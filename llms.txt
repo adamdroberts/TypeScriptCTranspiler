@@ -1,0 +1,69 @@
+# typescriptc
+
+> A whole-program TypeScript-to-C transpiler. Takes TS source + its local imports, emits C11, links with gcc and Boehm GC, produces a native Linux binary that behaves like `node file.ts` for the supported subset.
+
+Current status: 24 passing e2e tests, ~5,800 LOC, covers the typed-TS core + classes + Map/Set + regex + sync Node stdlib. Phases not yet implemented: NaN-boxed dynamic values (Phase 3), async/await (Phase 6), npm integration (Phase 14). See [docs/todo.md](docs/todo.md) for the full remaining list.
+
+## How to route questions
+
+- **"Can I use feature X today?"** → [docs/done.md](docs/done.md)
+- **"Is feature X planned?"** → [docs/todo.md](docs/todo.md)
+- **"How does the pipeline work?"** → [docs/architecture.md](docs/architecture.md) (Mermaid diagrams)
+- **"What does flag X do?"** → [docs/cli.md](docs/cli.md)
+- **"What's the C API?"** → [docs/runtime-reference.md](docs/runtime-reference.md)
+- **"How do I add a test?"** → [docs/testing.md](docs/testing.md)
+- **"What changed recently?"** → [CHANGELOG.md](CHANGELOG.md)
+
+## Docs
+
+- [README.md](README.md): product overview, install, feature tour, full example code
+- [docs/README.md](docs/README.md): documentation index
+- [docs/architecture.md](docs/architecture.md): pipeline stages, emission passes, module graph, value model, with Mermaid diagrams
+- [docs/cli.md](docs/cli.md): CLI flags, exit codes, env vars
+- [docs/runtime-reference.md](docs/runtime-reference.md): every `tsc_*` C symbol, grouped by feature
+- [docs/testing.md](docs/testing.md): e2e harness, adding a case
+- [docs/done.md](docs/done.md): every implemented capability with test pointers
+- [docs/todo.md](docs/todo.md): every unimplemented capability with effort estimates
+- [CHANGELOG.md](CHANGELOG.md): session-by-session history
+- [examples/README.md](examples/README.md): 7 runnable example programs
+
+## Agent skills
+
+- [.claude/skills/tsc2c-add-feature/SKILL.md](.claude/skills/tsc2c-add-feature/SKILL.md): procedural guide for adding a new TS language feature. Use when a user asks to extend `tsc2c` with a new operator, built-in method, or language construct.
+
+## Full ingestion bundle
+
+- [llms-full.txt](llms-full.txt): all canonical docs aggregated into a single file for LLM ingestion.
+
+## Architecture one-liner
+
+```
+entry.ts
+  ↓  ts.createProgram (official TypeScript compiler API)
+  ↓  src/resolve.ts — walks imports, topo-sorts modules
+  ↓  src/emit/index.ts — 5-pass emitter producing one main.c
+  ↓  src/link/cc.ts — gcc -O2 -std=c11 main.c runtime/tsc_runtime.c -lgc -lm
+binary
+```
+
+## Hard limits (permanent)
+
+Three JS features cannot be AOT-compiled at any engineering investment:
+
+1. Native C++ addons under `node_modules/*/build/Release/*.node` — compiled against Node's V8 ABI.
+2. Runtime code compilation (JS constructs that compile strings at runtime) — no runtime compiler in the binary.
+3. Dynamic `require(variable)` with a non-literal specifier — graph is walked statically.
+
+Documented in [docs/todo.md](docs/todo.md#5-permanent-limits-will-never-be-done).
+
+## Key files for code contributors
+
+| File | Purpose |
+|------|---------|
+| `src/emit/index.ts` | the emitter — one class, ~2,500 LOC |
+| `src/emit/types.ts` | TS → C type mapping |
+| `src/resolve.ts` | module graph walker |
+| `src/compile.ts` | pipeline orchestrator |
+| `runtime/tsc_runtime.h` | authoritative list of runtime capabilities |
+| `stdlib/lib.core.d.ts` | TS declarations we accept |
+| `tests/e2e/run.ts` | test harness |

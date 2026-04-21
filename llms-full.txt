@@ -1,0 +1,1656 @@
+# TypeScriptC — single-file documentation bundle
+
+This file aggregates the canonical documentation for `tsc2c` — a whole-program TypeScript-to-C transpiler. It is intended for LLM ingestion so an agent can answer questions about the project without re-traversing the file tree.
+
+Source pages (kept in the repo and updated independently):
+
+- `README.md` — product overview, install, feature tour
+- `docs/README.md` — documentation index
+- `docs/architecture.md` — pipeline, emitter passes, module graph, value model
+- `docs/cli.md` — CLI flags, exit codes, env vars
+- `docs/runtime-reference.md` — every `tsc_*` C symbol
+- `docs/testing.md` — e2e harness
+- `docs/done.md` — implemented features with test pointers
+- `docs/todo.md` — remaining work, grouped by priority
+- `CHANGELOG.md` — session-by-session history
+
+Each section below includes a source-file marker. When the underlying docs change, regenerate this file with the command shown at the bottom.
+
+
+---
+
+## File: `README.md`
+
+# TypeScriptC
+
+A whole-program TypeScript-to-C transpiler that produces native Linux binaries.
+
+Goal: take a Node.js-style TypeScript app and get back a standalone executable that behaves like `node app.ts` — without Node at runtime. It uses the **official TypeScript Compiler API** for parsing and type-checking, generates C11, and invokes **gcc** to produce the binary. Memory is managed by **Boehm GC** (`libgc`).
+
+## Status
+
+Substantial working subset, verified by **24 passing end-to-end tests** including a real word-count CLI that tokenizes via regex, counts via `Map`, sorts by a user comparator, and reads `process.env`. ~5,800 LOC across TypeScript compiler + C runtime + type shims.
+
+**Phases complete:**
+
+| Phase | Feature | Status |
+|-------|---------|--------|
+| 0 | Bootstrap (gcc driver, build dir, CLI, `--no-gc` fallback) | ✅ |
+| 1 | Typed core — primitives, operators, control flow, functions, `switch`, nullish coalescing `??`, optional chaining `?.` | ✅ |
+| 2a | Typed arrays — literal (with spread `[...a, b]`), indexing, `.length`, push/pop/shift/unshift, `for-of`, reverse, **sort (user comparator)**, slice, concat, join, indexOf, includes | ✅ |
+| 2b | Classes — fields, ctor, methods, `new`, `this`, `extends`, `super()`, static fields + methods | ✅ |
+| 2c | Higher-order array methods (`forEach`/`map`/`filter`/`reduce`/`find`/`findIndex`/`some`/`every`) with **inline arrows OR named function references** | ✅ |
+| 2d | Top-level `const f = (...) => ...` lifts to a static C function — usable as a call target AND as an HOF callback | ✅ |
+| 2.5 | Interfaces + object literals with typed shape; `Object.keys`/`values` | ✅ |
+| 4 | Multi-file module graph — flat namespace, local imports, topological init | ✅ |
+| 5 | Exceptions — `throw` / `try` / `catch` / `finally` via setjmp/longjmp | ✅ |
+| 7 (partial) | `Map<K,V>` + `Set<T>` with linear scan (get/set/has/delete/clear/keys/values/size) | ✅ |
+| 7 (partial) | JSON.stringify (type-driven, recursive for arrays and objects) | ✅ |
+| 8 (partial) | **RegExp via POSIX ERE** (`/pattern/flags`, `re.test`, `s.replace`, `s.match`, `s.split` with JS escape translation: `\d` `\D` `\w` `\W` `\s` `\S`) | ✅ |
+| 10 | Sync Node stdlib — `fs` (read/write/exists/readdir), `path`, `Math`, `os`, `Date.now`, `Number.*` statics, `Array.isArray`/`Array.from`, **`process.env`**, **`process.cwd()`**, **`process.argv`** | ✅ |
+| 2d+ | **Module-level captures** — top-level `const/let` are emitted as file-scope statics, so top-level functions AND lifted arrow consts can read/write them as ordinary globals | ✅ |
+
+**Not implemented in this session (deferred):**
+
+- **Phase 3** — NaN-boxed dynamic value runtime. Needed for `any`/`unknown`, untyped npm packages, `JSON.parse` into dynamic objects. ~2–3 weeks of focused work.
+- **Phase 6** — `async/await` + libuv event loop + Promise + microtask queue. ~3 weeks.
+- **Phase 7 remainder** — `Symbol`, generators, `Proxy`, `Reflect`, `WeakMap`, `WeakSet`.
+- **Phase 8 remainder** — BigInt (GMP-backed). Regex is in (POSIX ERE); lookahead/behind + named groups would need PCRE2.
+- **Phases 11–13** — Async Node stdlib (streams, http, net, child_process, worker_threads).
+- **Phase 14** — `node_modules` transpilation (requires Phases 3, 6, 7 first).
+- Full closures over arbitrary captured variables — needs env-struct allocation per arrow. Non-capturing top-level arrows work; inline-arrow HOF callbacks work (via C lexical scope).
+
+See `~/.claude/plans/make-a-typescript-to-floating-comet.md` for the full 15-phase plan.
+
+## Quick start
+
+```bash
+# one-time: install Boehm GC for real binaries.
+# without it, pass --no-gc and the binary will leak (fine for short programs).
+sudo apt-get install -y libgc-dev
+
+bun install
+
+./bin/tsc2c tests/e2e/cases/hello/in.ts -o /tmp/hello && /tmp/hello
+./bin/tsc2c tests/e2e/cases/fizzbuzz/in.ts -o /tmp/fb && /tmp/fb
+```
+
+`bin/tsc2c` prefers `bun` (runs TS directly); falls back to `node dist/cli.js` if you've run `bun run build`.
+
+## CLI
+
+```
+tsc2c <entry.ts> [options]
+
+  -o, --output <path>       output binary path (default: a.out)
+  --emit-c-only             write generated C to the build dir, skip gcc
+  --keep-build-dir <path>   reuse an explicit build dir (default: tempdir)
+  --no-gc                   link without libgc (leaking malloc fallback)
+  --verbose                 print compile steps + gcc command
+```
+
+## Feature tour
+
+Each of the following compiles and runs end-to-end. See `tests/e2e/cases/` for full examples.
+
+### Classes with inheritance + static
+
+```ts
+class Animal {
+    name: string;
+    constructor(name: string) { this.name = name; }
+    describe(): string { return "I am " + this.name; }
+}
+class Dog extends Animal {
+    breed: string;
+    constructor(name: string, breed: string) {
+        super(name);
+        this.breed = breed;
+    }
+    bark(): string { return this.name + " (" + this.breed + ") says woof"; }
+}
+
+class Counter {
+    static current: number = 0;
+    static increment(): number { return ++Counter.current; }
+}
+```
+
+### Interfaces + object literals
+
+```ts
+interface Point { x: number; y: number; }
+interface Line  { from: Point; to: Point; label: string; }
+
+const line: Line = {
+    from: { x: 0, y: 0 },
+    to:   { x: 3, y: 4 },
+    label: "hypotenuse",
+};
+```
+
+### Higher-order array methods
+
+```ts
+const nums: number[] = [1, 2, 3, 4, 5];
+const doubled = nums.map((n) => n * 2);
+const evens = nums.filter((n) => n % 2 === 0);
+const sum = nums.reduce((acc, n) => acc + n, 0);
+const first = nums.find((n) => n > 3);
+console.log(nums.some((n) => n > 10), nums.every((n) => n > 0));
+
+// Named function references work too:
+const doubler = (x: number) => x * 2;      // lifted to static C fn
+function isEven(n: number): boolean { return n % 2 === 0; }
+nums.map(doubler).filter(isEven);
+```
+
+### Regex
+
+```ts
+const re = /\d+/;
+re.test("42");                                   // true
+"hello world".replace(/world/, "there");         // "hello there"
+"a1 b2 c3".replace(/\d/g, "X");                  // "aX bX cX"
+"pi=3.14 e=2.71".match(/\d+\.\d+/g);             // ["3.14", "2.71"]
+"one  two   three".split(/\s+/);                 // ["one","two","three"]
+/hello/i.test("HELLO");                          // true
+```
+
+### Spread + Object helpers + nullish
+
+```ts
+const combined = [0, ...[1, 2, 3], 4];           // [0,1,2,3,4]
+Object.keys({ x: 1, y: 2 } as { x: number; y: number });  // ["x","y"]
+
+function find(id: number): User | null { /* ... */ }
+const u = find(2);
+console.log(u?.name ?? "not found");             // optional chaining + nullish
+```
+
+### Map + Set
+
+```ts
+const ages = new Map<string, number>();
+ages.set("alice", 30).set("bob", 25);
+ages.get("alice");          // 30
+ages.has("carol");          // false
+ages.keys().forEach((n) => console.log(n));
+
+const seen = new Set<number>();
+seen.add(1); seen.add(2); seen.add(2);
+console.log(seen.size);     // 2
+```
+
+### Exceptions
+
+```ts
+function mayThrow(n: number): number {
+    if (n < 0) throw "negative: " + n;
+    return n * 2;
+}
+try {
+    console.log(mayThrow(-3));
+} catch (e) {
+    console.log("caught:", e);
+}
+```
+
+### JSON (type-driven stringify)
+
+```ts
+interface Person { name: string; age: number; active: boolean; }
+const alice: Person = { name: "Alice", age: 30, active: true };
+console.log(JSON.stringify(alice));
+// => {"name":"Alice","age":30,"active":true}
+```
+
+### fs + path + os + Date
+
+```ts
+fs.writeFileSync("/tmp/hello.txt", "hi");
+const s = fs.readFileSync("/tmp/hello.txt");
+console.log(path.join("/tmp", "sub", "x.txt"));
+console.log(os.platform(), os.arch(), os.cpus().length);
+const t = Date.now();
+```
+
+### switch / case
+
+```ts
+function describe(n: number): string {
+    switch (n) {
+        case 0:        return "zero";
+        case 1: case 2: case 3:
+                       return "small";
+        case 10:       return "ten";
+        default:       return "other";
+    }
+}
+```
+
+### Multi-file imports
+
+```ts
+// src/math.ts
+export function add(a: number, b: number): number { return a + b; }
+
+// src/main.ts
+import { add } from "./math";
+console.log(add(2, 3));
+```
+
+The entry file plus every reachable `.ts` is compiled together. Each module's top-level code becomes `mod_init_<id>()` — called by `main()` in topological order.
+
+## Architecture
+
+```
+ entry.ts
+   │
+   ▼
+ ts.createProgram (TypeScript Compiler API: parser, type checker, module resolver)
+   │
+   ▼
+ resolve.ts — walks imports, builds module graph, topo-sorts modules
+   │
+   ▼
+ emit/ — per-module AST walker:
+           • consults TypeChecker for each expression type
+           • picks a specialized C type (double / tsc_str_t* / tsc_array_t* /
+             tsc_map_t* / Class_t*) — no boxing overhead in the typed path
+           • wraps each module's top-level code in mod_init_<id>()
+   │
+   ▼
+ runtime/ — hand-written C11 linked into every binary:
+           • UTF-8 strings, dynamic arrays, Map/Set, JS-compatible number formatting
+           • console / process / fs / path / Math / os / Date / Number
+           • exceptions (setjmp / longjmp + single-string error state)
+           • Boehm GC behind a wrapper (malloc fallback for --no-gc)
+   │
+   ▼
+ gcc -std=c11 -O2 main.c runtime/tsc_runtime.c -lgc -lm -o <output>
+```
+
+### Memory model
+
+Boehm GC — a conservative tracing collector. No runtime changes needed per class, handles cycles correctly, matches JS semantics. Strings, arrays, maps, sets, and class instances are all `GC_MALLOC`'d.
+
+### Multi-file compilation
+
+Every `.ts` file reachable from the entry is compiled into the same `main.c`. Each module's top-level statements become a `mod_init_<moduleId>()` function. `main()` calls them in topological order (dependencies before dependents), then returns.
+
+### Exceptions
+
+`throw` constructs an error frame and `longjmp`s to the most recent `setjmp` set by a `try`. No stack traces yet, but the message is preserved through `tsc_current_error()`. Uncaught exceptions exit the process with a printed message.
+
+### Three hard limits
+
+Three TS/JS features can't be AOT-compiled regardless of engineering effort:
+
+1. **Native C++ addons** under `node_modules/*/build/Release/*.node` — compiled against Node's V8 ABI. Detection + error planned for Phase 14.
+2. **`eval`** and the `Function` constructor — require a compiler at runtime.
+3. **Dynamic `require(variable)`** where the module path isn't a string literal — can't be walked statically.
+
+## Tests
+
+```
+TSC2C_NO_GC=1 bun tests/e2e/run.ts
+```
+
+```
+e2e: advanced      … OK      (spread + Object.keys + padStart/pad/replace + Array.from)
+e2e: arith         … OK
+e2e: array_hof     … OK      (map/filter/reduce/find/some/every)
+e2e: arrays        … OK
+e2e: captures      … OK      (module-level let/const used inside functions + arrows)
+e2e: classes       … OK
+e2e: exceptions    … OK
+e2e: fizzbuzz      … OK
+e2e: fn_refs       … OK      (named function references as HOF callbacks)
+e2e: fs_roundtrip  … OK
+e2e: greet         … OK
+e2e: hello         … OK
+e2e: inheritance   … OK
+e2e: interfaces    … OK
+e2e: json          … OK
+e2e: map_set       … OK
+e2e: math          … OK
+e2e: modules       … OK      (multi-file imports)
+e2e: nullish       … OK      (?. and ??)
+e2e: regex         … OK      (POSIX ERE)
+e2e: stdlib_os     … OK
+e2e: strings       … OK
+e2e: switch        … OK
+e2e: wordcount     … OK      (real-world demo: fs+regex+Map+sort+captures)
+
+24 passed, 0 failed
+```
+
+Drop `TSC2C_NO_GC=1` after `sudo apt-get install libgc-dev`.
+
+## Repo layout
+
+| Path | What |
+|------|------|
+| `src/cli.ts` | Command-line entry (commander) |
+| `src/compile.ts` | Pipeline: program → graph → emit → gcc |
+| `src/program.ts` | `ts.createProgram` + `TypeChecker` wrapper |
+| `src/resolve.ts` | Module graph walker, topological sort |
+| `src/emit/index.ts` | AST → C emitter (statements, expressions, classes, modules, HOFs) |
+| `src/emit/types.ts` | TS type → C type mapping |
+| `src/emit/cbuf.ts` | Indented C source writer with escape helpers |
+| `src/emit/mangle.ts` | Identifier mangling (avoids C keywords) |
+| `src/link/cc.ts` | Spawns gcc with our flags |
+| `src/diagnostics.ts` | User-facing error reporting |
+| `runtime/tsc_runtime.{c,h}` | Full runtime: strings, arrays, maps/sets, console, fs, path, Math, os, Date, Number, JSON, exceptions |
+| `stdlib/lib.core.d.ts` | Type shim (replaces `@types/node`) |
+| `tests/e2e/cases/` | One dir per test: `in.ts` + optional support files + `expected.stdout` |
+| `tests/e2e/run.ts` | E2E harness: compile, execute, diff |
+
+## What's next
+
+The plan file at `~/.claude/plans/make-a-typescript-to-floating-comet.md` sequences the remaining phases. Highest leverage:
+
+1. **Phase 3 (NaN-boxing)** — unlocks untyped code paths, `any`/`unknown`, `JSON.parse` into objects, and the ability to compile most pure-JS npm packages.
+2. **Phase 6 (async/await + libuv)** — needed for real Node programs that do I/O concurrently.
+3. **Phase 14 (npm integration)** — walks `node_modules`, respects `package.json` `exports`, detects native addons. Depends on 3 + 6.
+
+Phases 3 and 6 are each multi-week undertakings. Phase 14 is about a month on top of those.
+
+---
+
+## File: `docs/README.md`
+
+# TypeScriptC documentation
+
+This directory is the full documentation set for `typescriptc` (CLI: `tsc2c`) — a whole-program TypeScript-to-C transpiler that produces native Linux binaries.
+
+If you're new, start with the top-level [`../README.md`](../README.md) for the product story + quick start.
+
+## By role
+
+**I want to use it** (write TS, get a binary):
+1. [`../README.md`](../README.md) — install, quick start, feature tour
+2. [`cli.md`](cli.md) — every CLI flag + exit code + env var
+3. [`done.md`](done.md) — every language and stdlib feature you can use today
+4. [`todo.md`](todo.md) — what you can't use today and when it's planned
+
+**I want to understand how it works** (read the code, change it):
+1. [`architecture.md`](architecture.md) — pipeline, emission passes, module graph, value model (diagrams included)
+2. [`runtime-reference.md`](runtime-reference.md) — every `tsc_*` runtime symbol grouped by area
+3. [`testing.md`](testing.md) — the e2e harness and how to add a new case
+4. [`../src/emit/index.ts`](../src/emit/index.ts) — the emitter itself; ~2,500 LOC, one class with focused methods
+5. [`../CHANGELOG.md`](../CHANGELOG.md) — evolution of capability session by session
+
+**I'm an LLM agent**:
+1. [`../llms.txt`](../llms.txt) — one-screen index
+2. [`../llms-full.txt`](../llms-full.txt) — single-file ingestion bundle
+3. [`../.claude/skills/tsc2c-add-feature/SKILL.md`](../.claude/skills/tsc2c-add-feature/SKILL.md) — procedural skill for adding a language feature
+
+## By topic
+
+| Area | Page |
+|------|------|
+| Install + quick start | [`../README.md`](../README.md) |
+| Full feature list | [`done.md`](done.md) |
+| Remaining work | [`todo.md`](todo.md) |
+| Changelog | [`../CHANGELOG.md`](../CHANGELOG.md) |
+| CLI reference | [`cli.md`](cli.md) |
+| Architecture + diagrams | [`architecture.md`](architecture.md) |
+| C runtime API | [`runtime-reference.md`](runtime-reference.md) |
+| Testing | [`testing.md`](testing.md) |
+| Agent skills | [`../.claude/skills/tsc2c-add-feature/SKILL.md`](../.claude/skills/tsc2c-add-feature/SKILL.md) |
+| LLM index | [`../llms.txt`](../llms.txt) |
+| LLM full bundle | [`../llms-full.txt`](../llms-full.txt) |
+| Original 15-phase plan | `~/.claude/plans/make-a-typescript-to-floating-comet.md` |
+
+## Surface overview
+
+`tsc2c` is four things:
+
+- **CLI** — `bin/tsc2c` → `src/cli.ts` → `src/compile.ts`. Thin argv parser, orchestrates the pipeline.
+- **Compiler pipeline** — `src/compile.ts` glues together `ts.createProgram` (official TS API), `src/resolve.ts` (module graph), and `src/emit/index.ts` (AST → C).
+- **C runtime** — `runtime/tsc_runtime.c` + `runtime/tsc_runtime.h`. Every produced binary links against this. Covers strings, arrays, Map/Set, regex, exceptions, fs, path, os, Math, console, process, JSON helpers.
+- **Type shim** — `stdlib/lib.core.d.ts`. Replaces `@types/node` with our minimal declarations so TS's type checker accepts the language subset we support.
+
+See [`architecture.md`](architecture.md) for how these fit together.
+
+## What "deep" documentation covers here
+
+Each page targets a specific question:
+
+- `architecture.md` — "What does the pipeline do at each stage?"
+- `cli.md` — "What does flag X do and what does exit code N mean?"
+- `runtime-reference.md` — "What does `tsc_str_replace_regex` take and return?"
+- `testing.md` — "How do I add a test for a new feature?"
+- `done.md` — "Can I use feature X today?"
+- `todo.md` — "Is feature X planned? Roughly when?"
+- `CHANGELOG.md` — "When did this feature land?"
+
+None of these duplicate the top-level README's quick start. The README is for orientation; the docs here are for execution.
+
+---
+
+## File: `docs/architecture.md`
+
+# Architecture
+
+How `tsc2c` turns a TypeScript source tree into a native gcc-linked binary.
+
+## Top-level pipeline
+
+```mermaid
+flowchart LR
+    A[entry.ts]
+    A --> B[ts.createProgram<br/>official TS API]
+    B --> C[TypeChecker]
+    B --> D[Module graph walker<br/>src/resolve.ts]
+    C --> E
+    D --> E[Emitter<br/>src/emit/index.ts]
+    E --> F[build/main.c<br/>single C file]
+    F --> G[gcc -O2 main.c tsc_runtime.c -lgc -lm]
+    G --> H[native binary]
+```
+
+Every step maps to a file under `src/`:
+
+| Stage | File | Responsibility |
+|-------|------|---------------|
+| Parse + type-check | `src/program.ts` | wraps `ts.createProgram` with our compiler options and `stdlib/lib.core.d.ts` as the ambient lib |
+| Module graph | `src/resolve.ts` | walks `ts.Program.getSourceFiles()`, resolves imports via `ts.resolveModuleName`, topologically sorts |
+| Emit | `src/emit/index.ts` | AST → C via the `Emitter` class |
+| Link | `src/link/cc.ts` | spawns gcc with the right flags |
+| Orchestrate | `src/compile.ts` | drives all of the above |
+| CLI | `src/cli.ts` | commander-based argv parser |
+
+## Emission: six passes per module
+
+Inside `Emitter.emitModule()`, each source file goes through passes. The multi-pass structure lets cyclic declarations resolve (e.g. a class's method can reference another class declared later in the file, or even in a later module).
+
+```mermaid
+flowchart TD
+    M[sf.statements] --> A[Pass A: struct fwd-decls<br/>typedef struct Foo_t Foo_t;]
+    A --> B[Pass B: struct bodies<br/>struct Foo_t { ... };]
+    B --> C[Pass C: function + method prototypes<br/>also lifted-arrow protos]
+    C --> D[Pass D: function + method bodies<br/>also lifted-arrow bodies]
+    D --> E[Pass E: top-level statements<br/>split into file-scope decls<br/>+ mod_init_mX assignments]
+```
+
+Pass A and B handle **both** class declarations and interface declarations — interfaces become C structs with fields, no methods. The emission is ordered A..E so every name is declared by the time it's used.
+
+Pass E is the only place where module-scope `const`/`let` are special-cased: they're split into a file-scope declaration (`static T name;`) and an assignment inside `mod_init_mX()`. This promotion is what makes top-level names visible to functions + lifted arrows.
+
+## Module graph + init ordering
+
+```mermaid
+flowchart LR
+    E[entry.ts<br/>m_in]
+    U[src/utils.ts<br/>m_utils]
+    M[src/math.ts<br/>m_math]
+    E -- import --> U
+    E -- import --> M
+    U -- import --> M
+```
+
+Topo-sorted: `[m_math, m_utils, m_in]` (leaves first).
+
+The final `main.c` calls mod_inits in that order, then returns:
+
+```c
+int main(int argc, char** argv) {
+    tsc_bootstrap(argc, argv);
+    mod_init_m_math();    // deps first
+    mod_init_m_utils();
+    mod_init_m_in();      // entry module last
+    return 0;
+}
+```
+
+Every module's top-level statements execute inside its `mod_init`. This matches CommonJS "module runs on first require" semantics.
+
+Cycles: the DFS in `src/resolve.ts` stops at the back edge, then continues — producing a best-effort topological order. Circular imports are compiled but not runtime-reordered; if module A's init reads from module B's uninitialized globals, the reader sees the zero value (since all file-scope statics are zero-initialized by the C ABI).
+
+## Multi-file output model
+
+```mermaid
+flowchart LR
+    SRC[entry.ts + utils.ts + math.ts]
+    OUT[build/main.c<br/>single file<br/>all modules merged<br/>flat namespace]
+    RT[build/tsc_runtime.c<br/>hand-written runtime]
+    H[build/tsc_runtime.h]
+    SRC --> OUT
+    OUT -- includes --> H
+    RT -- includes --> H
+    OUT --> CC[gcc]
+    RT --> CC
+    CC --> BIN[binary]
+```
+
+Every user-defined module merges into one `main.c`. This keeps the flat symbol namespace viable at link time. A future session can switch to per-module `.c`/`.h` files once symbol prefixing is in, but flat-namespace was enough for the current 24-test suite.
+
+## Value representation (typed path)
+
+Today's emitter produces specialized C types for each TS type — there's no boxing. The `CType` model (in `src/emit/types.ts`) decides the C spelling based on TypeScript's inferred or annotated type:
+
+| TS type | C type | Notes |
+|---------|--------|-------|
+| `number` | `double` | IEEE 754; int optimization deferred |
+| `string` | `tsc_str_t*` | immutable UTF-8, GC'd |
+| `boolean` | `bool` | `<stdbool.h>` |
+| `void` / `null` / `undefined` | `void` / NULL sentinel | for pointer types |
+| `T[]` / `Array<T>` | `tsc_array_t*` | dynamic array, element type known at emit |
+| `Map<K, V>` | `tsc_map_t*` | type-erased runtime; key kind tag chooses compare fn |
+| `Set<T>` | `tsc_set_t*` | same |
+| `RegExp` | `tsc_regexp_t*` | POSIX regex behind the wrapper |
+| `class Foo` | `Foo_t*` | struct with inherited fields laid at prefix |
+| `interface Foo` | `Foo_t*` | same (struct of fields, no methods) |
+
+When two CTypes disagree (e.g. assigning `null` to a `string` field), `Emitter.coerce()` inserts the bridge. Valid coercions today:
+
+- `void` → any pointer kind = typed `NULL` cast
+- any value → `string` = `tsc_str_from_num/bool/lit` helper
+- same-kind classes with different names (up-cast) = C cast
+
+Cross-type arithmetic / equality is rejected by the emitter with a `Cannot coerce` diagnostic.
+
+## Future: Phase 3 NaN-boxing (not yet built)
+
+Phase 3 will add a second, dynamic path via NaN-boxed `tsc_value_t`. The plan in `~/.claude/plans/make-a-typescript-to-floating-comet.md` covers it; summary:
+
+```mermaid
+flowchart TD
+    AST[TS AST node]
+    AST --> TC{checker.getTypeAtLocation<br/>specialized?}
+    TC -- yes --> S[Specialized path<br/>double / tsc_str_t* / ...]
+    TC -- no<br/>any/unknown --> D[Boxed path<br/>tsc_value_t<br/>NaN-tagged uint64_t]
+    S <--> B[Bridge:<br/>box/unbox at boundaries]
+    D <--> B
+```
+
+Today's code always takes the specialized path and refuses to emit for untyped/any code. Phase 3 introduces the boxed path + bridge. See [`todo.md`](todo.md#1-next-up-unblockers) for impact and effort.
+
+## Runtime layer
+
+`runtime/tsc_runtime.h` + `runtime/tsc_runtime.c` are the C runtime. Every produced binary includes these. Grouped by feature area:
+
+```mermaid
+flowchart TD
+    RT[tsc_runtime]
+    RT --> GC[GC wrapper<br/>Boehm or malloc fallback]
+    RT --> STR[Strings<br/>tsc_str_*]
+    RT --> ARR[Arrays<br/>tsc_array_*]
+    RT --> MS[Map / Set<br/>tsc_map_* / tsc_set_*]
+    RT --> REG[RegExp<br/>POSIX regex wrapper]
+    RT --> EX[Exceptions<br/>setjmp/longjmp]
+    RT --> NUM[Numbers<br/>parseFloat/Int, num_mod, math_random]
+    RT --> JSON[JSON helpers<br/>escape_string, num]
+    RT --> NODE[Node stdlib<br/>fs / path / os / process / console]
+```
+
+Symbol-level reference: [`runtime-reference.md`](runtime-reference.md).
+
+## Memory model
+
+- Boehm GC (`libgc-dev`) by default. All user-visible allocations go through `TSC_GC_MALLOC` (tracked) or `TSC_GC_MALLOC_ATOMIC` (raw bytes, no scan).
+- Fallback: `--no-gc` compile flag swaps the macros for `calloc`. The binary leaks everything but runs — useful in environments without libgc.
+- Exception path: `setjmp`/`longjmp` with a single global error string (`g_current_error`). No stack traces yet.
+- Classes and interfaces are heap-allocated; there's no value type for them.
+- Strings are immutable — every mutation returns a fresh allocation.
+
+## Diagnostics flow
+
+```mermaid
+flowchart LR
+    SRC[user.ts]
+    SRC --> TS[TS type check]
+    TS -->|TS error| TSE[exit 2<br/>TS diag with code frame]
+    TS -->|ok| EM[Emitter]
+    EM -->|unsupported node| UE[exit 3<br/>file:line:col: unsupported: ...]
+    EM -->|ok| CC[gcc]
+    CC -->|C error| CCE[exit 1<br/>gcc output]
+    CC -->|ok| BIN[binary]
+```
+
+Three distinct exit codes let callers (tests, CI, other tools) tell categories of failure apart.
+
+## Files-to-know list
+
+For readers planning to modify the emitter:
+
+- `src/emit/index.ts` — the whole `Emitter` class. One method per AST node kind.
+- `src/emit/types.ts` — CType and `mapTsType` (the single source of truth for TS → C type mapping).
+- `src/emit/cbuf.ts` — indent-tracked C source writer + string escape helpers.
+- `src/emit/mangle.ts` — C keyword collision avoidance.
+- `src/resolve.ts` — the module graph.
+- `src/compile.ts` — the glue; typically read first for orientation.
+- `runtime/tsc_runtime.h` — the authoritative list of runtime capabilities.
+- `stdlib/lib.core.d.ts` — the authoritative list of what TS the checker will accept.
+
+---
+
+## File: `docs/cli.md`
+
+# CLI reference
+
+`tsc2c` — the command-line frontend.
+
+## Synopsis
+
+```
+tsc2c <entry.ts> [options]
+```
+
+Exactly one positional argument: the entry `.ts` file. All imports reachable from the entry are compiled transparently; no need to list them.
+
+## Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-o, --output <path>` | `a.out` | Output binary path. Parent directory must exist. |
+| `--emit-c-only` | `false` | Skip the gcc step. Write generated C into the build dir and return. Useful for inspecting what the emitter produced. |
+| `--keep-build-dir <path>` | tempdir | Use this directory for intermediate `main.c` + `tsc_runtime.c`/`.h`. Created if absent; not cleaned up. Without this flag a temp dir is created and kept (its path is printed under `--verbose`). |
+| `--no-gc` | `false` | Compile with `-DTSC_NO_GC`. The runtime swaps Boehm GC for a leaking `calloc` fallback. For short-lived programs or envs without `libgc-dev`. **Do not ship production binaries with this flag.** |
+| `--verbose` | `false` | Print the build dir, each output file, and the full gcc command line. |
+| `-h, --help` | — | Standard commander help. |
+| `-V, --version` | — | Print `0.0.1`. |
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success. Binary written to `--output` (or C written to build dir with `--emit-c-only`). |
+| `1` | gcc failed. Its stderr is forwarded before this message: `tsc2c: gcc exited <N>`. |
+| `2` | TypeScript type-check failed. Full `ts.formatDiagnosticsWithColorAndContext` output is printed before exit. |
+| `3` | Emitter rejected the program because it uses an unsupported TS feature. A `file:line:col: unsupported: <reason>` line is printed before exit. |
+
+The three failure codes are distinct so CI / test harnesses can categorize failures.
+
+## Environment variables
+
+| Variable | Read by | Effect |
+|----------|---------|--------|
+| `TSC2C_NO_GC` | `tests/e2e/run.ts` | If `=1`, the harness passes `--no-gc` to every compile. Lets you run the suite without `libgc-dev` installed. |
+| `TMPDIR` | runtime (inside produced binaries) | Used by `os.tmpdir()`. Falls back to `/tmp`. |
+| `HOME` | runtime | Used by `os.homedir()`. Falls back to `/`. |
+| (any) | runtime | Exposed via `process.env.VAR` inside the TS program. |
+
+## Examples
+
+Compile + run a single file:
+
+```bash
+./bin/tsc2c examples/hello.ts -o /tmp/hello
+/tmp/hello
+# hello, world!
+```
+
+Compile an existing example and keep the C for inspection:
+
+```bash
+./bin/tsc2c examples/fizzbuzz.ts -o /tmp/fb --keep-build-dir /tmp/fb-build --verbose
+cat /tmp/fb-build/main.c | head -30
+```
+
+Check type errors without invoking gcc:
+
+```bash
+./bin/tsc2c broken.ts -o /tmp/out --emit-c-only
+echo "tsc2c exit: $?"
+```
+
+## How `bin/tsc2c` finds the implementation
+
+`bin/tsc2c` is a POSIX shell script that dispatches in this order:
+
+1. If `bun` is on `PATH` and `src/cli.ts` exists, run `bun src/cli.ts "$@"`.
+2. Else if `dist/cli.js` exists (from `bun run build`), run `node dist/cli.js "$@"`.
+3. Else print a setup-required error and exit 1.
+
+So for normal development (bun installed): no build step needed. For shipped/packaged use: run `bun run build` first.
+
+## Inside the pipeline
+
+When you run `tsc2c foo.ts`, the CLI's `action()` handler:
+
+1. Builds a `CompileOptions` struct from the flags.
+2. Calls `compile({ entry, output, ... })` from `src/compile.ts`.
+3. Inside `compile()`:
+   - `buildProgram()` wraps `ts.createProgram` with our `stdlib/lib.core.d.ts` as a root file.
+   - `ts.getPreEmitDiagnostics()` runs the type check. Any diagnostic → exit 2.
+   - `buildModuleGraph()` walks imports, produces topo order.
+   - `emitProgram(graph, checker)` produces a single `mainC` string.
+   - Runtime files are copied into the build dir.
+   - `invokeCc()` in `src/link/cc.ts` spawns gcc.
+4. The CLI calls `process.exit(result.exitCode)` so the shell gets the right code.
+
+See [`architecture.md`](architecture.md) for the diagram.
+
+---
+
+## File: `docs/runtime-reference.md`
+
+# Runtime reference
+
+The `tsc_*` C runtime — everything in `runtime/tsc_runtime.h` and `runtime/tsc_runtime.c` — linked into every produced binary.
+
+Conventions:
+
+- All allocations go through `TSC_GC_MALLOC` (Boehm GC) or `TSC_GC_MALLOC_ATOMIC` (raw bytes, no pointer scan). Under `-DTSC_NO_GC` these expand to `calloc` and the binary leaks.
+- Strings are **immutable UTF-8** with explicit length. Every `tsc_str_*` mutation returns a fresh `tsc_str_t*`.
+- `double` is the numeric type for all JS numbers (IEEE 754).
+- `bool` comes from `<stdbool.h>`.
+
+## Bootstrap
+
+| Symbol | Signature | Purpose |
+|--------|-----------|---------|
+| `tsc_bootstrap` | `void(int argc, char** argv)` | Called once from `main`. Initializes GC, stores argv for `process.argv` / `process.exit`, seeds `rand()`. |
+| `tsc_panic` | `void(const char* msg)` | Fatal error. Prints `"tsc: panic: <msg>"` to stderr and `abort()`s. |
+| `tsc_argc` / `tsc_argv` | globals | Populated by `tsc_bootstrap`. |
+
+## Strings (`tsc_str_t`)
+
+```c
+typedef struct tsc_str {
+    size_t len;         // bytes (not codepoints, for now)
+    const char* data;   // UTF-8 payload, NUL-terminated for C interop but len is authoritative
+} tsc_str_t;
+```
+
+### Construction
+
+| Symbol | Signature | Notes |
+|--------|-----------|-------|
+| `tsc_str_from_lit` | `(const char*, size_t) -> tsc_str_t*` | Wraps a string literal with no copy. |
+| `tsc_str_from_cstr` | `(const char*) -> tsc_str_t*` | Copies a null-terminated C string. |
+| `tsc_str_from_num` | `(double) -> tsc_str_t*` | JS-compatible shortest round-trip number formatting. |
+| `tsc_str_from_bool` | `(bool) -> tsc_str_t*` | `"true"` / `"false"`. |
+
+### Equality and comparison
+
+| Symbol | Signature |
+|--------|-----------|
+| `tsc_str_eq` | `(const tsc_str_t*, const tsc_str_t*) -> bool` |
+| `tsc_str_cmp` | `(const tsc_str_t*, const tsc_str_t*) -> int` (strcmp-style) |
+
+### Methods (match JS `String.prototype`)
+
+| Symbol | Returns | JS equivalent |
+|--------|---------|---------------|
+| `tsc_str_length` | `double` | `.length` |
+| `tsc_str_char_at(s, i)` | `tsc_str_t*` | `.charAt(i)` |
+| `tsc_str_index_of(h, n)` | `double` | `.indexOf(n)` (-1 if missing) |
+| `tsc_str_includes(h, n)` | `bool` | `.includes(n)` |
+| `tsc_str_starts_with(s, p)` | `bool` | `.startsWith(p)` |
+| `tsc_str_ends_with(s, p)` | `bool` | `.endsWith(p)` |
+| `tsc_str_slice(s, start, end)` | `tsc_str_t*` | `.slice(start, end)`, negative indices OK |
+| `tsc_str_to_upper` | `tsc_str_t*` | `.toUpperCase()` (ASCII only) |
+| `tsc_str_to_lower` | `tsc_str_t*` | `.toLowerCase()` (ASCII only) |
+| `tsc_str_trim` | `tsc_str_t*` | `.trim()` |
+| `tsc_str_repeat(s, n)` | `tsc_str_t*` | `.repeat(n)` |
+| `tsc_str_pad_start(s, len, pad)` | `tsc_str_t*` | `.padStart(len, pad)` |
+| `tsc_str_pad_end(s, len, pad)` | `tsc_str_t*` | `.padEnd(len, pad)` |
+| `tsc_str_replace(s, needle, repl)` | `tsc_str_t*` | `.replace("a", "b")` (first match) |
+| `tsc_str_replace_all(s, needle, repl)` | `tsc_str_t*` | `.replaceAll("a", "b")` (all matches) |
+| `tsc_str_concat(a, b)` | `tsc_str_t*` | `a + b` |
+| `tsc_str_split(s, sep)` | `tsc_array_t*` | `.split("a")` → array of strings |
+
+## Numbers
+
+| Symbol | Signature | Purpose |
+|--------|-----------|---------|
+| `tsc_num_mod` | `(double, double) -> double` | `fmod` — JS-style modulo for the `%` operator. |
+| `tsc_parse_float` | `(const tsc_str_t*) -> double` | Equivalent of `parseFloat`. Returns NaN on failure. |
+| `tsc_parse_int` | `(const tsc_str_t*, double radix) -> double` | Equivalent of `parseInt`. |
+| `tsc_math_random` | `() -> double` | `Math.random()`, range [0, 1). Uses `rand()`. |
+
+## Arrays (`tsc_array_t`)
+
+Type-erased dynamic vector. Element size + kind known only to the emitter — the emitter generates the right access via the `TSC_ARR(T, arr, i)` macro.
+
+```c
+typedef struct tsc_array {
+    size_t len, cap, es;  // element size in bytes
+    void* data;
+} tsc_array_t;
+```
+
+| Symbol | Signature | Notes |
+|--------|-----------|-------|
+| `tsc_array_new(es, cap)` | `tsc_array_t*` | Empty array with capacity. |
+| `tsc_array_from_buf(es, src, n)` | `tsc_array_t*` | Copy `n` elements from `src`. |
+| `tsc_array_reserve(arr, cap)` | `void` | Grow capacity to at least `cap`. |
+| `tsc_array_push_raw(arr, &elem)` | `void` | Append; grows if needed. |
+| `tsc_array_pop_raw(arr)` | `void` | Decrement `len`. Caller reads the element first. |
+| `tsc_array_shift_raw(arr)` | `void` | Remove front (shifts remaining). |
+| `tsc_array_unshift_raw(arr, &elem)` | `void` | Prepend. |
+| `tsc_array_reverse(arr)` | `tsc_array_t*` | In-place. Returns the same array. |
+| `tsc_array_slice(arr, start, end)` | `tsc_array_t*` | New array with copied range. |
+| `tsc_array_append(dst, src)` | `tsc_array_t*` | Append `src`'s elements to `dst`. |
+| `tsc_array_length(arr)` | `double` | For `.length` property. |
+| `TSC_ARR(T, arr, i)` | lvalue | Macro for typed element access — `((T*)arr->data)[(size_t)i]`. |
+| `tsc_array_oob(arr, i)` | `void` | Placeholder bounds-check hook (silent today, planned to throw `RangeError`). |
+
+High-order methods like `.map`/`.filter`/`.reduce` are **not** runtime functions — they're expanded inline in the emitter (`emitArrayHof` in `src/emit/index.ts`).
+
+## Maps and Sets (`tsc_map_t`, `tsc_set_t`)
+
+Type-erased linear-scan collections. Key equality is chosen by a `tsc_key_kind_t` tag passed at construction:
+
+| Tag | Value | Equality |
+|-----|-------|----------|
+| `TSC_KEY_NUM` | 0 | `double ==` |
+| `TSC_KEY_STR` | 1 | `tsc_str_eq` |
+| `TSC_KEY_PTR` | 2 | pointer `==` (for class instances) |
+| `TSC_KEY_BOOL` | 3 | `bool ==` |
+
+### Map
+
+| Symbol | Signature |
+|--------|-----------|
+| `tsc_map_new(ks, vs, kk, cap)` | `tsc_map_t*` |
+| `tsc_map_set_raw(m, &k, &v)` | `void` |
+| `tsc_map_get_raw(m, &k, &out)` | `bool` (true if present) |
+| `tsc_map_has_raw(m, &k)` | `bool` |
+| `tsc_map_delete_raw(m, &k)` | `bool` |
+| `tsc_map_clear(m)` | `void` |
+| `tsc_map_size(m)` | `double` |
+| `tsc_map_keys(m)` | `tsc_array_t*` — array of keys |
+| `tsc_map_values(m)` | `tsc_array_t*` — array of values |
+
+### Set
+
+| Symbol | Signature |
+|--------|-----------|
+| `tsc_set_new(es, kk, cap)` | `tsc_set_t*` |
+| `tsc_set_add_raw(s, &v)` | `void` |
+| `tsc_set_has_raw(s, &v)` | `bool` |
+| `tsc_set_delete_raw(s, &v)` | `bool` |
+| `tsc_set_clear(s)` | `void` |
+| `tsc_set_size(s)` | `double` |
+| `tsc_set_values(s)` | `tsc_array_t*` |
+
+## Regex (`tsc_regexp_t`)
+
+Wraps POSIX extended regex (`<regex.h>`).
+
+```c
+typedef struct tsc_regexp {
+    regex_t re;
+    tsc_str_t* source;
+    tsc_str_t* flags;
+    bool global, ignore_case, multiline;
+    bool compiled;
+} tsc_regexp_t;
+```
+
+Translation from JS regex syntax happens inside `tsc_regexp_new`:
+
+- `\d` → `[0-9]`, `\D` → `[^0-9]`
+- `\w` → `[A-Za-z0-9_]`, `\W` → `[^A-Za-z0-9_]`
+- `\s` → `[ \t\n\r\f\v]`, `\S` → `[^ \t\n\r\f\v]`
+- Everything else passes through — POSIX ERE semantics apply (no lookahead/lookbehind, no named groups).
+
+| Symbol | Signature |
+|--------|-----------|
+| `tsc_regexp_new(pattern, flags)` | `tsc_regexp_t*` |
+| `tsc_regexp_test(re, s)` | `bool` |
+| `tsc_str_match_regex(s, re)` | `tsc_array_t*` — array of match strings, or `NULL` if none |
+| `tsc_str_replace_regex(s, re, repl)` | `tsc_str_t*` — honors the `g` flag |
+| `tsc_str_split_regex(s, re)` | `tsc_array_t*` |
+
+## Exceptions (`tsc_try_frame_t`)
+
+Thin `setjmp`/`longjmp` wrapper with a single global "current error" string. No stack traces yet.
+
+```c
+typedef struct tsc_try_frame {
+    jmp_buf jb;
+    struct tsc_try_frame* prev;
+} tsc_try_frame_t;
+```
+
+| Symbol | Signature | Notes |
+|--------|-----------|-------|
+| `tsc_try_push(&frame)` | `void` | Push frame onto the try-chain. |
+| `tsc_try_pop()` | `void` | Pop after successful try body. |
+| `tsc_throw_str(msg)` | `noreturn-ish` | Stores msg, longjmp to top frame. If none, prints `Uncaught:` and exits 1. |
+| `tsc_current_error()` | `tsc_str_t*` | Read inside `catch` to get the thrown value. |
+| `tsc_rethrow()` | `void` | Re-throw the current error (used for try without catch + finally). |
+
+Generated `try { } catch (e) { }` expands to:
+
+```c
+tsc_try_frame_t _eh0;
+tsc_try_push(&_eh0);
+if (setjmp(_eh0.jb) == 0) {
+    /* try body */
+    tsc_try_pop();
+} else {
+    tsc_str_t* e = tsc_current_error();
+    /* catch body */
+}
+```
+
+## Console
+
+| Symbol | Signature |
+|--------|-----------|
+| `tsc_console_log_n(n, ...)` | `void` — n stringified args, space-joined, newline |
+| `tsc_console_error_n(n, ...)` | `void` — same but to stderr |
+
+The emitter stringifies each argument to `tsc_str_t*` at the call site, then invokes with the count plus the pointers.
+
+## Process
+
+| Symbol | Signature | JS equivalent |
+|--------|-----------|---------------|
+| `tsc_process_exit(code)` | `noreturn` | `process.exit(code)` |
+| `tsc_process_argv()` | `tsc_array_t*` | `process.argv` — returns new array each call |
+| `tsc_process_env_get(name)` | `tsc_str_t*` | `process.env[name]` — NULL if unset |
+| `tsc_process_cwd()` | `tsc_str_t*` | `process.cwd()` |
+
+## fs (sync subset)
+
+| Symbol | Signature | JS equivalent |
+|--------|-----------|---------------|
+| `tsc_fs_read_file_sync(path)` | `tsc_str_t*` | `fs.readFileSync(path)` — throws via `tsc_throw_str` on error |
+| `tsc_fs_write_file_sync(path, data)` | `void` | `fs.writeFileSync(path, data)` |
+| `tsc_fs_exists_sync(path)` | `bool` | `fs.existsSync(path)` |
+| `tsc_fs_readdir_sync(path)` | `tsc_array_t*` | `fs.readdirSync(path)` — array of filenames |
+
+## path
+
+| Symbol | Signature |
+|--------|-----------|
+| `tsc_path_join(n, ...)` | `tsc_str_t*` — variadic |
+| `tsc_path_resolve(n, ...)` | `tsc_str_t*` — variadic, absolute |
+| `tsc_path_basename(p)` | `tsc_str_t*` |
+| `tsc_path_dirname(p)` | `tsc_str_t*` |
+| `tsc_path_extname(p)` | `tsc_str_t*` |
+
+## os
+
+| Symbol | Returns |
+|--------|---------|
+| `tsc_os_platform()` | `tsc_str_t*` — `"linux"`, `"darwin"`, `"win32"`, or `"unknown"` |
+| `tsc_os_arch()` | `tsc_str_t*` — `"x64"`, `"arm64"`, `"ia32"`, `"arm"`, `"unknown"` |
+| `tsc_os_hostname()` | `tsc_str_t*` |
+| `tsc_os_tmpdir()` | `tsc_str_t*` — `$TMPDIR` or `/tmp` |
+| `tsc_os_homedir()` | `tsc_str_t*` — `$HOME` or `/` |
+| `tsc_os_cpu_count()` | `double` — from `sysconf(_SC_NPROCESSORS_ONLN)` |
+| `tsc_date_now()` | `double` — ms since epoch via `clock_gettime(CLOCK_REALTIME)` |
+
+## JSON helpers
+
+| Symbol | Purpose |
+|--------|---------|
+| `tsc_json_escape_string(s)` | Returns `s` wrapped in `"..."` with JSON escape sequences. |
+| `tsc_json_num(n)` | Number formatted for JSON. `NaN` / `±Infinity` → `"null"` per spec. |
+
+`JSON.stringify` itself is not a runtime function — it's expanded at emit time by walking the TS type and emitting the right nested helpers. See `stringifyJsonValue` in `src/emit/index.ts`.
+
+## Memory-management macros
+
+```c
+#define TSC_GC_MALLOC(n)         GC_MALLOC(n)        /* or calloc under -DTSC_NO_GC */
+#define TSC_GC_MALLOC_ATOMIC(n)  GC_MALLOC_ATOMIC(n) /* raw bytes, no scan */
+#define TSC_GC_REALLOC(p, n)     GC_REALLOC((p), (n))
+#define TSC_GC_INIT()            GC_INIT()
+```
+
+The `-DTSC_NO_GC` define in `src/link/cc.ts` switches all of these to `calloc`/`realloc`/`ε`. This is what `--no-gc` does at the CLI.
+
+## Adding a new runtime function
+
+1. Declare in `runtime/tsc_runtime.h` under an appropriate section.
+2. Implement in `runtime/tsc_runtime.c`.
+3. Teach the emitter to call it — typically by adding a `case` inside `emitArrayMethod`, `emitStringMethod`, `emitMathCall`, or similar dispatchers in `src/emit/index.ts`.
+4. If it exposes a new TS API, also add the TS declaration in `stdlib/lib.core.d.ts` so the type checker accepts user code using it.
+5. Add an e2e case under `tests/e2e/cases/<feature>/` — see [`testing.md`](testing.md).
+
+---
+
+## File: `docs/testing.md`
+
+# Testing
+
+`tsc2c` uses a single end-to-end test harness: **compile each TS case, execute the resulting binary, diff stdout against an expected file**. No separate unit test layer yet — by design. Every feature has at least one black-box test proving it produces correct output.
+
+## Running the suite
+
+```bash
+cd /home/adam/dev/innovation/TypeScriptC
+
+# with libgc-dev installed:
+bun tests/e2e/run.ts
+
+# without libgc-dev (leaking fallback):
+TSC2C_NO_GC=1 bun tests/e2e/run.ts
+```
+
+Expected output:
+
+```
+e2e: advanced … OK
+e2e: arith … OK
+...
+e2e: wordcount … OK
+
+24 passed, 0 failed
+```
+
+Non-zero exit if any case fails.
+
+## Test layout
+
+```
+tests/e2e/
+├── run.ts                 — the harness
+└── cases/
+    ├── hello/
+    │   ├── in.ts          — the program to compile
+    │   └── expected.stdout — expected output when the binary runs
+    ├── fizzbuzz/
+    ├── ...
+    └── modules/
+        ├── in.ts          — the entry file
+        ├── math.ts        — additional module imported by in.ts
+        ├── greeter.ts
+        └── expected.stdout
+```
+
+Each subdirectory under `tests/e2e/cases/` is one test. The harness auto-discovers every directory with both `in.ts` and `expected.stdout`.
+
+## How the harness works
+
+`tests/e2e/run.ts` does:
+
+1. Discover all test directories.
+2. For each case:
+   - Call `compile({ entry: in.ts, output: /tmp/<case>, buildDir: /tmp/<case>-build, noGc: env })`.
+   - If compile exits non-zero → print the error → mark **COMPILE FAIL**.
+   - Else run the binary with no stdin.
+   - If the binary exits non-zero → **RUN FAIL**.
+   - Else diff captured stdout against `expected.stdout`.
+   - If they differ → **STDOUT MISMATCH** with both blocks printed.
+   - Else → **OK**.
+3. Print the tally. Exit 0 if everything OK, else 1.
+
+Source: [`tests/e2e/run.ts`](../tests/e2e/run.ts).
+
+## Adding a new test case
+
+1. Create `tests/e2e/cases/<name>/`.
+2. Write `in.ts` — the program.
+3. Write `expected.stdout` — exactly what stdout should look like, including trailing newline.
+4. Run `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
+
+If your test imports other files, add them to the same directory. They're auto-picked-up by the TS program walker.
+
+### Tips for writing deterministic tests
+
+- Avoid timing (`Date.now()` values differ between runs). Test only *relative* properties: `t1 >= t0` instead of the actual value.
+- Avoid `Math.random()` — it's not seeded deterministically.
+- For `os.platform()` / `arch()` / `hostname()`, assert properties like `.length > 0` rather than the exact string.
+- Avoid testing `process.argv` directly — the binary's argv changes between bun-level runs and stand-alone invocations.
+- C function-argument evaluation order is unspecified. `console.log(f(), f(), f())` may reorder. Hoist into temps: `const a = f(); const b = f(); console.log(a, b);`.
+
+### Choosing a focused or compound test
+
+- **Focused test** (e.g. `math`, `nullish`): one TS feature, a few lines, tight stdout. Most tests should be focused.
+- **Compound test** (e.g. `wordcount`, `collections`): multiple features combined into one realistic program. Keep one or two of these to verify real-world composition — but don't lean on them for individual-feature regressions.
+
+## Debugging a failing test
+
+1. Run just that case with `--verbose` to see the gcc command and any C warnings:
+   ```bash
+   bun src/cli.ts tests/e2e/cases/foo/in.ts -o /tmp/foo --no-gc --verbose --keep-build-dir /tmp/foo-build
+   ```
+2. Look at the generated C: `cat /tmp/foo-build/main.c`.
+3. Try the emit-only path if gcc is failing:
+   ```bash
+   bun src/cli.ts tests/e2e/cases/foo/in.ts -o /tmp/foo --emit-c-only --keep-build-dir /tmp/foo-build
+   ```
+4. If the C looks right but the binary behaves wrong, compile with `-g` manually from the build dir:
+   ```bash
+   cd /tmp/foo-build
+   gcc -g -std=c11 main.c tsc_runtime.c -lm -DTSC_NO_GC -o foo-debug
+   gdb ./foo-debug
+   ```
+
+## What's NOT tested yet
+
+- **Error paths at the emit level** — the 3 exit codes (1 gcc, 2 TS, 3 emitter) aren't explicitly tested with expected-failure cases. If you add a case that expects compile failure, add an `expected.exitcode` file and extend the harness.
+- **Multi-config matrix** — only `--no-gc` vs default. macOS / Windows / clang paths aren't exercised yet.
+- **Binary size / perf regressions** — not measured.
+- **Stdlib edge cases** at scale — we test "happy path" for each feature. Fuzz / property-based testing would improve coverage.
+
+These are candidate Phase 15 work. See [`todo.md`](todo.md).
+
+## Related
+
+- [`architecture.md`](architecture.md#diagnostics-flow) — where the three exit codes come from.
+- [`runtime-reference.md`](runtime-reference.md) — what runtime symbols you're testing against.
+- [`cli.md`](cli.md) — flags useful for debugging (`--keep-build-dir`, `--emit-c-only`, `--verbose`).
+
+---
+
+## File: `docs/done.md`
+
+# Implemented features
+
+Everything in this file compiles end-to-end to a native binary via `./bin/tsc2c file.ts -o out`. Each bullet points at the test case under `tests/e2e/cases/` that exercises it and, where useful, at the runtime symbol or emitter method that implements it.
+
+Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 24 passed.
+
+---
+
+## 1. Language core
+
+### Literals
+- Numeric literals — decimal, `0x`/`0o`/`0b`, underscore separators → `formatNumericLiteral` in `src/emit/index.ts`. Test: `arith`
+- String literals with full C escape handling for UTF-8 → `escapeCString` in `src/emit/cbuf.ts`. Test: `hello`, `strings`
+- Template literals with `${expr}` interpolation → `emitTemplate`. Test: `greet`, `fizzbuzz`
+- Boolean literals `true` / `false`. Test: `json`
+- `null` / `undefined` / `NaN` / `Infinity` globals. Test: `nullish`, `stdlib_os`
+- Array literals `[1, 2, 3]` with spread `[0, ...a, 6]` → `emitArrayLiteral`. Test: `advanced`
+- Object literals `{ x: 1 }` matched against an interface/class shape → `emitObjectLiteral`. Test: `interfaces`
+- Regex literals `/pattern/flags` → `emitExpr` RegularExpressionLiteral branch. Test: `regex`
+
+### Primitives
+- `number` → C `double` with shortest round-trip formatting. Runtime: `tsc_str_from_num`
+- `string` → immutable UTF-8 `tsc_str_t*`. Runtime: `tsc_str_from_lit`, `tsc_str_concat`, `tsc_str_eq`, `tsc_str_cmp`
+- `boolean` → C `bool` (stdbool.h)
+- `void` / `undefined` / `null` as `NULL` for pointer-typed contexts
+
+### Operators
+- Arithmetic: `+ - * / % **` (incl. `tsc_num_mod` for JS-semantics modulo, `pow` for `**`)
+- Comparison: `== != === !==` (with `tsc_str_eq` for strings)
+- Relational: `< <= > >=` (with `tsc_str_cmp` for strings)
+- Logical: `&& || !`
+- Bitwise: `& | ^ << >> >>>` (JS-style int32 semantics)
+- Assignment + compound: `= += -= *= /= %=`
+- Pre/post `++` `--`
+- Ternary `a ? b : c`
+- Nullish coalescing `??` — null-aware for pointer types. Test: `nullish`
+- Optional chaining `?.` — null-aware for class fields with zero-sentinel fallback. Test: `nullish`
+- Cross-type null comparison: `arr !== null`, `cls === null`
+
+### Control flow
+- `if` / `else if` / `else`
+- `while`, `do` / `while`
+- `for (let i = 0; i < n; i++)`
+- `for (const x of arr)` — also works on `for-of` over arrays. Test: `arrays`, `captures`
+- `break`, `continue`
+- `switch` / `case` / `default` with correct **fall-through semantics** (empty cases merge via `||`). Test: `switch`
+- `return`, void return, typed return
+
+---
+
+## 2. Functions
+
+- Top-level `function` declarations with typed params and return. Test: `greet`
+- Recursion (direct)
+- Top-level `const f = (...) => ...` **lifted to a static C function** — usable both as a call target and as an HOF callback. Test: `fn_refs`
+- Inline arrow functions in HOF call sites (body expanded inline via GCC statement expressions). Test: `array_hof`
+- Function references passed as HOF callbacks — both declared functions and lifted-arrow consts. Test: `fn_refs`
+- Module-level `const` / `let` emitted as file-scope statics so top-level functions read/write them as captures. Test: `captures`
+
+---
+
+## 3. Classes & types
+
+- `class Foo { field: T; }` — compiled to a C struct. Test: `classes`
+- Constructors — `ClassName_init(self, ...)` + `ClassName_new(...)` pair. Test: `classes`
+- Methods — `ClassName_methodName(self, ...)`. Test: `classes`
+- `this` → `self` inside methods and ctor
+- `new Foo(args)` → `Foo_new(args)`. Test: `classes`
+- Field access `obj.x`, field assignment `obj.x = v`. Test: `classes`
+- **Single inheritance** via `extends` — base fields laid out at struct head for safe up-cast. Test: `inheritance`
+- `super(...)` call in subclass constructor → `Base_init((Base_t*)self, ...)`. Test: `inheritance`
+- **Static fields** — emitted as file-scope `ClassName_field`. Test: `inheritance`
+- **Static methods** — called as `ClassName_method(args)`. Test: `inheritance`
+- Inherited method dispatch — `d.describe()` on `Dog extends Animal` resolves to `Animal_describe((Animal_t*)d)`. Test: `inheritance`
+- `interface` declarations → C struct types (no runtime overhead). Test: `interfaces`
+- Object literals typed against an interface/class → allocated + field-assigned. Test: `interfaces`
+- Interface nesting — `interface Line { from: Point; to: Point; }`. Test: `interfaces`
+- Shorthand property assignment `{ x, y }`. Test: `interfaces`
+
+---
+
+## 4. Collections
+
+### Arrays
+- Literal construction with optional `...spread`. Test: `advanced`
+- Index access `arr[i]` (get and set) via `TSC_ARR(T, arr, i)` macro
+- `.length` → `tsc_array_length`
+- `.push(...)` / `.pop()` — `tsc_array_push_raw`, `tsc_array_pop_raw`
+- `.shift()` / `.unshift(...)` — `tsc_array_shift_raw`, `tsc_array_unshift_raw`
+- `.reverse()` — in-place via `tsc_array_reverse`
+- `.slice(start?, end?)` — `tsc_array_slice`
+- `.concat(...arrays)` — `tsc_array_append`
+- `.join(sep?)` — with type-driven element stringification
+- `.indexOf(x)`, `.includes(x)` — with proper per-element-type equality
+- `.sort((a, b) => cmp)` — inline insertion sort; accepts inline arrow OR named function reference. Test: `wordcount`
+- `.forEach(cb)` / `.map(cb)` / `.filter(cb)` / `.reduce(cb, init)`. Test: `array_hof`
+- `.find(cb)` / `.findIndex(cb)` / `.some(cb)` / `.every(cb)`. Test: `array_hof`
+- All HOFs accept **either** inline arrow **or** named function reference. Test: `fn_refs`
+- `for-of` iteration. Test: `arrays`
+- `Array.isArray(x)` — resolved at compile time from the CType. Test: `advanced`
+- `Array.from(arr)` — identity copy for arrays. Test: `advanced`
+
+### `Map<K, V>`
+- `new Map<K, V>()` — `tsc_map_new(sizeof(K), sizeof(V), keyKind, 0)`
+- `.set(k, v)`, `.get(k)`, `.has(k)`, `.delete(k)`, `.clear()`. Test: `map_set`
+- `.keys()`, `.values()` — returns typed array
+- `.size` property. Test: `map_set`, `wordcount`
+- Key equality polymorphic by tag: number / string / bool / pointer. Runtime: `key_eq`
+
+### `Set<T>`
+- `new Set<T>()` — `tsc_set_new(sizeof(T), keyKind, 0)`
+- `.add(v)`, `.has(v)`, `.delete(v)`, `.clear()`, `.values()`, `.size`. Test: `map_set`
+
+---
+
+## 5. Strings
+
+All methods on the `String` interface map to `tsc_str_*` runtime calls:
+
+- `.length` → `tsc_str_length`
+- `.charAt(i)` → `tsc_str_char_at`
+- `.indexOf(needle)` → `tsc_str_index_of`
+- `.includes(needle)` → `tsc_str_includes`
+- `.startsWith(p)` → `tsc_str_starts_with`
+- `.endsWith(p)` → `tsc_str_ends_with`
+- `.slice(start?, end?)` → `tsc_str_slice`
+- `.toUpperCase()` / `.toLowerCase()` → `tsc_str_to_upper`, `tsc_str_to_lower`
+- `.trim()` → `tsc_str_trim`
+- `.repeat(n)` → `tsc_str_repeat`
+- `.padStart(len, pad?)` / `.padEnd(len, pad?)` → `tsc_str_pad_start`, `tsc_str_pad_end`
+- `.replace(search, repl)` → `tsc_str_replace` or `tsc_str_replace_regex` (if `search` is a RegExp)
+- `.replaceAll(search, repl)` → `tsc_str_replace_all` or regex version
+- `.match(regex)` → `tsc_str_match_regex`
+- `.split(sep)` / `.split(regex)` → `tsc_str_split` / `tsc_str_split_regex`
+- String + anything → concat with automatic stringification
+- Index access `s[i]` → same as `charAt`
+
+Tests: `strings`, `wordcount`
+
+---
+
+## 6. Regex (POSIX ERE-backed)
+
+- `/pattern/flags` literal syntax — parsed at emit time. Test: `regex`
+- Flag support: `g`, `i`, `m` (global, ignore-case, multiline)
+- JS escape-class translation:
+  - `\d` → `[0-9]`, `\D` → `[^0-9]`
+  - `\w` → `[A-Za-z0-9_]`, `\W` → `[^A-Za-z0-9_]`
+  - `\s` → `[ \t\n\r\f\v]`, `\S` → `[^ \t\n\r\f\v]`
+- `re.test(s)` → `tsc_regexp_test`
+- String-side methods with regex argument: `.replace`, `.replaceAll`, `.match`, `.split`
+- Runtime: `tsc_regexp_new`, `tsc_str_replace_regex`, `tsc_str_match_regex`, `tsc_str_split_regex` (all in `runtime/tsc_runtime.c`)
+
+---
+
+## 7. Modules
+
+- Multi-file compilation via `ts.createProgram` — walks `import`/`export` declarations. Test: `modules`
+- `src/resolve.ts` builds the dependency graph, topo-sorts modules
+- Each module's top-level statements wrapped in a static `mod_init_<moduleId>(void)` function
+- `main()` calls `mod_init_*` in topological order (deps first)
+- Flat symbol namespace — function/class/const names are global across the program
+- Local relative imports: `import { x } from "./y"` resolves via `ts.resolveModuleName`
+- Circular imports don't crash — topo DFS stops at the back-edge
+
+---
+
+## 8. Error handling
+
+- `throw expr` — stringifies `expr` and `longjmp`s to the nearest enclosing `try`. Test: `exceptions`
+- `try { } catch (e) { } finally { }` — catch binding is `tsc_str_t* e = tsc_current_error()`
+- `new Error("msg")` → treated as a string carrier (simple form)
+- Nested try/catch with re-throw. Test: `exceptions`
+- Uncaught exceptions print `Uncaught: <msg>` and exit 1
+- Runtime: `tsc_try_push`, `tsc_try_pop`, `tsc_throw_str`, `tsc_rethrow`, `tsc_current_error` + `setjmp`/`longjmp`
+
+---
+
+## 9. JSON
+
+- `JSON.stringify(value)` — type-driven, recurses into:
+  - Primitives (number/string/boolean) with proper JSON escaping
+  - Arrays → `[...]`
+  - Class/interface values → `{"field":value,...}` using the declared property list from the TypeScript checker
+- Runtime: `tsc_json_escape_string`, `tsc_json_num`. Test: `json`
+- **Not** implemented: `JSON.parse` (needs the dynamic value runtime)
+
+---
+
+## 10. Node stdlib (sync subset)
+
+### `fs`
+- `fs.readFileSync(path)` → `tsc_fs_read_file_sync`
+- `fs.writeFileSync(path, data)` → `tsc_fs_write_file_sync`
+- `fs.existsSync(path)` → `tsc_fs_exists_sync`
+- `fs.readdirSync(path)` → `tsc_fs_readdir_sync`
+- Test: `fs_roundtrip`
+
+### `path`
+- `path.join(...parts)` → `tsc_path_join`
+- `path.resolve(...parts)` → `tsc_path_resolve` (against `getcwd()`)
+- `path.basename` / `dirname` / `extname`
+- Test: `fs_roundtrip`
+
+### `os`
+- `os.platform()` / `arch()` / `hostname()` / `tmpdir()` / `homedir()` / `cpus()`
+- Runtime: `tsc_os_*`. Test: `stdlib_os`
+
+### `Math`
+- `floor`, `ceil`, `round` (JS half-to-+Inf), `abs`, `trunc`, `sign`
+- `sqrt`, `pow`, `log`, `exp`, `sin`, `cos`, `tan`, `atan`, `atan2`
+- `min(...)`, `max(...)` — variadic via chained `fmin`/`fmax`
+- `random()` → `tsc_math_random`
+- Constants: `PI`, `E`, `LN2`, `LN10`, `LOG2E`, `LOG10E`, `SQRT2`
+- Test: `math`
+
+### `process`
+- `process.argv` → `tsc_process_argv` (string[] of command-line args)
+- `process.env.VAR` → `tsc_process_env_get(VAR)` (getenv)
+- `process.env["VAR"]` — same as above via element access
+- `process.cwd()` → `tsc_process_cwd`
+- `process.exit(code)` → `tsc_process_exit`
+- Test: `wordcount`, `stdlib_os`
+
+### `console`
+- `console.log` / `.error` / `.warn` / `.info` — variadic, auto-stringifies each arg
+- Runtime: `tsc_console_log_n`, `tsc_console_error_n`
+
+### `Date`, `Number`, `Array`, `Object`
+- `Date.now()` → `tsc_date_now` (ms since epoch)
+- `Number.isInteger(n)`, `Number.isFinite(n)`, `Number.isNaN(n)`, `Number.parseFloat(s)`, `Number.parseInt(s)`
+- `Array.isArray(x)`, `Array.from(arr)`
+- `Object.keys(obj)`, `Object.values(obj)` — compile-time expanded from the type's property list
+- Global `parseInt` / `parseFloat` / `isNaN` / `isFinite` → mapped to runtime or C math builtins
+
+---
+
+## 11. Diagnostics & tooling
+
+- TypeScript type-checking via the official compiler API — any TS type error is surfaced with full source context (file:line:col + code frame) before emission. Test: try `/tmp/bad.ts` with `const x: number = "str"`.
+- Unsupported-feature diagnostics include source location and a one-line reason — exit code 3 distinguishes them from TS errors (exit 2) and gcc failures (exit 1).
+- `--emit-c-only` — skip gcc, just write the generated `main.c` for inspection.
+- `--keep-build-dir <path>` — keep intermediate files rather than using a tempdir.
+- `--verbose` — print compile steps + the full gcc command line.
+- `--no-gc` — link without Boehm GC (leaking `calloc` fallback) for environments where `libgc-dev` isn't installed.
+- Shortest round-trip number formatting — `tsc_str_from_num` probes `%.*g` with precision 1..17 until the formatted value strtods back to the original. Matches JS's `Number.prototype.toString` output on common cases.
+- Multi-pass emission (struct fwd-decls → struct bodies → function/method protos → function/method bodies → module init bodies → main) so cycles and forward references work cleanly.
+
+---
+
+## Test case index
+
+| Test case | Demonstrates |
+|-----------|--------------|
+| `hello` | minimal pipeline |
+| `fizzbuzz` | loop + modulo + conditional + string concat |
+| `arith` | all arithmetic operators + JS number formatting |
+| `greet` | function declaration + template literals |
+| `arrays` | array literal + push/pop + for-of + length |
+| `array_hof` | forEach/map/filter/reduce/find/some/every + inline arrows |
+| `classes` | class + ctor + method + `this` + `new` |
+| `inheritance` | extends + super() + static members |
+| `interfaces` | interface + object literal + nested refs + shorthand |
+| `exceptions` | throw + try/catch/finally + re-throw + nested |
+| `modules` | multi-file import/export |
+| `strings` | every supported String method |
+| `math` | Math.* + constants |
+| `fs_roundtrip` | fs.readFileSync + writeFileSync + path helpers |
+| `map_set` | Map + Set with all methods |
+| `json` | JSON.stringify of primitives, arrays, typed objects |
+| `switch` | number + string switch with fall-through |
+| `regex` | POSIX-backed regex: test, replace, match, split, flags |
+| `nullish` | `??` + `?.` + null returns from functions |
+| `advanced` | spread + Object.keys + Array.from + padStart + replace |
+| `fn_refs` | named function refs + lifted arrow consts in HOFs |
+| `captures` | module-level const/let used inside functions and arrows |
+| `stdlib_os` | os module + Date.now + Number.* statics |
+| `wordcount` | real-world: fs + regex + Map + sort + captures + env |
+
+---
+
+## File: `docs/todo.md`
+
+# TODO — remaining work
+
+Scope of the full project (from the approved plan): **full ECMAScript 2026 + transpile arbitrary `node_modules`**. At the current pace, what's done is roughly 55–65% of the 15-phase plan. The rest is measured in weeks and months, not hours.
+
+Items are grouped by how soon they unblock the most user value. Within each group the ordering reflects dependency + estimated effort.
+
+---
+
+## 1. Next-up unblockers
+
+These are the two items that most directly expand what programs can be written against `tsc2c`. Either is a reasonable starting point for the next session.
+
+- **Closures with non-module captures** (~1–2 weeks)
+  - What: arrow functions or function expressions that capture variables from an enclosing *function* scope (not just module scope).
+  - Why blocked: requires allocating an environment struct per arrow, boxing captured mutable locals in ref cells, and generating a `{fn_ptr, env_ptr}` closure value per unique signature.
+  - Today: inline arrows in HOFs work (C lexical scope picks up enclosing locals), and top-level arrow consts work (module-level vars are file-scope). Neither of those helps `function outer() { const x = 5; return (y) => x + y; }`.
+  - Unblocks: callback-returning factories, partial application, any deeply functional style.
+
+- **NaN-boxed dynamic value runtime — Phase 3** (~2–3 weeks)
+  - What: a `tsc_value_t` type (NaN-boxed `uint64_t`) that can hold any JS value — number, string pointer, object pointer, bool, null, undefined — uniformly.
+  - Why deferred: hidden-classes / shape trees + inline caches are a significant project.
+  - Unblocks simultaneously: `any` / `unknown` types at runtime, `JSON.parse` returning a dynamic object, `Object.values` with mixed-type fields, heterogeneous arrays, `Proxy`/`Reflect` (depends on dynamic property access), and **the vast majority of untyped npm packages**.
+  - Critical files (planned): `runtime/tsc_value.h` (NaN-box helpers), `runtime/tsc_object.c` (shapes + IC), new boxed/unboxed bridging in `src/emit/index.ts`.
+
+---
+
+## 2. Medium-term phases (weeks each)
+
+- **Phase 6 — `async`/`await` + libuv event loop** (~3 weeks)
+  - State-machine lowering of each `async` function. `await` becomes a suspend/resume point that chains a `.then` onto the awaited promise.
+  - `Promise` runtime with `resolve`/`reject`/`then`/`catch`/`finally`/`all`/`allSettled`/`race`/`any`.
+  - Microtask queue + process.nextTick queue, drained in the right order each tick.
+  - libuv (`libuv1-dev`) bound for `setTimeout`/`setInterval`/`setImmediate` and all future async I/O.
+  - **Depends on Phase 3** for the `Promise<T>` value representation (mixed boxed + unboxed).
+
+- **Phase 7 remainder — ES collections + language features** (~3 weeks)
+  - `Symbol`, well-known symbols (`Symbol.iterator`, `Symbol.asyncIterator`)
+  - Generators `function*` and `async function*` — state-machine lowering similar to async
+  - `WeakMap`, `WeakSet`, `WeakRef`, `FinalizationRegistry`
+  - Iterator protocol for built-in collections — `for...of` on `Map`/`Set` natively (currently only via `.forEach`)
+  - Spread/rest in function calls and parameters (`f(...args)`, `function f(...rest)`)
+  - Computed property names `{ [k]: v }`
+  - Tagged template literals
+
+- **Phase 8 remainder — BigInt + full regex** (~1 week)
+  - `BigInt` backed by GMP (`libgmp-dev`). `0n` literals, arbitrary-precision arithmetic.
+  - PCRE2 (`libpcre2-dev`) swap-in to replace POSIX ERE — gives lookahead/lookbehind, named capture groups, Unicode property escapes.
+  - Regex capture groups exposed on `.match()` results (today only `match[0]` is returned).
+
+- **Phase 9 — `Proxy` + `Reflect`** (~2 weeks)
+  - All 13 `Proxy` traps (`get`, `set`, `has`, `deleteProperty`, `apply`, `construct`, etc.)
+  - `Reflect.*` API
+  - `Object.defineProperty` with full property descriptor semantics (writable/configurable/enumerable, getters/setters)
+  - **Depends on Phase 3** heavily — proxies intercept dynamic property access.
+
+---
+
+## 3. Long-term phases (months)
+
+- **Phases 11–13 — async Node stdlib** (~2 months total)
+  - Phase 11: `fs.promises`, `events.EventEmitter`, `stream` (readable/writable/transform/pipe), `net`, `dns`
+  - Phase 12: `http` / `https` (OpenSSL), `http2` (best-effort)
+  - Phase 13: `child_process`, `cluster` (spawn model), `worker_threads` (pthread-backed, `structuredClone` for messages)
+
+- **Phase 14 — npm integration** (~2 weeks *on top of* Phases 3 + 6 + 7)
+  - Walk `node_modules/` and honor `package.json` `exports`/`imports`/`conditions`
+  - Dual CJS/ESM resolution
+  - `allowJs: true` so pure-JS packages are type-erased to `any` (needs Phase 3)
+  - Detect `*.node` native addons at resolve time and emit a hard error with remediation guidance
+
+- **Phase 15 — perf & polish** (ongoing)
+  - Inline-caching stats and diagnostics
+  - Basic escape analysis to stack-allocate objects that don't outlive their frame
+  - Dead-code elimination on the generated C
+  - `#line` directives from TS into the `.c` output so gdb stops at TS source
+  - Binary-size optimization, release build, CI matrix (Linux ✓, macOS, Windows later)
+
+---
+
+## 4. Smaller missing pieces
+
+Within-phase gaps that can be picked off individually without the big phase-level investments:
+
+- `Array.prototype.sort` with **no comparator** — currently requires an explicit `(a, b) => …`. JS default is string-conversion sort; we'd need to add that as a fallback path. (A few hours.)
+- `Array.prototype.flat(depth?)` and `.flatMap(cb)`. (A few hours.)
+- `Object.entries(obj)`, `Object.fromEntries(entries)`. (Needs either Phase 3 tuples or a specialized `[K, V]` 2-element struct per call site.)
+- `String.prototype.matchAll(re)` returning an iterator of full match groups.
+- `String.prototype.normalize()`, `.codePointAt()`, `.fromCharCode()` — Unicode-aware string ops.
+- **Left-to-right argument evaluation** for function calls with side effects. C's argument order is unspecified, so `f(bump(), bump(), bump())` can reorder. Fix: hoist args with side effects into sequenced temps before the call.
+- **Regex capture groups** on the results of `.match()` (today only `match[0]` is exposed — we ignore `regmatch_t` slots beyond 0).
+- `for...of` directly on `Map` and `Set` — currently works via `.forEach()` but not via native iteration syntax.
+- `JSON.parse(text)` — returns a structured value, blocked on Phase 3 dynamic runtime.
+- `Buffer` — currently conflated with `string` in the type shim; real `Uint8Array`-like semantics with binary safety is a modest amount of runtime work.
+- `URL` parsing class — a focused effort using a URL library or hand-rolled parser.
+- `crypto.createHash('sha256').update(...).digest('hex')` — straightforward once linked against OpenSSL.
+- `console.log` formatting specifiers (`%s`, `%d`, `%o`, etc.) — ignored today, each arg just stringified + space-joined.
+- `instanceof` operator — needs a class-hierarchy check, trivial for our single-inheritance model.
+- `typeof` operator — trivial in typed code (compile-time result), more interesting for `any` values (Phase 3).
+- Exhaustiveness checking in `switch` — TS already does this; we just surface its errors today.
+- `enum` declarations — parsed by TS but we don't emit them yet. Numeric enums would be straightforward.
+- `abstract` classes, access modifiers (`public`/`private`/`protected`) — TS-only; no runtime effect, we currently accept but ignore.
+- `readonly` on fields — TS-only; same treatment.
+- Type guards / narrowing beyond `T | null`/`undefined` — partial support; `typeof x === "string"` isn't tracked.
+- Generic functions that aren't type-erased cleanly — e.g. `function identity<T>(x: T): T` works only when `T` binds to a single concrete type at each call site.
+- Namespace declarations — TS namespace syntax not handled.
+- Decorators — requires metadata + Proxy support.
+- **Tail-call optimization** — not emitted. Deep recursion hits C stack.
+
+---
+
+## 5. Permanent limits (will never be done)
+
+These are genuinely impossible to AOT-compile at any engineering investment. The plan documents them, the emitter will eventually detect + hard-error on them (today it just fails at link or parse time).
+
+- **Native C++ addons under `node_modules/*/build/Release/*.node`.** They're compiled against Node's V8 ABI and the embedder's internals. We can't transpile their source because we don't have it — they're binary `.node` files. Detection + error is planned for Phase 14; suggested workaround is to document pure-JS alternatives.
+- **Runtime code compilation** — JavaScript offers two constructs that require compiling source text at runtime. `tsc2c` is ahead-of-time and has no compiler in the produced binary, so any call to either form is rejected. Diagnostic planned in Phase 3 or Phase 14.
+- **Dynamic `require(variable)`** where the argument isn't a string literal. The import graph is walked statically; a variable-valued specifier is unknowable at compile time. `require("./literal")` and `await import("./literal")` are supported; `require(someExpr)` is rejected.
+
+---
+
+## How to pick
+
+If the next session has **hours**, pick from section 4 (smaller pieces).
+
+If it has **a few days to a week**, pick from section 2 (medium-term phases — start with Phase 8 remainder since PCRE2 is mostly drop-in).
+
+If it has **a week or more** to invest in one thing, do **Phase 3 (NaN-boxing)** from section 1. That one item unblocks about half of what's in sections 2–4.
+
+If the goal is **"run a real npm package"**, the sequential chain is: Phase 3 → Closures → Phase 6 → Phase 14. Expect roughly two months of focused work for that end-to-end.
+
+---
+
+## File: `CHANGELOG.md`
+
+# Changelog
+
+All meaningful changes to `typescriptc` land here. Newest at the top.
+
+## Unreleased
+
+### Added — deep documentation pass
+- `docs/README.md` — documentation index routing by role/topic.
+- `docs/architecture.md` — multi-pass pipeline, module graph, value model; includes Mermaid diagrams for pipeline, emission passes, module init chain, and the future dynamic-value bridge.
+- `docs/cli.md` — complete CLI reference: every flag, exit code, env var; explains the `bin/tsc2c` dispatch.
+- `docs/runtime-reference.md` — every `tsc_*` runtime symbol grouped by feature area, with signatures and memory semantics.
+- `docs/testing.md` — how the e2e harness works, how to add a new case, debugging tips.
+- `CHANGELOG.md` — this file.
+- `llms.txt` — concise LLM-oriented index.
+- `llms-full.txt` — single-file documentation bundle for ingestion.
+- `.claude/skills/tsc2c-add-feature/SKILL.md` — repo-local agent skill for future LLMs adding a language feature.
+
+### Added — examples (under `examples/`)
+- `examples/hello.ts`, `fizzbuzz.ts` — minimal demonstrations.
+- `examples/calc.ts` — CLI calculator: `process.argv`, `parseFloat`, switch fall-through, `process.exit`.
+- `examples/tree.ts` — binary search tree with recursive class methods and `Node | null` fields.
+- `examples/cart.ts` — interfaces, classes, `reduce`/`map`/`filter`, template literals.
+- `examples/collections.ts` — every HOF, `Map`, `Set`, object literals, `padEnd`.
+- `examples/wordcount.ts` — fs + regex split + `Map` counter + `Array.sort` with comparator.
+- `examples/README.md` — index with run commands.
+
+## Session 4 — real-world programming
+
+### Added
+- `Array.prototype.sort` with user comparator — inline insertion sort; accepts inline arrows or function references.
+- `process.env.VAR` — maps to `getenv` via `tsc_process_env_get`.
+- `process.cwd()` — `tsc_process_cwd`.
+- `wordcount` e2e test — tokenize via regex, count via `Map`, sort by comparator, read env var.
+
+## Session 3 — full functional style
+
+### Added
+- Function references as HOF callbacks. `arr.map(declaredFn)` or `arr.map(liftedArrowConst)` works as well as inline arrows.
+- Top-level `const f = (x) => ...` lifts to a static C function. Usable as a call target and as an HOF callback.
+- Module-level `const/let` promoted to file-scope statics. Top-level functions and lifted arrows can now read/write them as captures.
+- Spread in array literals: `[0, ...a, 6]`.
+- `Object.keys`/`values` on typed interfaces (compile-time expansion from the TypeScript type's property list).
+- `Array.from`, `Array.isArray`.
+- String methods: `padStart`, `padEnd`, `replace`/`replaceAll` with both string and regex patterns.
+- RegExp via POSIX ERE (`<regex.h>`): `/pattern/flags` literals, `re.test`, `s.replace`/`.match`/`.split` with regex, flag handling for `g`/`i`/`m`, JS escape class translation (`\d`, `\D`, `\w`, `\W`, `\s`, `\S`).
+- Nullish coalescing `??` — null-aware for pointer types.
+- Optional chaining `?.` — null-aware property access with zero-sentinel fallback.
+- `null` literal as a real runtime value: cross-type equality (`arr !== null`), coercion to any pointer type.
+- Declared-type preference for identifier references — enables `const s: string | null = null; s ?? "x"` to compile.
+
+### Fixed
+- `cstr_dup` forward declaration so regex code (earlier in the file) can call it.
+
+## Session 2 — the typed-TS core
+
+### Added
+- Phase 2a: typed arrays. Literal, indexing, `.length`, `push`/`pop`/`shift`/`unshift`, `for-of`, `reverse`, `slice`, `concat`, `join`, `indexOf`, `includes`.
+- Phase 2b: classes. Fields, constructor, methods, `new`, `this`, `extends`/`super()`, static fields, static methods, inherited method dispatch.
+- Phase 2c: higher-order array methods with inline arrow callbacks — `forEach`/`map`/`filter`/`reduce`/`find`/`findIndex`/`some`/`every`. Expansion via GCC statement expressions.
+- Phase 2.5: interfaces emitted as C structs; object literals with typed shape; shorthand property assignment `{ x, y }`.
+- Phase 4: multi-file module graph. `ts.Program` walks imports, topo-sorted, each module's top-level code wrapped in `mod_init_<id>()`, called from `main` in dependency order.
+- Phase 5: exceptions. `throw`/`try`/`catch`/`finally` via setjmp/longjmp with a single global error string.
+- Phase 7 (partial): `Map<K,V>` and `Set<T>` via type-erased linear-scan with key-kind tag for equality.
+- Phase 7 (partial): `JSON.stringify` — type-driven, recurses through arrays and class/interface fields.
+- Phase 10: sync-core Node stdlib. `fs.readFileSync`/`writeFileSync`/`existsSync`/`readdirSync`, `path.join`/`resolve`/`basename`/`dirname`/`extname`, `Math.*` (floor/ceil/round/abs/sqrt/pow/min/max/log/sin/cos/tan/atan/atan2/exp/random/trunc/sign + PI, E, LN2, LN10, LOG2E, LOG10E, SQRT2), `os.platform`/`arch`/`hostname`/`tmpdir`/`homedir`/`cpus`, `Date.now`, `Number.isInteger`/`isFinite`/`isNaN`/`parseInt`/`parseFloat`.
+- Shortest round-trip number formatting (`tsc_str_from_num` probes `%.*g` precisions 1–17).
+- Fall-through switch/case semantics: consecutive empty cases merge via `||`.
+- `NaN`, `Infinity`, `undefined` globals.
+
+## Session 1 — bootstrap
+
+### Added
+- Phase 0: CLI (`bin/tsc2c` → `src/cli.ts`), TypeScript compiler API integration (`src/program.ts`), emitter scaffolding (`src/emit/index.ts`), gcc driver (`src/link/cc.ts`), runtime skeleton (`runtime/tsc_runtime.c/.h`), `stdlib/lib.core.d.ts` shim replacing `@types/node`.
+- Phase 1: typed core — `number`/`string`/`boolean`/`void`, literals, operators (arithmetic, comparison, logical, bitwise, assignment + compound, pre/post `++ --`), ternary, template literals, if/while/do-while/for/break/continue, top-level function declarations with recursion, `console.log`/`error`/`warn`/`info`, `process.exit`/`argv`, `parseInt`/`parseFloat`/`isNaN`/`isFinite`.
+- `--no-gc` compile flag using `-DTSC_NO_GC` as a fallback for environments without `libgc-dev`.
+- e2e test harness at `tests/e2e/run.ts` with `hello`, `fizzbuzz`, `arith`, `greet` cases.
+
+## Permanent limits
+
+Features that will never be supported, documented once and referenced from [`docs/todo.md`](docs/todo.md):
+
+- Native C++ addons (`node_modules/*/build/Release/*.node`) — linked against Node's V8 ABI.
+- Runtime code compilation (JS constructs that compile strings at runtime) — `tsc2c` is ahead-of-time.
+- Dynamic `require(variable)` with a non-literal argument — can't be walked statically.
+
+These are hard limits, not backlog items. The plan explicitly acknowledges them.
+
+---
+
+## Regenerate
+
+```bash
+cd /home/adam/dev/innovation/TypeScriptC
+{
+  # ... header + loop identical to the one that produced this file ...
+} > llms-full.txt
+```
+
+The canonical loop lives inside the deep-documentation task runner — grep the changelog for "Added — deep documentation pass" to find its most recent invocation.

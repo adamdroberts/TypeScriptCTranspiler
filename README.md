@@ -39,6 +39,20 @@ Substantial working subset, verified by **24 passing end-to-end tests** includin
 
 See `~/.claude/plans/make-a-typescript-to-floating-comet.md` for the full 15-phase plan.
 
+## Documentation
+
+Full docs live in [`docs/`](docs/). Fast routing:
+
+- [`docs/done.md`](docs/done.md) — every implemented feature with test pointers
+- [`docs/todo.md`](docs/todo.md) — every remaining item with effort estimates
+- [`docs/architecture.md`](docs/architecture.md) — pipeline + Mermaid diagrams
+- [`docs/cli.md`](docs/cli.md) — CLI flags, exit codes, env vars
+- [`docs/runtime-reference.md`](docs/runtime-reference.md) — every `tsc_*` C symbol
+- [`docs/testing.md`](docs/testing.md) — e2e harness and how to add a case
+- [`CHANGELOG.md`](CHANGELOG.md) — session-by-session history
+- [`llms.txt`](llms.txt) / [`llms-full.txt`](llms-full.txt) — LLM-oriented index + full bundle
+- [`examples/README.md`](examples/README.md) — 7 runnable demo programs
+
 ## Quick start
 
 ```bash
@@ -48,8 +62,10 @@ sudo apt-get install -y libgc-dev
 
 bun install
 
-./bin/tsc2c tests/e2e/cases/hello/in.ts -o /tmp/hello && /tmp/hello
-./bin/tsc2c tests/e2e/cases/fizzbuzz/in.ts -o /tmp/fb && /tmp/fb
+./bin/tsc2c examples/hello.ts -o /tmp/hello && /tmp/hello
+./bin/tsc2c examples/fizzbuzz.ts -o /tmp/fb && /tmp/fb
+./bin/tsc2c examples/collections.ts -o /tmp/coll && /tmp/coll    # Map + Set + HOFs
+./bin/tsc2c examples/wordcount.ts -o /tmp/wc && /tmp/wc README.md 5
 ```
 
 `bin/tsc2c` prefers `bun` (runs TS directly); falls back to `node dist/cli.js` if you've run `bun run build`.
