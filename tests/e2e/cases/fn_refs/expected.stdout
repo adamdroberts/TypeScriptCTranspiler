@@ -1,0 +1,7 @@
+doubled: 2,4,6,8,10
+inc: 2,3,4,5,6
+evens: 2,4
+x=2 x=4 x=6 x=8 x=10
+n=1 | n=2 | n=3 | n=4 | n=5
+doubler(7): 14
+addOne(99): 100

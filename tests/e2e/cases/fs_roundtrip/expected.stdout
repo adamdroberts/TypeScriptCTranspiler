@@ -1,0 +1,5 @@
+round-trip OK, bytes: 22
+dirname: /tmp
+basename: tsc2c-fs-test.txt
+extname: .txt
+joined: /tmp/foo/bar.txt

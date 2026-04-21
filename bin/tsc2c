@@ -1,0 +1,15 @@
+#!/bin/sh
+# tsc2c — TypeScriptC compiler CLI wrapper.
+# Prefers bun (native TS). Falls back to node dist/cli.js if built.
+set -e
+HERE="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")" && pwd)"
+ROOT="$(cd "$HERE/.." && pwd)"
+
+if command -v bun >/dev/null 2>&1 && [ -f "$ROOT/src/cli.ts" ]; then
+  exec bun "$ROOT/src/cli.ts" "$@"
+elif [ -f "$ROOT/dist/cli.js" ]; then
+  exec node "$ROOT/dist/cli.js" "$@"
+else
+  echo "tsc2c: no runnable entry. Install bun or run \`bun run build\` first." >&2
+  exit 1
+fi

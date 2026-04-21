@@ -1,0 +1,9 @@
+add(5): 15
+multiplyByBase(7): 70
+bump x3: 1 2 3
+counter: 3
+mapped: 10,20,30,40
+  box: 11
+  box: 12
+  box: 13
+  box: 14

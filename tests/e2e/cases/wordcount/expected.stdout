@@ -1,0 +1,15 @@
+tokens: 12
+distinct: 9
+  brown=1
+  dog=2
+  fox=1
+  jumps=1
+  lazy=1
+  over=1
+  quick=1
+  sleeps=1
+  the=3
+the: 3
+dog: 2
+unicorn: false
+greet: hello

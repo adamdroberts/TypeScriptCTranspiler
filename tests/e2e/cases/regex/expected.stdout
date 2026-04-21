@@ -1,0 +1,9 @@
+test '42': true
+test 'abc': false
+email match: true
+replace: hello there
+replaceAll: aX bX cX
+matches: 3.14,2.71
+parts: one|two|three
+ci test: true
+ci test: false

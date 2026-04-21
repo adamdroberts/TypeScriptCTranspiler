@@ -1,0 +1,15 @@
+len: 13
+upper: HELLO, WORLD!
+lower: hello, world!
+slice: World
+includes World: true
+startsWith Hello: true
+endsWith !: true
+indexOf o: 4
+repeat 3: ababab
+trim: hi
+parts len: 4
+   a
+   b
+   c
+   d

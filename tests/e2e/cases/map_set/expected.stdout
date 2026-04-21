@@ -1,0 +1,14 @@
+size: 3
+has alice: true
+has dan: false
+bob: 25
+updated bob: 26
+size after delete: 2
+has alice: false
+name: bob
+name: carol
+total age: 66
+set size: 3
+has 2: true
+has 99: false
+size after delete 2: 2

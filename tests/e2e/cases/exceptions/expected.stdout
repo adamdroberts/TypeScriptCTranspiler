@@ -1,0 +1,4 @@
+ok: 10
+caught: negative not allowed: -3
+inner caught: inner
+outer caught: wrapped: inner

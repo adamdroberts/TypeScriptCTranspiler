@@ -1,0 +1,8 @@
+0,1,2,3,4,5,6
+keys: name,age,active
+pad: 005 | x---
+replace: hello there
+replaceAll: a/b/c
+from: 1,2,3
+isArray(a): true
+isArray(42): false

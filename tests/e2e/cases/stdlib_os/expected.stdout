@@ -1,0 +1,12 @@
+cpus >=1: true
+platform nonempty: true
+arch nonempty: true
+hostname nonempty: true
+tmpdir: /tmp
+time monotonic-ish: true
+isInteger 5: true
+isInteger 5.5: false
+isNaN NaN: true
+isFinite 1/0: false
+parseInt '42': 42
+parseFloat '3.14': 3.14
