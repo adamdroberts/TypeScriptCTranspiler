@@ -1,0 +1,5 @@
+num: 42
+bool: yes
+string: 42!
+array len: 3
+array: 1|two|3

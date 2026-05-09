@@ -1,0 +1,10 @@
+string:3:abc
+not-string
+present:set
+missing
+negated:OK
+negated:nullish
+typeof-null: object
+typeof-missing: undefined
+direct-call: string 1
+compare-call: false 2

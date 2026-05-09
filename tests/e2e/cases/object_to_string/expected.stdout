@@ -1,0 +1,5 @@
+object: [object Object]
+array: 1,2
+num: 12.5
+text: hello
+bool: true

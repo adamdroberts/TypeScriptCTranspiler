@@ -1,0 +1,10 @@
+local eq: false
+global eq: true
+key: shared
+local key missing: true
+desc: local
+missing desc: true
+string: Symbol(local) Symbol()
+typeof: symbol
+iterator: true Symbol.iterator
+async: true Symbol.asyncIterator

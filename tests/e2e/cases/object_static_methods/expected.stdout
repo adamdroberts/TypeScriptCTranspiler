@@ -1,0 +1,8 @@
+same: true
+json: {"keep":"new","locked":"stay","add":3}
+names: keep|add|hidden
+keys: keep|add
+has keep: true
+has hidden: false
+locked set: false
+locked: stay

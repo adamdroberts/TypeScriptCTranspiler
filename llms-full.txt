@@ -4,15 +4,15 @@ This file aggregates the canonical documentation for `tsc2c` — a whole-program
 
 Source pages (kept in the repo and updated independently):
 
-- `README.md` — product overview, install, feature tour
-- `docs/README.md` — documentation index
-- `docs/architecture.md` — pipeline, emitter passes, module graph, value model
-- `docs/cli.md` — CLI flags, exit codes, env vars
-- `docs/runtime-reference.md` — every `tsc_*` C symbol
-- `docs/testing.md` — e2e harness
-- `docs/done.md` — implemented features with test pointers
-- `docs/todo.md` — remaining work, grouped by priority
-- `CHANGELOG.md` — session-by-session history
+- `README.md`
+- `docs/README.md`
+- `docs/architecture.md`
+- `docs/cli.md`
+- `docs/runtime-reference.md`
+- `docs/testing.md`
+- `docs/done.md`
+- `docs/todo.md`
+- `CHANGELOG.md`
 
 Each section below includes a source-file marker. When the underlying docs change, regenerate this file with the command shown at the bottom.
 
@@ -29,7 +29,7 @@ Goal: take a Node.js-style TypeScript app and get back a standalone executable t
 
 ## Status
 
-Substantial working subset, verified by **24 passing end-to-end tests** including a real word-count CLI that tokenizes via regex, counts via `Map`, sorts by a user comparator, and reads `process.env`. ~5,800 LOC across TypeScript compiler + C runtime + type shims.
+Substantial working subset, verified by **146 passing end-to-end tests** including a real word-count CLI that tokenizes via regex, counts via `Map`, sorts by a user comparator, and reads `process.env`. ~10,500 LOC across TypeScript compiler + C runtime + type shims.
 
 **Phases complete:**
 
@@ -37,42 +37,59 @@ Substantial working subset, verified by **24 passing end-to-end tests** includin
 |-------|---------|--------|
 | 0 | Bootstrap (gcc driver, build dir, CLI, `--no-gc` fallback) | ✅ |
 | 1 | Typed core — primitives, operators, control flow, functions, `switch`, nullish coalescing `??`, optional chaining `?.` | ✅ |
-| 2a | Typed arrays — literal (with spread `[...a, b]`), indexing, `.length`, push/pop/shift/unshift, `for-of`, reverse, **sort (user comparator)**, slice, concat, join, indexOf, includes | ✅ |
+| 2a | Typed arrays — literal (with spread `[...a, b]`), indexing, `.length`, push/pop/shift/unshift, `for-of`, at, reverse/toReversed, fill, copyWithin, with, toSpliced, **sort/toSorted (default + user comparator for typed arrays)**, slice, concat, join, indexOf, lastIndexOf, includes | ✅ |
 | 2b | Classes — fields, ctor, methods, `new`, `this`, `extends`, `super()`, static fields + methods | ✅ |
-| 2c | Higher-order array methods (`forEach`/`map`/`filter`/`reduce`/`find`/`findIndex`/`some`/`every`) with **inline arrows OR named function references** | ✅ |
+| 2c | Higher-order array methods (`forEach`/`map`/`filter`/`reduce`/`reduceRight`/`find`/`findIndex`/`findLast`/`findLastIndex`/`some`/`every`) with **inline arrows OR named function references** | ✅ |
 | 2d | Top-level `const f = (...) => ...` lifts to a static C function — usable as a call target AND as an HOF callback | ✅ |
-| 2.5 | Interfaces + object literals with typed shape; `Object.keys`/`values` | ✅ |
+| 2.5 | Interfaces + object literals with typed shape; `Object.keys`/`values`/`entries`/`fromEntries` | ✅ |
 | 4 | Multi-file module graph — flat namespace, local imports, topological init | ✅ |
 | 5 | Exceptions — `throw` / `try` / `catch` / `finally` via setjmp/longjmp | ✅ |
-| 7 (partial) | `Map<K,V>` + `Set<T>` with linear scan (get/set/has/delete/clear/keys/values/size) | ✅ |
+| 7 (partial) | `Map<K,V>` + `Set<T>` with linear scan, typed `WeakMap<K,V>`/`WeakSet<T>`, and direct `for...of` over strings/Map/Set | ✅ |
 | 7 (partial) | JSON.stringify (type-driven, recursive for arrays and objects) | ✅ |
-| 8 (partial) | **RegExp via POSIX ERE** (`/pattern/flags`, `re.test`, `s.replace`, `s.match`, `s.split` with JS escape translation: `\d` `\D` `\w` `\W` `\s` `\S`) | ✅ |
-| 10 | Sync Node stdlib — `fs` (read/write/exists/readdir), `path`, `Math`, `os`, `Date.now`, `Number.*` statics, `Array.isArray`/`Array.from`, **`process.env`**, **`process.cwd()`**, **`process.argv`** | ✅ |
+| 8 (partial) | **RegExp via PCRE2** (`/pattern/flags`, `re.test`, `s.replace`, `s.match`, `s.matchAll`, `s.split`, capture groups, lookahead/lookbehind, named capture syntax, Unicode properties) | ✅ |
+| 10 | Sync Node stdlib — `fs` (read/write/exists/readdir), `path`, `Math`, `os`, `Date.now`, `Number.*` statics, `Array.isArray`/`Array.from`/`Array.of`, `Buffer`, `URL`, **`process.env`**, **`process.cwd()`**, **`process.argv`** | ✅ |
 | 2d+ | **Module-level captures** — top-level `const/let` are emitted as file-scope statics, so top-level functions AND lifted arrow consts can read/write them as ordinary globals | ✅ |
+| 2e | **Function-scope closures** — first-class typed arrow/function expressions lower to generated `{fn, env}` closure structs with captured locals boxed in ref cells | ✅ |
+| 3 foundation | **Dynamic values** — `any`/`unknown` map to NaN-boxed `tsc_value_t`; supports `JSON.parse`, dynamic JSON stringify, heterogeneous arrays/objects, dynamic property/index reads/writes, dynamic `in`/`delete`, dynamic binary/compound assignment operators, broader dynamic string/array methods including at/concat/copyWithin/fill/lastIndexOf/localeCompare/normalize/pad/repeat/replace/split/substring/toReversed/toSorted/toSpliced/with/trim edges/sort/splice and inline-arrow array HOFs including reduceRight/findLast/findLastIndex, dynamic `Array.isArray`/`Array.from`/`Array.of`, typed coercion bridges, `Object.is`/assign/keys/values/entries/fromEntries/names/hasOwn/hasOwnProperty/isPrototypeOf/propertyIsEnumerable/toLocaleString/toString/valueOf/getOwnPropertyDescriptors, data descriptor flags, named-function accessor descriptors, Object.create/prototype-chain lookup, and basic Reflect object helpers | ✅ |
 
 **Not implemented in this session (deferred):**
 
-- **Phase 3** — NaN-boxed dynamic value runtime. Needed for `any`/`unknown`, untyped npm packages, `JSON.parse` into dynamic objects. ~2–3 weeks of focused work.
+- **Phase 3 remainder** — hidden classes / shape trees, inline caches, full accessor semantics, complete built-in/prototype semantics, and npm-scale object behavior.
 - **Phase 6** — `async/await` + libuv event loop + Promise + microtask queue. ~3 weeks.
-- **Phase 7 remainder** — `Symbol`, generators, `Proxy`, `Reflect`, `WeakMap`, `WeakSet`.
-- **Phase 8 remainder** — BigInt (GMP-backed). Regex is in (POSIX ERE); lookahead/behind + named groups would need PCRE2.
+- **Phase 7 remainder** — generators, `FinalizationRegistry`, custom iterator objects.
+- **Phase 9** — `Proxy`, `Reflect`, and full property descriptor semantics.
 - **Phases 11–13** — Async Node stdlib (streams, http, net, child_process, worker_threads).
 - **Phase 14** — `node_modules` transpilation (requires Phases 3, 6, 7 first).
-- Full closures over arbitrary captured variables — needs env-struct allocation per arrow. Non-capturing top-level arrows work; inline-arrow HOF callbacks work (via C lexical scope).
 
 See `~/.claude/plans/make-a-typescript-to-floating-comet.md` for the full 15-phase plan.
+
+## Documentation
+
+Full docs live in [`docs/`](docs/). Fast routing:
+
+- [`docs/done.md`](docs/done.md) — every implemented feature with test pointers
+- [`docs/todo.md`](docs/todo.md) — every remaining item with effort estimates
+- [`docs/architecture.md`](docs/architecture.md) — pipeline + Mermaid diagrams
+- [`docs/cli.md`](docs/cli.md) — CLI flags, exit codes, env vars
+- [`docs/runtime-reference.md`](docs/runtime-reference.md) — every `tsc_*` C symbol
+- [`docs/testing.md`](docs/testing.md) — e2e harness and how to add a case
+- [`CHANGELOG.md`](CHANGELOG.md) — session-by-session history
+- [`llms.txt`](llms.txt) / [`llms-full.txt`](llms-full.txt) — LLM-oriented index + full bundle
+- [`examples/README.md`](examples/README.md) — 7 runnable demo programs
 
 ## Quick start
 
 ```bash
-# one-time: install Boehm GC for real binaries.
+# one-time: install native libraries for runtime features.
 # without it, pass --no-gc and the binary will leak (fine for short programs).
-sudo apt-get install -y libgc-dev
+sudo apt-get install -y libgc-dev libssl-dev libicu-dev libgmp-dev libpcre2-dev
 
 bun install
 
-./bin/tsc2c tests/e2e/cases/hello/in.ts -o /tmp/hello && /tmp/hello
-./bin/tsc2c tests/e2e/cases/fizzbuzz/in.ts -o /tmp/fb && /tmp/fb
+./bin/tsc2c examples/hello.ts -o /tmp/hello && /tmp/hello
+./bin/tsc2c examples/fizzbuzz.ts -o /tmp/fb && /tmp/fb
+./bin/tsc2c examples/collections.ts -o /tmp/coll && /tmp/coll    # Map + Set + HOFs
+./bin/tsc2c examples/wordcount.ts -o /tmp/wc && /tmp/wc README.md 5
 ```
 
 `bin/tsc2c` prefers `bun` (runs TS directly); falls back to `node dist/cli.js` if you've run `bun run build`.
@@ -86,6 +103,7 @@ tsc2c <entry.ts> [options]
   --emit-c-only             write generated C to the build dir, skip gcc
   --keep-build-dir <path>   reuse an explicit build dir (default: tempdir)
   --no-gc                   link without libgc (leaking malloc fallback)
+  --release                 optimize for smaller stripped binaries
   --verbose                 print compile steps + gcc command
 ```
 
@@ -162,6 +180,7 @@ re.test("42");                                   // true
 ```ts
 const combined = [0, ...[1, 2, 3], 4];           // [0,1,2,3,4]
 Object.keys({ x: 1, y: 2 } as { x: number; y: number });  // ["x","y"]
+Object.entries({ x: 1, y: 2 } as { x: number; y: number }); // [["x",1],["y",2]]
 
 function find(id: number): User | null { /* ... */ }
 const u = find(2);
@@ -269,6 +288,7 @@ The entry file plus every reachable `.ts` is compiled together. Each module's to
    │
    ▼
  gcc -std=c11 -O2 main.c runtime/tsc_runtime.c -lgc -lm -o <output>
+ # --release switches the gcc optimization/link mode to -Os -s.
 ```
 
 ### Memory model
@@ -287,9 +307,9 @@ Every `.ts` file reachable from the entry is compiled into the same `main.c`. Ea
 
 Three TS/JS features can't be AOT-compiled regardless of engineering effort:
 
-1. **Native C++ addons** under `node_modules/*/build/Release/*.node` — compiled against Node's V8 ABI. Detection + error planned for Phase 14.
-2. **`eval`** and the `Function` constructor — require a compiler at runtime.
-3. **Dynamic `require(variable)`** where the module path isn't a string literal — can't be walked statically.
+1. **Native C++ addons** under `node_modules/*/build/Release/*.node` — compiled against Node's V8 ABI. Literal `.node` imports/requires and imported package roots containing `build/Release/*.node` are rejected before TypeScript diagnostics; broader package export/condition handling remains Phase 14.
+2. **`eval`** and the `Function` constructor — require a compiler at runtime. Calls are rejected before TypeScript diagnostics.
+3. **Dynamic `require(variable)`** where the module path isn't a string literal — can't be walked statically. Non-literal calls are rejected before emission.
 
 ## Tests
 
@@ -300,33 +320,147 @@ TSC2C_NO_GC=1 bun tests/e2e/run.ts
 ```
 e2e: advanced      … OK      (spread + Object.keys + padStart/pad/replace + Array.from)
 e2e: arith         … OK
+e2e: array_copy_within … OK (Array.copyWithin)
+e2e: array_fill    … OK      (Array.fill)
+e2e: array_flat    … OK      (flat + flatMap)
 e2e: array_hof     … OK      (map/filter/reduce/find/some/every)
+e2e: array_at      … OK      (Array.at positive/negative indexes)
+e2e: array_find_last … OK (Array.findLast/findLastIndex)
+e2e: array_last_index_of … OK (Array.lastIndexOf)
+e2e: array_of … OK (Array.of typed construction)
+e2e: array_reduce_right … OK (Array.reduceRight with initial value)
+e2e: array_sort_default … OK (JS-style default Array.sort)
+e2e: array_static_dynamic … OK (dynamic Array.isArray/from)
+e2e: array_to_reversed … OK (Array.toReversed)
+e2e: array_to_sorted … OK (Array.toSorted default copy)
+e2e: array_to_spliced … OK (Array.toSpliced non-mutating splice)
+e2e: array_with    … OK      (Array.with non-mutating replacement)
 e2e: arrays        … OK
+e2e: bigint        … OK      (GMP-backed BigInt arithmetic)
+e2e: buffer        … OK      (binary-safe Buffer subset)
 e2e: captures      … OK      (module-level let/const used inside functions + arrows)
+e2e: call_arg_order … OK     (left-to-right call argument evaluation)
+e2e: class_modifiers … OK    (abstract/access/readonly modifiers)
 e2e: classes       … OK
+e2e: computed_props … OK    (computed object-literal keys)
+e2e: console_format … OK     (console % specifiers)
+e2e: crypto_sha256 … OK      (sha256 hex hashing)
+e2e: custom_predicates … OK  (user-defined type predicate narrowing)
+e2e: custom_iterator_object … OK (class iterator object with next())
+e2e: discriminated_unions … OK (basic discriminated-union narrowing)
+e2e: dynamic_coercions … OK  (any/unknown unbox into typed destinations)
+e2e: dynamic_index_assignment … OK (dynamic array index writes)
+e2e: dynamic_last_index_of … OK (dynamic string/array lastIndexOf)
+e2e: dynamic_array_copy_within … OK (dynamic Array.copyWithin)
+e2e: dynamic_array_fill … OK (dynamic Array.fill)
+e2e: dynamic_array_find_last … OK (dynamic findLast/findLastIndex)
+e2e: dynamic_array_flat … OK (dynamic Array.flat depth)
+e2e: dynamic_array_flatmap … OK (dynamic flatMap inline arrows)
+e2e: dynamic_array_hof … OK  (dynamic map/filter inline arrows)
+e2e: dynamic_array_hof_more … OK (dynamic forEach/some/every/find/findIndex)
+e2e: dynamic_array_methods … OK (dynamic shift/unshift/push/concat)
+e2e: dynamic_array_of … OK (Array.of<any> dynamic values)
+e2e: dynamic_array_reduce … OK (dynamic reduce with initial value)
+e2e: dynamic_array_reduce_right … OK (dynamic reduceRight with initial value)
+e2e: dynamic_array_sort … OK (dynamic default sort)
+e2e: dynamic_array_splice … OK (dynamic splice mutation/removal)
+e2e: dynamic_array_at … OK (dynamic Array.at positive/negative indexes)
+e2e: dynamic_array_to_reversed … OK (dynamic toReversed)
+e2e: dynamic_array_to_sorted … OK (dynamic toSorted default copy)
+e2e: dynamic_array_to_spliced … OK (dynamic toSpliced non-mutating splice)
+e2e: dynamic_array_with … OK (dynamic Array.with non-mutating replacement)
+e2e: dynamic_methods … OK    (dynamic string/array method dispatch)
+e2e: dynamic_ops  … OK       (dynamic arithmetic/equality/relational/logical ops)
+e2e: dynamic_property_assignment … OK (dynamic property writes and compound writes)
+e2e: dynamic_property_ops … OK (dynamic in/delete property operations)
+e2e: dynamic_string_at … OK (dynamic String.at positive/negative indexes)
+e2e: dynamic_string_concat … OK (dynamic string concat)
+e2e: dynamic_string_locale_compare … OK (dynamic string localeCompare)
+e2e: dynamic_string_normalize … OK (dynamic string normalize)
+e2e: dynamic_string_pad_repeat … OK (dynamic repeat/padStart/padEnd)
+e2e: dynamic_string_replace … OK (dynamic string replace/replaceAll)
+e2e: dynamic_string_split … OK (dynamic string split)
+e2e: dynamic_string_substring … OK (dynamic string substring)
+e2e: dynamic_string_trim_edges … OK (dynamic trimStart/trimEnd)
+e2e: dynamic_require … OK    (expected AOT-limit diagnostic)
+e2e: enums         … OK      (numeric enum constants)
 e2e: exceptions    … OK
 e2e: fizzbuzz      … OK
 e2e: fn_refs       … OK      (named function references as HOF callbacks)
 e2e: fs_roundtrip  … OK
+e2e: generic_classes … OK (erased generic class fields/methods)
+e2e: generic_function_values … OK (generic functions as concrete function values)
 e2e: greet         … OK
 e2e: hello         … OK
 e2e: inheritance   … OK
+e2e: instanceof    … OK      (class ancestry checks)
 e2e: interfaces    … OK
 e2e: json          … OK
 e2e: map_set       … OK
+e2e: map_set_for_of … OK    (direct Map/Set for-of)
 e2e: math          … OK
 e2e: modules       … OK      (multi-file imports)
+e2e: native_addon  … OK      (expected AOT-limit diagnostic)
+e2e: native_addon_package … OK (expected native package diagnostic)
+e2e: namespaces    … OK      (namespace-scoped values and functions)
 e2e: nullish       … OK      (?. and ??)
-e2e: regex         … OK      (POSIX ERE)
+e2e: object_accessors … OK   (dynamic named-function accessor descriptors)
+e2e: object_define_property … OK (dynamic data descriptors)
+e2e: object_descriptors … OK (writable/enumerable/configurable data descriptors)
+e2e: object_entries … OK     (typed Object.entries/fromEntries)
+e2e: dynamic_object_entries … OK (dynamic Object.entries)
+e2e: dynamic_object_from_entries … OK (dynamic Object.fromEntries)
+e2e: object_extensibility … OK (Object/Reflect preventExtensions/isExtensible)
+e2e: object_get_own_property_descriptors … OK (dynamic Object.getOwnPropertyDescriptors)
+e2e: object_has_own_property … OK (dynamic Object.prototype.hasOwnProperty)
+e2e: object_is … OK (Object.is SameValue semantics)
+e2e: object_is_prototype_of … OK (dynamic Object.prototype.isPrototypeOf)
+e2e: object_property_is_enumerable … OK (dynamic Object.prototype.propertyIsEnumerable)
+e2e: object_prototypes … OK (dynamic Object.create/getPrototypeOf/setPrototypeOf)
+e2e: object_seal_freeze … OK (dynamic Object.seal/freeze state)
+e2e: object_static_methods … OK (dynamic Object.assign/hasOwn/getOwnPropertyNames)
+e2e: object_to_locale_string … OK (dynamic Object.prototype.toLocaleString)
+e2e: object_to_string … OK (dynamic Object.prototype.toString)
+e2e: object_value_of … OK (dynamic Object.prototype.valueOf)
+e2e: reflect_dynamic … OK    (Reflect.get/set on dynamic objects)
+e2e: reflect_get_own_property_descriptor … OK (Reflect descriptor lookup)
+e2e: regex         … OK      (PCRE2 regex)
+e2e: regex_captures … OK     (non-global match groups)
+e2e: regex_pcre2  … OK      (lookaround, named syntax, Unicode properties)
+e2e: release_build … OK     (--release uses size-optimized linking)
+e2e: rest_spread   … OK      (rest params + spread calls)
+e2e: runtime_eval  … OK      (expected AOT-limit diagnostic)
+e2e: runtime_function_constructor … OK (expected AOT-limit diagnostic)
 e2e: stdlib_os     … OK
+e2e: string_at     … OK      (String.at positive/negative indexes)
+e2e: string_codepoints … OK  (fromCharCode + codePointAt)
+e2e: string_concat … OK      (String.concat)
+e2e: string_for_of … OK      (Unicode string iteration)
+e2e: string_last_index_of … OK (String.lastIndexOf)
+e2e: string_locale_compare … OK (String.localeCompare)
+e2e: string_match_all … OK   (matchAll capture groups)
+e2e: string_normalize … OK   (ICU Unicode normalization)
+e2e: string_substring … OK   (substring clamp/swap semantics)
+e2e: string_trim_edges … OK  (trimStart/trimEnd)
 e2e: strings       … OK
 e2e: switch        … OK
+e2e: switch_exhaustive … OK (finite-domain exhaustiveness)
+e2e: switch_exhaustive_missing … OK (expected diagnostic)
+e2e: symbols       … OK      (Symbol values and registry)
+e2e: tagged_templates … OK (tagged template calls)
+e2e: tail_calls    … OK      (self-tail recursion lowered to goto)
+e2e: typeof        … OK      (typed typeof results)
+e2e: typeof_guards … OK      (typeof checks over nullable strings)
+e2e: url_parse     … OK      (URL parsing fields)
+e2e: weak_collections … OK  (typed WeakMap/WeakSet)
+e2e: weak_ref      … OK      (typed WeakRef deref)
 e2e: wordcount     … OK      (real-world demo: fs+regex+Map+sort+captures)
+e2e: line_directives … OK   (generated C carries TS #line markers)
 
-24 passed, 0 failed
+146 passed, 0 failed
 ```
 
-Drop `TSC2C_NO_GC=1` after `sudo apt-get install libgc-dev`.
+Drop `TSC2C_NO_GC=1` after `sudo apt-get install libgc-dev`; OpenSSL, ICU, GMP, and PCRE2 are still required for crypto, Unicode normalization, BigInt, and regex.
 
 ## Repo layout
 
@@ -344,7 +478,7 @@ Drop `TSC2C_NO_GC=1` after `sudo apt-get install libgc-dev`.
 | `src/diagnostics.ts` | User-facing error reporting |
 | `runtime/tsc_runtime.{c,h}` | Full runtime: strings, arrays, maps/sets, console, fs, path, Math, os, Date, Number, JSON, exceptions |
 | `stdlib/lib.core.d.ts` | Type shim (replaces `@types/node`) |
-| `tests/e2e/cases/` | One dir per test: `in.ts` + optional support files + `expected.stdout` |
+| `tests/e2e/cases/` | One dir per test: `in.ts` + optional support files + `expected.stdout` or `expected.exitcode` |
 | `tests/e2e/run.ts` | E2E harness: compile, execute, diff |
 
 ## What's next
@@ -379,7 +513,7 @@ If you're new, start with the top-level [`../README.md`](../README.md) for the p
 1. [`architecture.md`](architecture.md) — pipeline, emission passes, module graph, value model (diagrams included)
 2. [`runtime-reference.md`](runtime-reference.md) — every `tsc_*` runtime symbol grouped by area
 3. [`testing.md`](testing.md) — the e2e harness and how to add a new case
-4. [`../src/emit/index.ts`](../src/emit/index.ts) — the emitter itself; ~2,500 LOC, one class with focused methods
+4. [`../src/emit/index.ts`](../src/emit/index.ts) — the emitter itself; ~6,000 LOC, one class with focused methods
 5. [`../CHANGELOG.md`](../CHANGELOG.md) — evolution of capability session by session
 
 **I'm an LLM agent**:
@@ -448,7 +582,7 @@ flowchart LR
     C --> E
     D --> E[Emitter<br/>src/emit/index.ts]
     E --> F[build/main.c<br/>single C file]
-    F --> G[gcc -O2 main.c tsc_runtime.c -lgc -lm]
+    F --> G[gcc -O2 main.c tsc_runtime.c -lgc -lm<br/>or -Os -s with --release]
     G --> H[native binary]
 ```
 
@@ -530,18 +664,24 @@ Every user-defined module merges into one `main.c`. This keeps the flat symbol n
 
 ## Value representation (typed path)
 
-Today's emitter produces specialized C types for each TS type — there's no boxing. The `CType` model (in `src/emit/types.ts`) decides the C spelling based on TypeScript's inferred or annotated type:
+Today's emitter prefers specialized C types for each TS type and uses a NaN-boxed dynamic value only for `any` / `unknown` / heterogeneous unions. The `CType` model (in `src/emit/types.ts`) decides the C spelling based on TypeScript's inferred or annotated type:
 
 | TS type | C type | Notes |
 |---------|--------|-------|
 | `number` | `double` | IEEE 754; int optimization deferred |
+| `symbol` | `tsc_symbol_t*` | unique symbol identity plus global registry |
 | `string` | `tsc_str_t*` | immutable UTF-8, GC'd |
 | `boolean` | `bool` | `<stdbool.h>` |
+| `any` / `unknown` | `tsc_value_t` | NaN-boxed dynamic value for numbers, strings, booleans, null/undefined, arrays, and dynamic objects |
 | `void` / `null` / `undefined` | `void` / NULL sentinel | for pointer types |
 | `T[]` / `Array<T>` | `tsc_array_t*` | dynamic array, element type known at emit |
 | `Map<K, V>` | `tsc_map_t*` | type-erased runtime; key kind tag chooses compare fn |
 | `Set<T>` | `tsc_set_t*` | same |
-| `RegExp` | `tsc_regexp_t*` | POSIX regex behind the wrapper |
+| `WeakMap<K, V>` | `tsc_map_t*` | pointer-key map without iteration API |
+| `WeakSet<T>` | `tsc_set_t*` | pointer-key set without iteration API |
+| `WeakRef<T>` | `tsc_weakref_t*` | typed target pointer wrapper |
+| `RegExp` | `tsc_regexp_t*` | PCRE2 regex behind the wrapper |
+| `(args) => ret` | `tsc_fn_*_t*` | typed closure value with generated `{fn, env}` struct; function-scope captures use GC-managed ref cells |
 | `class Foo` | `Foo_t*` | struct with inherited fields laid at prefix |
 | `interface Foo` | `Foo_t*` | same (struct of fields, no methods) |
 
@@ -553,9 +693,9 @@ When two CTypes disagree (e.g. assigning `null` to a `string` field), `Emitter.c
 
 Cross-type arithmetic / equality is rejected by the emitter with a `Cannot coerce` diagnostic.
 
-## Future: Phase 3 NaN-boxing (not yet built)
+## Dynamic value path
 
-Phase 3 will add a second, dynamic path via NaN-boxed `tsc_value_t`. The plan in `~/.claude/plans/make-a-typescript-to-floating-comet.md` covers it; summary:
+Phase 3 now has its foundation: `any` / `unknown` and heterogeneous unions use NaN-boxed `tsc_value_t`. The plan in `~/.claude/plans/make-a-typescript-to-floating-comet.md` still covers the remaining high-performance object work; summary:
 
 ```mermaid
 flowchart TD
@@ -567,7 +707,7 @@ flowchart TD
     D <--> B
 ```
 
-Today's code always takes the specialized path and refuses to emit for untyped/any code. Phase 3 introduces the boxed path + bridge. See [`todo.md`](todo.md#1-next-up-unblockers) for impact and effort.
+The current bridge boxes specialized primitives/arrays into `tsc_value_t` and supports dynamic JSON/object/array access, dynamic arithmetic/equality/relational/logical/nullish operators, common string/array method dispatch, and unboxing into typed destinations. Remaining Phase 3 work includes hidden classes / shape trees, inline caches, broader prototype method coverage, and descriptor-aware property semantics. See [`todo.md`](todo.md#1-next-up-unblockers) for impact and effort.
 
 ## Runtime layer
 
@@ -580,7 +720,7 @@ flowchart TD
     RT --> STR[Strings<br/>tsc_str_*]
     RT --> ARR[Arrays<br/>tsc_array_*]
     RT --> MS[Map / Set<br/>tsc_map_* / tsc_set_*]
-    RT --> REG[RegExp<br/>POSIX regex wrapper]
+    RT --> REG[RegExp<br/>PCRE2 regex wrapper]
     RT --> EX[Exceptions<br/>setjmp/longjmp]
     RT --> NUM[Numbers<br/>parseFloat/Int, num_mod, math_random]
     RT --> JSON[JSON helpers<br/>escape_string, num]
@@ -619,7 +759,7 @@ For readers planning to modify the emitter:
 
 - `src/emit/index.ts` — the whole `Emitter` class. One method per AST node kind.
 - `src/emit/types.ts` — CType and `mapTsType` (the single source of truth for TS → C type mapping).
-- `src/emit/cbuf.ts` — indent-tracked C source writer + string escape helpers.
+- `src/emit/cbuf.ts` — indent-tracked C source writer, raw preprocessor lines for `#line`, and string escape helpers.
 - `src/emit/mangle.ts` — C keyword collision avoidance.
 - `src/resolve.ts` — the module graph.
 - `src/compile.ts` — the glue; typically read first for orientation.
@@ -650,6 +790,7 @@ Exactly one positional argument: the entry `.ts` file. All imports reachable fro
 | `--emit-c-only` | `false` | Skip the gcc step. Write generated C into the build dir and return. Useful for inspecting what the emitter produced. |
 | `--keep-build-dir <path>` | tempdir | Use this directory for intermediate `main.c` + `tsc_runtime.c`/`.h`. Created if absent; not cleaned up. Without this flag a temp dir is created and kept (its path is printed under `--verbose`). |
 | `--no-gc` | `false` | Compile with `-DTSC_NO_GC`. The runtime swaps Boehm GC for a leaking `calloc` fallback. For short-lived programs or envs without `libgc-dev`. **Do not ship production binaries with this flag.** |
+| `--release` | `false` | Link a smaller release binary using gcc `-Os -s` instead of the default `-O2`. |
 | `--verbose` | `false` | Print the build dir, each output file, and the full gcc command line. |
 | `-h, --help` | — | Standard commander help. |
 | `-V, --version` | — | Print `0.0.1`. |
@@ -765,6 +906,7 @@ typedef struct tsc_str {
 | `tsc_str_from_cstr` | `(const char*) -> tsc_str_t*` | Copies a null-terminated C string. |
 | `tsc_str_from_num` | `(double) -> tsc_str_t*` | JS-compatible shortest round-trip number formatting. |
 | `tsc_str_from_bool` | `(bool) -> tsc_str_t*` | `"true"` / `"false"`. |
+| `tsc_str_from_char_code_n` | `(size_t n, ...) -> tsc_str_t*` | `String.fromCharCode(...)`, encoding UTF-16 code units as UTF-8. |
 
 ### Equality and comparison
 
@@ -772,6 +914,7 @@ typedef struct tsc_str {
 |--------|-----------|
 | `tsc_str_eq` | `(const tsc_str_t*, const tsc_str_t*) -> bool` |
 | `tsc_str_cmp` | `(const tsc_str_t*, const tsc_str_t*) -> int` (strcmp-style) |
+| `tsc_str_locale_compare` | `(const tsc_str_t*, const tsc_str_t*) -> double` (`localeCompare`-style -1/0/1) |
 
 ### Methods (match JS `String.prototype`)
 
@@ -779,21 +922,28 @@ typedef struct tsc_str {
 |--------|---------|---------------|
 | `tsc_str_length` | `double` | `.length` |
 | `tsc_str_char_at(s, i)` | `tsc_str_t*` | `.charAt(i)` |
+| `tsc_str_at(s, i)` | `tsc_str_t*` | `.at(i)`, negative indices OK |
+| `tsc_str_code_point_at(s, i)` | `double` | `.codePointAt(i)`, using JS UTF-16 indices |
 | `tsc_str_index_of(h, n)` | `double` | `.indexOf(n)` (-1 if missing) |
 | `tsc_str_includes(h, n)` | `bool` | `.includes(n)` |
 | `tsc_str_starts_with(s, p)` | `bool` | `.startsWith(p)` |
 | `tsc_str_ends_with(s, p)` | `bool` | `.endsWith(p)` |
 | `tsc_str_slice(s, start, end)` | `tsc_str_t*` | `.slice(start, end)`, negative indices OK |
+| `tsc_str_substring(s, start, end)` | `tsc_str_t*` | `.substring(start, end)`, clamp/swap semantics |
 | `tsc_str_to_upper` | `tsc_str_t*` | `.toUpperCase()` (ASCII only) |
 | `tsc_str_to_lower` | `tsc_str_t*` | `.toLowerCase()` (ASCII only) |
+| `tsc_str_normalize(s, form)` | `tsc_str_t*` | `.normalize(form)`, ICU-backed NFC/NFD/NFKC/NFKD |
 | `tsc_str_trim` | `tsc_str_t*` | `.trim()` |
+| `tsc_str_trim_start` | `tsc_str_t*` | `.trimStart()` |
+| `tsc_str_trim_end` | `tsc_str_t*` | `.trimEnd()` |
 | `tsc_str_repeat(s, n)` | `tsc_str_t*` | `.repeat(n)` |
 | `tsc_str_pad_start(s, len, pad)` | `tsc_str_t*` | `.padStart(len, pad)` |
 | `tsc_str_pad_end(s, len, pad)` | `tsc_str_t*` | `.padEnd(len, pad)` |
 | `tsc_str_replace(s, needle, repl)` | `tsc_str_t*` | `.replace("a", "b")` (first match) |
 | `tsc_str_replace_all(s, needle, repl)` | `tsc_str_t*` | `.replaceAll("a", "b")` (all matches) |
-| `tsc_str_concat(a, b)` | `tsc_str_t*` | `a + b` |
+| `tsc_str_concat(a, b)` | `tsc_str_t*` | `a + b` and `.concat(...)` |
 | `tsc_str_split(s, sep)` | `tsc_array_t*` | `.split("a")` → array of strings |
+| `tsc_str_chars(s)` | `tsc_array_t*` | string `for...of` values, one UTF-8 code point per string |
 
 ## Numbers
 
@@ -825,13 +975,105 @@ typedef struct tsc_array {
 | `tsc_array_shift_raw(arr)` | `void` | Remove front (shifts remaining). |
 | `tsc_array_unshift_raw(arr, &elem)` | `void` | Prepend. |
 | `tsc_array_reverse(arr)` | `tsc_array_t*` | In-place. Returns the same array. |
+| `tsc_array_to_reversed(arr)` | `tsc_array_t*` | Reversed copy. Leaves the input unchanged. |
+| `tsc_array_fill(arr, &elem, start, end)` | `tsc_array_t*` | In-place range fill. Returns the same array. |
+| `tsc_array_copy_within(arr, target, start, end)` | `tsc_array_t*` | In-place overlapping copy. Returns the same array. |
+| `tsc_array_with(arr, index, &elem)` | `tsc_array_t*` | Non-mutating copy with one replaced element. Supports negative indices. |
+| `tsc_array_to_spliced(arr, start, delete_count, argc, items)` | `tsc_array_t*` | Non-mutating splice copy. `argc` preserves omitted-argument semantics. |
 | `tsc_array_slice(arr, start, end)` | `tsc_array_t*` | New array with copied range. |
 | `tsc_array_append(dst, src)` | `tsc_array_t*` | Append `src`'s elements to `dst`. |
+| `tsc_array_flat_once(outer, elem_size)` | `tsc_array_t*` | Flatten one homogeneous nested-array level. |
 | `tsc_array_length(arr)` | `double` | For `.length` property. |
 | `TSC_ARR(T, arr, i)` | lvalue | Macro for typed element access — `((T*)arr->data)[(size_t)i]`. |
 | `tsc_array_oob(arr, i)` | `void` | Placeholder bounds-check hook (silent today, planned to throw `RangeError`). |
 
 High-order methods like `.map`/`.filter`/`.reduce` are **not** runtime functions — they're expanded inline in the emitter (`emitArrayHof` in `src/emit/index.ts`).
+
+`Object.entries` uses `tsc_object_entry_t` elements inside a normal `tsc_array_t`. The struct stores the string key plus one typed value slot (`num`, `boolean`, or `ptr`) chosen by the emitter for the homogeneous object field type.
+
+## Dynamic Values (`tsc_value_t`)
+
+NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JSON results, and heterogeneous dynamic arrays/objects.
+
+| Symbol | Signature | Purpose |
+|--------|-----------|---------|
+| `tsc_value_num/bool/string/array/object(...)` | `tsc_value_t` | Box specialized values into the dynamic representation |
+| `tsc_value_null()` / `tsc_value_undefined()` | `tsc_value_t` | Dynamic nullish sentinels |
+| `tsc_value_as_num/bool/string/array(v)` | varies | Unbox dynamic values after TypeScript narrowing, typed assignment/call coercion, or runtime coercion |
+| `tsc_value_to_string(v)` | `tsc_str_t*` | JS-like string conversion for console/template coercion |
+| `tsc_value_typeof(v)` | `tsc_str_t*` | Runtime `typeof` result for dynamic values |
+| `tsc_value_is_truthy(v)` | `bool` | JS truthiness for dynamic values |
+| `tsc_value_is_nullish(v)` | `bool` | Dynamic `??` null/undefined test |
+| `tsc_value_is_array(v)` | `bool` | Runtime check used by dynamic `Array.isArray` |
+| `tsc_value_add/sub/mul/div/mod/pow(a, b)` | `tsc_value_t` | Dynamic arithmetic and `+` string concatenation |
+| `tsc_value_eq(a, b)` | `bool` | Dynamic equality for numbers, booleans, strings, nullish sentinels, and object identity |
+| `tsc_value_object_is(a, b)` | `bool` | SameValue comparison used by `Object.is`, including `NaN` and signed-zero handling |
+| `tsc_value_cmp(a, b)` | `int` | Dynamic relational comparison; returns `2` for unordered/NaN comparisons |
+| `tsc_value_method_*(recv, ...)` | `tsc_value_t` | Runtime dispatch for common dynamic string/array methods such as `includes`, `indexOf`, `lastIndexOf`, `localeCompare`, `normalize`, `padStart`, `padEnd`, `repeat`, `replace`, `replaceAll`, `slice`, `split`, `substring`, `trimStart`, `trimEnd`, `join`, `push`, `pop`, `shift`, `unshift`, `at`, `concat`, `copyWithin`, `fill`, `flat`, `sort`, `splice`, `toReversed`, `toSorted`, `toSpliced`, `with`, and casing/trim helpers |
+| `tsc_value_json_stringify(v)` | `tsc_str_t*` | Recursive dynamic JSON stringify |
+| `tsc_value_get_prop(v, key)` | `tsc_value_t` | Dynamic object property read through the prototype chain, returning `undefined` when absent |
+| `tsc_value_get_index(v, index)` | `tsc_value_t` | Dynamic array index read, returning `undefined` when absent |
+| `tsc_value_set_index(v, index, value)` | `bool` | Dynamic array index write, extending with `undefined` for skipped slots |
+| `tsc_value_set_prop(v, key, value)` | `bool` | Dynamic object data/accessor-property write used by `Reflect.set(...)` and direct dynamic property assignment |
+| `tsc_value_define_property_desc(v, key, value, writable, enumerable, configurable)` | `bool` | Dynamic data descriptor definition used by `Object.defineProperty` / `Reflect.defineProperty` |
+| `tsc_value_define_accessor_desc(v, key, getter, setter, enumerable, configurable)` | `bool` | Dynamic named-function accessor descriptor definition used by `Object.defineProperty` / `Reflect.defineProperty` |
+| `tsc_value_object_create(proto)` | `tsc_value_t` | Dynamic object allocation with an object/null prototype |
+| `tsc_value_is_prototype_of(proto, object)` | `bool` | Dynamic `Object.prototype.isPrototypeOf` prototype-chain query |
+| `tsc_value_get/set_prototype_of(v, proto)` | `tsc_value_t` / `bool` | Dynamic `Object`/`Reflect` prototype access and mutation |
+| `tsc_value_has_prop(v, key)` | `bool` | Dynamic property existence through the prototype chain |
+| `tsc_value_has_own_prop(v, key)` | `bool` | Own-property existence used by `Object.hasOwn` and `Object.prototype.hasOwnProperty` |
+| `tsc_value_property_is_enumerable(v, key)` | `bool` | Own enumerable-property check used by `Object.prototype.propertyIsEnumerable` |
+| `tsc_value_delete_prop(v, key)` | `bool` | Own-property descriptor-aware deletion |
+| `tsc_value_is_extensible/prevent_extensions(v)` | `bool` | Dynamic object extensibility state used by `Object` / `Reflect` APIs |
+| `tsc_value_seal/freeze/is_sealed/is_frozen(v)` | `bool` | Dynamic seal/freeze state and descriptor flag enforcement |
+| `tsc_value_own_keys(v)` | `tsc_array_t*` | Reflect-style own string keys including non-enumerable properties |
+| `tsc_value_get_own_property_descriptor(v, key)` | `tsc_value_t` | Dynamic data/accessor descriptor object or `undefined` |
+| `tsc_value_get_own_property_descriptors(v)` | `tsc_value_t` | Dynamic object containing descriptor objects for all own dynamic properties |
+| `tsc_value_object_assign(target, source)` | `tsc_value_t` | Dynamic enumerable-property copy used by `Object.assign`, invoking source getters |
+| `tsc_value_length(v)` | `double` | `.length` for dynamic arrays/strings |
+| `tsc_object_new/set/define/define_accessor/get(...)` | varies | Runtime backing store for dynamic objects, data descriptors, and named-function accessor descriptors |
+| `tsc_value_object_keys/values(v)` | `tsc_array_t*` | Enumerable `Object.keys` / `Object.values` for dynamic objects |
+| `tsc_value_object_entries(v)` | `tsc_array_t*` | Enumerable `Object.entries` for dynamic objects, returning dynamic `[key, value]` arrays |
+| `tsc_value_object_from_entries(entries)` | `tsc_value_t` | Dynamic `Object.fromEntries`, accepting dynamic arrays of dynamic `[key, value]` pairs |
+| `tsc_json_parse(text)` | `tsc_value_t` | Recursive JSON parser for objects, arrays, strings, numbers, booleans, and null |
+
+## BigInt (`tsc_bigint_t`)
+
+GMP-backed arbitrary-precision integers. `bigint` values are heap-allocated wrappers around `mpz_t`; operators are emitted as runtime calls.
+
+| Symbol | Signature | Purpose |
+|--------|-----------|---------|
+| `tsc_bigint_from_lit(lit)` | `tsc_bigint_t*` | BigInt literal construction, including `0x`, `0o`, and `0b` prefixes |
+| `tsc_bigint_from_str(s)` | `tsc_bigint_t*` | `BigInt(string)` |
+| `tsc_bigint_from_num(n)` | `tsc_bigint_t*` | `BigInt(number)`, finite integers only |
+| `tsc_bigint_from_bool(b)` | `tsc_bigint_t*` | `BigInt(boolean)` |
+| `tsc_bigint_add/sub/mul/div/mod/pow(a, b)` | `tsc_bigint_t*` | BigInt arithmetic |
+| `tsc_bigint_cmp(a, b)` | `int` | Relational comparison |
+| `tsc_bigint_eq(a, b)` | `bool` | Equality comparison |
+| `tsc_bigint_to_string(a, radix)` | `tsc_str_t*` | `.toString(radix?)` |
+
+## Symbols (`tsc_symbol_t`)
+
+Heap-allocated unique symbol identities with an optional description and a small global registry for `Symbol.for`.
+
+| Symbol | Signature | Purpose |
+|--------|-----------|---------|
+| `tsc_symbol_new(description)` | `tsc_symbol_t*` | `Symbol(description?)`, always creates a new identity |
+| `tsc_symbol_for(key)` | `tsc_symbol_t*` | `Symbol.for(key)` global registry lookup/create |
+| `tsc_symbol_key_for(sym)` | `tsc_str_t*` | `Symbol.keyFor(sym)`, `NULL` for non-global symbols |
+| `tsc_symbol_iterator()` | `tsc_symbol_t*` | Singleton `Symbol.iterator` |
+| `tsc_symbol_async_iterator()` | `tsc_symbol_t*` | Singleton `Symbol.asyncIterator` |
+| `tsc_symbol_description(sym)` | `tsc_str_t*` | `.description`, `NULL` when absent |
+| `tsc_symbol_to_string(sym)` | `tsc_str_t*` | `.toString()` / console stringification |
+
+## WeakRef (`tsc_weakref_t`)
+
+Typed weak-reference wrappers store a target pointer and return it from `.deref()`. `FinalizationRegistry` is not part of this surface yet.
+
+| Symbol | Signature | Purpose |
+|--------|-----------|---------|
+| `tsc_weakref_new(target)` | `tsc_weakref_t*` | `new WeakRef(target)` |
+| `tsc_weakref_deref(ref)` | `void*` | `.deref()`, cast back to the typed target by the emitter |
 
 ## Maps and Sets (`tsc_map_t`, `tsc_set_t`)
 
@@ -870,34 +1112,39 @@ Type-erased linear-scan collections. Key equality is chosen by a `tsc_key_kind_t
 | `tsc_set_size(s)` | `double` |
 | `tsc_set_values(s)` | `tsc_array_t*` |
 
+Typed `WeakMap<K, V>` and `WeakSet<T>` reuse these map/set tables with pointer-key kinds and expose only the JavaScript weak-collection methods (`get`/`set`/`has`/`delete` or `add`/`has`/`delete`). There is no iteration API for weak collections.
+
 ## Regex (`tsc_regexp_t`)
 
-Wraps POSIX extended regex (`<regex.h>`).
+Wraps PCRE2 8-bit regexes (`<pcre2.h>`) with UTF and Unicode-property support enabled.
 
 ```c
 typedef struct tsc_regexp {
-    regex_t re;
+    pcre2_code* re;
     tsc_str_t* source;
     tsc_str_t* flags;
-    bool global, ignore_case, multiline;
+    bool global, ignore_case, multiline, dot_all, unicode;
     bool compiled;
+    uint32_t capture_count;
 } tsc_regexp_t;
 ```
 
-Translation from JS regex syntax happens inside `tsc_regexp_new`:
-
-- `\d` → `[0-9]`, `\D` → `[^0-9]`
-- `\w` → `[A-Za-z0-9_]`, `\W` → `[^A-Za-z0-9_]`
-- `\s` → `[ \t\n\r\f\v]`, `\S` → `[^ \t\n\r\f\v]`
-- Everything else passes through — POSIX ERE semantics apply (no lookahead/lookbehind, no named groups).
+`tsc_regexp_new` compiles JS regex literals through PCRE2. Supported flags include `g`, `i`, `m`, `s`, and `u`; UTF/UCP mode is enabled so Unicode property escapes such as `\p{L}` and `\p{Script=Greek}` work. PCRE2 also covers lookahead, lookbehind, normal capture groups, and named capture syntax. Named groups are returned by numeric capture position today; a JS-style `.groups` object needs the future dynamic object runtime.
 
 | Symbol | Signature |
 |--------|-----------|
 | `tsc_regexp_new(pattern, flags)` | `tsc_regexp_t*` |
 | `tsc_regexp_test(re, s)` | `bool` |
-| `tsc_str_match_regex(s, re)` | `tsc_array_t*` — array of match strings, or `NULL` if none |
+| `tsc_str_match_regex(s, re)` | `tsc_array_t*` — array of global match strings, or full match + capture groups for non-global regexes; `NULL` if none |
+| `tsc_str_match_all_regex(s, re)` | `tsc_array_t*` — array of per-match capture arrays |
 | `tsc_str_replace_regex(s, re, repl)` | `tsc_str_t*` — honors the `g` flag |
 | `tsc_str_split_regex(s, re)` | `tsc_array_t*` |
+
+## Classes
+
+| Symbol | Signature | Purpose |
+|--------|-----------|---------|
+| `tsc_instanceof(type_chain, class_name)` | `(const char*, const char*) -> bool` | Runtime ancestry check for emitted class instances. |
 
 ## Exceptions (`tsc_try_frame_t`)
 
@@ -936,7 +1183,7 @@ if (setjmp(_eh0.jb) == 0) {
 
 | Symbol | Signature |
 |--------|-----------|
-| `tsc_console_log_n(n, ...)` | `void` — n stringified args, space-joined, newline |
+| `tsc_console_log_n(n, ...)` | `void` — n stringified args, first-arg format substitutions, newline |
 | `tsc_console_error_n(n, ...)` | `void` — same but to stderr |
 
 The emitter stringifies each argument to `tsc_str_t*` at the call site, then invokes with the count plus the pointers.
@@ -981,6 +1228,38 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 | `tsc_os_cpu_count()` | `double` — from `sysconf(_SC_NPROCESSORS_ONLN)` |
 | `tsc_date_now()` | `double` — ms since epoch via `clock_gettime(CLOCK_REALTIME)` |
 
+## crypto
+
+| Symbol | Signature | JS equivalent |
+|--------|-----------|---------------|
+| `tsc_crypto_create_hash(algorithm)` | `tsc_hash_t*` | `crypto.createHash("sha256")` |
+| `tsc_hash_update(hash, data)` | `tsc_hash_t*` | `.update(data)` |
+| `tsc_hash_digest(hash, encoding)` | `tsc_str_t*` | `.digest("hex")` |
+
+## URL
+
+`tsc_url_t` stores the parsed fields exposed by `URL` instances: `href`, `protocol`, `host`, `hostname`, `port`, `pathname`, `search`, `hash`, and `origin`.
+
+| Symbol | Signature | JS equivalent |
+|--------|-----------|---------------|
+| `tsc_url_new(input)` | `tsc_url_t*` | `new URL(input)` for absolute URLs with `//` authority |
+
+## Buffer
+
+`tsc_buffer_t` is a byte vector with explicit length. It is binary-safe; UTF-8 conversion is only applied by `toString("utf8")`/string coercion.
+
+| Symbol | Signature | JS equivalent |
+|--------|-----------|---------------|
+| `tsc_buffer_from_str(input, encoding)` | `tsc_buffer_t*` | `Buffer.from(string, "utf8" | "hex")` |
+| `tsc_buffer_from_array(input)` | `tsc_buffer_t*` | `Buffer.from(number[])` |
+| `tsc_buffer_alloc(size, fill)` | `tsc_buffer_t*` | `Buffer.alloc(size, fill)` |
+| `tsc_buffer_concat(list)` | `tsc_buffer_t*` | `Buffer.concat(Buffer[])` |
+| `tsc_buffer_to_string(buffer, encoding)` | `tsc_str_t*` | `.toString("utf8" | "hex")` |
+| `tsc_buffer_slice(buffer, start, end)` | `tsc_buffer_t*` | `.slice()` / `.subarray()` |
+| `tsc_buffer_equals(a, b)` | `bool` | `.equals(other)` |
+| `tsc_buffer_length(buffer)` | `double` | `.length` |
+| `tsc_buffer_get(buffer, idx)` | `double` | `buffer[idx]` |
+
 ## JSON helpers
 
 | Symbol | Purpose |
@@ -1015,7 +1294,7 @@ The `-DTSC_NO_GC` define in `src/link/cc.ts` switches all of these to `calloc`/`
 
 # Testing
 
-`tsc2c` uses a single end-to-end test harness: **compile each TS case, execute the resulting binary, diff stdout against an expected file**. No separate unit test layer yet — by design. Every feature has at least one black-box test proving it produces correct output.
+`tsc2c` uses a single end-to-end test harness: **compile each TS case, execute the resulting binary, diff stdout against an expected file**. Expected compile-failure cases use `expected.exitcode` instead. No separate unit test layer yet — by design. Every feature has at least one black-box test proving it produces correct output or the intended diagnostic.
 
 ## Running the suite
 
@@ -1034,10 +1313,111 @@ Expected output:
 ```
 e2e: advanced … OK
 e2e: arith … OK
+e2e: array_static_dynamic … OK
 ...
+e2e: buffer … OK
+e2e: bigint … OK
+e2e: computed_props … OK
+e2e: custom_iterator_object … OK
+e2e: custom_predicates … OK
+e2e: discriminated_unions … OK
+e2e: array_copy_within … OK
+e2e: array_fill … OK
+e2e: array_at … OK
+e2e: array_find_last … OK
+e2e: array_last_index_of … OK
+e2e: array_of … OK
+e2e: array_reduce_right … OK
+e2e: array_to_reversed … OK
+e2e: array_to_sorted … OK
+e2e: array_to_spliced … OK
+e2e: array_with … OK
+e2e: dynamic_array_methods … OK
+e2e: dynamic_array_copy_within … OK
+e2e: dynamic_array_fill … OK
+e2e: dynamic_array_find_last … OK
+e2e: dynamic_array_flat … OK
+e2e: dynamic_array_to_reversed … OK
+e2e: dynamic_array_to_sorted … OK
+e2e: dynamic_array_to_spliced … OK
+e2e: dynamic_array_with … OK
+e2e: dynamic_array_flatmap … OK
+e2e: dynamic_array_hof … OK
+e2e: dynamic_array_hof_more … OK
+e2e: dynamic_array_of … OK
+e2e: dynamic_array_reduce … OK
+e2e: dynamic_array_reduce_right … OK
+e2e: dynamic_array_sort … OK
+e2e: dynamic_array_splice … OK
+e2e: dynamic_array_at … OK
+e2e: dynamic_coercions … OK
+e2e: dynamic_index_assignment … OK
+e2e: dynamic_last_index_of … OK
+e2e: dynamic_methods … OK
+e2e: dynamic_ops … OK
+e2e: dynamic_property_assignment … OK
+e2e: dynamic_property_ops … OK
+e2e: dynamic_string_at … OK
+e2e: dynamic_string_concat … OK
+e2e: dynamic_string_locale_compare … OK
+e2e: dynamic_string_normalize … OK
+e2e: dynamic_string_pad_repeat … OK
+e2e: dynamic_string_replace … OK
+e2e: dynamic_string_split … OK
+e2e: dynamic_string_substring … OK
+e2e: dynamic_string_trim_edges … OK
+e2e: dynamic_require … OK
+e2e: generic_classes … OK
+e2e: generic_function_values … OK
+e2e: weak_collections … OK
+e2e: weak_ref … OK
+e2e: line_directives … OK
+e2e: native_addon … OK
+e2e: namespaces … OK
+e2e: regex_pcre2 … OK
+e2e: release_build … OK
+e2e: rest_spread … OK
+e2e: runtime_eval … OK
+e2e: runtime_function_constructor … OK
+e2e: string_at … OK
+e2e: string_concat … OK
+e2e: string_for_of … OK
+e2e: string_last_index_of … OK
+e2e: string_locale_compare … OK
+e2e: switch_exhaustive … OK
+e2e: switch_exhaustive_missing … OK
+e2e: symbols … OK
+e2e: tagged_templates … OK
+e2e: tail_calls … OK
+e2e: string_match_all … OK
+e2e: string_normalize … OK
+e2e: string_substring … OK
+e2e: string_trim_edges … OK
+e2e: object_accessors … OK
+e2e: object_define_property … OK
+e2e: object_descriptors … OK
+e2e: dynamic_object_entries … OK
+e2e: dynamic_object_from_entries … OK
+e2e: object_entries … OK
+e2e: object_extensibility … OK
+e2e: object_get_own_property_descriptors … OK
+e2e: object_has_own_property … OK
+e2e: object_is … OK
+e2e: object_is_prototype_of … OK
+e2e: object_property_is_enumerable … OK
+e2e: object_prototypes … OK
+e2e: object_seal_freeze … OK
+e2e: object_static_methods … OK
+e2e: object_to_locale_string … OK
+e2e: object_to_string … OK
+e2e: object_value_of … OK
+e2e: reflect_dynamic … OK
+e2e: reflect_get_own_property_descriptor … OK
+e2e: typeof_guards … OK
+e2e: url_parse … OK
 e2e: wordcount … OK
 
-24 passed, 0 failed
+146 passed, 0 failed
 ```
 
 Non-zero exit if any case fails.
@@ -1060,7 +1440,7 @@ tests/e2e/
         └── expected.stdout
 ```
 
-Each subdirectory under `tests/e2e/cases/` is one test. The harness auto-discovers every directory with both `in.ts` and `expected.stdout`.
+Each subdirectory under `tests/e2e/cases/` is one test. The harness auto-discovers every directory with `in.ts` plus either `expected.stdout` or `expected.exitcode`. A case may also include `expected.mainc.contains` to assert that generated `main.c` contains a substring; `{{ENTRY}}` expands to the case entry path. A `compile.release` marker compiles that case with `--release`.
 
 ## How the harness works
 
@@ -1068,9 +1448,11 @@ Each subdirectory under `tests/e2e/cases/` is one test. The harness auto-discove
 
 1. Discover all test directories.
 2. For each case:
-   - Call `compile({ entry: in.ts, output: /tmp/<case>, buildDir: /tmp/<case>-build, noGc: env })`.
-   - If compile exits non-zero → print the error → mark **COMPILE FAIL**.
-   - Else run the binary with no stdin.
+   - Call `compile({ entry: in.ts, output: /tmp/<case>, buildDir: /tmp/<case>-build, noGc: env, release: marker })`.
+   - If `expected.exitcode` exists, compare the compile exit code and skip binary execution.
+   - If compile exits non-zero unexpectedly → print the error → mark **COMPILE FAIL**.
+   - If `expected.mainc.contains` exists, check the generated C before running the binary.
+   - Run the binary with no stdin.
    - If the binary exits non-zero → **RUN FAIL**.
    - Else diff captured stdout against `expected.stdout`.
    - If they differ → **STDOUT MISMATCH** with both blocks printed.
@@ -1083,7 +1465,7 @@ Source: [`tests/e2e/run.ts`](../tests/e2e/run.ts).
 
 1. Create `tests/e2e/cases/<name>/`.
 2. Write `in.ts` — the program.
-3. Write `expected.stdout` — exactly what stdout should look like, including trailing newline.
+3. Write `expected.stdout` — exactly what stdout should look like, including trailing newline. For an expected compile failure, write `expected.exitcode` instead.
 4. Run `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 
 If your test imports other files, add them to the same directory. They're auto-picked-up by the TS program walker.
@@ -1094,7 +1476,7 @@ If your test imports other files, add them to the same directory. They're auto-p
 - Avoid `Math.random()` — it's not seeded deterministically.
 - For `os.platform()` / `arch()` / `hostname()`, assert properties like `.length > 0` rather than the exact string.
 - Avoid testing `process.argv` directly — the binary's argv changes between bun-level runs and stand-alone invocations.
-- C function-argument evaluation order is unspecified. `console.log(f(), f(), f())` may reorder. Hoist into temps: `const a = f(); const b = f(); console.log(a, b);`.
+- Call arguments with side effects should preserve JavaScript's left-to-right order. Keep focused coverage like `call_arg_order` when changing call emission.
 
 ### Choosing a focused or compound test
 
@@ -1121,8 +1503,8 @@ If your test imports other files, add them to the same directory. They're auto-p
 
 ## What's NOT tested yet
 
-- **Error paths at the emit level** — the 3 exit codes (1 gcc, 2 TS, 3 emitter) aren't explicitly tested with expected-failure cases. If you add a case that expects compile failure, add an `expected.exitcode` file and extend the harness.
-- **Multi-config matrix** — only `--no-gc` vs default. macOS / Windows / clang paths aren't exercised yet.
+- **Error paths at the emit level** — expected-failure coverage exists for emitter diagnostics, but broader exit-code coverage is still thin.
+- **Multi-config matrix** — `--no-gc`, default, and one `--release` case are covered. macOS / Windows / clang paths aren't exercised yet.
 - **Binary size / perf regressions** — not measured.
 - **Stdlib edge cases** at scale — we test "happy path" for each feature. Fuzz / property-based testing would improve coverage.
 
@@ -1142,7 +1524,7 @@ These are candidate Phase 15 work. See [`todo.md`](todo.md).
 
 Everything in this file compiles end-to-end to a native binary via `./bin/tsc2c file.ts -o out`. Each bullet points at the test case under `tests/e2e/cases/` that exercises it and, where useful, at the runtime symbol or emitter method that implements it.
 
-Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 24 passed.
+Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 146 passed.
 
 ---
 
@@ -1150,13 +1532,17 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 24 passed.
 
 ### Literals
 - Numeric literals — decimal, `0x`/`0o`/`0b`, underscore separators → `formatNumericLiteral` in `src/emit/index.ts`. Test: `arith`
-- String literals with full C escape handling for UTF-8 → `escapeCString` in `src/emit/cbuf.ts`. Test: `hello`, `strings`
+- BigInt literals (`0n`, `0xfn`, `0o77n`, `0b101n`), `BigInt(...)`, arithmetic/comparison/equality, unary minus, compound arithmetic assignment, `typeof`, and `.toString(radix?)` backed by GMP. Test: `bigint`
+- Symbol values via `Symbol(description?)`, `Symbol.for`, `Symbol.keyFor`, `Symbol.iterator`, `Symbol.asyncIterator`, `.description`, `.toString()`, equality, and `typeof`. Test: `symbols`
+- String literals with full C escape handling for UTF-8 and non-BMP code points → `escapeCString` in `src/emit/cbuf.ts`. Test: `hello`, `strings`, `string_for_of`
 - Template literals with `${expr}` interpolation → `emitTemplate`. Test: `greet`, `fizzbuzz`
+- Tagged template calls with a `TemplateStringsArray` first parameter and fixed substitution parameters. Test: `tagged_templates`
 - Boolean literals `true` / `false`. Test: `json`
 - `null` / `undefined` / `NaN` / `Infinity` globals. Test: `nullish`, `stdlib_os`
 - Array literals `[1, 2, 3]` with spread `[0, ...a, 6]` → `emitArrayLiteral`. Test: `advanced`
 - Object literals `{ x: 1 }` matched against an interface/class shape → `emitObjectLiteral`. Test: `interfaces`
-- Regex literals `/pattern/flags` → `emitExpr` RegularExpressionLiteral branch. Test: `regex`
+- Computed property names in typed object literals when the key resolves to a string/number literal, e.g. `{ [key]: value }`. Test: `computed_props`
+- Regex literals `/pattern/flags` → `emitExpr` RegularExpressionLiteral branch. Tests: `regex`, `regex_pcre2`
 
 ### Primitives
 - `number` → C `double` with shortest round-trip formatting. Runtime: `tsc_str_from_num`
@@ -1172,18 +1558,21 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 24 passed.
 - Bitwise: `& | ^ << >> >>>` (JS-style int32 semantics)
 - Assignment + compound: `= += -= *= /= %=`
 - Pre/post `++` `--`
+- `typeof` in typed code — JS type string with operand side effects preserved. Nullable pointer unions such as `string | null` and `string | undefined` produce the nullish runtime result and work in equality/inequality guards. Tests: `typeof`, `typeof_guards`
 - Ternary `a ? b : c`
 - Nullish coalescing `??` — null-aware for pointer types. Test: `nullish`
 - Optional chaining `?.` — null-aware for class fields with zero-sentinel fallback. Test: `nullish`
 - Cross-type null comparison: `arr !== null`, `cls === null`
+- `instanceof` for class instances across single-inheritance chains. Test: `instanceof`
 
 ### Control flow
 - `if` / `else if` / `else`
 - `while`, `do` / `while`
 - `for (let i = 0; i < n; i++)`
-- `for (const x of arr)` — also works on `for-of` over arrays. Test: `arrays`, `captures`
+- `for (const x of arr)` — also works on arrays, strings, Map/Set, typed custom iterable classes whose `[Symbol.iterator]()` returns an array-backed `IterableIterator<T>`, and custom iterator objects with `next()` returning `{ done, value }`. Tests: `arrays`, `captures`, `string_for_of`, `map_set_for_of`, `custom_iterable`, `custom_iterator_object`
 - `break`, `continue`
 - `switch` / `case` / `default` with correct **fall-through semantics** (empty cases merge via `||`). Test: `switch`
+- Exhaustiveness diagnostics for finite-domain switches over literal unions and booleans. Tests: `switch_exhaustive`, `switch_exhaustive_missing`
 - `return`, void return, typed return
 
 ---
@@ -1195,6 +1584,15 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 24 passed.
 - Top-level `const f = (...) => ...` **lifted to a static C function** — usable both as a call target and as an HOF callback. Test: `fn_refs`
 - Inline arrow functions in HOF call sites (body expanded inline via GCC statement expressions). Test: `array_hof`
 - Function references passed as HOF callbacks — both declared functions and lifted-arrow consts. Test: `fn_refs`
+- First-class typed closures for arrow/function expressions that capture enclosing function-scope locals or parameters. Captured storage is boxed in GC-managed ref cells and closure values lower to generated `{fn, env}` structs per signature. Test: `function_closures`
+- Direct calls to top-level generic functions are monomorphized per concrete call signature, with simple `T` and `T[]` annotations inside the function body. Test: `generic_functions`
+- Top-level generic function references are specialized in typed array callback contexts such as `map(identity)`, `flatMap(wrap)`, `filter`, `reduce`, `forEach`, `find`/`some`/`every`, and `sort` comparators. Test: `generic_callbacks`
+- Top-level generic function references are specialized when assigned to concrete function-typed values, using generated adapter closures. Test: `generic_function_values`
+- Generic classes are supported with erased `tsc_value_t` type-parameter storage and typed coercion at construction/method boundaries. Test: `generic_classes`
+- Generic instance and static class methods are monomorphized per concrete call signature, including inherited generic method calls with base self-casts. Test: `generic_methods`
+- Left-to-right argument evaluation for function, method, constructor, console, math, path, fs write, regex, and supported string calls with side effects. Test: `call_arg_order`
+- Rest parameters lower to typed arrays, and spread arguments append arrays into rest parameters in evaluation order. Test: `rest_spread`
+- Direct self-tail calls in top-level functions lower to parameter temporaries plus `goto`, avoiding C stack growth for accumulator-style recursion. Test: `tail_calls`
 - Module-level `const` / `let` emitted as file-scope statics so top-level functions read/write them as captures. Test: `captures`
 
 ---
@@ -1212,10 +1610,13 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 24 passed.
 - **Static fields** — emitted as file-scope `ClassName_field`. Test: `inheritance`
 - **Static methods** — called as `ClassName_method(args)`. Test: `inheritance`
 - Inherited method dispatch — `d.describe()` on `Dog extends Animal` resolves to `Animal_describe((Animal_t*)d)`. Test: `inheritance`
+- `abstract` classes, access modifiers, and `readonly` fields are accepted as TS-only modifiers. Test: `class_modifiers`
 - `interface` declarations → C struct types (no runtime overhead). Test: `interfaces`
 - Object literals typed against an interface/class → allocated + field-assigned. Test: `interfaces`
 - Interface nesting — `interface Line { from: Point; to: Point; }`. Test: `interfaces`
 - Shorthand property assignment `{ x, y }`. Test: `interfaces`
+- Computed property assignment with literal or const-literal keys. Test: `computed_props`
+- Numeric `enum` declarations and `Enum.Member` constants. Test: `enums`
 
 ---
 
@@ -1228,28 +1629,48 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 24 passed.
 - `.push(...)` / `.pop()` — `tsc_array_push_raw`, `tsc_array_pop_raw`
 - `.shift()` / `.unshift(...)` — `tsc_array_shift_raw`, `tsc_array_unshift_raw`
 - `.reverse()` — in-place via `tsc_array_reverse`
+- `.toReversed()` — copy via `tsc_array_to_reversed`; original array remains unchanged. Test: `array_to_reversed`
+- `.fill(value, start?, end?)` — in-place via `tsc_array_fill`. Test: `array_fill`
+- `.copyWithin(target, start, end?)` — in-place via `tsc_array_copy_within`. Test: `array_copy_within`
+- `.at(index)` — positive and negative index lookup. Test: `array_at`
+- `.with(index, value)` — copy via `tsc_array_with`; original array remains unchanged and negative indices count from the end. Test: `array_with`
+- `.toSpliced(start?, deleteCount?, ...items)` — copy via `tsc_array_to_spliced`; original array remains unchanged. Test: `array_to_spliced`
 - `.slice(start?, end?)` — `tsc_array_slice`
 - `.concat(...arrays)` — `tsc_array_append`
 - `.join(sep?)` — with type-driven element stringification
-- `.indexOf(x)`, `.includes(x)` — with proper per-element-type equality
-- `.sort((a, b) => cmp)` — inline insertion sort; accepts inline arrow OR named function reference. Test: `wordcount`
-- `.forEach(cb)` / `.map(cb)` / `.filter(cb)` / `.reduce(cb, init)`. Test: `array_hof`
-- `.find(cb)` / `.findIndex(cb)` / `.some(cb)` / `.every(cb)`. Test: `array_hof`
+- `.indexOf(x)`, `.lastIndexOf(x)`, `.includes(x)` — with proper per-element-type equality. Test: `array_last_index_of`
+- `.sort()` / `.toSorted()` — JS-style default string-conversion sort; `toSorted` returns a sorted copy. Tests: `array_sort_default`, `array_to_sorted`
+- `.sort((a, b) => cmp)` / `.toSorted((a, b) => cmp)` — inline insertion sort; accepts inline arrow OR named function reference. Test: `wordcount`
+- `.flat(depth)` for compile-time numeric depths and `.flatMap(cb)` for array-returning callbacks. Test: `array_flat`
+- `.forEach(cb)` / `.map(cb)` / `.filter(cb)` / `.reduce(cb, init)` / `.reduceRight(cb, init)`. Tests: `array_hof`, `array_reduce_right`
+- `.find(cb)` / `.findIndex(cb)` / `.findLast(cb)` / `.findLastIndex(cb)` / `.some(cb)` / `.every(cb)`. Tests: `array_hof`, `array_find_last`
 - All HOFs accept **either** inline arrow **or** named function reference. Test: `fn_refs`
 - `for-of` iteration. Test: `arrays`
-- `Array.isArray(x)` — resolved at compile time from the CType. Test: `advanced`
-- `Array.from(arr)` — identity copy for arrays. Test: `advanced`
+- `Array.isArray(x)` — resolved at compile time from typed CTypes and at runtime for dynamic values. Tests: `advanced`, `array_static_dynamic`
+- `Array.from(arr)` — identity copy for typed arrays and dynamic `tsc_value_t` arrays. Tests: `advanced`, `array_static_dynamic`
+- `Array.of(...items)` — typed array construction, including `Array.of<any>(...)` followed by dynamic array coercion. Tests: `array_of`, `dynamic_array_of`
 
 ### `Map<K, V>`
 - `new Map<K, V>()` — `tsc_map_new(sizeof(K), sizeof(V), keyKind, 0)`
 - `.set(k, v)`, `.get(k)`, `.has(k)`, `.delete(k)`, `.clear()`. Test: `map_set`
 - `.keys()`, `.values()` — returns typed array
+- Direct `for...of` with `[key, value]` destructuring. Test: `map_set_for_of`
 - `.size` property. Test: `map_set`, `wordcount`
 - Key equality polymorphic by tag: number / string / bool / pointer. Runtime: `key_eq`
 
 ### `Set<T>`
 - `new Set<T>()` — `tsc_set_new(sizeof(T), keyKind, 0)`
 - `.add(v)`, `.has(v)`, `.delete(v)`, `.clear()`, `.values()`, `.size`. Test: `map_set`
+- Direct `for...of` over values. Test: `map_set_for_of`
+
+### `WeakMap<K, V>` / `WeakSet<T>`
+- Typed object-key `WeakMap` supports `.set(k, v)`, `.get(k)`, `.has(k)`, and `.delete(k)`. Test: `weak_collections`
+- Typed object-key `WeakSet` supports `.add(v)`, `.has(v)`, and `.delete(v)`. Test: `weak_collections`
+- Runtime storage reuses pointer-key map/set tables; there is no iteration API exposed.
+
+### `WeakRef<T>`
+- `new WeakRef(target)` creates a typed weak-reference wrapper, and `.deref()` returns `T | undefined`. Test: `weak_ref`
+- Runtime storage is a small pointer wrapper; `FinalizationRegistry` remains separate because it needs observable GC callback scheduling.
 
 ---
 
@@ -1259,37 +1680,45 @@ All methods on the `String` interface map to `tsc_str_*` runtime calls:
 
 - `.length` → `tsc_str_length`
 - `.charAt(i)` → `tsc_str_char_at`
-- `.indexOf(needle)` → `tsc_str_index_of`
+- `.at(i)` → `tsc_str_at`, including negative-index lookup. Test: `string_at`
+- `.codePointAt(i)` → `tsc_str_code_point_at`. Test: `string_codepoints`
+- `String.fromCharCode(...)` → `tsc_str_from_char_code_n`. Test: `string_codepoints`
+- `.indexOf(needle)` / `.lastIndexOf(needle)` → `tsc_str_index_of`, `tsc_str_last_index_of`. Test: `string_last_index_of`
+- `.localeCompare(other)` → `tsc_str_locale_compare` using deterministic runtime string ordering. Test: `string_locale_compare`
 - `.includes(needle)` → `tsc_str_includes`
 - `.startsWith(p)` → `tsc_str_starts_with`
 - `.endsWith(p)` → `tsc_str_ends_with`
 - `.slice(start?, end?)` → `tsc_str_slice`
+- `.substring(start, end?)` → `tsc_str_substring`, including clamp/swap semantics. Test: `string_substring`
 - `.toUpperCase()` / `.toLowerCase()` → `tsc_str_to_upper`, `tsc_str_to_lower`
-- `.trim()` → `tsc_str_trim`
+- `.normalize(form?)` → `tsc_str_normalize` backed by ICU for NFC/NFD/NFKC/NFKD. Test: `string_normalize`
+- `.trim()` / `.trimStart()` / `.trimEnd()` → `tsc_str_trim`, `tsc_str_trim_start`, `tsc_str_trim_end`. Test: `string_trim_edges`
 - `.repeat(n)` → `tsc_str_repeat`
 - `.padStart(len, pad?)` / `.padEnd(len, pad?)` → `tsc_str_pad_start`, `tsc_str_pad_end`
 - `.replace(search, repl)` → `tsc_str_replace` or `tsc_str_replace_regex` (if `search` is a RegExp)
 - `.replaceAll(search, repl)` → `tsc_str_replace_all` or regex version
 - `.match(regex)` → `tsc_str_match_regex`
+- `.matchAll(regex)` → `tsc_str_match_all_regex`, returning `string[][]` groups. Test: `string_match_all`
 - `.split(sep)` / `.split(regex)` → `tsc_str_split` / `tsc_str_split_regex`
+- `.concat(...strings)` → repeated `tsc_str_concat`. Test: `string_concat`
+- `for...of` over strings → `tsc_str_chars`, yielding one string per UTF-8 code point. Test: `string_for_of`
 - String + anything → concat with automatic stringification
 - Index access `s[i]` → same as `charAt`
 
-Tests: `strings`, `wordcount`
+Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_index_of`, `string_locale_compare`, `string_match_all`, `string_normalize`, `string_substring`, `string_trim_edges`, `wordcount`
 
 ---
 
-## 6. Regex (POSIX ERE-backed)
+## 6. Regex (PCRE2-backed)
 
 - `/pattern/flags` literal syntax — parsed at emit time. Test: `regex`
-- Flag support: `g`, `i`, `m` (global, ignore-case, multiline)
-- JS escape-class translation:
-  - `\d` → `[0-9]`, `\D` → `[^0-9]`
-  - `\w` → `[A-Za-z0-9_]`, `\W` → `[^A-Za-z0-9_]`
-  - `\s` → `[ \t\n\r\f\v]`, `\S` → `[^ \t\n\r\f\v]`
+- Flag support: `g`, `i`, `m`, `s`, `u` (global, ignore-case, multiline, dotAll, Unicode)
+- PCRE2 syntax support for lookahead/lookbehind, named capture syntax, and Unicode property escapes. Test: `regex_pcre2`
 - `re.test(s)` → `tsc_regexp_test`
 - String-side methods with regex argument: `.replace`, `.replaceAll`, `.match`, `.split`
-- Runtime: `tsc_regexp_new`, `tsc_str_replace_regex`, `tsc_str_match_regex`, `tsc_str_split_regex` (all in `runtime/tsc_runtime.c`)
+- Capture groups on non-global `.match()` results. Test: `regex_captures`
+- `.matchAll(regex)` full-match and capture arrays. Test: `string_match_all`
+- Runtime: `tsc_regexp_new`, `tsc_str_replace_regex`, `tsc_str_match_regex`, `tsc_str_match_all_regex`, `tsc_str_split_regex` (all in `runtime/tsc_runtime.c`)
 
 ---
 
@@ -1301,6 +1730,7 @@ Tests: `strings`, `wordcount`
 - `main()` calls `mod_init_*` in topological order (deps first)
 - Flat symbol namespace — function/class/const names are global across the program
 - Local relative imports: `import { x } from "./y"` resolves via `ts.resolveModuleName`
+- Namespace declarations for scoped values, functions, lifted arrow consts, nested namespaces, and namespace member assignment. Test: `namespaces`
 - Circular imports don't crash — topo DFS stops at the back-edge
 
 ---
@@ -1323,7 +1753,51 @@ Tests: `strings`, `wordcount`
   - Arrays → `[...]`
   - Class/interface values → `{"field":value,...}` using the declared property list from the TypeScript checker
 - Runtime: `tsc_json_escape_string`, `tsc_json_num`. Test: `json`
-- **Not** implemented: `JSON.parse` (needs the dynamic value runtime)
+- `JSON.parse(text)` returns a NaN-boxed dynamic `tsc_value_t`, with recursive parsing for objects, arrays, strings, numbers, booleans, and null. Test: `dynamic_values`
+
+## 9.5 Dynamic values
+
+- `any` / `unknown` and heterogeneous unions map to `tsc_value_t`, a NaN-boxed `uint64_t` dynamic value.
+- Dynamic values can hold numbers, strings, booleans, null, undefined, arrays, and object pointers.
+- Dynamic array/object literals box heterogeneous fields/elements into `tsc_value_t`.
+- Dynamic property and element access supports object properties, array indices, and `.length` on dynamic arrays/strings.
+- Dynamic property writes (`obj.x = value`, `obj["x"] = value`) and compound writes (`+=`, `-=`, `*=`, `/=`, `%=`) lower through descriptor-aware `tsc_value_set_prop` / dynamic operator helpers. Test: `dynamic_property_assignment`
+- Dynamic array index writes (`arr[i] = value`) and numeric-index compound writes extend/update `tsc_value_t` arrays, filling skipped slots with `undefined`. Test: `dynamic_index_assignment`
+- Dynamic `"key" in object` and `delete object.key` / `delete object["key"]` route through descriptor-aware dynamic object lookup/deletion. Test: `dynamic_property_ops`
+- `typeof` guards over `string | number` unions narrow dynamic storage back to specialized string/number reads. Test: `union_narrowing`
+- Dynamic arithmetic, string concatenation, equality, relational, logical, nullish, and compound arithmetic operators dispatch through `tsc_value_*` helpers. Test: `dynamic_ops`
+- Dynamic array `forEach`, `map`, `flatMap`, `filter`, `reduce`/`reduceRight` with an explicit initial value, `find`, `findIndex`, `findLast`, `findLastIndex`, `some`, and `every` work with inline expression-body callbacks over `tsc_value_t` elements. Tests: `dynamic_array_hof`, `dynamic_array_hof_more`, `dynamic_array_find_last`, `dynamic_array_reduce`, `dynamic_array_reduce_right`, `dynamic_array_flatmap`
+- Dynamic array `copyWithin(target, start, end?)` mutates `tsc_value_t` arrays with overlapping-copy semantics. Test: `dynamic_array_copy_within`
+- Dynamic array `fill(value, start?, end?)` mutates `tsc_value_t` arrays over the selected range. Test: `dynamic_array_fill`
+- Dynamic array `at(index)` returns the element at a positive or negative index, or `undefined` when out of bounds. Test: `dynamic_array_at`
+- Dynamic array `toReversed()` returns a reversed copy without mutating the receiver. Test: `dynamic_array_to_reversed`
+- Dynamic array `toSorted()` returns a default string-conversion sorted copy without mutating the receiver. Test: `dynamic_array_to_sorted`
+- Dynamic array `with(index, value)` returns a copy with one replaced element and leaves the receiver unchanged. Test: `dynamic_array_with`
+- Dynamic array `toSpliced(start?, deleteCount?, ...items)` returns a spliced copy and leaves the receiver unchanged. Test: `dynamic_array_to_spliced`
+- Dynamic array `splice(start, deleteCount?, ...items)` mutates `tsc_value_t` arrays and returns removed elements as a dynamic array. Test: `dynamic_array_splice`
+- Dynamic array `sort()` mutates `tsc_value_t` arrays with JS-style default string-conversion ordering. Test: `dynamic_array_sort`
+- Mixed ternary branches that can be represented dynamically, such as `array` vs `any`, are boxed to `tsc_value_t`. Test: `dynamic_array_flatmap`
+- Common dynamic string/array methods dispatch at runtime for `charAt`, `includes`, `indexOf`, `lastIndexOf`, `localeCompare`, `join`, `pop`, variadic `push`, `shift`, variadic `unshift`, `at`, `concat`, `copyWithin`, `fill`, `flat`, `normalize`, `padStart`, `padEnd`, `repeat`, `replace`, `replaceAll`, `reverse`, `toReversed`, `toSorted`, `toSpliced`, `with`, `slice`, `split`, `substring`, `startsWith`, `endsWith`, `toLowerCase`, `toUpperCase`, `trim`, `trimStart`, `trimEnd`, and `toString`. Tests: `dynamic_methods`, `dynamic_array_methods`, `dynamic_array_at`, `dynamic_array_copy_within`, `dynamic_array_fill`, `dynamic_array_flat`, `dynamic_array_to_reversed`, `dynamic_array_to_sorted`, `dynamic_array_to_spliced`, `dynamic_array_with`, `dynamic_last_index_of`, `dynamic_string_at`, `dynamic_string_concat`, `dynamic_string_locale_compare`, `dynamic_string_normalize`, `dynamic_string_pad_repeat`, `dynamic_string_replace`, `dynamic_string_split`, `dynamic_string_substring`, `dynamic_string_trim_edges`
+- Dynamic values can be coerced into typed `number`, `boolean`, `string`, and array destinations using runtime unbox/conversion helpers. Test: `dynamic_coercions`
+- Basic discriminated unions over interface-shaped dynamic object storage work with literal discriminants and typed field reads through dynamic coercion. Test: `discriminated_unions`
+- User-defined type predicate functions work for interface-shaped dynamic union values when their runtime body returns a boolean guard. Test: `custom_predicates`
+- `Object.keys(dynamic)`, `Object.values(dynamic)`, and `Object.entries(dynamic)` work for enumerable dynamic object data/accessor properties; values are returned as `tsc_value_t[]` and entries as dynamic `[key, value]` arrays. Test: `dynamic_object_entries`
+- `Object.fromEntries(dynamicEntries)` builds a dynamic object from dynamic `[key, value]` arrays and uses string conversion for keys. Test: `dynamic_object_from_entries`
+- `Object.is(a, b)` uses SameValue semantics over boxed dynamic values, including `NaN`, signed zero, strings, and object identity. Test: `object_is`
+- `Object.assign(dynamicTarget, ...dynamicSources)` copies enumerable dynamic object data properties, and `Object.getOwnPropertyNames(dynamic)` / `Object.hasOwn(dynamic, key)` use the dynamic object property table. Test: `object_static_methods`
+- `dynamicObj.hasOwnProperty(key)` checks the dynamic object's own property table without walking prototypes. Test: `object_has_own_property`
+- `dynamicObj.isPrototypeOf(value)` checks whether the dynamic receiver appears in another dynamic object's prototype chain. Test: `object_is_prototype_of`
+- `dynamicObj.propertyIsEnumerable(key)` checks that a dynamic property is both own and enumerable, returning false for hidden, inherited, or missing keys. Test: `object_property_is_enumerable`
+- `dynamicObj.toString()` / `dynamicObj.toLocaleString()` reuse dynamic string conversion, and `dynamicObj.valueOf()` returns the dynamic receiver unchanged for objects and primitives. Tests: `object_to_string`, `object_to_locale_string`, `object_value_of`
+- `Object.defineProperty(dynamic, key, { value, writable, enumerable, configurable })` sets dynamic object data properties and enforces data descriptor flags for writes, key enumeration, deletion, and JSON stringify. Tests: `object_define_property`, `object_descriptors`
+- `Object.defineProperty` / `Reflect.defineProperty` support named-function accessor descriptors (`get`/`set`) on dynamic objects; reads call getters, writes call setters, and enumerable accessor values flow through `Object.values`, `Object.assign`, inherited lookup, and `JSON.stringify`. Test: `object_accessors`
+- `Object.create(proto)`, `Object.getPrototypeOf`, `Object.setPrototypeOf`, `Reflect.getPrototypeOf`, and `Reflect.setPrototypeOf` support dynamic object prototype chains; dynamic property reads, `in`, and `Reflect.has` walk prototypes while `Object.keys`, `Reflect.ownKeys`, descriptors, and `Object.hasOwn` remain own-property based. Test: `object_prototypes`
+- `Object.preventExtensions(dynamic)` / `Object.isExtensible(dynamic)` and `Reflect.preventExtensions` / `Reflect.isExtensible` track dynamic object extensibility and reject new properties after extension prevention. Test: `object_extensibility`
+- `Object.seal(dynamic)`, `Object.freeze(dynamic)`, `Object.isSealed(dynamic)`, and `Object.isFrozen(dynamic)` update/enforce dynamic data descriptor configurability/writability. Test: `object_seal_freeze`
+- `Object.getOwnPropertyDescriptor(dynamic, key)` returns a dynamic data descriptor object for existing dynamic properties. Test: `object_descriptors`
+- `Object.getOwnPropertyDescriptors(dynamic)` returns a dynamic object whose own properties are descriptor objects for every own dynamic property, including non-enumerable data properties. Test: `object_get_own_property_descriptors`
+- `Reflect.get(dynamic, key)`, `Reflect.set(dynamic, key, value)`, `Reflect.has`, `Reflect.deleteProperty`, `Reflect.ownKeys`, `Reflect.defineProperty`, `Reflect.getPrototypeOf`, `Reflect.setPrototypeOf`, and `Reflect.getOwnPropertyDescriptor` handle dynamic object data properties/prototypes. Tests: `reflect_dynamic`, `reflect_get_own_property_descriptor`, `object_prototypes`, `object_descriptors`
+- `JSON.stringify(dynamic)` recurses through dynamic arrays/objects. Test: `dynamic_values`
 
 ---
 
@@ -1346,6 +1820,16 @@ Tests: `strings`, `wordcount`
 - `os.platform()` / `arch()` / `hostname()` / `tmpdir()` / `homedir()` / `cpus()`
 - Runtime: `tsc_os_*`. Test: `stdlib_os`
 
+### `crypto`
+- `crypto.createHash("sha256").update(data).digest("hex")` backed by OpenSSL SHA-256. Test: `crypto_sha256`
+
+### `Buffer`
+- `Buffer.from(string[, "utf8" | "hex"])`, `Buffer.from(number[])`, `Buffer.alloc(size, fill?)`, `Buffer.concat(list)`, `Buffer.isBuffer(value)`.
+- Buffer instances expose `.length`, numeric byte indexing/get-set, `.toString("utf8" | "hex")`, `.slice()`, `.subarray()`, and `.equals()`. Test: `buffer`
+
+### `URL`
+- `new URL(input)` parses absolute URLs with `href`, `protocol`, `host`, `hostname`, `port`, `pathname`, `search`, `hash`, and `origin` fields. Test: `url_parse`
+
 ### `Math`
 - `floor`, `ceil`, `round` (JS half-to-+Inf), `abs`, `trunc`, `sign`
 - `sqrt`, `pow`, `log`, `exp`, `sin`, `cos`, `tan`, `atan`, `atan2`
@@ -1364,13 +1848,15 @@ Tests: `strings`, `wordcount`
 
 ### `console`
 - `console.log` / `.error` / `.warn` / `.info` — variadic, auto-stringifies each arg
+- First-argument formatting for `%s`, `%d`, `%i`, `%f`, `%o`, `%O`, `%c`, and `%%`. Test: `console_format`
 - Runtime: `tsc_console_log_n`, `tsc_console_error_n`
 
 ### `Date`, `Number`, `Array`, `Object`
 - `Date.now()` → `tsc_date_now` (ms since epoch)
 - `Number.isInteger(n)`, `Number.isFinite(n)`, `Number.isNaN(n)`, `Number.parseFloat(s)`, `Number.parseInt(s)`
-- `Array.isArray(x)`, `Array.from(arr)`
+- `Array.isArray(x)`, `Array.from(arr)`, `Array.of(...items)`
 - `Object.keys(obj)`, `Object.values(obj)` — compile-time expanded from the type's property list
+- `Object.entries(obj)`, `Object.fromEntries(entries)` — typed `[string, T]` entry arrays for homogeneous object fields. Test: `object_entries`
 - Global `parseInt` / `parseFloat` / `isNaN` / `isFinite` → mapped to runtime or C math builtins
 
 ---
@@ -1379,10 +1865,14 @@ Tests: `strings`, `wordcount`
 
 - TypeScript type-checking via the official compiler API — any TS type error is surfaced with full source context (file:line:col + code frame) before emission. Test: try `/tmp/bad.ts` with `const x: number = "str"`.
 - Unsupported-feature diagnostics include source location and a one-line reason — exit code 3 distinguishes them from TS errors (exit 2) and gcc failures (exit 1).
+- Permanent AOT-limit diagnostics reject `eval`, `Function` / `new Function`, non-literal `require(variable)`, literal native addon specifiers ending in `.node`, and literal package imports/requires whose installed package root contains `build/Release/*.node`. Tests: `runtime_eval`, `runtime_function_constructor`, `dynamic_require`, `native_addon`, `native_addon_package`
+- Generated C includes `#line` directives for emitted TypeScript statements so debugger and compiler locations can point back to TS source. Test: `line_directives`
 - `--emit-c-only` — skip gcc, just write the generated `main.c` for inspection.
 - `--keep-build-dir <path>` — keep intermediate files rather than using a tempdir.
 - `--verbose` — print compile steps + the full gcc command line.
 - `--no-gc` — link without Boehm GC (leaking `calloc` fallback) for environments where `libgc-dev` isn't installed.
+- `--release` — link a smaller release binary using gcc `-Os -s` instead of the default `-O2`. Test: `release_build`
+- OpenSSL (`libssl-dev`), ICU (`libicu-dev`), and GMP (`libgmp-dev`) are linked for crypto hashing, Unicode normalization, and BigInt.
 - Shortest round-trip number formatting — `tsc_str_from_num` probes `%.*g` with precision 1..17 until the formatted value strtods back to the original. Matches JS's `Number.prototype.toString` output on common cases.
 - Multi-pass emission (struct fwd-decls → struct bodies → function/method protos → function/method bodies → module init bodies → main) so cycles and forward references work cleanly.
 
@@ -1397,24 +1887,141 @@ Tests: `strings`, `wordcount`
 | `arith` | all arithmetic operators + JS number formatting |
 | `greet` | function declaration + template literals |
 | `arrays` | array literal + push/pop + for-of + length |
+| `array_copy_within` | Array.copyWithin overlapping copy |
+| `array_fill` | Array.fill range mutation |
+| `array_flat` | flat + flatMap on homogeneous typed arrays |
 | `array_hof` | forEach/map/filter/reduce/find/some/every + inline arrows |
+| `array_last_index_of` | Array.lastIndexOf |
+| `array_of` | Array.of typed array construction |
+| `array_sort_default` | default JS-style string-conversion sort |
+| `array_static_dynamic` | dynamic Array.isArray and Array.from copy behavior |
+| `array_to_reversed` | Array.toReversed non-mutating copy |
+| `array_to_sorted` | Array.toSorted default non-mutating sort |
+| `array_to_spliced` | Array.toSpliced non-mutating splice |
+| `array_with` | Array.with non-mutating replacement |
+| `bigint` | GMP-backed BigInt literals, arithmetic, comparison, and toString |
 | `classes` | class + ctor + method + `this` + `new` |
+| `buffer` | binary-safe Buffer construction, indexing, slicing, hex/utf8 conversion |
+| `class_modifiers` | abstract/access/readonly modifiers accepted as TS-only |
+| `computed_props` | computed object-literal keys resolved at compile time |
+| `console_format` | first-argument console `%` specifier formatting |
+| `crypto_sha256` | sha256 update + hex digest |
+| `custom_iterator_object` | class `[Symbol.iterator]()` returning an iterator object with `next()` |
+| `custom_predicates` | user-defined type predicate narrowing over interface-shaped union values |
+| `enums` | numeric enum constants |
 | `inheritance` | extends + super() + static members |
+| `instanceof` | class instance ancestry checks |
 | `interfaces` | interface + object literal + nested refs + shorthand |
 | `exceptions` | throw + try/catch/finally + re-throw + nested |
 | `modules` | multi-file import/export |
+| `namespaces` | namespace-scoped values, functions, lifted arrows, and nested namespaces |
 | `strings` | every supported String method |
 | `math` | Math.* + constants |
 | `fs_roundtrip` | fs.readFileSync + writeFileSync + path helpers |
+| `function_closures` | returned closures with function-scope captures and mutable captured state |
+| `generic_classes` | erased generic class fields/methods using dynamic value storage |
+| `generic_function_values` | generic top-level functions assigned to concrete function-typed values |
+| `line_directives` | generated C contains TS source `#line` markers |
 | `map_set` | Map + Set with all methods |
+| `map_set_for_of` | direct Map `[key, value]` and Set value iteration |
+| `native_addon` | expected diagnostic for literal native addon imports |
+| `native_addon_package` | expected diagnostic for imported packages containing native addon binaries |
 | `json` | JSON.stringify of primitives, arrays, typed objects |
 | `switch` | number + string switch with fall-through |
-| `regex` | POSIX-backed regex: test, replace, match, split, flags |
+| `switch_exhaustive` | exhaustive finite-domain switch over literal unions and booleans |
+| `switch_exhaustive_missing` | expected diagnostic for a missing finite-domain switch case |
+| `symbols` | Symbol values, global registry, well-known symbols, typeof |
+| `tagged_templates` | tagged template calls with cooked string segments |
+| `tail_calls` | direct self-tail recursion lowered to a loop |
+| `regex` | PCRE2-backed regex: test, replace, match, split, flags |
+| `regex_captures` | capture groups for non-global `.match()` |
+| `regex_pcre2` | lookahead/lookbehind, named capture syntax, Unicode properties, dotAll |
+| `release_build` | `--release` size-optimized linking still produces a runnable binary |
+| `rest_spread` | rest parameters and spread arguments into rest calls |
 | `nullish` | `??` + `?.` + null returns from functions |
 | `advanced` | spread + Object.keys + Array.from + padStart + replace |
+| `object_entries` | typed Object.entries/fromEntries over homogeneous object fields |
+| `object_extensibility` | dynamic Object/Reflect preventExtensions and isExtensible |
+| `object_get_own_property_descriptors` | dynamic Object.getOwnPropertyDescriptors over own data descriptors |
+| `object_has_own_property` | dynamic Object.prototype.hasOwnProperty over own vs inherited properties |
+| `object_is` | Object.is SameValue semantics for numbers, strings, and dynamic object identity |
+| `object_is_prototype_of` | dynamic Object.prototype.isPrototypeOf over prototype chains |
+| `object_property_is_enumerable` | dynamic Object.prototype.propertyIsEnumerable over descriptor enumerable flags |
+| `object_prototypes` | dynamic Object.create, getPrototypeOf/setPrototypeOf, and prototype-chain lookup |
+| `object_seal_freeze` | dynamic Object.seal/freeze/isSealed/isFrozen |
+| `object_to_locale_string` | dynamic Object.prototype.toLocaleString string conversion |
+| `object_to_string` | dynamic Object.prototype.toString conversion for objects and primitives |
+| `object_value_of` | dynamic Object.prototype.valueOf identity/primitive passthrough |
+| `object_accessors` | dynamic named-function accessor descriptors |
+| `object_define_property` | dynamic Object.defineProperty data descriptor value writes |
+| `object_descriptors` | dynamic descriptor flags, getOwnPropertyDescriptor, and Reflect helpers |
+| `object_static_methods` | dynamic Object.assign, Object.hasOwn, and Object.getOwnPropertyNames |
+| `reflect_dynamic` | basic Reflect.get/set over dynamic object properties |
+| `reflect_get_own_property_descriptor` | Reflect descriptor lookup over dynamic object data properties |
 | `fn_refs` | named function refs + lifted arrow consts in HOFs |
+| `call_arg_order` | left-to-right call argument evaluation with side effects |
 | `captures` | module-level const/let used inside functions and arrows |
+| `discriminated_unions` | literal discriminant checks over interface-shaped union values |
+| `dynamic_property_assignment` | dynamic property writes and compound property writes |
+| `dynamic_string_at` | dynamic String.at positive and negative index lookup |
+| `dynamic_string_concat` | dynamic string concat |
+| `dynamic_string_locale_compare` | dynamic string localeCompare |
+| `dynamic_string_normalize` | dynamic string Unicode normalization |
+| `dynamic_string_pad_repeat` | dynamic string repeat, padStart, and padEnd |
+| `dynamic_string_replace` | dynamic string replace and replaceAll |
+| `dynamic_string_split` | dynamic string split into dynamic arrays |
+| `dynamic_string_substring` | dynamic string substring clamp/swap semantics |
+| `dynamic_string_trim_edges` | dynamic string trimStart and trimEnd |
+| `dynamic_require` | expected diagnostic for non-literal `require(variable)` |
+| `dynamic_coercions` | `any`/`unknown` unboxing into typed number/boolean/string/array destinations |
+| `dynamic_index_assignment` | dynamic array index writes and compound index writes |
+| `dynamic_last_index_of` | dynamic string and array lastIndexOf |
+| `array_at` | Array.at positive and negative index lookup |
+| `array_find_last` | Array.findLast and Array.findLastIndex reverse callback scan |
+| `array_reduce_right` | Array.reduceRight reverse accumulation with explicit initial value |
+| `dynamic_array_at` | dynamic Array.at positive and negative index lookup |
+| `dynamic_array_copy_within` | dynamic Array.copyWithin overlapping copy |
+| `dynamic_array_fill` | dynamic Array.fill range mutation |
+| `dynamic_array_flat` | dynamic Array.flat depth behavior |
+| `dynamic_array_flatmap` | dynamic Array.flatMap with inline callbacks |
+| `dynamic_array_find_last` | dynamic Array.findLast and findLastIndex with inline callbacks |
+| `dynamic_array_hof` | dynamic Array.map/filter with inline callbacks |
+| `dynamic_array_hof_more` | dynamic Array.forEach/some/every/find/findIndex with inline callbacks |
+| `dynamic_array_methods` | dynamic array shift/unshift/push/concat behavior |
+| `dynamic_array_of` | Array.of<any> construction followed by dynamic array coercion |
+| `dynamic_array_reduce` | dynamic Array.reduce with explicit initial value |
+| `dynamic_array_reduce_right` | dynamic Array.reduceRight with explicit initial value |
+| `dynamic_array_sort` | dynamic Array.sort default string-conversion ordering |
+| `dynamic_array_splice` | dynamic Array.splice mutation and removed-element return |
+| `dynamic_array_to_reversed` | dynamic Array.toReversed non-mutating copy |
+| `dynamic_array_to_sorted` | dynamic Array.toSorted default non-mutating sort |
+| `dynamic_array_to_spliced` | dynamic Array.toSpliced non-mutating splice |
+| `dynamic_array_with` | dynamic Array.with non-mutating replacement |
+| `dynamic_methods` | runtime method dispatch for common dynamic string/array methods |
+| `dynamic_object_entries` | dynamic Object.entries over enumerable data/accessor properties |
+| `dynamic_object_from_entries` | dynamic Object.fromEntries from dynamic key/value pairs |
+| `dynamic_ops` | dynamic arithmetic, equality, relational, logical, nullish, and compound operators |
+| `dynamic_property_ops` | dynamic `in` and `delete` property operations |
+| `dynamic_values` | NaN-boxed `any`/`unknown`, JSON.parse, heterogeneous arrays/objects |
 | `stdlib_os` | os module + Date.now + Number.* statics |
+| `runtime_eval` | expected diagnostic for `eval(...)` runtime compilation |
+| `runtime_function_constructor` | expected diagnostic for the `Function` constructor |
+| `string_at` | String.at positive and negative index lookup |
+| `string_concat` | String.concat |
+| `string_codepoints` | String.fromCharCode + codePointAt |
+| `string_for_of` | Unicode string `for...of` iteration |
+| `string_last_index_of` | String.lastIndexOf |
+| `string_locale_compare` | String.localeCompare |
+| `string_match_all` | matchAll full matches and capture groups |
+| `string_normalize` | ICU-backed Unicode normalization forms |
+| `string_substring` | String.substring clamp/swap semantics |
+| `string_trim_edges` | String.trimStart and trimEnd |
+| `typeof` | typed `typeof` results with operand side effects preserved |
+| `typeof_guards` | typeof equality checks over nullable string values |
+| `union_narrowing` | `typeof` narrowing over `string | number` dynamic union storage |
+| `url_parse` | URL parsing fields |
+| `weak_collections` | typed WeakMap/WeakSet with object keys |
+| `weak_ref` | typed WeakRef construction and deref |
 | `wordcount` | real-world: fs + regex + Map + sort + captures + env |
 
 ---
@@ -1423,7 +2030,7 @@ Tests: `strings`, `wordcount`
 
 # TODO — remaining work
 
-Scope of the full project (from the approved plan): **full ECMAScript 2026 + transpile arbitrary `node_modules`**. At the current pace, what's done is roughly 55–65% of the 15-phase plan. The rest is measured in weeks and months, not hours.
+Scope of the full project (from the approved plan): **full ECMAScript 2026 + transpile arbitrary `node_modules`**. At the current pace, what's done is roughly 65–75% of the 15-phase plan. The rest is measured in weeks and months, not hours.
 
 Items are grouped by how soon they unblock the most user value. Within each group the ordering reflects dependency + estimated effort.
 
@@ -1431,19 +2038,12 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
-These are the two items that most directly expand what programs can be written against `tsc2c`. Either is a reasonable starting point for the next session.
+This is the next item that most directly expands what programs can be written against `tsc2c`.
 
-- **Closures with non-module captures** (~1–2 weeks)
-  - What: arrow functions or function expressions that capture variables from an enclosing *function* scope (not just module scope).
-  - Why blocked: requires allocating an environment struct per arrow, boxing captured mutable locals in ref cells, and generating a `{fn_ptr, env_ptr}` closure value per unique signature.
-  - Today: inline arrows in HOFs work (C lexical scope picks up enclosing locals), and top-level arrow consts work (module-level vars are file-scope). Neither of those helps `function outer() { const x = 5; return (y) => x + y; }`.
-  - Unblocks: callback-returning factories, partial application, any deeply functional style.
-
-- **NaN-boxed dynamic value runtime — Phase 3** (~2–3 weeks)
-  - What: a `tsc_value_t` type (NaN-boxed `uint64_t`) that can hold any JS value — number, string pointer, object pointer, bool, null, undefined — uniformly.
-  - Why deferred: hidden-classes / shape trees + inline caches are a significant project.
-  - Unblocks simultaneously: `any` / `unknown` types at runtime, `JSON.parse` returning a dynamic object, `Object.values` with mixed-type fields, heterogeneous arrays, `Proxy`/`Reflect` (depends on dynamic property access), and **the vast majority of untyped npm packages**.
-  - Critical files (planned): `runtime/tsc_value.h` (NaN-box helpers), `runtime/tsc_object.c` (shapes + IC), new boxed/unboxed bridging in `src/emit/index.ts`.
+- **NaN-boxed dynamic value runtime — Phase 3 remainder** (~1–2+ weeks)
+  - Done foundation: `tsc_value_t` exists as a NaN-boxed `uint64_t`; `any` / `unknown` and heterogeneous unions map to it; `JSON.parse`, dynamic JSON stringify, heterogeneous arrays/objects, dynamic property/index access, dynamic property writes/compound writes, dynamic array index writes/compound writes, dynamic `in`/`delete`, dynamic binary/logical/nullish operators, broader dynamic string/array methods including `at`, `concat`, `copyWithin`, `fill`, `lastIndexOf`, `localeCompare`, `normalize`, `padStart`/`padEnd`, `repeat`, `replace`, `replaceAll`, `split`, `substring`, `toReversed`, `toSorted`, `toSpliced`, `with`, `trimStart`/`trimEnd`, `flat`, default `sort`, `splice`, and inline-arrow array HOFs including `reduceRight`/`findLast`/`findLastIndex`, mixed dynamic ternary boxing, dynamic `Array.isArray`/`Array.from`/`Array.of`, typed unbox/coercion bridges, enumerable `Object.keys`/`Object.values`/`Object.entries`, dynamic `Object.fromEntries`, `Object.is`, `Object.assign`/`Object.getOwnPropertyNames`/`Object.getOwnPropertyDescriptors`/`Object.hasOwn`, dynamic `Object.prototype.hasOwnProperty`/`isPrototypeOf`/`propertyIsEnumerable`/`toLocaleString`/`toString`/`valueOf`, dynamic data descriptor flags, named-function accessor descriptors, dynamic object extensibility/seal/freeze state, dynamic `Object.create`/prototype-chain lookup, and basic Reflect object helpers are implemented. Tests: `dynamic_values`, `dynamic_ops`, `dynamic_property_assignment`, `dynamic_index_assignment`, `dynamic_property_ops`, `dynamic_methods`, `dynamic_last_index_of`, `dynamic_string_at`, `dynamic_string_concat`, `dynamic_string_locale_compare`, `dynamic_string_normalize`, `dynamic_string_pad_repeat`, `dynamic_string_replace`, `dynamic_string_split`, `dynamic_string_substring`, `dynamic_string_trim_edges`, `dynamic_array_methods`, `dynamic_array_at`, `dynamic_array_copy_within`, `dynamic_array_fill`, `dynamic_array_find_last`, `dynamic_array_flat`, `dynamic_array_of`, `dynamic_array_sort`, `dynamic_array_splice`, `dynamic_array_to_reversed`, `dynamic_array_to_sorted`, `dynamic_array_to_spliced`, `dynamic_array_with`, `dynamic_array_flatmap`, `dynamic_array_hof`, `dynamic_array_hof_more`, `dynamic_array_reduce`, `dynamic_array_reduce_right`, `array_static_dynamic`, `dynamic_coercions`, `dynamic_object_entries`, `dynamic_object_from_entries`, `object_accessors`, `object_descriptors`, `object_extensibility`, `object_get_own_property_descriptors`, `object_has_own_property`, `object_is_prototype_of`, `object_property_is_enumerable`, `object_to_locale_string`, `object_to_string`, `object_value_of`, `object_is`, `object_prototypes`, `object_seal_freeze`, `object_static_methods`, `reflect_get_own_property_descriptor`.
+  - Still missing: hidden classes / shape trees, inline caches and diagnostics, full accessor descriptor semantics (boxed function identity, closure-valued accessors, receiver-aware `this`), complete built-in object/array prototype behavior, broader prototype method coverage, and clean source split into `runtime/tsc_value.*` / `runtime/tsc_object.*`.
+  - Still blocks: production-quality untyped npm packages, `Proxy`, full `Reflect`, full accessor descriptor semantics, and high-performance dynamic property access.
 
 ---
 
@@ -1457,23 +2057,14 @@ These are the two items that most directly expand what programs can be written a
   - **Depends on Phase 3** for the `Promise<T>` value representation (mixed boxed + unboxed).
 
 - **Phase 7 remainder — ES collections + language features** (~3 weeks)
-  - `Symbol`, well-known symbols (`Symbol.iterator`, `Symbol.asyncIterator`)
   - Generators `function*` and `async function*` — state-machine lowering similar to async
-  - `WeakMap`, `WeakSet`, `WeakRef`, `FinalizationRegistry`
-  - Iterator protocol for built-in collections — `for...of` on `Map`/`Set` natively (currently only via `.forEach`)
-  - Spread/rest in function calls and parameters (`f(...args)`, `function f(...rest)`)
-  - Computed property names `{ [k]: v }`
-  - Tagged template literals
-
-- **Phase 8 remainder — BigInt + full regex** (~1 week)
-  - `BigInt` backed by GMP (`libgmp-dev`). `0n` literals, arbitrary-precision arithmetic.
-  - PCRE2 (`libpcre2-dev`) swap-in to replace POSIX ERE — gives lookahead/lookbehind, named capture groups, Unicode property escapes.
-  - Regex capture groups exposed on `.match()` results (today only `match[0]` is returned).
+  - `FinalizationRegistry`
+  - Full iterator protocol coverage beyond arrays/strings/Map/Set, array-backed custom iterable classes, and class iterator objects with `next()` still remains for broader protocol edge cases
 
 - **Phase 9 — `Proxy` + `Reflect`** (~2 weeks)
   - All 13 `Proxy` traps (`get`, `set`, `has`, `deleteProperty`, `apply`, `construct`, etc.)
-  - `Reflect.*` API
-  - `Object.defineProperty` with full property descriptor semantics (writable/configurable/enumerable, getters/setters)
+  - `Reflect.*` API; dynamic `Reflect.get`/`Reflect.set`/`Reflect.has`/`Reflect.deleteProperty`/`Reflect.ownKeys`/`Reflect.defineProperty`/`Reflect.getPrototypeOf`/`Reflect.setPrototypeOf`/`Reflect.getOwnPropertyDescriptor`/`Reflect.isExtensible`/`Reflect.preventExtensions` are implemented
+  - `Object.defineProperty` with full property descriptor semantics; dynamic data descriptors enforce `writable`/`configurable`/`enumerable`, and named-function accessors work, while closure-valued accessors/function identity/receiver-aware `this` remain
   - **Depends on Phase 3** heavily — proxies intercept dynamic property access.
 
 ---
@@ -1489,14 +2080,13 @@ These are the two items that most directly expand what programs can be written a
   - Walk `node_modules/` and honor `package.json` `exports`/`imports`/`conditions`
   - Dual CJS/ESM resolution
   - `allowJs: true` so pure-JS packages are type-erased to `any` (needs Phase 3)
-  - Detect `*.node` native addons at resolve time and emit a hard error with remediation guidance
+  - Native addon package detection for literal imports/requires now rejects installed package roots containing `build/Release/*.node`; broader package export/condition resolution remains
 
 - **Phase 15 — perf & polish** (ongoing)
   - Inline-caching stats and diagnostics
   - Basic escape analysis to stack-allocate objects that don't outlive their frame
   - Dead-code elimination on the generated C
-  - `#line` directives from TS into the `.c` output so gdb stops at TS source
-  - Binary-size optimization, release build, CI matrix (Linux ✓, macOS, Windows later)
+  - Further binary-size optimization and CI matrix (Linux ✓, macOS, Windows later)
 
 ---
 
@@ -1504,40 +2094,19 @@ These are the two items that most directly expand what programs can be written a
 
 Within-phase gaps that can be picked off individually without the big phase-level investments:
 
-- `Array.prototype.sort` with **no comparator** — currently requires an explicit `(a, b) => …`. JS default is string-conversion sort; we'd need to add that as a fallback path. (A few hours.)
-- `Array.prototype.flat(depth?)` and `.flatMap(cb)`. (A few hours.)
-- `Object.entries(obj)`, `Object.fromEntries(entries)`. (Needs either Phase 3 tuples or a specialized `[K, V]` 2-element struct per call site.)
-- `String.prototype.matchAll(re)` returning an iterator of full match groups.
-- `String.prototype.normalize()`, `.codePointAt()`, `.fromCharCode()` — Unicode-aware string ops.
-- **Left-to-right argument evaluation** for function calls with side effects. C's argument order is unspecified, so `f(bump(), bump(), bump())` can reorder. Fix: hoist args with side effects into sequenced temps before the call.
-- **Regex capture groups** on the results of `.match()` (today only `match[0]` is exposed — we ignore `regmatch_t` slots beyond 0).
-- `for...of` directly on `Map` and `Set` — currently works via `.forEach()` but not via native iteration syntax.
-- `JSON.parse(text)` — returns a structured value, blocked on Phase 3 dynamic runtime.
-- `Buffer` — currently conflated with `string` in the type shim; real `Uint8Array`-like semantics with binary safety is a modest amount of runtime work.
-- `URL` parsing class — a focused effort using a URL library or hand-rolled parser.
-- `crypto.createHash('sha256').update(...).digest('hex')` — straightforward once linked against OpenSSL.
-- `console.log` formatting specifiers (`%s`, `%d`, `%o`, etc.) — ignored today, each arg just stringified + space-joined.
-- `instanceof` operator — needs a class-hierarchy check, trivial for our single-inheritance model.
-- `typeof` operator — trivial in typed code (compile-time result), more interesting for `any` values (Phase 3).
-- Exhaustiveness checking in `switch` — TS already does this; we just surface its errors today.
-- `enum` declarations — parsed by TS but we don't emit them yet. Numeric enums would be straightforward.
-- `abstract` classes, access modifiers (`public`/`private`/`protected`) — TS-only; no runtime effect, we currently accept but ignore.
-- `readonly` on fields — TS-only; same treatment.
-- Type guards / narrowing beyond `T | null`/`undefined` — partial support; `typeof x === "string"` isn't tracked.
-- Generic functions that aren't type-erased cleanly — e.g. `function identity<T>(x: T): T` works only when `T` binds to a single concrete type at each call site.
-- Namespace declarations — TS namespace syntax not handled.
+- Broader type guards / narrowing for deeper discriminated-union patterns. Basic user-defined type predicates over interface-shaped dynamic unions, basic literal-discriminant unions over interface-shaped dynamic objects, nullable pointer `typeof` guards such as `string | null` / `string | undefined`, and dynamic `string | number` `typeof` guards are implemented.
+- More complex generic type relationships. Direct top-level generic function calls, typed array callback references, concrete generic function-value adapters, erased generic classes, and generic instance/static method calls with concrete `T` / `T[]` specializations are implemented.
 - Decorators — requires metadata + Proxy support.
-- **Tail-call optimization** — not emitted. Deep recursion hits C stack.
 
 ---
 
 ## 5. Permanent limits (will never be done)
 
-These are genuinely impossible to AOT-compile at any engineering investment. The plan documents them, the emitter will eventually detect + hard-error on them (today it just fails at link or parse time).
+These are genuinely impossible to AOT-compile at any engineering investment. The plan documents them, and `tsc2c` emits hard errors for the limits it can see before emission.
 
-- **Native C++ addons under `node_modules/*/build/Release/*.node`.** They're compiled against Node's V8 ABI and the embedder's internals. We can't transpile their source because we don't have it — they're binary `.node` files. Detection + error is planned for Phase 14; suggested workaround is to document pure-JS alternatives.
-- **Runtime code compilation** — JavaScript offers two constructs that require compiling source text at runtime. `tsc2c` is ahead-of-time and has no compiler in the produced binary, so any call to either form is rejected. Diagnostic planned in Phase 3 or Phase 14.
-- **Dynamic `require(variable)`** where the argument isn't a string literal. The import graph is walked statically; a variable-valued specifier is unknowable at compile time. `require("./literal")` and `await import("./literal")` are supported; `require(someExpr)` is rejected.
+- **Native C++ addons under `node_modules/*/build/Release/*.node`.** They're compiled against Node's V8 ABI and the embedder's internals. We can't transpile their source because we don't have it — they're binary `.node` files. Literal `.node` import/require specifiers and literal package imports/requires whose installed package root contains `build/Release/*.node` are rejected now; broader package export/condition handling remains Phase 14. Suggested workaround is to document pure-JS alternatives.
+- **Runtime code compilation** — JavaScript offers two constructs that require compiling source text at runtime. `tsc2c` is ahead-of-time and has no compiler in the produced binary, so `eval`, `Function(...)`, and `new Function(...)` are rejected before TypeScript diagnostics.
+- **Dynamic `require(variable)`** where the argument isn't a string literal. The import graph is walked statically; a variable-valued specifier is unknowable at compile time, so non-literal `require(...)` is rejected before emission.
 
 ---
 
@@ -1545,7 +2114,7 @@ These are genuinely impossible to AOT-compile at any engineering investment. The
 
 If the next session has **hours**, pick from section 4 (smaller pieces).
 
-If it has **a few days to a week**, pick from section 2 (medium-term phases — start with Phase 8 remainder since PCRE2 is mostly drop-in).
+If it has **a few days to a week**, pick a bounded item from section 2, such as custom iterables, unless the session is large enough to start Phase 3.
 
 If it has **a week or more** to invest in one thing, do **Phase 3 (NaN-boxing)** from section 1. That one item unblocks about half of what's in sections 2–4.
 
@@ -1560,6 +2129,110 @@ If the goal is **"run a real npm package"**, the sequential chain is: Phase 3 �
 All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
+
+### Added
+- Dedicated dynamic `Object.prototype.toString()` coverage for object, array, number, string, and boolean receivers.
+- Dynamic `Object.prototype.toLocaleString()` and `valueOf()` support over boxed dynamic receivers.
+- Dynamic `Object.prototype.isPrototypeOf(value)` support over dynamic prototype chains.
+- Dynamic `Object.prototype.propertyIsEnumerable(key)` support over dynamic descriptor enumerable flags.
+- Dynamic `Object.prototype.hasOwnProperty(key)` support over dynamic objects without walking prototypes.
+- `Array.of(...items)` typed array construction, including `Array.of<any>(...)` values that can be coerced to dynamic arrays.
+- `Array.prototype.reduceRight(...)` for typed arrays plus dynamic inline callbacks over `tsc_value_t` arrays with an explicit initial value.
+- `Object.is(...)` support over boxed dynamic values with SameValue semantics for `NaN`, signed zero, strings, and object identity.
+- Dynamic `Object.getOwnPropertyDescriptors(dynamic)` support for own data/accessor descriptor objects.
+- `String.prototype.at(index)` for typed strings plus dynamic `tsc_value_t` string receivers.
+- `Array.prototype.findLast(...)` and `findLastIndex(...)` for typed arrays plus dynamic inline callbacks over `tsc_value_t` arrays.
+- `Array.prototype.at(index)` for typed arrays plus dynamic `tsc_value_t` array receivers.
+- Dynamic `Object.fromEntries(dynamicEntries)` support for dynamic `[key, value]` arrays.
+- Dynamic `Object.entries(dynamic)` support over enumerable dynamic data/accessor properties.
+- Dynamic named-function accessor descriptors for `Object.defineProperty` / `Reflect.defineProperty`, including getter reads, setter writes, inherited accessors, enumerable accessor values, and JSON stringify behavior.
+- `Array.prototype.toSpliced(...)` for typed arrays plus dynamic `tsc_value_t` array receivers.
+- `Array.prototype.with(...)` for typed arrays plus dynamic `tsc_value_t` array receivers.
+- `Array.prototype.toSorted()` for typed arrays plus default dynamic `tsc_value_t` array receivers.
+- `Array.prototype.toReversed()` for typed arrays plus dynamic `tsc_value_t` array receivers.
+- `Array.prototype.lastIndexOf(...)` for typed arrays.
+- `Array.prototype.copyWithin(...)` for typed arrays plus dynamic `tsc_value_t` array receivers.
+- `Array.prototype.fill(...)` for typed arrays plus dynamic `tsc_value_t` array receivers.
+- `String.prototype.localeCompare(...)` for typed strings plus dynamic `tsc_value_t` string receivers.
+- `String.prototype.lastIndexOf(...)` for typed strings.
+- `String.prototype.concat(...)` for typed strings plus dynamic `tsc_value_t` string receivers.
+- `String.prototype.trimStart()` and `String.prototype.trimEnd()` for typed strings plus dynamic `tsc_value_t` string receivers.
+- `String.prototype.substring()` for typed strings plus dynamic `tsc_value_t` string receivers.
+- Dynamic `String.prototype.normalize()` support over `tsc_value_t` string receivers.
+- Dynamic `String.prototype.repeat`, `String.prototype.padStart`, and `String.prototype.padEnd` support over `tsc_value_t` string receivers.
+- Dynamic `lastIndexOf` support over `tsc_value_t` string and array receivers.
+- Dynamic `String.prototype.replace(string, value)` and `String.prototype.replaceAll(string, value)` support over `tsc_value_t` string receivers.
+- Dynamic `String.prototype.split(string)` support over `tsc_value_t` string receivers, returning dynamic arrays.
+- Dynamic default `Array.prototype.sort()` support over `tsc_value_t` arrays using JS-style string-conversion ordering.
+- Dynamic `Array.prototype.splice` support over `tsc_value_t` arrays, returning removed elements and mutating the receiver.
+- Dynamic array index assignment and compound numeric-index assignment for `tsc_value_t` arrays, including sparse extension with `undefined`.
+- Dynamic direct property assignment and compound property assignment for `obj.x` / `obj["x"]` over `tsc_value_t` objects.
+- Dynamic object prototype chains with `Object.create`, `Object.getPrototypeOf`, `Object.setPrototypeOf`, `Reflect.getPrototypeOf`, `Reflect.setPrototypeOf`, and prototype-walking property reads / `in` / `Reflect.has`.
+- Dynamic `Reflect.getOwnPropertyDescriptor(dynamic, key)` support for descriptor lookup over dynamic object data properties.
+- Dynamic `Object.seal`, `Object.freeze`, `Object.isSealed`, and `Object.isFrozen` support over dynamic data descriptors.
+- Dynamic object extensibility tracking with `Object.preventExtensions`, `Object.isExtensible`, `Reflect.preventExtensions`, and `Reflect.isExtensible`, enforced for new data-property writes/definitions.
+- Dynamic array `flatMap` support for inline expression-body callbacks over `tsc_value_t` arrays, plus mixed dynamic ternary branch boxing.
+- Dynamic array `reduce` support with an explicit initial value for inline expression-body callbacks over `tsc_value_t` arrays.
+- Dynamic array `forEach`, `some`, `every`, `find`, and `findIndex` support for inline expression-body callbacks over `tsc_value_t` arrays.
+- Dynamic array `map` and `filter` support for inline expression-body callbacks over `tsc_value_t` arrays.
+- Dynamic `Array.prototype.flat(depth?)` support for `tsc_value_t` arrays.
+- Dynamic `Array.isArray(value)` and `Array.from(value)` support for `tsc_value_t` arrays.
+- Dynamic `"key" in object` and `delete object.key` / `delete object["key"]` support over descriptor-aware dynamic object properties.
+- Dynamic array `shift`, variadic `unshift`, variadic `push`, and `concat` support on `tsc_value_t` arrays.
+- Dynamic `Object.assign`, `Object.hasOwn`, and `Object.getOwnPropertyNames` support over dynamic object data properties.
+- Dynamic object data descriptor flags for `Object.defineProperty` / `Reflect.defineProperty`, including enumerable `Object.keys`/`Object.values`/JSON behavior, non-writable `Reflect.set` failures, non-configurable `Reflect.deleteProperty` failures, `Reflect.has`, `Reflect.ownKeys`, and `Object.getOwnPropertyDescriptor`.
+- Basic `Reflect.get(dynamic, key)` and `Reflect.set(dynamic, key, value)` support for dynamic object property access.
+- Basic `Object.defineProperty(dynamic, key, { value })` support for dynamic object data-property writes.
+- `for...of` over classes whose `[Symbol.iterator]()` returns a custom iterator object with `next()` returning `{ done, value }`.
+- Generic classes now work in an erased form, storing type-parameter fields/params/returns as `tsc_value_t` and coercing at typed boundaries.
+- Generic top-level function references can now be assigned to concrete function-typed values through specialized adapter closures.
+- User-defined type predicate narrowing for interface-shaped dynamic union values.
+- Basic discriminated-union support over interface-shaped dynamic object storage with literal discriminant checks and typed field reads through dynamic coercion.
+- `tsc_value_t` unbox/coercion bridges for assigning or passing dynamic values into typed `number`, `boolean`, `string`, and array destinations.
+- Runtime dispatch for common dynamic string/array methods on `tsc_value_t`, including `includes`, `indexOf`, `slice`, `join`, `push`, `pop`, casing, trim, and related helpers.
+- Dynamic `tsc_value_t` binary/logical/nullish operator dispatch for arithmetic, string concatenation, equality, relational comparison, and compound arithmetic assignment.
+- Phase 3 dynamic-value foundation: NaN-boxed `tsc_value_t` for `any`/`unknown`, `JSON.parse`, dynamic JSON stringify, heterogeneous dynamic arrays/objects, dynamic property/index access, and `Object.keys`/`Object.values` over dynamic objects.
+- `typeof` guard narrowing over `string | number` dynamic union storage, with unbox bridges back to specialized string/number reads.
+- First-class typed closures for arrow/function expressions with function-scope captures, including returned closures, mutable captured state via ref cells, closure calls, and declared-function wrapping for function-typed parameters.
+- Pre-emit diagnostics now reject literal package imports/requires when the installed package root contains `build/Release/*.node`.
+- `for...of` over typed custom iterable classes with `[Symbol.iterator]()` returning an array-backed `IterableIterator<T>`.
+- Generic instance/static class methods are monomorphized per concrete call signature, including inherited generic method calls.
+- Generic top-level function references can be specialized in typed array callback contexts, including HOFs and `sort` comparators.
+- Direct top-level generic function calls are monomorphized per concrete call signature, including simple `T` and `T[]` flows.
+- `--release` build mode, using gcc `-Os -s`, plus a release-mode e2e case.
+- Generated C `#line` directives for emitted TypeScript statements, with an e2e generated-C assertion.
+- `for...of` over strings, yielding UTF-8 code point strings, plus fixed-width C escapes for non-BMP string literals.
+- Pre-emit hard-error diagnostics for literal native addon imports/requires ending in `.node`.
+- Pre-emit hard-error diagnostics for permanent AOT limits: `eval`, `Function` / `new Function`, and non-literal `require(variable)`.
+- Typed `WeakRef<T>` construction and `.deref()` support.
+- `symbol` values with `Symbol(description?)`, `Symbol.for`, `Symbol.keyFor`, `Symbol.iterator`, `Symbol.asyncIterator`, `.description`, `.toString()`, equality, and `typeof`.
+- Typed `WeakMap<K, V>` and `WeakSet<T>` with object keys and the non-iterable weak-collection method surface.
+- Rest parameters for user-defined functions/methods plus spread arguments into those rest parameters.
+- Tagged template calls for tags with a `TemplateStringsArray` first parameter and fixed substitution parameters.
+- Computed property names in typed object literals when the key resolves to a string or number literal.
+- PCRE2-backed RegExp runtime with lookahead/lookbehind, named capture syntax, Unicode property escapes, `s`/`u` flags, and existing regex string APIs preserved.
+- GMP-backed `bigint` support for literals, `BigInt(...)`, arithmetic/comparison/equality, `typeof`, and `.toString(radix?)`.
+- Runtime-correct `typeof` equality/inequality guards for nullable pointer unions such as `string | null` and `string | undefined`.
+- `Object.entries(obj)` / `Object.fromEntries(entries)` for homogeneous typed object fields using `[string, T]` entry arrays.
+- `String.prototype.normalize()` for NFC/NFD/NFKC/NFKD using ICU.
+- `String.prototype.matchAll(re)` as typed `string[][]` full-match and capture-group results.
+- Direct self-tail-call optimization for top-level functions, lowering `return f(...)` to argument temporaries and a `goto` loop.
+- Namespace declarations for scoped values/functions, lifted arrow consts, nested namespaces, and namespace member access/assignment.
+- Exhaustiveness diagnostics for finite-domain switches over literal unions and booleans, plus expected-failure e2e support with `expected.exitcode`.
+- Binary-safe `Buffer` subset: `from`, `alloc`, `concat`, `isBuffer`, `.length`, byte indexing/get-set, `.toString`, `.slice`/`.subarray`, and `.equals`.
+- `new URL(input)` for absolute URL parsing with common readonly fields (`href`, `protocol`, `host`, `hostname`, `port`, `pathname`, `search`, `hash`, `origin`).
+- `crypto.createHash("sha256").update(...).digest("hex")` via OpenSSL-backed runtime helpers.
+- Left-to-right call argument evaluation through sequenced temporaries for supported call emitters.
+- `String.fromCharCode(...)` and `String.prototype.codePointAt(...)` backed by UTF-8 runtime helpers.
+- Direct `for...of` iteration over `Map` entries and `Set` values.
+- `instanceof` for emitted class instances using runtime class ancestry tags.
+- Console first-argument formatting for common `%` specifiers.
+- `Array.prototype.flat()` / `.flatMap()` for homogeneous typed arrays.
+- Numeric `enum` declarations and `Enum.Member` constant lowering.
+- Regex capture groups on non-global `.match()` results.
+- E2E coverage documenting `abstract` classes, access modifiers, and `readonly` fields as accepted TS-only modifiers.
+- `typeof` in typed code — returns the JS type string while preserving operand side effects.
+- `Array.prototype.sort()` with no comparator — defaults to JS-style string-conversion ordering.
 
 ### Added — deep documentation pass
 - `docs/README.md` — documentation index routing by role/topic.

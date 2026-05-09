@@ -1,0 +1,5 @@
+user: ada
+box: 42
+same: true
+text: [object WeakRef]
+ref key: true

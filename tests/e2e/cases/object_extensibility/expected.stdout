@@ -1,0 +1,9 @@
+extensible before: true true
+prevent: true
+extensible after: false false
+set existing: true
+set new: false
+define new: false
+a: 2
+keys: a
+json: {"a":2}

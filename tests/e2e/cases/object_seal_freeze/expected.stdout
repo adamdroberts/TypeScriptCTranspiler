@@ -1,0 +1,8 @@
+sealed states: true false false
+frozen states: true true false
+sealed set existing: true
+sealed set new: false
+sealed delete: false
+frozen set existing: false
+frozen delete: false
+json: {"a":2} {"x":1}

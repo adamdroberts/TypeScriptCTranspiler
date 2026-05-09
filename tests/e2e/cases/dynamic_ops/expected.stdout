@@ -1,0 +1,18 @@
+add num: 7
+concat: id-4
+numeric string: 3
+mul: 15
+div: 3
+mod: 1
+pow: 9
+plus eq: 10x
+minus eq: 4
+eq1: true
+eq2: true
+eq3: true
+rel1: true
+rel2: true
+rel3: true
+nullish: fallback
+or: or
+and: ok

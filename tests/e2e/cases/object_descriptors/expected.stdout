@@ -1,0 +1,12 @@
+keys: locked
+own: locked|hidden
+set locked: false
+locked: 1
+set hidden: true
+hidden: H
+has hidden: true
+delete locked: false
+delete hidden: true
+has hidden after: false
+desc: 1 false true false
+json: {"locked":1}

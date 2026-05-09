@@ -1,0 +1,11 @@
+initial: 3
+set: true
+after: 10
+current: 10
+keys: score
+values: 10
+json: {"score":10}
+desc: true true undefined
+child: 10
+child set: true
+child after: 14 14

@@ -6,6 +6,8 @@ export interface CcOptions {
     includeDirs: string[];
     libs: string[];
     extraFlags?: string[];
+    linkFlags?: string[];
+    release?: boolean;
     verbose?: boolean;
 }
 
@@ -17,16 +19,18 @@ export interface CcResult {
 export async function invokeCc(opts: CcOptions): Promise<CcResult> {
     const args: string[] = [
         "-std=c11",
-        "-O2",
+        opts.release ? "-Os" : "-O2",
         "-Wall",
         "-Wno-unused-variable",
         "-Wno-unused-parameter",
         "-Wno-unused-but-set-variable",
         "-Wno-parentheses-equality",
     ];
+    if (opts.release) args.push("-s");
     for (const dir of opts.includeDirs) args.push("-I", dir);
     args.push(...(opts.extraFlags ?? []));
     args.push(...opts.sources);
+    args.push(...(opts.linkFlags ?? []));
     for (const lib of opts.libs) args.push("-l" + lib);
     args.push("-o", opts.output);
 

@@ -18,6 +18,7 @@ Exactly one positional argument: the entry `.ts` file. All imports reachable fro
 | `--emit-c-only` | `false` | Skip the gcc step. Write generated C into the build dir and return. Useful for inspecting what the emitter produced. |
 | `--keep-build-dir <path>` | tempdir | Use this directory for intermediate `main.c` + `tsc_runtime.c`/`.h`. Created if absent; not cleaned up. Without this flag a temp dir is created and kept (its path is printed under `--verbose`). |
 | `--no-gc` | `false` | Compile with `-DTSC_NO_GC`. The runtime swaps Boehm GC for a leaking `calloc` fallback. For short-lived programs or envs without `libgc-dev`. **Do not ship production binaries with this flag.** |
+| `--release` | `false` | Link a smaller release binary using gcc `-Os -s` instead of the default `-O2`. |
 | `--verbose` | `false` | Print the build dir, each output file, and the full gcc command line. |
 | `-h, --help` | — | Standard commander help. |
 | `-V, --version` | — | Print `0.0.1`. |

@@ -1,0 +1,10 @@
+get: 10 20 5
+has: true true false true
+own: own own 1 false
+proto: true true
+null-set: true null false
+object-set: true 10
+cycle: false
+same: true
+locked: false 10
+bare: null 3 true

@@ -1,0 +1,6 @@
+unicode lookahead: café|α
+lookbehind: 123
+named: 3 user alice
+replace: a# b#
+dotall: true
+script: true false

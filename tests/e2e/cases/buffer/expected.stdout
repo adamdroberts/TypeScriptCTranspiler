@@ -1,0 +1,12 @@
+len: 2
+bytes: 72 105
+mutated: Ho
+array hex: 000f10ff00ff
+hex: 486900ff
+slice: Hi
+subarray: 6900
+filled: AAA
+joined: Hi!
+equals: true
+is buffer: true false
+typeof: object

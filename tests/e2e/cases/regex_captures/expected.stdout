@@ -1,0 +1,6 @@
+capture len: 4
+full: date=2026-05-09
+year: 2026
+month: 05
+day: 09
+global: x=1|y=2

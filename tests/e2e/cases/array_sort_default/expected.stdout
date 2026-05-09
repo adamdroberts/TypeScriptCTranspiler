@@ -1,0 +1,4 @@
+nums: 1,10,2,21,3
+same nums: true
+words: Apple|apple|banana|cherry
+flags: false,true,true

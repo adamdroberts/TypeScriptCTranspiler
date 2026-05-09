@@ -1,0 +1,9 @@
+number: number
+string: string
+boolean: boolean
+array: object
+class: object
+regexp: object
+null: object
+undefined: undefined
+call: number 1

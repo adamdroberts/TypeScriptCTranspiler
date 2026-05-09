@@ -16,7 +16,7 @@ If you're new, start with the top-level [`../README.md`](../README.md) for the p
 1. [`architecture.md`](architecture.md) — pipeline, emission passes, module graph, value model (diagrams included)
 2. [`runtime-reference.md`](runtime-reference.md) — every `tsc_*` runtime symbol grouped by area
 3. [`testing.md`](testing.md) — the e2e harness and how to add a new case
-4. [`../src/emit/index.ts`](../src/emit/index.ts) — the emitter itself; ~2,500 LOC, one class with focused methods
+4. [`../src/emit/index.ts`](../src/emit/index.ts) — the emitter itself; ~6,000 LOC, one class with focused methods
 5. [`../CHANGELOG.md`](../CHANGELOG.md) — evolution of capability session by session
 
 **I'm an LLM agent**:

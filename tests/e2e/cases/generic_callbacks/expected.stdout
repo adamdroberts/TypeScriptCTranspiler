@@ -1,0 +1,12 @@
+seen 3
+seen 1
+seen 2
+mapped nums: 3,1,2
+flat nums: 3,1,2
+kept nums: 3,1,2
+last num: 2
+sorted nums: 3,1,2
+mapped words: a|b
+flat words: a|b
+first word: a
+word checks: true true

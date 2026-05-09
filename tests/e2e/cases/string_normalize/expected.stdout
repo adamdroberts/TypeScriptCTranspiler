@@ -1,0 +1,5 @@
+nfc: true
+default: true
+nfd: true
+nfkc: true
+nfkd: true

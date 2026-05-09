@@ -1,0 +1,6 @@
+total: 16
+some: true
+every: true
+find: 3
+findIndex: 2
+missing: undefined

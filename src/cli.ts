@@ -16,6 +16,7 @@ program
         "reuse this directory for intermediate .c/.h files (default: tempdir)",
     )
     .option("--no-gc", "link without Boehm GC (leaks — for bootstrap only)")
+    .option("--release", "optimize for smaller release binaries and strip symbols")
     .option("--verbose", "print compile steps")
     .action(async (entry: string, opts: Record<string, unknown>) => {
         const result = await compile({
@@ -27,6 +28,7 @@ program
                 : undefined,
             verbose: !!opts.verbose,
             noGc: opts.gc === false,
+            release: !!opts.release,
         });
         process.exit(result.exitCode);
     });

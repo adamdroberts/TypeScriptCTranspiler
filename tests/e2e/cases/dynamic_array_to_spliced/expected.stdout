@@ -1,0 +1,5 @@
+changed: 1,a,b,4
+tail: 1,2
+inserted: 1,2,7,3,4
+copy: 1,2,3,4
+orig: 1,2,3,4

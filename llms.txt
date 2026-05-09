@@ -2,7 +2,7 @@
 
 > A whole-program TypeScript-to-C transpiler. Takes TS source + its local imports, emits C11, links with gcc and Boehm GC, produces a native Linux binary that behaves like `node file.ts` for the supported subset.
 
-Current status: 24 passing e2e tests, ~5,800 LOC, covers the typed-TS core + classes + Map/Set + regex + sync Node stdlib. Phases not yet implemented: NaN-boxed dynamic values (Phase 3), async/await (Phase 6), npm integration (Phase 14). See [docs/todo.md](docs/todo.md) for the full remaining list.
+Current status: 146 passing e2e tests, ~10,500 LOC, covers the typed-TS core + classes + first-class typed closures over function-scope captures + foundational NaN-boxed dynamic values for `any`/`unknown`/JSON.parse/dynamic Array statics/dynamic Array.of/dynamic property/index reads/writes/dynamic in/delete/dynamic operators/broader dynamic string-array methods including at/concat/copyWithin/fill/lastIndexOf/localeCompare/normalize/pad/repeat/replace/split/substring/toReversed/toSorted/toSpliced/with/trimStart/trimEnd/flat/sort/splice/flatMap and inline-arrow HOFs with reduce/reduceRight/findLast/findLastIndex/typed coercions/basic discriminated unions/custom type predicates/dynamic Object.is/assign/hasOwn/hasOwnProperty/isPrototypeOf/propertyIsEnumerable/toLocaleString/toString/valueOf/names/entries/fromEntries/getOwnPropertyDescriptors/data/accessor descriptors/extensibility/seal/freeze/prototype-chain lookup/basic Reflect object helpers + typed Array.at/copyWithin/fill/of/reduceRight/findLast/findLastIndex/lastIndexOf/toReversed/toSorted/toSpliced/with + typed string at/lastIndexOf/localeCompare + `string | number` typeof narrowing + direct generic function call/callback/function-value/method specialization + erased generic classes + string/Map/Set/custom iterable/custom iterator object/WeakMap/WeakSet/WeakRef iteration support + Symbol + PCRE2 regex + sync Node stdlib + hard-error diagnostics for permanent AOT limits + generated-C `#line` markers + `--release` builds. Phases not yet implemented: Phase 3 hidden classes/inline caches/remainder, async/await (Phase 6), npm integration (Phase 14). See [docs/todo.md](docs/todo.md) for the full remaining list.
 
 ## How to route questions
 
@@ -42,7 +42,7 @@ entry.ts
   ↓  ts.createProgram (official TypeScript compiler API)
   ↓  src/resolve.ts — walks imports, topo-sorts modules
   ↓  src/emit/index.ts — 5-pass emitter producing one main.c
-  ↓  src/link/cc.ts — gcc -O2 -std=c11 main.c runtime/tsc_runtime.c -lgc -lm
+  ↓  src/link/cc.ts — gcc -O2 -std=c11 main.c runtime/tsc_runtime.c -lgc -lm, or -Os -s with --release
 binary
 ```
 
@@ -50,9 +50,9 @@ binary
 
 Three JS features cannot be AOT-compiled at any engineering investment:
 
-1. Native C++ addons under `node_modules/*/build/Release/*.node` — compiled against Node's V8 ABI.
-2. Runtime code compilation (JS constructs that compile strings at runtime) — no runtime compiler in the binary.
-3. Dynamic `require(variable)` with a non-literal specifier — graph is walked statically.
+1. Native C++ addons under `node_modules/*/build/Release/*.node` — literal `.node` specifiers are rejected now; full package-resolution detection is Phase 14.
+2. Runtime code compilation (JS constructs that compile strings at runtime) — rejected before TypeScript diagnostics.
+3. Dynamic `require(variable)` with a non-literal specifier — rejected before emission.
 
 Documented in [docs/todo.md](docs/todo.md#5-permanent-limits-will-never-be-done).
 
@@ -60,7 +60,7 @@ Documented in [docs/todo.md](docs/todo.md#5-permanent-limits-will-never-be-done)
 
 | File | Purpose |
 |------|---------|
-| `src/emit/index.ts` | the emitter — one class, ~2,500 LOC |
+| `src/emit/index.ts` | the emitter — one class, ~6,000 LOC |
 | `src/emit/types.ts` | TS → C type mapping |
 | `src/resolve.ts` | module graph walker |
 | `src/compile.ts` | pipeline orchestrator |

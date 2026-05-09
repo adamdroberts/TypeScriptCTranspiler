@@ -1,0 +1,17 @@
+json: {"name":"Ada","scores":[1,true,"x"],"meta":{"active":true}}
+name: Ada
+len: 3
+score0: 1
+score1: true
+score2: x
+active: true
+typeof name: string
+typeof score0: number
+typeof score1: boolean
+typeof missing: undefined
+is string: true
+values len: 3
+ value: Ada
+ value: 1,true,x
+ value: [object Object]
+literal: {"a":1,"b":"two","c":false}

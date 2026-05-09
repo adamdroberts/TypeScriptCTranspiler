@@ -1,0 +1,9 @@
+unshift len: 4
+after unshift: 0,1,2,3
+shift: 0
+after shift: 1,2,3
+push len: 5
+after push: 1,2,3,4,5
+merged: 1|2|3|4|5|6|7|end
+original: 1|2|3|4|5
+empty concat: 1|2|3|4|5

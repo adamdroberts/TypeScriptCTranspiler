@@ -1,0 +1,5 @@
+dog Dog: true
+dog Animal: true
+animal Dog: true
+cat Dog: false
+cat Animal: true

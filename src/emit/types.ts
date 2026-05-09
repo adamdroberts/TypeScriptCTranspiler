@@ -3,30 +3,63 @@ import { unsupported } from "../diagnostics";
 
 export type CTypeKind =
     | "number"
+    | "bigint"
+    | "symbol"
     | "string"
     | "boolean"
     | "void"
     | "never"
     | "array"
+    | "entry"
     | "class"
     | "map"
     | "set"
+    | "weakmap"
+    | "weakset"
+    | "weakref"
     | "regexp"
+    | "hash"
+    | "url"
+    | "buffer"
+    | "function"
+    | "value"
     | "unsupported";
 
 export interface CType {
     kind: CTypeKind;
     /** Spelling used in C declarations (e.g. "double", "tsc_str_t*", "Point_t*"). */
     c: string;
-    /** For arrays/sets: element type. For maps: value type. */
+    /** For arrays/sets/object entries: element/value type. For maps: value type. */
     elem?: CType;
     /** For maps only: key type. */
     key?: CType;
     /** For classes only: the C struct base name (e.g. "Point" -> Point_t). */
     className?: string;
+    /** For first-class function/closure values. */
+    params?: CType[];
+    ret?: CType;
+    closureName?: string;
+}
+
+export type TypeBindings = Map<string, CType>;
+
+const typeBindingStack: TypeBindings[] = [];
+
+export function withTypeBindings<T>(
+    bindings: TypeBindings,
+    fn: () => T,
+): T {
+    typeBindingStack.push(bindings);
+    try {
+        return fn();
+    } finally {
+        typeBindingStack.pop();
+    }
 }
 
 export const T_NUMBER: CType = { kind: "number", c: "double" };
+export const T_BIGINT: CType = { kind: "bigint", c: "tsc_bigint_t*" };
+export const T_SYMBOL: CType = { kind: "symbol", c: "tsc_symbol_t*" };
 export const T_STRING: CType = { kind: "string", c: "tsc_str_t*" };
 export const T_BOOLEAN: CType = { kind: "boolean", c: "bool" };
 export const T_VOID: CType = { kind: "void", c: "void" };
@@ -34,6 +67,10 @@ export const T_NEVER: CType = { kind: "never", c: "void" };
 
 export function arrayType(elem: CType): CType {
     return { kind: "array", c: "tsc_array_t*", elem };
+}
+
+export function entryType(elem: CType): CType {
+    return { kind: "entry", c: "tsc_object_entry_t", elem };
 }
 
 export function mapType_(key: CType, value: CType): CType {
@@ -44,10 +81,37 @@ export function setType(elem: CType): CType {
     return { kind: "set", c: "tsc_set_t*", elem };
 }
 
+export function weakMapType(key: CType, value: CType): CType {
+    return { kind: "weakmap", c: "tsc_map_t*", key, elem: value };
+}
+
+export function weakSetType(elem: CType): CType {
+    return { kind: "weakset", c: "tsc_set_t*", elem };
+}
+
+export function weakRefType(elem: CType): CType {
+    return { kind: "weakref", c: "tsc_weakref_t*", elem };
+}
+
 export const T_REGEXP: CType = { kind: "regexp", c: "tsc_regexp_t*" };
+export const T_HASH: CType = { kind: "hash", c: "tsc_hash_t*" };
+export const T_URL: CType = { kind: "url", c: "tsc_url_t*" };
+export const T_BUFFER: CType = { kind: "buffer", c: "tsc_buffer_t*" };
+export const T_VALUE: CType = { kind: "value", c: "tsc_value_t" };
 
 export function classType(className: string): CType {
     return { kind: "class", c: `${className}_t*`, className };
+}
+
+export function functionType(params: readonly CType[], ret: CType): CType {
+    const closureName = `tsc_fn_${params.length ? params.map(typeNamePart).join("_") : "void"}_to_${typeNamePart(ret)}_t`;
+    return {
+        kind: "function",
+        c: `${closureName}*`,
+        params: [...params],
+        ret,
+        closureName,
+    };
 }
 
 /** Convert CType.kind to the tsc_key_kind_t enum used in runtime. */
@@ -65,7 +129,18 @@ export function mapType(node: ts.Node, checker: ts.TypeChecker): CType {
     // one so code like `const s: string | null = null; s ?? "x"` compiles
     // (the declared storage type is `string | null`, mapped to string; the
     // narrowed type at that point would be just `null`, which we'd reject).
+    // Exception: if storage is the dynamic value type and TS has narrowed the
+    // current reference to a concrete primitive/pointer type, use the narrowed
+    // type. The emitter will insert the unbox bridge at that identifier read.
     if (ts.isIdentifier(node)) {
+        const contextual = checker.getContextualType(node);
+        if (contextual?.getCallSignatures().length) {
+            try {
+                return mapTsType(node, contextual, checker);
+            } catch {
+                // fall through to declared/current type
+            }
+        }
         const sym = checker.getSymbolAtLocation(node);
         if (sym && sym.valueDeclaration) {
             try {
@@ -78,7 +153,23 @@ export function mapType(node: ts.Node, checker: ts.TypeChecker): CType {
                     !(declType.flags & ts.TypeFlags.Null) &&
                     !(declType.flags & ts.TypeFlags.Undefined)
                 ) {
-                    return mapTsType(node, declType, checker);
+                    const declCt = mapTsType(node, declType, checker);
+                    if (declCt.kind === "value") {
+                        const narrowedCt = mapTsType(
+                            node,
+                            checker.getTypeAtLocation(node),
+                            checker,
+                        );
+                        if (
+                            narrowedCt.kind === "number" ||
+                            narrowedCt.kind === "boolean" ||
+                            narrowedCt.kind === "string" ||
+                            narrowedCt.kind === "array"
+                        ) {
+                            return narrowedCt;
+                        }
+                    }
+                    return declCt;
                 }
             } catch {
                 // fall through
@@ -90,23 +181,29 @@ export function mapType(node: ts.Node, checker: ts.TypeChecker): CType {
 }
 
 export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): CType {
+    const boundTypeParam = lookupTypeBinding(t, checker);
+    if (boundTypeParam) return boundTypeParam;
+    if (t.flags & ts.TypeFlags.TypeParameter) return T_VALUE;
+
     // Strip literal narrowings first.
+    if (t.flags & ts.TypeFlags.BigIntLiteral) return T_BIGINT;
+    if (t.flags & ts.TypeFlags.UniqueESSymbol) return T_SYMBOL;
     if (t.flags & ts.TypeFlags.NumberLiteral) return T_NUMBER;
     if (t.flags & ts.TypeFlags.StringLiteral) return T_STRING;
     if (t.flags & ts.TypeFlags.BooleanLiteral) return T_BOOLEAN;
 
+    if (t.flags & ts.TypeFlags.BigInt) return T_BIGINT;
+    if (t.flags & ts.TypeFlags.ESSymbol) return T_SYMBOL;
     if (t.flags & ts.TypeFlags.Number) return T_NUMBER;
     if (t.flags & ts.TypeFlags.String) return T_STRING;
     if (t.flags & ts.TypeFlags.Boolean) return T_BOOLEAN;
+    if (t.flags & ts.TypeFlags.EnumLike) return T_NUMBER;
     if (t.flags & ts.TypeFlags.Void) return T_VOID;
     if (t.flags & ts.TypeFlags.Undefined) return T_VOID;
     if (t.flags & ts.TypeFlags.Null) return T_VOID;
     if (t.flags & ts.TypeFlags.Never) return T_NEVER;
-    // `unknown` shows up on catch bindings (TS 4.4+ default) and as
-    // explicit user annotations. Phase 2 runtime only throws strings, so we
-    // treat it as string here; Phase 3 will switch to boxed tsc_value_t.
-    if (t.flags & ts.TypeFlags.Unknown) return T_STRING;
-    if (t.flags & ts.TypeFlags.Any) return T_STRING;
+    if (t.flags & ts.TypeFlags.Unknown) return T_VALUE;
+    if (t.flags & ts.TypeFlags.Any) return T_VALUE;
 
     if (t.isUnion()) {
         const parts = t.types;
@@ -114,6 +211,18 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
             (p) => p.flags & (ts.TypeFlags.BooleanLiteral | ts.TypeFlags.Boolean),
         );
         if (allBool) return T_BOOLEAN;
+        const allBigInt = parts.every(
+            (p) => p.flags & (ts.TypeFlags.BigIntLiteral | ts.TypeFlags.BigInt),
+        );
+        if (allBigInt) return T_BIGINT;
+        const allString = parts.every(
+            (p) => p.flags & (ts.TypeFlags.StringLiteral | ts.TypeFlags.String),
+        );
+        if (allString) return T_STRING;
+        const allNumber = parts.every(
+            (p) => p.flags & (ts.TypeFlags.NumberLiteral | ts.TypeFlags.Number),
+        );
+        if (allNumber) return T_NUMBER;
         // Treat `T | undefined` (and `T | null`) as just `T` for typed
         // contexts. Phase 3 will model this properly via boxed values.
         const concrete = parts.filter(
@@ -122,12 +231,42 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         if (concrete.length === 1) {
             return mapTsType(node, concrete[0]!, checker);
         }
+        if (concrete.length > 1) {
+            return T_VALUE;
+        }
+    }
+
+    const tupleElems = getTupleElementTypes(t, checker);
+    if (tupleElems) {
+        if (tupleElems.length !== 2) {
+            unsupported(node, "only 2-element tuples are supported");
+        }
+        const keyType = mapTsType(node, tupleElems[0]!, checker);
+        if (keyType.kind !== "string") {
+            unsupported(node, "only [string, T] tuple entries are supported");
+        }
+        return entryType(mapTsType(node, tupleElems[1]!, checker));
     }
 
     // Array<T> / T[]
     const arrayElem = getArrayElementType(t);
     if (arrayElem) {
         return arrayType(mapTsType(node, arrayElem, checker));
+    }
+
+    const callSig =
+        checker.getSignaturesOfType(t, ts.SignatureKind.Call)[0] ??
+        t.getCallSignatures()[0];
+    if (callSig) {
+        const params = callSig.getParameters().map((param) => {
+            const decl = param.valueDeclaration ?? node;
+            return mapTsType(
+                decl,
+                checker.getTypeOfSymbolAtLocation(param, decl),
+                checker,
+            );
+        });
+        return functionType(params, mapTsType(node, callSig.getReturnType(), checker));
     }
 
     // Map<K, V>
@@ -150,7 +289,42 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
                 return setType(mapTsType(node, ta[0]!, checker));
             }
         }
+        if (sym?.getName() === "WeakMap") {
+            const tr = t as ts.TypeReference;
+            const ta = tr.typeArguments;
+            if (ta && ta.length >= 2) {
+                return weakMapType(
+                    mapTsType(node, ta[0]!, checker),
+                    mapTsType(node, ta[1]!, checker),
+                );
+            }
+        }
+        if (sym?.getName() === "WeakSet") {
+            const tr = t as ts.TypeReference;
+            const ta = tr.typeArguments;
+            if (ta && ta.length >= 1) {
+                return weakSetType(mapTsType(node, ta[0]!, checker));
+            }
+        }
+        if (sym?.getName() === "WeakRef") {
+            const tr = t as ts.TypeReference;
+            const ta = tr.typeArguments;
+            if (ta && ta.length >= 1) {
+                return weakRefType(mapTsType(node, ta[0]!, checker));
+            }
+        }
+        if (sym?.getName() === "IterableIterator" || sym?.getName() === "Iterator") {
+            const tr = t as ts.TypeReference;
+            const ta = tr.typeArguments;
+            if (ta && ta.length >= 1) {
+                return arrayType(mapTsType(node, ta[0]!, checker));
+            }
+        }
         if (sym?.getName() === "RegExp") return T_REGEXP;
+        if (sym?.getName() === "CryptoHash") return T_HASH;
+        if (sym?.getName() === "URL") return T_URL;
+        if (sym?.getName() === "Buffer") return T_BUFFER;
+        if (sym?.getName() === "TemplateStringsArray") return arrayType(T_STRING);
     }
 
     // User-defined class or interface?
@@ -184,6 +358,52 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
     unsupported(node, `type not supported yet: ${checker.typeToString(t)}`);
 }
 
+function typeNamePart(t: CType): string {
+    switch (t.kind) {
+        case "array":
+            return `array_${t.elem ? typeNamePart(t.elem) : "void"}`;
+        case "entry":
+            return `entry_${t.elem ? typeNamePart(t.elem) : "void"}`;
+        case "map":
+            return `map_${t.key ? typeNamePart(t.key) : "void"}_${t.elem ? typeNamePart(t.elem) : "void"}`;
+        case "set":
+            return `set_${t.elem ? typeNamePart(t.elem) : "void"}`;
+        case "weakmap":
+            return `weakmap_${t.key ? typeNamePart(t.key) : "void"}_${t.elem ? typeNamePart(t.elem) : "void"}`;
+        case "weakset":
+            return `weakset_${t.elem ? typeNamePart(t.elem) : "void"}`;
+        case "weakref":
+            return `weakref_${t.elem ? typeNamePart(t.elem) : "void"}`;
+        case "class":
+            return sanitizeTypeName(`class_${t.className ?? t.c}`);
+        case "function":
+            return sanitizeTypeName(
+                `fn_${t.params?.map(typeNamePart).join("_") || "void"}_to_${t.ret ? typeNamePart(t.ret) : "void"}`,
+            );
+        case "value":
+            return "value";
+        default:
+            return sanitizeTypeName(t.kind);
+    }
+}
+
+function sanitizeTypeName(name: string): string {
+    return name.replace(/[^A-Za-z0-9_]/g, "_");
+}
+
+function lookupTypeBinding(
+    t: ts.Type,
+    checker: ts.TypeChecker,
+): CType | undefined {
+    if (!(t.flags & ts.TypeFlags.TypeParameter)) return undefined;
+    const name = t.getSymbol()?.getName() ?? checker.typeToString(t);
+    for (let i = typeBindingStack.length - 1; i >= 0; i--) {
+        const binding = typeBindingStack[i]!.get(name);
+        if (binding) return binding;
+    }
+    return undefined;
+}
+
 /** If t is an Array<T>, return T. Otherwise undefined. */
 export function getArrayElementType(t: ts.Type): ts.Type | undefined {
     const sym = t.getSymbol();
@@ -193,4 +413,16 @@ export function getArrayElementType(t: ts.Type): ts.Type | undefined {
     const args = tr.typeArguments;
     if (!args || args.length === 0) return undefined;
     return args[0];
+}
+
+function getTupleElementTypes(
+    t: ts.Type,
+    checker: ts.TypeChecker,
+): readonly ts.Type[] | undefined {
+    const tupleAwareChecker = checker as ts.TypeChecker & {
+        isTupleType?: (type: ts.Type) => boolean;
+    };
+    if (!tupleAwareChecker.isTupleType?.(t)) return undefined;
+    const tr = t as ts.TypeReference;
+    return tr.typeArguments ?? checker.getTypeArguments(tr);
 }

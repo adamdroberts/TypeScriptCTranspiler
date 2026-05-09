@@ -1,0 +1,5 @@
+nan: true
+zero: false
+string: true
+same object: true
+different object: false

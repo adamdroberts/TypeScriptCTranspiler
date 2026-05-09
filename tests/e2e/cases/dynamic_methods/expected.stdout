@@ -1,0 +1,16 @@
+upper: ADA LOVELACE
+lower: ada lovelace
+char: L
+includes: true
+starts: true
+ends: true
+index: 5
+slice: Love
+join: 1|two|3
+has two: true
+idx three: 2
+push len: 4
+pop: four
+after: 1,two,3
+slice arr: two/3
+reverse: 3-two-1

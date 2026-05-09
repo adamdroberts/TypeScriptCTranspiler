@@ -1,0 +1,4 @@
+parsed array: true
+object array: false
+copy: 1|two|3|four
+original: 1|two|3

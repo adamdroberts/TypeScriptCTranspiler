@@ -1,0 +1,4 @@
+get a: 1
+set b: true
+get b: 2
+json: {"a":1,"b":2}

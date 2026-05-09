@@ -1,0 +1,12 @@
+sum: 913065604375333880235
+diff: -888374246572864744455
+mul: 121932631112635269
+divmod: 3 1 -3 -1
+pow: 1024
+compound: 1
+compare: true true false true true true
+radix: ab54a98ceb1f0ad2
+prefix: 255 63 42 5
+ctor: 42 1 0
+typeof: bigint
+concat: id:123

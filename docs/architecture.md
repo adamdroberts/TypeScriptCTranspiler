@@ -13,7 +13,7 @@ flowchart LR
     C --> E
     D --> E[Emitter<br/>src/emit/index.ts]
     E --> F[build/main.c<br/>single C file]
-    F --> G[gcc -O2 main.c tsc_runtime.c -lgc -lm]
+    F --> G[gcc -O2 main.c tsc_runtime.c -lgc -lm<br/>or -Os -s with --release]
     G --> H[native binary]
 ```
 
@@ -95,18 +95,24 @@ Every user-defined module merges into one `main.c`. This keeps the flat symbol n
 
 ## Value representation (typed path)
 
-Today's emitter produces specialized C types for each TS type — there's no boxing. The `CType` model (in `src/emit/types.ts`) decides the C spelling based on TypeScript's inferred or annotated type:
+Today's emitter prefers specialized C types for each TS type and uses a NaN-boxed dynamic value only for `any` / `unknown` / heterogeneous unions. The `CType` model (in `src/emit/types.ts`) decides the C spelling based on TypeScript's inferred or annotated type:
 
 | TS type | C type | Notes |
 |---------|--------|-------|
 | `number` | `double` | IEEE 754; int optimization deferred |
+| `symbol` | `tsc_symbol_t*` | unique symbol identity plus global registry |
 | `string` | `tsc_str_t*` | immutable UTF-8, GC'd |
 | `boolean` | `bool` | `<stdbool.h>` |
+| `any` / `unknown` | `tsc_value_t` | NaN-boxed dynamic value for numbers, strings, booleans, null/undefined, arrays, and dynamic objects |
 | `void` / `null` / `undefined` | `void` / NULL sentinel | for pointer types |
 | `T[]` / `Array<T>` | `tsc_array_t*` | dynamic array, element type known at emit |
 | `Map<K, V>` | `tsc_map_t*` | type-erased runtime; key kind tag chooses compare fn |
 | `Set<T>` | `tsc_set_t*` | same |
-| `RegExp` | `tsc_regexp_t*` | POSIX regex behind the wrapper |
+| `WeakMap<K, V>` | `tsc_map_t*` | pointer-key map without iteration API |
+| `WeakSet<T>` | `tsc_set_t*` | pointer-key set without iteration API |
+| `WeakRef<T>` | `tsc_weakref_t*` | typed target pointer wrapper |
+| `RegExp` | `tsc_regexp_t*` | PCRE2 regex behind the wrapper |
+| `(args) => ret` | `tsc_fn_*_t*` | typed closure value with generated `{fn, env}` struct; function-scope captures use GC-managed ref cells |
 | `class Foo` | `Foo_t*` | struct with inherited fields laid at prefix |
 | `interface Foo` | `Foo_t*` | same (struct of fields, no methods) |
 
@@ -118,9 +124,9 @@ When two CTypes disagree (e.g. assigning `null` to a `string` field), `Emitter.c
 
 Cross-type arithmetic / equality is rejected by the emitter with a `Cannot coerce` diagnostic.
 
-## Future: Phase 3 NaN-boxing (not yet built)
+## Dynamic value path
 
-Phase 3 will add a second, dynamic path via NaN-boxed `tsc_value_t`. The plan in `~/.claude/plans/make-a-typescript-to-floating-comet.md` covers it; summary:
+Phase 3 now has its foundation: `any` / `unknown` and heterogeneous unions use NaN-boxed `tsc_value_t`. The plan in `~/.claude/plans/make-a-typescript-to-floating-comet.md` still covers the remaining high-performance object work; summary:
 
 ```mermaid
 flowchart TD
@@ -132,7 +138,7 @@ flowchart TD
     D <--> B
 ```
 
-Today's code always takes the specialized path and refuses to emit for untyped/any code. Phase 3 introduces the boxed path + bridge. See [`todo.md`](todo.md#1-next-up-unblockers) for impact and effort.
+The current bridge boxes specialized primitives/arrays into `tsc_value_t` and supports dynamic JSON/object/array access, dynamic arithmetic/equality/relational/logical/nullish operators, common string/array method dispatch, and unboxing into typed destinations. Remaining Phase 3 work includes hidden classes / shape trees, inline caches, broader prototype method coverage, and descriptor-aware property semantics. See [`todo.md`](todo.md#1-next-up-unblockers) for impact and effort.
 
 ## Runtime layer
 
@@ -145,7 +151,7 @@ flowchart TD
     RT --> STR[Strings<br/>tsc_str_*]
     RT --> ARR[Arrays<br/>tsc_array_*]
     RT --> MS[Map / Set<br/>tsc_map_* / tsc_set_*]
-    RT --> REG[RegExp<br/>POSIX regex wrapper]
+    RT --> REG[RegExp<br/>PCRE2 regex wrapper]
     RT --> EX[Exceptions<br/>setjmp/longjmp]
     RT --> NUM[Numbers<br/>parseFloat/Int, num_mod, math_random]
     RT --> JSON[JSON helpers<br/>escape_string, num]
@@ -184,7 +190,7 @@ For readers planning to modify the emitter:
 
 - `src/emit/index.ts` — the whole `Emitter` class. One method per AST node kind.
 - `src/emit/types.ts` — CType and `mapTsType` (the single source of truth for TS → C type mapping).
-- `src/emit/cbuf.ts` — indent-tracked C source writer + string escape helpers.
+- `src/emit/cbuf.ts` — indent-tracked C source writer, raw preprocessor lines for `#line`, and string escape helpers.
 - `src/emit/mangle.ts` — C keyword collision avoidance.
 - `src/resolve.ts` — the module graph.
 - `src/compile.ts` — the glue; typically read first for orientation.

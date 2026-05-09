@@ -1,0 +1,15 @@
+href: https://example.com:8443/a/b?x=1#frag
+protocol: https:
+host: example.com:8443
+hostname: example.com
+port: 8443
+pathname: /a/b
+search: ?x=1
+hash: #frag
+origin: https://example.com:8443
+typeof: object
+string: https://example.com:8443/a/b?x=1#frag
+pathname: /
+search: 
+hash: 
+origin: http://site.test
