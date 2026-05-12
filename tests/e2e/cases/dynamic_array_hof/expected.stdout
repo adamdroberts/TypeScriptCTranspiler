@@ -1,4 +1,7 @@
 doubled: 2|5|8|11
 evens: 2|4
 labels: n=1,n=2,n=3,n=4
+receiver: 5|7|9|11
+block mapped: 1|4|9|16
+block found: 3
 original: 1|2|3|4

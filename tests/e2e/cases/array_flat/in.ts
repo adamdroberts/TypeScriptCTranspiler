@@ -11,3 +11,6 @@ console.log("copy:", copy.join(","));
 
 const mapped = [2, 4, 6].flatMap((n, i) => [n, i]);
 console.log("flatMap:", mapped.join(","));
+
+const scalarMapped = [1, 2, 3].flatMap((n) => n * 2);
+console.log("flatMap scalar:", scalarMapped.join(","));

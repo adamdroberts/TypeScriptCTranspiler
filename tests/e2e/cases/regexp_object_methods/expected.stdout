@@ -1,0 +1,9 @@
+source: a.b
+flags: gimsu
+props: true true true true true
+toString: /a.b/gimsu
+locale: /a.b/gimsu
+concat: re=/a.b/gimsu
+value test: true
+plain props: false false false false false
+plain string: /cat/

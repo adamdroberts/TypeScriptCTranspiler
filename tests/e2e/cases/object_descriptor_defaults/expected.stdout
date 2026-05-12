@@ -1,0 +1,10 @@
+reflect empty: true undefined
+empty desc: undefined false false false
+writable before: undefined
+writable set: true set
+batch: undefined undefined
+set accessor: false undefined
+no accessors desc: true undefined true undefined
+read only desc: function true undefined false 12
+descriptor json: {"enumerable":true,"configurable":true} {"enumerable":true,"configurable":true} [null,null]
+keys: writableMissing|fromBatch|noAccessors|readOnly

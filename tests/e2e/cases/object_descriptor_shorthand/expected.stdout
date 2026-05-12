@@ -1,0 +1,5 @@
+data: 3 false true true x
+write data: false 3
+accessor: 10 function function true true
+write accessor: true 12
+expr flag: x|y false true

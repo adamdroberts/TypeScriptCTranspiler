@@ -1,0 +1,11 @@
+locale: Hi
+value text: Hi
+value same: true
+concat: buf=Hi
+own: 0,1 72,105 0,1
+has: true false true true
+desc: 72 true true true 0,1
+entries: 0:72|1:105
+reflect: 0,1 105
+reflect get: true true 72 2
+in: true true false

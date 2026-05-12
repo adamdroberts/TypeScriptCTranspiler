@@ -1,0 +1,8 @@
+object-x: true
+object-z: false
+object-key: true
+method-y: true
+enum-x: true
+enum-missing: false
+class-field: true
+class-method: false

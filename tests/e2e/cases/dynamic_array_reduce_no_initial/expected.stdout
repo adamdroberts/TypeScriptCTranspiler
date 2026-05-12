@@ -1,0 +1,4 @@
+sum: 16
+joined: a1:b;2:c;
+diff: -5
+rjoined: c1:b;0:a;

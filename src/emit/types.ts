@@ -17,6 +17,7 @@ export type CTypeKind =
     | "weakmap"
     | "weakset"
     | "weakref"
+    | "finregistry"
     | "regexp"
     | "hash"
     | "url"
@@ -37,6 +38,7 @@ export interface CType {
     className?: string;
     /** For first-class function/closure values. */
     params?: CType[];
+    thisParam?: CType;
     ret?: CType;
     closureName?: string;
 }
@@ -58,6 +60,10 @@ export function withTypeBindings<T>(
 }
 
 export const T_NUMBER: CType = { kind: "number", c: "double" };
+/** Same TS-level type (`number`) but stored as `int64_t` in C — used by the
+ *  int-shape specialization path so chains of arithmetic stay in integer
+ *  registers without per-op cvttsd2si/cvtsi2sd round trips. */
+export const T_NUMBER_INT: CType = { kind: "number", c: "int64_t" };
 export const T_BIGINT: CType = { kind: "bigint", c: "tsc_bigint_t*" };
 export const T_SYMBOL: CType = { kind: "symbol", c: "tsc_symbol_t*" };
 export const T_STRING: CType = { kind: "string", c: "tsc_str_t*" };
@@ -93,6 +99,10 @@ export function weakRefType(elem: CType): CType {
     return { kind: "weakref", c: "tsc_weakref_t*", elem };
 }
 
+export function finRegistryType(elem: CType): CType {
+    return { kind: "finregistry", c: "tsc_finregistry_t*", elem };
+}
+
 export const T_REGEXP: CType = { kind: "regexp", c: "tsc_regexp_t*" };
 export const T_HASH: CType = { kind: "hash", c: "tsc_hash_t*" };
 export const T_URL: CType = { kind: "url", c: "tsc_url_t*" };
@@ -103,15 +113,34 @@ export function classType(className: string): CType {
     return { kind: "class", c: `${className}_t*`, className };
 }
 
-export function functionType(params: readonly CType[], ret: CType): CType {
-    const closureName = `tsc_fn_${params.length ? params.map(typeNamePart).join("_") : "void"}_to_${typeNamePart(ret)}_t`;
+export function functionType(params: readonly CType[], ret: CType, thisParam?: CType): CType {
+    const thisPart = thisParam ? `this_${typeNamePart(thisParam)}_` : "";
+    const closureName = `tsc_fn_${thisPart}${params.length ? params.map(typeNamePart).join("_") : "void"}_to_${typeNamePart(ret)}_t`;
     return {
         kind: "function",
         c: `${closureName}*`,
         params: [...params],
+        thisParam,
         ret,
         closureName,
     };
+}
+
+function isThisParameter(p: ts.ParameterDeclaration): boolean {
+    return ts.isIdentifier(p.name) && p.name.text === "this";
+}
+
+function explicitThisParameter(node: ts.Node): ts.ParameterDeclaration | null {
+    if (
+        ts.isFunctionDeclaration(node) ||
+        ts.isFunctionExpression(node) ||
+        ts.isArrowFunction(node) ||
+        ts.isMethodDeclaration(node) ||
+        ts.isConstructorDeclaration(node)
+    ) {
+        return node.parameters.find(isThisParameter) ?? null;
+    }
+    return null;
 }
 
 /** Convert CType.kind to the tsc_key_kind_t enum used in runtime. */
@@ -258,6 +287,26 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         checker.getSignaturesOfType(t, ts.SignatureKind.Call)[0] ??
         t.getCallSignatures()[0];
     if (callSig) {
+        let thisParamType: CType | undefined;
+        if (callSig.thisParameter) {
+            const decl = callSig.thisParameter.valueDeclaration ?? node;
+            thisParamType = mapTsType(
+                decl,
+                checker.getTypeOfSymbolAtLocation(callSig.thisParameter, decl),
+                checker,
+            );
+            if (thisParamType.kind !== "value") {
+                unsupported(decl, "function this parameters are currently supported only as any/unknown");
+            }
+        } else {
+            const decl = explicitThisParameter(callSig.getDeclaration() ?? node);
+            if (decl) {
+                thisParamType = mapTsType(decl, checker.getTypeAtLocation(decl), checker);
+                if (thisParamType.kind !== "value") {
+                    unsupported(decl, "function this parameters are currently supported only as any/unknown");
+                }
+            }
+        }
         const params = callSig.getParameters().map((param) => {
             const decl = param.valueDeclaration ?? node;
             return mapTsType(
@@ -266,7 +315,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
                 checker,
             );
         });
-        return functionType(params, mapTsType(node, callSig.getReturnType(), checker));
+        return functionType(params, mapTsType(node, callSig.getReturnType(), checker), thisParamType);
     }
 
     // Map<K, V>
@@ -313,7 +362,14 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
                 return weakRefType(mapTsType(node, ta[0]!, checker));
             }
         }
-        if (sym?.getName() === "IterableIterator" || sym?.getName() === "Iterator") {
+        if (sym?.getName() === "FinalizationRegistry") {
+            const tr = t as ts.TypeReference;
+            const ta = tr.typeArguments;
+            if (ta && ta.length >= 1) {
+                return finRegistryType(mapTsType(node, ta[0]!, checker));
+            }
+        }
+        if (sym?.getName() === "IterableIterator" || sym?.getName() === "Iterator" || sym?.getName() === "Generator") {
             const tr = t as ts.TypeReference;
             const ta = tr.typeArguments;
             if (ta && ta.length >= 1) {
@@ -374,6 +430,8 @@ function typeNamePart(t: CType): string {
             return `weakset_${t.elem ? typeNamePart(t.elem) : "void"}`;
         case "weakref":
             return `weakref_${t.elem ? typeNamePart(t.elem) : "void"}`;
+        case "finregistry":
+            return `finregistry_${t.elem ? typeNamePart(t.elem) : "void"}`;
         case "class":
             return sanitizeTypeName(`class_${t.className ?? t.c}`);
         case "function":

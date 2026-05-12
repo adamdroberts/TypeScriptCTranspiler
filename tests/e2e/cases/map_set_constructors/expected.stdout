@@ -1,0 +1,4 @@
+map: 2 1 true
+keys: a|b|c values: 1|2|3
+set: 3 true 1|2|3
+empty: 0 0

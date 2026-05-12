@@ -6,7 +6,7 @@ Goal: take a Node.js-style TypeScript app and get back a standalone executable t
 
 ## Status
 
-Substantial working subset, verified by **146 passing end-to-end tests** including a real word-count CLI that tokenizes via regex, counts via `Map`, sorts by a user comparator, and reads `process.env`. ~10,500 LOC across TypeScript compiler + C runtime + type shims.
+Substantial working subset, verified by **251 passing end-to-end tests** including a real word-count CLI that tokenizes via regex, counts via `Map`, sorts by a user comparator, and reads `process.env`. ~10,500 LOC across TypeScript compiler + C runtime + type shims.
 
 **Phases complete:**
 
@@ -14,26 +14,26 @@ Substantial working subset, verified by **146 passing end-to-end tests** includi
 |-------|---------|--------|
 | 0 | Bootstrap (gcc driver, build dir, CLI, `--no-gc` fallback) | ✅ |
 | 1 | Typed core — primitives, operators, control flow, functions, `switch`, nullish coalescing `??`, optional chaining `?.` | ✅ |
-| 2a | Typed arrays — literal (with spread `[...a, b]`), indexing, `.length`, push/pop/shift/unshift, `for-of`, at, reverse/toReversed, fill, copyWithin, with, toSpliced, **sort/toSorted (default + user comparator for typed arrays)**, slice, concat, join, indexOf, lastIndexOf, includes | ✅ |
+| 2a | Typed arrays — literal (with spread `[...a, b]`), indexing, `.length`, push/pop/shift/unshift, `for-of`, keys/values, at, reverse/toReversed, fill, copyWithin, with, toSpliced, **sort/toSorted (default + user comparator for typed arrays)**, slice, concat, join, toString/toLocaleString/valueOf, indexOf, lastIndexOf, includes | ✅ |
 | 2b | Classes — fields, ctor, methods, `new`, `this`, `extends`, `super()`, static fields + methods | ✅ |
-| 2c | Higher-order array methods (`forEach`/`map`/`filter`/`reduce`/`reduceRight`/`find`/`findIndex`/`findLast`/`findLastIndex`/`some`/`every`) with **inline arrows OR named function references** | ✅ |
+| 2c | Higher-order array methods (`forEach`/`map`/`filter`/`reduce`/`reduceRight`/`find`/`findIndex`/`findLast`/`findLastIndex`/`some`/`every`) with **inline arrows OR named function references**, including receiver array callback arguments | ✅ |
 | 2d | Top-level `const f = (...) => ...` lifts to a static C function — usable as a call target AND as an HOF callback | ✅ |
 | 2.5 | Interfaces + object literals with typed shape; `Object.keys`/`values`/`entries`/`fromEntries` | ✅ |
 | 4 | Multi-file module graph — flat namespace, local imports, topological init | ✅ |
 | 5 | Exceptions — `throw` / `try` / `catch` / `finally` via setjmp/longjmp | ✅ |
-| 7 (partial) | `Map<K,V>` + `Set<T>` with linear scan, typed `WeakMap<K,V>`/`WeakSet<T>`, and direct `for...of` over strings/Map/Set | ✅ |
+| 7 (partial) | `Map<K,V>` + `Set<T>` with insertion-order hash tables, SameValueZero numeric keys, `new Set(array)`, `new Map(Object.entries(...))`, typed `WeakMap<K,V>`/`WeakSet<T>`/`WeakRef<T>`, `Set.keys`, collection `forEach` with inline or named callbacks, collection `toString`/`toLocaleString`/`valueOf`, and direct `for...of` over strings/Map/Set | ✅ |
 | 7 (partial) | JSON.stringify (type-driven, recursive for arrays and objects) | ✅ |
-| 8 (partial) | **RegExp via PCRE2** (`/pattern/flags`, `re.test`, `s.replace`, `s.match`, `s.matchAll`, `s.split`, capture groups, lookahead/lookbehind, named capture syntax, Unicode properties) | ✅ |
-| 10 | Sync Node stdlib — `fs` (read/write/exists/readdir), `path`, `Math`, `os`, `Date.now`, `Number.*` statics, `Array.isArray`/`Array.from`/`Array.of`, `Buffer`, `URL`, **`process.env`**, **`process.cwd()`**, **`process.argv`** | ✅ |
+| 8 (partial) | **RegExp via PCRE2** (`/pattern/flags`, `re.exec`, `re.test`, `re.source`/`flags`/flag booleans including `hasIndices`/`sticky`, `re.toString`/`toLocaleString`/`valueOf`, `s.replace`, `s.match`, `s.matchAll`, `s.search`, `s.split`, capture groups, lookahead/lookbehind, named capture syntax, Unicode properties) | ✅ |
+| 10 | Sync Node stdlib — `fs` (read/write/exists/readdir), `path`, `Math`, `os`, `Date.now`, `Number.*` statics, `Array.isArray`/`Array.from`/`Array.of`, `Buffer` fields + object methods, `URL` fields + `toString`/`toJSON`, **`process.env`**, **`process.cwd()`**, **`process.argv`** | ✅ |
 | 2d+ | **Module-level captures** — top-level `const/let` are emitted as file-scope statics, so top-level functions AND lifted arrow consts can read/write them as ordinary globals | ✅ |
 | 2e | **Function-scope closures** — first-class typed arrow/function expressions lower to generated `{fn, env}` closure structs with captured locals boxed in ref cells | ✅ |
-| 3 foundation | **Dynamic values** — `any`/`unknown` map to NaN-boxed `tsc_value_t`; supports `JSON.parse`, dynamic JSON stringify, heterogeneous arrays/objects, dynamic property/index reads/writes, dynamic `in`/`delete`, dynamic binary/compound assignment operators, broader dynamic string/array methods including at/concat/copyWithin/fill/lastIndexOf/localeCompare/normalize/pad/repeat/replace/split/substring/toReversed/toSorted/toSpliced/with/trim edges/sort/splice and inline-arrow array HOFs including reduceRight/findLast/findLastIndex, dynamic `Array.isArray`/`Array.from`/`Array.of`, typed coercion bridges, `Object.is`/assign/keys/values/entries/fromEntries/names/hasOwn/hasOwnProperty/isPrototypeOf/propertyIsEnumerable/toLocaleString/toString/valueOf/getOwnPropertyDescriptors, data descriptor flags, named-function accessor descriptors, Object.create/prototype-chain lookup, and basic Reflect object helpers | ✅ |
+| 3 foundation | **Dynamic values** — `any`/`unknown` map to NaN-boxed `tsc_value_t`; supports `JSON.parse`, dynamic JSON stringify with object-property omission for `undefined`/function values, heterogeneous arrays/objects, dynamic property/index reads/writes, dynamic `in`/`delete`, dynamic binary/compound assignment operators, broader dynamic string/array methods including at/concat/copyWithin/fill/keys/values/lastIndexOf/localeCompare/normalize/pad/repeat/replace/string replace tokens/RegExp replace tokens/split/RegExp split/substr/substring/slice/reverse/toReversed/toSorted/toSpliced/with/trim edges/default and comparator sort/splice/toString/valueOf and inline/named/closure array HOFs with receiver callback args including reduceRight/findLast/findLastIndex, dynamic `Array.isArray`/`Array.from`/`Array.of`, typed coercion bridges, `Object.is`/assign/keys/values/entries/fromEntries/names/hasOwn/hasOwnProperty/isPrototypeOf/propertyIsEnumerable/toLocaleString/toString/valueOf/getOwnPropertyDescriptors/defineProperties, data descriptor flags, omitted-field/default handling, and compatible non-configurable redefinition, named-function/lifted-arrow/closure-valued/undefined accessor descriptors with receiver-bound `this`, own undefined absent-hook fields, boxed `get`/`set` identities callable through dynamic `Reflect.apply`, typed/dynamic string own-property enumeration/descriptors, bounded dynamic array extensibility/seal/freeze state and descriptor flags, Object.create with descriptor maps/prototype-chain lookup, and Reflect object helpers including receiver-aware dynamic data writes | ✅ |
 
 **Not implemented in this session (deferred):**
 
-- **Phase 3 remainder** — hidden classes / shape trees, inline caches, full accessor semantics, complete built-in/prototype semantics, and npm-scale object behavior.
+- **Phase 3 remainder** — hidden classes / shape trees, inline caches, remaining descriptor/prototype edge cases, complete built-in/prototype semantics, and npm-scale object behavior.
 - **Phase 6** — `async/await` + libuv event loop + Promise + microtask queue. ~3 weeks.
-- **Phase 7 remainder** — generators, `FinalizationRegistry`, custom iterator objects.
+- **Phase 7 remainder** — generators and broader iterator protocol edge cases.
 - **Phase 9** — `Proxy`, `Reflect`, and full property descriptor semantics.
 - **Phases 11–13** — Async Node stdlib (streams, http, net, child_process, worker_threads).
 - **Phase 14** — `node_modules` transpilation (requires Phases 3, 6, 7 first).
@@ -297,24 +297,37 @@ TSC2C_NO_GC=1 bun tests/e2e/run.ts
 ```
 e2e: advanced      … OK      (spread + Object.keys + padStart/pad/replace + Array.from)
 e2e: arith         … OK
+e2e: array_concat_values … OK (Array.concat with array and single-value args)
 e2e: array_copy_within … OK (Array.copyWithin)
+e2e: array_entries … OK (Array.entries string-index entry arrays)
 e2e: array_fill    … OK      (Array.fill)
-e2e: array_flat    … OK      (flat + flatMap)
-e2e: array_hof     … OK      (map/filter/reduce/find/some/every)
+e2e: array_flat    … OK      (flat + flatMap array/scalar callbacks)
+e2e: array_from_string … OK (Array.from over strings)
+e2e: array_hof     … OK      (map/filter/reduce/find/some/every + receiver callback args)
+e2e: array_includes_same_value_zero … OK (Array.includes SameValueZero)
+e2e: array_is_array_narrowing … OK (Array.isArray narrows unknown dynamic values)
+e2e: array_keys_values … OK (Array.keys/values copies)
 e2e: array_at      … OK      (Array.at positive/negative indexes)
 e2e: array_find_last … OK (Array.findLast/findLastIndex)
 e2e: array_last_index_of … OK (Array.lastIndexOf)
 e2e: array_of … OK (Array.of typed construction)
+e2e: array_own_properties … OK (typed array own-property checks)
+e2e: array_property_descriptors … OK (typed array property descriptors)
+e2e: array_reduce_no_initial … OK (Array.reduce/reduceRight without initial value)
 e2e: array_reduce_right … OK (Array.reduceRight with initial value)
+e2e: array_search_from_index … OK (Array indexOf/includes/lastIndexOf fromIndex)
 e2e: array_sort_default … OK (JS-style default Array.sort)
 e2e: array_static_dynamic … OK (dynamic Array.isArray/from)
 e2e: array_to_reversed … OK (Array.toReversed)
 e2e: array_to_sorted … OK (Array.toSorted default copy)
 e2e: array_to_spliced … OK (Array.toSpliced non-mutating splice)
+e2e: array_to_string … OK (Array.toString/toLocaleString)
+e2e: array_value_of … OK (Array.valueOf identity)
 e2e: array_with    … OK      (Array.with non-mutating replacement)
 e2e: arrays        … OK
 e2e: bigint        … OK      (GMP-backed BigInt arithmetic)
 e2e: buffer        … OK      (binary-safe Buffer subset)
+e2e: buffer_object_methods … OK (Buffer toLocaleString/valueOf)
 e2e: captures      … OK      (module-level let/const used inside functions + arrows)
 e2e: call_arg_order … OK     (left-to-right call argument evaluation)
 e2e: class_modifiers … OK    (abstract/access/readonly modifiers)
@@ -329,34 +342,60 @@ e2e: dynamic_coercions … OK  (any/unknown unbox into typed destinations)
 e2e: dynamic_index_assignment … OK (dynamic array index writes)
 e2e: dynamic_last_index_of … OK (dynamic string/array lastIndexOf)
 e2e: dynamic_array_copy_within … OK (dynamic Array.copyWithin)
+e2e: dynamic_array_define_property … OK (dynamic array defineProperty)
+e2e: dynamic_array_entries … OK (dynamic Array.entries)
+e2e: dynamic_array_extensibility … OK (dynamic array preventExtensions/seal/freeze descriptors and mutators)
 e2e: dynamic_array_fill … OK (dynamic Array.fill)
 e2e: dynamic_array_find_last … OK (dynamic findLast/findLastIndex)
 e2e: dynamic_array_flat … OK (dynamic Array.flat depth)
 e2e: dynamic_array_flatmap … OK (dynamic flatMap inline arrows)
-e2e: dynamic_array_hof … OK  (dynamic map/filter inline arrows)
+e2e: dynamic_array_hof … OK  (dynamic map/filter inline arrows + receiver args)
 e2e: dynamic_array_hof_more … OK (dynamic forEach/some/every/find/findIndex)
+e2e: dynamic_array_hof_refs … OK (dynamic array HOF named/closure callback refs + receiver args)
+e2e: dynamic_array_keys_values … OK (dynamic Array.keys/values copies)
 e2e: dynamic_array_methods … OK (dynamic shift/unshift/push/concat)
+e2e: dynamic_array_object_enumeration … OK (dynamic array Object/Reflect enumeration)
 e2e: dynamic_array_of … OK (Array.of<any> dynamic values)
+e2e: dynamic_array_property_writes … OK (dynamic array string-key/length writes)
 e2e: dynamic_array_reduce … OK (dynamic reduce with initial value)
+e2e: dynamic_array_reduce_no_initial … OK (dynamic reduce/reduceRight without initial value)
 e2e: dynamic_array_reduce_right … OK (dynamic reduceRight with initial value)
+e2e: dynamic_array_slice_reverse … OK (dynamic Array.slice/reverse)
 e2e: dynamic_array_sort … OK (dynamic default sort)
+e2e: dynamic_array_sort_comparator … OK (dynamic Array.sort comparator)
 e2e: dynamic_array_splice … OK (dynamic splice mutation/removal)
 e2e: dynamic_array_at … OK (dynamic Array.at positive/negative indexes)
 e2e: dynamic_array_to_reversed … OK (dynamic toReversed)
 e2e: dynamic_array_to_sorted … OK (dynamic toSorted default copy)
+e2e: dynamic_array_to_sorted_comparator … OK (dynamic toSorted comparator copy)
 e2e: dynamic_array_to_spliced … OK (dynamic toSpliced non-mutating splice)
+e2e: dynamic_array_to_string … OK (dynamic Array.toString/toLocaleString join)
+e2e: dynamic_array_value_of … OK (dynamic Array.valueOf identity)
 e2e: dynamic_array_with … OK (dynamic Array.with non-mutating replacement)
 e2e: dynamic_methods … OK    (dynamic string/array method dispatch)
+e2e: dynamic_string_match … OK (dynamic string match/matchAll)
+e2e: dynamic_string_match_string … OK (dynamic string match/matchAll with string patterns)
+e2e: dynamic_number_to_string … OK (dynamic Number.toString radix conversion)
 e2e: dynamic_ops  … OK       (dynamic arithmetic/equality/relational/logical ops)
 e2e: dynamic_property_assignment … OK (dynamic property writes and compound writes)
 e2e: dynamic_property_ops … OK (dynamic in/delete property operations)
+e2e: dynamic_search_positions … OK (dynamic string/array search positions)
 e2e: dynamic_string_at … OK (dynamic String.at positive/negative indexes)
+e2e: dynamic_string_code_point_at … OK (dynamic string codePointAt)
 e2e: dynamic_string_concat … OK (dynamic string concat)
 e2e: dynamic_string_locale_compare … OK (dynamic string localeCompare)
 e2e: dynamic_string_normalize … OK (dynamic string normalize)
+e2e: dynamic_string_object_enumeration … OK (dynamic string Object/Reflect enumeration)
 e2e: dynamic_string_pad_repeat … OK (dynamic repeat/padStart/padEnd)
 e2e: dynamic_string_replace … OK (dynamic string replace/replaceAll)
+e2e: dynamic_string_replace_regex … OK (dynamic string RegExp replace/replaceAll)
+e2e: dynamic_string_replace_regex_groups … OK (dynamic string RegExp replacement tokens)
+e2e: dynamic_string_replace_string_tokens … OK (dynamic string replacement tokens)
+e2e: dynamic_string_search … OK (dynamic String.search RegExp/string patterns)
 e2e: dynamic_string_split … OK (dynamic string split)
+e2e: dynamic_string_split_limit … OK (dynamic string split limit)
+e2e: dynamic_string_split_regex … OK (dynamic string RegExp split)
+e2e: dynamic_string_substr … OK (dynamic string substr)
 e2e: dynamic_string_substring … OK (dynamic string substring)
 e2e: dynamic_string_trim_edges … OK (dynamic trimStart/trimEnd)
 e2e: dynamic_require … OK    (expected AOT-limit diagnostic)
@@ -367,22 +406,44 @@ e2e: fn_refs       … OK      (named function references as HOF callbacks)
 e2e: fs_roundtrip  … OK
 e2e: generic_classes … OK (erased generic class fields/methods)
 e2e: generic_function_values … OK (generic functions as concrete function values)
+e2e: global_number_predicates … OK (global isNaN/isFinite coercion)
 e2e: greet         … OK
 e2e: hello         … OK
+e2e: in_operator_narrowing … OK (in-operator narrowing and typed field checks)
 e2e: inheritance   … OK
 e2e: instanceof    … OK      (class ancestry checks)
 e2e: interfaces    … OK
 e2e: json          … OK
 e2e: map_set       … OK
+e2e: map_set_constructors … OK (Map/Set typed constructor initialization)
+e2e: map_set_for_each … OK (Map/Set forEach inline callbacks)
+e2e: map_set_for_each_refs … OK (Map/Set forEach named callback refs)
 e2e: map_set_for_of … OK    (direct Map/Set for-of)
+e2e: map_set_same_value_zero … OK (Map/Set SameValueZero numeric keys)
 e2e: math          … OK
+e2e: math_constants_more … OK (Math.SQRT1_2 plus trunc/sign coverage)
+e2e: math_int32_float … OK (Math.imul/clz32/fround)
+e2e: math_more … OK (additional libm-backed Math methods, including variadic hypot and inverse trig)
 e2e: modules       … OK      (multi-file imports)
 e2e: native_addon  … OK      (expected AOT-limit diagnostic)
 e2e: native_addon_package … OK (expected native package diagnostic)
 e2e: namespaces    … OK      (namespace-scoped values and functions)
 e2e: nullish       … OK      (?. and ??)
-e2e: object_accessors … OK   (dynamic named-function accessor descriptors)
+e2e: number_constants … OK (Number static constants)
+e2e: number_constructor … OK (callable Number coercion)
+e2e: number_static_more … OK (Number.is* predicates and parseInt/parseFloat radix/coercion behavior)
+e2e: number_to_exponential … OK (Number.toExponential typed and dynamic formatting)
+e2e: number_to_fixed … OK (Number.toFixed typed and dynamic formatting)
+e2e: number_to_precision … OK (Number.toPrecision typed and dynamic formatting)
+e2e: object_accessor_arrows … OK (dynamic lifted-arrow accessor descriptors)
+e2e: object_accessor_closures … OK (dynamic closure-valued accessor descriptors)
+e2e: object_accessors … OK   (dynamic named-function/lifted-arrow accessor descriptors)
+e2e: object_array_enumeration … OK (typed array Object enumeration)
+e2e: object_create_descriptors … OK (dynamic Object.create descriptor maps)
+e2e: object_define_properties … OK (dynamic descriptor maps)
 e2e: object_define_property … OK (dynamic data descriptors)
+e2e: object_descriptor_defaults … OK (descriptor defaults and absent accessor hooks)
+e2e: object_descriptor_redefine … OK (non-configurable descriptor redefinition)
 e2e: object_descriptors … OK (writable/enumerable/configurable data descriptors)
 e2e: object_entries … OK     (typed Object.entries/fromEntries)
 e2e: dynamic_object_entries … OK (dynamic Object.entries)
@@ -399,42 +460,78 @@ e2e: object_static_methods … OK (dynamic Object.assign/hasOwn/getOwnPropertyNa
 e2e: object_to_locale_string … OK (dynamic Object.prototype.toLocaleString)
 e2e: object_to_string … OK (dynamic Object.prototype.toString)
 e2e: object_value_of … OK (dynamic Object.prototype.valueOf)
+e2e: primitive_object_methods … OK (Number/Boolean toString/toLocaleString/valueOf)
+e2e: reflect_apply … OK (Reflect.apply over known functions + array args + thisArg)
+e2e: reflect_construct … OK (Reflect.construct over known classes + array args)
 e2e: reflect_dynamic … OK    (Reflect.get/set on dynamic objects)
 e2e: reflect_get_own_property_descriptor … OK (Reflect descriptor lookup)
+e2e: reflect_receiver … OK (Reflect.get/set receiver arguments + accessor this/function identity/apply)
 e2e: regex         … OK      (PCRE2 regex)
 e2e: regex_captures … OK     (non-global match groups)
 e2e: regex_pcre2  … OK      (lookaround, named syntax, Unicode properties)
+e2e: regexp_exec … OK (RegExp.exec capture arrays)
+e2e: regexp_extra_flags … OK (RegExp hasIndices/sticky flags)
+e2e: regexp_object_methods … OK (RegExp properties/toString/valueOf)
+e2e: collection_object_methods … OK (collection toString/toLocaleString/valueOf)
 e2e: release_build … OK     (--release uses size-optimized linking)
 e2e: rest_spread   … OK      (rest params + spread calls)
 e2e: runtime_eval  … OK      (expected AOT-limit diagnostic)
 e2e: runtime_function_constructor … OK (expected AOT-limit diagnostic)
+e2e: set_keys      … OK      (Set.keys alias for values)
 e2e: stdlib_os     … OK
 e2e: string_at     … OK      (String.at positive/negative indexes)
+e2e: string_boolean_constructors … OK (callable String/Boolean coercion)
+e2e: string_char_code_at … OK (String.charCodeAt UTF-16 code units)
 e2e: string_codepoints … OK  (fromCharCode + codePointAt)
 e2e: string_concat … OK      (String.concat)
 e2e: string_for_of … OK      (Unicode string iteration)
+e2e: string_from_code_point … OK (String.fromCodePoint)
 e2e: string_last_index_of … OK (String.lastIndexOf)
 e2e: string_locale_compare … OK (String.localeCompare)
 e2e: string_match_all … OK   (matchAll capture groups)
+e2e: string_match_string … OK (String.match/matchAll with string patterns)
 e2e: string_normalize … OK   (ICU Unicode normalization)
+e2e: string_object_enumeration … OK (typed string Object/Reflect enumeration)
+e2e: string_object_methods … OK (String toString/toLocaleString/valueOf)
+e2e: string_replace_regex_groups … OK (String.replace RegExp replacement tokens)
+e2e: string_replace_string_tokens … OK (String.replace string replacement tokens)
+e2e: string_search_positions … OK (String search position/endPosition args)
+e2e: string_search_regex … OK (String.search with RegExp)
+e2e: string_search_string … OK (String.search with string patterns)
+e2e: string_split_limit … OK (String.split limit)
+e2e: string_substr … OK      (String.substr start/length semantics)
 e2e: string_substring … OK   (substring clamp/swap semantics)
+e2e: string_trim_aliases … OK (trimLeft/trimRight aliases)
 e2e: string_trim_edges … OK  (trimStart/trimEnd)
+e2e: string_well_formed … OK (String isWellFormed/toWellFormed)
 e2e: strings       … OK
 e2e: switch        … OK
 e2e: switch_exhaustive … OK (finite-domain exhaustiveness)
 e2e: switch_exhaustive_missing … OK (expected diagnostic)
+e2e: symbol_bigint_object_methods … OK (Symbol/BigInt toLocaleString/valueOf)
 e2e: symbols       … OK      (Symbol values and registry)
 e2e: tagged_templates … OK (tagged template calls)
 e2e: tail_calls    … OK      (self-tail recursion lowered to goto)
+e2e: typed_object_has_own … OK (typed Object.hasOwn/hasOwnProperty/propertyIsEnumerable)
+e2e: typed_object_methods … OK (typed Object toString/toLocaleString/valueOf)
+e2e: typed_object_property_names … OK (typed Object.getOwnPropertyNames)
+e2e: typed_property_descriptor … OK (typed Object/Reflect property descriptors)
+e2e: typed_property_descriptors … OK (typed Object.getOwnPropertyDescriptors)
+e2e: typed_reflect_get … OK (typed Reflect.get field reads)
+e2e: typed_reflect_has … OK (typed Reflect.has field checks)
+e2e: typed_reflect_own_keys … OK (typed Reflect.ownKeys)
+e2e: typed_reflect_set … OK (typed Reflect.set field writes)
 e2e: typeof        … OK      (typed typeof results)
+e2e: typeof_boolean_union … OK (typeof narrowing over dynamic string/number/boolean unions)
 e2e: typeof_guards … OK      (typeof checks over nullable strings)
+e2e: url_object_methods … OK (URL toString/toJSON/valueOf)
 e2e: url_parse     … OK      (URL parsing fields)
 e2e: weak_collections … OK  (typed WeakMap/WeakSet)
 e2e: weak_ref      … OK      (typed WeakRef deref)
 e2e: wordcount     … OK      (real-world demo: fs+regex+Map+sort+captures)
 e2e: line_directives … OK   (generated C carries TS #line markers)
 
-146 passed, 0 failed
+251 passed, 0 failed
 ```
 
 Drop `TSC2C_NO_GC=1` after `sudo apt-get install libgc-dev`; OpenSSL, ICU, GMP, and PCRE2 are still required for crypto, Unicode normalization, BigInt, and regex.

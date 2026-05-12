@@ -1,0 +1,5 @@
+capture: 1843:Ada
+match: Ada [1843]
+dollar: $ 1843
+prefix-suffix: Ada Ada |
+missing: $2-Ada 1843

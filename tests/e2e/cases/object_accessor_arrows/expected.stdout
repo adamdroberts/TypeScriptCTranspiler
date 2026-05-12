@@ -1,0 +1,5 @@
+initial: 3
+set: true
+after: 13
+current: 12
+keys: score

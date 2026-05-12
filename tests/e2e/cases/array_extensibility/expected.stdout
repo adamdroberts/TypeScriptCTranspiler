@@ -1,0 +1,30 @@
+before: true false false
+define existing: true a|B
+prevent identity: true
+after: false false
+set existing: true a|BB
+set new: false 2 a|BB
+prevent push: 2 a|BB
+define new: false
+object define: true 3 7
+define props: true 3 11|2|33
+define props length: 2 11|2
+define props strings: 2 x|y
+delete typed: true 2 keep|drop
+seal identity: true
+sealed: false true false
+sealed desc: true false
+sealed set: true 10
+sealed new: false 2
+sealed delete: false 10
+sealed push: 2 10|2
+sealed fill: 5|5
+sealed define props: 2 6|5
+freeze identity: true
+frozen: false true true
+frozen desc: false false
+frozen set: false 3
+frozen delete: false 3
+frozen push: 2 3|4
+frozen fill: 3|4
+frozen reverse: 3|4

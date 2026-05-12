@@ -4,3 +4,7 @@ wrapped: 7,8
 describe: base:5
 static: z
 child: child:9
+computed generic: 12
+computed static generic: ok
+spread method: 11
+spread static: right

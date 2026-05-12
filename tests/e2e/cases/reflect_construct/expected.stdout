@@ -1,0 +1,7 @@
+point: p:7 true
+empty: 42 true
+point args: q:11 true
+sum args: 7 true
+point spread: r:13 true
+point dynamic spread: s:17 true
+sum spread: 13 true

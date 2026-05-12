@@ -1,0 +1,15 @@
+and: 1
+or: 7
+xor: 4
+shl: 20
+shr: -4
+ushr: 2147483647
+nan: 0
+and eq: 2
+or eq: 10
+xor eq: 8
+shl eq: 16
+shr eq: 4
+ushr eq: 2
+props: 8 1073741820
+array: 6 -4

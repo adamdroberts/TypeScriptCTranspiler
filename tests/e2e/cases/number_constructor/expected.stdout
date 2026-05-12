@@ -1,0 +1,6 @@
+none: 0
+number: 4.5
+bools: 1 0
+strings: 42.5 0 NaN
+nullish: 0 NaN
+dynamic: 5.25

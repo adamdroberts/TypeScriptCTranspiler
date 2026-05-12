@@ -1,0 +1,7 @@
+initial: true 1 x
+set-only: true 1 x
+setter: 23
+get-only: true 2
+setter preserved: 24
+clear-get: true undefined
+setter after clear: 25

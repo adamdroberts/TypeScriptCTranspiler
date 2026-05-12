@@ -1,0 +1,4 @@
+initial: true 1
+same: true 1
+bad getter: false 1
+bad enum: false 1

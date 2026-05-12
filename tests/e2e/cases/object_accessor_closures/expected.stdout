@@ -1,0 +1,5 @@
+initial: 4
+set: true
+after: 21
+keys: score
+inline: 1 2 2

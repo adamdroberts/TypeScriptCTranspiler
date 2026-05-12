@@ -1,0 +1,4 @@
+sizes: 2 3
+original: 1 false
+copy: 1 2 3
+numeric: 2 nan zero

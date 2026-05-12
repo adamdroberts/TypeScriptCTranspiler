@@ -4,7 +4,9 @@
 // --- iterator protocol (minimal, for for-of on arrays) ---
 interface Symbol {
     readonly description: string | undefined;
+    toLocaleString(): string;
     toString(): string;
+    valueOf(): symbol;
 }
 interface SymbolConstructor {
     (description?: string): symbol;
@@ -16,16 +18,22 @@ interface SymbolConstructor {
 declare var Symbol: SymbolConstructor;
 
 interface IteratorYieldResult<T> { done?: false; value: T; }
-interface IteratorReturnResult<T> { done: true; value: T; }
-type IteratorResult<T> = IteratorYieldResult<T> | IteratorReturnResult<T>;
-interface Iterator<T> {
-    next(): IteratorResult<T>;
+interface IteratorReturnResult<TReturn> { done: true; value: TReturn; }
+type IteratorResult<T, TReturn = any> = IteratorYieldResult<T> | IteratorReturnResult<TReturn>;
+interface Iterator<T, TReturn = any, TNext = undefined> {
+    next(...args: [] | [TNext]): IteratorResult<T, TReturn>;
 }
 interface Iterable<T> {
     [Symbol.iterator](): Iterator<T>;
 }
 interface IterableIterator<T> extends Iterator<T> {
     [Symbol.iterator](): IterableIterator<T>;
+}
+interface Generator<T = unknown, TReturn = any, TNext = unknown> extends Iterator<T, TReturn, TNext> {
+    next(...args: [] | [TNext]): IteratorResult<T, TReturn>;
+    return(value: TReturn): IteratorResult<T, TReturn>;
+    throw(e: any): IteratorResult<T, TReturn>;
+    [Symbol.iterator](): Generator<T, TReturn, TNext>;
 }
 
 interface TemplateStringsArray extends ReadonlyArray<string> {
@@ -35,42 +43,72 @@ interface TemplateStringsArray extends ReadonlyArray<string> {
 interface String extends Iterable<string> {
     readonly length: number;
     charAt(index: number): string;
+    charCodeAt(index: number): number;
     at(index: number): string | undefined;
     codePointAt(index: number): number | undefined;
-    indexOf(search: string): number;
-    lastIndexOf(search: string): number;
+    indexOf(search: string, position?: number): number;
+    lastIndexOf(search: string, position?: number): number;
     localeCompare(compareString: string): number;
-    includes(search: string): boolean;
-    startsWith(prefix: string): boolean;
-    endsWith(suffix: string): boolean;
+    includes(search: string, position?: number): boolean;
+    startsWith(prefix: string, position?: number): boolean;
+    endsWith(suffix: string, endPosition?: number): boolean;
     slice(start?: number, end?: number): string;
     substring(start: number, end?: number): string;
+    substr(start: number, length?: number): string;
+    toLocaleString(): string;
+    toString(): string;
     toUpperCase(): string;
     toLowerCase(): string;
+    valueOf(): string;
     normalize(form?: "NFC" | "NFD" | "NFKC" | "NFKD"): string;
     trim(): string;
+    trimLeft(): string;
+    trimRight(): string;
     trimStart(): string;
     trimEnd(): string;
+    isWellFormed(): boolean;
+    toWellFormed(): string;
     repeat(count: number): string;
     padStart(targetLength: number, padString?: string): string;
     padEnd(targetLength: number, padString?: string): string;
     replace(search: string | RegExp, replacement: string): string;
     replaceAll(search: string | RegExp, replacement: string): string;
-    match(re: RegExp): string[] | null;
-    matchAll(re: RegExp): string[][];
-    split(separator: string | RegExp): string[];
+    match(re: RegExp | string): string[] | null;
+    matchAll(re: RegExp | string): string[][];
+    search(re: RegExp | string): number;
+    split(separator: string | RegExp, limit?: number): string[];
     concat(...strings: string[]): string;
+    [n: number]: string;
     [Symbol.iterator](): IterableIterator<string>;
 }
 interface StringConstructor {
+    (value?: any): string;
     fromCharCode(...codes: number[]): string;
+    fromCodePoint(...codes: number[]): string;
 }
 declare var String: StringConstructor;
 
-interface Boolean {}
-interface Number {}
-interface BigInt {
+interface Boolean {
+    toLocaleString(): string;
+    toString(): string;
+    valueOf(): boolean;
+}
+interface BooleanConstructor {
+    (value?: any): boolean;
+}
+declare var Boolean: BooleanConstructor;
+interface Number {
+    toLocaleString(): string;
     toString(radix?: number): string;
+    toFixed(fractionDigits?: number): string;
+    toExponential(fractionDigits?: number): string;
+    toPrecision(precision?: number): string;
+    valueOf(): number;
+}
+interface BigInt {
+    toLocaleString(): string;
+    toString(radix?: number): string;
+    valueOf(): bigint;
 }
 interface BigIntConstructor {
     (value: string | number | boolean): bigint;
@@ -84,9 +122,9 @@ interface Array<T> extends Iterable<T> {
     pop(): T | undefined;
     shift(): T | undefined;
     unshift(...items: T[]): number;
-    indexOf(searchElement: T): number;
-    lastIndexOf(searchElement: T): number;
-    includes(searchElement: T): boolean;
+    indexOf(searchElement: T, fromIndex?: number): number;
+    lastIndexOf(searchElement: T, fromIndex?: number): number;
+    includes(searchElement: T, fromIndex?: number): boolean;
     at(index: number): T | undefined;
     reverse(): T[];
     toReversed(): T[];
@@ -100,47 +138,65 @@ interface Array<T> extends Iterable<T> {
     flat<U>(this: U[][], depth?: 1): U[];
     flat<U>(this: U[][][], depth: 2): U[];
     slice(start?: number, end?: number): T[];
-    concat(...arrays: T[][]): T[];
+    concat(...items: (T | T[])[]): T[];
     join(sep?: string): string;
-    forEach(cb: (element: T, index: number) => void): void;
-    map<U>(cb: (element: T, index: number) => U): U[];
-    flatMap<U>(cb: (element: T, index: number) => U[]): U[];
-    filter(cb: (element: T, index: number) => boolean): T[];
-    reduce<U>(cb: (acc: U, element: T, index: number) => U, init: U): U;
-    reduceRight<U>(cb: (acc: U, element: T, index: number) => U, init: U): U;
-    find(cb: (element: T, index: number) => boolean): T | undefined;
-    findIndex(cb: (element: T, index: number) => boolean): number;
-    findLast(cb: (element: T, index: number) => boolean): T | undefined;
-    findLastIndex(cb: (element: T, index: number) => boolean): number;
-    some(cb: (element: T, index: number) => boolean): boolean;
-    every(cb: (element: T, index: number) => boolean): boolean;
+    keys(): number[];
+    values(): T[];
+    entries(): [string, T][];
+    toLocaleString(): string;
+    toString(): string;
+    valueOf(): T[];
+    forEach(cb: (element: T, index: number, array: T[]) => void): void;
+    map<U>(cb: (element: T, index: number, array: T[]) => U): U[];
+    flatMap<U>(cb: (element: T, index: number, array: T[]) => U[]): U[];
+    flatMap<U>(cb: (element: T, index: number, array: T[]) => U): U[];
+    filter(cb: (element: T, index: number, array: T[]) => boolean): T[];
+    reduce(cb: (acc: T, element: T, index: number, array: T[]) => T): T;
+    reduce<U>(cb: (acc: U, element: T, index: number, array: T[]) => U, init: U): U;
+    reduceRight(cb: (acc: T, element: T, index: number, array: T[]) => T): T;
+    reduceRight<U>(cb: (acc: U, element: T, index: number, array: T[]) => U, init: U): U;
+    find(cb: (element: T, index: number, array: T[]) => boolean): T | undefined;
+    findIndex(cb: (element: T, index: number, array: T[]) => boolean): number;
+    findLast(cb: (element: T, index: number, array: T[]) => boolean): T | undefined;
+    findLastIndex(cb: (element: T, index: number, array: T[]) => boolean): number;
+    some(cb: (element: T, index: number, array: T[]) => boolean): boolean;
+    every(cb: (element: T, index: number, array: T[]) => boolean): boolean;
     [n: number]: T;
     [Symbol.iterator](): IterableIterator<T>;
 }
 
 interface ReadonlyArray<T> extends Iterable<T> {
     readonly length: number;
-    indexOf(searchElement: T): number;
-    lastIndexOf(searchElement: T): number;
-    includes(searchElement: T): boolean;
+    indexOf(searchElement: T, fromIndex?: number): number;
+    lastIndexOf(searchElement: T, fromIndex?: number): number;
+    includes(searchElement: T, fromIndex?: number): boolean;
     at(index: number): T | undefined;
     toReversed(): T[];
     toSorted(cmp?: (a: T, b: T) => number): T[];
     with(index: number, value: T): T[];
     toSpliced(start?: number, deleteCount?: number, ...items: T[]): T[];
     slice(start?: number, end?: number): T[];
+    concat(...items: (T | T[])[]): T[];
     join(sep?: string): string;
-    forEach(cb: (element: T, index: number) => void): void;
-    map<U>(cb: (element: T, index: number) => U): U[];
-    filter(cb: (element: T, index: number) => boolean): T[];
-    reduce<U>(cb: (acc: U, element: T, index: number) => U, init: U): U;
-    reduceRight<U>(cb: (acc: U, element: T, index: number) => U, init: U): U;
-    find(cb: (element: T, index: number) => boolean): T | undefined;
-    findIndex(cb: (element: T, index: number) => boolean): number;
-    findLast(cb: (element: T, index: number) => boolean): T | undefined;
-    findLastIndex(cb: (element: T, index: number) => boolean): number;
-    some(cb: (element: T, index: number) => boolean): boolean;
-    every(cb: (element: T, index: number) => boolean): boolean;
+    keys(): number[];
+    values(): T[];
+    entries(): [string, T][];
+    toLocaleString(): string;
+    toString(): string;
+    valueOf(): T[];
+    forEach(cb: (element: T, index: number, array: ReadonlyArray<T>) => void): void;
+    map<U>(cb: (element: T, index: number, array: ReadonlyArray<T>) => U): U[];
+    filter(cb: (element: T, index: number, array: ReadonlyArray<T>) => boolean): T[];
+    reduce(cb: (acc: T, element: T, index: number, array: ReadonlyArray<T>) => T): T;
+    reduce<U>(cb: (acc: U, element: T, index: number, array: ReadonlyArray<T>) => U, init: U): U;
+    reduceRight(cb: (acc: T, element: T, index: number, array: ReadonlyArray<T>) => T): T;
+    reduceRight<U>(cb: (acc: U, element: T, index: number, array: ReadonlyArray<T>) => U, init: U): U;
+    find(cb: (element: T, index: number, array: ReadonlyArray<T>) => boolean): T | undefined;
+    findIndex(cb: (element: T, index: number, array: ReadonlyArray<T>) => boolean): number;
+    findLast(cb: (element: T, index: number, array: ReadonlyArray<T>) => boolean): T | undefined;
+    findLastIndex(cb: (element: T, index: number, array: ReadonlyArray<T>) => boolean): number;
+    some(cb: (element: T, index: number, array: ReadonlyArray<T>) => boolean): boolean;
+    every(cb: (element: T, index: number, array: ReadonlyArray<T>) => boolean): boolean;
     [n: number]: T;
     [Symbol.iterator](): IterableIterator<T>;
 }
@@ -159,11 +215,21 @@ interface ObjectConstructor {
     assign<T, U, V>(target: T, source1: U, source2: V): T & U & V;
     assign(target: any, ...sources: any[]): any;
     keys(o: unknown): string[];
+    values(o: string): string[];
+    values<T>(o: T[]): T[];
+    values<T>(o: ReadonlyArray<T>): T[];
     values<T extends object>(o: T): T[keyof T][];
+    values(o: unknown): any[];
+    entries(o: string): ObjectEntry<string>[];
+    entries<T>(o: T[]): ObjectEntry<T>[];
+    entries<T>(o: ReadonlyArray<T>): ObjectEntry<T>[];
     entries<T extends object>(o: T): ObjectEntry<T[keyof T]>[];
+    entries(o: unknown): ObjectEntry<any>[];
     fromEntries<T>(entries: ObjectEntry<any>[]): T;
-    create(o: any): any;
+    fromEntries<T>(entries: Map<string, any>): T;
+    create(o: any, properties?: any): any;
     defineProperty<T>(o: T, p: string, attributes: any): T;
+    defineProperties<T>(o: T, properties: any): T;
     getPrototypeOf(o: any): any;
     getOwnPropertyDescriptor(o: any, p: string): any;
     getOwnPropertyDescriptors(o: any): any;
@@ -177,27 +243,37 @@ interface ObjectConstructor {
     preventExtensions<T>(o: T): T;
     seal<T>(o: T): T;
     setPrototypeOf<T>(o: T, proto: any): T;
+    groupBy<T>(items: T[], keyFn: (item: T, index: number) => string): unknown;
 }
 declare var Object: ObjectConstructor;
 
 interface ReflectConstructor {
+    apply(target: Function, thisArgument: any, argumentsList: any[]): any;
+    construct(target: any, argumentsList: any[]): any;
     defineProperty(target: any, propertyKey: string, attributes: any): boolean;
     deleteProperty(target: any, propertyKey: string): boolean;
-    get(target: any, propertyKey: string): any;
+    get(target: any, propertyKey: string, receiver?: any): any;
     getPrototypeOf(target: any): any;
     getOwnPropertyDescriptor(target: any, propertyKey: string): any;
     has(target: any, propertyKey: string): boolean;
     isExtensible(target: any): boolean;
     ownKeys(target: any): string[];
     preventExtensions(target: any): boolean;
-    set(target: any, propertyKey: string, value: any): boolean;
+    set(target: any, propertyKey: string, value: any, receiver?: any): boolean;
     setPrototypeOf(target: any, proto: any): boolean;
 }
 declare var Reflect: ReflectConstructor;
 
 interface ArrayConstructor {
-    isArray(arg: unknown): boolean;
+    isArray(arg: unknown): arg is any[];
+    from(s: string): string[];
     from<T>(arr: T[]): T[];
+    from<T>(set: Set<T>): T[];
+    from<T>(map: Map<string, T>): ObjectEntry<T>[];
+    from<U>(s: string, mapfn: (v: string, k: number) => U): U[];
+    from<T, U>(arr: T[], mapfn: (v: T, k: number) => U): U[];
+    from<T, U>(set: Set<T>, mapfn: (v: T, k: number) => U): U[];
+    from<T, U>(map: Map<string, T>, mapfn: (v: ObjectEntry<T>, k: number) => U): U[];
     of<T>(...items: T[]): T[];
 }
 declare var Array: ArrayConstructor;
@@ -211,10 +287,18 @@ interface Map<K, V> extends Iterable<[K, V]> {
     clear(): void;
     keys(): K[];
     values(): V[];
+    entries(): ObjectEntry<V>[];
+    forEach(cb: (value: V, key: K, map: Map<K, V>) => void): void;
+    toLocaleString(): string;
+    toString(): string;
+    valueOf(): Map<K, V>;
     [Symbol.iterator](): IterableIterator<[K, V]>;
 }
 interface MapConstructor {
+    new <V>(entries: ObjectEntry<V>[]): Map<string, V>;
+    new <K, V>(entries: Map<K, V>): Map<K, V>;
     new <K, V>(): Map<K, V>;
+    groupBy<T, K>(items: T[], callbackfn: (value: T, index: number) => K): Map<K, T[]>;
 }
 declare var Map: MapConstructor;
 
@@ -224,10 +308,24 @@ interface Set<T> extends Iterable<T> {
     has(value: T): boolean;
     delete(value: T): boolean;
     clear(): void;
+    keys(): T[];
     values(): T[];
+    forEach(cb: (value: T, value2: T, set: Set<T>) => void): void;
+    union(other: Set<T>): Set<T>;
+    intersection(other: Set<T>): Set<T>;
+    difference(other: Set<T>): Set<T>;
+    symmetricDifference(other: Set<T>): Set<T>;
+    isSubsetOf(other: Set<T>): boolean;
+    isSupersetOf(other: Set<T>): boolean;
+    isDisjointFrom(other: Set<T>): boolean;
+    toLocaleString(): string;
+    toString(): string;
+    valueOf(): Set<T>;
     [Symbol.iterator](): IterableIterator<T>;
 }
 interface SetConstructor {
+    new <T>(values: T[]): Set<T>;
+    new <T>(values: Set<T>): Set<T>;
     new <T>(): Set<T>;
 }
 declare var Set: SetConstructor;
@@ -237,6 +335,9 @@ interface WeakMap<K extends object, V> {
     set(key: K, value: V): this;
     has(key: K): boolean;
     delete(key: K): boolean;
+    toLocaleString(): string;
+    toString(): string;
+    valueOf(): WeakMap<K, V>;
 }
 interface WeakMapConstructor {
     new <K extends object, V>(): WeakMap<K, V>;
@@ -247,6 +348,9 @@ interface WeakSet<T extends object> {
     add(value: T): this;
     has(value: T): boolean;
     delete(value: T): boolean;
+    toLocaleString(): string;
+    toString(): string;
+    valueOf(): WeakSet<T>;
 }
 interface WeakSetConstructor {
     new <T extends object>(): WeakSet<T>;
@@ -255,21 +359,44 @@ declare var WeakSet: WeakSetConstructor;
 
 interface WeakRef<T extends object> {
     deref(): T | undefined;
+    toLocaleString(): string;
+    toString(): string;
+    valueOf(): WeakRef<T>;
 }
 interface WeakRefConstructor {
     new <T extends object>(target: T): WeakRef<T>;
 }
 declare var WeakRef: WeakRefConstructor;
+
+interface FinalizationRegistry<T> {
+    register(target: object, heldValue: T, unregisterToken?: object): void;
+    unregister(unregisterToken: object): boolean;
+    toLocaleString(): string;
+    toString(): string;
+    valueOf(): FinalizationRegistry<T>;
+}
+interface FinalizationRegistryConstructor {
+    new <T>(cleanupCallback: (heldValue: T) => void): FinalizationRegistry<T>;
+}
+declare var FinalizationRegistry: FinalizationRegistryConstructor;
 interface Function {}
 interface CallableFunction extends Function {}
 interface NewableFunction extends Function {}
 interface RegExp {
+    exec(s: string): string[] | null;
     test(s: string): boolean;
+    toLocaleString(): string;
+    toString(): string;
+    valueOf(): RegExp;
     readonly source: string;
     readonly flags: string;
     readonly global: boolean;
+    readonly hasIndices: boolean;
     readonly ignoreCase: boolean;
     readonly multiline: boolean;
+    readonly dotAll: boolean;
+    readonly sticky: boolean;
+    readonly unicode: boolean;
 }
 
 interface Error {
@@ -300,10 +427,10 @@ interface Process {
 }
 declare const process: Process;
 
-declare function parseInt(value: string, radix?: number): number;
-declare function parseFloat(value: string): number;
-declare function isNaN(value: number): boolean;
-declare function isFinite(value: number): boolean;
+declare function parseInt(value: any, radix?: number): number;
+declare function parseFloat(value: any): number;
+declare function isNaN(value: any): boolean;
+declare function isFinite(value: any): boolean;
 declare const NaN: number;
 declare const Infinity: number;
 declare const undefined: undefined;
@@ -316,22 +443,40 @@ interface Math {
     readonly LOG2E: number;
     readonly LOG10E: number;
     readonly SQRT2: number;
+    readonly SQRT1_2: number;
     floor(x: number): number;
     ceil(x: number): number;
     round(x: number): number;
     abs(x: number): number;
     trunc(x: number): number;
     sign(x: number): number;
+    imul(x: number, y: number): number;
+    clz32(x: number): number;
+    fround(x: number): number;
+    cbrt(x: number): number;
     sqrt(x: number): number;
     pow(x: number, y: number): number;
+    hypot(...values: number[]): number;
     min(...values: number[]): number;
     max(...values: number[]): number;
     log(x: number): number;
+    log1p(x: number): number;
+    log2(x: number): number;
+    log10(x: number): number;
     exp(x: number): number;
+    expm1(x: number): number;
     sin(x: number): number;
+    asin(x: number): number;
     cos(x: number): number;
+    acos(x: number): number;
     tan(x: number): number;
+    sinh(x: number): number;
+    cosh(x: number): number;
+    tanh(x: number): number;
     atan(x: number): number;
+    asinh(x: number): number;
+    acosh(x: number): number;
+    atanh(x: number): number;
     atan2(y: number, x: number): number;
     random(): number;
 }
@@ -359,11 +504,21 @@ interface DateConstructor {
 declare var Date: DateConstructor;
 
 interface NumberConstructor {
-    isInteger(value: number): boolean;
-    isFinite(value: number): boolean;
-    isNaN(value: number): boolean;
-    parseFloat(value: string): number;
-    parseInt(value: string, radix?: number): number;
+    (value?: any): number;
+    readonly EPSILON: number;
+    readonly MAX_SAFE_INTEGER: number;
+    readonly MAX_VALUE: number;
+    readonly MIN_SAFE_INTEGER: number;
+    readonly MIN_VALUE: number;
+    readonly NaN: number;
+    readonly NEGATIVE_INFINITY: number;
+    readonly POSITIVE_INFINITY: number;
+    isInteger(value: any): boolean;
+    isFinite(value: any): boolean;
+    isNaN(value: any): boolean;
+    isSafeInteger(value: any): boolean;
+    parseFloat(value: any): number;
+    parseInt(value: any, radix?: number): number;
 }
 declare var Number: NumberConstructor;
 
@@ -399,7 +554,9 @@ declare const crypto: Crypto;
 type BufferEncoding = "utf8" | "hex";
 interface Buffer {
     readonly length: number;
+    toLocaleString(): string;
     toString(encoding?: BufferEncoding): string;
+    valueOf(): Buffer;
     slice(start?: number, end?: number): Buffer;
     subarray(start?: number, end?: number): Buffer;
     equals(other: Buffer): boolean;
@@ -424,6 +581,10 @@ interface URL {
     readonly search: string;
     readonly hash: string;
     readonly origin: string;
+    toJSON(): string;
+    toLocaleString(): string;
+    toString(): string;
+    valueOf(): URL;
 }
 interface URLConstructor {
     new (input: string): URL;

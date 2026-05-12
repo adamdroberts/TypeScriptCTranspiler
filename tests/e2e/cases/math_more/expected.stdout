@@ -1,0 +1,10 @@
+cbrt 3
+hypot 5
+hypot variadic 0 13
+log2 3
+log10 3
+log1p 1
+expm1 1.718
+inverse trig 0 0 1.571
+hyperbolic 0 1 0
+inverse hyperbolic 0 0 0

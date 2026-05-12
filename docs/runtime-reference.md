@@ -33,8 +33,13 @@ typedef struct tsc_str {
 | `tsc_str_from_lit` | `(const char*, size_t) -> tsc_str_t*` | Wraps a string literal with no copy. |
 | `tsc_str_from_cstr` | `(const char*) -> tsc_str_t*` | Copies a null-terminated C string. |
 | `tsc_str_from_num` | `(double) -> tsc_str_t*` | JS-compatible shortest round-trip number formatting. |
+| `tsc_str_from_num_radix` | `(double, double) -> tsc_str_t*` | `Number.prototype.toString(radix)` formatting with 2..36 radix validation. |
+| `tsc_str_from_num_fixed` | `(double, double) -> tsc_str_t*` | `Number.prototype.toFixed(fractionDigits)` fixed-point formatting with 0..100 digit validation. |
+| `tsc_str_from_num_exponential` | `(double, double, bool) -> tsc_str_t*` | `Number.prototype.toExponential(fractionDigits?)` scientific formatting with JS-style exponent normalization. |
+| `tsc_str_from_num_precision` | `(double, double, bool) -> tsc_str_t*` | `Number.prototype.toPrecision(precision?)` significant-digit formatting with fixed/exponential selection. |
 | `tsc_str_from_bool` | `(bool) -> tsc_str_t*` | `"true"` / `"false"`. |
 | `tsc_str_from_char_code_n` | `(size_t n, ...) -> tsc_str_t*` | `String.fromCharCode(...)`, encoding UTF-16 code units as UTF-8. |
+| `tsc_str_from_code_point_n` | `(size_t n, ...) -> tsc_str_t*` | `String.fromCodePoint(...)`, validating Unicode scalar values and encoding UTF-8. |
 
 ### Equality and comparison
 
@@ -51,13 +56,16 @@ typedef struct tsc_str {
 | `tsc_str_length` | `double` | `.length` |
 | `tsc_str_char_at(s, i)` | `tsc_str_t*` | `.charAt(i)` |
 | `tsc_str_at(s, i)` | `tsc_str_t*` | `.at(i)`, negative indices OK |
+| `tsc_str_char_code_at(s, i)` | `double` | `.charCodeAt(i)`, using JS UTF-16 indices |
 | `tsc_str_code_point_at(s, i)` | `double` | `.codePointAt(i)`, using JS UTF-16 indices |
-| `tsc_str_index_of(h, n)` | `double` | `.indexOf(n)` (-1 if missing) |
-| `tsc_str_includes(h, n)` | `bool` | `.includes(n)` |
-| `tsc_str_starts_with(s, p)` | `bool` | `.startsWith(p)` |
-| `tsc_str_ends_with(s, p)` | `bool` | `.endsWith(p)` |
+| `tsc_str_index_of(h, n, position)` | `double` | `.indexOf(n, position?)` (-1 if missing) |
+| `tsc_str_last_index_of(h, n, position)` | `double` | `.lastIndexOf(n, position?)` |
+| `tsc_str_includes(h, n, position)` | `bool` | `.includes(n, position?)` |
+| `tsc_str_starts_with(s, p, position)` | `bool` | `.startsWith(p, position?)` |
+| `tsc_str_ends_with(s, p, end_position)` | `bool` | `.endsWith(p, endPosition?)` |
 | `tsc_str_slice(s, start, end)` | `tsc_str_t*` | `.slice(start, end)`, negative indices OK |
 | `tsc_str_substring(s, start, end)` | `tsc_str_t*` | `.substring(start, end)`, clamp/swap semantics |
+| `tsc_str_substr(s, start, length)` | `tsc_str_t*` | `.substr(start, length)`, negative-start and length clamping semantics |
 | `tsc_str_to_upper` | `tsc_str_t*` | `.toUpperCase()` (ASCII only) |
 | `tsc_str_to_lower` | `tsc_str_t*` | `.toLowerCase()` (ASCII only) |
 | `tsc_str_normalize(s, form)` | `tsc_str_t*` | `.normalize(form)`, ICU-backed NFC/NFD/NFKC/NFKD |
@@ -67,10 +75,12 @@ typedef struct tsc_str {
 | `tsc_str_repeat(s, n)` | `tsc_str_t*` | `.repeat(n)` |
 | `tsc_str_pad_start(s, len, pad)` | `tsc_str_t*` | `.padStart(len, pad)` |
 | `tsc_str_pad_end(s, len, pad)` | `tsc_str_t*` | `.padEnd(len, pad)` |
-| `tsc_str_replace(s, needle, repl)` | `tsc_str_t*` | `.replace("a", "b")` (first match) |
-| `tsc_str_replace_all(s, needle, repl)` | `tsc_str_t*` | `.replaceAll("a", "b")` (all matches) |
+| `tsc_str_replace(s, needle, repl)` | `tsc_str_t*` | `.replace("a", "b")` (first match), with JS replacement-string tokens |
+| `tsc_str_replace_all(s, needle, repl)` | `tsc_str_t*` | `.replaceAll("a", "b")` (all matches), with JS replacement-string tokens |
 | `tsc_str_concat(a, b)` | `tsc_str_t*` | `a + b` and `.concat(...)` |
 | `tsc_str_split(s, sep)` | `tsc_array_t*` | `.split("a")` → array of strings |
+| `tsc_str_split_limit(s, sep, limit)` | `tsc_array_t*` | Bounded split helper using an already-normalized uint32 limit |
+| `tsc_str_split_limit_num(s, sep, limit)` | `tsc_array_t*` | `.split("a", limit)` with JS-style `ToUint32` limit coercion |
 | `tsc_str_chars(s)` | `tsc_array_t*` | string `for...of` values, one UTF-8 code point per string |
 
 ## Numbers
@@ -79,8 +89,13 @@ typedef struct tsc_str {
 |--------|-----------|---------|
 | `tsc_num_mod` | `(double, double) -> double` | `fmod` — JS-style modulo for the `%` operator. |
 | `tsc_parse_float` | `(const tsc_str_t*) -> double` | Equivalent of `parseFloat`. Returns NaN on failure. |
-| `tsc_parse_int` | `(const tsc_str_t*, double radix) -> double` | Equivalent of `parseInt`. |
+| `tsc_parse_int` | `(const tsc_str_t*, double radix) -> double` | Equivalent of `parseInt`, including omitted/zero radix inference and invalid-radix `NaN`. |
 | `tsc_math_random` | `() -> double` | `Math.random()`, range [0, 1). Uses `rand()`. |
+| `tsc_math_round` | `(double) -> double` | `Math.round()`, preserving JavaScript negative zero. |
+| `tsc_math_sign` | `(double) -> double` | `Math.sign()`, preserving signed zero and `NaN`. |
+| `tsc_math_imul` | `(double, double) -> double` | `Math.imul`, using JS ToInt32 coercion and signed 32-bit result wrapping. |
+| `tsc_math_clz32` | `(double) -> double` | `Math.clz32`, using JS ToUint32 coercion. |
+| `tsc_math_fround` | `(double) -> double` | `Math.fround`, rounded through C `float` and returned as `double`. |
 
 ## Arrays (`tsc_array_t`)
 
@@ -89,6 +104,7 @@ Type-erased dynamic vector. Element size + kind known only to the emitter — th
 ```c
 typedef struct tsc_array {
     size_t len, cap, es;  // element size in bytes
+    bool extensible, sealed, frozen;  // dynamic Object/Reflect state
     void* data;
 } tsc_array_t;
 ```
@@ -112,6 +128,8 @@ typedef struct tsc_array {
 | `tsc_array_append(dst, src)` | `tsc_array_t*` | Append `src`'s elements to `dst`. |
 | `tsc_array_flat_once(outer, elem_size)` | `tsc_array_t*` | Flatten one homogeneous nested-array level. |
 | `tsc_array_length(arr)` | `double` | For `.length` property. |
+| `tsc_array_has_own_key(arr, key)` | `bool` | Own-property test for typed array indexes and `length`. |
+| `tsc_array_property_is_enumerable_key(arr, key)` | `bool` | Enumerable own-property test for typed array indexes. `length` is non-enumerable. |
 | `TSC_ARR(T, arr, i)` | lvalue | Macro for typed element access — `((T*)arr->data)[(size_t)i]`. |
 | `tsc_array_oob(arr, i)` | `void` | Placeholder bounds-check hook (silent today, planned to throw `RangeError`). |
 
@@ -121,47 +139,58 @@ High-order methods like `.map`/`.filter`/`.reduce` are **not** runtime functions
 
 ## Dynamic Values (`tsc_value_t`)
 
-NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JSON results, and heterogeneous dynamic arrays/objects.
+NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JSON results, heterogeneous dynamic arrays/objects, and boxed accessor function identities returned from descriptor reads.
 
 | Symbol | Signature | Purpose |
 |--------|-----------|---------|
 | `tsc_value_num/bool/string/array/object(...)` | `tsc_value_t` | Box specialized values into the dynamic representation |
 | `tsc_value_null()` / `tsc_value_undefined()` | `tsc_value_t` | Dynamic nullish sentinels |
 | `tsc_value_as_num/bool/string/array(v)` | varies | Unbox dynamic values after TypeScript narrowing, typed assignment/call coercion, or runtime coercion |
-| `tsc_value_to_string(v)` | `tsc_str_t*` | JS-like string conversion for console/template coercion |
+| `tsc_value_to_string(v)` | `tsc_str_t*` | JS-like string conversion for console/template coercion; dynamic arrays use comma-join conversion |
+| `tsc_value_method_to_string(v, radix)` | `tsc_str_t*` | Dynamic `.toString(...)`; number receivers honor `radix`, while other values use ordinary dynamic string conversion |
+| `tsc_value_method_to_fixed(v, digits)` | `tsc_str_t*` | Dynamic number `.toFixed(...)` formatting |
+| `tsc_value_method_to_exponential(v, digits)` | `tsc_str_t*` | Dynamic number `.toExponential(...)` formatting |
+| `tsc_value_method_to_precision(v, precision)` | `tsc_str_t*` | Dynamic number `.toPrecision(...)` formatting |
 | `tsc_value_typeof(v)` | `tsc_str_t*` | Runtime `typeof` result for dynamic values |
 | `tsc_value_is_truthy(v)` | `bool` | JS truthiness for dynamic values |
 | `tsc_value_is_nullish(v)` | `bool` | Dynamic `??` null/undefined test |
 | `tsc_value_is_array(v)` | `bool` | Runtime check used by dynamic `Array.isArray` |
 | `tsc_value_add/sub/mul/div/mod/pow(a, b)` | `tsc_value_t` | Dynamic arithmetic and `+` string concatenation |
-| `tsc_value_eq(a, b)` | `bool` | Dynamic equality for numbers, booleans, strings, nullish sentinels, and object identity |
+| `tsc_value_pos/neg/bit_not(v)` | `tsc_value_t` | Dynamic unary `+`, `-`, and `~` using JS-style numeric coercion |
+| `tsc_value_bit_and/bit_or/bit_xor/shl/shr/ushr(a, b)` | `tsc_value_t` | Dynamic bitwise operators with JS-style numeric coercion, int32/uint32 conversion, and masked shift counts |
+| `tsc_value_eq(a, b)` | `bool` | Dynamic equality for numbers, booleans, strings, nullish sentinels, object identity, and boxed function identity |
 | `tsc_value_object_is(a, b)` | `bool` | SameValue comparison used by `Object.is`, including `NaN` and signed-zero handling |
 | `tsc_value_cmp(a, b)` | `int` | Dynamic relational comparison; returns `2` for unordered/NaN comparisons |
-| `tsc_value_method_*(recv, ...)` | `tsc_value_t` | Runtime dispatch for common dynamic string/array methods such as `includes`, `indexOf`, `lastIndexOf`, `localeCompare`, `normalize`, `padStart`, `padEnd`, `repeat`, `replace`, `replaceAll`, `slice`, `split`, `substring`, `trimStart`, `trimEnd`, `join`, `push`, `pop`, `shift`, `unshift`, `at`, `concat`, `copyWithin`, `fill`, `flat`, `sort`, `splice`, `toReversed`, `toSorted`, `toSpliced`, `with`, and casing/trim helpers |
-| `tsc_value_json_stringify(v)` | `tsc_str_t*` | Recursive dynamic JSON stringify |
-| `tsc_value_get_prop(v, key)` | `tsc_value_t` | Dynamic object property read through the prototype chain, returning `undefined` when absent |
-| `tsc_value_get_index(v, index)` | `tsc_value_t` | Dynamic array index read, returning `undefined` when absent |
+| `tsc_value_method_*(recv, ...)` | `tsc_value_t` | Runtime dispatch for common dynamic string/array methods such as `includes`, `indexOf`, `lastIndexOf`, `localeCompare`, `match`, `matchAll`, `normalize`, `padStart`, `padEnd`, `repeat`, `replace`, `replaceAll`, `slice`, `split`, `split(RegExp)`, `substr`, `substring`, `trimStart`, `trimEnd`, `join`, `push`, `pop`, `shift`, `unshift`, `at`, `concat`, `copyWithin`, `fill`, `flat`, `keys`, `values`, `sort`, `splice`, `toReversed`, `toSorted`, `toSpliced`, `with`, and casing/trim helpers |
+| `tsc_value_json_stringify(v)` | `tsc_str_t*` | Recursive dynamic JSON stringify; object properties whose values are `undefined` or boxed function identities are omitted, while array slots stringify as `null` |
+| `tsc_value_apply_function(fn, this_arg, args)` | `tsc_value_t` | Dynamic `Reflect.apply` dispatch for boxed accessor function identities returned from descriptor `get`/`set` fields |
+| `tsc_value_get_prop(v, key)` | `tsc_value_t` | Dynamic object property read through the prototype chain plus array/string own-property reads, returning `undefined` when absent |
+| `tsc_value_get_prop_receiver(v, key, receiver)` | `tsc_value_t` | Dynamic `Reflect.get` read with an explicit receiver argument for accessor dispatch |
+| `tsc_value_get_index(v, index)` | `tsc_value_t` | Dynamic array or string index read, returning `undefined` when absent |
 | `tsc_value_set_index(v, index, value)` | `bool` | Dynamic array index write, extending with `undefined` for skipped slots |
-| `tsc_value_set_prop(v, key, value)` | `bool` | Dynamic object data/accessor-property write used by `Reflect.set(...)` and direct dynamic property assignment |
-| `tsc_value_define_property_desc(v, key, value, writable, enumerable, configurable)` | `bool` | Dynamic data descriptor definition used by `Object.defineProperty` / `Reflect.defineProperty` |
-| `tsc_value_define_accessor_desc(v, key, getter, setter, enumerable, configurable)` | `bool` | Dynamic named-function accessor descriptor definition used by `Object.defineProperty` / `Reflect.defineProperty` |
+| `tsc_value_set_prop(v, key, value)` | `bool` | Dynamic object data/accessor-property write used by direct dynamic property assignment and three-argument `Reflect.set(...)` |
+| `tsc_value_set_prop_receiver(v, key, value, receiver)` | `bool` | Dynamic `Reflect.set` write with an explicit receiver; inherited or missing writable data properties are written to the receiver |
+| `tsc_value_define_property_desc(v, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable)` | `bool` | Dynamic data descriptor definition used by `Object.defineProperty`, `Object.defineProperties`, and `Reflect.defineProperty`; presence bits preserve omitted fields on existing descriptors, omitted new-property values are lowered as `undefined`, compatible non-configurable writable data redefinitions are allowed, and dynamic arrays support bounded dense-index and `length` descriptors with extensibility/seal/freeze checks |
+| `tsc_value_define_accessor_desc(v, key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable)` | `bool` | Dynamic accessor descriptor definition used by `Object.defineProperty`, `Object.defineProperties`, and `Reflect.defineProperty`; presence bits preserve omitted hooks/flags on configurable redefinition, explicit undefined hooks become null callbacks, compatible non-configurable accessor redefinitions are allowed, and descriptor reads expose stable boxed `get`/`set` identities or own `undefined` fields for absent hooks |
 | `tsc_value_object_create(proto)` | `tsc_value_t` | Dynamic object allocation with an object/null prototype |
 | `tsc_value_is_prototype_of(proto, object)` | `bool` | Dynamic `Object.prototype.isPrototypeOf` prototype-chain query |
 | `tsc_value_get/set_prototype_of(v, proto)` | `tsc_value_t` / `bool` | Dynamic `Object`/`Reflect` prototype access and mutation |
-| `tsc_value_has_prop(v, key)` | `bool` | Dynamic property existence through the prototype chain |
-| `tsc_value_has_own_prop(v, key)` | `bool` | Own-property existence used by `Object.hasOwn` and `Object.prototype.hasOwnProperty` |
-| `tsc_value_property_is_enumerable(v, key)` | `bool` | Own enumerable-property check used by `Object.prototype.propertyIsEnumerable` |
-| `tsc_value_delete_prop(v, key)` | `bool` | Own-property descriptor-aware deletion |
-| `tsc_value_is_extensible/prevent_extensions(v)` | `bool` | Dynamic object extensibility state used by `Object` / `Reflect` APIs |
-| `tsc_value_seal/freeze/is_sealed/is_frozen(v)` | `bool` | Dynamic seal/freeze state and descriptor flag enforcement |
-| `tsc_value_own_keys(v)` | `tsc_array_t*` | Reflect-style own string keys including non-enumerable properties |
-| `tsc_value_get_own_property_descriptor(v, key)` | `tsc_value_t` | Dynamic data/accessor descriptor object or `undefined` |
-| `tsc_value_get_own_property_descriptors(v)` | `tsc_value_t` | Dynamic object containing descriptor objects for all own dynamic properties |
-| `tsc_value_object_assign(target, source)` | `tsc_value_t` | Dynamic enumerable-property copy used by `Object.assign`, invoking source getters |
+| `tsc_value_has_prop(v, key)` | `bool` | Dynamic property existence through the prototype chain, plus array/string own properties |
+| `tsc_value_has_own_prop(v, key)` | `bool` | Own-property existence used by `Object.hasOwn` and `Object.prototype.hasOwnProperty`, including dynamic array/string indexes and `length` |
+| `tsc_value_property_is_enumerable(v, key)` | `bool` | Own enumerable-property check used by `Object.prototype.propertyIsEnumerable`; dynamic string/array indexes are enumerable and `length` is not |
+| `tsc_value_delete_prop(v, key)` | `bool` | Own-property descriptor-aware deletion; dynamic array/string `length` and string indexes return false |
+| `tsc_value_is_extensible/prevent_extensions(v)` | `bool` | Dynamic object/array extensibility state used by `Object` / `Reflect` APIs |
+| `tsc_value_seal/freeze/is_sealed/is_frozen(v)` | `bool` | Dynamic object/array seal/freeze state and descriptor/write/delete/mutator enforcement |
+| `tsc_value_own_keys(v)` | `tsc_array_t*` | Reflect-style own string keys including non-enumerable properties; dynamic arrays/strings include numeric indexes plus `length` |
+| `tsc_value_get_own_property_descriptor(v, key)` | `tsc_value_t` | Dynamic data/accessor descriptor object or `undefined`; accessor descriptors expose stable boxed `get`/`set` identities or own `undefined` fields for absent hooks, dynamic arrays expose index and `length` data descriptors with seal/freeze-aware flags, and dynamic strings expose read-only index/length descriptors |
+| `tsc_value_get_own_property_descriptors(v)` | `tsc_value_t` | Dynamic object containing descriptor objects for all own dynamic object/array/string properties, including accessor `get`/`set` identities or own `undefined` absent-hook fields and array seal/freeze-aware flags |
+| `tsc_value_object_assign(target, source)` | `tsc_value_t` | Dynamic enumerable-property copy used by `Object.assign`; supports dynamic object/array targets, invokes object source getters, and copies array/string index properties |
 | `tsc_value_length(v)` | `double` | `.length` for dynamic arrays/strings |
-| `tsc_object_new/set/define/define_accessor/get(...)` | varies | Runtime backing store for dynamic objects, data descriptors, and named-function accessor descriptors |
-| `tsc_value_object_keys/values(v)` | `tsc_array_t*` | Enumerable `Object.keys` / `Object.values` for dynamic objects |
-| `tsc_value_object_entries(v)` | `tsc_array_t*` | Enumerable `Object.entries` for dynamic objects, returning dynamic `[key, value]` arrays |
+| `tsc_value_iter_values(v)` | `tsc_array_t*` | Dynamic `for...of` value list for boxed arrays and strings; non-iterable values panic |
+| `tsc_value_method_entries(v)` | `tsc_value_t` | Dynamic `Array.prototype.entries()`, returning dynamic `[key, value]` arrays with string index keys |
+| `tsc_object_new/set/define/define_accessor/get(...)` | varies | Runtime backing store for dynamic objects, data descriptors, and accessor descriptors with optional callback environments |
+| `tsc_value_object_keys/values(v)` | `tsc_array_t*` | Enumerable `Object.keys` / `Object.values` for dynamic objects, arrays, and strings |
+| `tsc_value_object_entries(v)` | `tsc_array_t*` | Enumerable `Object.entries` for dynamic objects/arrays/strings, returning dynamic `[key, value]` arrays |
 | `tsc_value_object_from_entries(entries)` | `tsc_value_t` | Dynamic `Object.fromEntries`, accepting dynamic arrays of dynamic `[key, value]` pairs |
 | `tsc_json_parse(text)` | `tsc_value_t` | Recursive JSON parser for objects, arrays, strings, numbers, booleans, and null |
 
@@ -196,12 +225,22 @@ Heap-allocated unique symbol identities with an optional description and a small
 
 ## WeakRef (`tsc_weakref_t`)
 
-Typed weak-reference wrappers store a target pointer and return it from `.deref()`. `FinalizationRegistry` is not part of this surface yet.
+Typed weak-reference wrappers store a target pointer and return it from `.deref()`.
 
 | Symbol | Signature | Purpose |
 |--------|-----------|---------|
 | `tsc_weakref_new(target)` | `tsc_weakref_t*` | `new WeakRef(target)` |
 | `tsc_weakref_deref(ref)` | `void*` | `.deref()`, cast back to the typed target by the emitter |
+
+## FinalizationRegistry (`tsc_finregistry_t`)
+
+A stub registry that tracks `unregister` tokens but never fires the cleanup callback (no GC-finalizer plumbing). The cleanup callback supplied to `new FinalizationRegistry<T>(cb)` is evaluated for side effects at construction time and discarded.
+
+| Symbol | Signature | Purpose |
+|--------|-----------|---------|
+| `tsc_finregistry_new()` | `tsc_finregistry_t*` | `new FinalizationRegistry(cb)` (the callback is not stored). |
+| `tsc_finregistry_register(r, token)` | `void` | Records a token (`NULL` when `register(target, heldValue)` is called without an explicit token). |
+| `tsc_finregistry_unregister(r, token)` | `bool` | Removes every registration whose token matches and reports whether any were removed. |
 
 ## Maps and Sets (`tsc_map_t`, `tsc_set_t`)
 
@@ -239,6 +278,13 @@ Type-erased linear-scan collections. Key equality is chosen by a `tsc_key_kind_t
 | `tsc_set_clear(s)` | `void` |
 | `tsc_set_size(s)` | `double` |
 | `tsc_set_values(s)` | `tsc_array_t*` |
+| `tsc_set_union(a, b)` | `tsc_set_t*` — new Set with all elements from both inputs (insertion order preserved). |
+| `tsc_set_intersection(a, b)` | `tsc_set_t*` — new Set with elements present in both inputs. |
+| `tsc_set_difference(a, b)` | `tsc_set_t*` — new Set with elements of `a` not in `b`. |
+| `tsc_set_symmetric_difference(a, b)` | `tsc_set_t*` — new Set with elements present in exactly one of `a` or `b`. |
+| `tsc_set_is_subset_of(a, b)` | `bool` — every element of `a` is in `b`. |
+| `tsc_set_is_superset_of(a, b)` | `bool` — every element of `b` is in `a`. |
+| `tsc_set_is_disjoint_from(a, b)` | `bool` — `a` and `b` share no elements. |
 
 Typed `WeakMap<K, V>` and `WeakSet<T>` reuse these map/set tables with pointer-key kinds and expose only the JavaScript weak-collection methods (`get`/`set`/`has`/`delete` or `add`/`has`/`delete`). There is no iteration API for weak collections.
 
@@ -251,22 +297,26 @@ typedef struct tsc_regexp {
     pcre2_code* re;
     tsc_str_t* source;
     tsc_str_t* flags;
-    bool global, ignore_case, multiline, dot_all, unicode;
+    bool global, has_indices, ignore_case, multiline, dot_all, sticky, unicode;
     bool compiled;
     uint32_t capture_count;
 } tsc_regexp_t;
 ```
 
-`tsc_regexp_new` compiles JS regex literals through PCRE2. Supported flags include `g`, `i`, `m`, `s`, and `u`; UTF/UCP mode is enabled so Unicode property escapes such as `\p{L}` and `\p{Script=Greek}` work. PCRE2 also covers lookahead, lookbehind, normal capture groups, and named capture syntax. Named groups are returned by numeric capture position today; a JS-style `.groups` object needs the future dynamic object runtime.
+`tsc_regexp_new` compiles JS regex literals through PCRE2. Supported flag properties include `d`, `g`, `i`, `m`, `s`, `u`, and `y`; matching options currently use `i`, `m`, and `s`, while `d`/`y` are exposed as properties without full indices/sticky execution semantics. UTF/UCP mode is enabled so Unicode property escapes such as `\p{L}` and `\p{Script=Greek}` work. PCRE2 also covers lookahead, lookbehind, normal capture groups, and named capture syntax. Named groups are returned by numeric capture position today; a JS-style `.groups` object needs the future dynamic object runtime.
 
 | Symbol | Signature |
 |--------|-----------|
 | `tsc_regexp_new(pattern, flags)` | `tsc_regexp_t*` |
+| `tsc_regexp_exec(re, s)` | `tsc_array_t*` — full match plus capture groups, or `NULL` if none |
 | `tsc_regexp_test(re, s)` | `bool` |
 | `tsc_str_match_regex(s, re)` | `tsc_array_t*` — array of global match strings, or full match + capture groups for non-global regexes; `NULL` if none |
 | `tsc_str_match_all_regex(s, re)` | `tsc_array_t*` — array of per-match capture arrays |
-| `tsc_str_replace_regex(s, re, repl)` | `tsc_str_t*` — honors the `g` flag |
+| `tsc_str_search_regex(s, re)` | `double` — byte offset of the first match, or `-1` if none |
+| `tsc_str_replace_regex(s, re, repl)` | `tsc_str_t*` — honors the `g` flag and expands JS replacement-string tokens |
 | `tsc_str_split_regex(s, re)` | `tsc_array_t*` |
+| `tsc_str_split_regex_limit(s, re, limit)` | `tsc_array_t*` |
+| `tsc_str_split_regex_limit_num(s, re, limit)` | `tsc_array_t*` |
 
 ## Classes
 

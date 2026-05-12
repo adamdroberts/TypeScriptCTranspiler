@@ -1,0 +1,8 @@
+dyn index: 4
+dyn last: 4
+dyn includes: true
+dyn starts: true
+dyn ends: true
+dyn array index: 2
+dyn array includes: false
+dyn array last: 2

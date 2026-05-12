@@ -1,0 +1,8 @@
+same: true
+keys: a|closed
+values: 1|4
+hidden: false true true
+closed desc: true true
+closed: 4
+closed set: 9
+json: {"a":1,"closed":9}

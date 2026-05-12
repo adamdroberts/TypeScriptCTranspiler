@@ -1,0 +1,6 @@
+string index: red|cyan cyan
+reflect index: true
+expanded: 4 undefined gold red|cyan||gold
+reflect length: true
+truncated: 2 red|cyan
+delete length: false

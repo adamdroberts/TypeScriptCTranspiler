@@ -1,0 +1,11 @@
+len: 3
+a = 1
+b = 2
+c = 3
+size: 3
+a: 1
+b: 2
+c: 3
+doc.a: 1
+doc.b: 2
+doc.c: 3

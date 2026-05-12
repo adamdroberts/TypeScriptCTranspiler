@@ -1,0 +1,5 @@
+object: true false true
+method: true true
+enum: true false false
+reflect: true true false
+in: true true false

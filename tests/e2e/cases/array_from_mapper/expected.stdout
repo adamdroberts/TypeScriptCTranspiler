@@ -1,0 +1,6 @@
+doubled: 2,5,8,11
+block: 1,3,5,7
+labels: n=1|n=2|n=3|n=4
+tagged: first:1;rest:2;rest:3;rest:4
+letters: a0,b1,c2
+sizes: 1,1,1,1,1

@@ -1,0 +1,10 @@
+post inc: 5 6 number
+pre inc: 2 2 number
+bad inc: NaN NaN
+pre dec: 1 1
+post dec: 2 1
+prop post: 1 2 number
+prop pre: 3 3 number
+idx post: 10 9
+idx pre: 8 8 number
+keyed: 2 3 number

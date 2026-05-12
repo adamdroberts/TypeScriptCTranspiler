@@ -1,0 +1,8 @@
+omitted: 1234
+fixed: 1234.00
+exp: 1.2e+3
+small: 0.00012
+rounded: 13
+zero: 0.00
+dynamic: 10
+dynamic omitted: 9.99

@@ -1,0 +1,3 @@
+{
+  "description": "Array.isArray narrows unknown dynamic values to typed array operations"
+}

@@ -1,0 +1,10 @@
+map: 2|4|6|8
+index: 1|3|5|7
+receiver: 5|7|9|11
+closure receiver: 6|8|10|12
+filter: 2|4
+checks: true false
+find: 3 2 4 3
+reduce: 16 4321
+reduce receiver: 32
+total: 10

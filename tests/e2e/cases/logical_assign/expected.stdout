@@ -1,0 +1,9 @@
+and-false: false 0
+and-true: false 1
+or-true: true 1
+or-false: true 2
+nullish-1: fallback
+nullish-2: fallback
+dyn-or: 5
+dyn-and: 2
+dyn-nullish: 7

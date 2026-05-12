@@ -1,0 +1,6 @@
+first: 4 true true true
+length: 2 true false false
+missing: undefined
+reflect: 5 true
+keys: 0|1|length
+all: 4 5 2

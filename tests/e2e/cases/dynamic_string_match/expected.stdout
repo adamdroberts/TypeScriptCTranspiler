@@ -1,0 +1,5 @@
+first: a1 a 1
+global: a1|b22|c333
+none: null
+all len: 3
+all second: b22 b 22

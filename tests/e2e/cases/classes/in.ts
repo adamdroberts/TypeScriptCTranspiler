@@ -17,6 +17,9 @@ class Point {
 
 const a = new Point(0, 0);
 const b = new Point(3, 4);
+const coords = [5, 12];
+const c = new Point(...(coords as [number, number]));
 console.log(a.toLabel(), "to", b.toLabel(), "=", a.distanceTo(b));
 b.x = b.x + 1;
 console.log("after shift:", b.toLabel(), "distance", a.distanceTo(b));
+console.log("spread ctor:", c.toLabel(), "distance", a.distanceTo(c));

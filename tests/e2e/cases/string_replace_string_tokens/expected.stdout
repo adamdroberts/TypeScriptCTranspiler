@@ -1,0 +1,5 @@
+match: [red] fish red fish
+dollar: $ fish red fish
+prefix-suffix: red red | red fish red fish
+all: red! fish red! fish
+literal-capture: $1 fish red fish

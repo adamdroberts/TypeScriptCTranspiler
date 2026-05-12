@@ -1,0 +1,13 @@
+bands: 3
+senior: grace,rms
+adult: ada,alan,linus
+child: abby
+index bands: 2
+even-index: ada,grace,rms
+odd-index: alan,linus,abby
+parities: 2
+k=0: 2,4,6,8,10
+k=1: 1,3,5,7,9
+halves: 2
+first-half: ada,alan,grace
+second-half: linus,rms,abby

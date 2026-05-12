@@ -2,3 +2,4 @@ flat: 1,2,3,4
 flat2: 1,2,3,4
 copy: 5,1
 flatMap: 2,0,4,1,6,2
+flatMap scalar: 2,4,6

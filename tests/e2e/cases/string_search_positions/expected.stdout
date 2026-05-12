@@ -1,0 +1,7 @@
+index from 3: 4
+index empty past end: 8
+last from 5: 4
+last negative: 0
+includes from 5: true
+starts from 2: true
+ends at 6: true

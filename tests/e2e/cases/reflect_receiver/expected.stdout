@@ -1,0 +1,21 @@
+set own data receiver: true 1 7 true
+set inherited receiver: true 3 3 4 false
+set nonwritable target: false fixed undefined
+set nonwritable receiver: false 1 0
+set missing receiver: true undefined ok
+get accessor receiver: none
+set accessor receiver: true via
+bound get default: base
+bound get receiver: receiver
+bound set receiver: true base via-this
+bound getter identity: function [function] true true
+bound setter identity: function [function] true true
+bound getter apply: via-this
+bound setter apply: undefined base via-apply
+closure get default: c:base
+closure get receiver: c:receiver
+closure set receiver: true base c:next
+closure getter identity: function [function] true true
+closure setter identity: function [function] true true
+closure getter apply: c:c:next
+closure setter apply: undefined base c:apply

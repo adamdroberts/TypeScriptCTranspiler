@@ -1,0 +1,13 @@
+safe max: true
+safe next: false
+safe frac: false
+safe inf: false
+finite any: false true false
+nan any: false true
+integer any: false true
+dynamic any: true false true true
+parse bin: 5
+parse hex: 255
+parse inferred: 16 77 32
+parse invalid radix: NaN
+parse any: 12 12.5 3 3

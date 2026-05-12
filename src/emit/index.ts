@@ -17,6 +17,7 @@ import {
     T_BUFFER,
     T_HASH,
     T_NUMBER,
+    T_NUMBER_INT,
     T_REGEXP,
     T_STRING,
     T_SYMBOL,
@@ -52,6 +53,11 @@ interface TailFunctionContext {
     params: { name: string; type: CType }[];
 }
 
+interface GeneratorContext {
+    arrayVar: string;
+    elemType: CType;
+}
+
 type GenericCallableDeclaration = ts.FunctionDeclaration | ts.MethodDeclaration;
 
 interface CaptureCell {
@@ -69,6 +75,38 @@ interface ClosureEnvBinding {
     type: CType;
     ptr: string;
 }
+
+interface DescriptorAccessor {
+    adapter: string;
+    env: EmitResult | null;
+    node: ts.Expression;
+}
+
+type DescriptorData =
+    | {
+        kind: "data";
+        value: ts.Expression | null;
+        hasValue: string;
+        writable: string;
+        hasWritable: string;
+        enumerable: string;
+        hasEnumerable: string;
+        configurable: string;
+        hasConfigurable: string;
+    }
+    | {
+        kind: "accessor";
+        getter: DescriptorAccessor | null;
+        hasGetter: string;
+        setter: DescriptorAccessor | null;
+        hasSetter: string;
+        enumerable: string;
+        hasEnumerable: string;
+        configurable: string;
+        hasConfigurable: string;
+    };
+
+type DataDescriptorData = Extract<DescriptorData, { kind: "data" }>;
 
 export interface EmittedProgram {
     mainC: string;
@@ -96,8 +134,10 @@ class Emitter {
     private modInits = new Map<string, CBuf>();
     private returnStack: CType[] = [];
     private tailFunctionStack: TailFunctionContext[] = [];
+    private generatorStack: GeneratorContext[] = [];
     private currentClass: string | null = null;
     private currentBaseClass: string | null = null;
+    private functionThisStack: EmitResult[] = [];
     private currentModuleId = "";
     private currentSf: ts.SourceFile | null = null;
     private tempCounter = 0;
@@ -111,6 +151,22 @@ class Emitter {
     private cellScopes: Map<ts.Symbol, CaptureCell>[] = [];
     private closureEnvScopes: Map<ts.Symbol, ClosureEnvBinding>[] = [];
     private catchStringSymbols = new Set<ts.Symbol>();
+    /**
+     * Symbols whose value is provably integer-shape at every read site.
+     * Populated per source file by analyzeIntegerSymbols(); consulted by
+     * isIntegerShape(). Used to emit naked int64 modulo for `%` instead of
+     * the generic tsc_num_mod helper.
+     */
+    private intSymbols = new Set<ts.Symbol>();
+    /**
+     * String-typed `let` locals that are only ever modified via `X = X + ...`
+     * self-append. Lifted from `tsc_str_t*` to a per-scope `tsc_jsonbuf_t`
+     * (used as a strbuf), turning O(N²) byte copy across N concats into
+     * amortized O(N) append.
+     */
+    private strbufSymbols = new Set<ts.Symbol>();
+    /** C variable name suffix appended to identify the strbuf storage. */
+    private readonly strbufSuffix = "_sb";
 
     constructor(
         private checker: ts.TypeChecker,
@@ -128,6 +184,7 @@ class Emitter {
             case "set":
             case "weakset":
             case "weakref":
+            case "finregistry":
                 if (type.elem) this.prepareType(type.elem);
                 break;
             case "map":
@@ -151,7 +208,7 @@ class Emitter {
         if (this.functionTypes.has(type.closureName)) return;
         this.functionTypes.add(type.closureName);
         const paramTypes = type.params ?? [];
-        const fnParams = ["void*", ...paramTypes.map((p) => p.c)].join(", ");
+        const fnParams = ["void*", ...(type.thisParam ? [type.thisParam.c] : []), ...paramTypes.map((p) => p.c)].join(", ");
         this.structDecls.open(`typedef struct ${type.closureName}`);
         this.structDecls.line(`${type.ret.c} (*fn)(${fnParams});`);
         this.structDecls.line("void* env;");
@@ -244,6 +301,8 @@ class Emitter {
 
         try {
             const statements = this.flattenModuleStatements(sf.statements);
+            this.analyzeIntegerSymbols(sf);
+            this.analyzeStrbufSymbols(sf);
             // Pass A: struct forward-decls + typedefs for classes & interfaces.
             for (const inner of statements) {
                 if (inner && ts.isClassDeclaration(inner) && inner.name) {
@@ -302,7 +361,10 @@ class Emitter {
             for (const inner of statements) {
                 if (!inner) continue;
                 if (ts.isFunctionDeclaration(inner)) continue;
-                if (ts.isClassDeclaration(inner)) continue;
+                if (ts.isClassDeclaration(inner)) {
+                    this.emitClassStaticInitializers(initBuf, inner);
+                    continue;
+                }
                 if (ts.isInterfaceDeclaration(inner)) continue;
                 if (ts.isTypeAliasDeclaration(inner)) continue;
                 if (ts.isEnumDeclaration(inner)) continue;
@@ -419,7 +481,13 @@ class Emitter {
     }
 
     private symbolForIdentifier(id: ts.Identifier): ts.Symbol | undefined {
-        const sym = this.checker.getSymbolAtLocation(id);
+        let sym = this.checker.getSymbolAtLocation(id);
+        if (ts.isShorthandPropertyAssignment(id.parent) && id.parent.name === id) {
+            sym =
+                this.checker.getShorthandAssignmentValueSymbol(id.parent) ??
+                this.checker.getShorthandAssignmentValueSymbol(id) ??
+                sym;
+        }
         if (sym && (sym.flags & ts.SymbolFlags.Alias)) {
             try {
                 return this.checker.getAliasedSymbol(sym);
@@ -471,6 +539,12 @@ class Emitter {
         if (env) return `(*${env.ptr})`;
         const cell = this.captureCellForSymbol(sym);
         if (cell) return `(*${cell.cellName})`;
+        // Lifted strbuf: a non-write read returns a fresh tsc_str_t* snapshot
+        // of the current strbuf contents (jsonbuf_finish copies, so the
+        // strbuf can keep growing without invalidating prior reads).
+        if (sym && this.strbufSymbols.has(sym)) {
+            return `tsc_jsonbuf_finish(&${this.identifierName(id)}${this.strbufSuffix})`;
+        }
         return this.identifierName(id);
     }
 
@@ -479,16 +553,38 @@ class Emitter {
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         if (!decl) return null;
         try {
-            return this.prepareType(
+            const base = this.prepareType(
                 mapTsType(
                     decl,
                     this.checker.getTypeOfSymbolAtLocation(sym!, decl),
                     this.checker,
                 ),
             );
+            // Int-shape specialization: the C-level storage of this symbol
+            // is int64_t, not double. Surface that to the assignment / read
+            // sites so they don't insert spurious cvtsi2sd casts.
+            if (base.c === "double" && sym && this.intSymbols.has(sym)) {
+                return T_NUMBER_INT;
+            }
+            return base;
         } catch {
             return null;
         }
+    }
+
+    private expressionDeclaredOrCurrentType(expr: ts.Expression): ts.Type {
+        if (ts.isIdentifier(expr)) {
+            const sym = this.symbolForIdentifier(expr);
+            const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+            if (sym && decl) {
+                try {
+                    return this.checker.getTypeOfSymbolAtLocation(sym, decl);
+                } catch {
+                    // fall through to current/contextual type
+                }
+            }
+        }
+        return this.checker.getTypeAtLocation(expr);
     }
 
     private identifierHasDynamicAnnotation(id: ts.Identifier): boolean {
@@ -637,24 +733,70 @@ class Emitter {
 
     private emitInterfaceStruct(id: ts.InterfaceDeclaration): void {
         if (!id.name) return;
-        // Skip if this interface is re-declared/merged — only emit first.
-        if (id.heritageClauses && id.heritageClauses.length > 0) {
-            unsupported(id, "interface inheritance (Phase 3)");
-        }
         this.structDecls.open(`struct ${id.name.text}_t`);
+        for (const field of this.interfaceFields(id)) {
+            this.structDecls.line(`${field.type.c} ${mangleIdent(field.name)};`);
+        }
+        this.structDecls.close(";");
+        this.structDecls.line();
+    }
+
+    private interfaceFields(id: ts.InterfaceDeclaration): {
+        name: string;
+        type: CType;
+    }[] {
+        const fields: { name: string; type: CType }[] = [];
+        for (const prop of this.interfacePropertySymbols(id)) {
+            const decl = prop.valueDeclaration ?? prop.getDeclarations()?.[0] ?? id;
+            fields.push({
+                name: prop.getName(),
+                type: mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(prop, decl), this.checker),
+            });
+        }
+        return fields;
+    }
+
+    private interfacePropertySymbols(
+        id: ts.InterfaceDeclaration,
+        seen = new Set<string>(),
+    ): ts.Symbol[] {
         for (const m of id.members) {
             if (ts.isPropertySignature(m) && m.name && ts.isIdentifier(m.name)) {
                 if (m.questionToken) {
                     unsupported(m, "optional interface fields (Phase 3)");
                 }
-                const ft = mapType(m, this.checker);
-                this.structDecls.line(`${ft.c} ${mangleIdent(m.name.text)};`);
-            } else {
-                unsupported(m, `interface member kind ${ts.SyntaxKind[m.kind]}`);
+                continue;
+            }
+            unsupported(m, `interface member kind ${ts.SyntaxKind[m.kind]}`);
+        }
+
+        const props: ts.Symbol[] = [];
+        for (const h of id.heritageClauses ?? []) {
+            if (h.token !== ts.SyntaxKind.ExtendsKeyword) continue;
+            for (const t of h.types) {
+                const sym = this.checker.getSymbolAtLocation(t.expression);
+                const base = sym?.getDeclarations()?.find(ts.isInterfaceDeclaration);
+                if (!base) continue;
+                for (const prop of this.interfacePropertySymbols(base, seen)) {
+                    props.push(prop);
+                }
             }
         }
-        this.structDecls.close(";");
-        this.structDecls.line();
+
+        for (const m of id.members) {
+            if (!ts.isPropertySignature(m) || !m.name || !ts.isIdentifier(m.name)) continue;
+            const prop = this.checker.getSymbolAtLocation(m.name);
+            if (!prop || seen.has(prop.getName())) continue;
+            seen.add(prop.getName());
+            props.push(prop);
+        }
+        return props;
+    }
+
+    private interfaceDeclarationForType(type: ts.Type): ts.InterfaceDeclaration | null {
+        const sym = type.getSymbol();
+        const decl = sym?.getDeclarations()?.find(ts.isInterfaceDeclaration);
+        return decl ?? null;
     }
 
     private emitClassStruct(cd: ts.ClassDeclaration): void {
@@ -669,12 +811,13 @@ class Emitter {
         }
         for (const m of cd.members) {
             if (ts.isPropertyDeclaration(m)) {
-                if (!ts.isIdentifier(m.name))
-                    unsupported(m, "computed property names in class");
                 if (isStatic(m)) continue; // emitted as free var, not struct field
+                const fieldName = this.staticPropertyName(m.name);
+                if (!fieldName)
+                    unsupported(m.name, "computed property names in class must resolve to a string or number literal");
                 const fieldType = mapType(m, this.checker);
                 this.structDecls.line(
-                    `${fieldType.c} ${mangleIdent(m.name.text)};`,
+                    `${fieldType.c} ${mangleIdent(fieldName)};`,
                 );
             }
         }
@@ -728,14 +871,12 @@ class Emitter {
                 // Recurse for multi-level inheritance.
                 for (const f of this.collectInheritedFields(base)) fields.push(f);
                 for (const m of base.members) {
-                    if (
-                        ts.isPropertyDeclaration(m) &&
-                        m.name &&
-                        ts.isIdentifier(m.name) &&
-                        !isStatic(m)
-                    ) {
+                    if (ts.isPropertyDeclaration(m) && m.name && !isStatic(m)) {
+                        const fieldName = this.staticPropertyName(m.name);
+                        if (!fieldName)
+                            unsupported(m.name, "computed property names in class must resolve to a string or number literal");
                         fields.push({
-                            name: m.name.text,
+                            name: fieldName,
                             type: mapType(m, this.checker),
                         });
                     }
@@ -761,9 +902,12 @@ class Emitter {
         );
         // Static field externs
         for (const m of cd.members) {
-            if (ts.isPropertyDeclaration(m) && isStatic(m) && ts.isIdentifier(m.name)) {
+            if (ts.isPropertyDeclaration(m) && isStatic(m)) {
+                const fieldName = this.staticPropertyName(m.name);
+                if (!fieldName)
+                    unsupported(m.name, "computed property names in class must resolve to a string or number literal");
                 const ft = mapType(m, this.checker);
-                this.protos.line(`extern ${ft.c} ${name}_${mangleIdent(m.name.text)};`);
+                this.protos.line(`extern ${ft.c} ${name}_${mangleIdent(fieldName)};`);
             }
         }
         for (const m of cd.members) {
@@ -795,16 +939,12 @@ class Emitter {
 
         // Static field storage (once per class, at file scope).
         for (const m of cd.members) {
-            if (ts.isPropertyDeclaration(m) && isStatic(m) && ts.isIdentifier(m.name)) {
+            if (ts.isPropertyDeclaration(m) && isStatic(m)) {
+                const fieldName = this.staticPropertyName(m.name);
+                if (!fieldName)
+                    unsupported(m.name, "computed property names in class must resolve to a string or number literal");
                 const ft = mapType(m, this.checker);
-                if (m.initializer) {
-                    const init = this.emitExpr(m.initializer);
-                    this.defs.line(
-                        `${ft.c} ${name}_${mangleIdent(m.name.text)} = ${this.coerce(init, ft, m.initializer)};`,
-                    );
-                } else {
-                    this.defs.line(`${ft.c} ${name}_${mangleIdent(m.name.text)};`);
-                }
+                this.defs.line(`${ft.c} ${name}_${mangleIdent(fieldName)};`);
             }
         }
         this.defs.line();
@@ -821,14 +961,16 @@ class Emitter {
             if (
                 ts.isPropertyDeclaration(m) &&
                 m.initializer &&
-                ts.isIdentifier(m.name) &&
                 !isStatic(m)
             ) {
+                const fieldName = this.staticPropertyName(m.name);
+                if (!fieldName)
+                    unsupported(m.name, "computed property names in class must resolve to a string or number literal");
                 const init = this.emitExpr(m.initializer);
                 const pt = mapType(m, this.checker);
                 const coerced = this.coerce(init, pt, m.initializer);
                 this.defs.line(
-                    `self->${mangleIdent(m.name.text)} = ${coerced};`,
+                    `self->${mangleIdent(fieldName)} = ${coerced};`,
                 );
             }
         }
@@ -895,8 +1037,75 @@ class Emitter {
         }
     }
 
+    private emitClassStaticInitializers(buf: CBuf, cd: ts.ClassDeclaration): void {
+        if (!cd.name) return;
+        const name = cd.name.text;
+        for (const m of cd.members) {
+            if (!ts.isPropertyDeclaration(m) || !isStatic(m) || !m.initializer) continue;
+            const fieldName = this.staticPropertyName(m.name);
+            if (!fieldName)
+                unsupported(m.name, "computed property names in class must resolve to a string or number literal");
+            const ft = mapType(m, this.checker);
+            const init = this.emitExpr(m.initializer);
+            buf.line(
+                `${name}_${mangleIdent(fieldName)} = ${this.coerce(init, ft, m.initializer)};`,
+            );
+        }
+    }
+
     private collectParams(ps: readonly ts.ParameterDeclaration[]): string[] {
         return this.collectParamInfos(ps).map((p) => `${p.type.c} ${p.name}`);
+    }
+
+    private isThisParameter(p: ts.ParameterDeclaration): boolean {
+        return ts.isIdentifier(p.name) && p.name.text === "this";
+    }
+
+    private signatureThisType(sig: ts.Signature, node: ts.Node): CType | null {
+        const thisParam = sig.thisParameter;
+        let ty: CType | null = null;
+        if (thisParam) {
+            const decl = thisParam.valueDeclaration ?? node;
+            ty = this.prepareType(mapTsType(
+                decl,
+                this.checker.getTypeOfSymbolAtLocation(thisParam, decl),
+                this.checker,
+            ));
+        } else {
+            const explicit = this.explicitThisParameter(node);
+            if (explicit) {
+                ty = this.prepareType(mapType(explicit, this.checker));
+            }
+        }
+        if (!ty) return null;
+        if (ty.kind !== "value") {
+            unsupported(node, "function this parameters are currently supported only as any/unknown");
+        }
+        return ty;
+    }
+
+    private explicitThisParameter(node: ts.Node): ts.ParameterDeclaration | null {
+        if (
+            ts.isFunctionDeclaration(node) ||
+            ts.isFunctionExpression(node) ||
+            ts.isArrowFunction(node) ||
+            ts.isMethodDeclaration(node) ||
+            ts.isConstructorDeclaration(node)
+        ) {
+            return node.parameters.find((p) => this.isThisParameter(p)) ?? null;
+        }
+        return null;
+    }
+
+    private directCallableThisType(id: ts.Identifier): CType | null {
+        const sig = this.checker.getTypeAtLocation(id).getCallSignatures()[0];
+        if (!sig) return null;
+        const sym = this.symbolForIdentifier(id);
+        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        if (decl && ts.isVariableDeclaration(decl) && decl.initializer) {
+            return this.signatureThisType(sig, decl.initializer);
+        }
+        return this.signatureThisType(sig, decl ?? id);
     }
 
     private collectParamInfos(ps: readonly ts.ParameterDeclaration[]): {
@@ -905,6 +1114,7 @@ class Emitter {
     }[] {
         const infos: { name: string; type: CType }[] = [];
         for (const p of ps) {
+            if (this.isThisParameter(p)) continue;
             if (p.questionToken) unsupported(p, "optional parameters");
             if (p.initializer) unsupported(p, "default parameters");
             if (!ts.isIdentifier(p.name)) {
@@ -947,12 +1157,19 @@ class Emitter {
     }
 
     private emitFunctionBody(fd: ts.FunctionDeclaration): void {
-        const { signature, returnType } = this.fnSignature(fd);
+        if (fd.asteriskToken) {
+            this.emitGeneratorFunctionBody(fd);
+            return;
+        }
+        const { signature, returnType, thisType } = this.fnSignature(fd);
         const capturedCells = this.capturedCellsFor(fd);
         this.defs.open(signature);
         this.returnStack.push(returnType);
         this.cellScopes.push(capturedCells);
-        const tailCtx = fd.name && capturedCells.size === 0
+        if (thisType) {
+            this.functionThisStack.push({ c: "__tsc_this", ty: thisType });
+        }
+        const tailCtx = fd.name && capturedCells.size === 0 && !thisType
             ? {
                 name: this.declaredName(fd.name),
                 label: this.freshTemp("_tail"),
@@ -971,6 +1188,42 @@ class Emitter {
             }
         } finally {
             if (tailCtx) this.tailFunctionStack.pop();
+            if (thisType) this.functionThisStack.pop();
+            this.cellScopes.pop();
+            this.returnStack.pop();
+        }
+        this.defs.close();
+        this.defs.line();
+    }
+
+    private emitGeneratorFunctionBody(fd: ts.FunctionDeclaration): void {
+        if (fd.modifiers?.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)) {
+            unsupported(fd, "async generator functions require Phase 6 async lowering");
+        }
+        const { signature, returnType, thisType } = this.fnSignature(fd);
+        if (returnType.kind !== "array" || !returnType.elem) {
+            unsupported(fd, "generator functions must return Iterator<T> or IterableIterator<T>");
+        }
+        const capturedCells = this.capturedCellsFor(fd);
+        const arrayVar = this.freshTemp("_gen");
+        this.defs.open(signature);
+        this.returnStack.push(returnType);
+        this.cellScopes.push(capturedCells);
+        this.generatorStack.push({ arrayVar, elemType: returnType.elem });
+        if (thisType) {
+            this.functionThisStack.push({ c: "__tsc_this", ty: thisType });
+        }
+        this.defs.line(`tsc_array_t* ${arrayVar} = tsc_array_new(sizeof(${returnType.elem.c}), 4);`);
+        this.emitCapturedParameterCells(this.defs, fd.parameters, capturedCells);
+        try {
+            if (!fd.body) unsupported(fd, "function without body");
+            for (const s of fd.body.statements) {
+                this.emitStmt(this.defs, s);
+            }
+            this.defs.line(`return ${arrayVar};`);
+        } finally {
+            if (thisType) this.functionThisStack.pop();
+            this.generatorStack.pop();
             this.cellScopes.pop();
             this.returnStack.pop();
         }
@@ -981,6 +1234,7 @@ class Emitter {
     private fnSignature(fd: ts.FunctionDeclaration): {
         signature: string;
         returnType: CType;
+        thisType: CType | null;
     } {
         if (!fd.name) unsupported(fd, "anonymous top-level function");
         const name = this.declaredName(fd.name);
@@ -988,12 +1242,14 @@ class Emitter {
         if (!sig) unsupported(fd, "could not resolve function signature");
         const retTsType = sig.getReturnType();
         const retCt = this.prepareType(mapTsType(fd, retTsType, this.checker));
+        const thisType = this.signatureThisType(sig, fd);
         const params = this.collectParams(fd.parameters);
+        const allParams = thisType ? [`${thisType.c} __tsc_this`, ...params] : params;
         const signature =
             `${retCt.c} ${name}(` +
-            (params.length ? params.join(", ") : "void") +
+            (allParams.length ? allParams.join(", ") : "void") +
             `)`;
-        return { signature, returnType: retCt };
+        return { signature, returnType: retCt, thisType };
     }
 
     // ---------------- statements ----------------
@@ -1007,6 +1263,7 @@ class Emitter {
         if (ts.isDoStatement(stmt)) return this.emitDoWhile(buf, stmt);
         if (ts.isForStatement(stmt)) return this.emitFor(buf, stmt);
         if (ts.isForOfStatement(stmt)) return this.emitForOf(buf, stmt);
+        if (ts.isForInStatement(stmt)) return this.emitForIn(buf, stmt);
         if (ts.isBlock(stmt)) return this.emitBlock(buf, stmt);
         if (ts.isReturnStatement(stmt)) return this.emitReturn(buf, stmt);
         if (ts.isThrowStatement(stmt)) return this.emitThrow(buf, stmt);
@@ -1025,32 +1282,569 @@ class Emitter {
     }
 
     private emitExprStmt(buf: CBuf, es: ts.ExpressionStatement): void {
+        if (ts.isYieldExpression(es.expression)) {
+            this.emitYieldStmt(buf, es.expression);
+            return;
+        }
         const r = this.emitExpr(es.expression);
         buf.line(r.c + ";");
+    }
+
+    private emitYieldStmt(buf: CBuf, y: ts.YieldExpression): void {
+        const gen = this.generatorStack[this.generatorStack.length - 1];
+        if (!gen) unsupported(y, "yield outside of generator function");
+        if (!y.expression) unsupported(y, "yield without a value");
+        if (y.asteriskToken) {
+            this.emitYieldStarStmt(buf, y, gen);
+            return;
+        }
+        const value = this.emitExpr(y.expression);
+        const tmp = this.freshTemp("_yield");
+        buf.line(`${gen.elemType.c} ${tmp} = ${this.coerce(value, gen.elemType, y.expression)};`);
+        buf.line(`tsc_array_push_raw(${gen.arrayVar}, &${tmp});`);
+    }
+
+    private emitYieldStarStmt(buf: CBuf, y: ts.YieldExpression, gen: GeneratorContext): void {
+        if (!y.expression) unsupported(y, "yield* without a value");
+        const source = this.emitExpr(y.expression);
+        let arrayExpr: string;
+        let elemType: CType;
+        if (source.ty.kind === "array" && source.ty.elem) {
+            arrayExpr = source.c;
+            elemType = source.ty.elem;
+        } else if (source.ty.kind === "string") {
+            arrayExpr = `tsc_str_chars(${source.c})`;
+            elemType = T_STRING;
+        } else if (source.ty.kind === "value") {
+            arrayExpr = `tsc_value_iter_values(${source.c})`;
+            elemType = T_VALUE;
+        } else {
+            unsupported(y.expression, "yield* currently supports arrays, strings, and dynamic iterable values");
+        }
+        const arr = this.freshTemp("_yield_star");
+        const idx = this.freshTemp("_ysi");
+        const tmp = this.freshTemp("_yield");
+        const current = { c: `TSC_ARR(${elemType.c}, ${arr}, ${idx})`, ty: elemType };
+        buf.open("");
+        buf.line(`tsc_array_t* const ${arr} = ${arrayExpr};`);
+        buf.open(`for (size_t ${idx} = 0; ${idx} < ${arr}->len; ${idx}++)`);
+        buf.line(`${gen.elemType.c} ${tmp} = ${this.coerce(current, gen.elemType, y.expression)};`);
+        buf.line(`tsc_array_push_raw(${gen.arrayVar}, &${tmp});`);
+        buf.close();
+        buf.close();
     }
 
     /**
      * Top-level variable statements: split into file-scope decl + mod_init
      * assignment. Enables top-level functions and lifted arrows to read/write
      * module-level const/let as ordinary C globals.
+     *
+     * Fast path: `const X = <numeric literal>` is emitted as `static const
+     * double X = literal;` so gcc can fold reads in inner loops.
      */
     private emitTopLevelVarStmt(
         initBuf: CBuf,
         vs: ts.VariableStatement,
     ): void {
+        const isConst = (vs.declarationList.flags & ts.NodeFlags.Const) !== 0;
         for (const d of vs.declarationList.declarations) {
             if (!ts.isIdentifier(d.name)) {
                 unsupported(d, "destructuring at module scope");
             }
             const name = this.declaredName(d.name);
-            const ct = this.prepareType(mapType(d, this.checker));
+            const baseCt = this.prepareType(mapType(d, this.checker));
+
+            // If this number is provably integer-shape, store as int64_t.
+            // C's implicit conversion handles boundaries (calls, etc.).
+            const sym = this.checker.getSymbolAtLocation(d.name);
+            const useInt = baseCt.c === "double" && sym !== undefined && this.intSymbols.has(sym);
+            const ct = useInt ? T_NUMBER_INT : baseCt;
+
+            const lit = isConst && d.initializer
+                ? this.tryFoldNumericLiteral(d.initializer)
+                : null;
+            if (lit !== null && baseCt.c === "double") {
+                const literalValue = useInt ? `((int64_t)(${lit}))` : lit;
+                this.globalDecls.line(`static const ${ct.c} ${name} = ${literalValue};`);
+                continue;
+            }
+
             this.globalDecls.line(`static ${ct.c} ${name};`);
             if (d.initializer) {
                 const r = this.emitExpr(d.initializer);
-                const coerced = this.coerce(r, ct, d.initializer);
+                const coerced = useInt && r.ty.kind === "number"
+                    ? `((int64_t)(${r.c}))`
+                    : this.coerce(r, ct, d.initializer);
                 initBuf.line(`${name} = ${coerced};`);
             }
         }
+    }
+
+    /**
+     * Walk the source file and populate `this.intSymbols` with every local
+     * `let`/`const`/parameter that is provably integer-shape at every read.
+     *
+     * A symbol is integer-shape iff:
+     *   - its declaration's initializer is integer-shape (or it's a for-let
+     *     counter with an integer initializer + an integer increment), AND
+     *   - every assignment / compound assignment / ++/-- to it is
+     *     integer-shape.
+     *
+     * Iterates to a fixpoint: each round may unlock more symbols as their
+     * dependencies become known-int. Conservative on anything else.
+     */
+    private analyzeIntegerSymbols(sf: ts.SourceFile): void {
+        this.intSymbols = new Set();
+
+        interface Cand {
+            sym: ts.Symbol;
+            initExpr: ts.Expression | null;     // `null` if init is "0" of for-let counter
+            initIsInt: boolean | null;          // null = recompute each pass
+            assignments: ts.Expression[];       // RHS of `s = expr` (and compound-RHS for `s += expr`)
+            compoundOnlyOps: Set<ts.SyntaxKind>; // operators used in `s op= rhs` and ++/--
+        }
+        const candidates = new Map<ts.Symbol, Cand>();
+
+        const recordCand = (sym: ts.Symbol, initExpr: ts.Expression | null) => {
+            if (!candidates.has(sym)) {
+                candidates.set(sym, {
+                    sym,
+                    initExpr,
+                    initIsInt: null,
+                    assignments: [],
+                    compoundOnlyOps: new Set(),
+                });
+            }
+        };
+        const recordWrite = (sym: ts.Symbol, rhs: ts.Expression | null, op: ts.SyntaxKind | null) => {
+            const c = candidates.get(sym);
+            if (!c) return;
+            if (rhs) c.assignments.push(rhs);
+            if (op !== null) c.compoundOnlyOps.add(op);
+        };
+
+        const visit = (n: ts.Node) => {
+            // Capture declarations.
+            if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name)) {
+                const sym = this.checker.getSymbolAtLocation(n.name);
+                if (sym) recordCand(sym, n.initializer ?? null);
+            }
+            // Function/method parameters that have a default integer initializer
+            // are not common in our hot paths — skip for now.
+
+            // Capture writes.
+            if (ts.isBinaryExpression(n)) {
+                const op = n.operatorToken.kind;
+                if (op === ts.SyntaxKind.EqualsToken && ts.isIdentifier(n.left)) {
+                    const sym = this.checker.getSymbolAtLocation(n.left);
+                    if (sym) recordWrite(sym, n.right, null);
+                } else if (
+                    op === ts.SyntaxKind.PlusEqualsToken ||
+                    op === ts.SyntaxKind.MinusEqualsToken ||
+                    op === ts.SyntaxKind.AsteriskEqualsToken ||
+                    op === ts.SyntaxKind.PercentEqualsToken ||
+                    op === ts.SyntaxKind.AmpersandEqualsToken ||
+                    op === ts.SyntaxKind.BarEqualsToken ||
+                    op === ts.SyntaxKind.CaretEqualsToken ||
+                    op === ts.SyntaxKind.LessThanLessThanEqualsToken ||
+                    op === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken ||
+                    op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken
+                ) {
+                    if (ts.isIdentifier(n.left)) {
+                        const sym = this.checker.getSymbolAtLocation(n.left);
+                        if (sym) recordWrite(sym, n.right, op);
+                    }
+                } else if (
+                    op === ts.SyntaxKind.SlashEqualsToken ||
+                    op === ts.SyntaxKind.AsteriskAsteriskEqualsToken
+                ) {
+                    // /= and **= produce non-int in general; demote.
+                    if (ts.isIdentifier(n.left)) {
+                        const sym = this.checker.getSymbolAtLocation(n.left);
+                        if (sym) {
+                            recordCand(sym, null);
+                            const c = candidates.get(sym)!;
+                            c.compoundOnlyOps.add(op); // marker that disqualifies
+                        }
+                    }
+                }
+            }
+            if (
+                (ts.isPostfixUnaryExpression(n) || ts.isPrefixUnaryExpression(n)) &&
+                (n.operator === ts.SyntaxKind.PlusPlusToken ||
+                    n.operator === ts.SyntaxKind.MinusMinusToken)
+            ) {
+                if (ts.isIdentifier(n.operand)) {
+                    const sym = this.checker.getSymbolAtLocation(n.operand);
+                    if (sym) recordWrite(sym, null, n.operator);
+                }
+            }
+
+            ts.forEachChild(n, visit);
+        };
+        visit(sf);
+
+        // Optimistic-narrow fixpoint: assume every candidate is int, then
+        // demote any whose init or any assignment evaluates to non-int under
+        // the current set. Iterate until stable.
+        this.intSymbols = new Set(candidates.keys());
+        let changed = true;
+        let safety = 0;
+        while (changed && safety++ < 32) {
+            changed = false;
+            for (const c of candidates.values()) {
+                if (!this.intSymbols.has(c.sym)) continue;
+                let demote = false;
+                if (c.compoundOnlyOps.has(ts.SyntaxKind.SlashEqualsToken) ||
+                    c.compoundOnlyOps.has(ts.SyntaxKind.AsteriskAsteriskEqualsToken)) {
+                    demote = true;
+                }
+                if (!demote && c.initExpr && !this.isIntegerShape(c.initExpr)) {
+                    demote = true;
+                }
+                if (!demote) {
+                    for (const rhs of c.assignments) {
+                        if (!this.isIntegerShape(rhs)) { demote = true; break; }
+                    }
+                }
+                if (demote) {
+                    this.intSymbols.delete(c.sym);
+                    changed = true;
+                }
+            }
+        }
+
+        // Overflow-safety pass: ECMAScript numbers are doubles, so any
+        // intermediate that would exceed 2^53 in true int64 arithmetic
+        // would round under JS but stay exact in our int-spec emit, giving
+        // observably-different results. Demote any symbol that participates
+        // in a multiplication where the other operand isn't a tiny literal.
+        const SMALL_LIT_BOUND = 1 << 20; // 1M — products with two of these stay < 2^40
+        const isSmallLit = (e: ts.Expression): boolean => {
+            let cur: ts.Expression = e;
+            while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+            if (ts.isPrefixUnaryExpression(cur) &&
+                (cur.operator === ts.SyntaxKind.MinusToken ||
+                    cur.operator === ts.SyntaxKind.PlusToken)) {
+                cur = cur.operand;
+                while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+            }
+            if (!ts.isNumericLiteral(cur)) return false;
+            const n = Math.abs(Number(cur.text));
+            return isFinite(n) && n <= SMALL_LIT_BOUND;
+        };
+        const demoteIfCandidateIdent = (e: ts.Expression): void => {
+            let cur: ts.Expression = e;
+            while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+            if (ts.isIdentifier(cur)) {
+                const sym = this.checker.getSymbolAtLocation(cur);
+                if (sym) this.intSymbols.delete(sym);
+            }
+        };
+        const overflowCheck = (n: ts.Node): void => {
+            if (ts.isBinaryExpression(n) &&
+                n.operatorToken.kind === ts.SyntaxKind.AsteriskToken) {
+                const lSmall = isSmallLit(n.left);
+                const rSmall = isSmallLit(n.right);
+                if (!lSmall && !rSmall) {
+                    demoteIfCandidateIdent(n.left);
+                    demoteIfCandidateIdent(n.right);
+                }
+            }
+            ts.forEachChild(n, overflowCheck);
+        };
+        // Iterate to fixpoint: a demotion can break a dependent's int-shape
+        // invariant in the next pass.
+        let prevSize = -1;
+        while (this.intSymbols.size !== prevSize) {
+            prevSize = this.intSymbols.size;
+            overflowCheck(sf);
+            let again = true;
+            let safety2 = 0;
+            while (again && safety2++ < 32) {
+                again = false;
+                for (const c of candidates.values()) {
+                    if (!this.intSymbols.has(c.sym)) continue;
+                    let bad = false;
+                    if (c.initExpr && !this.isIntegerShape(c.initExpr)) bad = true;
+                    if (!bad) for (const rhs of c.assignments) {
+                        if (!this.isIntegerShape(rhs)) { bad = true; break; }
+                    }
+                    if (bad) { this.intSymbols.delete(c.sym); again = true; }
+                }
+            }
+        }
+    }
+
+    /**
+     * Identify `let X: string = ""` locals where every assignment is
+     * `X = X + ...` (self-append) and X never escapes — populates
+     * `this.strbufSymbols`. The emitter lifts these to a `tsc_jsonbuf_t`
+     * strbuf, so a tight loop of N concats becomes amortized O(N) bytes
+     * copied instead of O(N²).
+     *
+     * Conservative pass: any read in a context that takes the value
+     * (object literal, function call passing X as a string, return value,
+     * stored in another variable) disqualifies. A bare `X.length` or
+     * `X` inside a string-typed concat after the loop is fine because we
+     * materialize via tsc_jsonbuf_finish() at each read.
+     */
+    private analyzeStrbufSymbols(sf: ts.SourceFile): void {
+        this.strbufSymbols = new Set();
+
+        interface Cand {
+            sym: ts.Symbol;
+            decl: ts.VariableDeclaration;
+        }
+        const candidates: Cand[] = [];
+
+        // Pass 1: collect declarations of `let X: string = ""`.
+        const collect = (n: ts.Node) => {
+            if (
+                ts.isVariableDeclarationList(n) &&
+                (n.flags & ts.NodeFlags.Const) === 0
+            ) {
+                for (const d of n.declarations) {
+                    if (!ts.isIdentifier(d.name)) continue;
+                    if (!d.initializer) continue;
+                    if (!ts.isStringLiteral(d.initializer)) continue;
+                    if (d.initializer.text !== "") continue;
+                    const sym = this.checker.getSymbolAtLocation(d.name);
+                    if (!sym) continue;
+                    candidates.push({ sym, decl: d });
+                }
+            }
+            ts.forEachChild(n, collect);
+        };
+        collect(sf);
+
+        if (candidates.length === 0) return;
+
+        // Pass 2: for each candidate, verify all writes are self-append and
+        // no read context aliases or stores the value.
+        const candSyms = new Set(candidates.map((c) => c.sym));
+        const status = new Map<ts.Symbol, boolean>();
+        for (const c of candidates) status.set(c.sym, true);
+
+        const isSelfAppendRhs = (sym: ts.Symbol, rhs: ts.Expression): boolean => {
+            // Walk the leftmost spine of `rhs`; the leftmost leaf must be
+            // an Identifier referring to `sym`. Any structure that puts the
+            // self-reference deeper than the leftmost leaf is rejected
+            // (would imply we'd need to evaluate sym before mutation).
+            let cur: ts.Expression = rhs;
+            while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+            while (
+                ts.isBinaryExpression(cur) &&
+                cur.operatorToken.kind === ts.SyntaxKind.PlusToken
+            ) {
+                cur = cur.left;
+                while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+            }
+            if (!ts.isIdentifier(cur)) return false;
+            return this.checker.getSymbolAtLocation(cur) === sym;
+        };
+
+        const visit = (n: ts.Node) => {
+            // Disqualify writes that aren't self-append.
+            if (ts.isBinaryExpression(n)) {
+                const op = n.operatorToken.kind;
+                if (
+                    op === ts.SyntaxKind.EqualsToken &&
+                    ts.isIdentifier(n.left)
+                ) {
+                    const sym = this.checker.getSymbolAtLocation(n.left);
+                    if (sym && candSyms.has(sym)) {
+                        if (!isSelfAppendRhs(sym, n.right)) status.set(sym, false);
+                        // Don't descend into this assignment's LHS — that's the write.
+                        visit(n.right);
+                        return;
+                    }
+                } else if (
+                    op === ts.SyntaxKind.PlusEqualsToken &&
+                    ts.isIdentifier(n.left)
+                ) {
+                    const sym = this.checker.getSymbolAtLocation(n.left);
+                    if (sym && candSyms.has(sym)) {
+                        // `X += rhs` is fine — equivalent to X = X + rhs.
+                        visit(n.right);
+                        return;
+                    }
+                } else if (
+                    (op === ts.SyntaxKind.MinusEqualsToken ||
+                        op === ts.SyntaxKind.AsteriskEqualsToken ||
+                        op === ts.SyntaxKind.SlashEqualsToken ||
+                        op === ts.SyntaxKind.PercentEqualsToken) &&
+                    ts.isIdentifier(n.left)
+                ) {
+                    const sym = this.checker.getSymbolAtLocation(n.left);
+                    if (sym && candSyms.has(sym)) status.set(sym, false);
+                }
+            }
+            // Identifier reads in escape contexts disqualify.
+            if (ts.isIdentifier(n)) {
+                const sym = this.checker.getSymbolAtLocation(n);
+                if (sym && candSyms.has(sym)) {
+                    const parent = n.parent;
+                    let escapes = false;
+                    // Stored into another variable.
+                    if (ts.isVariableDeclaration(parent) && parent.initializer === n) escapes = true;
+                    // Returned.
+                    if (ts.isReturnStatement(parent)) escapes = true;
+                    // Captured by an arrow / function (any nested function decl
+                    // shouldn't be able to see lifted strbuf).
+                    // Property of an object literal.
+                    if (ts.isPropertyAssignment(parent) && parent.initializer === n) escapes = true;
+                    if (ts.isShorthandPropertyAssignment(parent)) escapes = true;
+                    // Element of an array literal.
+                    if (ts.isArrayLiteralExpression(parent)) escapes = true;
+                    // Argument to a function/method call (we conservatively
+                    // assume all callees may retain). Allow `console.log` /
+                    // string-coercion contexts via the BinaryExpression path,
+                    // but treat all CallExpression args as escape.
+                    if (ts.isCallExpression(parent) && parent.arguments.includes(n as ts.Expression)) {
+                        escapes = true;
+                    }
+                    // The `this` of a method call reading X.length etc is fine.
+                    if (escapes) status.set(sym, false);
+                }
+            }
+            ts.forEachChild(n, visit);
+        };
+        visit(sf);
+
+        for (const c of candidates) {
+            if (status.get(c.sym)) this.strbufSymbols.add(c.sym);
+        }
+    }
+
+    /**
+     * Emit `e` as a pure int64 C expression. Caller must have verified
+     * isIntegerShape(e). Identifiers resolve to their declared C name (which
+     * for int-spec locals is `int64_t`); numeric literals shed their `.0`;
+     * binary +,-,*,% and parens recurse without going through emitExpr's
+     * double-typed path. As a last resort, casts a normally-emitted
+     * double expression to int64.
+     */
+    private emitIntegerExpr(e: ts.Expression): string {
+        let cur: ts.Expression = e;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+
+        if (ts.isNumericLiteral(cur)) {
+            // Strip any source separators ("1_000_003") and any trailing 'n'
+            // (BigInt literals don't reach here — typed paths only).
+            return cur.text.replace(/_/g, "");
+        }
+        if (ts.isPrefixUnaryExpression(cur)) {
+            if (cur.operator === ts.SyntaxKind.MinusToken) {
+                return `(-${this.emitIntegerExpr(cur.operand)})`;
+            }
+            if (cur.operator === ts.SyntaxKind.PlusToken) {
+                return this.emitIntegerExpr(cur.operand);
+            }
+        }
+        if (ts.isBinaryExpression(cur)) {
+            const op = cur.operatorToken.kind;
+            const cop =
+                op === ts.SyntaxKind.PlusToken ? "+" :
+                op === ts.SyntaxKind.MinusToken ? "-" :
+                op === ts.SyntaxKind.AsteriskToken ? "*" :
+                op === ts.SyntaxKind.PercentToken ? "%" :
+                op === ts.SyntaxKind.AmpersandToken ? "&" :
+                op === ts.SyntaxKind.BarToken ? "|" :
+                op === ts.SyntaxKind.CaretToken ? "^" :
+                op === ts.SyntaxKind.LessThanLessThanToken ? "<<" :
+                op === ts.SyntaxKind.GreaterThanGreaterThanToken ? ">>" :
+                null;
+            if (cop) {
+                return `(${this.emitIntegerExpr(cur.left)} ${cop} ${this.emitIntegerExpr(cur.right)})`;
+            }
+        }
+        if (ts.isIdentifier(cur)) {
+            const sym = this.checker.getSymbolAtLocation(cur);
+            if (sym && this.intSymbols.has(sym)) {
+                // The declaration was emitted as int64_t; reference as-is.
+                return this.declaredName(cur);
+            }
+        }
+        // Fallback: emit normally as double and cast to int64.
+        const r = this.emitExpr(e);
+        return `((int64_t)(${r.c}))`;
+    }
+
+    /**
+     * True if `e` provably evaluates to an integer-valued double at every
+     * runtime visit. Conservative: returns false on anything not in the
+     * recognized set. Consults `this.intSymbols` populated by
+     * analyzeIntegerSymbols().
+     */
+    private isIntegerShape(e: ts.Expression): boolean {
+        let cur: ts.Expression = e;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+
+        if (ts.isNumericLiteral(cur)) {
+            return /^\d+$/.test(cur.text);
+        }
+        if (ts.isPrefixUnaryExpression(cur)) {
+            if (cur.operator === ts.SyntaxKind.MinusToken ||
+                cur.operator === ts.SyntaxKind.PlusToken) {
+                return this.isIntegerShape(cur.operand);
+            }
+            if (cur.operator === ts.SyntaxKind.TildeToken) return true; // bitwise NOT yields int
+        }
+        if (ts.isPostfixUnaryExpression(cur)) {
+            if (cur.operator === ts.SyntaxKind.PlusPlusToken ||
+                cur.operator === ts.SyntaxKind.MinusMinusToken) {
+                return this.isIntegerShape(cur.operand);
+            }
+        }
+        if (ts.isBinaryExpression(cur)) {
+            const op = cur.operatorToken.kind;
+            // Bitwise ops always coerce to int32 in JS — safely int-shape.
+            if (op === ts.SyntaxKind.AmpersandToken ||
+                op === ts.SyntaxKind.BarToken ||
+                op === ts.SyntaxKind.CaretToken ||
+                op === ts.SyntaxKind.LessThanLessThanToken ||
+                op === ts.SyntaxKind.GreaterThanGreaterThanToken ||
+                op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken) {
+                return true;
+            }
+            if (op === ts.SyntaxKind.PlusToken ||
+                op === ts.SyntaxKind.MinusToken ||
+                op === ts.SyntaxKind.AsteriskToken ||
+                op === ts.SyntaxKind.PercentToken) {
+                return this.isIntegerShape(cur.left) && this.isIntegerShape(cur.right);
+            }
+        }
+        if (ts.isIdentifier(cur)) {
+            const sym = this.checker.getSymbolAtLocation(cur);
+            if (sym && this.intSymbols.has(sym)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * If `e` is a numeric literal, optionally negated and/or parenthesized,
+     * return its C-source spelling as a double literal. Otherwise null.
+     * Pure: no side effects, safe to evaluate at compile time.
+     */
+    private tryFoldNumericLiteral(e: ts.Expression): string | null {
+        let cur: ts.Expression = e;
+        let negate = false;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isPrefixUnaryExpression(cur) && cur.operator === ts.SyntaxKind.MinusToken) {
+            negate = true;
+            cur = cur.operand;
+            while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        }
+        if (!ts.isNumericLiteral(cur)) return null;
+        const text = cur.text;
+        const n = Number(text);
+        if (!isFinite(n)) return null;
+        const sign = negate ? "-" : "";
+        // Format as a C double literal — preserve the source spelling for
+        // integers, force a decimal for floats so gcc treats it as double.
+        if (/^[+-]?\d+$/.test(text)) return `${sign}${text}.0`;
+        return `${sign}${text}`;
     }
 
     private emitVarStmt(buf: CBuf, vs: ts.VariableStatement): void {
@@ -1061,16 +1855,39 @@ class Emitter {
                 unsupported(d, "destructuring declarations");
             }
             const name = mangleIdent(d.name.text);
-            const cell = this.currentFunctionCellForSymbol(this.symbolForIdentifier(d.name));
+            const sym = this.symbolForIdentifier(d.name);
+            // Lifted strbuf: declare the per-scope `tsc_jsonbuf_t` instead of
+            // a tsc_str_t*. The init is empty by definition (analyzer only
+            // accepts `let X = ""`).
+            if (sym && this.strbufSymbols.has(sym)) {
+                buf.line(`tsc_jsonbuf_t ${name}${this.strbufSuffix};`);
+                buf.line(`tsc_jsonbuf_init(&${name}${this.strbufSuffix});`);
+                continue;
+            }
+            const cell = this.currentFunctionCellForSymbol(sym);
             let ct: CType;
             let init = "";
+            let r: EmitResult | null = null;
             if (d.initializer) {
-                const r = this.emitExpr(d.initializer);
+                r = this.emitExpr(d.initializer);
                 ct = this.prepareType(d.type ? mapType(d, this.checker) : r.ty);
-                const coerced = this.coerce(r, ct, d.initializer);
-                init = " = " + coerced;
             } else {
                 ct = this.prepareType(mapType(d, this.checker));
+            }
+            // Int-shape specialization: when the symbol is provably integer
+            // and would otherwise be `double`, store as `int64_t`. Closures
+            // (cell-allocated) keep the original double type — capture cells
+            // need a stable layout.
+            const useInt = !cell &&
+                ct.c === "double" &&
+                sym !== undefined &&
+                this.intSymbols.has(sym);
+            if (useInt) ct = T_NUMBER_INT;
+            if (r) {
+                const coerced = useInt && r.ty.kind === "number"
+                    ? `((int64_t)(${r.c}))`
+                    : this.coerce(r, ct, d.initializer!);
+                init = " = " + coerced;
             }
             if (cell) {
                 buf.line(`${ct.c}* ${cell.cellName} = (${ct.c}*)TSC_GC_MALLOC(sizeof(${ct.c}));`);
@@ -1144,15 +1961,27 @@ class Emitter {
                     if (!ts.isIdentifier(d.name))
                         unsupported(d, "destructuring in for-init");
                     const name = mangleIdent(d.name.text);
-                    const cell = this.currentFunctionCellForSymbol(this.symbolForIdentifier(d.name));
+                    const sym = this.symbolForIdentifier(d.name);
+                    const cell = this.currentFunctionCellForSymbol(sym);
                     let ct: CType;
-                    let init = "";
+                    let r: EmitResult | null = null;
                     if (d.initializer) {
-                        const r = this.emitExpr(d.initializer);
+                        r = this.emitExpr(d.initializer);
                         ct = this.prepareType(d.type ? mapType(d, this.checker) : r.ty);
-                        init = " = " + this.coerce(r, ct, d.initializer);
                     } else {
                         ct = this.prepareType(mapType(d, this.checker));
+                    }
+                    const useInt = !cell &&
+                        ct.c === "double" &&
+                        sym !== undefined &&
+                        this.intSymbols.has(sym);
+                    if (useInt) ct = T_NUMBER_INT;
+                    let init = "";
+                    if (r) {
+                        const coerced = useInt && r.ty.kind === "number"
+                            ? `((int64_t)(${r.c}))`
+                            : this.coerce(r, ct, d.initializer!);
+                        init = " = " + coerced;
                     }
                     if (cell) {
                         buf.line(`${ct.c}* ${cell.cellName} = (${ct.c}*)TSC_GC_MALLOC(sizeof(${ct.c}));`);
@@ -1176,6 +2005,108 @@ class Emitter {
         buf.close();
     }
 
+    private emitForIn(buf: CBuf, fis: ts.ForInStatement): void {
+        const iter = this.emitExpr(fis.expression);
+        let bindingName: string;
+        let bindingIsConst = false;
+        if (ts.isVariableDeclarationList(fis.initializer)) {
+            bindingIsConst = (fis.initializer.flags & ts.NodeFlags.Const) !== 0;
+            const d = fis.initializer.declarations[0];
+            if (!d || !ts.isIdentifier(d.name))
+                unsupported(fis.initializer, "for-in binding must be simple identifier");
+            bindingName = mangleIdent(d.name.text);
+        } else if (ts.isIdentifier(fis.initializer)) {
+            bindingName = mangleIdent(fis.initializer.text);
+        } else {
+            unsupported(fis.initializer, "for-in binding form");
+        }
+
+        const idxVar = this.freshTemp("_fi");
+        const keysVar = this.freshTemp("_fk");
+
+        let keysExpr: string;
+        if (iter.ty.kind === "value") {
+            keysExpr = `tsc_value_object_keys(${iter.c})`;
+        } else if (iter.ty.kind === "array") {
+            // Numeric own keys as strings — JS for-in over arrays enumerates index strings.
+            const av = this.freshTemp("_fa");
+            buf.open("");
+            buf.line(`tsc_array_t* const ${av} = ${iter.c};`);
+            buf.line(
+                `tsc_array_t* const ${keysVar} = tsc_array_new(sizeof(tsc_str_t*), ${av}->len ? ${av}->len : 1);`,
+            );
+            buf.open(`for (size_t ${idxVar} = 0; ${idxVar} < ${av}->len; ${idxVar}++)`);
+            buf.line(`tsc_str_t* _fk_v = tsc_str_from_int((int64_t)${idxVar});`);
+            buf.line(`tsc_array_push_raw(${keysVar}, &_fk_v);`);
+            buf.close();
+            this.emitForInBody(buf, fis, keysVar, bindingName, bindingIsConst);
+            buf.close();
+            return;
+        } else if (iter.ty.kind === "class") {
+            // Typed-object own enumerable property names — emit a static array.
+            const fields = this.classOwnPropertyNames(fis.expression, iter);
+            if (!fields) {
+                unsupported(
+                    fis.expression,
+                    `for-in over ${iter.ty.c} (could not resolve enumerable field names)`,
+                );
+            }
+            buf.open("");
+            buf.line(
+                `tsc_array_t* const ${keysVar} = tsc_array_new(sizeof(tsc_str_t*), ${Math.max(1, fields.length)});`,
+            );
+            for (const f of fields) {
+                const fc = `tsc_str_from_lit(${JSON.stringify(f)}, ${utf8ByteLen(f)})`;
+                buf.line(`{ tsc_str_t* _fk_v = ${fc}; tsc_array_push_raw(${keysVar}, &_fk_v); }`);
+            }
+            this.emitForInBody(buf, fis, keysVar, bindingName, bindingIsConst);
+            buf.close();
+            return;
+        } else {
+            unsupported(fis.expression, `for-in over ${iter.ty.c} (supports dynamic values, typed arrays, and classes)`);
+        }
+
+        buf.open("");
+        buf.line(`tsc_array_t* const ${keysVar} = ${keysExpr};`);
+        this.emitForInBody(buf, fis, keysVar, bindingName, bindingIsConst);
+        buf.close();
+    }
+
+    private emitForInBody(
+        buf: CBuf,
+        fis: ts.ForInStatement,
+        keysVar: string,
+        bindingName: string,
+        bindingIsConst: boolean,
+    ): void {
+        const idxVar = this.freshTemp("_fii");
+        buf.open(
+            `for (size_t ${idxVar} = 0; ${idxVar} < ${keysVar}->len; ${idxVar}++)`,
+        );
+        const qual = bindingIsConst ? " const" : "";
+        buf.line(
+            `tsc_str_t*${qual} ${bindingName} = TSC_ARR(tsc_str_t*, ${keysVar}, ${idxVar});`,
+        );
+        this.emitStmtInBlock(buf, fis.statement);
+        buf.close();
+    }
+
+    private classOwnPropertyNames(expr: ts.Expression, iter: EmitResult): string[] | null {
+        if (iter.ty.kind !== "class" || !iter.ty.className) return null;
+        const tsType = this.checker.getTypeAtLocation(expr);
+        const names: string[] = [];
+        for (const prop of tsType.getProperties()) {
+            // Skip methods — for-in only enumerates own enumerable properties,
+            // which for our typed shapes are data fields.
+            const decl = prop.valueDeclaration ?? prop.declarations?.[0];
+            if (!decl) continue;
+            if (ts.isMethodDeclaration(decl) || ts.isMethodSignature(decl)) continue;
+            if (ts.isGetAccessor(decl) || ts.isSetAccessor(decl)) continue;
+            names.push(prop.getName());
+        }
+        return names;
+    }
+
     private emitForOf(buf: CBuf, fos: ts.ForOfStatement): void {
         const iter = this.emitExpr(fos.expression);
         if (iter.ty.kind === "map") {
@@ -1190,6 +2121,9 @@ class Emitter {
         } else if (iter.ty.kind === "string") {
             arrayExpr = `tsc_str_chars(${iter.c})`;
             elemType = T_STRING;
+        } else if (iter.ty.kind === "value") {
+            arrayExpr = `tsc_value_iter_values(${iter.c})`;
+            elemType = T_VALUE;
         } else if (iter.ty.kind === "class") {
             if (this.emitCustomIteratorForOf(buf, fos, iter)) return;
             const custom = this.emitCustomIterableArray(fos.expression, iter);
@@ -1204,7 +2138,7 @@ class Emitter {
         } else if (iter.ty.kind !== "array") {
             unsupported(
                 fos.expression,
-                `for-of over ${iter.ty.c} (supports arrays, strings, Map, Set, and typed custom iterables)`,
+                `for-of over ${iter.ty.c} (supports arrays, strings, dynamic values, Map, Set, and typed custom iterables)`,
             );
         }
         elemType ??= iter.ty.elem;
@@ -1223,6 +2157,13 @@ class Emitter {
                     arrVar,
                     idxVar,
                 );
+                return;
+            }
+        }
+        if (elemType.kind === "value" && ts.isVariableDeclarationList(fos.initializer)) {
+            const d = fos.initializer.declarations[0];
+            if (d && ts.isArrayBindingPattern(d.name)) {
+                this.emitDynamicArrayBindingForOf(buf, fos, arrayExpr, arrVar, idxVar);
                 return;
             }
         }
@@ -1304,13 +2245,9 @@ class Emitter {
         if (iteratorType.kind !== "class" || !iteratorType.className) return false;
         const iteratorDecl = this.findClassDecl(iteratorType.className);
         if (!iteratorDecl) return false;
-        const next = iteratorDecl.members.find(
-            (m) =>
-                ts.isMethodDeclaration(m) &&
-                ts.isIdentifier(m.name) &&
-                m.name.text === "next",
-        );
-        if (!next || !ts.isMethodDeclaration(next)) return false;
+        const foundNext = this.findNamedClassMethod(iteratorDecl, "next");
+        if (!foundNext) return false;
+        const { owner: nextOwner, method: next } = foundNext;
         const nextSig = this.checker.getSignatureFromDeclaration(next);
         if (!nextSig) unsupported(next, "could not resolve iterator next() signature");
         const stepTsType = nextSig.getReturnType();
@@ -1319,6 +2256,53 @@ class Emitter {
         const doneType = this.objectFieldType(next, stepTsType, "done", next.name);
         if (doneType.kind !== "boolean") unsupported(next, "iterator next().done must be boolean");
         const valueType = this.objectFieldType(next, stepTsType, "value", next.name);
+
+        const entryBindingDecl = ts.isVariableDeclarationList(fos.initializer)
+            ? fos.initializer.declarations[0]
+            : null;
+        if (entryBindingDecl && ts.isArrayBindingPattern(entryBindingDecl.name)) {
+            if (valueType.kind !== "entry") {
+                unsupported(fos.initializer, "custom iterator destructuring currently supports ObjectEntry values only");
+            }
+            const [keyEl, valueEl] = entryBindingDecl.name.elements;
+            if (
+                !keyEl ||
+                !valueEl ||
+                !ts.isBindingElement(keyEl) ||
+                !ts.isBindingElement(valueEl) ||
+                !ts.isIdentifier(keyEl.name) ||
+                !ts.isIdentifier(valueEl.name)
+            ) {
+                unsupported(entryBindingDecl.name, "custom iterator entry binding must be [keyIdentifier, valueIdentifier]");
+            }
+            const iterVar = this.freshTemp("_it");
+            const stepVar = this.freshTemp("_step");
+            const entryVar = this.freshTemp("_entry");
+            const bindingIsConst = (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
+            const qual = bindingIsConst ? " const" : "";
+            const recv = this.freshTemp("_recv");
+            const keyName = mangleIdent(keyEl.name.text);
+            const valueName = mangleIdent(valueEl.name.text);
+            const entryValueType = valueType.elem ?? T_VOID;
+            buf.open("");
+            buf.line(`${iter.ty.c} ${recv} = ${iter.c};`);
+            const selfArg = owner.name!.text === iter.ty.className ? recv : `((${owner.name!.text}_t*)${recv})`;
+            buf.line(`${iteratorType.c} const ${iterVar} = ${owner.name!.text}___tsc_iterator(${selfArg});`);
+            const nextOwnerName = nextOwner.name!.text;
+            const nextSelfArg = nextOwnerName === iteratorType.className
+                ? iterVar
+                : `((${nextOwnerName}_t*)${iterVar})`;
+            buf.open("while (true)");
+            buf.line(`${stepType.c} const ${stepVar} = ${nextOwnerName}_next(${nextSelfArg});`);
+            buf.line(`if (${stepVar}->done) break;`);
+            buf.line(`${valueType.c}${qual} ${entryVar} = ${stepVar}->value;`);
+            buf.line(`tsc_str_t*${qual} ${keyName} = ${entryVar}.key;`);
+            buf.line(`${entryValueType.c}${qual} ${valueName} = ${this.objectEntryValue(entryVar, entryValueType)};`);
+            this.emitStmtInBlock(buf, fos.statement);
+            buf.close();
+            buf.close();
+            return true;
+        }
 
         let bindingName: string;
         let bindingIsConst = false;
@@ -1343,8 +2327,12 @@ class Emitter {
         buf.line(`${iter.ty.c} ${recv} = ${iter.c};`);
         const selfArg = owner.name!.text === iter.ty.className ? recv : `((${owner.name!.text}_t*)${recv})`;
         buf.line(`${iteratorType.c} const ${iterVar} = ${owner.name!.text}___tsc_iterator(${selfArg});`);
+        const nextOwnerName = nextOwner.name!.text;
+        const nextSelfArg = nextOwnerName === iteratorType.className
+            ? iterVar
+            : `((${nextOwnerName}_t*)${iterVar})`;
         buf.open("while (true)");
-        buf.line(`${stepType.c} const ${stepVar} = ${iteratorType.className}_next(${iterVar});`);
+        buf.line(`${stepType.c} const ${stepVar} = ${nextOwnerName}_next(${nextSelfArg});`);
         buf.line(`if (${stepVar}->done) break;`);
         buf.line(`${valueType.c}${qual} ${bindingName} = ${stepVar}->value;`);
         this.emitStmtInBlock(buf, fos.statement);
@@ -1373,6 +2361,113 @@ class Emitter {
         }
         const base = this.baseClassDecl(cd);
         return base ? this.findSymbolIteratorMethod(base) : null;
+    }
+
+    private findNamedClassMethod(
+        cd: ts.ClassDeclaration,
+        name: string,
+    ): { owner: ts.ClassDeclaration; method: ts.MethodDeclaration } | null {
+        for (const m of cd.members) {
+            if (
+                ts.isMethodDeclaration(m) &&
+                this.staticPropertyName(m.name) === name
+            ) {
+                return { owner: cd, method: m };
+            }
+        }
+        const base = this.baseClassDecl(cd);
+        return base ? this.findNamedClassMethod(base, name) : null;
+    }
+
+    private emitDynamicArrayBindingForOf(
+        buf: CBuf,
+        fos: ts.ForOfStatement,
+        arrayExpr: string,
+        arrVar: string,
+        idxVar: string,
+    ): void {
+        if (!ts.isVariableDeclarationList(fos.initializer)) {
+            unsupported(
+                fos.initializer,
+                "dynamic for-of destructuring needs const/let [value, ...]",
+            );
+        }
+        const d = fos.initializer.declarations[0];
+        if (!d || !ts.isArrayBindingPattern(d.name)) {
+            unsupported(
+                fos.initializer,
+                "dynamic for-of binding must use an array binding pattern",
+            );
+        }
+
+        const bindings: { name: string; index: number; type: CType; node: ts.Identifier }[] = [];
+        let restBinding: { name: string; index: number; type: CType; node: ts.Identifier } | null = null;
+        for (let i = 0; i < d.name.elements.length; i++) {
+            const el = d.name.elements[i];
+            if (!el || el.kind === ts.SyntaxKind.OmittedExpression) continue;
+            if (!ts.isBindingElement(el) || !ts.isIdentifier(el.name)) {
+                unsupported(d.name, "dynamic for-of destructuring supports identifier bindings only");
+            }
+            if (el.dotDotDotToken) {
+                if (restBinding) {
+                    unsupported(el, "dynamic for-of destructuring supports only one rest binding");
+                }
+                const type = this.prepareType(mapType(el.name, this.checker));
+                if (type.kind !== "value" && (type.kind !== "array" || type.elem?.kind !== "value")) {
+                    unsupported(el.name, "dynamic for-of rest destructuring supports any or any[] rest bindings only");
+                }
+                restBinding = {
+                    name: mangleIdent(el.name.text),
+                    index: i,
+                    type,
+                    node: el.name,
+                };
+                continue;
+            }
+            bindings.push({
+                name: mangleIdent(el.name.text),
+                index: i,
+                type: this.prepareType(mapType(el.name, this.checker)),
+                node: el.name,
+            });
+        }
+
+        const bindingIsConst = (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
+        const qual = bindingIsConst ? " const" : "";
+        const entryVar = this.freshTemp("_dyn_entry");
+
+        buf.open("");
+        buf.line(`tsc_array_t* const ${arrVar} = ${arrayExpr};`);
+        buf.open(
+            `for (size_t ${idxVar} = 0; ${idxVar} < ${arrVar}->len; ${idxVar}++)`,
+        );
+        buf.line(`tsc_value_t const ${entryVar} = TSC_ARR(tsc_value_t, ${arrVar}, ${idxVar});`);
+        for (const binding of bindings) {
+            const value: EmitResult = {
+                c: `tsc_value_get_index(${entryVar}, ${binding.index}.0)`,
+                ty: T_VALUE,
+            };
+            buf.line(
+                `${binding.type.c}${qual} ${binding.name} = ${this.coerce(value, binding.type, binding.node)};`,
+            );
+        }
+        if (restBinding) {
+            const restArray = this.freshTemp("_dyn_rest");
+            const restIdx = this.freshTemp("_dyn_rest_i");
+            const restValue = this.freshTemp("_dyn_rest_v");
+            buf.line(`tsc_array_t* ${restArray} = tsc_array_new(sizeof(tsc_value_t), 1);`);
+            buf.open(`for (size_t ${restIdx} = ${restBinding.index}; ${restIdx} < (size_t)tsc_value_length(${entryVar}); ${restIdx}++)`);
+            buf.line(`tsc_value_t ${restValue} = tsc_value_get_index(${entryVar}, (double)${restIdx});`);
+            buf.line(`tsc_array_push_raw(${restArray}, &${restValue});`);
+            buf.close();
+            const init = restBinding.type.kind === "value"
+                ? `tsc_value_array(${restArray})`
+                : restArray;
+            buf.line(`${restBinding.type.c}${qual} ${restBinding.name} = ${init};`);
+        }
+        this.emitStmtInBlock(buf, fos.statement);
+        buf.close();
+        buf.close();
     }
 
     private emitEntryArrayForOf(
@@ -1505,6 +2600,15 @@ class Emitter {
             unsupported(r, "return outside of function");
         }
         const ret = this.returnStack[this.returnStack.length - 1]!;
+        const gen = this.generatorStack[this.generatorStack.length - 1];
+        if (gen) {
+            if (r.expression) {
+                const expr = this.emitExpr(r.expression);
+                buf.line(`(void)(${expr.c});`);
+            }
+            buf.line(`return ${gen.arrayVar};`);
+            return;
+        }
         if (!r.expression) {
             buf.line("return;");
             return;
@@ -1771,9 +2875,11 @@ class Emitter {
         if (ts.isTemplateExpression(expr)) return this.emitTemplate(expr);
         if (ts.isTaggedTemplateExpression(expr)) return this.emitTaggedTemplate(expr);
         if (expr.kind === ts.SyntaxKind.ThisKeyword) {
-            if (!this.currentClass)
-                unsupported(expr, "`this` outside of a class method");
-            return { c: "self", ty: classType(this.currentClass) };
+            const fnThis = this.functionThisStack[this.functionThisStack.length - 1];
+            if (!this.currentClass && !fnThis)
+                unsupported(expr, "`this` outside of a class method or function this parameter");
+            if (fnThis) return fnThis;
+            return { c: "self", ty: classType(this.currentClass!) };
         }
 
         if (ts.isIdentifier(expr)) {
@@ -1796,7 +2902,13 @@ class Emitter {
             if (ty.kind === "function" && this.isDirectFunctionReferenceValue(expr)) {
                 return this.emitFunctionReferenceClosure(expr, ty);
             }
-            return { c: this.identifierRead(expr), ty };
+            // Surface int-spec storage type so downstream emitters (binary,
+            // strbuf append, JSON, etc.) can pick the int64 fast paths.
+            const effectiveTy =
+                declaredTy && declaredTy.c === "int64_t" && ty.kind === "number"
+                    ? declaredTy
+                    : ty;
+            return { c: this.identifierRead(expr), ty: effectiveTy };
         }
         if (ts.isParenthesizedExpression(expr)) {
             const inner = this.emitExpr(expr.expression);
@@ -1804,6 +2916,7 @@ class Emitter {
         }
         if (ts.isTypeOfExpression(expr)) return this.emitTypeOf(expr);
         if (ts.isDeleteExpression(expr)) return this.emitDelete(expr);
+        if (ts.isVoidExpression(expr)) return this.emitVoidExpression(expr);
         if (ts.isPrefixUnaryExpression(expr)) return this.emitPrefixUnary(expr);
         if (ts.isPostfixUnaryExpression(expr)) return this.emitPostfixUnary(expr);
         if (ts.isBinaryExpression(expr)) return this.emitBinary(expr);
@@ -1845,6 +2958,14 @@ class Emitter {
                 `({ (void)(${inner.c}); ` +
                 `${this.stringLit(result)}; })`,
             ty: T_STRING,
+        };
+    }
+
+    private emitVoidExpression(expr: ts.VoidExpression): EmitResult {
+        const inner = this.emitExpr(expr.expression);
+        return {
+            c: `({ (void)(${inner.c}); NULL; })`,
+            ty: T_VOID,
         };
     }
 
@@ -1890,6 +3011,7 @@ class Emitter {
             case "weakmap":
             case "weakset":
             case "weakref":
+            case "finregistry":
             case "regexp":
             case "hash":
             case "url":
@@ -2083,26 +3205,57 @@ class Emitter {
 
     private emitPrefixUnary(pu: ts.PrefixUnaryExpression): EmitResult {
         const op = pu.operator;
+        if (op === ts.SyntaxKind.PlusPlusToken || op === ts.SyntaxKind.MinusMinusToken) {
+            const dynamicUpdate = this.emitDynamicPropertyUpdate(pu.operand, op, true);
+            if (dynamicUpdate) return dynamicUpdate;
+        }
         const inner = this.emitExpr(pu.operand);
         switch (op) {
             case ts.SyntaxKind.ExclamationToken:
                 return { c: `(!${this.emitBoolExpr(pu.operand)})`, ty: T_BOOLEAN };
             case ts.SyntaxKind.MinusToken:
+                if (inner.ty.kind === "value") {
+                    return this.emitSequencedCall("tsc_value_neg", T_VALUE, [
+                        { value: inner, target: T_VALUE, node: pu.operand },
+                    ]);
+                }
                 if (inner.ty.kind === "bigint") {
                     return { c: `tsc_bigint_neg(${inner.c})`, ty: T_BIGINT };
                 }
                 requireNumber(pu, inner.ty);
                 return { c: `(-${inner.c})`, ty: T_NUMBER };
             case ts.SyntaxKind.PlusToken:
+                if (inner.ty.kind === "value") {
+                    return this.emitSequencedCall("tsc_value_pos", T_VALUE, [
+                        { value: inner, target: T_VALUE, node: pu.operand },
+                    ]);
+                }
                 requireNumber(pu, inner.ty);
                 return { c: `(+${inner.c})`, ty: T_NUMBER };
             case ts.SyntaxKind.PlusPlusToken:
+                if (inner.ty.kind === "value" && ts.isIdentifier(pu.operand)) {
+                    return {
+                        c: `(${inner.c} = tsc_value_add(tsc_value_pos(${inner.c}), tsc_value_num(1.0)))`,
+                        ty: T_VALUE,
+                    };
+                }
                 requireNumber(pu, inner.ty);
                 return { c: `(++${inner.c})`, ty: T_NUMBER };
             case ts.SyntaxKind.MinusMinusToken:
+                if (inner.ty.kind === "value" && ts.isIdentifier(pu.operand)) {
+                    return {
+                        c: `(${inner.c} = tsc_value_sub(tsc_value_pos(${inner.c}), tsc_value_num(1.0)))`,
+                        ty: T_VALUE,
+                    };
+                }
                 requireNumber(pu, inner.ty);
                 return { c: `(--${inner.c})`, ty: T_NUMBER };
             case ts.SyntaxKind.TildeToken:
+                if (inner.ty.kind === "value") {
+                    return this.emitSequencedCall("tsc_value_bit_not", T_VALUE, [
+                        { value: inner, target: T_VALUE, node: pu.operand },
+                    ]);
+                }
                 requireNumber(pu, inner.ty);
                 return { c: `((double)(~(int32_t)(${inner.c})))`, ty: T_NUMBER };
         }
@@ -2112,20 +3265,30 @@ class Emitter {
     private emitDelete(del: ts.DeleteExpression): EmitResult {
         const expr = del.expression;
         if (ts.isPropertyAccessExpression(expr)) {
+            const recvType = this.expressionDeclaredOrCurrentType(expr.expression);
+            const mapped = this.prepareType(mapTsType(expr.expression, recvType, this.checker));
             const recv = this.emitExpr(expr.expression);
             const keyText = expr.name.text;
             const key: EmitResult = {
                 c: `tsc_str_from_lit("${escapeCString(keyText)}", ${utf8ByteLen(keyText)})`,
                 ty: T_STRING,
             };
+            if (mapped.kind === "array") {
+                return this.emitTypedArrayDeleteProperty(expr.expression, recv, key, expr.name);
+            }
             return this.emitSequencedCall("tsc_value_delete_prop", T_BOOLEAN, [
                 { value: recv, target: T_VALUE, node: expr.expression },
                 { value: key, target: T_STRING, node: expr.name },
             ]);
         }
         if (ts.isElementAccessExpression(expr)) {
+            const recvType = this.expressionDeclaredOrCurrentType(expr.expression);
+            const mapped = this.prepareType(mapTsType(expr.expression, recvType, this.checker));
             const recv = this.emitExpr(expr.expression);
             const key = this.emitExpr(expr.argumentExpression);
+            if (mapped.kind === "array") {
+                return this.emitTypedArrayDeleteProperty(expr.expression, recv, key, expr.argumentExpression);
+            }
             return this.emitSequencedCall("tsc_value_delete_prop", T_BOOLEAN, [
                 { value: recv, target: T_VALUE, node: expr.expression },
                 { value: key, target: T_STRING, node: expr.argumentExpression },
@@ -2135,16 +3298,147 @@ class Emitter {
     }
 
     private emitPostfixUnary(pu: ts.PostfixUnaryExpression): EmitResult {
+        if (pu.operator === ts.SyntaxKind.PlusPlusToken || pu.operator === ts.SyntaxKind.MinusMinusToken) {
+            const dynamicUpdate = this.emitDynamicPropertyUpdate(pu.operand, pu.operator, false);
+            if (dynamicUpdate) return dynamicUpdate;
+        }
         const inner = this.emitExpr(pu.operand);
         switch (pu.operator) {
-            case ts.SyntaxKind.PlusPlusToken:
+            case ts.SyntaxKind.PlusPlusToken: {
+                if (inner.ty.kind === "value" && ts.isIdentifier(pu.operand)) {
+                    const tmp = this.freshTemp("_post");
+                    return {
+                        c: `({ tsc_value_t ${tmp} = tsc_value_pos(${inner.c}); ${inner.c} = tsc_value_add(${tmp}, tsc_value_num(1.0)); ${tmp}; })`,
+                        ty: T_VALUE,
+                    };
+                }
                 requireNumber(pu, inner.ty);
                 return { c: `(${inner.c}++)`, ty: T_NUMBER };
-            case ts.SyntaxKind.MinusMinusToken:
+            }
+            case ts.SyntaxKind.MinusMinusToken: {
+                if (inner.ty.kind === "value" && ts.isIdentifier(pu.operand)) {
+                    const tmp = this.freshTemp("_post");
+                    return {
+                        c: `({ tsc_value_t ${tmp} = tsc_value_pos(${inner.c}); ${inner.c} = tsc_value_sub(${tmp}, tsc_value_num(1.0)); ${tmp}; })`,
+                        ty: T_VALUE,
+                    };
+                }
                 requireNumber(pu, inner.ty);
                 return { c: `(${inner.c}--)`, ty: T_NUMBER };
+            }
         }
         unsupported(pu, `postfix operator ${ts.SyntaxKind[pu.operator]}`);
+    }
+
+    private emitDynamicPropertyUpdate(
+        operand: ts.Expression,
+        op: ts.SyntaxKind.PlusPlusToken | ts.SyntaxKind.MinusMinusToken,
+        prefix: boolean,
+    ): EmitResult | null {
+        let recvExpr: ts.Expression | null = null;
+        let keyExpr: ts.Expression | null = null;
+        let indexUpdate = false;
+        let literalKey: string | null = null;
+
+        if (ts.isPropertyAccessExpression(operand)) {
+            if (!ts.isIdentifier(operand.name)) return null;
+            recvExpr = operand.expression;
+            literalKey = operand.name.text;
+            if (this.namespaceMemberName(operand.name)) return null;
+            if (ts.isIdentifier(recvExpr)) {
+                const sym = this.checker.getSymbolAtLocation(recvExpr);
+                const cd = sym
+                    ?.getDeclarations()
+                    ?.find(ts.isClassDeclaration);
+                const staticField = cd?.members.find(
+                    (m) =>
+                        ts.isPropertyDeclaration(m) &&
+                        m.name &&
+                        this.staticPropertyName(m.name) === operand.name.text &&
+                        isStatic(m),
+                );
+                if (staticField) return null;
+            }
+        } else if (ts.isElementAccessExpression(operand)) {
+            recvExpr = operand.expression;
+            keyExpr = operand.argumentExpression;
+        } else {
+            return null;
+        }
+
+        const recv = this.emitExpr(recvExpr);
+        if (recv.ty.kind !== "value") return null;
+
+        const specs: SequencedCallArg[] = [
+            { value: recv, target: T_VALUE, node: recvExpr },
+        ];
+        if (keyExpr) {
+            const key = this.emitExpr(keyExpr);
+            indexUpdate = key.ty.kind === "number";
+            specs.push({ value: key, target: indexUpdate ? T_NUMBER : T_STRING, node: keyExpr });
+        }
+
+        const fn = op === ts.SyntaxKind.PlusPlusToken ? "tsc_value_add" : "tsc_value_sub";
+        return this.emitSequencedExpr(T_VALUE, specs, (values) => {
+            const obj = values[0]!;
+            const keyC = keyExpr
+                ? values[1]!
+                : `tsc_str_from_lit("${escapeCString(literalKey!)}", ${utf8ByteLen(literalKey!)})`;
+            const cur = this.freshTemp("_dynupd");
+            const next = this.freshTemp("_dynupd_next");
+            const existing = indexUpdate
+                ? `tsc_value_get_index(${obj}, ${keyC})`
+                : `tsc_value_get_prop(${obj}, ${keyC})`;
+            const set = indexUpdate
+                ? `tsc_value_set_index(${obj}, ${keyC}, ${next})`
+                : `tsc_value_set_prop(${obj}, ${keyC}, ${next})`;
+            return `({ tsc_value_t ${cur} = tsc_value_pos(${existing}); tsc_value_t ${next} = ${fn}(${cur}, tsc_value_num(1.0)); ${set}; ${prefix ? next : cur}; })`;
+        });
+    }
+
+    /**
+     * Detect a left-leaning chain `a + b + c + d` whose final result is
+     * string-typed and at least one operand is string. If so, emit a single
+     * `tsc_str_concat_n(N, a_str, b_str, ...)` call instead of N-1 nested
+     * `tsc_str_concat`s. Returns null if not a string-`+` chain.
+     */
+    private tryFoldStringConcatChain(bin: ts.BinaryExpression): EmitResult | null {
+        // Quick gate: the top-level result must be string-typed. Look at TS
+        // types so we don't have to emit any operand twice.
+        const topTy = mapType(bin, this.checker);
+        if (topTy.kind !== "string") return null;
+
+        // Walk the left chain, collecting leaves left-to-right.
+        const leaves: ts.Expression[] = [];
+        const walk = (e: ts.Expression): void => {
+            if (
+                ts.isBinaryExpression(e) &&
+                e.operatorToken.kind === ts.SyntaxKind.PlusToken
+            ) {
+                const childTy = mapType(e, this.checker);
+                if (childTy.kind === "string") {
+                    walk(e.left);
+                    walk(e.right);
+                    return;
+                }
+            }
+            leaves.push(e);
+        };
+        walk(bin.left);
+        walk(bin.right);
+
+        if (leaves.length < 3) return null; // 2-operand `+` already optimal
+
+        // Emit each leaf and coerce to string.
+        const parts: string[] = [];
+        for (const leaf of leaves) {
+            const r = this.emitExpr(leaf);
+            parts.push(this.coerceToString(r, leaf));
+        }
+        return {
+            c: `tsc_str_concat_n(${parts.length}, ${parts.join(", ")})`,
+            ty: T_STRING,
+        };
     }
 
     private emitBinary(bin: ts.BinaryExpression): EmitResult {
@@ -2155,8 +3449,18 @@ class Emitter {
             op === ts.SyntaxKind.PlusEqualsToken ||
             op === ts.SyntaxKind.MinusEqualsToken ||
             op === ts.SyntaxKind.AsteriskEqualsToken ||
+            op === ts.SyntaxKind.AsteriskAsteriskEqualsToken ||
             op === ts.SyntaxKind.SlashEqualsToken ||
-            op === ts.SyntaxKind.PercentEqualsToken
+            op === ts.SyntaxKind.PercentEqualsToken ||
+            op === ts.SyntaxKind.AmpersandEqualsToken ||
+            op === ts.SyntaxKind.BarEqualsToken ||
+            op === ts.SyntaxKind.CaretEqualsToken ||
+            op === ts.SyntaxKind.LessThanLessThanEqualsToken ||
+            op === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken ||
+            op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken ||
+            op === ts.SyntaxKind.AmpersandAmpersandEqualsToken ||
+            op === ts.SyntaxKind.BarBarEqualsToken ||
+            op === ts.SyntaxKind.QuestionQuestionEqualsToken
         ) {
             return this.emitAssignment(bin, op);
         }
@@ -2179,13 +3483,43 @@ class Emitter {
             if (typeofComparison) return typeofComparison;
         }
 
+        // String-concat chain folding: `a + b + c + d` (string-typed) lowers to
+        // a single tsc_str_concat_n call with one allocation, vs N-1 nested
+        // tsc_str_concat calls each doing its own GC_MALLOC + memcpys.
+        if (op === ts.SyntaxKind.PlusToken) {
+            const chain = this.tryFoldStringConcatChain(bin);
+            if (chain) return chain;
+        }
+
         const left = this.emitExpr(bin.left);
         const right = this.emitExpr(bin.right);
 
+        if (op === ts.SyntaxKind.CommaToken) {
+            return this.emitSequencedExpr(right.ty, [{ value: left }], () => right.c);
+        }
+
         switch (op) {
             case ts.SyntaxKind.InKeyword: {
+                if (right.ty.kind === "class") {
+                    return this.emitTypedObjectHasOwn(
+                        bin.right,
+                        right,
+                        bin.left,
+                        this.checker.getTypeAtLocation(bin.right),
+                        "in",
+                    );
+                }
+                if (right.ty.kind === "array") {
+                    return this.emitSequencedCall("tsc_array_has_own_key", T_BOOLEAN, [
+                        { value: right },
+                        { value: left, target: T_STRING, node: bin.left },
+                    ]);
+                }
+                if (right.ty.kind === "buffer") {
+                    return this.emitBufferPropertyKeyCheck(bin.right, right, bin.left, true);
+                }
                 if (right.ty.kind !== "value") {
-                    unsupported(bin.right, "in currently supports dynamic object right-hand sides only");
+                    unsupported(bin.right, "in currently supports dynamic objects, typed objects, arrays, and buffers only");
                 }
                 return this.emitSequencedExpr(
                     T_BOOLEAN,
@@ -2241,6 +3575,9 @@ class Emitter {
                         : op === ts.SyntaxKind.AsteriskToken
                             ? "*"
                             : "/";
+                if (op === ts.SyntaxKind.SlashToken) {
+                    return { c: `(((double)(${left.c})) / ((double)(${right.c})))`, ty: T_NUMBER };
+                }
                 return { c: `(${left.c} ${cop} ${right.c})`, ty: T_NUMBER };
             }
             case ts.SyntaxKind.PercentToken: {
@@ -2252,6 +3589,16 @@ class Emitter {
                 }
                 requireNumber(bin, left.ty);
                 requireNumber(bin, right.ty);
+                // Fast path: when both sides are provably integer-valued, lower
+                // the whole sub-tree as int64 arithmetic (no double round trip
+                // per intermediate). Falls back to tsc_num_mod (inline runtime
+                // helper) otherwise.
+                if (this.isIntegerShape(bin.left) && this.isIntegerShape(bin.right)) {
+                    return {
+                        c: `(${this.emitIntegerExpr(bin.left)} % ${this.emitIntegerExpr(bin.right)})`,
+                        ty: T_NUMBER_INT,
+                    };
+                }
                 return { c: `tsc_num_mod(${left.c}, ${right.c})`, ty: T_NUMBER };
             }
             case ts.SyntaxKind.AsteriskAsteriskToken: {
@@ -2312,7 +3659,7 @@ class Emitter {
                     );
                 }
                 const pointerKinds: readonly CType["kind"][] = [
-                    "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "regexp", "hash", "url", "buffer", "function",
+                    "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "regexp", "hash", "url", "buffer", "function",
                 ];
                 if (pointerKinds.includes(left.ty.kind)) {
                     const tv = this.freshTemp("_nc");
@@ -2330,6 +3677,19 @@ class Emitter {
             case ts.SyntaxKind.CaretToken:
             case ts.SyntaxKind.LessThanLessThanToken:
             case ts.SyntaxKind.GreaterThanGreaterThanToken: {
+                if (left.ty.kind === "value" || right.ty.kind === "value") {
+                    const fn =
+                        op === ts.SyntaxKind.AmpersandToken
+                            ? "tsc_value_bit_and"
+                            : op === ts.SyntaxKind.BarToken
+                                ? "tsc_value_bit_or"
+                                : op === ts.SyntaxKind.CaretToken
+                                    ? "tsc_value_bit_xor"
+                                    : op === ts.SyntaxKind.LessThanLessThanToken
+                                        ? "tsc_value_shl"
+                                        : "tsc_value_shr";
+                    return this.emitDynamicBinary(fn, T_VALUE, bin, left, right);
+                }
                 requireNumber(bin, left.ty);
                 requireNumber(bin, right.ty);
                 const cop = bitwiseOp(op);
@@ -2339,6 +3699,9 @@ class Emitter {
                 };
             }
             case ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken: {
+                if (left.ty.kind === "value" || right.ty.kind === "value") {
+                    return this.emitDynamicBinary("tsc_value_ushr", T_VALUE, bin, left, right);
+                }
                 requireNumber(bin, left.ty);
                 requireNumber(bin, right.ty);
                 return {
@@ -2394,6 +3757,21 @@ class Emitter {
         const dynamicPropertyAssignment = this.emitDynamicPropertyAssignment(bin, op);
         if (dynamicPropertyAssignment) return dynamicPropertyAssignment;
 
+        // Strbuf-lifted self-append: `X = X + a + b + ...` or `X += ...`
+        // becomes a sequence of tsc_jsonbuf_append* calls into X_sb.
+        if (
+            ts.isIdentifier(bin.left) &&
+            (op === ts.SyntaxKind.EqualsToken || op === ts.SyntaxKind.PlusEqualsToken)
+        ) {
+            const sym = this.checker.getSymbolAtLocation(bin.left);
+            if (sym && this.strbufSymbols.has(sym)) {
+                return this.emitStrbufAssignment(
+                    bin.left, bin.right,
+                    op === ts.SyntaxKind.PlusEqualsToken,
+                );
+            }
+        }
+
         const lhsC = this.emitLvalue(bin.left);
         const lhsType = this.storageType(bin.left);
         const rhs = this.emitExpr(bin.right);
@@ -2401,6 +3779,14 @@ class Emitter {
         if (op === ts.SyntaxKind.EqualsToken) {
             const coerced = this.coerce(rhs, lhsType, bin.right);
             return { c: `(${lhsC} = ${coerced})`, ty: lhsType };
+        }
+
+        if (
+            op === ts.SyntaxKind.AmpersandAmpersandEqualsToken ||
+            op === ts.SyntaxKind.BarBarEqualsToken ||
+            op === ts.SyntaxKind.QuestionQuestionEqualsToken
+        ) {
+            return this.emitLogicalAssignment(bin, op, lhsC, lhsType, rhs);
         }
 
         if (lhsType.kind === "bigint") {
@@ -2414,11 +3800,13 @@ class Emitter {
                         ? "tsc_bigint_sub"
                         : op === ts.SyntaxKind.AsteriskEqualsToken
                             ? "tsc_bigint_mul"
-                            : op === ts.SyntaxKind.SlashEqualsToken
-                                ? "tsc_bigint_div"
-                                : op === ts.SyntaxKind.PercentEqualsToken
-                                    ? "tsc_bigint_mod"
-                                    : null;
+                            : op === ts.SyntaxKind.AsteriskAsteriskEqualsToken
+                                ? "tsc_bigint_pow"
+                                : op === ts.SyntaxKind.SlashEqualsToken
+                                    ? "tsc_bigint_div"
+                                    : op === ts.SyntaxKind.PercentEqualsToken
+                                        ? "tsc_bigint_mod"
+                                        : null;
             if (fn) return { c: `(${lhsC} = ${fn}(${lhsC}, ${rhs.c}))`, ty: T_BIGINT };
         }
 
@@ -2430,17 +3818,39 @@ class Emitter {
                         ? "tsc_value_sub"
                         : op === ts.SyntaxKind.AsteriskEqualsToken
                             ? "tsc_value_mul"
-                            : op === ts.SyntaxKind.SlashEqualsToken
-                                ? "tsc_value_div"
-                                : op === ts.SyntaxKind.PercentEqualsToken
-                                    ? "tsc_value_mod"
-                                    : null;
+                            : op === ts.SyntaxKind.AsteriskAsteriskEqualsToken
+                                ? "tsc_value_pow"
+                                : op === ts.SyntaxKind.SlashEqualsToken
+                                    ? "tsc_value_div"
+                                    : op === ts.SyntaxKind.PercentEqualsToken
+                                        ? "tsc_value_mod"
+                                        : op === ts.SyntaxKind.AmpersandEqualsToken
+                                            ? "tsc_value_bit_and"
+                                            : op === ts.SyntaxKind.BarEqualsToken
+                                                ? "tsc_value_bit_or"
+                                                : op === ts.SyntaxKind.CaretEqualsToken
+                                                    ? "tsc_value_bit_xor"
+                                                    : op === ts.SyntaxKind.LessThanLessThanEqualsToken
+                                                        ? "tsc_value_shl"
+                                                        : op === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken
+                                                            ? "tsc_value_shr"
+                                                            : op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken
+                                                                ? "tsc_value_ushr"
+                                                                : null;
             if (fn) {
                 return {
                     c: `(${lhsC} = ${fn}(${lhsC}, ${this.coerce(rhs, T_VALUE, bin.right)}))`,
                     ty: T_VALUE,
                 };
             }
+        }
+
+        if (lhsType.kind === "string" && op === ts.SyntaxKind.PlusEqualsToken) {
+            const rhsStr = this.coerceToString(rhs, bin.right);
+            return {
+                c: `(${lhsC} = tsc_str_concat(${lhsC}, ${rhsStr}))`,
+                ty: T_STRING,
+            };
         }
 
         requireNumber(bin.left, lhsType);
@@ -2462,7 +3872,72 @@ class Emitter {
                 ty: T_NUMBER,
             };
         }
+        if (op === ts.SyntaxKind.AsteriskAsteriskEqualsToken) {
+            return { c: `(${lhsC} = pow(${lhsC}, ${rhs.c}))`, ty: T_NUMBER };
+        }
+        const bitwiseAssign =
+            op === ts.SyntaxKind.AmpersandEqualsToken
+                ? "&"
+                : op === ts.SyntaxKind.BarEqualsToken
+                    ? "|"
+                    : op === ts.SyntaxKind.CaretEqualsToken
+                        ? "^"
+                        : op === ts.SyntaxKind.LessThanLessThanEqualsToken
+                            ? "<<"
+                            : op === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken
+                                ? ">>"
+                                : null;
+        if (bitwiseAssign) {
+            return {
+                c: `(${lhsC} = (double)((int32_t)(${lhsC}) ${bitwiseAssign} (int32_t)(${rhs.c})))`,
+                ty: T_NUMBER,
+            };
+        }
+        if (op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken) {
+            return {
+                c: `(${lhsC} = (double)((uint32_t)(${lhsC}) >> (uint32_t)(${rhs.c})))`,
+                ty: T_NUMBER,
+            };
+        }
         unsupported(bin, `compound assignment ${ts.SyntaxKind[op]}`);
+    }
+
+    private emitLogicalAssignment(
+        bin: ts.BinaryExpression,
+        op: ts.SyntaxKind,
+        lhsC: string,
+        lhsType: CType,
+        rhs: EmitResult,
+    ): EmitResult {
+        const cur = this.freshTemp("_la");
+        const assign = `(${lhsC} = ${this.coerce(rhs, lhsType, bin.right)})`;
+        if (op === ts.SyntaxKind.QuestionQuestionEqualsToken) {
+            if (lhsType.kind === "value") {
+                return {
+                    c: `({ ${lhsType.c} ${cur} = ${lhsC}; tsc_value_is_nullish(${cur}) ? ${assign} : ${cur}; })`,
+                    ty: lhsType,
+                };
+            }
+            if (isPointerKind(lhsType)) {
+                return {
+                    c: `({ ${lhsType.c} ${cur} = ${lhsC}; ${cur} == NULL ? ${assign} : ${cur}; })`,
+                    ty: lhsType,
+                };
+            }
+            return { c: `({ ${lhsType.c} ${cur} = ${lhsC}; ${cur}; })`, ty: lhsType };
+        }
+
+        const cond = this.truthyC({ c: cur, ty: lhsType }, bin.left);
+        if (op === ts.SyntaxKind.AmpersandAmpersandEqualsToken) {
+            return {
+                c: `({ ${lhsType.c} ${cur} = ${lhsC}; ${cond} ? ${assign} : ${cur}; })`,
+                ty: lhsType,
+            };
+        }
+        return {
+            c: `({ ${lhsType.c} ${cur} = ${lhsC}; ${cond} ? ${cur} : ${assign}; })`,
+            ty: lhsType,
+        };
     }
 
     private emitDynamicPropertyAssignment(
@@ -2490,8 +3965,7 @@ class Emitter {
                     (m) =>
                         ts.isPropertyDeclaration(m) &&
                         m.name &&
-                        ts.isIdentifier(m.name) &&
-                        m.name.text === left.name.text &&
+                        this.staticPropertyName(m.name) === left.name.text &&
                         isStatic(m),
                 );
                 if (staticField) return null;
@@ -2515,7 +3989,11 @@ class Emitter {
             indexAssignment = key.ty.kind === "number";
             specs.push({ value: key, target: indexAssignment ? T_NUMBER : T_STRING, node: keyExpr });
         }
-        specs.push({ value: rhs, target: T_VALUE, node: bin.right });
+
+        const logicalOp =
+            op === ts.SyntaxKind.AmpersandAmpersandEqualsToken ||
+            op === ts.SyntaxKind.BarBarEqualsToken ||
+            op === ts.SyntaxKind.QuestionQuestionEqualsToken;
 
         const compoundFn =
             op === ts.SyntaxKind.PlusEqualsToken
@@ -2524,31 +4002,64 @@ class Emitter {
                     ? "tsc_value_sub"
                     : op === ts.SyntaxKind.AsteriskEqualsToken
                         ? "tsc_value_mul"
-                        : op === ts.SyntaxKind.SlashEqualsToken
-                            ? "tsc_value_div"
-                            : op === ts.SyntaxKind.PercentEqualsToken
-                                ? "tsc_value_mod"
-                                : null;
+                        : op === ts.SyntaxKind.AsteriskAsteriskEqualsToken
+                            ? "tsc_value_pow"
+                            : op === ts.SyntaxKind.SlashEqualsToken
+                                ? "tsc_value_div"
+                                : op === ts.SyntaxKind.PercentEqualsToken
+                                    ? "tsc_value_mod"
+                                    : op === ts.SyntaxKind.AmpersandEqualsToken
+                                        ? "tsc_value_bit_and"
+                                        : op === ts.SyntaxKind.BarEqualsToken
+                                            ? "tsc_value_bit_or"
+                                            : op === ts.SyntaxKind.CaretEqualsToken
+                                                ? "tsc_value_bit_xor"
+                                                : op === ts.SyntaxKind.LessThanLessThanEqualsToken
+                                                    ? "tsc_value_shl"
+                                                    : op === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken
+                                                        ? "tsc_value_shr"
+                                                        : op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken
+                                                            ? "tsc_value_ushr"
+                                                            : null;
 
-        if (op !== ts.SyntaxKind.EqualsToken && !compoundFn) return null;
+        if (op !== ts.SyntaxKind.EqualsToken && !compoundFn && !logicalOp) return null;
+        if (!logicalOp) {
+            specs.push({ value: rhs, target: T_VALUE, node: bin.right });
+        }
 
         return this.emitSequencedExpr(T_VALUE, specs, (values) => {
             const obj = values[0]!;
             const keyC = keyExpr
                 ? values[1]!
                 : `tsc_str_from_lit("${escapeCString(literalKey!)}", ${utf8ByteLen(literalKey!)})`;
-            const value = values[keyExpr ? 2 : 1]!;
             const out = this.freshTemp("_dynassign");
+            const existing = indexAssignment
+                ? `tsc_value_get_index(${obj}, ${keyC})`
+                : `tsc_value_get_prop(${obj}, ${keyC})`;
+            const set = (value: string) => indexAssignment
+                ? `tsc_value_set_index(${obj}, ${keyC}, ${value})`
+                : `tsc_value_set_prop(${obj}, ${keyC}, ${value})`;
+            if (logicalOp) {
+                const rhsValue = this.coerce(rhs, T_VALUE, bin.right);
+                const cond =
+                    op === ts.SyntaxKind.AmpersandAmpersandEqualsToken
+                        ? `tsc_value_is_truthy(${out})`
+                        : op === ts.SyntaxKind.BarBarEqualsToken
+                            ? `!tsc_value_is_truthy(${out})`
+                            : `tsc_value_is_nullish(${out})`;
+                return `({ tsc_value_t ${out} = ${existing}; if (${cond}) { ${out} = ${rhsValue}; ${set(out)}; } ${out}; })`;
+            }
+            const value = values[keyExpr ? 2 : 1]!;
             if (indexAssignment) {
                 if (op === ts.SyntaxKind.EqualsToken) {
                     return `({ tsc_value_t ${out} = ${value}; tsc_value_set_index(${obj}, ${keyC}, ${out}); ${out}; })`;
                 }
-                return `({ tsc_value_t ${out} = ${compoundFn}(tsc_value_get_index(${obj}, ${keyC}), ${value}); tsc_value_set_index(${obj}, ${keyC}, ${out}); ${out}; })`;
+                return `({ tsc_value_t ${out} = ${compoundFn}(${existing}, ${value}); ${set(out)}; ${out}; })`;
             }
             if (op === ts.SyntaxKind.EqualsToken) {
                 return `({ tsc_value_t ${out} = ${value}; tsc_value_set_prop(${obj}, ${keyC}, ${out}); ${out}; })`;
             }
-            return `({ tsc_value_t ${out} = ${compoundFn}(tsc_value_get_prop(${obj}, ${keyC}), ${value}); tsc_value_set_prop(${obj}, ${keyC}, ${out}); ${out}; })`;
+            return `({ tsc_value_t ${out} = ${compoundFn}(${existing}, ${value}); ${set(out)}; ${out}; })`;
         });
     }
 
@@ -2577,8 +4088,7 @@ class Emitter {
                         (m) =>
                             ts.isPropertyDeclaration(m) &&
                             m.name &&
-                            ts.isIdentifier(m.name) &&
-                            m.name.text === expr.name.text &&
+                            this.staticPropertyName(m.name) === expr.name.text &&
                             isStatic(m),
                     );
                     if (field) {
@@ -2633,7 +4143,7 @@ class Emitter {
         }
         // Compare pointer-valued types (array, class, map, set, regexp, string) to null.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "regexp", "hash", "url", "buffer", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "regexp", "hash", "url", "buffer", "function",
         ];
         const leftIsNull = left.ty.kind === "void";
         const rightIsNull = right.ty.kind === "void";
@@ -2790,20 +4300,25 @@ class Emitter {
         if (name === "BigInt") {
             return this.emitBigIntConstructor(call);
         }
+        if (name === "Boolean") {
+            return this.emitBooleanConstructor(call);
+        }
+        if (name === "String") {
+            return this.emitStringConstructor(call);
+        }
+        if (name === "Number") {
+            return this.emitNumberConstructor(call);
+        }
         if (name === "Symbol") {
             return this.emitSymbolConstructor(call);
         }
         if (name === "isNaN") {
             if (call.arguments.length !== 1) unsupported(call, "isNaN expects 1 arg");
-            const r = this.emitExpr(call.arguments[0]!);
-            requireNumber(call.arguments[0]!, r.ty);
-            return { c: `(isnan(${r.c}))`, ty: T_BOOLEAN };
+            return this.emitGlobalNumberPredicate(call, "isNaN");
         }
         if (name === "isFinite") {
             if (call.arguments.length !== 1) unsupported(call, "isFinite expects 1 arg");
-            const r = this.emitExpr(call.arguments[0]!);
-            requireNumber(call.arguments[0]!, r.ty);
-            return { c: `(isfinite(${r.c}))`, ty: T_BOOLEAN };
+            return this.emitGlobalNumberPredicate(call, "isFinite");
         }
 
         if (!this.isDirectCallableIdentifier(call.expression)) {
@@ -2820,9 +4335,68 @@ class Emitter {
         if (genericDecl) {
             return this.emitGenericFunctionCall(call, genericDecl, sig);
         }
-        const specs = this.callSpecsFromSignature(call, call.arguments, sig.getParameters());
         const retType = this.prepareType(mapTsType(call, sig.getReturnType(), this.checker));
-        return this.emitSequencedCall(fnName, retType, specs);
+        const params = sig.getParameters();
+        const thisType = ts.isIdentifier(call.expression)
+            ? this.directCallableThisType(call.expression)
+            : this.signatureThisType(sig, call.expression);
+        const fixedArgs = thisType ? ["tsc_value_undefined()"] : [];
+        if (
+            call.arguments.some((arg) => ts.isSpreadElement(arg)) &&
+            !this.signatureHasRestParameter(params)
+        ) {
+            return this.emitStaticSpreadCall(call, fnName, retType, params, fixedArgs);
+        }
+        const specs = this.callSpecsFromSignature(call, call.arguments, params);
+        return this.emitSequencedCall(fnName, retType, specs, fixedArgs);
+    }
+
+    private signatureHasRestParameter(params: readonly ts.Symbol[]): boolean {
+        return params.some((param) => {
+            const decl = param.valueDeclaration;
+            return !!decl && ts.isParameter(decl) && !!decl.dotDotDotToken;
+        });
+    }
+
+    private emitStaticSpreadCall(
+        call: ts.CallExpression | ts.NewExpression,
+        callee: string,
+        ret: CType,
+        params: readonly ts.Symbol[],
+        fixedArgs: readonly string[] = [],
+        leadingSpecs: readonly SequencedCallArg[] = [],
+    ): EmitResult {
+        const argList = this.emitSpreadCallArgumentList(call.arguments ?? []);
+        const paramTypes = params.map((param) => {
+            const decl = param.valueDeclaration;
+            if (!decl || !ts.isParameter(decl)) {
+                unsupported(call, "spread call parameter declaration unavailable");
+            }
+            return this.prepareType(mapTsType(
+                decl,
+                this.checker.getTypeOfSymbolAtLocation(param, call),
+                this.checker,
+            ));
+        });
+        return this.emitSpreadCallWithParamTypes(call, callee, ret, paramTypes, fixedArgs, leadingSpecs);
+    }
+
+    private emitSpreadCallWithParamTypes(
+        call: ts.CallExpression | ts.NewExpression,
+        callee: string,
+        ret: CType,
+        paramTypes: readonly CType[],
+        fixedArgs: readonly string[] = [],
+        leadingSpecs: readonly SequencedCallArg[] = [],
+    ): EmitResult {
+        const argList = this.emitSpreadCallArgumentList(call.arguments ?? []);
+        return this.emitSequencedExpr(ret, [...leadingSpecs, { value: argList, node: call }], (vals) => {
+            const list = vals[leadingSpecs.length]!;
+            const args = paramTypes.map((paramType, index) =>
+                this.coerce({ c: `TSC_ARR(tsc_value_t, ${list}, ${index})`, ty: T_VALUE }, paramType, call),
+            );
+            return `({ if (${list}->len != ${paramTypes.length}) tsc_panic("spread call argument length mismatch"); ${callee}(${[...fixedArgs, ...vals.slice(0, leadingSpecs.length), ...args].join(", ")}); })`;
+        });
     }
 
     private isDirectCallableIdentifier(id: ts.Identifier): boolean {
@@ -2855,6 +4429,22 @@ class Emitter {
             unsupported(call.expression, "call target is not a function value");
         }
         const params = callee.ty.params ?? [];
+        if (call.arguments.some((arg) => ts.isSpreadElement(arg))) {
+            const argList = this.emitSpreadCallArgumentList(call.arguments);
+            const ret = this.prepareType(callee.ty.ret);
+            return this.emitSequencedExpr(ret, [
+                { value: callee, target: callee.ty, node: call.expression },
+                { value: argList, node: call },
+            ], (vals) => {
+                const fn = vals[0]!;
+                const list = vals[1]!;
+                const args: string[] = [];
+                for (let i = 0; i < params.length; i++) {
+                    args.push(this.coerce({ c: `TSC_ARR(tsc_value_t, ${list}, ${i})`, ty: T_VALUE }, params[i]!, call));
+                }
+                return `({ if (${list}->len != ${params.length}) tsc_panic("function value argument length mismatch"); ${fn}->fn(${[`${fn}->env`, ...(callee.ty.thisParam ? ["tsc_value_undefined()"] : []), ...args].join(", ")}); })`;
+            });
+        }
         if (call.arguments.length !== params.length) {
             unsupported(
                 call,
@@ -2864,7 +4454,6 @@ class Emitter {
         const specs: SequencedCallArg[] = [{ value: callee, target: callee.ty, node: call.expression }];
         for (let i = 0; i < call.arguments.length; i++) {
             const arg = call.arguments[i]!;
-            if (ts.isSpreadElement(arg)) unsupported(arg, "spread call into function value");
             specs.push({
                 value: this.emitExpr(arg),
                 target: params[i]!,
@@ -2875,8 +4464,43 @@ class Emitter {
         return this.emitSequencedExpr(ret, specs, (vals) => {
             const fn = vals[0]!;
             const args = vals.slice(1);
-            return `${fn}->fn(${[`${fn}->env`, ...args].join(", ")})`;
+            return `${fn}->fn(${[`${fn}->env`, ...(callee.ty.thisParam ? ["tsc_value_undefined()"] : []), ...args].join(", ")})`;
         });
+    }
+
+    private emitSpreadCallArgumentList(args: readonly ts.Expression[]): EmitResult {
+        const av = this.freshTemp("_spread_args");
+        const pieces: string[] = [
+            `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, args.length)})`,
+        ];
+        for (const arg of args) {
+            if (ts.isSpreadElement(arg)) {
+                const r = this.emitExpr(arg.expression);
+                if (r.ty.kind === "array") {
+                    const src = this.freshTemp("_spread_args_src");
+                    const idx = this.freshTemp("_spread_args_i");
+                    const value = this.freshTemp("_spread_args_value");
+                    const elem = r.ty.elem!;
+                    const current = { c: `TSC_ARR(${elem.c}, ${src}, ${idx})`, ty: elem };
+                    pieces.push(
+                        `{ tsc_array_t* const ${src} = ${r.c}; for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { tsc_value_t ${value} = ${this.coerce(current, T_VALUE, arg.expression)}; tsc_array_push_raw(${av}, &${value}); } }`,
+                    );
+                    continue;
+                }
+                if (r.ty.kind === "value" || r.ty.kind === "string") {
+                    const spread = this.freshTemp("_spread_args_iter");
+                    pieces.push(`{ tsc_array_t* const ${spread} = tsc_value_iter_values(${this.coerce(r, T_VALUE, arg.expression)}); tsc_array_append(${av}, ${spread}); }`);
+                    continue;
+                }
+                unsupported(arg, "spread call into function value expects an array or string");
+            }
+            const r = this.emitExpr(arg);
+            const value = this.freshTemp("_spread_arg");
+            pieces.push(`${T_VALUE.c} ${value} = ${this.coerce(r, T_VALUE, arg)}`);
+            pieces.push(`tsc_array_push_raw(${av}, &${value})`);
+        }
+        pieces.push(av);
+        return { c: `({ ${pieces.join("; ")}; })`, ty: arrayType(T_VALUE) };
     }
 
     private emitFunctionReferenceClosure(id: ts.Identifier, type: CType): EmitResult {
@@ -2914,14 +4538,16 @@ class Emitter {
         this.functionRefAdapters.set(key, name);
         const ret = this.prepareType(type.ret);
         const params = type.params ?? [];
+        const thisType = this.directCallableThisType(id);
         const envParam = this.freshTemp("_envp");
         const paramDecls = params.map((p, i) => `${p.c} _p${i}`);
-        this.protos.line(`${ret.c} ${name}(${["void* " + envParam, ...paramDecls].join(", ")});`);
+        const thisDecl = type.thisParam ? [`${type.thisParam.c} __tsc_this`] : [];
+        this.protos.line(`${ret.c} ${name}(${["void* " + envParam, ...thisDecl, ...paramDecls].join(", ")});`);
 
         const buf = new CBuf();
-        buf.open(`${ret.c} ${name}(${["void* " + envParam, ...paramDecls].join(", ")})`);
+        buf.open(`${ret.c} ${name}(${["void* " + envParam, ...thisDecl, ...paramDecls].join(", ")})`);
         buf.line(`(void)${envParam};`);
-        const args = params.map((_, i) => `_p${i}`).join(", ");
+        const args = [...(thisType ? [type.thisParam ? "__tsc_this" : "tsc_value_undefined()"] : []), ...params.map((_, i) => `_p${i}`)].join(", ");
         if (ret.kind === "void") {
             buf.line(`${callee}(${args});`);
             buf.line("return;");
@@ -2951,14 +4577,16 @@ class Emitter {
     private emitClosureExpression(fn: ts.ArrowFunction | ts.FunctionExpression): EmitResult {
         const sig = this.checker.getSignatureFromDeclaration(fn);
         if (!sig) unsupported(fn, "could not resolve closure signature");
-        const params = fn.parameters.map((p) => {
+        const runtimeParams = fn.parameters.filter((p) => !this.isThisParameter(p));
+        const params = runtimeParams.map((p) => {
             if (!ts.isIdentifier(p.name)) unsupported(p, "closure parameter destructuring");
             if (p.questionToken) unsupported(p, "optional closure parameters");
             if (p.initializer) unsupported(p, "default closure parameters");
             return this.prepareType(mapType(p, this.checker));
         });
         const ret = this.prepareType(mapTsType(fn, sig.getReturnType(), this.checker));
-        const type = this.prepareType(functionType(params, ret));
+        const thisType = this.signatureThisType(sig, fn);
+        const type = this.prepareType(functionType(params, ret, thisType ?? undefined));
         const captures = this.collectClosureCaptures(fn);
         const implName = `tsc_closure_${this.closureCounter++}`;
         let envType: string | null = null;
@@ -3006,12 +4634,14 @@ class Emitter {
         }
         const ret = this.prepareType(type.ret);
         const envParam = this.freshTemp("_envp");
-        const paramDecls = fn.parameters.map((p, i) => {
+        const runtimeParams = fn.parameters.filter((p) => !this.isThisParameter(p));
+        const paramDecls = runtimeParams.map((p, i) => {
             if (!ts.isIdentifier(p.name)) unsupported(p, "closure parameter destructuring");
             const pt = type.params?.[i] ?? this.prepareType(mapType(p, this.checker));
             return `${pt.c} ${mangleIdent(p.name.text)}`;
         });
-        const signature = `${ret.c} ${implName}(${["void* " + envParam, ...paramDecls].join(", ")})`;
+        const thisDecl = type.thisParam ? [`${type.thisParam.c} __tsc_this`] : [];
+        const signature = `${ret.c} ${implName}(${["void* " + envParam, ...thisDecl, ...paramDecls].join(", ")})`;
         this.protos.line(signature + ";");
 
         const body = new CBuf();
@@ -3034,7 +4664,10 @@ class Emitter {
         this.returnStack.push(ret);
         this.cellScopes.push(capturedCells);
         this.closureEnvScopes.push(envBindings);
-        this.emitCapturedParameterCells(body, fn.parameters, capturedCells);
+        if (type.thisParam) {
+            this.functionThisStack.push({ c: "__tsc_this", ty: type.thisParam });
+        }
+        this.emitCapturedParameterCells(body, runtimeParams, capturedCells);
         try {
             if (ts.isBlock(fn.body)) {
                 for (const s of fn.body.statements) this.emitStmt(body, s);
@@ -3048,6 +4681,7 @@ class Emitter {
                 }
             }
         } finally {
+            if (type.thisParam) this.functionThisStack.pop();
             this.closureEnvScopes.pop();
             this.cellScopes.pop();
             this.returnStack.pop();
@@ -3093,8 +4727,15 @@ class Emitter {
     ): EmitResult {
         const bindings = this.genericBindingsForCall(call, fd, sig);
         const name = this.ensureGenericSpecialization(fd, bindings);
-        const specs = this.callSpecsFromSignature(call, call.arguments, sig.getParameters());
         const retType = mapTsType(call, sig.getReturnType(), this.checker);
+        const params = sig.getParameters();
+        if (
+            call.arguments.some((arg) => ts.isSpreadElement(arg)) &&
+            !this.signatureHasRestParameter(params)
+        ) {
+            return this.emitStaticSpreadCall(call, name, retType, params);
+        }
+        const specs = this.callSpecsFromSignature(call, call.arguments, params);
         return this.emitSequencedCall(name, retType, specs);
     }
 
@@ -3229,7 +4870,7 @@ class Emitter {
                 this.bindTypeNode(node, bindings, args[0]!, concrete.elem);
                 return;
             }
-            if ((name === "Set" || name === "WeakSet" || name === "WeakRef") && concrete.elem) {
+            if ((name === "Set" || name === "WeakSet" || name === "WeakRef" || name === "FinalizationRegistry") && concrete.elem) {
                 this.bindTypeNode(node, bindings, args[0]!, concrete.elem);
                 return;
             }
@@ -3342,8 +4983,9 @@ class Emitter {
         owningCls: string,
         bindings: TypeBindings,
     ): string {
-        if (!ts.isIdentifier(md.name)) unsupported(md, "computed generic method names");
-        const baseName = `${owningCls}_${mangleIdent(md.name.text)}`;
+        const methodName = this.classMethodCName(md.name);
+        if (!methodName) unsupported(md, "computed generic method names");
+        const baseName = `${owningCls}_${methodName}`;
         const typeParams = md.typeParameters ?? [];
         const typeKey = typeParams
             .map((tp) => `${tp.name.text}:${this.typeKey(bindings.get(tp.name.text)! )}`)
@@ -3397,6 +5039,7 @@ class Emitter {
             case "set":
             case "weakset":
             case "weakref":
+            case "finregistry":
             case "entry":
                 return `${type.kind}_${type.elem ? this.typeKey(type.elem) : "void"}`;
             case "map":
@@ -3405,7 +5048,7 @@ class Emitter {
             case "class":
                 return `class_${type.className ?? type.c}`;
             case "function":
-                return `function_${type.params?.map((p) => this.typeKey(p)).join("_") || "void"}_to_${type.ret ? this.typeKey(type.ret) : "void"}`;
+                return `function_${type.thisParam ? `this_${this.typeKey(type.thisParam)}_` : ""}${type.params?.map((p) => this.typeKey(p)).join("_") || "void"}_to_${type.ret ? this.typeKey(type.ret) : "void"}`;
             default:
                 return type.kind;
         }
@@ -3541,12 +5184,19 @@ class Emitter {
             if (nsName) {
                 const sig = this.checker.getResolvedSignature(call);
                 if (!sig) unsupported(call, "unresolved namespace function");
+                const params = sig.getParameters();
+                const retType = mapTsType(call, sig.getReturnType(), this.checker);
+                if (
+                    call.arguments.some((arg) => ts.isSpreadElement(arg)) &&
+                    !this.signatureHasRestParameter(params)
+                ) {
+                    return this.emitStaticSpreadCall(call, nsName, retType, params);
+                }
                 const specs = this.callSpecsFromSignature(
                     call,
                     call.arguments,
-                    sig.getParameters(),
+                    params,
                 );
-                const retType = mapTsType(call, sig.getReturnType(), this.checker);
                 return this.emitSequencedCall(nsName, retType, specs);
             }
         }
@@ -3562,8 +5212,7 @@ class Emitter {
                     (m) =>
                         ts.isMethodDeclaration(m) &&
                         m.name &&
-                        ts.isIdentifier(m.name) &&
-                        m.name.text === memberName &&
+                        this.staticPropertyName(m.name) === memberName &&
                         isStatic(m),
                 );
                 if (method) {
@@ -3582,11 +5231,6 @@ class Emitter {
                             sig.getReturnType(),
                             this.checker,
                         );
-                    const specs = this.callSpecsFromSignature(
-                        call,
-                        call.arguments,
-                        sig.getParameters(),
-                    );
                     const callee = genericMethod && genericBindings
                         ? this.ensureGenericMethodSpecialization(
                             genericMethod,
@@ -3594,6 +5238,18 @@ class Emitter {
                             genericBindings,
                         )
                         : `${classDecl.name.text}_${mangleIdent(memberName)}`;
+                    const params = sig.getParameters();
+                    if (
+                        call.arguments.some((arg) => ts.isSpreadElement(arg)) &&
+                        !this.signatureHasRestParameter(params)
+                    ) {
+                        return this.emitStaticSpreadCall(call, callee, ret, params);
+                    }
+                    const specs = this.callSpecsFromSignature(
+                        call,
+                        call.arguments,
+                        params,
+                    );
                     return this.emitSequencedCall(
                         callee,
                         ret,
@@ -3687,6 +5343,10 @@ class Emitter {
             // Array.from(arrayLike) — array copy for typed and dynamic arrays.
             const a = call.arguments[0];
             if (!a) unsupported(call, "Array.from needs an argument");
+            const mapfn = call.arguments[1];
+            if (mapfn) {
+                return this.emitArrayFromWithMapper(call, a, mapfn);
+            }
             const r = this.emitExpr(a);
             if (r.ty.kind === "value") {
                 const missing: EmitResult = { c: "tsc_value_undefined()", ty: T_VALUE };
@@ -3696,12 +5356,29 @@ class Emitter {
                     { value: missing, target: T_VALUE, node: a },
                 ]);
             }
+            if (r.ty.kind === "string") {
+                return this.emitSequencedCall("tsc_str_chars", arrayType(T_STRING), [
+                    { value: r, target: T_STRING, node: a },
+                ]);
+            }
+            if (r.ty.kind === "set") {
+                const elem = r.ty.elem ?? T_VALUE;
+                return this.emitSequencedCall("tsc_set_values", arrayType(elem), [
+                    { value: r },
+                ]);
+            }
+            if (r.ty.kind === "map") {
+                return this.emitMapEntriesArray(a, r, "Array.from(Map)");
+            }
             if (r.ty.kind !== "array")
                 unsupported(a, "Array.from on non-array");
             return {
                 c: `tsc_array_slice(${r.c}, 0, (double)${r.c}->len)`,
                 ty: r.ty,
             };
+        }
+        if (ts.isIdentifier(recvExpr) && recvExpr.text === "Map" && memberName === "groupBy") {
+            return this.emitMapGroupBy(call);
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Array" && memberName === "isArray") {
             // Type-guard: in typed mode, we can answer statically.
@@ -3721,6 +5398,10 @@ class Emitter {
             return this.emitArrayMethod(call, recv, memberName);
         if (recv.ty.kind === "value")
             return this.emitDynamicMethod(call, recv, memberName);
+        if (recv.ty.kind === "number")
+            return this.emitNumberMethod(call, recv, memberName);
+        if (recv.ty.kind === "boolean")
+            return this.emitBooleanMethod(call, recv, memberName);
         if (recv.ty.kind === "string")
             return this.emitStringMethod(call, recv, memberName);
         if (recv.ty.kind === "bigint")
@@ -3737,15 +5418,72 @@ class Emitter {
             return this.emitWeakSetMethod(call, recv, memberName);
         if (recv.ty.kind === "weakref")
             return this.emitWeakRefMethod(call, recv, memberName);
+        if (recv.ty.kind === "finregistry")
+            return this.emitFinRegistryMethod(call, recv, memberName);
         if (recv.ty.kind === "regexp")
             return this.emitRegexpMethod(call, recv, memberName);
         if (recv.ty.kind === "hash")
             return this.emitHashMethod(call, recv, memberName);
+        if (recv.ty.kind === "url")
+            return this.emitUrlMethod(call, recv, memberName);
         if (recv.ty.kind === "buffer")
             return this.emitBufferMethod(call, recv, memberName);
+        if (recv.ty.kind === "class" && this.isObjectPrototypeFallback(call)) {
+            return this.emitTypedObjectPrototypeMethod(call, recvExpr, recv, memberName);
+        }
         if (recv.ty.kind === "class")
             return this.emitClassMethodCall(call, recv, memberName);
         unsupported(call, `method .${memberName} on ${recv.ty.c}`);
+    }
+
+    private isObjectPrototypeFallback(call: ts.CallExpression): boolean {
+        if (!ts.isPropertyAccessExpression(call.expression)) return false;
+        switch (call.expression.name.text) {
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                break;
+            default:
+                return false;
+        }
+        const sig = this.checker.getResolvedSignature(call);
+        const decl = sig?.getDeclaration();
+        if (decl && ts.isMethodDeclaration(decl) && decl.parent && ts.isClassDeclaration(decl.parent)) {
+            return false;
+        }
+        return true;
+    }
+
+    private emitTypedObjectPrototypeMethod(
+        call: ts.CallExpression,
+        recvExpr: ts.Expression,
+        recv: EmitResult,
+        method: string,
+    ): EmitResult {
+        switch (method) {
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+                if (call.arguments.length !== 1) unsupported(call, `${method} expects 1 arg`);
+                return this.emitTypedObjectHasOwn(
+                    recvExpr,
+                    recv,
+                    call.arguments[0]!,
+                    this.checker.getTypeAtLocation(recvExpr),
+                    method,
+                );
+            case "toLocaleString":
+            case "toString":
+                if (call.arguments.length !== 0) unsupported(call, `${method} expects no args`);
+                return this.emitSequencedExpr(T_STRING, [
+                    { value: recv, node: recvExpr },
+                ], ([obj]) => `({ (void)${obj}; tsc_str_from_lit("[object Object]", 15); })`);
+            case "valueOf":
+                if (call.arguments.length !== 0) unsupported(call, "valueOf expects no args");
+                return recv;
+        }
+        unsupported(call, `Object.prototype.${method}`);
     }
 
     private emitDynamicMethod(
@@ -3763,18 +5501,28 @@ class Emitter {
                 { value: arg, target: T_VALUE, node: args[0] ?? call.expression },
             ]);
         };
+        const oneRequiredOneOptional = (callee: string, fallback: EmitResult): EmitResult => {
+            if (args.length < 1 || args.length > 2) unsupported(call, `${method} expects 1 or 2 args`);
+            const second = args[1] ? this.emitExpr(args[1]) : fallback;
+            return this.emitSequencedCall(callee, T_VALUE, [
+                { value: recv, target: T_VALUE, node: call.expression },
+                { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
+                { value: second, target: T_VALUE, node: args[1] ?? call.expression },
+            ]);
+        };
         switch (method) {
             case "charAt":
                 return oneArg("tsc_value_method_char_at", { c: "tsc_value_num(0.0)", ty: T_VALUE });
+            case "charCodeAt":
+                return oneArg("tsc_value_method_char_code_at", { c: "tsc_value_num(0.0)", ty: T_VALUE });
+            case "codePointAt":
+                return oneArg("tsc_value_method_code_point_at", { c: "tsc_value_num(0.0)", ty: T_VALUE });
             case "includes":
-                if (args.length !== 1) unsupported(call, "includes expects 1 arg");
-                return oneArg("tsc_value_method_includes");
+                return oneRequiredOneOptional("tsc_value_method_includes", { c: "tsc_value_num(0.0)", ty: T_VALUE });
             case "indexOf":
-                if (args.length !== 1) unsupported(call, "indexOf expects 1 arg");
-                return oneArg("tsc_value_method_index_of");
+                return oneRequiredOneOptional("tsc_value_method_index_of", { c: "tsc_value_num(0.0)", ty: T_VALUE });
             case "lastIndexOf":
-                if (args.length !== 1) unsupported(call, "lastIndexOf expects 1 arg");
-                return oneArg("tsc_value_method_last_index_of");
+                return oneRequiredOneOptional("tsc_value_method_last_index_of", { c: "tsc_value_num(INFINITY)", ty: T_VALUE });
             case "at":
                 if (args.length !== 1) unsupported(call, "at expects 1 arg");
                 return oneArg("tsc_value_method_at");
@@ -3920,12 +5668,14 @@ class Emitter {
                 });
             }
             case "sort":
-                if (args.length !== 0) unsupported(call, "dynamic sort currently supports the default no-comparator form");
+                if (args.length > 1) unsupported(call, "dynamic sort expects 0-1 args");
+                if (args.length === 1) return this.emitDynamicArraySort(call, recv, false);
                 return this.emitSequencedCall("tsc_value_method_sort", T_VALUE, [
                     { value: recv, target: T_VALUE, node: call.expression },
                 ]);
             case "toSorted":
-                if (args.length !== 0) unsupported(call, "dynamic toSorted currently supports the default no-comparator form");
+                if (args.length > 1) unsupported(call, "dynamic toSorted expects 0-1 args");
+                if (args.length === 1) return this.emitDynamicArraySort(call, recv, true);
                 return this.emitSequencedCall("tsc_value_method_to_sorted", T_VALUE, [
                     { value: recv, target: T_VALUE, node: call.expression },
                 ]);
@@ -4005,6 +5755,21 @@ class Emitter {
                     { value: end, target: T_VALUE, node: args[1] ?? call.expression },
                 ]);
             }
+            case "keys":
+                if (args.length !== 0) unsupported(call, "keys expects no args");
+                return this.emitSequencedCall("tsc_value_method_keys", T_VALUE, [
+                    { value: recv, target: T_VALUE, node: call.expression },
+                ]);
+            case "values":
+                if (args.length !== 0) unsupported(call, "values expects no args");
+                return this.emitSequencedCall("tsc_value_method_values", T_VALUE, [
+                    { value: recv, target: T_VALUE, node: call.expression },
+                ]);
+            case "entries":
+                if (args.length !== 0) unsupported(call, "entries expects no args");
+                return this.emitSequencedCall("tsc_value_method_entries", T_VALUE, [
+                    { value: recv, target: T_VALUE, node: call.expression },
+                ]);
             case "substring": {
                 if (args.length > 2) unsupported(call, "substring expects 0-2 args");
                 const start = args[0] ? this.emitExpr(args[0]) : missing;
@@ -4015,28 +5780,121 @@ class Emitter {
                     { value: end, target: T_VALUE, node: args[1] ?? call.expression },
                 ]);
             }
+            case "substr": {
+                if (args.length > 2) unsupported(call, "substr expects 0-2 args");
+                const start = args[0] ? this.emitExpr(args[0]) : missing;
+                const length = args[1] ? this.emitExpr(args[1]) : missing;
+                return this.emitSequencedCall("tsc_value_method_substr", T_VALUE, [
+                    { value: recv, target: T_VALUE, node: call.expression },
+                    { value: start, target: T_VALUE, node: args[0] ?? call.expression },
+                    { value: length, target: T_VALUE, node: args[1] ?? call.expression },
+                ]);
+            }
             case "replace":
             case "replaceAll": {
                 if (args.length !== 2) unsupported(call, `${method} expects 2 args`);
+                const search = this.emitExpr(args[0]!);
+                const replacement = this.emitExpr(args[1]!);
+                if (search.ty.kind === "regexp") {
+                    return this.emitSequencedExpr(T_VALUE, [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: search },
+                        { value: replacement, target: T_STRING, node: args[1]! },
+                    ], ([s, re, repl]) => `tsc_value_string(tsc_str_replace_regex(tsc_value_as_string(${s}), ${re}, ${repl}))`);
+                }
                 const fn = method === "replace" ? "tsc_value_method_replace" : "tsc_value_method_replace_all";
                 return this.emitSequencedCall(fn, T_VALUE, [
                     { value: recv, target: T_VALUE, node: call.expression },
-                    { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
-                    { value: this.emitExpr(args[1]!), target: T_VALUE, node: args[1]! },
+                    { value: search, target: T_VALUE, node: args[0]! },
+                    { value: replacement, target: T_VALUE, node: args[1]! },
                 ]);
             }
             case "split":
-                if (args.length !== 1) unsupported(call, "split expects 1 arg");
+                if (args.length < 1 || args.length > 2) unsupported(call, "split expects 1-2 args");
+                const sep = this.emitExpr(args[0]!);
+                const limit = args[1] ? this.emitExpr(args[1]) : missing;
+                if (sep.ty.kind === "regexp") {
+                    return this.emitSequencedCall("tsc_value_method_split_regex", T_VALUE, [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: sep },
+                        { value: limit, target: T_VALUE, node: args[1] ?? call.expression },
+                    ]);
+                }
                 return this.emitSequencedCall("tsc_value_method_split", T_VALUE, [
                     { value: recv, target: T_VALUE, node: call.expression },
-                    { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
+                    { value: sep, target: T_VALUE, node: args[0]! },
+                    { value: limit, target: T_VALUE, node: args[1] ?? call.expression },
                 ]);
+            case "match": {
+                if (args.length !== 1) unsupported(call, "match expects 1 arg");
+                const re = this.emitExpr(args[0]!);
+                if (re.ty.kind === "regexp") {
+                    return this.emitSequencedCall("tsc_value_method_match_regex", T_VALUE, [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: re },
+                    ]);
+                }
+                if (re.ty.kind !== "string" && re.ty.kind !== "value") {
+                    unsupported(args[0]!, "match requires a RegExp or string pattern");
+                }
+                return this.emitSequencedCall("tsc_value_method_match_regex", T_VALUE, [
+                    { value: recv, target: T_VALUE, node: call.expression },
+                    {
+                        value: {
+                            c: `tsc_regexp_new(${this.coerce(re, T_STRING, args[0]!)}, tsc_str_from_lit("", 0))`,
+                            ty: T_REGEXP,
+                        },
+                    },
+                ]);
+            }
+            case "matchAll": {
+                if (args.length !== 1) unsupported(call, "matchAll expects 1 arg");
+                const re = this.emitExpr(args[0]!);
+                if (re.ty.kind === "regexp") {
+                    return this.emitSequencedCall("tsc_value_method_match_all_regex", T_VALUE, [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: re },
+                    ]);
+                }
+                if (re.ty.kind !== "string" && re.ty.kind !== "value") {
+                    unsupported(args[0]!, "matchAll requires a RegExp or string pattern");
+                }
+                return this.emitSequencedCall("tsc_value_method_match_all_regex", T_VALUE, [
+                    { value: recv, target: T_VALUE, node: call.expression },
+                    {
+                        value: {
+                            c: `tsc_regexp_new(${this.coerce(re, T_STRING, args[0]!)}, tsc_str_from_lit("g", 1))`,
+                            ty: T_REGEXP,
+                        },
+                    },
+                ]);
+            }
+            case "search": {
+                if (args.length !== 1) unsupported(call, "search expects 1 arg");
+                const re = this.emitExpr(args[0]!);
+                if (re.ty.kind === "regexp") {
+                    return this.emitSequencedExpr(T_VALUE, [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: re },
+                    ], ([s, r]) => `tsc_value_num(tsc_str_search_regex(tsc_value_as_string(${s}), ${r}))`);
+                }
+                if (re.ty.kind !== "string" && re.ty.kind !== "value") {
+                    unsupported(args[0]!, "search requires a RegExp or string pattern");
+                }
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: recv, target: T_VALUE, node: call.expression },
+                    {
+                        value: {
+                            c: `tsc_regexp_new(${this.coerce(re, T_STRING, args[0]!)}, tsc_str_from_lit("", 0))`,
+                            ty: T_REGEXP,
+                        },
+                    },
+                ], ([s, r]) => `tsc_value_num(tsc_str_search_regex(tsc_value_as_string(${s}), ${r}))`);
+            }
             case "startsWith":
-                if (args.length !== 1) unsupported(call, "startsWith expects 1 arg");
-                return oneArg("tsc_value_method_starts_with");
+                return oneRequiredOneOptional("tsc_value_method_starts_with", { c: "tsc_value_num(0.0)", ty: T_VALUE });
             case "endsWith":
-                if (args.length !== 1) unsupported(call, "endsWith expects 1 arg");
-                return oneArg("tsc_value_method_ends_with");
+                return oneRequiredOneOptional("tsc_value_method_ends_with", { c: "tsc_value_num(INFINITY)", ty: T_VALUE });
             case "toLowerCase":
                 if (args.length !== 0) unsupported(call, "toLowerCase expects no args");
                 return this.emitSequencedCall("tsc_value_method_to_lower", T_VALUE, [
@@ -4058,13 +5916,15 @@ class Emitter {
                 return this.emitSequencedCall("tsc_value_method_trim", T_VALUE, [
                     { value: recv, target: T_VALUE, node: call.expression },
                 ]);
+            case "trimLeft":
             case "trimStart":
-                if (args.length !== 0) unsupported(call, "trimStart expects no args");
+                if (args.length !== 0) unsupported(call, `${method} expects no args`);
                 return this.emitSequencedCall("tsc_value_method_trim_start", T_VALUE, [
                     { value: recv, target: T_VALUE, node: call.expression },
                 ]);
+            case "trimRight":
             case "trimEnd":
-                if (args.length !== 0) unsupported(call, "trimEnd expects no args");
+                if (args.length !== 0) unsupported(call, `${method} expects no args`);
                 return this.emitSequencedCall("tsc_value_method_trim_end", T_VALUE, [
                     { value: recv, target: T_VALUE, node: call.expression },
                 ]);
@@ -4084,9 +5944,32 @@ class Emitter {
                     { value: args[1] ? this.emitExpr(args[1]) : missing, target: T_VALUE, node: args[1] ?? call.expression },
                 ]);
             }
-            case "toLocaleString":
             case "toString":
-                if (args.length !== 0) unsupported(call, `${method} expects no args`);
+                if (args.length > 1) unsupported(call, "toString expects 0 or 1 args");
+                return this.emitSequencedExpr(T_STRING, [
+                    { value: recv, target: T_VALUE, node: call.expression },
+                    { value: args[0] ? this.emitExpr(args[0]) : missing, target: T_VALUE, node: args[0] ?? call.expression },
+                ], ([v, radix]) => `tsc_value_method_to_string(${v}, ${radix})`);
+            case "toFixed":
+                if (args.length > 1) unsupported(call, "toFixed expects 0 or 1 args");
+                return this.emitSequencedExpr(T_STRING, [
+                    { value: recv, target: T_VALUE, node: call.expression },
+                    { value: args[0] ? this.emitExpr(args[0]) : missing, target: T_VALUE, node: args[0] ?? call.expression },
+                ], ([v, digits]) => `tsc_value_method_to_fixed(${v}, ${digits})`);
+            case "toExponential":
+                if (args.length > 1) unsupported(call, "toExponential expects 0 or 1 args");
+                return this.emitSequencedExpr(T_STRING, [
+                    { value: recv, target: T_VALUE, node: call.expression },
+                    { value: args[0] ? this.emitExpr(args[0]) : missing, target: T_VALUE, node: args[0] ?? call.expression },
+                ], ([v, digits]) => `tsc_value_method_to_exponential(${v}, ${digits})`);
+            case "toPrecision":
+                if (args.length > 1) unsupported(call, "toPrecision expects 0 or 1 args");
+                return this.emitSequencedExpr(T_STRING, [
+                    { value: recv, target: T_VALUE, node: call.expression },
+                    { value: args[0] ? this.emitExpr(args[0]) : missing, target: T_VALUE, node: args[0] ?? call.expression },
+                ], ([v, digits]) => `tsc_value_method_to_precision(${v}, ${digits})`);
+            case "toLocaleString":
+                if (args.length !== 0) unsupported(call, "toLocaleString expects no args");
                 return this.emitSequencedExpr(T_STRING, [
                     { value: recv, target: T_VALUE, node: call.expression },
                 ], ([v]) => `tsc_value_to_string(${v})`);
@@ -4095,6 +5978,122 @@ class Emitter {
                 return recv;
         }
         unsupported(call, `dynamic method .${method}`);
+    }
+
+    private emitDynamicArraySort(
+        call: ts.CallExpression,
+        recv: EmitResult,
+        copyFirst: boolean,
+    ): EmitResult {
+        const cb = call.arguments[0];
+        if (!cb) unsupported(call, "dynamic sort comparator missing");
+        if (call.arguments.length !== 1) unsupported(call, "dynamic sort expects exactly one comparator");
+
+        const av = this.freshTemp("_dynsort");
+        const src = this.freshTemp("_dynsort_src");
+        const base = this.freshTemp("_dynsort_base");
+        const iv = this.freshTemp("_i");
+        const jv = this.freshTemp("_j");
+        const kv = this.freshTemp("_k");
+        const cmp = this.freshTemp("_cmp");
+        let aName = this.freshTemp("_sa");
+        let bName = this.freshTemp("_sb");
+        const bindings: string[] = [];
+        let body: EmitResult;
+        let bodyNode: ts.Expression = cb;
+
+        const leftValue: EmitResult = { c: aName, ty: T_VALUE };
+        const rightValue: EmitResult = { c: bName, ty: T_VALUE };
+
+        if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
+            if (cb.parameters.length !== 2) {
+                unsupported(cb, "dynamic sort comparator needs 2 params");
+            }
+            const p0 = cb.parameters[0]!.name;
+            const p1 = cb.parameters[1]!.name;
+            if (!ts.isIdentifier(p0) || !ts.isIdentifier(p1)) {
+                unsupported(cb, "dynamic sort comparator params must be identifiers");
+            }
+            const bodyExpr = this.callbackReturnExpression(cb, "dynamic sort comparator");
+            aName = mangleIdent(p0.text);
+            bName = mangleIdent(p1.text);
+            body = this.emitExpr(bodyExpr);
+            bodyNode = bodyExpr;
+        } else if (ts.isIdentifier(cb)) {
+            const cbType = this.checker.getTypeAtLocation(cb);
+            const sig = cbType.getCallSignatures()[0];
+            if (!sig) unsupported(cb, "dynamic sort comparator must be callable");
+            if (this.isDirectCallableIdentifier(cb)) {
+                let fnName = this.identifierName(cb);
+                const genericDecl = this.genericFunctionDeclaration(sig);
+                const genericBindings = genericDecl
+                    ? this.genericBindingsForCallbackTypes(cb, genericDecl, [T_VALUE, T_VALUE], T_NUMBER)
+                    : null;
+                if (genericDecl && genericBindings) {
+                    fnName = this.ensureGenericSpecialization(genericDecl, genericBindings);
+                }
+                const params = sig.getParameters();
+                const sources = [leftValue, rightValue];
+                const callArgs = params.slice(0, 2).map((param, index) => {
+                    const decl = param.valueDeclaration ?? cb;
+                    const target = this.prepareType(genericBindings
+                        ? withTypeBindings(genericBindings, () =>
+                            mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
+                        )
+                        : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker));
+                    return this.coerce(sources[index]!, target, cb);
+                });
+                const retType = this.prepareType(genericBindings
+                    ? withTypeBindings(genericBindings, () =>
+                        mapTsType(cb, sig.getReturnType(), this.checker),
+                    )
+                    : mapTsType(cb, sig.getReturnType(), this.checker));
+                body = { c: `${fnName}(${callArgs.join(", ")})`, ty: retType };
+            } else {
+                const fn = this.emitExpr(cb);
+                if (fn.ty.kind !== "function" || !fn.ty.ret) {
+                    unsupported(cb, "dynamic sort comparator must be callable");
+                }
+                const fnv = this.freshTemp("_cb");
+                bindings.push(`${fn.ty.c} ${fnv} = ${fn.c}`);
+                const params = fn.ty.params ?? [];
+                const sources = [leftValue, rightValue];
+                const callArgs = params.slice(0, 2).map((param, index) =>
+                    this.coerce(sources[index]!, param, cb),
+                );
+                body = {
+                    c: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`,
+                    ty: this.prepareType(fn.ty.ret),
+                };
+            }
+        } else {
+            unsupported(cb, "dynamic sort comparator must be an inline arrow/function expression or function reference");
+        }
+
+        const cmpExpr = this.coerce(body, T_NUMBER, bodyNode);
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: recv, target: T_VALUE, node: call.expression },
+        ], ([value]) => {
+            const init = copyFirst
+                ? `tsc_value_t const ${base} = ${value}; tsc_array_t* const ${src} = tsc_value_as_array(${base}); ` +
+                    `tsc_array_t* const ${av} = tsc_array_slice(${src}, 0.0, (double)${src}->len);`
+                : `tsc_value_t const ${base} = ${value}; tsc_array_t* const ${av} = tsc_value_as_array(${base});`;
+            const result = copyFirst ? `tsc_value_array(${av})` : base;
+            return `({ ${init} ` +
+                `if (!${av}->frozen) { ` +
+                `for (size_t ${iv} = 1; ${iv} < ${av}->len; ${iv}++) { ` +
+                `tsc_value_t ${kv} = TSC_ARR(tsc_value_t, ${av}, ${iv}); ` +
+                `size_t ${jv} = ${iv}; ` +
+                `while (${jv} > 0) { ` +
+                `tsc_value_t ${aName} = TSC_ARR(tsc_value_t, ${av}, ${jv} - 1); ` +
+                `tsc_value_t ${bName} = ${kv}; ` +
+                `${bindings.length ? `${bindings.join("; ")}; ` : ""}` +
+                `double ${cmp} = ${cmpExpr}; ` +
+                `if (${cmp} <= 0) break; ` +
+                `TSC_ARR(tsc_value_t, ${av}, ${jv}) = TSC_ARR(tsc_value_t, ${av}, ${jv} - 1); ` +
+                `${jv}--; } ` +
+                `TSC_ARR(tsc_value_t, ${av}, ${jv}) = ${kv}; } } ${result}; })`;
+        });
     }
 
     private emitDynamicArrayHof(
@@ -4115,33 +6114,105 @@ class Emitter {
         const cb = call.arguments[0];
         if (!cb) unsupported(call, `${method}: missing callback`);
         if (call.arguments.length !== 1) unsupported(call, `${method} expects exactly one callback`);
-        if (!ts.isArrowFunction(cb) && !ts.isFunctionExpression(cb)) {
-            unsupported(cb, `dynamic ${method}: callback must be an inline arrow/function expression`);
-        }
-        const elemSlot = cb.parameters[0];
-        if (!elemSlot || !ts.isIdentifier(elemSlot.name)) {
-            unsupported(cb, `dynamic ${method}: callback needs an element parameter`);
-        }
-        const idxSlot = cb.parameters[1];
-        if (idxSlot && !ts.isIdentifier(idxSlot.name)) {
-            unsupported(idxSlot, `dynamic ${method}: index parameter must be an identifier`);
-        }
-        const idxName = idxSlot && ts.isIdentifier(idxSlot.name) ? idxSlot.name.text : null;
-        if (ts.isBlock(cb.body)) {
-            unsupported(cb, `dynamic ${method}: block-body callbacks are not supported yet`);
-        }
-
-        const body = this.emitExpr(cb.body);
         const av = this.freshTemp("_dynhof");
         const iv = this.freshTemp("_i");
         const dst = this.freshTemp("_dst");
         const elem = this.freshTemp("_el");
-        const bindings: string[] = [
-            `tsc_value_t ${elem} = TSC_ARR(tsc_value_t, ${av}, ${iv})`,
-            `tsc_value_t ${mangleIdent(elemSlot.name.text)} = ${elem}`,
-        ];
-        if (idxName) {
-            bindings.push(`double ${mangleIdent(idxName)} = (double)${iv}`);
+        const bindings: string[] = [`tsc_value_t ${elem} = TSC_ARR(tsc_value_t, ${av}, ${iv})`];
+        let body: EmitResult;
+        let bodyNode: ts.Expression = cb;
+
+        if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
+            const elemSlot = cb.parameters[0];
+            if (!elemSlot || !ts.isIdentifier(elemSlot.name)) {
+                unsupported(cb, `dynamic ${method}: callback needs an element parameter`);
+            }
+            const idxSlot = cb.parameters[1];
+            if (idxSlot && !ts.isIdentifier(idxSlot.name)) {
+                unsupported(idxSlot, `dynamic ${method}: index parameter must be an identifier`);
+            }
+            const arraySlot = cb.parameters[2];
+            if (arraySlot && !ts.isIdentifier(arraySlot.name)) {
+                unsupported(arraySlot, `dynamic ${method}: array parameter must be an identifier`);
+            }
+            const idxName = idxSlot && ts.isIdentifier(idxSlot.name) ? idxSlot.name.text : null;
+            const arrayName = arraySlot && ts.isIdentifier(arraySlot.name) ? arraySlot.name.text : null;
+            const bodyExpr = this.callbackReturnExpression(cb, `dynamic ${method}`);
+            bindings.push(`tsc_value_t ${mangleIdent(elemSlot.name.text)} = ${elem}`);
+            if (idxName) {
+                bindings.push(`double ${mangleIdent(idxName)} = (double)${iv}`);
+            }
+            if (arrayName) {
+                bindings.push(`tsc_value_t ${mangleIdent(arrayName)} = tsc_value_array(${av})`);
+            }
+            body = this.emitExpr(bodyExpr);
+            bodyNode = bodyExpr;
+        } else if (ts.isIdentifier(cb)) {
+            const cbType = this.checker.getTypeAtLocation(cb);
+            const sig = cbType.getCallSignatures()[0];
+            if (!sig) unsupported(cb, `dynamic ${method}: callback must be callable`);
+            if (this.isDirectCallableIdentifier(cb)) {
+                let fnName = this.identifierName(cb);
+                const genericDecl = this.genericFunctionDeclaration(sig);
+                const genericBindings = genericDecl
+                    ? this.genericBindingsForCallback(
+                        cb,
+                        genericDecl,
+                        this.contextualCallSignature(cb, method),
+                    )
+                    : null;
+                if (genericDecl && genericBindings) {
+                    fnName = this.ensureGenericSpecialization(genericDecl, genericBindings);
+                }
+                const params = sig.getParameters();
+                const callArgs: string[] = [];
+                const typedArg = (index: number, source: EmitResult): string => {
+                    const param = params[index];
+                    if (!param) return source.c;
+                    const decl = param.valueDeclaration ?? cb;
+                    const target = this.prepareType(genericBindings
+                        ? withTypeBindings(genericBindings, () =>
+                            mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
+                        )
+                        : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker));
+                    return this.coerce(source, target, cb);
+                };
+                if (params.length >= 1) callArgs.push(typedArg(0, { c: elem, ty: T_VALUE }));
+                if (params.length >= 2) callArgs.push(typedArg(1, { c: `(double)${iv}`, ty: T_NUMBER }));
+                if (params.length >= 3) callArgs.push(typedArg(2, { c: `tsc_value_array(${av})`, ty: T_VALUE }));
+                const thisType = this.directCallableThisType(cb);
+                if (thisType) callArgs.unshift("tsc_value_undefined()");
+                const retType = this.prepareType(genericBindings
+                    ? withTypeBindings(genericBindings, () =>
+                        mapTsType(cb, sig.getReturnType(), this.checker),
+                    )
+                    : mapTsType(cb, sig.getReturnType(), this.checker));
+                body = { c: `${fnName}(${callArgs.join(", ")})`, ty: retType };
+            } else {
+                const fn = this.emitExpr(cb);
+                if (fn.ty.kind !== "function" || !fn.ty.ret) {
+                    unsupported(cb, `dynamic ${method}: callback must be callable`);
+                }
+                const fnv = this.freshTemp("_cb");
+                bindings.push(`${fn.ty.c} ${fnv} = ${fn.c}`);
+                const params = fn.ty.params ?? [];
+                const callArgs: string[] = [];
+                if (params.length >= 1) {
+                    callArgs.push(this.coerce({ c: elem, ty: T_VALUE }, params[0]!, cb));
+                }
+                if (params.length >= 2) {
+                    callArgs.push(this.coerce({ c: `(double)${iv}`, ty: T_NUMBER }, params[1]!, cb));
+                }
+                if (params.length >= 3) {
+                    callArgs.push(this.coerce({ c: `tsc_value_array(${av})`, ty: T_VALUE }, params[2]!, cb));
+                }
+                body = {
+                    c: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`,
+                    ty: this.prepareType(fn.ty.ret),
+                };
+            }
+        } else {
+            unsupported(cb, `dynamic ${method}: callback must be an inline arrow/function expression or function reference`);
         }
         if (method === "forEach") {
             return this.emitSequencedExpr(T_VOID, [
@@ -4154,7 +6225,7 @@ class Emitter {
         }
         if (method === "map") {
             const out = this.freshTemp("_mapped");
-            const mapped = this.coerce(body, T_VALUE, cb.body);
+            const mapped = this.coerce(body, T_VALUE, bodyNode);
             return this.emitSequencedExpr(T_VALUE, [
                 { value: recv, target: T_VALUE, node: call.expression },
             ], ([value]) =>
@@ -4167,7 +6238,7 @@ class Emitter {
         }
         if (method === "flatMap") {
             const out = this.freshTemp("_mapped");
-            const mapped = this.coerce(body, T_VALUE, cb.body);
+            const mapped = this.coerce(body, T_VALUE, bodyNode);
             return this.emitSequencedExpr(T_VALUE, [
                 { value: recv, target: T_VALUE, node: call.expression },
             ], ([value]) =>
@@ -4178,7 +6249,7 @@ class Emitter {
                 `tsc_value_array(${dst}); })`,
             );
         }
-        const cond = this.truthyC(body, cb.body);
+        const cond = this.truthyC(body, bodyNode);
         if (method === "some") {
             const result = this.freshTemp("_some");
             return this.emitSequencedExpr(T_BOOLEAN, [
@@ -4253,54 +6324,130 @@ class Emitter {
     private emitDynamicArrayReduce(call: ts.CallExpression, recv: EmitResult, method: "reduce" | "reduceRight"): EmitResult {
         const cb = call.arguments[0];
         const initArg = call.arguments[1];
-        if (!cb || !initArg) unsupported(call, `dynamic ${method} currently expects callback and initial value`);
-        if (call.arguments.length !== 2) unsupported(call, `dynamic ${method} expects exactly callback and initial value`);
-        if (!ts.isArrowFunction(cb) && !ts.isFunctionExpression(cb)) {
-            unsupported(cb, `dynamic ${method}: callback must be an inline arrow/function expression`);
-        }
-        const accSlot = cb.parameters[0];
-        const elemSlot = cb.parameters[1];
-        if (!accSlot || !ts.isIdentifier(accSlot.name)) {
-            unsupported(cb, `dynamic ${method}: callback needs an accumulator parameter`);
-        }
-        if (!elemSlot || !ts.isIdentifier(elemSlot.name)) {
-            unsupported(cb, `dynamic ${method}: callback needs an element parameter`);
-        }
-        const idxSlot = cb.parameters[2];
-        if (idxSlot && !ts.isIdentifier(idxSlot.name)) {
-            unsupported(idxSlot, `dynamic ${method}: index parameter must be an identifier`);
-        }
-        const idxName = idxSlot && ts.isIdentifier(idxSlot.name) ? idxSlot.name.text : null;
-        if (ts.isBlock(cb.body)) {
-            unsupported(cb, `dynamic ${method}: block-body callbacks are not supported yet`);
-        }
-
-        const body = this.emitExpr(cb.body);
-        const init = this.emitExpr(initArg);
+        if (!cb) unsupported(call, `dynamic ${method}: missing callback`);
+        if (call.arguments.length > 2) unsupported(call, `dynamic ${method} expects callback and optional initial value`);
+        const init = initArg ? this.emitExpr(initArg) : null;
         const av = this.freshTemp("_dynred");
         const iv = this.freshTemp("_i");
         const acc = this.freshTemp("_acc");
         const elem = this.freshTemp("_el");
-        const bindings: string[] = [
-            `tsc_value_t ${mangleIdent(accSlot.name.text)} = ${acc}`,
-            `tsc_value_t ${elem} = TSC_ARR(tsc_value_t, ${av}, ${iv})`,
-            `tsc_value_t ${mangleIdent(elemSlot.name.text)} = ${elem}`,
-        ];
-        if (idxName) {
-            bindings.push(`double ${mangleIdent(idxName)} = (double)${iv}`);
+        const bindings: string[] = [`tsc_value_t ${elem} = TSC_ARR(tsc_value_t, ${av}, ${iv})`];
+        let body: EmitResult;
+        let bodyNode: ts.Expression = cb;
+
+        if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
+            const accSlot = cb.parameters[0];
+            const elemSlot = cb.parameters[1];
+            if (!accSlot || !ts.isIdentifier(accSlot.name)) {
+                unsupported(cb, `dynamic ${method}: callback needs an accumulator parameter`);
+            }
+            if (!elemSlot || !ts.isIdentifier(elemSlot.name)) {
+                unsupported(cb, `dynamic ${method}: callback needs an element parameter`);
+            }
+            const idxSlot = cb.parameters[2];
+            if (idxSlot && !ts.isIdentifier(idxSlot.name)) {
+                unsupported(idxSlot, `dynamic ${method}: index parameter must be an identifier`);
+            }
+            const arraySlot = cb.parameters[3];
+            if (arraySlot && !ts.isIdentifier(arraySlot.name)) {
+                unsupported(arraySlot, `dynamic ${method}: array parameter must be an identifier`);
+            }
+            const idxName = idxSlot && ts.isIdentifier(idxSlot.name) ? idxSlot.name.text : null;
+            const arrayName = arraySlot && ts.isIdentifier(arraySlot.name) ? arraySlot.name.text : null;
+            const bodyExpr = this.callbackReturnExpression(cb, `dynamic ${method}`);
+            bindings.unshift(`tsc_value_t ${mangleIdent(accSlot.name.text)} = ${acc}`);
+            bindings.push(`tsc_value_t ${mangleIdent(elemSlot.name.text)} = ${elem}`);
+            if (idxName) {
+                bindings.push(`double ${mangleIdent(idxName)} = (double)${iv}`);
+            }
+            if (arrayName) {
+                bindings.push(`tsc_value_t ${mangleIdent(arrayName)} = tsc_value_array(${av})`);
+            }
+            body = this.emitExpr(bodyExpr);
+            bodyNode = bodyExpr;
+        } else if (ts.isIdentifier(cb)) {
+            const cbType = this.checker.getTypeAtLocation(cb);
+            const sig = cbType.getCallSignatures()[0];
+            if (!sig) unsupported(cb, `dynamic ${method}: callback must be callable`);
+            if (this.isDirectCallableIdentifier(cb)) {
+                let fnName = this.identifierName(cb);
+                const genericDecl = this.genericFunctionDeclaration(sig);
+                const genericBindings = genericDecl
+                    ? this.genericBindingsForCallback(
+                        cb,
+                        genericDecl,
+                        this.contextualCallSignature(cb, method),
+                    )
+                    : null;
+                if (genericDecl && genericBindings) {
+                    fnName = this.ensureGenericSpecialization(genericDecl, genericBindings);
+                }
+                const params = sig.getParameters();
+                const typedArg = (index: number, source: EmitResult): string => {
+                    const param = params[index];
+                    if (!param) return source.c;
+                    const decl = param.valueDeclaration ?? cb;
+                    const target = this.prepareType(genericBindings
+                        ? withTypeBindings(genericBindings, () =>
+                            mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
+                        )
+                        : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker));
+                    return this.coerce(source, target, cb);
+                };
+                const callArgs: string[] = [];
+                if (params.length >= 1) callArgs.push(typedArg(0, { c: acc, ty: T_VALUE }));
+                if (params.length >= 2) callArgs.push(typedArg(1, { c: elem, ty: T_VALUE }));
+                if (params.length >= 3) callArgs.push(typedArg(2, { c: `(double)${iv}`, ty: T_NUMBER }));
+                if (params.length >= 4) callArgs.push(typedArg(3, { c: `tsc_value_array(${av})`, ty: T_VALUE }));
+                const thisType = this.directCallableThisType(cb);
+                if (thisType) callArgs.unshift("tsc_value_undefined()");
+                const retType = this.prepareType(genericBindings
+                    ? withTypeBindings(genericBindings, () =>
+                        mapTsType(cb, sig.getReturnType(), this.checker),
+                    )
+                    : mapTsType(cb, sig.getReturnType(), this.checker));
+                body = { c: `${fnName}(${callArgs.join(", ")})`, ty: retType };
+            } else {
+                const fn = this.emitExpr(cb);
+                if (fn.ty.kind !== "function" || !fn.ty.ret) {
+                    unsupported(cb, `dynamic ${method}: callback must be callable`);
+                }
+                const fnv = this.freshTemp("_cb");
+                bindings.push(`${fn.ty.c} ${fnv} = ${fn.c}`);
+                const params = fn.ty.params ?? [];
+                const callArgs: string[] = [];
+                if (params.length >= 1) callArgs.push(this.coerce({ c: acc, ty: T_VALUE }, params[0]!, cb));
+                if (params.length >= 2) callArgs.push(this.coerce({ c: elem, ty: T_VALUE }, params[1]!, cb));
+                if (params.length >= 3) callArgs.push(this.coerce({ c: `(double)${iv}`, ty: T_NUMBER }, params[2]!, cb));
+                if (params.length >= 4) callArgs.push(this.coerce({ c: `tsc_value_array(${av})`, ty: T_VALUE }, params[3]!, cb));
+                body = {
+                    c: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`,
+                    ty: this.prepareType(fn.ty.ret),
+                };
+            }
+        } else {
+            unsupported(cb, `dynamic ${method}: callback must be an inline arrow/function expression or function reference`);
         }
-        const reduced = this.coerce(body, T_VALUE, cb.body);
-        return this.emitSequencedExpr(T_VALUE, [
+        const reduced = this.coerce(body, T_VALUE, bodyNode);
+        const specs: SequencedCallArg[] = [
             { value: recv, target: T_VALUE, node: call.expression },
-            { value: init, target: T_VALUE, node: initArg },
-        ], ([value, initial]) =>
-            `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); ` +
-            `tsc_value_t ${acc} = ${initial}; ` +
-            (method === "reduce"
-                ? `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) `
-                : `for (size_t ${iv} = ${av}->len; ${iv}-- > 0;) `) +
-            `{ ${bindings.join("; ")}; ${acc} = ${reduced}; } ${acc}; })`,
-        );
+        ];
+        if (init && initArg) specs.push({ value: init, target: T_VALUE, node: initArg });
+        return this.emitSequencedExpr(T_VALUE, specs, ([value, initial]) => {
+            const initC = initial
+                ? `tsc_value_t ${acc} = ${initial}; size_t ${iv}_start = ${av}->len;`
+                : method === "reduce"
+                    ? `if (${av}->len == 0) tsc_panic("Array.reduce: empty array with no initial value"); ` +
+                        `tsc_value_t ${acc} = TSC_ARR(tsc_value_t, ${av}, 0); size_t ${iv}_start = 1;`
+                    : `if (${av}->len == 0) tsc_panic("Array.reduceRight: empty array with no initial value"); ` +
+                        `tsc_value_t ${acc} = TSC_ARR(tsc_value_t, ${av}, ${av}->len - 1); size_t ${iv}_start = ${av}->len - 1;`;
+            const loop = method === "reduce"
+                ? `for (size_t ${iv} = ${initial ? "0" : `${iv}_start`}; ${iv} < ${av}->len; ${iv}++) `
+                : `for (size_t ${iv} = ${iv}_start; ${iv}-- > 0;) `;
+            return `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); ` +
+                `${initC} ${loop}` +
+                `{ ${bindings.join("; ")}; ${acc} = ${reduced}; } ${acc}; })`;
+        });
     }
 
     private emitRegexpMethod(
@@ -4310,6 +6457,18 @@ class Emitter {
     ): EmitResult {
         const args = call.arguments;
         switch (method) {
+            case "exec": {
+                if (args.length !== 1) unsupported(call, "RegExp.exec expects 1 arg");
+                const s = this.emitExpr(args[0]!);
+                return this.emitSequencedCall(
+                    "tsc_regexp_exec",
+                    arrayType(T_STRING),
+                    [
+                        { value: recv },
+                        { value: s, target: T_STRING, node: args[0]! },
+                    ],
+                );
+            }
             case "test": {
                 if (args.length !== 1) unsupported(call, "RegExp.test expects 1 arg");
                 const s = this.emitExpr(args[0]!);
@@ -4322,8 +6481,429 @@ class Emitter {
                     ],
                 );
             }
+            case "toLocaleString":
+            case "toString":
+                if (args.length !== 0) unsupported(call, `RegExp.${method} expects no args`);
+                return this.emitSequencedCall("tsc_regexp_to_string", T_STRING, [{ value: recv }]);
+            case "valueOf":
+                if (args.length !== 0) unsupported(call, "RegExp.valueOf expects no args");
+                return recv;
         }
         unsupported(call, `RegExp method .${method}`);
+    }
+
+    private emitArrayFromWithMapper(
+        call: ts.CallExpression,
+        itemsArg: ts.Expression,
+        mapfnArg: ts.Expression,
+    ): EmitResult {
+        const callType = this.prepareType(
+            mapTsType(call, this.checker.getTypeAtLocation(call), this.checker),
+        );
+        if (callType.kind !== "array" || !callType.elem)
+            unsupported(call, "Array.from(items, mapfn) result must be an array");
+        const u = callType.elem;
+
+        const items = this.emitExpr(itemsArg);
+        if (items.ty.kind === "string") {
+            return this.emitArrayFromMapperStringSource(call, items, mapfnArg, u);
+        }
+        if (items.ty.kind === "value") {
+            return this.emitSequencedExpr(callType, [{ value: items, target: T_VALUE, node: itemsArg }], ([itemsExpr]) => {
+                const src = this.freshTemp("_af_dyn_src");
+                const out = this.freshTemp("_af_dyn_out");
+                const iv = this.freshTemp("_af_dyn_i");
+                const item = this.freshTemp("_af_dyn_item");
+                const mapped = this.freshTemp("_af_dyn_mapped");
+                const itemExpr = `TSC_ARR(tsc_value_t, ${src}, ${iv})`;
+                const { bindings, body } = this.bindArrayFromCallback(mapfnArg, T_VALUE, u, item, iv);
+                const mappedC = this.coerce(body, u, mapfnArg);
+                return (
+                    `({ tsc_array_t* const ${src} = tsc_value_iter_values(${itemsExpr!}); ` +
+                    `tsc_array_t* ${out} = tsc_array_new(sizeof(${u.c}), ${src}->len ? ${src}->len : 1); ` +
+                    `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
+                    `tsc_value_t ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
+                    `${u.c} ${mapped} = ${mappedC}; ` +
+                    `tsc_array_push_raw(${out}, &${mapped}); } ${out}; })`
+                );
+            });
+        }
+        if (items.ty.kind !== "array" && items.ty.kind !== "set" && items.ty.kind !== "map")
+            unsupported(itemsArg, "Array.from(items, mapfn) currently supports typed array, Map<string, V>, Set, dynamic, or string sources");
+        const t = items.ty.kind === "map" ? entryType(items.ty.elem!) : items.ty.elem!;
+        const sourceArray = (source: string) => {
+            if (items.ty.kind === "set") return `tsc_set_values(${source})`;
+            if (items.ty.kind === "map") return this.mapEntriesArrayExpr(itemsArg, source, items.ty).c;
+            return source;
+        };
+
+        return this.emitSequencedExpr(callType, [{ value: items }], ([itemsExpr]) => {
+            const src = this.freshTemp("_af_src");
+            const out = this.freshTemp("_af_out");
+            const iv = this.freshTemp("_af_i");
+            const item = this.freshTemp("_af_item");
+            const mapped = this.freshTemp("_af_mapped");
+            const itemExpr = `TSC_ARR(${t.c}, ${src}, ${iv})`;
+            const { bindings, body } = this.bindArrayFromCallback(mapfnArg, t, u, item, iv);
+            const mappedC = this.coerce(body, u, mapfnArg);
+            return (
+                `({ tsc_array_t* const ${src} = ${sourceArray(itemsExpr!)}; ` +
+                `tsc_array_t* ${out} = tsc_array_new(sizeof(${u.c}), ${src}->len ? ${src}->len : 1); ` +
+                `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
+                `${t.c} ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
+                `${u.c} ${mapped} = ${mappedC}; ` +
+                `tsc_array_push_raw(${out}, &${mapped}); } ${out}; })`
+            );
+        });
+    }
+
+    private emitArrayFromMapperStringSource(
+        call: ts.CallExpression,
+        items: EmitResult,
+        mapfnArg: ts.Expression,
+        u: CType,
+    ): EmitResult {
+        // String source: walk one code point per iteration via tsc_str_chars.
+        const callType = arrayType(u);
+        return this.emitSequencedExpr(callType, [{ value: items }], ([s]) => {
+            const src = this.freshTemp("_afs_src");
+            const out = this.freshTemp("_afs_out");
+            const iv = this.freshTemp("_afs_i");
+            const item = this.freshTemp("_afs_item");
+            const mapped = this.freshTemp("_afs_mapped");
+            const itemExpr = `TSC_ARR(tsc_str_t*, ${src}, ${iv})`;
+            const { bindings, body } = this.bindArrayFromCallback(mapfnArg, T_STRING, u, item, iv);
+            const mappedC = this.coerce(body, u, mapfnArg);
+            return (
+                `({ tsc_array_t* const ${src} = tsc_str_chars(${s}); ` +
+                `tsc_array_t* ${out} = tsc_array_new(sizeof(${u.c}), ${src}->len ? ${src}->len : 1); ` +
+                `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
+                `tsc_str_t* ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
+                `${u.c} ${mapped} = ${mappedC}; ` +
+                `tsc_array_push_raw(${out}, &${mapped}); } ${out}; })`
+            );
+        });
+    }
+
+    private bindArrayFromCallback(
+        cb: ts.Expression,
+        t: CType,
+        u: CType,
+        itemTemp: string,
+        indexTemp: string,
+    ): { bindings: string[]; body: EmitResult } {
+        const bindings: string[] = [];
+        if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
+            const bodyExpr = this.callbackReturnExpression(cb, "Array.from");
+            const valueParam = cb.parameters[0];
+            const indexParam = cb.parameters[1];
+            if (valueParam && ts.isIdentifier(valueParam.name)) {
+                bindings.push(`${t.c} ${mangleIdent(valueParam.name.text)} = ${itemTemp};`);
+            }
+            if (indexParam && ts.isIdentifier(indexParam.name)) {
+                bindings.push(`double ${mangleIdent(indexParam.name.text)} = (double)${indexTemp};`);
+            }
+            return { bindings, body: this.emitExpr(bodyExpr) };
+        }
+        if (ts.isIdentifier(cb)) {
+            const cbType = this.checker.getTypeAtLocation(cb);
+            const sig = cbType.getCallSignatures()[0];
+            if (!sig) unsupported(cb, "Array.from callback must be callable");
+            const sources: EmitResult[] = [
+                { c: itemTemp, ty: t },
+                { c: `(double)${indexTemp}`, ty: T_NUMBER },
+            ];
+            if (this.isDirectCallableIdentifier(cb)) {
+                let fnName = this.identifierName(cb);
+                const genericDecl = this.genericFunctionDeclaration(sig);
+                const genericBindings = genericDecl
+                    ? this.genericBindingsForCallbackTypes(cb, genericDecl, [t, T_NUMBER], u)
+                    : null;
+                if (genericDecl && genericBindings) {
+                    fnName = this.ensureGenericSpecialization(genericDecl, genericBindings);
+                }
+                const params = sig.getParameters();
+                const callArgs = params.slice(0, 2).map((param, index) => {
+                    const decl = param.valueDeclaration ?? cb;
+                    const target = this.prepareType(
+                        genericBindings
+                            ? withTypeBindings(genericBindings, () =>
+                                mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
+                            )
+                            : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
+                    );
+                    return this.coerce(sources[index]!, target, cb);
+                });
+                const retType = this.prepareType(
+                    genericBindings
+                        ? withTypeBindings(genericBindings, () =>
+                            mapTsType(cb, sig.getReturnType(), this.checker),
+                        )
+                        : mapTsType(cb, sig.getReturnType(), this.checker),
+                );
+                return { bindings, body: { c: `${fnName}(${callArgs.join(", ")})`, ty: retType } };
+            }
+            const fn = this.emitExpr(cb);
+            if (fn.ty.kind !== "function" || !fn.ty.ret)
+                unsupported(cb, "Array.from callback must be callable");
+            const fnv = this.freshTemp("_cb");
+            bindings.push(`${fn.ty.c} ${fnv} = ${fn.c};`);
+            const params = fn.ty.params ?? [];
+            const callArgs = params.slice(0, 2).map((param, index) =>
+                this.coerce(sources[index]!, param, cb),
+            );
+            return {
+                bindings,
+                body: {
+                    c: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`,
+                    ty: this.prepareType(fn.ty.ret),
+                },
+            };
+        }
+        unsupported(cb, "Array.from callback must be an inline arrow/function expression or function reference");
+    }
+
+    private emitMapGroupBy(call: ts.CallExpression): EmitResult {
+        if (call.arguments.length !== 2)
+            unsupported(call, "Map.groupBy expects (items, keyFn)");
+        const itemsArg = call.arguments[0]!;
+        const keyArg = call.arguments[1]!;
+        const callType = this.prepareType(
+            mapTsType(call, this.checker.getTypeAtLocation(call), this.checker),
+        );
+        if (callType.kind !== "map" || !callType.key || !callType.elem || callType.elem.kind !== "array" || !callType.elem.elem)
+            unsupported(call, "Map.groupBy result must be a Map<K, T[]>");
+        const k = callType.key;
+        const groupArrayTy = callType.elem;
+        const t = groupArrayTy.elem!;
+
+        const items = this.emitExpr(itemsArg);
+        if (items.ty.kind !== "array" || !sameCType(items.ty.elem!, t))
+            unsupported(itemsArg, "Map.groupBy items must match the result element type T[]");
+
+        return this.emitSequencedExpr(callType, [{ value: items }], ([itemsExpr]) => {
+            const src = this.freshTemp("_gb_src");
+            const map = this.freshTemp("_gb_map");
+            const iv = this.freshTemp("_gb_i");
+            const item = this.freshTemp("_gb_item");
+            const key = this.freshTemp("_gb_key");
+            const group = this.freshTemp("_gb_group");
+            const itemExpr = `TSC_ARR(${t.c}, ${src}, ${iv})`;
+
+            const cb = keyArg;
+            const bindings: string[] = [];
+            let keyBody: EmitResult;
+            if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
+                const bodyExpr = this.callbackReturnExpression(cb, "Map.groupBy");
+                const valueParam = cb.parameters[0];
+                const indexParam = cb.parameters[1];
+                if (valueParam && ts.isIdentifier(valueParam.name)) {
+                    bindings.push(`${t.c} ${mangleIdent(valueParam.name.text)} = ${item};`);
+                }
+                if (indexParam && ts.isIdentifier(indexParam.name)) {
+                    bindings.push(`double ${mangleIdent(indexParam.name.text)} = (double)${iv};`);
+                }
+                keyBody = this.emitExpr(bodyExpr);
+            } else if (ts.isIdentifier(cb)) {
+                const cbType = this.checker.getTypeAtLocation(cb);
+                const sig = cbType.getCallSignatures()[0];
+                if (!sig) unsupported(cb, "Map.groupBy callback must be callable");
+                const sources: EmitResult[] = [
+                    { c: item, ty: t },
+                    { c: `(double)${iv}`, ty: T_NUMBER },
+                ];
+                if (this.isDirectCallableIdentifier(cb)) {
+                    let fnName = this.identifierName(cb);
+                    const genericDecl = this.genericFunctionDeclaration(sig);
+                    const genericBindings = genericDecl
+                        ? this.genericBindingsForCallbackTypes(cb, genericDecl, [t, T_NUMBER], k)
+                        : null;
+                    if (genericDecl && genericBindings) {
+                        fnName = this.ensureGenericSpecialization(genericDecl, genericBindings);
+                    }
+                    const params = sig.getParameters();
+                    const callArgs = params.slice(0, 2).map((param, index) => {
+                        const decl = param.valueDeclaration ?? cb;
+                        const target = this.prepareType(
+                            genericBindings
+                                ? withTypeBindings(genericBindings, () =>
+                                    mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
+                                )
+                                : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
+                        );
+                        return this.coerce(sources[index]!, target, cb);
+                    });
+                    const retType = this.prepareType(
+                        genericBindings
+                            ? withTypeBindings(genericBindings, () =>
+                                mapTsType(cb, sig.getReturnType(), this.checker),
+                            )
+                            : mapTsType(cb, sig.getReturnType(), this.checker),
+                    );
+                    keyBody = { c: `${fnName}(${callArgs.join(", ")})`, ty: retType };
+                } else {
+                    const fn = this.emitExpr(cb);
+                    if (fn.ty.kind !== "function" || !fn.ty.ret)
+                        unsupported(cb, "Map.groupBy callback must be callable");
+                    const fnv = this.freshTemp("_cb");
+                    bindings.push(`${fn.ty.c} ${fnv} = ${fn.c};`);
+                    const params = fn.ty.params ?? [];
+                    const callArgs = params.slice(0, 2).map((param, index) =>
+                        this.coerce(sources[index]!, param, cb),
+                    );
+                    keyBody = {
+                        c: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`,
+                        ty: this.prepareType(fn.ty.ret),
+                    };
+                }
+            } else {
+                unsupported(cb, "Map.groupBy callback must be an inline arrow/function expression or function reference");
+            }
+            const keyCExpr = this.coerce(keyBody, k, cb);
+            return (
+                `({ tsc_array_t* const ${src} = ${itemsExpr}; ` +
+                `tsc_map_t* const ${map} = tsc_map_new(sizeof(${k.c}), sizeof(tsc_array_t*), ${keyKindOf(k)}, 0); ` +
+                `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
+                `${t.c} ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
+                `${k.c} ${key} = ${keyCExpr}; ` +
+                `tsc_array_t* ${group} = NULL; ` +
+                `if (!tsc_map_get_raw(${map}, &${key}, &${group}) || ${group} == NULL) { ` +
+                `${group} = tsc_array_new(sizeof(${t.c}), 4); ` +
+                `tsc_map_set_raw(${map}, &${key}, &${group}); } ` +
+                `tsc_array_push_raw(${group}, &${item}); } ${map}; })`
+            );
+        });
+    }
+
+    private callbackReturnExpression(
+        cb: ts.ArrowFunction | ts.FunctionExpression,
+        label: string,
+    ): ts.Expression {
+        if (!ts.isBlock(cb.body)) {
+            return cb.body;
+        }
+        const statements = cb.body.statements;
+        const statement = statements[0];
+        if (statements.length !== 1 || !statement || !ts.isReturnStatement(statement) || !statement.expression) {
+            unsupported(cb, `${label} block-body callbacks require exactly one return expression`);
+        }
+        return statement.expression;
+    }
+
+    private emitMapForEach(call: ts.CallExpression, recv: EmitResult): EmitResult {
+        const k = recv.ty.key!;
+        const v = recv.ty.elem!;
+        const args = call.arguments;
+        if (args.length !== 1) unsupported(call, "Map.forEach expects 1 callback");
+        const cb = args[0]!;
+        return this.emitSequencedExpr(T_VOID, [{ value: recv }], ([map]) => {
+            const mt = this.freshTemp("_map_each");
+            const iv = this.freshTemp("_i");
+            const valueExpr = `*((${v.c}*)((char*)${mt}->values + ${iv} * ${mt}->vs))`;
+            const keyExpr = `*((${k.c}*)((char*)${mt}->keys + ${iv} * ${mt}->ks))`;
+            const bindings: string[] = [];
+            let bodyC: string;
+            if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
+                const bodyExpr = this.callbackReturnExpression(cb, "Map.forEach");
+                const valueParam = cb.parameters[0];
+                const keyParam = cb.parameters[1];
+                const mapParam = cb.parameters[2];
+                if (valueParam && ts.isIdentifier(valueParam.name)) {
+                    bindings.push(`${v.c} ${mangleIdent(valueParam.name.text)} = ${valueExpr};`);
+                }
+                if (keyParam && ts.isIdentifier(keyParam.name)) {
+                    bindings.push(`${k.c} ${mangleIdent(keyParam.name.text)} = ${keyExpr};`);
+                }
+                if (mapParam && ts.isIdentifier(mapParam.name)) {
+                    bindings.push(`${recv.ty.c} ${mangleIdent(mapParam.name.text)} = ${mt};`);
+                }
+                bodyC = this.emitExpr(bodyExpr).c;
+            } else if (ts.isIdentifier(cb)) {
+                const cbType = this.checker.getTypeAtLocation(cb);
+                const sig = cbType.getCallSignatures()[0];
+                if (!sig) unsupported(cb, "Map.forEach callback must be callable");
+                const sources: EmitResult[] = [
+                    { c: valueExpr, ty: v },
+                    { c: keyExpr, ty: k },
+                    { c: mt, ty: recv.ty },
+                ];
+                if (this.isDirectCallableIdentifier(cb)) {
+                    let fnName = this.identifierName(cb);
+                    const genericDecl = this.genericFunctionDeclaration(sig);
+                    const genericBindings = genericDecl
+                        ? this.genericBindingsForCallbackTypes(cb, genericDecl, [v, k, recv.ty], T_VOID)
+                        : null;
+                    if (genericDecl && genericBindings) {
+                        fnName = this.ensureGenericSpecialization(genericDecl, genericBindings);
+                    }
+                    const params = sig.getParameters();
+                    const callArgs = params.slice(0, 3).map((param, index) => {
+                        const decl = param.valueDeclaration ?? cb;
+                        const target = this.prepareType(genericBindings
+                            ? withTypeBindings(genericBindings, () =>
+                                mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
+                            )
+                            : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker));
+                        return this.coerce(sources[index]!, target, cb);
+                    });
+                    bodyC = `${fnName}(${callArgs.join(", ")})`;
+                } else {
+                    const fn = this.emitExpr(cb);
+                    if (fn.ty.kind !== "function" || !fn.ty.ret) {
+                        unsupported(cb, "Map.forEach callback must be callable");
+                    }
+                    const fnv = this.freshTemp("_cb");
+                    bindings.push(`${fn.ty.c} ${fnv} = ${fn.c};`);
+                    const params = fn.ty.params ?? [];
+                    const callArgs = params.slice(0, 3).map((param, index) =>
+                        this.coerce(sources[index]!, param, cb),
+                    );
+                    bodyC = `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`;
+                }
+            } else {
+                unsupported(cb, "Map.forEach callback must be an inline arrow/function expression or function reference");
+            }
+            return (
+                `({ tsc_map_t* const ${mt} = ${map}; ` +
+                `for (size_t ${iv} = 0; ${iv} < ${mt}->len; ${iv}++) ` +
+                `{ ${bindings.join(" ")} (void)(${bodyC}); } (void)0; })`
+            );
+        });
+    }
+
+    private emitMapEntriesArray(node: ts.Node, recv: EmitResult, feature: string): EmitResult {
+        if (recv.ty.kind !== "map") unsupported(node, `${feature} expects a Map`);
+        return this.mapEntriesArrayExpr(node, recv.c, recv.ty, feature);
+    }
+
+    private mapEntriesArrayExpr(
+        node: ts.Node,
+        mapExpr: string,
+        mapTy: CType,
+        feature = "Map.entries",
+    ): EmitResult {
+        const k = mapTy.key;
+        const v = mapTy.elem;
+        if (!k || !v) unsupported(node, `${feature} needs known Map key/value types`);
+        if (k.kind !== "string")
+            unsupported(node, `${feature} currently supports Map<string, V> only`);
+        const elemType = entryType(v);
+        const mt = this.freshTemp("_me_map");
+        const out = this.freshTemp("_me_out");
+        const iv = this.freshTemp("_me_i");
+        const entry = this.freshTemp("_me_entry");
+        const keyExpr = `*((tsc_str_t**)((char*)${mt}->keys + ${iv} * ${mt}->ks))`;
+        const valueExpr = `*((${v.c}*)((char*)${mt}->values + ${iv} * ${mt}->vs))`;
+        return {
+            c:
+                `({ tsc_map_t* const ${mt} = ${mapExpr}; ` +
+                `tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${mt}->len ? ${mt}->len : 1); ` +
+                `for (size_t ${iv} = 0; ${iv} < ${mt}->len; ${iv}++) { ` +
+                `${elemType.c} ${entry}; ${entry}.key = ${keyExpr}; ` +
+                `${this.objectEntrySet(entry, v, valueExpr)}; ` +
+                `tsc_array_push_raw(${out}, &${entry}); } ${out}; })`,
+            ty: arrayType(elemType),
+        };
     }
 
     private emitMapMethod(
@@ -4389,10 +6969,100 @@ class Emitter {
                 return { c: `tsc_map_keys(${recv.c})`, ty: arrayType(k) };
             case "values":
                 return { c: `tsc_map_values(${recv.c})`, ty: arrayType(v) };
+            case "entries":
+                if (args.length !== 0) unsupported(call, "Map.entries expects no args");
+                return this.emitMapEntriesArray(call, recv, "Map.entries");
+            case "forEach":
+                return this.emitMapForEach(call, recv);
             case "size":
                 return { c: `tsc_map_size(${recv.c})`, ty: T_NUMBER };
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Map");
         }
         unsupported(call, `Map method .${method}`);
+    }
+
+    private emitSetForEach(call: ts.CallExpression, recv: EmitResult): EmitResult {
+        const e = recv.ty.elem!;
+        const args = call.arguments;
+        if (args.length !== 1) unsupported(call, "Set.forEach expects 1 callback");
+        const cb = args[0]!;
+        return this.emitSequencedExpr(T_VOID, [{ value: recv }], ([set]) => {
+            const st = this.freshTemp("_set_each");
+            const iv = this.freshTemp("_i");
+            const elemExpr = `*((${e.c}*)((char*)${st}->data + ${iv} * ${st}->es))`;
+            const bindings: string[] = [];
+            let bodyC: string;
+            if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
+                const bodyExpr = this.callbackReturnExpression(cb, "Set.forEach");
+                const valueParam = cb.parameters[0];
+                const value2Param = cb.parameters[1];
+                const setParam = cb.parameters[2];
+                if (valueParam && ts.isIdentifier(valueParam.name)) {
+                    bindings.push(`${e.c} ${mangleIdent(valueParam.name.text)} = ${elemExpr};`);
+                }
+                if (value2Param && ts.isIdentifier(value2Param.name)) {
+                    bindings.push(`${e.c} ${mangleIdent(value2Param.name.text)} = ${elemExpr};`);
+                }
+                if (setParam && ts.isIdentifier(setParam.name)) {
+                    bindings.push(`${recv.ty.c} ${mangleIdent(setParam.name.text)} = ${st};`);
+                }
+                bodyC = this.emitExpr(bodyExpr).c;
+            } else if (ts.isIdentifier(cb)) {
+                const cbType = this.checker.getTypeAtLocation(cb);
+                const sig = cbType.getCallSignatures()[0];
+                if (!sig) unsupported(cb, "Set.forEach callback must be callable");
+                const sources: EmitResult[] = [
+                    { c: elemExpr, ty: e },
+                    { c: elemExpr, ty: e },
+                    { c: st, ty: recv.ty },
+                ];
+                if (this.isDirectCallableIdentifier(cb)) {
+                    let fnName = this.identifierName(cb);
+                    const genericDecl = this.genericFunctionDeclaration(sig);
+                    const genericBindings = genericDecl
+                        ? this.genericBindingsForCallbackTypes(cb, genericDecl, [e, e, recv.ty], T_VOID)
+                        : null;
+                    if (genericDecl && genericBindings) {
+                        fnName = this.ensureGenericSpecialization(genericDecl, genericBindings);
+                    }
+                    const params = sig.getParameters();
+                    const callArgs = params.slice(0, 3).map((param, index) => {
+                        const decl = param.valueDeclaration ?? cb;
+                        const target = this.prepareType(genericBindings
+                            ? withTypeBindings(genericBindings, () =>
+                                mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
+                            )
+                            : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker));
+                        return this.coerce(sources[index]!, target, cb);
+                    });
+                    bodyC = `${fnName}(${callArgs.join(", ")})`;
+                } else {
+                    const fn = this.emitExpr(cb);
+                    if (fn.ty.kind !== "function" || !fn.ty.ret) {
+                        unsupported(cb, "Set.forEach callback must be callable");
+                    }
+                    const fnv = this.freshTemp("_cb");
+                    bindings.push(`${fn.ty.c} ${fnv} = ${fn.c};`);
+                    const params = fn.ty.params ?? [];
+                    const callArgs = params.slice(0, 3).map((param, index) =>
+                        this.coerce(sources[index]!, param, cb),
+                    );
+                    bodyC = `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`;
+                }
+            } else {
+                unsupported(cb, "Set.forEach callback must be an inline arrow/function expression or function reference");
+            }
+            return (
+                `({ tsc_set_t* const ${st} = ${set}; ` +
+                `for (size_t ${iv} = 0; ${iv} < ${st}->len; ${iv}++) ` +
+                `{ ${bindings.join(" ")} (void)(${bodyC}); } (void)0; })`
+            );
+        });
     }
 
     private emitSetMethod(
@@ -4435,10 +7105,54 @@ class Emitter {
             }
             case "clear":
                 return { c: `(tsc_set_clear(${recv.c}), (void)0)`, ty: T_VOID };
+            case "keys":
             case "values":
                 return { c: `tsc_set_values(${recv.c})`, ty: arrayType(e) };
+            case "forEach":
+                return this.emitSetForEach(call, recv);
             case "size":
                 return { c: `tsc_set_size(${recv.c})`, ty: T_NUMBER };
+            case "union":
+            case "intersection":
+            case "difference":
+            case "symmetricDifference": {
+                if (args.length !== 1)
+                    unsupported(call, `Set.${method} expects one Set<T> argument`);
+                const other = this.emitExpr(args[0]!);
+                if (other.ty.kind !== "set" || !sameCType(other.ty.elem!, e))
+                    unsupported(args[0]!, `Set.${method} expects a Set<T> with the same element type`);
+                const fn = method === "symmetricDifference" ? "tsc_set_symmetric_difference" : `tsc_set_${method}`;
+                return this.emitSequencedExpr(
+                    recv.ty,
+                    [{ value: recv }, { value: other }],
+                    ([a, b]) => `${fn}(${a!}, ${b!})`,
+                );
+            }
+            case "isSubsetOf":
+            case "isSupersetOf":
+            case "isDisjointFrom": {
+                if (args.length !== 1)
+                    unsupported(call, `Set.${method} expects one Set<T> argument`);
+                const other = this.emitExpr(args[0]!);
+                if (other.ty.kind !== "set" || !sameCType(other.ty.elem!, e))
+                    unsupported(args[0]!, `Set.${method} expects a Set<T> with the same element type`);
+                const fnName = method === "isSubsetOf"
+                    ? "tsc_set_is_subset_of"
+                    : method === "isSupersetOf"
+                        ? "tsc_set_is_superset_of"
+                        : "tsc_set_is_disjoint_from";
+                return this.emitSequencedExpr(
+                    T_BOOLEAN,
+                    [{ value: recv }, { value: other }],
+                    ([a, b]) => `${fnName}(${a!}, ${b!})`,
+                );
+            }
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Set");
         }
         unsupported(call, `Set method .${method}`);
     }
@@ -4454,6 +7168,12 @@ class Emitter {
             case "has":
             case "delete":
                 return this.emitMapMethod(call, recv, method);
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "WeakMap");
         }
         unsupported(call, `WeakMap method .${method}`);
     }
@@ -4468,6 +7188,12 @@ class Emitter {
             case "has":
             case "delete":
                 return this.emitSetMethod(call, recv, method);
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "WeakSet");
         }
         unsupported(call, `WeakSet method .${method}`);
     }
@@ -4485,8 +7211,116 @@ class Emitter {
                     `((${target.c})tsc_weakref_deref(${ref!}))`,
                 );
             }
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "WeakRef");
         }
         unsupported(call, `WeakRef method .${method}`);
+    }
+
+    private emitFinRegistryMethod(
+        call: ts.CallExpression,
+        recv: EmitResult,
+        method: string,
+    ): EmitResult {
+        switch (method) {
+            case "register": {
+                const args = call.arguments;
+                if (args.length < 2 || args.length > 3)
+                    unsupported(call, "FinalizationRegistry.register expects (target, heldValue, unregisterToken?)");
+                // target and heldValue are accepted but ignored — cleanup callback never fires.
+                // Only unregisterToken is tracked so that unregister(token) returns the right boolean.
+                if (args.length === 3) {
+                    const tokenArg = args[2]!;
+                    const tokenRes = this.emitExpr(tokenArg);
+                    requireWeakObjectKey(tokenArg, tokenRes.ty, "FinalizationRegistry unregisterToken");
+                    return this.emitSequencedExpr(
+                        T_VOID,
+                        [{ value: recv }, { value: tokenRes }],
+                        ([r, tok]) => `(tsc_finregistry_register(${r!}, (void*)${tok!}), (void)0)`,
+                    );
+                }
+                return this.emitSequencedExpr(
+                    T_VOID,
+                    [{ value: recv }],
+                    ([r]) => `(tsc_finregistry_register(${r!}, NULL), (void)0)`,
+                );
+            }
+            case "unregister": {
+                if (call.arguments.length !== 1)
+                    unsupported(call, "FinalizationRegistry.unregister expects (unregisterToken)");
+                const tokenArg = call.arguments[0]!;
+                const tokenRes = this.emitExpr(tokenArg);
+                requireWeakObjectKey(tokenArg, tokenRes.ty, "FinalizationRegistry unregisterToken");
+                return this.emitSequencedExpr(
+                    T_BOOLEAN,
+                    [{ value: recv }, { value: tokenRes }],
+                    ([r, tok]) => `tsc_finregistry_unregister(${r!}, (void*)${tok!})`,
+                );
+            }
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "FinalizationRegistry");
+        }
+        unsupported(call, `FinalizationRegistry method .${method}`);
+    }
+
+    private emitBuiltinObjectPrototypeMethod(
+        call: ts.CallExpression,
+        recv: EmitResult,
+        method: string,
+        tag: string,
+    ): EmitResult {
+        switch (method) {
+            case "hasOwnProperty":
+            case "propertyIsEnumerable": {
+                if (call.arguments.length !== 1) unsupported(call, `${tag}.${method} expects 1 arg`);
+                const key = this.emitExpr(call.arguments[0]!);
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: recv, node: call.expression },
+                    { value: key, target: T_STRING, node: call.arguments[0]! },
+                ], ([obj, prop]) => `({ (void)${obj}; (void)${prop}; false; })`);
+            }
+            case "toLocaleString":
+            case "toString": {
+                if (call.arguments.length !== 0) unsupported(call, `${tag}.${method} expects no args`);
+                const text = `[object ${tag}]`;
+                return this.emitSequencedExpr(T_STRING, [{ value: recv }], ([obj]) =>
+                    `({ (void)${obj}; tsc_str_from_lit("${escapeCString(text)}", ${utf8ByteLen(text)}); })`,
+                );
+            }
+            case "valueOf":
+                if (call.arguments.length !== 0) unsupported(call, `${tag}.valueOf expects no args`);
+                return recv;
+        }
+        unsupported(call, `${tag}.${method}`);
+    }
+
+    private emitUrlMethod(
+        call: ts.CallExpression,
+        recv: EmitResult,
+        method: string,
+    ): EmitResult {
+        switch (method) {
+            case "toJSON":
+            case "toLocaleString":
+            case "toString":
+                if (call.arguments.length !== 0) unsupported(call, `URL.${method} expects no args`);
+                return this.emitSequencedExpr(T_STRING, [{ value: recv }], ([url]) => `${url}->href`);
+            case "valueOf":
+                if (call.arguments.length !== 0) unsupported(call, "URL.valueOf expects no args");
+                return recv;
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "URL");
+        }
+        unsupported(call, `URL method .${method}`);
     }
 
     private emitArrayMethod(
@@ -4496,16 +7330,84 @@ class Emitter {
     ): EmitResult {
         const et = recv.ty.elem!;
         const args = call.arguments;
+        const emitJoinString = (sep: string): EmitResult => {
+            const av = this.freshTemp("_arr");
+            const iv = this.freshTemp("_i");
+            const stringify = (exprC: string): string => {
+                if (et.kind === "string") return exprC;
+                if (et.kind === "number") return `tsc_str_from_num(${exprC})`;
+                if (et.kind === "boolean") return `tsc_str_from_bool(${exprC})`;
+                if (et.kind === "value") return `tsc_value_to_string(${exprC})`;
+                return `tsc_str_from_lit("[obj]", 5)`;
+            };
+            return {
+                c:
+                    `({ tsc_array_t* const ${av} = ${recv.c}; tsc_str_t* _r = tsc_str_from_lit("", 0); ` +
+                    `tsc_str_t* _s = ${sep}; for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
+                    `{ if (${iv} > 0) _r = tsc_str_concat(_r, _s); _r = tsc_str_concat(_r, ${stringify(`TSC_ARR(${et.c}, ${av}, ${iv})`)}); } _r; })`,
+                ty: T_STRING,
+            };
+        };
+        const emitForwardStartDecls = (len: string, from: string, out: string): string =>
+            `size_t ${out} = 0; ` +
+            `if (isnan(${from}) || ${from} == -INFINITY) ${out} = 0; ` +
+            `else if (${from} == INFINITY) ${out} = ${len}; ` +
+            `else { int64_t _idx = (int64_t)(${from} < 0 ? ceil(${from}) : floor(${from})); ` +
+            `if (_idx < 0) _idx = (int64_t)${len} + _idx; ` +
+            `if (_idx < 0) ${out} = 0; else if (_idx > (int64_t)${len}) ${out} = ${len}; else ${out} = (size_t)_idx; }`;
+        const emitLastStartDecls = (len: string, from: string, out: string, ok: string): string =>
+            `bool ${ok} = false; size_t ${out} = 0; ` +
+            `if (${len} > 0 && ${from} != -INFINITY) { ` +
+            `double _from = isnan(${from}) ? 0.0 : ${from}; int64_t _idx; ` +
+            `if (_from == INFINITY) _idx = (int64_t)${len} - 1; ` +
+            `else { _idx = (int64_t)(_from < 0 ? ceil(_from) : floor(_from)); ` +
+            `if (_idx < 0) _idx = (int64_t)${len} + _idx; else if (_idx >= (int64_t)${len}) _idx = (int64_t)${len} - 1; } ` +
+            `if (_idx >= 0) { ${ok} = true; ${out} = (size_t)_idx; } }`;
+        const emitArrayLiteralArg = (al: ts.ArrayLiteralExpression): EmitResult => {
+            const av = this.freshTemp("_concat_arg");
+            const pieces: string[] = [
+                `tsc_array_t* ${av} = tsc_array_new(sizeof(${et.c}), ${Math.max(1, al.elements.length)})`,
+            ];
+            for (const e of al.elements) {
+                if (e.kind === ts.SyntaxKind.OmittedExpression) unsupported(e, "sparse concat array literals");
+                if (ts.isSpreadElement(e)) {
+                    const r = this.emitExpr(e.expression);
+                    if (r.ty.kind !== "array" || !r.ty.elem) unsupported(e, "concat array literal spread must be an array");
+                    const src = this.freshTemp("_concat_arg_src");
+                    if (sameCType(r.ty.elem, et)) {
+                        pieces.push(`{ tsc_array_t* const ${src} = ${r.c}; tsc_array_append(${av}, ${src}); }`);
+                        continue;
+                    }
+                    const idx = this.freshTemp("_concat_arg_i");
+                    const value = this.freshTemp("_concat_arg_value");
+                    const current = { c: `TSC_ARR(${r.ty.elem.c}, ${src}, ${idx})`, ty: r.ty.elem };
+                    pieces.push(
+                        `{ tsc_array_t* const ${src} = ${r.c}; for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { ${et.c} ${value} = ${this.coerce(current, et, e.expression)}; tsc_array_push_raw(${av}, &${value}); } }`,
+                    );
+                    continue;
+                }
+                const r = this.emitExpr(e as ts.Expression);
+                const value = this.freshTemp("_concat_arg_value");
+                pieces.push(`${et.c} ${value} = ${this.coerce(r, et, e as ts.Expression)}`);
+                pieces.push(`tsc_array_push_raw(${av}, &${value})`);
+            }
+            pieces.push(av);
+            return { c: `({ ${pieces.join("; ")}; })`, ty: arrayType(et) };
+        };
         switch (method) {
             case "push": {
                 const av = this.freshTemp("_arr");
                 const pieces: string[] = [`tsc_array_t* const ${av} = ${recv.c}`];
+                const pushes: string[] = [];
                 for (let i = 0; i < args.length; i++) {
                     const r = this.emitExpr(args[i]!);
                     const coerced = this.coerce(r, et, args[i]!);
                     const vv = this.freshTemp("_pv");
                     pieces.push(`${et.c} ${vv} = ${coerced}`);
-                    pieces.push(`tsc_array_push_raw(${av}, &${vv})`);
+                    pushes.push(`tsc_array_push_raw(${av}, &${vv})`);
+                }
+                if (pushes.length > 0) {
+                    pieces.push(`if (${av}->extensible && !${av}->sealed && !${av}->frozen) { ${pushes.join("; ")}; }`);
                 }
                 pieces.push(`tsc_array_length(${av})`);
                 return { c: `({ ${pieces.join("; ")}; })`, ty: T_NUMBER };
@@ -4517,7 +7419,7 @@ class Emitter {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ${et.c} ${rv} = ` +
                         `(${av}->len > 0 ? TSC_ARR(${et.c}, ${av}, ${av}->len - 1) : (${et.c})0); ` +
-                        `tsc_array_pop_raw(${av}); ${rv}; })`,
+                        `if (!${av}->sealed && !${av}->frozen) tsc_array_pop_raw(${av}); ${rv}; })`,
                     ty: et,
                 };
             }
@@ -4528,19 +7430,23 @@ class Emitter {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ${et.c} ${rv} = ` +
                         `(${av}->len > 0 ? TSC_ARR(${et.c}, ${av}, 0) : (${et.c})0); ` +
-                        `tsc_array_shift_raw(${av}); ${rv}; })`,
+                        `if (!${av}->sealed && !${av}->frozen) tsc_array_shift_raw(${av}); ${rv}; })`,
                     ty: et,
                 };
             }
             case "unshift": {
                 const av = this.freshTemp("_arr");
                 const pieces: string[] = [`tsc_array_t* const ${av} = ${recv.c}`];
+                const unshifts: string[] = [];
                 for (let i = args.length - 1; i >= 0; i--) {
                     const r = this.emitExpr(args[i]!);
                     const coerced = this.coerce(r, et, args[i]!);
                     const vv = this.freshTemp("_pv");
                     pieces.push(`${et.c} ${vv} = ${coerced}`);
-                    pieces.push(`tsc_array_unshift_raw(${av}, &${vv})`);
+                    unshifts.push(`tsc_array_unshift_raw(${av}, &${vv})`);
+                }
+                if (unshifts.length > 0) {
+                    pieces.push(`if (${av}->extensible && !${av}->sealed && !${av}->frozen) { ${unshifts.join("; ")}; }`);
                 }
                 pieces.push(`tsc_array_length(${av})`);
                 return { c: `({ ${pieces.join("; ")}; })`, ty: T_NUMBER };
@@ -4548,58 +7454,88 @@ class Emitter {
             case "length":
                 return { c: `tsc_array_length(${recv.c})`, ty: T_NUMBER };
             case "indexOf": {
-                if (args.length !== 1) unsupported(call, "indexOf expects 1 arg");
+                if (args.length < 1 || args.length > 2) unsupported(call, "indexOf expects 1 or 2 args");
                 const needle = this.emitExpr(args[0]!);
                 const coerced = this.coerce(needle, et, args[0]!);
-                const av = this.freshTemp("_arr");
-                const iv = this.freshTemp("_i");
-                const tv = this.freshTemp("_t");
-                const eqExpr = et.kind === "string"
-                    ? `tsc_str_eq(TSC_ARR(${et.c}, ${av}, ${iv}), ${tv})`
-                    : `TSC_ARR(${et.c}, ${av}, ${iv}) == ${tv}`;
-                return {
-                    c:
-                        `({ tsc_array_t* const ${av} = ${recv.c}; ${et.c} ${tv} = ${coerced}; ` +
-                        `double _r = -1.0; for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ if (${eqExpr}) { _r = (double)${iv}; break; } } _r; })`,
-                    ty: T_NUMBER,
-                };
+                const fromIndex = args[1] ? this.emitExpr(args[1]) : { c: "0.0", ty: T_NUMBER };
+                if (args[1]) requireNumber(args[1], fromIndex.ty);
+                return this.emitSequencedExpr(T_NUMBER, [
+                    { value: recv },
+                    { value: { c: coerced, ty: et }, target: et, node: args[0]! },
+                    { value: fromIndex, target: T_NUMBER, node: args[1] ?? call.expression },
+                ], ([arr, target, from]) => {
+                    const av = this.freshTemp("_arr");
+                    const iv = this.freshTemp("_i");
+                    const tv = this.freshTemp("_t");
+                    const sv = this.freshTemp("_start");
+                    const fv = this.freshTemp("_from");
+                    const eqExpr = et.kind === "string"
+                        ? `tsc_str_eq(TSC_ARR(${et.c}, ${av}, ${iv}), ${tv})`
+                        : `TSC_ARR(${et.c}, ${av}, ${iv}) == ${tv}`;
+                    return (
+                        `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${tv} = ${target}; double ${fv} = ${from}; ` +
+                        `${emitForwardStartDecls(`${av}->len`, fv, sv)}; ` +
+                        `double _r = -1.0; for (size_t ${iv} = ${sv}; ${iv} < ${av}->len; ${iv}++) ` +
+                        `{ if (${eqExpr}) { _r = (double)${iv}; break; } } _r; })`
+                    );
+                });
             }
             case "lastIndexOf": {
-                if (args.length !== 1) unsupported(call, "lastIndexOf expects 1 arg");
+                if (args.length < 1 || args.length > 2) unsupported(call, "lastIndexOf expects 1 or 2 args");
                 const needle = this.emitExpr(args[0]!);
                 const coerced = this.coerce(needle, et, args[0]!);
-                const av = this.freshTemp("_arr");
-                const iv = this.freshTemp("_i");
-                const tv = this.freshTemp("_t");
-                const eqExpr = et.kind === "string"
-                    ? `tsc_str_eq(TSC_ARR(${et.c}, ${av}, ${iv}), ${tv})`
-                    : `TSC_ARR(${et.c}, ${av}, ${iv}) == ${tv}`;
-                return {
-                    c:
-                        `({ tsc_array_t* const ${av} = ${recv.c}; ${et.c} ${tv} = ${coerced}; ` +
-                        `double _r = -1.0; size_t ${iv} = ${av}->len; while (${iv} > 0) ` +
-                        `{ ${iv}--; if (${eqExpr}) { _r = (double)${iv}; break; } } _r; })`,
-                    ty: T_NUMBER,
-                };
+                const fromIndex = args[1] ? this.emitExpr(args[1]) : { c: "INFINITY", ty: T_NUMBER };
+                if (args[1]) requireNumber(args[1], fromIndex.ty);
+                return this.emitSequencedExpr(T_NUMBER, [
+                    { value: recv },
+                    { value: { c: coerced, ty: et }, target: et, node: args[0]! },
+                    { value: fromIndex, target: T_NUMBER, node: args[1] ?? call.expression },
+                ], ([arr, target, from]) => {
+                    const av = this.freshTemp("_arr");
+                    const iv = this.freshTemp("_i");
+                    const tv = this.freshTemp("_t");
+                    const sv = this.freshTemp("_start");
+                    const fv = this.freshTemp("_from");
+                    const ok = this.freshTemp("_ok");
+                    const eqExpr = et.kind === "string"
+                        ? `tsc_str_eq(TSC_ARR(${et.c}, ${av}, ${iv}), ${tv})`
+                        : `TSC_ARR(${et.c}, ${av}, ${iv}) == ${tv}`;
+                    return (
+                        `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${tv} = ${target}; double ${fv} = ${from}; ` +
+                        `${emitLastStartDecls(`${av}->len`, fv, sv, ok)}; double _r = -1.0; ` +
+                        `if (${ok}) { size_t ${iv} = ${sv} + 1; while (${iv} > 0) ` +
+                        `{ ${iv}--; if (${eqExpr}) { _r = (double)${iv}; break; } } } _r; })`
+                    );
+                });
             }
             case "includes": {
-                if (args.length !== 1) unsupported(call, "includes expects 1 arg");
+                if (args.length < 1 || args.length > 2) unsupported(call, "includes expects 1 or 2 args");
                 const needle = this.emitExpr(args[0]!);
                 const coerced = this.coerce(needle, et, args[0]!);
-                const av = this.freshTemp("_arr");
-                const iv = this.freshTemp("_i");
-                const tv = this.freshTemp("_t");
-                const eqExpr = et.kind === "string"
-                    ? `tsc_str_eq(TSC_ARR(${et.c}, ${av}, ${iv}), ${tv})`
-                    : `TSC_ARR(${et.c}, ${av}, ${iv}) == ${tv}`;
-                return {
-                    c:
-                        `({ tsc_array_t* const ${av} = ${recv.c}; ${et.c} ${tv} = ${coerced}; ` +
-                        `bool _f = false; for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ if (${eqExpr}) { _f = true; break; } } _f; })`,
-                    ty: T_BOOLEAN,
-                };
+                const fromIndex = args[1] ? this.emitExpr(args[1]) : { c: "0.0", ty: T_NUMBER };
+                if (args[1]) requireNumber(args[1], fromIndex.ty);
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: recv },
+                    { value: { c: coerced, ty: et }, target: et, node: args[0]! },
+                    { value: fromIndex, target: T_NUMBER, node: args[1] ?? call.expression },
+                ], ([arr, target, from]) => {
+                    const av = this.freshTemp("_arr");
+                    const iv = this.freshTemp("_i");
+                    const tv = this.freshTemp("_t");
+                    const sv = this.freshTemp("_start");
+                    const fv = this.freshTemp("_from");
+                    const eqExpr = et.kind === "string"
+                        ? `tsc_str_eq(TSC_ARR(${et.c}, ${av}, ${iv}), ${tv})`
+                        : et.kind === "number"
+                            ? `(TSC_ARR(${et.c}, ${av}, ${iv}) == ${tv} || (isnan(TSC_ARR(${et.c}, ${av}, ${iv})) && isnan(${tv})))`
+                        : `TSC_ARR(${et.c}, ${av}, ${iv}) == ${tv}`;
+                    return (
+                        `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${tv} = ${target}; double ${fv} = ${from}; ` +
+                        `${emitForwardStartDecls(`${av}->len`, fv, sv)}; ` +
+                        `bool _f = false; for (size_t ${iv} = ${sv}; ${iv} < ${av}->len; ${iv}++) ` +
+                        `{ if (${eqExpr}) { _f = true; break; } } _f; })`
+                    );
+                });
             }
             case "at": {
                 if (args.length !== 1) unsupported(call, "at expects 1 arg");
@@ -4616,7 +7552,8 @@ class Emitter {
                 });
             }
             case "reverse": {
-                return { c: `tsc_array_reverse(${recv.c})`, ty: recv.ty };
+                const av = this.freshTemp("_arr");
+                return { c: `({ tsc_array_t* const ${av} = ${recv.c}; if (!${av}->frozen) tsc_array_reverse(${av}); ${av}; })`, ty: recv.ty };
             }
             case "toReversed": {
                 if (args.length !== 0) unsupported(call, "toReversed expects no args");
@@ -4646,40 +7583,91 @@ class Emitter {
                 });
             }
             case "concat": {
+                const src = this.freshTemp("_concat_src");
+                const dst = this.freshTemp("_concat_dst");
                 const pieces: string[] = [
-                    `tsc_array_t* _dst = tsc_array_slice(${recv.c}, 0, (double)${recv.c}->len)`,
+                    `tsc_array_t* const ${src} = ${recv.c}`,
+                    `tsc_array_t* ${dst} = tsc_array_slice(${src}, 0, (double)${src}->len)`,
                 ];
                 for (const a of args) {
-                    const r = this.emitExpr(a);
-                    if (r.ty.kind !== "array") {
-                        unsupported(a, "concat expects arrays (single-value form not supported)");
+                    const r = ts.isArrayLiteralExpression(a) ? emitArrayLiteralArg(a) : this.emitExpr(a);
+                    if (r.ty.kind === "array") {
+                        pieces.push(`tsc_array_append(${dst}, ${r.c})`);
+                    } else {
+                        const value = this.freshTemp("_concat_value");
+                        pieces.push(`${et.c} ${value} = ${this.coerce(r, et, a)}`);
+                        pieces.push(`tsc_array_push_raw(${dst}, &${value})`);
                     }
-                    pieces.push(`tsc_array_append(_dst, ${r.c})`);
                 }
-                pieces.push(`_dst`);
+                pieces.push(dst);
                 return { c: `({ ${pieces.join("; ")}; })`, ty: recv.ty };
             }
             case "join": {
                 const sep = args[0]
                     ? this.coerceToString(this.emitExpr(args[0]), args[0])
                     : `tsc_str_from_lit(",", 1)`;
+                return emitJoinString(sep);
+            }
+            case "keys": {
+                if (args.length !== 0) unsupported(call, "keys expects no args");
                 const av = this.freshTemp("_arr");
+                const out = this.freshTemp("_keys");
                 const iv = this.freshTemp("_i");
-                const stringify = (exprC: string): string => {
-                    if (et.kind === "string") return exprC;
-                    if (et.kind === "number") return `tsc_str_from_num(${exprC})`;
-                    if (et.kind === "boolean") return `tsc_str_from_bool(${exprC})`;
-                    if (et.kind === "value") return `tsc_value_to_string(${exprC})`;
-                    return `tsc_str_from_lit("[obj]", 5)`;
-                };
+                const kv = this.freshTemp("_key");
                 return {
                     c:
-                        `({ tsc_array_t* const ${av} = ${recv.c}; tsc_str_t* _r = tsc_str_from_lit("", 0); ` +
-                        `tsc_str_t* _s = ${sep}; for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ if (${iv} > 0) _r = tsc_str_concat(_r, _s); _r = tsc_str_concat(_r, ${stringify(`TSC_ARR(${et.c}, ${av}, ${iv})`)}); } _r; })`,
-                    ty: T_STRING,
+                        `({ tsc_array_t* const ${av} = ${recv.c}; ` +
+                        `tsc_array_t* ${out} = tsc_array_new(sizeof(double), ${av}->len); ` +
+                        `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) { ` +
+                        `double ${kv} = (double)${iv}; tsc_array_push_raw(${out}, &${kv}); } ${out}; })`,
+                    ty: arrayType(T_NUMBER),
                 };
             }
+            case "values": {
+                if (args.length !== 0) unsupported(call, "values expects no args");
+                const av = this.freshTemp("_arr");
+                return {
+                    c: `({ tsc_array_t* const ${av} = ${recv.c}; tsc_array_slice(${av}, 0, (double)${av}->len); })`,
+                    ty: recv.ty,
+                };
+            }
+            case "entries": {
+                if (args.length !== 0) unsupported(call, "entries expects no args");
+                const elemType = entryType(et);
+                const av = this.freshTemp("_arr");
+                const out = this.freshTemp("_entries");
+                const iv = this.freshTemp("_i");
+                const entry = this.freshTemp("_entry");
+                return {
+                    c:
+                        `({ tsc_array_t* const ${av} = ${recv.c}; ` +
+                        `tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${av}->len ? ${av}->len : 1); ` +
+                        `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) { ` +
+                        `${elemType.c} ${entry}; ${entry}.key = tsc_str_from_int((int64_t)${iv}); ` +
+                        `${this.objectEntrySet(entry, et, `TSC_ARR(${et.c}, ${av}, ${iv})`)}; ` +
+                        `tsc_array_push_raw(${out}, &${entry}); } ${out}; })`,
+                    ty: arrayType(elemType),
+                };
+            }
+            case "hasOwnProperty":
+            case "propertyIsEnumerable": {
+                if (args.length !== 1) unsupported(call, `${method} expects 1 arg`);
+                const key = this.emitExpr(args[0]!);
+                const fn = method === "hasOwnProperty"
+                    ? "tsc_array_has_own_key"
+                    : "tsc_array_property_is_enumerable_key";
+                return this.emitSequencedCall(fn, T_BOOLEAN, [
+                    { value: recv },
+                    { value: key, target: T_STRING, node: args[0]! },
+                ]);
+            }
+            case "toLocaleString":
+            case "toString":
+                if (args.length !== 0) unsupported(call, `${method} expects no args`);
+                return emitJoinString(`tsc_str_from_lit(",", 1)`);
+            case "valueOf":
+                if (args.length !== 0) unsupported(call, "valueOf expects no args");
+                return recv;
             case "sort":
                 return this.emitArraySort(call, recv);
             case "toSorted": {
@@ -4747,7 +7735,7 @@ class Emitter {
                     const arr = vals[0]!;
                     const start = vals[2] ?? "0.0";
                     const end = vals[3] ?? `(double)${arr}->len`;
-                    return `tsc_array_fill(${arr}, &(${et.c}){${vals[1]}}, ${start}, ${end})`;
+                    return `({ if (!${arr}->frozen) tsc_array_fill(${arr}, &(${et.c}){${vals[1]}}, ${start}, ${end}); ${arr}; })`;
                 });
             }
             case "copyWithin": {
@@ -4769,7 +7757,7 @@ class Emitter {
                 return this.emitSequencedExpr(recv.ty, specs, (vals) => {
                     const arr = vals[0]!;
                     const end = vals[3] ?? `(double)${arr}->len`;
-                    return `tsc_array_copy_within(${arr}, ${vals[1]}, ${vals[2]}, ${end})`;
+                    return `({ if (!${arr}->frozen) tsc_array_copy_within(${arr}, ${vals[1]}, ${vals[2]}, ${end}); ${arr}; })`;
                 });
             }
             case "flat":
@@ -4882,6 +7870,7 @@ class Emitter {
             const accParam = isReduce ? arrowFn.parameters[0] : undefined;
             const elemSlot = isReduce ? arrowFn.parameters[1] : arrowFn.parameters[0];
             const idxSlot = isReduce ? arrowFn.parameters[2] : arrowFn.parameters[1];
+            const arraySlot = isReduce ? arrowFn.parameters[3] : arrowFn.parameters[2];
             if (isReduce) {
                 if (!accParam || !ts.isIdentifier(accParam.name))
                     unsupported(arrowFn, `${method}: missing acc parameter`);
@@ -4905,13 +7894,17 @@ class Emitter {
                     src: `(double)${iv}`,
                 });
             }
-            if (ts.isBlock(arrowFn.body)) {
-                unsupported(
-                    arrowFn,
-                    "block-body arrow in higher-order array method (use expression body)",
-                );
+            if (arraySlot) {
+                if (!ts.isIdentifier(arraySlot.name))
+                    unsupported(arrowFn, `${method}: array parameter must be an identifier`);
+                paramBindings.push({
+                    name: mangleIdent(arraySlot.name.text),
+                    type: recv.ty,
+                    src: av,
+                });
             }
-            const bodyR = this.emitExpr(arrowFn.body);
+            const bodyExpr = this.callbackReturnExpression(arrowFn, method);
+            const bodyR = this.emitExpr(bodyExpr);
             const bindings = paramBindings
                 .map((b) => `${b.type.c} ${b.name} = ${b.src};`)
                 .join(" ");
@@ -4930,14 +7923,16 @@ class Emitter {
                     callArgs.push("_acc_rd");
                     if (params.length >= 2) callArgs.push(`TSC_ARR(${et.c}, ${av}, ${iv})`);
                     if (params.length >= 3) callArgs.push(`(double)${iv}`);
+                    if (params.length >= 4) callArgs.push(av);
                 } else {
                     if (params.length >= 1) callArgs.push(`TSC_ARR(${et.c}, ${av}, ${iv})`);
                     if (params.length >= 2) callArgs.push(`(double)${iv}`);
+                    if (params.length >= 3) callArgs.push(av);
                 }
                 const fnv = this.freshTemp("_cb");
                 callbackDetails = {
                     bindings: `${fn.ty.c} ${fnv} = ${fn.c};`,
-                    bodyC: `${fnv}->fn(${[`${fnv}->env`, ...callArgs].join(", ")})`,
+                    bodyC: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`,
                     bodyType: retType,
                 };
             } else {
@@ -4970,10 +7965,14 @@ class Emitter {
                     callArgs.push("_acc_rd");
                     if (paramCount >= 2) callArgs.push(`TSC_ARR(${et.c}, ${av}, ${iv})`);
                     if (paramCount >= 3) callArgs.push(`(double)${iv}`);
+                    if (paramCount >= 4) callArgs.push(av);
                 } else {
                     if (paramCount >= 1) callArgs.push(`TSC_ARR(${et.c}, ${av}, ${iv})`);
                     if (paramCount >= 2) callArgs.push(`(double)${iv}`);
+                    if (paramCount >= 3) callArgs.push(av);
                 }
+                const thisType = this.directCallableThisType(cb);
+                if (thisType) callArgs.unshift("tsc_value_undefined()");
                 callbackDetails = {
                     bindings: "",
                     bodyC: `${fnName}(${callArgs.join(", ")})`,
@@ -5008,9 +8007,18 @@ class Emitter {
                     ty: arrayType(bodyType),
                 };
             case "flatMap": {
-                if (bodyType.kind !== "array")
-                    unsupported(call, "flatMap callback must return an array");
-                const inner = bodyType.elem!;
+                const inner = bodyType.kind === "array" ? bodyType.elem! : bodyType;
+                if (bodyType.kind !== "array") {
+                    return {
+                        c:
+                            `({ tsc_array_t* const ${av} = ${recv.c}; ` +
+                            `tsc_array_t* _dst = tsc_array_new(sizeof(${inner.c}), ${av}->len); ` +
+                            `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
+                            `{ ${bindings} ${inner.c} _r = ${bodyC}; ` +
+                            `tsc_array_push_raw(_dst, &_r); } _dst; })`,
+                        ty: arrayType(inner),
+                    };
+                }
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ` +
@@ -5032,10 +8040,11 @@ class Emitter {
                     ty: recv.ty,
                 };
             case "reduce": {
-                if (args.length < 2)
-                    unsupported(call, "reduce requires an initial value");
-                const initR = this.emitExpr(args[1]!);
-                const accType = initR.ty;
+                if (args.length > 2)
+                    unsupported(call, "reduce expects callback and optional initial value");
+                const hasInit = args.length >= 2;
+                const initR = hasInit ? this.emitExpr(args[1]!) : null;
+                const accType = initR ? initR.ty : et;
                 // For inline arrow: the acc binding is named by the arrow's first param.
                 // For function ref: we use _acc_rd as the implicit acc name.
                 let accName = "_acc_rd";
@@ -5043,30 +8052,39 @@ class Emitter {
                     const p0 = cb.parameters[0];
                     if (p0 && ts.isIdentifier(p0.name)) accName = mangleIdent(p0.name.text);
                 }
+                const initC = initR
+                    ? `${accType.c} ${accName} = ${initR.c}; size_t ${iv}_start = 0;`
+                    : `if (${av}->len == 0) tsc_panic("Array.reduce: empty array with no initial value"); ` +
+                        `${accType.c} ${accName} = TSC_ARR(${accType.c}, ${av}, 0); size_t ${iv}_start = 1;`;
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ` +
-                        `${accType.c} ${accName} = ${initR.c}; ` +
-                        `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
+                        `${initC} ` +
+                        `for (size_t ${iv} = ${iv}_start; ${iv} < ${av}->len; ${iv}++) ` +
                         `{ ${bindings} ${accName} = ${bodyC.replaceAll("_acc_rd", accName)}; } ${accName}; })`,
                     ty: accType,
                 };
             }
             case "reduceRight": {
-                if (args.length < 2)
-                    unsupported(call, "reduceRight requires an initial value");
-                const initR = this.emitExpr(args[1]!);
-                const accType = initR.ty;
+                if (args.length > 2)
+                    unsupported(call, "reduceRight expects callback and optional initial value");
+                const hasInit = args.length >= 2;
+                const initR = hasInit ? this.emitExpr(args[1]!) : null;
+                const accType = initR ? initR.ty : et;
                 let accName = "_acc_rd";
                 if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
                     const p0 = cb.parameters[0];
                     if (p0 && ts.isIdentifier(p0.name)) accName = mangleIdent(p0.name.text);
                 }
+                const initC = initR
+                    ? `${accType.c} ${accName} = ${initR.c}; size_t ${iv}_start = ${av}->len;`
+                    : `if (${av}->len == 0) tsc_panic("Array.reduceRight: empty array with no initial value"); ` +
+                        `${accType.c} ${accName} = TSC_ARR(${accType.c}, ${av}, ${av}->len - 1); size_t ${iv}_start = ${av}->len - 1;`;
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ` +
-                        `${accType.c} ${accName} = ${initR.c}; ` +
-                        `for (size_t ${iv} = ${av}->len; ${iv}-- > 0;) ` +
+                        `${initC} ` +
+                        `for (size_t ${iv} = ${iv}_start; ${iv}-- > 0;) ` +
                         `{ ${bindings} ${accName} = ${bodyC.replaceAll("_acc_rd", accName)}; } ${accName}; })`,
                     ty: accType,
                 };
@@ -5139,6 +8157,7 @@ class Emitter {
         let aName = "_sa";
         let bName = "_sb";
         let cmpExpr = "";
+        let comparatorSetup = "";
         if (!cb) {
             if (call.arguments.length !== 0)
                 unsupported(call, "sort default form takes no arguments");
@@ -5152,28 +8171,47 @@ class Emitter {
                 unsupported(cb, "sort params must be identifiers");
             aName = mangleIdent(p0.text);
             bName = mangleIdent(p1.text);
-            if (ts.isBlock(cb.body))
-                unsupported(cb, "sort: block-body comparator (use expression body)");
-            const r = this.emitExpr(cb.body);
-            requireNumber(cb.body, r.ty);
+            const bodyExpr = this.callbackReturnExpression(cb, "sort comparator");
+            const r = this.emitExpr(bodyExpr);
+            requireNumber(bodyExpr, r.ty);
             cmpExpr = r.c;
         } else if (ts.isIdentifier(cb)) {
-            let fnName = this.identifierName(cb);
-            const cbType = this.checker.getTypeAtLocation(cb);
-            const sig = cbType.getCallSignatures()[0];
-            if (!sig) unsupported(cb, "sort comparator must be callable");
-            const genericDecl = this.genericFunctionDeclaration(sig);
-            if (genericDecl) {
-                const bindings = this.genericBindingsForCallbackTypes(cb, genericDecl, [et, et], T_NUMBER);
-                fnName = this.ensureGenericSpecialization(genericDecl, bindings);
+            if (!this.isDirectCallableIdentifier(cb)) {
+                const fn = this.emitExpr(cb);
+                if (fn.ty.kind !== "function" || !fn.ty.ret) {
+                    unsupported(cb, "sort comparator must be callable");
+                }
+                const fnv = this.freshTemp("_sort_cb");
+                comparatorSetup = `${fn.ty.c} ${fnv} = ${fn.c}; `;
+                const params = fn.ty.params ?? [];
+                const callArgs: string[] = [];
+                if (params.length >= 1) callArgs.push(this.coerce({ c: aName, ty: et }, params[0]!, cb));
+                if (params.length >= 2) callArgs.push(this.coerce({ c: bName, ty: et }, params[1]!, cb));
+                cmpExpr = this.coerce({
+                    c: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`,
+                    ty: this.prepareType(fn.ty.ret),
+                }, T_NUMBER, cb);
+            } else {
+                let fnName = this.identifierName(cb);
+                const cbType = this.checker.getTypeAtLocation(cb);
+                const sig = cbType.getCallSignatures()[0];
+                if (!sig) unsupported(cb, "sort comparator must be callable");
+                const genericDecl = this.genericFunctionDeclaration(sig);
+                if (genericDecl) {
+                    const bindings = this.genericBindingsForCallbackTypes(cb, genericDecl, [et, et], T_NUMBER);
+                    fnName = this.ensureGenericSpecialization(genericDecl, bindings);
+                }
+                const thisType = this.directCallableThisType(cb);
+                cmpExpr = `${fnName}(${[...(thisType ? ["tsc_value_undefined()"] : []), aName, bName].join(", ")})`;
             }
-            cmpExpr = `${fnName}(${aName}, ${bName})`;
         } else {
             unsupported(cb, "sort comparator must be inline arrow or function reference");
         }
         return {
             c:
                 `({ tsc_array_t* const ${av} = ${recv.c}; ` +
+                comparatorSetup +
+                `if (!${av}->frozen) { ` +
                 `for (size_t ${iv} = 1; ${iv} < ${av}->len; ${iv}++) { ` +
                 `${et.c} ${kv} = TSC_ARR(${et.c}, ${av}, ${iv}); ` +
                 `size_t ${jv} = ${iv}; ` +
@@ -5184,7 +8222,7 @@ class Emitter {
                 `if (_cmp <= 0) break; ` +
                 `TSC_ARR(${et.c}, ${av}, ${jv}) = TSC_ARR(${et.c}, ${av}, ${jv} - 1); ` +
                 `${jv}--; } ` +
-                `TSC_ARR(${et.c}, ${av}, ${jv}) = ${kv}; } ${av}; })`,
+                `TSC_ARR(${et.c}, ${av}, ${jv}) = ${kv}; } } ${av}; })`,
             ty: recv.ty,
         };
     }
@@ -5223,10 +8261,12 @@ class Emitter {
         const sig = this.checker.getSignatureFromDeclaration(info.fn);
         if (!sig) unsupported(info.fn, "could not resolve lifted arrow signature");
         const ret = mapTsType(info.fn, sig.getReturnType(), this.checker);
+        const thisType = this.signatureThisType(sig, info.fn);
         const params = this.collectParams(info.fn.parameters);
+        const allParams = thisType ? [`${thisType.c} __tsc_this`, ...params] : params;
         const name = this.declaredName(info.name);
         this.protos.line(
-            `${ret.c} ${name}(${params.length ? params.join(", ") : "void"});`,
+            `${ret.c} ${name}(${allParams.length ? allParams.join(", ") : "void"});`,
         );
     }
 
@@ -5236,12 +8276,15 @@ class Emitter {
         const sig = this.checker.getSignatureFromDeclaration(info.fn);
         if (!sig) unsupported(info.fn, "could not resolve lifted arrow signature");
         const ret = mapTsType(info.fn, sig.getReturnType(), this.checker);
+        const thisType = this.signatureThisType(sig, info.fn);
         const params = this.collectParams(info.fn.parameters);
+        const allParams = thisType ? [`${thisType.c} __tsc_this`, ...params] : params;
         const name = this.declaredName(info.name);
         this.defs.open(
-            `${ret.c} ${name}(${params.length ? params.join(", ") : "void"})`,
+            `${ret.c} ${name}(${allParams.length ? allParams.join(", ") : "void"})`,
         );
         this.returnStack.push(ret);
+        if (thisType) this.functionThisStack.push({ c: "__tsc_this", ty: thisType });
         try {
             if (ts.isBlock(info.fn.body)) {
                 for (const s of info.fn.body.statements) this.emitStmt(this.defs, s);
@@ -5251,6 +8294,7 @@ class Emitter {
                 this.defs.line(`return ${coerced};`);
             }
         } finally {
+            if (thisType) this.functionThisStack.pop();
             this.returnStack.pop();
         }
         this.defs.close();
@@ -5290,6 +8334,19 @@ class Emitter {
                     ],
                 );
             }
+            case "charCodeAt": {
+                if (args.length !== 1) unsupported(call, "charCodeAt expects 1 arg");
+                const idx = this.emitExpr(args[0]!);
+                requireNumber(args[0]!, idx.ty);
+                return this.emitSequencedCall(
+                    "tsc_str_char_code_at",
+                    T_NUMBER,
+                    [
+                        { value: recv },
+                        { value: idx, target: T_NUMBER, node: args[0]! },
+                    ],
+                );
+            }
             case "at": {
                 if (args.length !== 1) unsupported(call, "at expects 1 arg");
                 const idx = this.emitExpr(args[0]!);
@@ -5304,39 +8361,51 @@ class Emitter {
                 );
             }
             case "includes": {
-                if (args.length !== 1) unsupported(call, "includes expects 1 arg");
+                if (args.length < 1 || args.length > 2) unsupported(call, "includes expects 1 or 2 args");
                 const needle = this.emitExpr(args[0]!);
-                return this.emitSequencedCall(
-                    "tsc_str_includes",
-                    T_BOOLEAN,
-                    [
-                        { value: recv },
-                        { value: needle, target: T_STRING, node: args[0]! },
-                    ],
+                const specs: SequencedCallArg[] = [
+                    { value: recv },
+                    { value: needle, target: T_STRING, node: args[0]! },
+                ];
+                if (args[1]) {
+                    const position = this.emitExpr(args[1]);
+                    requireNumber(args[1], position.ty);
+                    specs.push({ value: position, target: T_NUMBER, node: args[1] });
+                }
+                return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) =>
+                    `tsc_str_includes(${vals[0]}, ${vals[1]}, ${vals[2] ?? "0.0"})`,
                 );
             }
             case "indexOf": {
-                if (args.length !== 1) unsupported(call, "indexOf expects 1 arg");
+                if (args.length < 1 || args.length > 2) unsupported(call, "indexOf expects 1 or 2 args");
                 const needle = this.emitExpr(args[0]!);
-                return this.emitSequencedCall(
-                    "tsc_str_index_of",
-                    T_NUMBER,
-                    [
-                        { value: recv },
-                        { value: needle, target: T_STRING, node: args[0]! },
-                    ],
+                const specs: SequencedCallArg[] = [
+                    { value: recv },
+                    { value: needle, target: T_STRING, node: args[0]! },
+                ];
+                if (args[1]) {
+                    const position = this.emitExpr(args[1]);
+                    requireNumber(args[1], position.ty);
+                    specs.push({ value: position, target: T_NUMBER, node: args[1] });
+                }
+                return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
+                    `tsc_str_index_of(${vals[0]}, ${vals[1]}, ${vals[2] ?? "0.0"})`,
                 );
             }
             case "lastIndexOf": {
-                if (args.length !== 1) unsupported(call, "lastIndexOf expects 1 arg");
+                if (args.length < 1 || args.length > 2) unsupported(call, "lastIndexOf expects 1 or 2 args");
                 const needle = this.emitExpr(args[0]!);
-                return this.emitSequencedCall(
-                    "tsc_str_last_index_of",
-                    T_NUMBER,
-                    [
-                        { value: recv },
-                        { value: needle, target: T_STRING, node: args[0]! },
-                    ],
+                const specs: SequencedCallArg[] = [
+                    { value: recv },
+                    { value: needle, target: T_STRING, node: args[0]! },
+                ];
+                if (args[1]) {
+                    const position = this.emitExpr(args[1]);
+                    requireNumber(args[1], position.ty);
+                    specs.push({ value: position, target: T_NUMBER, node: args[1] });
+                }
+                return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
+                    `tsc_str_last_index_of(${vals[0]}, ${vals[1]}, ${vals[2] ?? "INFINITY"})`,
                 );
             }
             case "localeCompare": {
@@ -5352,27 +8421,35 @@ class Emitter {
                 );
             }
             case "startsWith": {
-                if (args.length !== 1) unsupported(call, "startsWith expects 1 arg");
+                if (args.length < 1 || args.length > 2) unsupported(call, "startsWith expects 1 or 2 args");
                 const p = this.emitExpr(args[0]!);
-                return this.emitSequencedCall(
-                    "tsc_str_starts_with",
-                    T_BOOLEAN,
-                    [
-                        { value: recv },
-                        { value: p, target: T_STRING, node: args[0]! },
-                    ],
+                const specs: SequencedCallArg[] = [
+                    { value: recv },
+                    { value: p, target: T_STRING, node: args[0]! },
+                ];
+                if (args[1]) {
+                    const position = this.emitExpr(args[1]);
+                    requireNumber(args[1], position.ty);
+                    specs.push({ value: position, target: T_NUMBER, node: args[1] });
+                }
+                return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) =>
+                    `tsc_str_starts_with(${vals[0]}, ${vals[1]}, ${vals[2] ?? "0.0"})`,
                 );
             }
             case "endsWith": {
-                if (args.length !== 1) unsupported(call, "endsWith expects 1 arg");
+                if (args.length < 1 || args.length > 2) unsupported(call, "endsWith expects 1 or 2 args");
                 const p = this.emitExpr(args[0]!);
-                return this.emitSequencedCall(
-                    "tsc_str_ends_with",
-                    T_BOOLEAN,
-                    [
-                        { value: recv },
-                        { value: p, target: T_STRING, node: args[0]! },
-                    ],
+                const specs: SequencedCallArg[] = [
+                    { value: recv },
+                    { value: p, target: T_STRING, node: args[0]! },
+                ];
+                if (args[1]) {
+                    const endPosition = this.emitExpr(args[1]);
+                    requireNumber(args[1], endPosition.ty);
+                    specs.push({ value: endPosition, target: T_NUMBER, node: args[1] });
+                }
+                return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) =>
+                    `tsc_str_ends_with(${vals[0]}, ${vals[1]}, ${vals[2] ?? "INFINITY"})`,
                 );
             }
             case "slice": {
@@ -5413,6 +8490,25 @@ class Emitter {
                     return `tsc_str_substring(${s}, ${vals[1]}, ${end})`;
                 });
             }
+            case "substr": {
+                if (args.length < 1 || args.length > 2) unsupported(call, "substr expects 1-2 args");
+                const start = this.emitExpr(args[0]!);
+                requireNumber(args[0]!, start.ty);
+                const specs: SequencedCallArg[] = [
+                    { value: recv },
+                    { value: start, target: T_NUMBER, node: args[0]! },
+                ];
+                if (args[1]) {
+                    const length = this.emitExpr(args[1]);
+                    requireNumber(args[1], length.ty);
+                    specs.push({ value: length, target: T_NUMBER, node: args[1] });
+                }
+                return this.emitSequencedExpr(T_STRING, specs, (vals) => {
+                    const s = vals[0]!;
+                    const length = vals[2] ?? "INFINITY";
+                    return `tsc_str_substr(${s}, ${vals[1]}, ${length})`;
+                });
+            }
             case "concat": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
                 for (const arg of args) {
@@ -5430,6 +8526,14 @@ class Emitter {
                     return expr;
                 });
             }
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                if (args.length !== 0) unsupported(call, `${method} expects no args`);
+                return recv;
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+                return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "String");
             case "toUpperCase":
                 return { c: `tsc_str_to_upper(${recv.c})`, ty: T_STRING };
             case "toLowerCase":
@@ -5450,12 +8554,20 @@ class Emitter {
             }
             case "trim":
                 return { c: `tsc_str_trim(${recv.c})`, ty: T_STRING };
+            case "trimLeft":
             case "trimStart":
-                if (args.length !== 0) unsupported(call, "trimStart expects no args");
+                if (args.length !== 0) unsupported(call, `${method} expects no args`);
                 return { c: `tsc_str_trim_start(${recv.c})`, ty: T_STRING };
+            case "trimRight":
             case "trimEnd":
-                if (args.length !== 0) unsupported(call, "trimEnd expects no args");
+                if (args.length !== 0) unsupported(call, `${method} expects no args`);
                 return { c: `tsc_str_trim_end(${recv.c})`, ty: T_STRING };
+            case "isWellFormed":
+                if (args.length !== 0) unsupported(call, "isWellFormed expects no args");
+                return { c: "true", ty: T_BOOLEAN };
+            case "toWellFormed":
+                if (args.length !== 0) unsupported(call, "toWellFormed expects no args");
+                return recv;
             case "repeat": {
                 if (args.length !== 1) unsupported(call, "repeat expects 1 arg");
                 const n = this.emitExpr(args[0]!);
@@ -5549,46 +8661,135 @@ class Emitter {
             case "match": {
                 if (args.length !== 1) unsupported(call, "match expects 1 arg");
                 const re = this.emitExpr(args[0]!);
-                if (re.ty.kind !== "regexp")
-                    unsupported(args[0]!, "match requires a RegExp");
+                if (re.ty.kind === "regexp") {
+                    return this.emitSequencedCall(
+                        "tsc_str_match_regex",
+                        arrayType(T_STRING),
+                        [{ value: recv }, { value: re }],
+                    );
+                }
+                if (re.ty.kind !== "string" && re.ty.kind !== "value")
+                    unsupported(args[0]!, "match requires a RegExp or string pattern");
                 return this.emitSequencedCall(
                     "tsc_str_match_regex",
                     arrayType(T_STRING),
-                    [{ value: recv }, { value: re }],
+                    [
+                        { value: recv },
+                        {
+                            value: {
+                                c: `tsc_regexp_new(${this.coerce(re, T_STRING, args[0]!)}, tsc_str_from_lit("", 0))`,
+                                ty: T_REGEXP,
+                            },
+                        },
+                    ],
                 );
             }
             case "matchAll": {
                 if (args.length !== 1) unsupported(call, "matchAll expects 1 arg");
                 const re = this.emitExpr(args[0]!);
-                if (re.ty.kind !== "regexp")
-                    unsupported(args[0]!, "matchAll requires a RegExp");
+                if (re.ty.kind === "regexp") {
+                    return this.emitSequencedCall(
+                        "tsc_str_match_all_regex",
+                        arrayType(arrayType(T_STRING)),
+                        [{ value: recv }, { value: re }],
+                    );
+                }
+                if (re.ty.kind !== "string" && re.ty.kind !== "value")
+                    unsupported(args[0]!, "matchAll requires a RegExp or string pattern");
                 return this.emitSequencedCall(
                     "tsc_str_match_all_regex",
                     arrayType(arrayType(T_STRING)),
-                    [{ value: recv }, { value: re }],
+                    [
+                        { value: recv },
+                        {
+                            value: {
+                                c: `tsc_regexp_new(${this.coerce(re, T_STRING, args[0]!)}, tsc_str_from_lit("g", 1))`,
+                                ty: T_REGEXP,
+                            },
+                        },
+                    ],
+                );
+            }
+            case "search": {
+                if (args.length !== 1) unsupported(call, "search expects 1 arg");
+                const re = this.emitExpr(args[0]!);
+                if (re.ty.kind === "regexp") {
+                    return this.emitSequencedCall(
+                        "tsc_str_search_regex",
+                        T_NUMBER,
+                        [{ value: recv }, { value: re }],
+                    );
+                }
+                if (re.ty.kind !== "string" && re.ty.kind !== "value")
+                    unsupported(args[0]!, "search requires a RegExp or string pattern");
+                return this.emitSequencedCall(
+                    "tsc_str_search_regex",
+                    T_NUMBER,
+                    [
+                        { value: recv },
+                        {
+                            value: {
+                                c: `tsc_regexp_new(${this.coerce(re, T_STRING, args[0]!)}, tsc_str_from_lit("", 0))`,
+                                ty: T_REGEXP,
+                            },
+                        },
+                    ],
                 );
             }
             case "split": {
-                if (args.length !== 1) unsupported(call, "split expects 1 arg");
+                if (args.length < 1 || args.length > 2) unsupported(call, "split expects 1-2 args");
                 const sep = this.emitExpr(args[0]!);
+                const limit = args[1] ? this.emitExpr(args[1]) : null;
+                if (limit) requireNumber(args[1]!, limit.ty);
                 if (sep.ty.kind === "regexp") {
                     return this.emitSequencedCall(
-                        "tsc_str_split_regex",
+                        limit ? "tsc_str_split_regex_limit_num" : "tsc_str_split_regex",
                         arrayType(T_STRING),
-                        [{ value: recv }, { value: sep }],
+                        limit
+                            ? [{ value: recv }, { value: sep }, { value: limit, target: T_NUMBER, node: args[1]! }]
+                            : [{ value: recv }, { value: sep }],
                     );
                 }
                 return this.emitSequencedCall(
-                    "tsc_str_split",
+                    limit ? "tsc_str_split_limit_num" : "tsc_str_split",
                     arrayType(T_STRING),
-                    [
-                        { value: recv },
-                        { value: sep, target: T_STRING, node: args[0]! },
-                    ],
+                    limit
+                        ? [
+                            { value: recv },
+                            { value: sep, target: T_STRING, node: args[0]! },
+                            { value: limit, target: T_NUMBER, node: args[1]! },
+                        ]
+                        : [
+                            { value: recv },
+                            { value: sep, target: T_STRING, node: args[0]! },
+                        ],
                 );
             }
         }
         unsupported(call, `string method .${method} (Phase 2)`);
+    }
+
+    private emitPrimitiveObjectPrototypeOwnMethod(
+        call: ts.CallExpression,
+        recv: EmitResult,
+        method: string,
+        tag: string,
+    ): EmitResult {
+        if (call.arguments.length !== 1) unsupported(call, `${tag}.${method} expects 1 arg`);
+        const key = this.emitExpr(call.arguments[0]!);
+        if (recv.ty.kind === "string") {
+            const fn = method === "hasOwnProperty"
+                ? "tsc_value_has_own_prop"
+                : "tsc_value_property_is_enumerable";
+            return this.emitSequencedCall(fn, T_BOOLEAN, [
+                { value: recv, target: T_VALUE, node: call.expression },
+                { value: key, target: T_STRING, node: call.arguments[0]! },
+            ]);
+        }
+        return this.emitSequencedExpr(T_BOOLEAN, [
+            { value: recv, node: call.expression },
+            { value: key, target: T_STRING, node: call.arguments[0]! },
+        ], ([value, prop]) => `({ (void)${value}; (void)${prop}; false; })`);
     }
 
     private emitStringStatic(call: ts.CallExpression, name: string): EmitResult {
@@ -5606,8 +8807,181 @@ class Emitter {
                     [call.arguments.length.toString()],
                 );
             }
+            case "fromCodePoint": {
+                const specs = call.arguments.map((arg) => {
+                    const r = this.emitExpr(arg);
+                    requireNumber(arg, r.ty);
+                    return { value: r, target: T_NUMBER, node: arg };
+                });
+                return this.emitSequencedCall(
+                    "tsc_str_from_code_point_n",
+                    T_STRING,
+                    specs,
+                    [call.arguments.length.toString()],
+                );
+            }
         }
         unsupported(call, `String.${name}`);
+    }
+
+    private emitNumberMethod(
+        call: ts.CallExpression,
+        recv: EmitResult,
+        method: string,
+    ): EmitResult {
+        const args = call.arguments;
+        switch (method) {
+            case "toString": {
+                if (args.length > 1) unsupported(call, "Number.toString expects 0 or 1 args");
+                const specs: SequencedCallArg[] = [{ value: recv }];
+                if (args[0]) {
+                    const radix = this.emitExpr(args[0]);
+                    requireNumber(args[0], radix.ty);
+                    specs.push({ value: radix, target: T_NUMBER, node: args[0] });
+                }
+                return this.emitSequencedExpr(T_STRING, specs, (vals) => {
+                    const radix = vals[1] ?? "10.0";
+                    return `tsc_str_from_num_radix(${vals[0]}, ${radix})`;
+                });
+            }
+            case "toFixed": {
+                if (args.length > 1) unsupported(call, "Number.toFixed expects 0 or 1 args");
+                const specs: SequencedCallArg[] = [{ value: recv }];
+                if (args[0]) {
+                    const digits = this.emitExpr(args[0]);
+                    requireNumber(args[0], digits.ty);
+                    specs.push({ value: digits, target: T_NUMBER, node: args[0] });
+                }
+                return this.emitSequencedExpr(T_STRING, specs, (vals) => {
+                    const digits = vals[1] ?? "0.0";
+                    return `tsc_str_from_num_fixed(${vals[0]}, ${digits})`;
+                });
+            }
+            case "toExponential": {
+                if (args.length > 1) unsupported(call, "Number.toExponential expects 0 or 1 args");
+                const specs: SequencedCallArg[] = [{ value: recv }];
+                if (args[0]) {
+                    const digits = this.emitExpr(args[0]);
+                    requireNumber(args[0], digits.ty);
+                    specs.push({ value: digits, target: T_NUMBER, node: args[0] });
+                }
+                return this.emitSequencedExpr(T_STRING, specs, (vals) => {
+                    const digits = vals[1] ?? "0.0";
+                    const hasDigits = vals[1] ? "true" : "false";
+                    return `tsc_str_from_num_exponential(${vals[0]}, ${digits}, ${hasDigits})`;
+                });
+            }
+            case "toPrecision": {
+                if (args.length > 1) unsupported(call, "Number.toPrecision expects 0 or 1 args");
+                const specs: SequencedCallArg[] = [{ value: recv }];
+                if (args[0]) {
+                    const precision = this.emitExpr(args[0]);
+                    requireNumber(args[0], precision.ty);
+                    specs.push({ value: precision, target: T_NUMBER, node: args[0] });
+                }
+                return this.emitSequencedExpr(T_STRING, specs, (vals) => {
+                    const precision = vals[1] ?? "0.0";
+                    const hasPrecision = vals[1] ? "true" : "false";
+                    return `tsc_str_from_num_precision(${vals[0]}, ${precision}, ${hasPrecision})`;
+                });
+            }
+            case "toLocaleString":
+                if (args.length !== 0) unsupported(call, "Number.toLocaleString expects no args");
+                return this.emitSequencedCall("tsc_str_from_num", T_STRING, [
+                    { value: recv, target: T_NUMBER, node: call.expression },
+                ]);
+            case "valueOf":
+                if (args.length !== 0) unsupported(call, "Number.valueOf expects no args");
+                return recv;
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+                return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "Number");
+        }
+        unsupported(call, `Number method .${method}`);
+    }
+
+    private emitNumberConstructor(call: ts.CallExpression): EmitResult {
+        if (call.arguments.length > 1) unsupported(call, "Number expects 0 or 1 args");
+        const arg = call.arguments[0];
+        if (!arg) return { c: "0.0", ty: T_NUMBER };
+        const r = this.emitExpr(arg);
+        if (r.ty.kind === "number") return r;
+        if (r.ty.kind === "boolean") return { c: `((${r.c}) ? 1.0 : 0.0)`, ty: T_NUMBER };
+        if (r.ty.kind === "void" || r.ty.kind === "never") {
+            const value = arg.kind === ts.SyntaxKind.NullKeyword ? "0.0" : "NAN";
+            return { c: `({ (void)(${r.c}); ${value}; })`, ty: T_NUMBER };
+        }
+        return this.emitSequencedExpr(T_NUMBER, [
+            { value: r, target: T_VALUE, node: arg },
+        ], ([v]) => `tsc_value_as_num(${v})`);
+    }
+
+    private emitGlobalNumberPredicate(call: ts.CallExpression, name: "isNaN" | "isFinite"): EmitResult {
+        const arg = call.arguments[0]!;
+        const value = this.emitExpr(arg);
+        const fn = name === "isNaN" ? "isnan" : "isfinite";
+        if (value.ty.kind === "number") {
+            return { c: `(${fn}(${value.c}))`, ty: T_BOOLEAN };
+        }
+        if (value.ty.kind === "void" || value.ty.kind === "never") {
+            return this.emitSequencedExpr(T_BOOLEAN, [{ value }], () => name === "isNaN" ? "true" : "false");
+        }
+        const boxable: CType["kind"][] = ["value", "string", "boolean", "array"];
+        if (boxable.includes(value.ty.kind)) {
+            return this.emitSequencedExpr(T_BOOLEAN, [
+                { value, target: T_VALUE, node: arg },
+            ], ([v]) => `(${fn}(tsc_value_as_num(${v})))`);
+        }
+        return this.emitSequencedExpr(T_BOOLEAN, [{ value }], () => name === "isNaN" ? "true" : "false");
+    }
+
+    private emitBooleanMethod(
+        call: ts.CallExpression,
+        recv: EmitResult,
+        method: string,
+    ): EmitResult {
+        const args = call.arguments;
+        switch (method) {
+            case "toLocaleString":
+            case "toString":
+                if (args.length !== 0) unsupported(call, `Boolean.${method} expects no args`);
+                return this.emitSequencedCall("tsc_str_from_bool", T_STRING, [
+                    { value: recv, target: T_BOOLEAN, node: call.expression },
+                ]);
+            case "valueOf":
+                if (args.length !== 0) unsupported(call, "Boolean.valueOf expects no args");
+                return recv;
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+                return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "Boolean");
+        }
+        unsupported(call, `Boolean method .${method}`);
+    }
+
+    private emitBooleanConstructor(call: ts.CallExpression): EmitResult {
+        if (call.arguments.length > 1) unsupported(call, "Boolean expects 0 or 1 args");
+        const arg = call.arguments[0];
+        if (!arg) return { c: "false", ty: T_BOOLEAN };
+        const r = this.emitExpr(arg);
+        if (r.ty.kind === "void" || r.ty.kind === "never") {
+            return { c: `({ (void)(${r.c}); false; })`, ty: T_BOOLEAN };
+        }
+        return { c: this.truthyC(r, arg), ty: T_BOOLEAN };
+    }
+
+    private emitStringConstructor(call: ts.CallExpression): EmitResult {
+        if (call.arguments.length > 1) unsupported(call, "String expects 0 or 1 args");
+        const arg = call.arguments[0];
+        if (!arg) return { c: `tsc_str_from_lit("", 0)`, ty: T_STRING };
+        const r = this.emitExpr(arg);
+        if (r.ty.kind === "void" || r.ty.kind === "never") {
+            const text = arg.kind === ts.SyntaxKind.NullKeyword ? "null" : "undefined";
+            return {
+                c: `({ (void)(${r.c}); ${this.stringLit(text)}; })`,
+                ty: T_STRING,
+            };
+        }
+        return { c: this.coerceToString(r, arg), ty: T_STRING };
     }
 
     private emitSymbolConstructor(call: ts.CallExpression): EmitResult {
@@ -5652,10 +9026,17 @@ class Emitter {
         method: string,
     ): EmitResult {
         switch (method) {
+            case "toLocaleString":
             case "toString": {
-                if (call.arguments.length !== 0) unsupported(call, "Symbol.toString expects no args");
+                if (call.arguments.length !== 0) unsupported(call, `Symbol.${method} expects no args`);
                 return this.emitSequencedCall("tsc_symbol_to_string", T_STRING, [{ value: recv }]);
             }
+            case "valueOf":
+                if (call.arguments.length !== 0) unsupported(call, "Symbol.valueOf expects no args");
+                return recv;
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+                return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "Symbol");
         }
         unsupported(call, `Symbol method .${method}`);
     }
@@ -5691,6 +9072,11 @@ class Emitter {
     ): EmitResult {
         const args = call.arguments;
         switch (method) {
+            case "toLocaleString":
+                if (args.length !== 0) unsupported(call, "BigInt.toLocaleString expects no args");
+                return this.emitSequencedExpr(T_STRING, [{ value: recv }], ([value]) =>
+                    `tsc_bigint_to_string(${value}, 10.0)`,
+                );
             case "toString": {
                 if (args.length > 1) unsupported(call, "BigInt.toString expects 0 or 1 args");
                 const specs: SequencedCallArg[] = [{ value: recv }];
@@ -5704,6 +9090,12 @@ class Emitter {
                     return `tsc_bigint_to_string(${vals[0]}, ${radix})`;
                 });
             }
+            case "valueOf":
+                if (args.length !== 0) unsupported(call, "BigInt.valueOf expects no args");
+                return recv;
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+                return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "BigInt");
         }
         unsupported(call, `BigInt.${method}`);
     }
@@ -5741,6 +9133,9 @@ class Emitter {
                 mapTsType(call, sig.getReturnType(), this.checker),
             )
             : mapTsType(call, sig.getReturnType(), this.checker);
+        const callee = genericMethod && genericBindings
+            ? this.ensureGenericMethodSpecialization(genericMethod, owningCls, genericBindings)
+            : `${owningCls}_${mangleIdent(method)}`;
         // Pass self cast to the owning-class type so the signature matches.
         const specs: SequencedCallArg[] = [
             {
@@ -5748,7 +9143,22 @@ class Emitter {
                 pass: (tmp) => owningCls === recvCls ? tmp : `((${owningCls}_t*)${tmp})`,
             },
         ];
+        const params = sig.getParameters();
+        if (
+            !erasedGenericClassMethod &&
+            call.arguments.some((arg) => ts.isSpreadElement(arg)) &&
+            !this.signatureHasRestParameter(params)
+        ) {
+            return this.emitStaticSpreadCall(call, callee, ret, params, [], specs);
+        }
         if (erasedGenericClassMethod && ts.isMethodDeclaration(mdecl)) {
+            if (
+                call.arguments.some((arg) => ts.isSpreadElement(arg)) &&
+                !mdecl.parameters.some((param) => !!param.dotDotDotToken)
+            ) {
+                const paramTypes = mdecl.parameters.map((param) => this.prepareType(mapType(param, this.checker)));
+                return this.emitSpreadCallWithParamTypes(call, callee, ret, paramTypes, [], specs);
+            }
             for (let i = 0; i < call.arguments.length; i++) {
                 const arg = call.arguments[i]!;
                 if (ts.isSpreadElement(arg)) unsupported(arg, "spread call into generic class method");
@@ -5761,11 +9171,8 @@ class Emitter {
                 });
             }
         } else {
-            specs.push(...this.callSpecsFromSignature(call, call.arguments, sig.getParameters()));
+            specs.push(...this.callSpecsFromSignature(call, call.arguments, params));
         }
-        const callee = genericMethod && genericBindings
-            ? this.ensureGenericMethodSpecialization(genericMethod, owningCls, genericBindings)
-            : `${owningCls}_${mangleIdent(method)}`;
         return this.emitSequencedCall(callee, ret, specs);
     }
 
@@ -5799,10 +9206,28 @@ class Emitter {
         switch (name) {
             case "floor": return one((x) => `floor(${x})`);
             case "ceil": return one((x) => `ceil(${x})`);
-            case "round": return one((x) => `floor((${x}) + 0.5)`);
+            case "round": return one((x) => `tsc_math_round(${x})`);
             case "abs": return one((x) => `fabs(${x})`);
+            case "clz32": return one((x) => `tsc_math_clz32(${x})`);
+            case "fround": return one((x) => `tsc_math_fround(${x})`);
+            case "cbrt": return one((x) => `cbrt(${x})`);
             case "sqrt": return one((x) => `sqrt(${x})`);
             case "pow": return two((a, b) => `pow(${a}, ${b})`);
+            case "imul": return two((a, b) => `tsc_math_imul(${a}, ${b})`);
+            case "hypot": {
+                if (args.length === 0) return { c: "0.0", ty: T_NUMBER };
+                const specs = args.map((a) => {
+                    const r = this.emitExpr(a);
+                    requireNumber(a, r.ty);
+                    return { value: r, target: T_NUMBER, node: a };
+                });
+                return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
+                    const anyInf = vals.map((v) => `isinf(${v})`).join(" || ");
+                    const anyNaN = vals.map((v) => `isnan(${v})`).join(" || ");
+                    const sumSquares = vals.map((v) => `((${v}) * (${v}))`).join(" + ");
+                    return `((${anyInf}) ? INFINITY : ((${anyNaN}) ? NAN : sqrt(${sumSquares})))`;
+                });
+            }
             case "min": {
                 if (args.length === 0) return { c: `INFINITY`, ty: T_NUMBER };
                 const specs = args.map((a) => {
@@ -5813,7 +9238,8 @@ class Emitter {
                 return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
                     let e = vals[0]!;
                     for (let i = 1; i < vals.length; i++) e = `fmin(${e}, ${vals[i]})`;
-                    return e;
+                    const anyNaN = vals.map((v) => `isnan(${v})`).join(" || ");
+                    return `((${anyNaN}) ? NAN : ${e})`;
                 });
             }
             case "max": {
@@ -5826,19 +9252,32 @@ class Emitter {
                 return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
                     let e = vals[0]!;
                     for (let i = 1; i < vals.length; i++) e = `fmax(${e}, ${vals[i]})`;
-                    return e;
+                    const anyNaN = vals.map((v) => `isnan(${v})`).join(" || ");
+                    return `((${anyNaN}) ? NAN : ${e})`;
                 });
             }
             case "log": return one((x) => `log(${x})`);
+            case "log1p": return one((x) => `log1p(${x})`);
+            case "log2": return one((x) => `log2(${x})`);
+            case "log10": return one((x) => `log10(${x})`);
             case "sin": return one((x) => `sin(${x})`);
+            case "asin": return one((x) => `asin(${x})`);
             case "cos": return one((x) => `cos(${x})`);
+            case "acos": return one((x) => `acos(${x})`);
             case "tan": return one((x) => `tan(${x})`);
+            case "sinh": return one((x) => `sinh(${x})`);
+            case "cosh": return one((x) => `cosh(${x})`);
+            case "tanh": return one((x) => `tanh(${x})`);
             case "atan": return one((x) => `atan(${x})`);
+            case "asinh": return one((x) => `asinh(${x})`);
+            case "acosh": return one((x) => `acosh(${x})`);
+            case "atanh": return one((x) => `atanh(${x})`);
             case "atan2": return two((a, b) => `atan2(${a}, ${b})`);
             case "exp": return one((x) => `exp(${x})`);
+            case "expm1": return one((x) => `expm1(${x})`);
             case "random": return { c: `tsc_math_random()`, ty: T_NUMBER };
             case "trunc": return one((x) => `trunc(${x})`);
-            case "sign": return one((x) => `(double)(${x} > 0 ? 1 : (${x} < 0 ? -1 : 0))`);
+            case "sign": return one((x) => `tsc_math_sign(${x})`);
         }
         unsupported(call, `Math.${name}`);
     }
@@ -6028,6 +9467,11 @@ class Emitter {
     ): EmitResult {
         const args = call.arguments;
         switch (method) {
+            case "toLocaleString":
+                if (args.length !== 0) unsupported(call, "Buffer.toLocaleString expects no args");
+                return this.emitSequencedExpr(T_STRING, [{ value: recv }], ([buffer]) =>
+                    `tsc_buffer_to_string(${buffer}, tsc_str_from_lit("utf8", 4))`,
+                );
             case "toString": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
                 if (args[0]) {
@@ -6042,6 +9486,9 @@ class Emitter {
                     return `tsc_buffer_to_string(${vals[0]}, ${encoding})`;
                 });
             }
+            case "valueOf":
+                if (args.length !== 0) unsupported(call, "Buffer.valueOf expects no args");
+                return recv;
             case "slice":
             case "subarray": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
@@ -6072,8 +9519,263 @@ class Emitter {
                     [{ value: recv }, { value: other }],
                 );
             }
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+                if (args.length !== 1) unsupported(call, `Buffer.${method} expects 1 arg`);
+                return this.emitBufferOwnKeyCheck(call.expression, recv, args[0]!);
         }
         unsupported(call, `Buffer method .${method}`);
+    }
+
+    private emitBufferOwnKeys(objExpr: ts.Expression, obj: EmitResult): EmitResult {
+        if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer own keys on non-buffer");
+        return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: objExpr }], ([buffer]) => {
+            const source = this.freshTemp("_bok_src");
+            const out = this.freshTemp("_bok");
+            const idx = this.freshTemp("_bok_i");
+            const key = this.freshTemp("_bok_key");
+            return `({ tsc_buffer_t* const ${source} = ${buffer}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { tsc_str_t* ${key} = tsc_str_from_int((int64_t)${idx}); tsc_array_push_raw(${out}, &${key}); } ${out}; })`;
+        });
+    }
+
+    private emitBufferObjectValues(objExpr: ts.Expression, obj: EmitResult): EmitResult {
+        if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer Object.values on non-buffer");
+        return this.emitSequencedExpr(arrayType(T_NUMBER), [{ value: obj, node: objExpr }], ([buffer]) => {
+            const source = this.freshTemp("_bov_src");
+            const out = this.freshTemp("_bov");
+            const idx = this.freshTemp("_bov_i");
+            const value = this.freshTemp("_bov_v");
+            return `({ tsc_buffer_t* const ${source} = ${buffer}; tsc_array_t* ${out} = tsc_array_new(sizeof(double), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { double ${value} = (double)${source}->data[${idx}]; tsc_array_push_raw(${out}, &${value}); } ${out}; })`;
+        });
+    }
+
+    private emitBufferObjectEntries(objExpr: ts.Expression, obj: EmitResult): EmitResult {
+        if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer Object.entries on non-buffer");
+        const elemType = entryType(T_NUMBER);
+        return this.emitSequencedExpr(arrayType(elemType), [{ value: obj, node: objExpr }], ([buffer]) => {
+            const source = this.freshTemp("_boe_src");
+            const out = this.freshTemp("_boe");
+            const idx = this.freshTemp("_boe_i");
+            const entry = this.freshTemp("_boe_entry");
+            return `({ tsc_buffer_t* const ${source} = ${buffer}; tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { ${elemType.c} ${entry}; ${entry}.key = tsc_str_from_int((int64_t)${idx}); ${entry}.num = (double)${source}->data[${idx}]; ${entry}.ptr = (void*)tsc_value_num((double)${source}->data[${idx}]); tsc_array_push_raw(${out}, &${entry}); } ${out}; })`;
+        });
+    }
+
+    private emitBufferOwnKeyCheck(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+    ): EmitResult {
+        return this.emitBufferPropertyKeyCheck(objExpr, obj, keyExpr, false);
+    }
+
+    private emitBufferPropertyKeyCheck(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        includeLength: boolean,
+    ): EmitResult {
+        if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer own-key check on non-buffer");
+        const key = this.emitExpr(keyExpr);
+        return this.emitSequencedExpr(T_BOOLEAN, [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+        ], ([buffer, keyC]) => {
+            const source = this.freshTemp("_boh_src");
+            const idx = this.freshTemp("_boh_i");
+            const out = this.freshTemp("_boh");
+            const idxKey = this.freshTemp("_boh_key");
+            const lengthCheck = includeLength
+                ? `bool ${out} = tsc_str_eq(${keyC}, tsc_str_from_lit("length", 6));`
+                : `bool ${out} = false;`;
+            return `({ tsc_buffer_t* const ${source} = ${buffer}; ${lengthCheck} for (size_t ${idx} = 0; ${idx} < ${source}->len && !${out}; ${idx}++) { tsc_str_t* ${idxKey} = tsc_str_from_int((int64_t)${idx}); if (tsc_str_eq(${keyC}, ${idxKey})) { ${out} = true; break; } } ${out}; })`;
+        });
+    }
+
+    private emitBufferReflectGet(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+    ): EmitResult {
+        if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer Reflect.get on non-buffer");
+        const key = this.emitExpr(keyExpr);
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+        ], ([buffer, keyC]) => {
+            const source = this.freshTemp("_bget_src");
+            const out = this.freshTemp("_bget_out");
+            const found = this.freshTemp("_bget_found");
+            const idx = this.freshTemp("_bget_i");
+            const idxKey = this.freshTemp("_bget_key");
+            const pieces = [
+                `tsc_buffer_t* const ${source} = ${buffer}`,
+                `bool ${found} = tsc_str_eq(${keyC}, tsc_str_from_lit("length", 6))`,
+                `tsc_value_t ${out} = ${found} ? tsc_value_num((double)${source}->len) : tsc_value_undefined()`,
+                `for (size_t ${idx} = 0; ${idx} < ${source}->len && !${found}; ${idx}++) { ` +
+                    `tsc_str_t* ${idxKey} = tsc_str_from_int((int64_t)${idx}); ` +
+                    `if (tsc_str_eq(${keyC}, ${idxKey})) { ${found} = true; ${out} = tsc_value_num((double)${source}->data[${idx}]); break; } ` +
+                `}`,
+                out,
+            ];
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
+    private emitBufferGetOwnPropertyDescriptor(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+    ): EmitResult {
+        if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer descriptor on non-buffer");
+        const key = this.emitExpr(keyExpr);
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+        ], ([buffer, keyC]) => {
+            const source = this.freshTemp("_bdesc_src");
+            const out = this.freshTemp("_bdesc_out");
+            const idx = this.freshTemp("_bdesc_i");
+            const idxKey = this.freshTemp("_bdesc_key");
+            const desc = this.freshTemp("_bdesc");
+            const pieces = [
+                `tsc_buffer_t* const ${source} = ${buffer}`,
+                `tsc_value_t ${out} = tsc_value_undefined()`,
+                `for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { ` +
+                    `tsc_str_t* ${idxKey} = tsc_str_from_int((int64_t)${idx}); ` +
+                    `if (tsc_str_eq(${keyC}, ${idxKey})) { ` +
+                        `${this.typedArrayDescriptorInit(desc, `tsc_value_num((double)${source}->data[${idx}])`, "true", "true", "true")}; ` +
+                        `${out} = tsc_value_object(${desc}); ` +
+                        `break; ` +
+                    `} ` +
+                `}`,
+                out,
+            ];
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
+    private emitBufferGetOwnPropertyDescriptors(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+    ): EmitResult {
+        if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer descriptors on non-buffer");
+        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }], ([buffer]) => {
+            const source = this.freshTemp("_bdescs_src");
+            const out = this.freshTemp("_bdescs");
+            const idx = this.freshTemp("_bdescs_i");
+            const key = this.freshTemp("_bdescs_key");
+            const desc = this.freshTemp("_bdescs_desc");
+            const pieces = [
+                `tsc_buffer_t* const ${source} = ${buffer}`,
+                `tsc_object_t* ${out} = tsc_object_new()`,
+                `for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { ` +
+                    `tsc_str_t* ${key} = tsc_str_from_int((int64_t)${idx}); ` +
+                    `${this.typedArrayDescriptorInit(desc, `tsc_value_num((double)${source}->data[${idx}])`, "true", "true", "true")}; ` +
+                    `tsc_object_set(${out}, ${key}, tsc_value_object(${desc})); ` +
+                `}`,
+                `tsc_value_object(${out})`,
+            ];
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
+    /**
+     * Lower a strbuf-lifted self-append assignment into a sequence of
+     * tsc_jsonbuf_append* calls into X_sb. Handles both `X = X + a + b`
+     * (skipping the leftmost X self-reference) and `X += a + b`.
+     */
+    private emitStrbufAssignment(
+        lhs: ts.Identifier,
+        rhs: ts.Expression,
+        isCompound: boolean,
+    ): EmitResult {
+        const sb = this.identifierName(lhs) + this.strbufSuffix;
+        const lhsSym = this.checker.getSymbolAtLocation(lhs);
+
+        // Walk the leftmost spine of `rhs` collecting parts left-to-right.
+        // For `X = X + a + b`, the spine flattens to [X, a, b]; we drop the
+        // leading self-reference. For `X += a + b`, the spine is [a, b]
+        // (no self-reference in the RHS).
+        const parts: ts.Expression[] = [];
+        const flatten = (e: ts.Expression): void => {
+            let cur: ts.Expression = e;
+            while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+            if (
+                ts.isBinaryExpression(cur) &&
+                cur.operatorToken.kind === ts.SyntaxKind.PlusToken
+            ) {
+                flatten(cur.left);
+                flatten(cur.right);
+                return;
+            }
+            parts.push(cur);
+        };
+        flatten(rhs);
+        if (!isCompound) {
+            const first = parts[0];
+            if (
+                first && ts.isIdentifier(first) &&
+                this.checker.getSymbolAtLocation(first) === lhsSym
+            ) {
+                parts.shift();
+            }
+        }
+
+        const stmts: string[] = [];
+        for (const p of parts) {
+            // String literal short-circuit — append bytes directly without
+            // building a tsc_str_t* header per call.
+            if (
+                ts.isStringLiteral(p) ||
+                p.kind === ts.SyntaxKind.NoSubstitutionTemplateLiteral
+            ) {
+                const text = (p as ts.StringLiteral).text;
+                stmts.push(
+                    `tsc_jsonbuf_append(&${sb}, "${escapeCString(text)}", ${utf8ByteLen(text)})`
+                );
+                continue;
+            }
+            const r = this.emitExpr(p);
+            stmts.push(this.strbufAppendStmt(sb, r, p));
+        }
+        // Skip the per-iter materialize when the assignment is a statement
+        // (the JS expression value would be discarded anyway). Only finalize
+        // if the assignment expr feeds something that needs the new X value.
+        const parent = (lhs.parent as ts.BinaryExpression).parent;
+        const isStmt =
+            parent && (ts.isExpressionStatement(parent) || ts.isForStatement(parent));
+        if (isStmt) {
+            // Cast to (tsc_str_t*)NULL so the stmt-expression has a value
+            // that satisfies the T_STRING type contract without allocating.
+            stmts.push(`(tsc_str_t*)NULL`);
+        } else {
+            stmts.push(`tsc_jsonbuf_finish(&${sb})`);
+        }
+        return { c: `({ ${stmts.join("; ")}; })`, ty: T_STRING };
+    }
+
+    /** One C statement that appends `r` to the named tsc_jsonbuf strbuf. */
+    private strbufAppendStmt(sb: string, r: EmitResult, node: ts.Node): string {
+        switch (r.ty.kind) {
+            case "string": {
+                // Bind r.c once so we don't double-evaluate when reading
+                // both ->data and ->len.
+                const tmp = this.freshTemp("_sba");
+                return `({ tsc_str_t* ${tmp} = ${r.c}; tsc_jsonbuf_append(&${sb}, ${tmp}->data, ${tmp}->len); })`;
+            }
+            case "number":
+                if (r.ty.c === "int64_t") return `tsc_jsonbuf_int(&${sb}, ${r.c})`;
+                return `tsc_jsonbuf_num(&${sb}, ${r.c})`;
+            case "boolean":
+                return `tsc_jsonbuf_bool(&${sb}, ${r.c})`;
+            default: {
+                // Fall back: coerce to string, then append its bytes.
+                const sv = this.freshTemp("_sba");
+                const coerced = this.coerceToString(r, node);
+                return `({ tsc_str_t* ${sv} = ${coerced}; tsc_jsonbuf_append(&${sb}, ${sv}->data, ${sv}->len); })`;
+            }
+        }
     }
 
     private emitJsonCall(call: ts.CallExpression, name: string): EmitResult {
@@ -6082,8 +9784,17 @@ class Emitter {
             if (args.length < 1) unsupported(call, "JSON.stringify needs a value");
             const r = this.emitExpr(args[0]!);
             const tsType = this.checker.getTypeAtLocation(args[0]!);
+            // Single growable buffer + straight-line append walk; one final
+            // allocation. Falls back to the legacy concat path for `value` /
+            // dynamic types which use the runtime's tsc_value_json_stringify.
+            const stmts: string[] = [];
+            const bv = this.freshTemp("_jb");
+            stmts.push(`tsc_jsonbuf_t ${bv}`);
+            stmts.push(`tsc_jsonbuf_init(&${bv})`);
+            this.appendJsonValue(stmts, bv, r.c, r.ty, tsType, args[0]!);
+            stmts.push(`tsc_jsonbuf_finish(&${bv})`);
             return {
-                c: this.stringifyJsonValue(r.c, r.ty, tsType, args[0]!),
+                c: `({ ${stmts.join("; ")}; })`,
                 ty: T_STRING,
             };
         }
@@ -6097,6 +9808,104 @@ class Emitter {
             );
         }
         unsupported(call, `JSON.${name}`);
+    }
+
+    /**
+     * Emit C statements into `stmts` that append the JSON encoding of the
+     * value `cExpr` (typed `ty`) into the jsonbuf named `bv`. Type-driven
+     * recursive walk; each scalar is one append helper, each composite is a
+     * statement-expression with a temp + loop or straight-line field appends.
+     *
+     * For dynamic (`value` kind) values we still detour through
+     * `tsc_value_json_stringify`-then-append, since the dynamic walker is in
+     * the runtime.
+     */
+    private appendJsonValue(
+        stmts: string[],
+        bv: string,
+        cExpr: string,
+        ty: CType,
+        tsType: ts.Type,
+        node: ts.Node,
+    ): void {
+        switch (ty.kind) {
+            case "number": {
+                if (ty.c === "int64_t") {
+                    stmts.push(`tsc_jsonbuf_int(&${bv}, ${cExpr})`);
+                } else {
+                    stmts.push(`tsc_jsonbuf_num(&${bv}, ${cExpr})`);
+                }
+                return;
+            }
+            case "boolean": {
+                stmts.push(`tsc_jsonbuf_bool(&${bv}, ${cExpr})`);
+                return;
+            }
+            case "string": {
+                stmts.push(`tsc_jsonbuf_str(&${bv}, ${cExpr})`);
+                return;
+            }
+            case "array": {
+                const et = ty.elem!;
+                const av = this.freshTemp("_ja");
+                const iv = this.freshTemp("_ji");
+                const elemTsType =
+                    (tsType as ts.TypeReference).typeArguments?.[0] ?? tsType;
+                const inner: string[] = [];
+                this.appendJsonValue(
+                    inner, bv, `TSC_ARR(${et.c}, ${av}, ${iv})`, et, elemTsType, node,
+                );
+                stmts.push(`tsc_array_t* ${av} = ${cExpr}`);
+                stmts.push(`tsc_jsonbuf_byte(&${bv}, '[')`);
+                stmts.push(
+                    `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) { ` +
+                    `if (${iv} > 0) tsc_jsonbuf_byte(&${bv}, ','); ` +
+                    `${inner.join("; ")}; }`
+                );
+                stmts.push(`tsc_jsonbuf_byte(&${bv}, ']')`);
+                return;
+            }
+            case "class": {
+                const props = this.checker.getPropertiesOfType(tsType);
+                const ov = this.freshTemp("_jo");
+                stmts.push(`${ty.c} ${ov} = ${cExpr}`);
+                stmts.push(`tsc_jsonbuf_byte(&${bv}, '{')`);
+                let first = true;
+                for (const p of props) {
+                    if (!(p.flags & ts.SymbolFlags.Property)) continue;
+                    const decl = p.valueDeclaration ?? p.getDeclarations()?.[0];
+                    if (!decl) continue;
+                    const pt = this.checker.getTypeOfSymbolAtLocation(p, decl);
+                    const pCt = mapTsType(node, pt, this.checker);
+                    const key = p.getName();
+                    const sep = first ? "" : ",";
+                    const keyStr = `${sep}"${jsonEscape(key)}":`;
+                    stmts.push(
+                        `tsc_jsonbuf_append(&${bv}, "${escapeCString(keyStr)}", ${utf8ByteLen(keyStr)})`,
+                    );
+                    this.appendJsonValue(
+                        stmts, bv, `${ov}->${mangleIdent(key)}`, pCt, pt, node,
+                    );
+                    first = false;
+                }
+                stmts.push(`tsc_jsonbuf_byte(&${bv}, '}')`);
+                return;
+            }
+            case "void": {
+                stmts.push(`tsc_jsonbuf_append(&${bv}, "null", 4)`);
+                return;
+            }
+            case "value": {
+                // Dynamic: defer to the runtime's existing recursive value
+                // walker, then memcpy the resulting tsc_str_t into the buf.
+                const sv = this.freshTemp("_jvs");
+                stmts.push(`tsc_str_t* ${sv} = tsc_value_json_stringify(${cExpr})`);
+                stmts.push(`tsc_jsonbuf_append(&${bv}, ${sv}->data, ${sv}->len)`);
+                return;
+            }
+            default:
+                unsupported(node, `JSON.stringify of ${ty.c}`);
+        }
     }
 
     private stringifyJsonValue(
@@ -6187,6 +9996,8 @@ class Emitter {
     }
 
     private objectProperties(tsType: ts.Type): ts.Symbol[] {
+        const iface = this.interfaceDeclarationForType(tsType);
+        if (iface) return this.interfacePropertySymbols(iface);
         return this.checker
             .getPropertiesOfType(tsType)
             .filter((p) => p.flags & ts.SymbolFlags.Property);
@@ -6254,17 +10065,14 @@ class Emitter {
     }
 
     private classMethodCName(name: ts.PropertyName): string | null {
-        if (ts.isIdentifier(name)) return mangleIdent(name.text);
-        if (ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)) {
-            return mangleIdent(name.text);
-        }
         if (
             ts.isComputedPropertyName(name) &&
             this.isSymbolIteratorExpression(name.expression)
         ) {
             return "__tsc_iterator";
         }
-        return null;
+        const staticName = this.staticPropertyName(name);
+        return staticName == null ? null : mangleIdent(staticName);
     }
 
     private isSymbolIteratorExpression(expr: ts.Expression): boolean {
@@ -6365,7 +10173,10 @@ class Emitter {
             );
         }
 
-        const entries = this.emitExpr(arg);
+        let entries = this.emitExpr(arg);
+        if (entries.ty.kind === "map") {
+            entries = this.emitMapEntriesArray(arg, entries, "Object.fromEntries(Map)");
+        }
         if (entries.ty.kind !== "array" || entries.ty.elem?.kind !== "entry") {
             unsupported(arg, "Object.fromEntries expects Object.entries-style tuples");
         }
@@ -6414,11 +10225,38 @@ class Emitter {
         const args = call.arguments;
         if (args.length < 1) unsupported(call, `Object.${name} needs an argument`);
         const arg = args[0]!;
-        const tsType = this.checker.getTypeAtLocation(arg);
+        const tsType = this.expressionDeclaredOrCurrentType(arg);
         const mapped = this.prepareType(mapTsType(arg, tsType, this.checker));
+        const primitiveObjectArg =
+            mapped.kind === "number" ||
+            mapped.kind === "boolean" ||
+            mapped.kind === "string" ||
+            mapped.kind === "bigint" ||
+            mapped.kind === "symbol";
+        const nonStringPrimitiveObjectArg =
+            mapped.kind === "number" ||
+            mapped.kind === "boolean" ||
+            mapped.kind === "bigint" ||
+            mapped.kind === "symbol";
+        const emptyOwnBuiltinObjectArg =
+            mapped.kind === "map" ||
+            mapped.kind === "set" ||
+            mapped.kind === "weakmap" ||
+            mapped.kind === "weakset" ||
+            mapped.kind === "weakref" ||
+            mapped.kind === "finregistry" ||
+            mapped.kind === "url";
         if (name === "assign") {
+            if (mapped.kind === "array") {
+                const target = this.emitExpr(arg);
+                return this.emitTypedArrayObjectAssign(call, arg, target, args.slice(1));
+            }
+            if (mapped.kind === "class") {
+                const target = this.emitExpr(arg);
+                return this.emitTypedObjectAssign(call, arg, target, tsType, args.slice(1));
+            }
             if (mapped.kind !== "value") {
-                unsupported(arg, "Object.assign currently supports dynamic targets only");
+                unsupported(arg, "Object.assign currently supports dynamic, typed object, and typed array targets only");
             }
             const specs: SequencedCallArg[] = [
                 { value: this.emitExpr(arg), target: T_VALUE, node: arg },
@@ -6449,8 +10287,41 @@ class Emitter {
                     `tsc_value_object_keys(${v!})`,
                 );
             }
+            if (nonStringPrimitiveObjectArg) {
+                const value = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value, node: arg }], ([v]) =>
+                    `({ (void)${v}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
+                );
+            }
+            if (emptyOwnBuiltinObjectArg) {
+                const value = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value, node: arg }], ([v]) =>
+                    `({ (void)${v}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
+                );
+            }
+            if (mapped.kind === "buffer") {
+                const value = this.emitExpr(arg);
+                return this.emitBufferOwnKeys(arg, value);
+            }
+            if (mapped.kind === "string") {
+                const value = this.emitExpr(arg);
+                return this.emitSequencedCall("tsc_value_object_keys", arrayType(T_STRING), [
+                    { value, target: T_VALUE, node: arg },
+                ]);
+            }
+            if (mapped.kind === "array") {
+                const value = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value }], ([arr]) => {
+                    const source = this.freshTemp("_oak_src");
+                    const out = this.freshTemp("_oak");
+                    const idx = this.freshTemp("_oak_i");
+                    const key = this.freshTemp("_oak_key");
+                    return `({ tsc_array_t* const ${source} = ${arr}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { tsc_str_t* ${key} = tsc_str_from_int((int64_t)${idx}); tsc_array_push_raw(${out}, &${key}); } ${out}; })`;
+                });
+            }
             if (mapped.kind !== "class")
                 unsupported(arg, "Object.keys on non-object (Phase 3)");
+            const obj = this.emitExpr(arg);
             const props = this.objectProperties(tsType);
             const av = this.freshTemp("_ok");
             const pieces: string[] = [
@@ -6465,16 +10336,49 @@ class Emitter {
                 pieces.push(`tsc_array_push_raw(${av}, &${kv})`);
             }
             pieces.push(av);
-            return {
-                c: `({ ${pieces.join("; ")}; })`,
-                ty: arrayType(T_STRING),
-            };
+            return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }], ([o]) =>
+                `({ (void)${o}; ${pieces.join("; ")}; })`,
+            );
         }
         if (name === "values") {
             if (mapped.kind === "value") {
                 const value = this.emitExpr(arg);
                 return this.emitSequencedExpr(arrayType(T_VALUE), [{ value }], ([v]) =>
                     `tsc_value_object_values(${v!})`,
+                );
+            }
+            if (nonStringPrimitiveObjectArg) {
+                const value = this.emitExpr(arg);
+                const resultType = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
+                const elem = resultType.kind === "array" ? resultType.elem ?? T_VALUE : T_VALUE;
+                return this.emitSequencedExpr(arrayType(elem), [{ value, node: arg }], ([v]) =>
+                    `({ (void)${v}; tsc_array_new(sizeof(${elem.c}), 1); })`,
+                );
+            }
+            if (emptyOwnBuiltinObjectArg) {
+                const value = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, node: arg }], ([v]) =>
+                    `({ (void)${v}; tsc_array_new(sizeof(tsc_value_t), 1); })`,
+                );
+            }
+            if (mapped.kind === "buffer") {
+                const value = this.emitExpr(arg);
+                return this.emitBufferObjectValues(arg, value);
+            }
+            if (mapped.kind === "string") {
+                const value = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value }], ([str]) => {
+                    const source = this.freshTemp("_osv_src");
+                    const out = this.freshTemp("_osv");
+                    const idx = this.freshTemp("_osv_i");
+                    const ch = this.freshTemp("_osv_ch");
+                    return `({ tsc_str_t* const ${source} = ${str}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { tsc_str_t* ${ch} = tsc_str_char_at(${source}, (double)${idx}); tsc_array_push_raw(${out}, &${ch}); } ${out}; })`;
+                });
+            }
+            if (mapped.kind === "array") {
+                const value = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(mapped.elem ?? T_VALUE), [{ value }], ([arr]) =>
+                    `tsc_array_slice(${arr}, 0.0, (double)${arr}->len)`,
                 );
             }
             if (mapped.kind !== "class")
@@ -6508,6 +10412,48 @@ class Emitter {
             };
         }
         if (name === "entries") {
+            if (nonStringPrimitiveObjectArg) {
+                const value = this.emitExpr(arg);
+                const resultType = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
+                const elem = resultType.kind === "array" ? resultType.elem ?? T_VALUE : T_VALUE;
+                return this.emitSequencedExpr(arrayType(elem), [{ value, node: arg }], ([v]) =>
+                    `({ (void)${v}; tsc_array_new(sizeof(${elem.c}), 1); })`,
+                );
+            }
+            if (emptyOwnBuiltinObjectArg) {
+                const value = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, node: arg }], ([v]) =>
+                    `({ (void)${v}; tsc_array_new(sizeof(tsc_value_t), 1); })`,
+                );
+            }
+            if (mapped.kind === "buffer") {
+                const value = this.emitExpr(arg);
+                return this.emitBufferObjectEntries(arg, value);
+            }
+            if (mapped.kind === "string") {
+                const value = this.emitExpr(arg);
+                const elemType = entryType(T_STRING);
+                return this.emitSequencedExpr(arrayType(elemType), [{ value }], ([str]) => {
+                    const source = this.freshTemp("_ose_src");
+                    const out = this.freshTemp("_ose");
+                    const idx = this.freshTemp("_ose_i");
+                    const entry = this.freshTemp("_ose_entry");
+                    return `({ tsc_str_t* const ${source} = ${str}; tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { ${elemType.c} ${entry}; ${entry}.key = tsc_str_from_int((int64_t)${idx}); ${this.objectEntrySet(entry, T_STRING, `tsc_str_char_at(${source}, (double)${idx})`)}; tsc_array_push_raw(${out}, &${entry}); } ${out}; })`;
+                });
+            }
+            if (mapped.kind === "array") {
+                const value = this.emitExpr(arg);
+                const valueType = mapped.elem ?? T_VALUE;
+                const elemType = entryType(valueType);
+                return this.emitSequencedExpr(arrayType(elemType), [{ value }], ([arr]) => {
+                    const source = this.freshTemp("_oae_src");
+                    const out = this.freshTemp("_oae");
+                    const idx = this.freshTemp("_oae_i");
+                    const entry = this.freshTemp("_oae_entry");
+                    const current = `TSC_ARR(${valueType.c}, ${source}, ${idx})`;
+                    return `({ tsc_array_t* const ${source} = ${arr}; tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { ${elemType.c} ${entry}; ${entry}.key = tsc_str_from_int((int64_t)${idx}); ${this.objectEntrySet(entry, valueType, current)}; tsc_array_push_raw(${out}, &${entry}); } ${out}; })`;
+                });
+            }
             const value = this.emitExpr(arg);
             const declaredDynamic = ts.isIdentifier(arg) && (
                 this.identifierDeclaredType(arg)?.kind === "value" ||
@@ -6536,14 +10482,71 @@ class Emitter {
             return this.emitObjectFromEntries(call, arg);
         }
         if (name === "create") {
-            if (args.length !== 1) unsupported(call, "Object.create expects prototype");
+            if (args.length < 1 || args.length > 2) unsupported(call, "Object.create expects prototype and optional descriptor map");
             const proto = this.emitExpr(arg);
-            return this.emitSequencedCall("tsc_value_object_create", T_VALUE, [
+            const created = this.emitSequencedCall("tsc_value_object_create", T_VALUE, [
                 { value: proto, target: T_VALUE, node: arg },
             ]);
+            if (args.length === 2) {
+                return this.emitObjectDefineProperties(arg, created, args[1]!);
+            }
+            return created;
         }
         if (name === "getOwnPropertyNames") {
             if (args.length !== 1) unsupported(call, "Object.getOwnPropertyNames expects object");
+            if (nonStringPrimitiveObjectArg) {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }], ([o]) =>
+                    `({ (void)${o}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
+                );
+            }
+            if (emptyOwnBuiltinObjectArg) {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }], ([o]) =>
+                    `({ (void)${o}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
+                );
+            }
+            if (mapped.kind === "buffer") {
+                const obj = this.emitExpr(arg);
+                return this.emitBufferOwnKeys(arg, obj);
+            }
+            if (mapped.kind === "string") {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedCall("tsc_value_own_keys", arrayType(T_STRING), [
+                    { value: obj, target: T_VALUE, node: arg },
+                ]);
+            }
+            if (mapped.kind === "array") {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }], ([arr]) => {
+                    const source = this.freshTemp("_apn_src");
+                    const out = this.freshTemp("_apn");
+                    const idx = this.freshTemp("_apn_i");
+                    const key = this.freshTemp("_apn_key");
+                    const lenKey = this.freshTemp("_apn_len");
+                    return `({ tsc_array_t* const ${source} = ${arr}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), ${source}->len + 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { tsc_str_t* ${key} = tsc_str_from_int((int64_t)${idx}); tsc_array_push_raw(${out}, &${key}); } tsc_str_t* ${lenKey} = tsc_str_from_lit("length", 6); tsc_array_push_raw(${out}, &${lenKey}); ${out}; })`;
+                });
+            }
+            if (mapped.kind === "class") {
+                const obj = this.emitExpr(arg);
+                const props = this.objectProperties(tsType);
+                const av = this.freshTemp("_opn");
+                const pieces: string[] = [
+                    `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_str_t*), ${props.length || 1})`,
+                ];
+                for (const p of props) {
+                    const key = p.getName();
+                    const kv = this.freshTemp("_k");
+                    pieces.push(
+                        `tsc_str_t* ${kv} = tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)})`,
+                    );
+                    pieces.push(`tsc_array_push_raw(${av}, &${kv})`);
+                }
+                pieces.push(av);
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }], ([o]) =>
+                    `({ (void)${o}; ${pieces.join("; ")}; })`,
+                );
+            }
             if (mapped.kind !== "value") {
                 unsupported(arg, "Object.getOwnPropertyNames currently supports dynamic objects only");
             }
@@ -6554,6 +10557,42 @@ class Emitter {
         }
         if (name === "getOwnPropertyDescriptor") {
             if (args.length !== 2) unsupported(call, "Object.getOwnPropertyDescriptor expects object and key");
+            if (nonStringPrimitiveObjectArg) {
+                const obj = this.emitExpr(arg);
+                const key = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: obj, node: arg },
+                    { value: key, target: T_STRING, node: args[1]! },
+                ], ([o, k]) => `({ (void)${o}; (void)${k}; tsc_value_undefined(); })`);
+            }
+            if (emptyOwnBuiltinObjectArg) {
+                const obj = this.emitExpr(arg);
+                const key = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: obj, node: arg },
+                    { value: key, target: T_STRING, node: args[1]! },
+                ], ([o, k]) => `({ (void)${o}; (void)${k}; tsc_value_undefined(); })`);
+            }
+            if (mapped.kind === "buffer") {
+                const obj = this.emitExpr(arg);
+                return this.emitBufferGetOwnPropertyDescriptor(arg, obj, args[1]!);
+            }
+            if (mapped.kind === "string") {
+                const obj = this.emitExpr(arg);
+                const key = this.emitExpr(args[1]!);
+                return this.emitSequencedCall("tsc_value_get_own_property_descriptor", T_VALUE, [
+                    { value: obj, target: T_VALUE, node: arg },
+                    { value: key, target: T_STRING, node: args[1]! },
+                ]);
+            }
+            if (mapped.kind === "array") {
+                const obj = this.emitExpr(arg);
+                return this.emitTypedArrayGetOwnPropertyDescriptor(arg, obj, args[1]!);
+            }
+            if (mapped.kind === "class") {
+                const obj = this.emitExpr(arg);
+                return this.emitTypedGetOwnPropertyDescriptor(arg, obj, args[1]!, tsType);
+            }
             if (mapped.kind !== "value") {
                 unsupported(arg, "Object.getOwnPropertyDescriptor currently supports dynamic objects only");
             }
@@ -6566,6 +10605,36 @@ class Emitter {
         }
         if (name === "getOwnPropertyDescriptors") {
             if (args.length !== 1) unsupported(call, "Object.getOwnPropertyDescriptors expects object");
+            if (nonStringPrimitiveObjectArg) {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: arg }], ([o]) =>
+                    `({ (void)${o}; tsc_value_object(tsc_object_new()); })`,
+                );
+            }
+            if (emptyOwnBuiltinObjectArg) {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: arg }], ([o]) =>
+                    `({ (void)${o}; tsc_value_object(tsc_object_new()); })`,
+                );
+            }
+            if (mapped.kind === "buffer") {
+                const obj = this.emitExpr(arg);
+                return this.emitBufferGetOwnPropertyDescriptors(arg, obj);
+            }
+            if (mapped.kind === "string") {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedCall("tsc_value_get_own_property_descriptors", T_VALUE, [
+                    { value: obj, target: T_VALUE, node: arg },
+                ]);
+            }
+            if (mapped.kind === "array") {
+                const obj = this.emitExpr(arg);
+                return this.emitTypedArrayGetOwnPropertyDescriptors(arg, obj);
+            }
+            if (mapped.kind === "class") {
+                const obj = this.emitExpr(arg);
+                return this.emitTypedGetOwnPropertyDescriptors(arg, obj, tsType);
+            }
             if (mapped.kind !== "value") {
                 unsupported(arg, "Object.getOwnPropertyDescriptors currently supports dynamic objects only");
             }
@@ -6586,9 +10655,53 @@ class Emitter {
         }
         if (name === "hasOwn") {
             if (args.length !== 2) unsupported(call, "Object.hasOwn expects object and key");
-            if (mapped.kind !== "value") {
-                unsupported(arg, "Object.hasOwn currently supports dynamic objects only");
+            if (nonStringPrimitiveObjectArg) {
+                const obj = this.emitExpr(arg);
+                const key = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: obj, node: arg },
+                    { value: key, target: T_STRING, node: args[1]! },
+                ], ([o, k]) => `({ (void)${o}; (void)${k}; false; })`);
             }
+            if (emptyOwnBuiltinObjectArg) {
+                const obj = this.emitExpr(arg);
+                const key = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: obj, node: arg },
+                    { value: key, target: T_STRING, node: args[1]! },
+                ], ([o, k]) => `({ (void)${o}; (void)${k}; false; })`);
+            }
+            if (mapped.kind === "buffer") {
+                const obj = this.emitExpr(arg);
+                return this.emitBufferOwnKeyCheck(arg, obj, args[1]!);
+            }
+            if (mapped.kind === "string") {
+                const obj = this.emitExpr(arg);
+                const key = this.emitExpr(args[1]!);
+                return this.emitSequencedCall("tsc_value_has_own_prop", T_BOOLEAN, [
+                    { value: obj, target: T_VALUE, node: arg },
+                    { value: key, target: T_STRING, node: args[1]! },
+                ]);
+            }
+            if (mapped.kind === "array") {
+                const obj = this.emitExpr(arg);
+                const key = this.emitExpr(args[1]!);
+                return this.emitSequencedCall("tsc_array_has_own_key", T_BOOLEAN, [
+                    { value: obj },
+                    { value: key, target: T_STRING, node: args[1]! },
+                ]);
+            }
+            if (mapped.kind === "class") {
+                const obj = this.emitExpr(arg);
+                return this.emitTypedObjectHasOwn(
+                    arg,
+                    obj,
+                    args[1]!,
+                    tsType,
+                    "Object.hasOwn",
+                );
+            }
+            if (mapped.kind !== "value") unsupported(arg, "Object.hasOwn on non-object");
             const obj = this.emitExpr(arg);
             const key = this.emitExpr(args[1]!);
             return this.emitSequencedCall("tsc_value_has_own_prop", T_BOOLEAN, [
@@ -6598,8 +10711,12 @@ class Emitter {
         }
         if (name === "isExtensible") {
             if (args.length !== 1) unsupported(call, "Object.isExtensible expects object");
-            if (mapped.kind !== "value") {
-                unsupported(arg, "Object.isExtensible currently supports dynamic objects only");
+            if (primitiveObjectArg) {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }], ([o]) => `((void)${o}, false)`);
+            }
+            if (mapped.kind !== "value" && mapped.kind !== "array") {
+                unsupported(arg, "Object.isExtensible currently supports dynamic objects, arrays, and primitives only");
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedCall("tsc_value_is_extensible", T_BOOLEAN, [
@@ -6608,8 +10725,12 @@ class Emitter {
         }
         if (name === "isSealed") {
             if (args.length !== 1) unsupported(call, "Object.isSealed expects object");
-            if (mapped.kind !== "value") {
-                unsupported(arg, "Object.isSealed currently supports dynamic objects only");
+            if (primitiveObjectArg) {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }], ([o]) => `((void)${o}, true)`);
+            }
+            if (mapped.kind !== "value" && mapped.kind !== "array") {
+                unsupported(arg, "Object.isSealed currently supports dynamic objects, arrays, and primitives only");
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedCall("tsc_value_is_sealed", T_BOOLEAN, [
@@ -6618,8 +10739,12 @@ class Emitter {
         }
         if (name === "isFrozen") {
             if (args.length !== 1) unsupported(call, "Object.isFrozen expects object");
-            if (mapped.kind !== "value") {
-                unsupported(arg, "Object.isFrozen currently supports dynamic objects only");
+            if (primitiveObjectArg) {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }], ([o]) => `((void)${o}, true)`);
+            }
+            if (mapped.kind !== "value" && mapped.kind !== "array") {
+                unsupported(arg, "Object.isFrozen currently supports dynamic objects, arrays, and primitives only");
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedCall("tsc_value_is_frozen", T_BOOLEAN, [
@@ -6628,23 +10753,31 @@ class Emitter {
         }
         if (name === "preventExtensions") {
             if (args.length !== 1) unsupported(call, "Object.preventExtensions expects object");
-            if (mapped.kind !== "value") {
-                unsupported(arg, "Object.preventExtensions currently supports dynamic objects only");
+            if (primitiveObjectArg) {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(mapped, [{ value: obj, node: arg }], ([o]) => o);
+            }
+            if (mapped.kind !== "value" && mapped.kind !== "array") {
+                unsupported(arg, "Object.preventExtensions currently supports dynamic objects, arrays, and primitives only");
             }
             const obj = this.emitExpr(arg);
-            return this.emitSequencedExpr(T_VALUE, [
-                { value: obj, target: T_VALUE, node: arg },
-            ], ([o]) => `({ tsc_value_prevent_extensions(${o}); ${o}; })`);
+            return this.emitSequencedExpr(mapped, [
+                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
+            ], ([o]) => `({ tsc_value_prevent_extensions(${mapped.kind === "array" ? `tsc_value_array(${o})` : o}); ${o}; })`);
         }
         if (name === "seal") {
             if (args.length !== 1) unsupported(call, "Object.seal expects object");
-            if (mapped.kind !== "value") {
-                unsupported(arg, "Object.seal currently supports dynamic objects only");
+            if (primitiveObjectArg) {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(mapped, [{ value: obj, node: arg }], ([o]) => o);
+            }
+            if (mapped.kind !== "value" && mapped.kind !== "array") {
+                unsupported(arg, "Object.seal currently supports dynamic objects, arrays, and primitives only");
             }
             const obj = this.emitExpr(arg);
-            return this.emitSequencedExpr(T_VALUE, [
-                { value: obj, target: T_VALUE, node: arg },
-            ], ([o]) => `({ tsc_value_seal(${o}); ${o}; })`);
+            return this.emitSequencedExpr(mapped, [
+                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
+            ], ([o]) => `({ tsc_value_seal(${mapped.kind === "array" ? `tsc_value_array(${o})` : o}); ${o}; })`);
         }
         if (name === "setPrototypeOf") {
             if (args.length !== 2) unsupported(call, "Object.setPrototypeOf expects object and prototype");
@@ -6660,78 +10793,1320 @@ class Emitter {
         }
         if (name === "freeze") {
             if (args.length !== 1) unsupported(call, "Object.freeze expects object");
-            if (mapped.kind !== "value") {
-                unsupported(arg, "Object.freeze currently supports dynamic objects only");
+            if (primitiveObjectArg) {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(mapped, [{ value: obj, node: arg }], ([o]) => o);
+            }
+            if (mapped.kind !== "value" && mapped.kind !== "array") {
+                unsupported(arg, "Object.freeze currently supports dynamic objects, arrays, and primitives only");
             }
             const obj = this.emitExpr(arg);
-            return this.emitSequencedExpr(T_VALUE, [
-                { value: obj, target: T_VALUE, node: arg },
-            ], ([o]) => `({ tsc_value_freeze(${o}); ${o}; })`);
+            return this.emitSequencedExpr(mapped, [
+                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
+            ], ([o]) => `({ tsc_value_freeze(${mapped.kind === "array" ? `tsc_value_array(${o})` : o}); ${o}; })`);
         }
         if (name === "defineProperty") {
             if (args.length !== 3) unsupported(call, "Object.defineProperty expects object, key, descriptor");
+            if (mapped.kind === "array") {
+                const obj = this.emitExpr(arg);
+                const desc = this.descriptorData(args[2]!);
+                return this.emitTypedArrayDefineProperty(arg, obj, args[1]!, desc, true);
+            }
             if (mapped.kind !== "value") {
-                unsupported(arg, "Object.defineProperty currently supports dynamic objects only");
+                unsupported(arg, "Object.defineProperty currently supports dynamic objects and arrays only");
             }
             const key = this.emitExpr(args[1]!);
             const desc = this.descriptorData(args[2]!);
             const obj = this.emitExpr(arg);
             if (desc.kind === "accessor") {
+                const specs: SequencedCallArg[] = [
+                    { value: obj, target: T_VALUE, node: arg },
+                    { value: key, target: T_STRING, node: args[1]! },
+                ];
+                const getterEnvPos = desc.getter?.env ? specs.length : -1;
+                if (desc.getter?.env) {
+                    specs.push({ value: desc.getter.env, node: desc.getter.node, pass: (tmp) => `(void*)${tmp}` });
+                }
+                const setterEnvPos = desc.setter?.env ? specs.length : -1;
+                if (desc.setter?.env) {
+                    specs.push({ value: desc.setter.env, node: desc.setter.node, pass: (tmp) => `(void*)${tmp}` });
+                }
                 return this.emitSequencedExpr(
                     T_VALUE,
-                    [
-                        { value: obj, target: T_VALUE, node: arg },
-                        { value: key, target: T_STRING, node: args[1]! },
-                    ],
-                    ([o, k]) => `({ tsc_value_define_accessor_desc(${o}, ${k}, ${desc.getter}, ${desc.setter}, ${desc.enumerable}, ${desc.configurable}); ${o}; })`,
+                    specs,
+                    (vals) => {
+                        const o = vals[0]!;
+                        const k = vals[1]!;
+                        const getterEnv = getterEnvPos >= 0 ? vals[getterEnvPos]! : "NULL";
+                        const setterEnv = setterEnvPos >= 0 ? vals[setterEnvPos]! : "NULL";
+                        return `({ tsc_value_define_accessor_desc(${o}, ${k}, ${desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${desc.hasGetter}, ${desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${desc.hasSetter}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable}); ${o}; })`;
+                    },
                 );
             }
-            const value = this.emitExpr(desc.value);
+            const value = desc.value
+                ? this.emitExpr(desc.value)
+                : { c: "tsc_value_undefined()", ty: T_VALUE };
             return this.emitSequencedExpr(
                 T_VALUE,
                 [
                     { value: obj, target: T_VALUE, node: arg },
                     { value: key, target: T_STRING, node: args[1]! },
-                    { value, target: T_VALUE, node: desc.value },
+                    { value, target: T_VALUE, node: desc.value ?? args[2]! },
                 ],
-                ([o, k, v]) => `({ tsc_value_define_property_desc(${o}, ${k}, ${v}, ${desc.writable}, ${desc.enumerable}, ${desc.configurable}); ${o}; })`,
+                ([o, k, v]) => `({ tsc_value_define_property_desc(${o}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable}); ${o}; })`,
             );
         }
+        if (name === "defineProperties") {
+            if (args.length !== 2) unsupported(call, "Object.defineProperties expects object and descriptor map");
+            if (mapped.kind === "array") {
+                const obj = this.emitExpr(arg);
+                return this.emitTypedArrayDefineProperties(arg, obj, args[1]!);
+            }
+            if (mapped.kind !== "value") {
+                unsupported(arg, "Object.defineProperties currently supports dynamic objects and arrays only");
+            }
+            const obj = this.emitExpr(arg);
+            return this.emitObjectDefineProperties(arg, obj, args[1]!);
+        }
+        if (name === "groupBy") {
+            return this.emitObjectGroupBy(call);
+        }
         unsupported(call, `Object.${name}`);
+    }
+
+    private emitTypedObjectAssign(
+        call: ts.CallExpression,
+        targetExpr: ts.Expression,
+        target: EmitResult,
+        targetTsType: ts.Type,
+        sourceExprs: readonly ts.Expression[],
+    ): EmitResult {
+        if (target.ty.kind !== "class") unsupported(targetExpr, "Object.assign typed target must be an object");
+        const targetFields = this.objectProperties(targetTsType).map((prop) => {
+            const decl = prop.valueDeclaration ?? prop.getDeclarations()?.[0] ?? targetExpr;
+            return {
+                name: prop.getName(),
+                field: mangleIdent(prop.getName()),
+                type: this.prepareType(mapTsType(
+                    decl,
+                    this.checker.getTypeOfSymbolAtLocation(prop, decl),
+                    this.checker,
+                )),
+            };
+        });
+        const targetByName = new Map(targetFields.map((field) => [field.name, field]));
+
+        const specs: SequencedCallArg[] = [{ value: target, node: targetExpr }];
+        const sources: { ty: CType; node: ts.Expression; tsType: ts.Type; pos: number; dynamicLike: boolean }[] = [];
+        for (const sourceExpr of sourceExprs) {
+            const sourceTsType = this.expressionDeclaredOrCurrentType(sourceExpr);
+            const source = this.emitExpr(sourceExpr);
+            const primitiveSource =
+                source.ty.kind === "number" ||
+                source.ty.kind === "boolean" ||
+                source.ty.kind === "bigint" ||
+                source.ty.kind === "symbol";
+            const dynamicLike =
+                source.ty.kind === "value" ||
+                source.ty.kind === "array" ||
+                source.ty.kind === "string";
+            if (source.ty.kind !== "class" && !dynamicLike && !primitiveSource) {
+                unsupported(sourceExpr, "Object.assign typed object target currently supports typed object, array, string, dynamic, or primitive sources");
+            }
+            sources.push({ ty: source.ty, node: sourceExpr, tsType: sourceTsType, pos: specs.length, dynamicLike });
+            specs.push({ value: source, target: dynamicLike ? T_VALUE : undefined, node: sourceExpr });
+        }
+
+        return this.emitSequencedExpr(target.ty, specs, (vals) => {
+            const targetC = vals[0]!;
+            const pieces: string[] = [];
+            for (const source of sources) {
+                const sourceC = vals[source.pos]!;
+                if (source.ty.kind === "class") {
+                    const assignments: string[] = [];
+                    for (const prop of this.objectProperties(source.tsType)) {
+                        const targetField = targetByName.get(prop.getName());
+                        if (!targetField) continue;
+                        const decl = prop.valueDeclaration ?? prop.getDeclarations()?.[0] ?? source.node;
+                        const sourceType = this.prepareType(mapTsType(
+                            decl,
+                            this.checker.getTypeOfSymbolAtLocation(prop, decl),
+                            this.checker,
+                        ));
+                        const raw = {
+                            c: `${sourceC}->${mangleIdent(prop.getName())}`,
+                            ty: sourceType,
+                        };
+                        assignments.push(
+                            `${targetC}->${targetField.field} = ${this.coerce(raw, targetField.type, source.node)}`,
+                        );
+                    }
+                    pieces.push(assignments.length ? assignments.join("; ") : `(void)${sourceC}`);
+                    continue;
+                }
+                if (source.dynamicLike) {
+                    const assignments: string[] = [];
+                    for (const targetField of targetFields) {
+                        const key = `tsc_str_from_lit("${escapeCString(targetField.name)}", ${utf8ByteLen(targetField.name)})`;
+                        const raw = {
+                            c: `tsc_value_get_prop(${sourceC}, ${key})`,
+                            ty: T_VALUE,
+                        };
+                        assignments.push(
+                            `if (tsc_value_has_own_prop(${sourceC}, ${key})) ${targetC}->${targetField.field} = ${this.coerce(raw, targetField.type, source.node)}`,
+                        );
+                    }
+                    pieces.push(assignments.length ? assignments.join("; ") : `(void)${sourceC}`);
+                    continue;
+                }
+                pieces.push(`(void)${sourceC}`);
+            }
+            return `({ ${pieces.join("; ")}; ${targetC}; })`;
+        });
+    }
+
+    private emitTypedArrayObjectAssign(
+        call: ts.CallExpression,
+        targetExpr: ts.Expression,
+        target: EmitResult,
+        sourceExprs: readonly ts.Expression[],
+    ): EmitResult {
+        if (target.ty.kind !== "array") unsupported(targetExpr, "Object.assign typed target must be an array");
+        const elem = target.ty.elem ?? T_VALUE;
+        const specs: SequencedCallArg[] = [{ value: target, node: targetExpr }];
+        const sources: { ty: CType; node: ts.Expression; tsType: ts.Type; pos: number }[] = [];
+        for (const sourceExpr of sourceExprs) {
+            const sourceTsType = this.expressionDeclaredOrCurrentType(sourceExpr);
+            const source = this.emitExpr(sourceExpr);
+            const primitiveSource =
+                source.ty.kind === "number" ||
+                source.ty.kind === "boolean" ||
+                source.ty.kind === "bigint" ||
+                source.ty.kind === "symbol";
+            if (source.ty.kind !== "array" && source.ty.kind !== "string" && source.ty.kind !== "value" && source.ty.kind !== "class" && !primitiveSource) {
+                unsupported(sourceExpr, "Object.assign typed array target currently supports array, string, typed object, dynamic, or primitive sources");
+            }
+            sources.push({ ty: source.ty, node: sourceExpr, tsType: sourceTsType, pos: specs.length });
+            specs.push({ value: source, node: sourceExpr });
+        }
+        return this.emitSequencedExpr(target.ty, specs, (vals) => {
+            const targetC = vals[0]!;
+            const pieces: string[] = [];
+            for (const source of sources) {
+                const sourceC = vals[source.pos]!;
+                const idx = this.freshTemp("_ta_assign_i");
+                const elemTmp = this.freshTemp("_ta_assign_v");
+                if (source.ty.kind === "array") {
+                    const sourceElem = source.ty.elem ?? T_VALUE;
+                    const current = {
+                        c: `TSC_ARR(${sourceElem.c}, ${sourceC}, ${idx})`,
+                        ty: sourceElem,
+                    };
+                    const coerced = this.coerce(current, elem, source.node);
+                    pieces.push(
+                        `if (!${targetC}->frozen) { ` +
+                            `for (size_t ${idx} = 0; ${idx} < ${sourceC}->len; ${idx}++) { ` +
+                                `${elem.c} ${elemTmp} = ${coerced}; ` +
+                                `if (${idx} < ${targetC}->len) { ` +
+                                    `TSC_ARR(${elem.c}, ${targetC}, ${idx}) = ${elemTmp}; ` +
+                                `} else if (${targetC}->extensible && !${targetC}->sealed && ${idx} == ${targetC}->len) { ` +
+                                    `tsc_array_push_raw(${targetC}, &${elemTmp}); ` +
+                                `} ` +
+                            `} ` +
+                        `}`,
+                    );
+                    continue;
+                }
+                if (source.ty.kind === "value") {
+                    const keys = this.freshTemp("_ta_assign_keys");
+                    const key = this.freshTemp("_ta_assign_key");
+                    const targetIdx = this.freshTemp("_ta_assign_j");
+                    const nextKey = this.freshTemp("_ta_assign_next_key");
+                    const raw = {
+                        c: `tsc_value_get_prop(${sourceC}, ${key})`,
+                        ty: T_VALUE,
+                    };
+                    const coerced = this.coerce(raw, elem, source.node);
+                    pieces.push(
+                        `if (!${targetC}->frozen) { ` +
+                            `tsc_array_t* ${keys} = tsc_value_object_keys(${sourceC}); ` +
+                            `for (size_t ${idx} = 0; ${idx} < ${keys}->len; ${idx}++) { ` +
+                                `tsc_str_t* ${key} = TSC_ARR(tsc_str_t*, ${keys}, ${idx}); ` +
+                                `bool _ta_assign_done = false; ` +
+                                `for (size_t ${targetIdx} = 0; ${targetIdx} < ${targetC}->len; ${targetIdx}++) { ` +
+                                    `tsc_str_t* _ta_assign_idx_key = tsc_str_from_int((int64_t)${targetIdx}); ` +
+                                    `if (tsc_str_eq(${key}, _ta_assign_idx_key)) { ` +
+                                        `${elem.c} ${elemTmp} = ${coerced}; ` +
+                                        `TSC_ARR(${elem.c}, ${targetC}, ${targetIdx}) = ${elemTmp}; ` +
+                                        `_ta_assign_done = true; ` +
+                                        `break; ` +
+                                    `} ` +
+                                `} ` +
+                                `if (!_ta_assign_done && ${targetC}->extensible && !${targetC}->sealed) { ` +
+                                    `tsc_str_t* ${nextKey} = tsc_str_from_int((int64_t)${targetC}->len); ` +
+                                    `if (tsc_str_eq(${key}, ${nextKey})) { ` +
+                                        `${elem.c} ${elemTmp} = ${coerced}; ` +
+                                        `tsc_array_push_raw(${targetC}, &${elemTmp}); ` +
+                                    `} ` +
+                                `} ` +
+                            `} ` +
+                        `}`,
+                    );
+                    continue;
+                }
+                if (source.ty.kind === "class") {
+                    const sourceProps = this.objectProperties(source.tsType);
+                    const assignments: string[] = [];
+                    for (const prop of sourceProps) {
+                        const key = prop.getName();
+                        if (!/^(0|[1-9]\d*)$/.test(key)) continue;
+                        const numericKey = Number(key);
+                        if (!Number.isSafeInteger(numericKey)) continue;
+                        const decl = prop.valueDeclaration ?? prop.getDeclarations()?.[0] ?? source.node;
+                        const propType = this.prepareType(mapTsType(
+                            decl,
+                            this.checker.getTypeOfSymbolAtLocation(prop, decl),
+                            this.checker,
+                        ));
+                        const raw = {
+                            c: `${sourceC}->${mangleIdent(key)}`,
+                            ty: propType,
+                        };
+                        const coerced = this.coerce(raw, elem, source.node);
+                        assignments.push(
+                            `{ ${elem.c} ${elemTmp} = ${coerced}; ` +
+                                `if (${numericKey} < ${targetC}->len) { ` +
+                                    `TSC_ARR(${elem.c}, ${targetC}, ${numericKey}) = ${elemTmp}; ` +
+                                `} else if (${targetC}->extensible && !${targetC}->sealed && ${numericKey} == ${targetC}->len) { ` +
+                                    `tsc_array_push_raw(${targetC}, &${elemTmp}); ` +
+                                `} ` +
+                            `}`,
+                        );
+                    }
+                    if (assignments.length) {
+                        pieces.push(`if (!${targetC}->frozen) { ${assignments.join(" ")} }`);
+                    } else {
+                        pieces.push(`(void)${sourceC}`);
+                    }
+                    continue;
+                }
+                if (
+                    source.ty.kind === "number" ||
+                    source.ty.kind === "boolean" ||
+                    source.ty.kind === "bigint" ||
+                    source.ty.kind === "symbol"
+                ) {
+                    pieces.push(`(void)${sourceC}`);
+                    continue;
+                }
+                const current = {
+                    c: `tsc_str_char_at(${sourceC}, (double)${idx})`,
+                    ty: T_STRING,
+                };
+                const coerced = this.coerce(current, elem, source.node);
+                pieces.push(
+                    `if (!${targetC}->frozen) { ` +
+                        `for (size_t ${idx} = 0; ${idx} < ${sourceC}->len; ${idx}++) { ` +
+                            `${elem.c} ${elemTmp} = ${coerced}; ` +
+                            `if (${idx} < ${targetC}->len) { ` +
+                                `TSC_ARR(${elem.c}, ${targetC}, ${idx}) = ${elemTmp}; ` +
+                            `} else if (${targetC}->extensible && !${targetC}->sealed && ${idx} == ${targetC}->len) { ` +
+                                `tsc_array_push_raw(${targetC}, &${elemTmp}); ` +
+                            `} ` +
+                        `} ` +
+                    `}`,
+                );
+            }
+            return `({ ${pieces.join("; ")}; ${targetC}; })`;
+        });
+    }
+
+    private emitObjectGroupBy(call: ts.CallExpression): EmitResult {
+        if (call.arguments.length !== 2)
+            unsupported(call, "Object.groupBy expects (items, keyFn)");
+        const itemsArg = call.arguments[0]!;
+        const keyArg = call.arguments[1]!;
+        const items = this.emitExpr(itemsArg);
+        if (items.ty.kind !== "array")
+            unsupported(itemsArg, "Object.groupBy expects an array");
+        const t = items.ty.elem!;
+
+        return this.emitSequencedExpr(T_VALUE, [{ value: items }], ([itemsExpr]) => {
+            const src = this.freshTemp("_ogb_src");
+            const out = this.freshTemp("_ogb_out");
+            const iv = this.freshTemp("_ogb_i");
+            const item = this.freshTemp("_ogb_item");
+            const keyStr = this.freshTemp("_ogb_key");
+            const existing = this.freshTemp("_ogb_existing");
+            const group = this.freshTemp("_ogb_group");
+            const boxed = this.freshTemp("_ogb_box");
+            const itemExpr = `TSC_ARR(${t.c}, ${src}, ${iv})`;
+
+            const cb = keyArg;
+            const bindings: string[] = [];
+            let keyBody: EmitResult;
+            if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
+                const bodyExpr = this.callbackReturnExpression(cb, "Object.groupBy");
+                const valueParam = cb.parameters[0];
+                const indexParam = cb.parameters[1];
+                if (valueParam && ts.isIdentifier(valueParam.name)) {
+                    bindings.push(`${t.c} ${mangleIdent(valueParam.name.text)} = ${item};`);
+                }
+                if (indexParam && ts.isIdentifier(indexParam.name)) {
+                    bindings.push(`double ${mangleIdent(indexParam.name.text)} = (double)${iv};`);
+                }
+                keyBody = this.emitExpr(bodyExpr);
+            } else if (ts.isIdentifier(cb)) {
+                const cbType = this.checker.getTypeAtLocation(cb);
+                const sig = cbType.getCallSignatures()[0];
+                if (!sig) unsupported(cb, "Object.groupBy callback must be callable");
+                const sources: EmitResult[] = [
+                    { c: item, ty: t },
+                    { c: `(double)${iv}`, ty: T_NUMBER },
+                ];
+                if (this.isDirectCallableIdentifier(cb)) {
+                    let fnName = this.identifierName(cb);
+                    const genericDecl = this.genericFunctionDeclaration(sig);
+                    const genericBindings = genericDecl
+                        ? this.genericBindingsForCallbackTypes(cb, genericDecl, [t, T_NUMBER], T_STRING)
+                        : null;
+                    if (genericDecl && genericBindings) {
+                        fnName = this.ensureGenericSpecialization(genericDecl, genericBindings);
+                    }
+                    const params = sig.getParameters();
+                    const callArgs = params.slice(0, 2).map((param, index) => {
+                        const decl = param.valueDeclaration ?? cb;
+                        const target = this.prepareType(
+                            genericBindings
+                                ? withTypeBindings(genericBindings, () =>
+                                    mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
+                                )
+                                : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
+                        );
+                        return this.coerce(sources[index]!, target, cb);
+                    });
+                    const retType = this.prepareType(
+                        genericBindings
+                            ? withTypeBindings(genericBindings, () =>
+                                mapTsType(cb, sig.getReturnType(), this.checker),
+                            )
+                            : mapTsType(cb, sig.getReturnType(), this.checker),
+                    );
+                    keyBody = { c: `${fnName}(${callArgs.join(", ")})`, ty: retType };
+                } else {
+                    const fn = this.emitExpr(cb);
+                    if (fn.ty.kind !== "function" || !fn.ty.ret)
+                        unsupported(cb, "Object.groupBy callback must be callable");
+                    const fnv = this.freshTemp("_cb");
+                    bindings.push(`${fn.ty.c} ${fnv} = ${fn.c};`);
+                    const params = fn.ty.params ?? [];
+                    const callArgs = params.slice(0, 2).map((param, index) =>
+                        this.coerce(sources[index]!, param, cb),
+                    );
+                    keyBody = {
+                        c: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`,
+                        ty: this.prepareType(fn.ty.ret),
+                    };
+                }
+            } else {
+                unsupported(cb, "Object.groupBy callback must be an inline arrow/function expression or function reference");
+            }
+            const keyCExpr = this.coerceToString(keyBody, cb);
+            // Box the item into tsc_value_t. Restrict to types boxable through coerce(.., T_VALUE).
+            const boxedItemExpr = this.coerce({ c: item, ty: t }, T_VALUE, itemsArg);
+            return (
+                `({ tsc_array_t* const ${src} = ${itemsExpr}; ` +
+                `tsc_value_t ${out} = tsc_value_object_create(tsc_value_null()); ` +
+                `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
+                `${t.c} ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
+                `tsc_str_t* ${keyStr} = ${keyCExpr}; ` +
+                `tsc_value_t ${boxed} = ${boxedItemExpr}; ` +
+                `tsc_value_t ${existing} = tsc_value_get_prop(${out}, ${keyStr}); ` +
+                `tsc_array_t* ${group}; ` +
+                `if (tsc_value_is_nullish(${existing})) { ` +
+                `${group} = tsc_array_new(sizeof(tsc_value_t), 4); ` +
+                `tsc_value_set_prop(${out}, ${keyStr}, tsc_value_array(${group})); ` +
+                `} else { ${group} = tsc_value_as_array(${existing}); } ` +
+                `tsc_array_push_raw(${group}, &${boxed}); } ${out}; })`
+            );
+        });
+    }
+
+    private emitTypedObjectHasOwn(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        tsType: ts.Type,
+        label: string,
+    ): EmitResult {
+        if (obj.ty.kind !== "class") unsupported(objExpr, `${label} on non-object`);
+        const key = this.emitExpr(keyExpr);
+        const props = this.typedObjectPropertyNames(tsType, obj.ty);
+        return this.emitSequencedExpr(T_BOOLEAN, [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+        ], ([objC, keyC]) => {
+            const checks = props.map((name) =>
+                `tsc_str_eq(${keyC}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))`,
+            );
+            return `({ (void)${objC}; ${checks.length > 0 ? checks.join(" || ") : "false"}; })`;
+        });
+    }
+
+    private emitTypedReflectGet(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        tsType: ts.Type,
+    ): EmitResult {
+        if (obj.ty.kind !== "class") unsupported(objExpr, "Reflect.get on non-object");
+        const key = this.emitExpr(keyExpr);
+        const props = this.typedObjectPropertyNames(tsType, obj.ty);
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+        ], ([objC, keyC]) => {
+            const out = this.freshTemp("_rget");
+            const checks: string[] = [`tsc_value_t ${out} = tsc_value_undefined()`];
+            for (const name of props) {
+                const sym = tsType.getProperty(name);
+                const decl = sym?.valueDeclaration ?? sym?.getDeclarations()?.[0];
+                if (!sym || !decl) continue;
+                const pt = this.checker.getTypeOfSymbolAtLocation(sym, decl);
+                const fieldType = this.prepareType(mapTsType(objExpr, pt, this.checker));
+                const field = `${objC}->${mangleIdent(name)}`;
+                const boxed = this.coerce({ c: field, ty: fieldType }, T_VALUE, objExpr);
+                checks.push(
+                    `if (tsc_str_eq(${keyC}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))) ${out} = ${boxed}`,
+                );
+            }
+            checks.push(out);
+            return `({ ${checks.join("; ")}; })`;
+        });
+    }
+
+    private typedArrayDescriptorInit(
+        desc: string,
+        value: string,
+        writable: string,
+        enumerable: string,
+        configurable: string,
+    ): string {
+        return (
+            `tsc_object_t* ${desc} = tsc_object_new(); ` +
+            `tsc_object_set(${desc}, tsc_str_from_lit("value", 5), ${value}); ` +
+            `tsc_object_set(${desc}, tsc_str_from_lit("writable", 8), tsc_value_bool(${writable})); ` +
+            `tsc_object_set(${desc}, tsc_str_from_lit("enumerable", 10), tsc_value_bool(${enumerable})); ` +
+            `tsc_object_set(${desc}, tsc_str_from_lit("configurable", 12), tsc_value_bool(${configurable}))`
+        );
+    }
+
+    private emitTypedArrayGetOwnPropertyDescriptor(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+    ): EmitResult {
+        if (obj.ty.kind !== "array") unsupported(objExpr, "typed array descriptor on non-array");
+        const elem = obj.ty.elem ?? T_VALUE;
+        const key = this.emitExpr(keyExpr);
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+        ], ([arrC, keyC]) => {
+            const out = this.freshTemp("_adesc");
+            const idx = this.freshTemp("_adesc_i");
+            const lenDesc = this.freshTemp("_adesc_len");
+            const elemDesc = this.freshTemp("_adesc_elem");
+            const elemValue = this.coerce({ c: `TSC_ARR(${elem.c}, ${arrC}, ${idx})`, ty: elem }, T_VALUE, objExpr);
+            const pieces = [
+                `tsc_value_t ${out} = tsc_value_undefined()`,
+                `if (tsc_str_eq(${keyC}, tsc_str_from_lit("length", 6))) { ` +
+                    `${this.typedArrayDescriptorInit(lenDesc, `tsc_value_num((double)${arrC}->len)`, `!${arrC}->frozen`, "false", "false")}; ` +
+                    `${out} = tsc_value_object(${lenDesc}); ` +
+                `} else { ` +
+                    `for (size_t ${idx} = 0; ${idx} < ${arrC}->len; ${idx}++) { ` +
+                        `tsc_str_t* _idx_key = tsc_str_from_int((int64_t)${idx}); ` +
+                        `if (tsc_str_eq(${keyC}, _idx_key)) { ` +
+                            `${this.typedArrayDescriptorInit(elemDesc, elemValue, `!${arrC}->frozen`, "true", `!${arrC}->sealed && !${arrC}->frozen`)}; ` +
+                            `${out} = tsc_value_object(${elemDesc}); ` +
+                            `break; ` +
+                        `} ` +
+                    `} ` +
+                `}`,
+                out,
+            ];
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
+    private emitTypedArrayGetOwnPropertyDescriptors(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+    ): EmitResult {
+        if (obj.ty.kind !== "array") unsupported(objExpr, "typed array descriptors on non-array");
+        const elem = obj.ty.elem ?? T_VALUE;
+        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }], ([arrC]) => {
+            const out = this.freshTemp("_adescs");
+            const idx = this.freshTemp("_adescs_i");
+            const elemDesc = this.freshTemp("_adescs_elem");
+            const lenDesc = this.freshTemp("_adescs_len");
+            const key = this.freshTemp("_adescs_key");
+            const elemValue = this.coerce({ c: `TSC_ARR(${elem.c}, ${arrC}, ${idx})`, ty: elem }, T_VALUE, objExpr);
+            const pieces = [
+                `tsc_object_t* ${out} = tsc_object_new()`,
+                `for (size_t ${idx} = 0; ${idx} < ${arrC}->len; ${idx}++) { ` +
+                    `tsc_str_t* ${key} = tsc_str_from_int((int64_t)${idx}); ` +
+                    `${this.typedArrayDescriptorInit(elemDesc, elemValue, `!${arrC}->frozen`, "true", `!${arrC}->sealed && !${arrC}->frozen`)}; ` +
+                    `tsc_object_set(${out}, ${key}, tsc_value_object(${elemDesc})); ` +
+                `}`,
+                `{ ${this.typedArrayDescriptorInit(lenDesc, `tsc_value_num((double)${arrC}->len)`, `!${arrC}->frozen`, "false", "false")}; ` +
+                    `tsc_object_set(${out}, tsc_str_from_lit("length", 6), tsc_value_object(${lenDesc})); }`,
+                `tsc_value_object(${out})`,
+            ];
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
+    private emitTypedArrayDefineProperty(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        desc: DescriptorData,
+        returnObject: boolean,
+    ): EmitResult {
+        if (obj.ty.kind !== "array") unsupported(objExpr, "typed array defineProperty on non-array");
+        if (desc.kind === "accessor") {
+            unsupported(keyExpr, "typed array accessors are not supported");
+        }
+        const elem = obj.ty.elem ?? T_VALUE;
+        const key = this.emitExpr(keyExpr);
+        const specs: SequencedCallArg[] = [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+        ];
+        const value = desc.value ? this.emitExpr(desc.value) : null;
+        if (value) specs.push({ value, node: desc.value! });
+        return this.emitSequencedExpr(returnObject ? obj.ty : T_BOOLEAN, specs, (vals) => {
+            const arrC = vals[0]!;
+            const keyC = vals[1]!;
+            const valueC = vals[2];
+            const valueResult = value && desc.value
+                ? { c: valueC!, ty: value.ty }
+                : null;
+            const { pieces, out } = this.typedArrayDefinePropertyPieces(
+                arrC,
+                elem,
+                keyC,
+                desc,
+                valueResult && desc.value ? { value: valueResult, node: desc.value } : null,
+                keyExpr,
+            );
+            pieces.push(returnObject ? arrC : out);
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
+    private typedArrayDefinePropertyPieces(
+        arrC: string,
+        elem: CType,
+        keyC: string,
+        desc: DataDescriptorData,
+        valueInfo: { value: EmitResult; node: ts.Expression } | null,
+        fallbackNode: ts.Expression,
+    ): { pieces: string[]; out: string } {
+        const out = this.freshTemp("_adef");
+        const idx = this.freshTemp("_adef_i");
+        const elemTmp = this.freshTemp("_adef_value");
+        const nextKey = this.freshTemp("_adef_next_key");
+        const newLen = this.freshTemp("_adef_len");
+        const zero = this.freshTemp("_adef_zero");
+        const valueNode = valueInfo?.node ?? fallbackNode;
+        const elemValue = valueInfo
+            ? this.coerce(valueInfo.value, elem, valueNode)
+            : `(${elem.c})0`;
+        const lengthValue = valueInfo
+            ? this.coerce(valueInfo.value, T_VALUE, valueNode)
+            : "tsc_value_undefined()";
+        const pieces: string[] = [
+            `bool ${out} = false`,
+            `if (tsc_str_eq(${keyC}, tsc_str_from_lit("length", 6))) { ` +
+                `bool _cur_w = !${arrC}->frozen; ` +
+                `bool _next_w = ${desc.hasWritable} ? ${desc.writable} : _cur_w; ` +
+                `bool _next_e = ${desc.hasEnumerable} ? ${desc.enumerable} : false; ` +
+                `bool _next_c = ${desc.hasConfigurable} ? ${desc.configurable} : false; ` +
+                `if (_next_w == _cur_w && !_next_e && !_next_c) { ` +
+                    `${out} = true; ` +
+                    `if (${desc.hasValue}) { ` +
+                        `double ${newLen} = tsc_value_as_num(${lengthValue}); ` +
+                        `if (isnan(${newLen}) || isinf(${newLen}) || ${newLen} < 0.0 || floor(${newLen}) != ${newLen} || (${newLen} > (double)${arrC}->len && !${arrC}->extensible) || (${arrC}->sealed && (size_t)${newLen} != ${arrC}->len) || ${arrC}->frozen) { ` +
+                            `${out} = false; ` +
+                        `} else { ` +
+                            `${elem.c} ${zero} = (${elem.c})0; ` +
+                            `while (${arrC}->len < (size_t)${newLen}) tsc_array_push_raw(${arrC}, &${zero}); ` +
+                            `${arrC}->len = (size_t)${newLen}; ` +
+                        `} ` +
+                    `} ` +
+                `} ` +
+            `} else { ` +
+                `for (size_t ${idx} = 0; ${idx} < ${arrC}->len; ${idx}++) { ` +
+                    `tsc_str_t* _idx_key = tsc_str_from_int((int64_t)${idx}); ` +
+                    `if (tsc_str_eq(${keyC}, _idx_key)) { ` +
+                        `bool _cur_w = !${arrC}->frozen; ` +
+                        `bool _cur_e = true; ` +
+                        `bool _cur_c = !${arrC}->sealed && !${arrC}->frozen; ` +
+                        `bool _next_w = ${desc.hasWritable} ? ${desc.writable} : _cur_w; ` +
+                        `bool _next_e = ${desc.hasEnumerable} ? ${desc.enumerable} : _cur_e; ` +
+                        `bool _next_c = ${desc.hasConfigurable} ? ${desc.configurable} : _cur_c; ` +
+                        `if (_next_w == _cur_w && _next_e == _cur_e && _next_c == _cur_c) { ` +
+                            `${out} = true; ` +
+                            `if (${desc.hasValue}) { ` +
+                                `if (${arrC}->frozen) { ${out} = false; } else { ` +
+                                    `${elem.c} ${elemTmp} = ${elemValue}; ` +
+                                    `TSC_ARR(${elem.c}, ${arrC}, ${idx}) = ${elemTmp}; ` +
+                                `} ` +
+                            `} ` +
+                        `} ` +
+                        `break; ` +
+                    `} ` +
+                `} ` +
+                `if (!${out} && ${arrC}->extensible && !${arrC}->sealed && !${arrC}->frozen) { ` +
+                    `tsc_str_t* ${nextKey} = tsc_str_from_int((int64_t)${arrC}->len); ` +
+                    `bool _next_w = ${desc.hasWritable} ? ${desc.writable} : true; ` +
+                    `bool _next_e = ${desc.hasEnumerable} ? ${desc.enumerable} : true; ` +
+                    `bool _next_c = ${desc.hasConfigurable} ? ${desc.configurable} : true; ` +
+                    `if (${desc.hasValue} && _next_w && _next_e && _next_c && tsc_str_eq(${keyC}, ${nextKey})) { ` +
+                        `${elem.c} ${elemTmp} = ${elemValue}; ` +
+                        `tsc_array_push_raw(${arrC}, &${elemTmp}); ` +
+                        `${out} = true; ` +
+                    `} ` +
+                `} ` +
+            `}`,
+        ];
+        return { pieces, out };
+    }
+
+    private emitTypedArrayDefineProperties(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        descriptorsExpr: ts.Expression,
+    ): EmitResult {
+        if (obj.ty.kind !== "array") unsupported(objExpr, "typed array defineProperties on non-array");
+        if (!ts.isObjectLiteralExpression(descriptorsExpr)) {
+            unsupported(descriptorsExpr, "Object.defineProperties descriptor map must be an object literal");
+        }
+        const elem = obj.ty.elem ?? T_VALUE;
+        const specs: SequencedCallArg[] = [{ value: obj, node: objExpr }];
+        const entries: {
+            key: string;
+            desc: DataDescriptorData;
+            value?: EmitResult;
+            valueNode?: ts.Expression;
+            valuePos?: number;
+        }[] = [];
+        for (const prop of descriptorsExpr.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, "Object.defineProperties descriptor map only supports property assignments");
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (key == null) unsupported(prop.name, "Object.defineProperties keys must be static");
+            const desc = this.descriptorData(prop.initializer);
+            if (desc.kind === "accessor") {
+                unsupported(prop.initializer, "typed array accessors are not supported");
+            }
+            const entry: {
+                key: string;
+                desc: DataDescriptorData;
+                value?: EmitResult;
+                valueNode?: ts.Expression;
+                valuePos?: number;
+            } = { key, desc };
+            if (desc.value) {
+                entry.value = this.emitExpr(desc.value);
+                entry.valueNode = desc.value;
+                entry.valuePos = specs.length;
+                specs.push({ value: entry.value, node: desc.value });
+            }
+            entries.push(entry);
+        }
+        return this.emitSequencedExpr(obj.ty, specs, (vals) => {
+            const arrC = vals[0]!;
+            const pieces: string[] = [];
+            for (const entry of entries) {
+                const key = `tsc_str_from_lit("${escapeCString(entry.key)}", ${utf8ByteLen(entry.key)})`;
+                const valueInfo = entry.value && entry.valueNode && entry.valuePos != null
+                    ? { value: { c: vals[entry.valuePos]!, ty: entry.value.ty }, node: entry.valueNode }
+                    : null;
+                pieces.push(...this.typedArrayDefinePropertyPieces(
+                    arrC,
+                    elem,
+                    key,
+                    entry.desc,
+                    valueInfo,
+                    descriptorsExpr,
+                ).pieces);
+            }
+            return `({ ${pieces.join("; ")}; ${arrC}; })`;
+        });
+    }
+
+    private emitTypedArrayReflectGet(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+    ): EmitResult {
+        if (obj.ty.kind !== "array") unsupported(objExpr, "typed array Reflect.get on non-array");
+        const elem = obj.ty.elem ?? T_VALUE;
+        const key = this.emitExpr(keyExpr);
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+        ], ([arrC, keyC]) => {
+            const out = this.freshTemp("_aget");
+            const idx = this.freshTemp("_aget_i");
+            const elemValue = this.coerce({ c: `TSC_ARR(${elem.c}, ${arrC}, ${idx})`, ty: elem }, T_VALUE, objExpr);
+            const pieces = [
+                `tsc_value_t ${out} = tsc_value_undefined()`,
+                `if (tsc_str_eq(${keyC}, tsc_str_from_lit("length", 6))) { ` +
+                    `${out} = tsc_value_num((double)${arrC}->len); ` +
+                `} else { ` +
+                    `for (size_t ${idx} = 0; ${idx} < ${arrC}->len; ${idx}++) { ` +
+                        `tsc_str_t* _idx_key = tsc_str_from_int((int64_t)${idx}); ` +
+                        `if (tsc_str_eq(${keyC}, _idx_key)) { ${out} = ${elemValue}; break; } ` +
+                    `} ` +
+                `}`,
+                out,
+            ];
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
+    private emitTypedArrayReflectSet(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        valueExpr: ts.Expression,
+    ): EmitResult {
+        if (obj.ty.kind !== "array") unsupported(objExpr, "typed array Reflect.set on non-array");
+        const elem = obj.ty.elem ?? T_VALUE;
+        const key = this.emitExpr(keyExpr);
+        const value = this.emitExpr(valueExpr);
+        return this.emitSequencedExpr(T_BOOLEAN, [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+            { value, target: elem, node: valueExpr },
+        ], ([arrC, keyC, valueC]) => {
+            const out = this.freshTemp("_aset");
+            const idx = this.freshTemp("_aset_i");
+            const nextKey = this.freshTemp("_aset_next_key");
+            const elemTmp = this.freshTemp("_aset_value");
+            const pieces = [
+                `bool ${out} = false`,
+                `if (!${arrC}->frozen) { ` +
+                    `for (size_t ${idx} = 0; ${idx} < ${arrC}->len; ${idx}++) { ` +
+                        `tsc_str_t* _idx_key = tsc_str_from_int((int64_t)${idx}); ` +
+                        `if (tsc_str_eq(${keyC}, _idx_key)) { ` +
+                            `${elem.c} ${elemTmp} = ${valueC}; ` +
+                            `TSC_ARR(${elem.c}, ${arrC}, ${idx}) = ${elemTmp}; ` +
+                            `${out} = true; ` +
+                            `break; ` +
+                        `} ` +
+                    `} ` +
+                    `if (!${out} && ${arrC}->extensible && !${arrC}->sealed) { ` +
+                        `tsc_str_t* ${nextKey} = tsc_str_from_int((int64_t)${arrC}->len); ` +
+                        `if (tsc_str_eq(${keyC}, ${nextKey})) { ` +
+                            `${elem.c} ${elemTmp} = ${valueC}; ` +
+                            `tsc_array_push_raw(${arrC}, &${elemTmp}); ` +
+                            `${out} = true; ` +
+                        `} ` +
+                    `} ` +
+                `}`,
+                out,
+            ];
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
+    private emitTypedArrayReflectDelete(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+    ): EmitResult {
+        if (obj.ty.kind !== "array") unsupported(objExpr, "typed array Reflect.deleteProperty on non-array");
+        const key = this.emitExpr(keyExpr);
+        return this.emitTypedArrayDeleteProperty(objExpr, obj, key, keyExpr);
+    }
+
+    private emitTypedArrayDeleteProperty(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        key: EmitResult,
+        keyExpr: ts.Expression,
+    ): EmitResult {
+        if (obj.ty.kind !== "array") unsupported(objExpr, "typed array delete on non-array");
+        return this.emitSequencedExpr(T_BOOLEAN, [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+        ], ([arrC, keyC]) => {
+            const out = this.freshTemp("_adel");
+            const idx = this.freshTemp("_adel_i");
+            const pieces = [
+                `bool ${out} = true`,
+                `if (tsc_str_eq(${keyC}, tsc_str_from_lit("length", 6))) { ` +
+                    `${out} = false; ` +
+                `} else { ` +
+                    `for (size_t ${idx} = 0; ${idx} < ${arrC}->len; ${idx}++) { ` +
+                        `tsc_str_t* _idx_key = tsc_str_from_int((int64_t)${idx}); ` +
+                        `if (tsc_str_eq(${keyC}, _idx_key)) { ${out} = !${arrC}->sealed && !${arrC}->frozen; break; } ` +
+                    `} ` +
+                `}`,
+                out,
+            ];
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
+    private emitTypedGetOwnPropertyDescriptors(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        tsType: ts.Type,
+    ): EmitResult {
+        if (obj.ty.kind !== "class") unsupported(objExpr, "typed property descriptors on non-object");
+        const props = this.typedObjectPropertyNames(tsType, obj.ty);
+        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }], ([objC]) => {
+            const out = this.freshTemp("_tdescs");
+            const pieces: string[] = [`tsc_object_t* ${out} = tsc_object_new()`];
+            for (const name of props) {
+                const sym = tsType.getProperty(name);
+                const decl = sym?.valueDeclaration ?? sym?.getDeclarations()?.[0];
+                if (!sym || !decl) continue;
+                const pt = this.checker.getTypeOfSymbolAtLocation(sym, decl);
+                const fieldType = this.prepareType(mapTsType(objExpr, pt, this.checker));
+                const field = `${objC}->${mangleIdent(name)}`;
+                const boxed = this.coerce({ c: field, ty: fieldType }, T_VALUE, objExpr);
+                const desc = this.freshTemp("_desc");
+                const key = `tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)})`;
+                pieces.push(
+                    `{ tsc_object_t* ${desc} = tsc_object_new(); ` +
+                    `tsc_object_set(${desc}, tsc_str_from_lit("value", 5), ${boxed}); ` +
+                    `tsc_object_set(${desc}, tsc_str_from_lit("writable", 8), tsc_value_bool(true)); ` +
+                    `tsc_object_set(${desc}, tsc_str_from_lit("enumerable", 10), tsc_value_bool(true)); ` +
+                    `tsc_object_set(${desc}, tsc_str_from_lit("configurable", 12), tsc_value_bool(true)); ` +
+                    `tsc_object_set(${out}, ${key}, tsc_value_object(${desc})); }`,
+                );
+            }
+            pieces.push(`tsc_value_object(${out})`);
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
+    private emitTypedGetOwnPropertyDescriptor(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        tsType: ts.Type,
+    ): EmitResult {
+        if (obj.ty.kind !== "class") unsupported(objExpr, "typed property descriptor on non-object");
+        const key = this.emitExpr(keyExpr);
+        const props = this.typedObjectPropertyNames(tsType, obj.ty);
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+        ], ([objC, keyC]) => {
+            const out = this.freshTemp("_tdesc");
+            const checks: string[] = [`tsc_value_t ${out} = tsc_value_undefined()`];
+            for (const name of props) {
+                const sym = tsType.getProperty(name);
+                const decl = sym?.valueDeclaration ?? sym?.getDeclarations()?.[0];
+                if (!sym || !decl) continue;
+                const pt = this.checker.getTypeOfSymbolAtLocation(sym, decl);
+                const fieldType = this.prepareType(mapTsType(objExpr, pt, this.checker));
+                const field = `${objC}->${mangleIdent(name)}`;
+                const boxed = this.coerce({ c: field, ty: fieldType }, T_VALUE, objExpr);
+                const desc = this.freshTemp("_desc");
+                checks.push(
+                    `if (tsc_str_eq(${keyC}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))) { ` +
+                    `tsc_object_t* ${desc} = tsc_object_new(); ` +
+                    `tsc_object_set(${desc}, tsc_str_from_lit("value", 5), ${boxed}); ` +
+                    `tsc_object_set(${desc}, tsc_str_from_lit("writable", 8), tsc_value_bool(true)); ` +
+                    `tsc_object_set(${desc}, tsc_str_from_lit("enumerable", 10), tsc_value_bool(true)); ` +
+                    `tsc_object_set(${desc}, tsc_str_from_lit("configurable", 12), tsc_value_bool(true)); ` +
+                    `${out} = tsc_value_object(${desc}); }`,
+                );
+            }
+            checks.push(out);
+            return `({ ${checks.join("; ")}; })`;
+        });
+    }
+
+    private emitTypedReflectSet(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        valueExpr: ts.Expression,
+        tsType: ts.Type,
+    ): EmitResult {
+        if (obj.ty.kind !== "class") unsupported(objExpr, "Reflect.set on non-object");
+        const key = this.emitExpr(keyExpr);
+        const value = this.emitExpr(valueExpr);
+        const props = this.typedObjectPropertyNames(tsType, obj.ty);
+        return this.emitSequencedExpr(T_BOOLEAN, [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+            { value, target: T_VALUE, node: valueExpr },
+        ], ([objC, keyC, valueC]) => {
+            const ok = this.freshTemp("_rset");
+            const checks: string[] = [`bool ${ok} = false`];
+            for (const name of props) {
+                const sym = tsType.getProperty(name);
+                const decl = sym?.valueDeclaration ?? sym?.getDeclarations()?.[0];
+                if (!sym || !decl) continue;
+                const pt = this.checker.getTypeOfSymbolAtLocation(sym, decl);
+                const fieldType = this.prepareType(mapTsType(objExpr, pt, this.checker));
+                const assignment = this.coerce({ c: valueC, ty: T_VALUE }, fieldType, valueExpr);
+                checks.push(
+                    `if (tsc_str_eq(${keyC}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))) { ${objC}->${mangleIdent(name)} = ${assignment}; ${ok} = true; }`,
+                );
+            }
+            checks.push(ok);
+            return `({ ${checks.join("; ")}; })`;
+        });
+    }
+
+    private typedObjectPropertyNames(tsType: ts.Type, ty: CType): string[] {
+        const props = this.objectProperties(tsType).map((prop) => prop.getName());
+        if (props.length > 0 || ty.kind !== "class" || !ty.className) return props;
+        for (const mod of this.graph.modules.values()) {
+            for (const stmt of mod.sf.statements) {
+                if (ts.isInterfaceDeclaration(stmt) && stmt.name.text === ty.className) {
+                    const fields: string[] = [];
+                    for (const member of stmt.members) {
+                        if (ts.isPropertySignature(member) && member.name && ts.isIdentifier(member.name)) {
+                            fields.push(member.name.text);
+                        }
+                    }
+                    return fields;
+                }
+                if (ts.isClassDeclaration(stmt) && stmt.name?.text === ty.className) {
+                    const fields = this.collectInheritedFields(stmt).map((field) => field.name);
+                    for (const member of stmt.members) {
+                        if (ts.isPropertyDeclaration(member) && member.name && !isStatic(member)) {
+                            const fieldName = this.staticPropertyName(member.name);
+                            if (fieldName) fields.push(fieldName);
+                        }
+                    }
+                    return fields;
+                }
+            }
+        }
+        return props;
+    }
+
+    private emitReflectApply(call: ts.CallExpression): EmitResult {
+        const args = call.arguments;
+        if (args.length !== 3) unsupported(call, "Reflect.apply expects target, thisArg, and argumentsList");
+        const target = this.emitExpr(args[0]!);
+        if (target.ty.kind === "value") {
+            const list = this.emitReflectArgumentsListExpr(args[2]!);
+            if (list.ty.kind !== "array" && list.ty.kind !== "value") {
+                unsupported(args[2]!, "Reflect.apply argumentsList must be an array literal, typed array, or dynamic array");
+            }
+            return this.emitSequencedCall("tsc_value_apply_function", T_VALUE, [
+                { value: target, target: T_VALUE, node: args[0]! },
+                { value: this.emitExpr(args[1]!), target: T_VALUE, node: args[1]! },
+                { value: list, target: T_VALUE, node: args[2]! },
+            ]);
+        }
+        if (target.ty.kind !== "function" || !target.ty.ret) {
+            unsupported(args[0]!, "Reflect.apply target must be a function value");
+        }
+        let argList: ts.Expression = args[2]!;
+        while (
+            ts.isParenthesizedExpression(argList) ||
+            ts.isAsExpression(argList) ||
+            ts.isTypeAssertionExpression(argList) ||
+            ts.isNonNullExpression(argList)
+        ) {
+            argList = argList.expression;
+        }
+        if (!ts.isArrayLiteralExpression(argList)) {
+            const params = target.ty.params ?? [];
+            const list = this.emitReflectArgumentsListExpr(args[2]!);
+            if (list.ty.kind !== "array" && list.ty.kind !== "value") {
+                unsupported(args[2]!, "Reflect.apply argumentsList must be an array literal, typed array, or dynamic array");
+            }
+            const ret = this.prepareType(target.ty.ret);
+            return this.emitSequencedExpr(ret, [
+                { value: target, target: target.ty, node: args[0]! },
+                { value: this.emitExpr(args[1]!), target: T_VALUE, node: args[1]! },
+                { value: list, node: args[2]! },
+            ], (vals) => {
+                const fn = vals[0]!;
+                const thisArg = vals[1]!;
+                const listC = vals[2]!;
+                const callArgs: string[] = [];
+                const expected = params.length;
+                let lengthCheck: string;
+                for (let i = 0; i < expected; i++) {
+                    if (list.ty.kind === "array") {
+                        const elem = list.ty.elem ?? T_VALUE;
+                        callArgs.push(this.coerce({ c: `TSC_ARR(${elem.c}, ${listC}, ${i})`, ty: elem }, params[i]!, args[2]!));
+                    } else {
+                        callArgs.push(this.coerce({ c: `tsc_value_get_index(${listC}, ${i}.0)`, ty: T_VALUE }, params[i]!, args[2]!));
+                    }
+                }
+                if (list.ty.kind === "array") {
+                    lengthCheck = `${listC}->len != ${expected}`;
+                } else {
+                    lengthCheck = `(!tsc_value_is_array(${listC}) || (size_t)tsc_value_length(${listC}) != ${expected})`;
+                }
+                return `({ if (${lengthCheck}) tsc_panic("Reflect.apply argumentsList length mismatch"); ${fn}->fn(${[`${fn}->env`, ...(target.ty.thisParam ? [thisArg] : []), ...callArgs].join(", ")}); })`;
+            });
+        }
+        const params = target.ty.params ?? [];
+        if (argList.elements.some((element) => ts.isSpreadElement(element))) {
+            const list = this.emitReflectArgumentArrayLiteral(argList);
+            const ret = this.prepareType(target.ty.ret);
+            return this.emitSequencedExpr(ret, [
+                { value: target, target: target.ty, node: args[0]! },
+                { value: this.emitExpr(args[1]!), target: T_VALUE, node: args[1]! },
+                { value: list, node: args[2]! },
+            ], (vals) => {
+                const fn = vals[0]!;
+                const thisArg = vals[1]!;
+                const listC = vals[2]!;
+                const callArgs: string[] = [];
+                for (let i = 0; i < params.length; i++) {
+                    callArgs.push(this.coerce({ c: `TSC_ARR(tsc_value_t, ${listC}, ${i})`, ty: T_VALUE }, params[i]!, args[2]!));
+                }
+                return `({ if (${listC}->len != ${params.length}) tsc_panic("Reflect.apply argumentsList length mismatch"); ${fn}->fn(${[`${fn}->env`, ...(target.ty.thisParam ? [thisArg] : []), ...callArgs].join(", ")}); })`;
+            });
+        }
+        if (argList.elements.length !== params.length) {
+            unsupported(
+                argList,
+                `Reflect.apply target expects ${params.length} args, got ${argList.elements.length}`,
+            );
+        }
+        const specs: SequencedCallArg[] = [
+            { value: target, target: target.ty, node: args[0]! },
+            { value: this.emitExpr(args[1]!), target: T_VALUE, node: args[1]! },
+        ];
+        for (let i = 0; i < argList.elements.length; i++) {
+            const element = argList.elements[i]!;
+            if (ts.isSpreadElement(element)) unsupported(element, "Reflect.apply argumentsList spread");
+            specs.push({
+                value: this.emitExpr(element),
+                target: params[i]!,
+                node: element,
+            });
+        }
+        const ret = this.prepareType(target.ty.ret);
+        return this.emitSequencedExpr(ret, specs, (vals) => {
+            const fn = vals[0]!;
+            const thisArg = vals[1]!;
+            const callArgs = vals.slice(2);
+            return `({ ${fn}->fn(${[`${fn}->env`, ...(target.ty.thisParam ? [thisArg] : []), ...callArgs].join(", ")}); })`;
+        });
+    }
+
+    private emitReflectConstruct(call: ts.CallExpression): EmitResult {
+        const args = call.arguments;
+        if (args.length !== 2) unsupported(call, "Reflect.construct expects target and argumentsList");
+        if (!ts.isIdentifier(args[0]!)) {
+            unsupported(args[0]!, "Reflect.construct target must be a class identifier");
+        }
+        const cls = args[0]!.text;
+        const decl = this.findClassDecl(cls);
+        if (!decl) unsupported(args[0]!, "Reflect.construct target must be a supported class");
+        let argList: ts.Expression = args[1]!;
+        while (
+            ts.isParenthesizedExpression(argList) ||
+            ts.isAsExpression(argList) ||
+            ts.isTypeAssertionExpression(argList) ||
+            ts.isNonNullExpression(argList)
+        ) {
+            argList = argList.expression;
+        }
+        if (!ts.isArrayLiteralExpression(argList)) {
+            const ctor = decl.members.find(ts.isConstructorDeclaration);
+            const params = ctor?.parameters ?? [];
+            const list = this.emitReflectArgumentsListExpr(args[1]!);
+            if (list.ty.kind !== "array" && list.ty.kind !== "value") {
+                unsupported(args[1]!, "Reflect.construct argumentsList must be an array literal, typed array, or dynamic array");
+            }
+            return this.emitSequencedExpr(classType(cls), [
+                { value: list, node: args[1]! },
+            ], ([listC]) => {
+                const callArgs: string[] = [];
+                const expected = params.length;
+                for (let i = 0; i < expected; i++) {
+                    const paramType = mapType(params[i]!, this.checker);
+                    if (list.ty.kind === "array") {
+                        const elem = list.ty.elem ?? T_VALUE;
+                        callArgs.push(this.coerce({ c: `TSC_ARR(${elem.c}, ${listC}, ${i})`, ty: elem }, paramType, args[1]!));
+                    } else {
+                        callArgs.push(this.coerce({ c: `tsc_value_get_index(${listC}, ${i}.0)`, ty: T_VALUE }, paramType, args[1]!));
+                    }
+                }
+                const lengthCheck = list.ty.kind === "array"
+                    ? `${listC}->len != ${expected}`
+                    : `(!tsc_value_is_array(${listC}) || (size_t)tsc_value_length(${listC}) != ${expected})`;
+                return `({ if (${lengthCheck}) tsc_panic("Reflect.construct argumentsList length mismatch"); ${cls}_new(${callArgs.join(", ")}); })`;
+            });
+        }
+        const ctor = decl.members.find(ts.isConstructorDeclaration);
+        const params = ctor?.parameters ?? [];
+        if (argList.elements.some((element) => ts.isSpreadElement(element))) {
+            const list = this.emitReflectArgumentArrayLiteral(argList);
+            return this.emitSequencedExpr(classType(cls), [
+                { value: list, node: args[1]! },
+            ], ([listC]) => {
+                const callArgs: string[] = [];
+                for (let i = 0; i < params.length; i++) {
+                    const paramType = mapType(params[i]!, this.checker);
+                    callArgs.push(this.coerce({ c: `TSC_ARR(tsc_value_t, ${listC}, ${i})`, ty: T_VALUE }, paramType, args[1]!));
+                }
+                return `({ if (${listC}->len != ${params.length}) tsc_panic("Reflect.construct argumentsList length mismatch"); ${cls}_new(${callArgs.join(", ")}); })`;
+            });
+        }
+        if (argList.elements.length !== params.length) {
+            unsupported(
+                argList,
+                `Reflect.construct target expects ${params.length} args, got ${argList.elements.length}`,
+            );
+        }
+        const specs: SequencedCallArg[] = [];
+        for (let i = 0; i < argList.elements.length; i++) {
+            const element = argList.elements[i]!;
+            if (ts.isSpreadElement(element)) unsupported(element, "Reflect.construct argumentsList spread");
+            const param = params[i]!;
+            specs.push({
+                value: this.emitExpr(element),
+                target: mapType(param, this.checker),
+                node: element,
+            });
+        }
+        return this.emitSequencedCall(`${cls}_new`, classType(cls), specs);
+    }
+
+    private emitReflectArgumentsListExpr(expr: ts.Expression): EmitResult {
+        let argList = expr;
+        while (
+            ts.isParenthesizedExpression(argList) ||
+            ts.isAsExpression(argList) ||
+            ts.isTypeAssertionExpression(argList) ||
+            ts.isNonNullExpression(argList)
+        ) {
+            argList = argList.expression;
+        }
+        if (
+            ts.isArrayLiteralExpression(argList) &&
+            argList.elements.some((element) => ts.isSpreadElement(element))
+        ) {
+            return this.emitReflectArgumentArrayLiteral(argList);
+        }
+        return this.emitExpr(expr);
+    }
+
+    private emitReflectArgumentArrayLiteral(argList: ts.ArrayLiteralExpression): EmitResult {
+        const av = this.freshTemp("_reflect_args");
+        const pieces: string[] = [
+            `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, argList.elements.length)})`,
+        ];
+        for (const element of argList.elements) {
+            if (element.kind === ts.SyntaxKind.OmittedExpression) {
+                unsupported(element, "sparse Reflect argumentsList literals");
+            }
+            if (ts.isSpreadElement(element)) {
+                const r = this.emitExpr(element.expression);
+                if (r.ty.kind === "array") {
+                    const src = this.freshTemp("_reflect_spread_src");
+                    const idx = this.freshTemp("_reflect_spread_i");
+                    const value = this.freshTemp("_reflect_spread_value");
+                    const elem = r.ty.elem!;
+                    const current = { c: `TSC_ARR(${elem.c}, ${src}, ${idx})`, ty: elem };
+                    pieces.push(
+                        `{ tsc_array_t* const ${src} = ${r.c}; for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { tsc_value_t ${value} = ${this.coerce(current, T_VALUE, element.expression)}; tsc_array_push_raw(${av}, &${value}); } }`,
+                    );
+                    continue;
+                }
+                if (r.ty.kind === "value" || r.ty.kind === "string") {
+                    const spread = this.freshTemp("_reflect_spread");
+                    pieces.push(`{ tsc_array_t* const ${spread} = tsc_value_iter_values(${this.coerce(r, T_VALUE, element.expression)}); tsc_array_append(${av}, ${spread}); }`);
+                    continue;
+                }
+                unsupported(element, "Reflect argumentsList spread expects an array or string");
+            }
+            const r = this.emitExpr(element as ts.Expression);
+            const value = this.freshTemp("_reflect_arg");
+            pieces.push(`${T_VALUE.c} ${value} = ${this.coerce(r, T_VALUE, element as ts.Expression)}`);
+            pieces.push(`tsc_array_push_raw(${av}, &${value})`);
+        }
+        pieces.push(av);
+        return { c: `({ ${pieces.join("; ")}; })`, ty: arrayType(T_VALUE) };
     }
 
     private emitReflectCall(call: ts.CallExpression, name: string): EmitResult {
         const args = call.arguments;
         switch (name) {
+            case "apply":
+                return this.emitReflectApply(call);
+            case "construct":
+                return this.emitReflectConstruct(call);
             case "defineProperty": {
                 if (args.length !== 3) unsupported(call, "Reflect.defineProperty expects target, key, and descriptor");
                 const desc = this.descriptorData(args[2]!);
                 const target = this.emitExpr(args[0]!);
+                if (target.ty.kind === "array") {
+                    return this.emitTypedArrayDefineProperty(args[0]!, target, args[1]!, desc, false);
+                }
                 const key = this.emitExpr(args[1]!);
                 if (desc.kind === "accessor") {
+                    const specs: SequencedCallArg[] = [
+                        { value: target, target: T_VALUE, node: args[0]! },
+                        { value: key, target: T_STRING, node: args[1]! },
+                    ];
+                    const getterEnvPos = desc.getter?.env ? specs.length : -1;
+                    if (desc.getter?.env) {
+                        specs.push({ value: desc.getter.env, node: desc.getter.node, pass: (tmp) => `(void*)${tmp}` });
+                    }
+                    const setterEnvPos = desc.setter?.env ? specs.length : -1;
+                    if (desc.setter?.env) {
+                        specs.push({ value: desc.setter.env, node: desc.setter.node, pass: (tmp) => `(void*)${tmp}` });
+                    }
                     return this.emitSequencedExpr(
                         T_BOOLEAN,
-                        [
-                            { value: target, target: T_VALUE, node: args[0]! },
-                            { value: key, target: T_STRING, node: args[1]! },
-                        ],
-                        ([t, k]) => `tsc_value_define_accessor_desc(${t}, ${k}, ${desc.getter}, ${desc.setter}, ${desc.enumerable}, ${desc.configurable})`,
+                        specs,
+                        (vals) => {
+                            const t = vals[0]!;
+                            const k = vals[1]!;
+                            const getterEnv = getterEnvPos >= 0 ? vals[getterEnvPos]! : "NULL";
+                            const setterEnv = setterEnvPos >= 0 ? vals[setterEnvPos]! : "NULL";
+                            return `tsc_value_define_accessor_desc(${t}, ${k}, ${desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${desc.hasGetter}, ${desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${desc.hasSetter}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})`;
+                        },
                     );
                 }
-                const value = this.emitExpr(desc.value);
+                const value = desc.value
+                    ? this.emitExpr(desc.value)
+                    : { c: "tsc_value_undefined()", ty: T_VALUE };
                 return this.emitSequencedExpr(
                     T_BOOLEAN,
                     [
                         { value: target, target: T_VALUE, node: args[0]! },
                         { value: key, target: T_STRING, node: args[1]! },
-                        { value, target: T_VALUE, node: desc.value },
+                        { value, target: T_VALUE, node: desc.value ?? args[2]! },
                     ],
-                    ([t, k, v]) => `tsc_value_define_property_desc(${t}, ${k}, ${v}, ${desc.writable}, ${desc.enumerable}, ${desc.configurable})`,
+                    ([t, k, v]) => `tsc_value_define_property_desc(${t}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})`,
                 );
             }
             case "deleteProperty": {
                 if (args.length !== 2) unsupported(call, "Reflect.deleteProperty expects target and key");
+                const targetType = this.checker.getTypeAtLocation(args[0]!);
+                const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
+                if (mapped.kind === "array") {
+                    return this.emitTypedArrayReflectDelete(args[0]!, target, args[1]!);
+                }
                 const key = this.emitExpr(args[1]!);
                 return this.emitSequencedCall("tsc_value_delete_prop", T_BOOLEAN, [
                     { value: target, target: T_VALUE, node: args[0]! },
@@ -6739,9 +12114,31 @@ class Emitter {
                 ]);
             }
             case "get": {
-                if (args.length !== 2) unsupported(call, "Reflect.get expects target and key");
+                if (args.length !== 2 && args.length !== 3) unsupported(call, "Reflect.get expects target, key, and optional receiver");
+                const targetType = this.checker.getTypeAtLocation(args[0]!);
+                const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
+                if (mapped.kind === "array") {
+                    if (args.length === 3) unsupported(call, "Reflect.get receiver for typed arrays requires a dynamic target");
+                    return this.emitTypedArrayReflectGet(args[0]!, target, args[1]!);
+                }
+                if (mapped.kind === "buffer") {
+                    if (args.length === 3) unsupported(call, "Reflect.get receiver for Buffer requires a dynamic target");
+                    return this.emitBufferReflectGet(args[0]!, target, args[1]!);
+                }
+                if (mapped.kind === "class") {
+                    if (args.length === 3) unsupported(call, "Reflect.get receiver for typed objects requires a dynamic target");
+                    return this.emitTypedReflectGet(args[0]!, target, args[1]!, targetType);
+                }
                 const key = this.emitExpr(args[1]!);
+                if (args.length === 3) {
+                    const receiver = this.emitExpr(args[2]!);
+                    return this.emitSequencedCall("tsc_value_get_prop_receiver", T_VALUE, [
+                        { value: target, target: T_VALUE, node: args[0]! },
+                        { value: key, target: T_STRING, node: args[1]! },
+                        { value: receiver, target: T_VALUE, node: args[2]! },
+                    ]);
+                }
                 return this.emitSequencedCall("tsc_value_get_prop", T_VALUE, [
                     { value: target, target: T_VALUE, node: args[0]! },
                     { value: key, target: T_STRING, node: args[1]! },
@@ -6749,7 +12146,33 @@ class Emitter {
             }
             case "getOwnPropertyDescriptor": {
                 if (args.length !== 2) unsupported(call, "Reflect.getOwnPropertyDescriptor expects target and key");
+                const targetType = this.checker.getTypeAtLocation(args[0]!);
+                const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
+                if (
+                    mapped.kind === "map" ||
+                    mapped.kind === "set" ||
+                    mapped.kind === "weakmap" ||
+                    mapped.kind === "weakset" ||
+                    mapped.kind === "weakref" ||
+                    mapped.kind === "finregistry" ||
+                    mapped.kind === "url"
+                ) {
+                    const key = this.emitExpr(args[1]!);
+                    return this.emitSequencedExpr(T_VALUE, [
+                        { value: target, node: args[0]! },
+                        { value: key, target: T_STRING, node: args[1]! },
+                    ], ([t, k]) => `({ (void)${t}; (void)${k}; tsc_value_undefined(); })`);
+                }
+                if (mapped.kind === "buffer") {
+                    return this.emitBufferGetOwnPropertyDescriptor(args[0]!, target, args[1]!);
+                }
+                if (mapped.kind === "array") {
+                    return this.emitTypedArrayGetOwnPropertyDescriptor(args[0]!, target, args[1]!);
+                }
+                if (mapped.kind === "class") {
+                    return this.emitTypedGetOwnPropertyDescriptor(args[0]!, target, args[1]!, targetType);
+                }
                 const key = this.emitExpr(args[1]!);
                 return this.emitSequencedCall("tsc_value_get_own_property_descriptor", T_VALUE, [
                     { value: target, target: T_VALUE, node: args[0]! },
@@ -6765,7 +12188,28 @@ class Emitter {
             }
             case "has": {
                 if (args.length !== 2) unsupported(call, "Reflect.has expects target and key");
+                const targetType = this.checker.getTypeAtLocation(args[0]!);
+                const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
+                if (mapped.kind === "array") {
+                    const key = this.emitExpr(args[1]!);
+                    return this.emitSequencedCall("tsc_array_has_own_key", T_BOOLEAN, [
+                        { value: target },
+                        { value: key, target: T_STRING, node: args[1]! },
+                    ]);
+                }
+                if (mapped.kind === "buffer") {
+                    return this.emitBufferPropertyKeyCheck(args[0]!, target, args[1]!, true);
+                }
+                if (mapped.kind === "class") {
+                    return this.emitTypedObjectHasOwn(
+                        args[0]!,
+                        target,
+                        args[1]!,
+                        targetType,
+                        "Reflect.has",
+                    );
+                }
                 const key = this.emitExpr(args[1]!);
                 return this.emitSequencedCall("tsc_value_has_prop", T_BOOLEAN, [
                     { value: target, target: T_VALUE, node: args[0]! },
@@ -6781,6 +12225,46 @@ class Emitter {
             }
             case "ownKeys": {
                 if (args.length !== 1) unsupported(call, "Reflect.ownKeys expects target");
+                const targetType = this.checker.getTypeAtLocation(args[0]!);
+                const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
+                if (
+                    mapped.kind === "map" ||
+                    mapped.kind === "set" ||
+                    mapped.kind === "weakmap" ||
+                    mapped.kind === "weakset" ||
+                    mapped.kind === "weakref" ||
+                    mapped.kind === "finregistry" ||
+                    mapped.kind === "url"
+                ) {
+                    const target = this.emitExpr(args[0]!);
+                    return this.emitSequencedExpr(arrayType(T_STRING), [{ value: target, node: args[0]! }], ([t]) =>
+                        `({ (void)${t}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
+                    );
+                }
+                if (mapped.kind === "buffer") {
+                    const target = this.emitExpr(args[0]!);
+                    return this.emitBufferOwnKeys(args[0]!, target);
+                }
+                if (mapped.kind === "class") {
+                    const target = this.emitExpr(args[0]!);
+                    const props = this.objectProperties(targetType);
+                    const av = this.freshTemp("_rok");
+                    const pieces: string[] = [
+                        `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_str_t*), ${props.length || 1})`,
+                    ];
+                    for (const p of props) {
+                        const key = p.getName();
+                        const kv = this.freshTemp("_k");
+                        pieces.push(
+                            `tsc_str_t* ${kv} = tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)})`,
+                        );
+                        pieces.push(`tsc_array_push_raw(${av}, &${kv})`);
+                    }
+                    pieces.push(av);
+                    return this.emitSequencedExpr(arrayType(T_STRING), [{ value: target, node: args[0]! }], ([t]) =>
+                        `({ (void)${t}; ${pieces.join("; ")}; })`,
+                    );
+                }
                 const target = this.emitExpr(args[0]!);
                 return this.emitSequencedCall("tsc_value_own_keys", arrayType(T_STRING), [
                     { value: target, target: T_VALUE, node: args[0]! },
@@ -6794,10 +12278,29 @@ class Emitter {
                 ]);
             }
             case "set": {
-                if (args.length !== 3) unsupported(call, "Reflect.set expects target, key, value");
+                if (args.length !== 3 && args.length !== 4) unsupported(call, "Reflect.set expects target, key, value, and optional receiver");
+                const targetType = this.checker.getTypeAtLocation(args[0]!);
+                const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
+                if (mapped.kind === "array") {
+                    if (args.length === 4) unsupported(call, "Reflect.set receiver for typed arrays requires a dynamic target");
+                    return this.emitTypedArrayReflectSet(args[0]!, target, args[1]!, args[2]!);
+                }
+                if (mapped.kind === "class") {
+                    if (args.length === 4) unsupported(call, "Reflect.set receiver for typed objects requires a dynamic target");
+                    return this.emitTypedReflectSet(args[0]!, target, args[1]!, args[2]!, targetType);
+                }
                 const key = this.emitExpr(args[1]!);
                 const value = this.emitExpr(args[2]!);
+                if (args.length === 4) {
+                    const receiver = this.emitExpr(args[3]!);
+                    return this.emitSequencedCall("tsc_value_set_prop_receiver", T_BOOLEAN, [
+                        { value: target, target: T_VALUE, node: args[0]! },
+                        { value: key, target: T_STRING, node: args[1]! },
+                        { value, target: T_VALUE, node: args[2]! },
+                        { value: receiver, target: T_VALUE, node: args[3]! },
+                    ]);
+                }
                 return this.emitSequencedCall("tsc_value_set_prop", T_BOOLEAN, [
                     { value: target, target: T_VALUE, node: args[0]! },
                     { value: key, target: T_STRING, node: args[1]! },
@@ -6817,87 +12320,265 @@ class Emitter {
         unsupported(call, `Reflect.${name}`);
     }
 
-    private descriptorData(desc: ts.Expression): { kind: "data"; value: ts.Expression; writable: string; enumerable: string; configurable: string } | { kind: "accessor"; getter: string; setter: string; enumerable: string; configurable: string } {
+    private descriptorData(desc: ts.Expression): DescriptorData {
         if (!ts.isObjectLiteralExpression(desc)) {
             unsupported(desc, "Object.defineProperty descriptor must be an object literal");
         }
         let value: ts.Expression | null = null;
-        let getter = "NULL";
-        let setter = "NULL";
+        let getter: DescriptorAccessor | null = null;
+        let setter: DescriptorAccessor | null = null;
         let hasAccessor = false;
+        let hasGetter = false;
+        let hasSetter = false;
         let hasWritable = false;
+        let hasEnumerable = false;
+        let hasConfigurable = false;
         let writable = "false";
         let enumerable = "false";
         let configurable = "false";
         for (const prop of desc.properties) {
-            if (!ts.isPropertyAssignment(prop)) continue;
-            const name = this.staticPropertyName(prop.name);
+            let name: string | null = null;
+            let initializer: ts.Expression | null = null;
+            if (ts.isPropertyAssignment(prop)) {
+                name = this.staticPropertyName(prop.name);
+                initializer = prop.initializer;
+            } else if (ts.isShorthandPropertyAssignment(prop)) {
+                name = prop.name.text;
+                initializer = prop.name;
+            } else {
+                continue;
+            }
             if (name === "value") {
-                value = prop.initializer;
+                value = initializer;
             } else if (name === "get") {
-                getter = this.descriptorAccessorAdapter(prop.initializer, "get");
+                getter = this.isUndefinedExpression(initializer)
+                    ? null
+                    : this.descriptorAccessorAdapter(initializer, "get");
                 hasAccessor = true;
+                hasGetter = true;
             } else if (name === "set") {
-                setter = this.descriptorAccessorAdapter(prop.initializer, "set");
+                setter = this.isUndefinedExpression(initializer)
+                    ? null
+                    : this.descriptorAccessorAdapter(initializer, "set");
                 hasAccessor = true;
+                hasSetter = true;
             } else if (name === "writable") {
-                writable = this.descriptorBoolean(prop.initializer, "writable");
+                writable = this.descriptorBoolean(initializer, "writable");
                 hasWritable = true;
             } else if (name === "enumerable") {
-                enumerable = this.descriptorBoolean(prop.initializer, "enumerable");
+                enumerable = this.descriptorBoolean(initializer, "enumerable");
+                hasEnumerable = true;
             } else if (name === "configurable") {
-                configurable = this.descriptorBoolean(prop.initializer, "configurable");
+                configurable = this.descriptorBoolean(initializer, "configurable");
+                hasConfigurable = true;
             }
         }
         if (hasAccessor) {
             if (value) unsupported(desc, "Object.defineProperty descriptor cannot mix value with get/set");
             if (hasWritable) unsupported(desc, "Object.defineProperty accessor descriptor cannot include writable");
-            return { kind: "accessor", getter, setter, enumerable, configurable };
+            return {
+                kind: "accessor",
+                getter,
+                hasGetter: hasGetter ? "true" : "false",
+                setter,
+                hasSetter: hasSetter ? "true" : "false",
+                enumerable,
+                hasEnumerable: hasEnumerable ? "true" : "false",
+                configurable,
+                hasConfigurable: hasConfigurable ? "true" : "false",
+            };
         }
-        if (!value) unsupported(desc, "Object.defineProperty descriptor needs a value property");
-        return { kind: "data", value, writable, enumerable, configurable };
+        return {
+            kind: "data",
+            value,
+            hasValue: value ? "true" : "false",
+            writable,
+            hasWritable: hasWritable ? "true" : "false",
+            enumerable,
+            hasEnumerable: hasEnumerable ? "true" : "false",
+            configurable,
+            hasConfigurable: hasConfigurable ? "true" : "false",
+        };
     }
 
-    private descriptorAccessorAdapter(expr: ts.Expression, kind: "get" | "set"): string {
-        if (!ts.isIdentifier(expr)) {
-            unsupported(expr, `Object.defineProperty ${kind} accessor must be a named function`);
+    private isUndefinedExpression(expr: ts.Expression): boolean {
+        return ts.isIdentifier(expr) && expr.text === "undefined";
+    }
+
+    private emitObjectDefineProperties(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        descriptorsExpr: ts.Expression,
+    ): EmitResult {
+        if (!ts.isObjectLiteralExpression(descriptorsExpr)) {
+            unsupported(descriptorsExpr, "Object.defineProperties descriptor map must be an object literal");
         }
-        const sym = this.symbolForIdentifier(expr);
-        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
-        if (!decl || !ts.isFunctionDeclaration(decl) || !decl.name) {
-            unsupported(expr, `Object.defineProperty ${kind} accessor must reference a function declaration`);
+        const specs: SequencedCallArg[] = [{ value: obj, target: T_VALUE, node: objExpr }];
+        const entries: {
+            key: string;
+            desc: DescriptorData;
+            valuePos?: number;
+            getterEnvPos?: number;
+            setterEnvPos?: number;
+        }[] = [];
+        for (const prop of descriptorsExpr.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, "Object.defineProperties descriptor map only supports property assignments");
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (key == null) unsupported(prop.name, "Object.defineProperties keys must be static");
+            const desc = this.descriptorData(prop.initializer);
+            const entry = { key, desc } as {
+                key: string;
+                desc: DescriptorData;
+                valuePos?: number;
+                getterEnvPos?: number;
+                setterEnvPos?: number;
+            };
+            if (desc.kind === "data") {
+                entry.valuePos = specs.length;
+                const value = desc.value
+                    ? this.emitExpr(desc.value)
+                    : { c: "tsc_value_undefined()", ty: T_VALUE };
+                specs.push({ value, target: T_VALUE, node: desc.value ?? prop.initializer });
+            } else {
+                if (desc.getter?.env) {
+                    entry.getterEnvPos = specs.length;
+                    specs.push({ value: desc.getter.env, node: desc.getter.node, pass: (tmp) => `(void*)${tmp}` });
+                }
+                if (desc.setter?.env) {
+                    entry.setterEnvPos = specs.length;
+                    specs.push({ value: desc.setter.env, node: desc.setter.node, pass: (tmp) => `(void*)${tmp}` });
+                }
+            }
+            entries.push(entry);
         }
-        const type = this.prepareType(mapType(expr, this.checker));
-        if (type.kind !== "function" || !type.ret) {
+        return this.emitSequencedExpr(T_VALUE, specs, (vals) => {
+            const o = vals[0]!;
+            const pieces: string[] = [];
+            for (const entry of entries) {
+                const key = `tsc_str_from_lit("${escapeCString(entry.key)}", ${utf8ByteLen(entry.key)})`;
+                if (entry.desc.kind === "data") {
+                    const value = vals[entry.valuePos!]!;
+                    pieces.push(
+                        `tsc_value_define_property_desc(${o}, ${key}, ${value}, ${entry.desc.hasValue}, ${entry.desc.writable}, ${entry.desc.hasWritable}, ${entry.desc.enumerable}, ${entry.desc.hasEnumerable}, ${entry.desc.configurable}, ${entry.desc.hasConfigurable})`,
+                    );
+                } else {
+                    const getterEnv = entry.getterEnvPos != null ? vals[entry.getterEnvPos]! : "NULL";
+                    const setterEnv = entry.setterEnvPos != null ? vals[entry.setterEnvPos]! : "NULL";
+                    pieces.push(
+                        `tsc_value_define_accessor_desc(${o}, ${key}, ${entry.desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${entry.desc.hasGetter}, ${entry.desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${entry.desc.hasSetter}, ${entry.desc.enumerable}, ${entry.desc.hasEnumerable}, ${entry.desc.configurable}, ${entry.desc.hasConfigurable})`,
+                    );
+                }
+            }
+            return `({ ${pieces.join("; ")}; ${o}; })`;
+        });
+    }
+
+    private descriptorAccessorAdapter(expr: ts.Expression, kind: "get" | "set"): DescriptorAccessor {
+        if (ts.isIdentifier(expr) && this.isDirectCallableIdentifier(expr)) {
+            const type = this.prepareType(mapType(expr, this.checker));
+            this.validateDescriptorAccessorType(expr, kind, type);
+            return {
+                adapter: this.ensureDirectAccessorAdapter(expr, kind, type),
+                env: null,
+                node: expr,
+            };
+        }
+        const fn = this.emitExpr(expr);
+        this.validateDescriptorAccessorType(expr, kind, fn.ty);
+        return {
+            adapter: this.ensureClosureAccessorAdapter(expr, kind, fn.ty),
+            env: fn,
+            node: expr,
+        };
+    }
+
+    private validateDescriptorAccessorType(expr: ts.Expression, kind: "get" | "set", type: CType): void {
+        const prepared = this.prepareType(type);
+        if (prepared.kind !== "function" || !prepared.ret) {
             unsupported(expr, `Object.defineProperty ${kind} accessor must be a function`);
         }
-        const params = type.params ?? [];
+        const params = prepared.params ?? [];
         if (kind === "get" && params.length !== 0) {
             unsupported(expr, "Object.defineProperty getter must take no arguments");
         }
         if (kind === "set" && params.length !== 1) {
             unsupported(expr, "Object.defineProperty setter must take one argument");
         }
+    }
+
+    private ensureDirectAccessorAdapter(expr: ts.Identifier, kind: "get" | "set", type: CType): string {
+        if (type.kind !== "function" || !type.ret) {
+            unsupported(expr, `Object.defineProperty ${kind} accessor must be a function`);
+        }
         const callee = this.identifierName(expr);
-        const key = `${kind}:${callee}:${this.typeKey(type)}`;
+        const key = `${kind}:direct:${callee}:${this.typeKey(type)}`;
         const existing = this.accessorAdapters.get(key);
         if (existing) return existing;
         const name = `${callee}__access_${kind}_${this.accessorAdapters.size}`;
         this.accessorAdapters.set(key, name);
         const buf = new CBuf();
+        const params = type.params ?? [];
+        const thisType = this.directCallableThisType(expr);
         if (kind === "get") {
             const ret = this.prepareType(type.ret);
             if (ret.kind === "void") unsupported(expr, "Object.defineProperty getter must return a value");
-            this.protos.line(`tsc_value_t ${name}(void);`);
-            buf.open(`tsc_value_t ${name}(void)`);
-            const boxed = this.coerce({ c: `${callee}()`, ty: ret }, T_VALUE, expr);
+            this.protos.line(`tsc_value_t ${name}(void* env, tsc_value_t receiver);`);
+            buf.open(`tsc_value_t ${name}(void* env, tsc_value_t receiver)`);
+            buf.line("(void)env;");
+            if (!thisType) buf.line("(void)receiver;");
+            const args = thisType ? "receiver" : "";
+            const boxed = this.coerce({ c: `${callee}(${args})`, ty: ret }, T_VALUE, expr);
             buf.line(`return ${boxed};`);
         } else {
             const param = this.prepareType(params[0]!);
-            this.protos.line(`bool ${name}(tsc_value_t value);`);
-            buf.open(`bool ${name}(tsc_value_t value)`);
+            this.protos.line(`bool ${name}(void* env, tsc_value_t receiver, tsc_value_t value);`);
+            buf.open(`bool ${name}(void* env, tsc_value_t receiver, tsc_value_t value)`);
+            buf.line("(void)env;");
+            if (!thisType) buf.line("(void)receiver;");
             const arg = this.coerce({ c: "value", ty: T_VALUE }, param, expr);
-            buf.line(`${callee}(${arg});`);
+            const args = [...(thisType ? ["receiver"] : []), arg].join(", ");
+            buf.line(`${callee}(${args});`);
+            buf.line("return true;");
+        }
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
+    private ensureClosureAccessorAdapter(expr: ts.Expression, kind: "get" | "set", type: CType): string {
+        if (type.kind !== "function" || !type.ret || !type.closureName) {
+            unsupported(expr, `Object.defineProperty ${kind} accessor must be a function`);
+        }
+        this.prepareType(type);
+        const key = `${kind}:closure:${this.typeKey(type)}`;
+        const existing = this.accessorAdapters.get(key);
+        if (existing) return existing;
+        const name = `tsc_closure_access_${kind}_${this.accessorAdapters.size}`;
+        this.accessorAdapters.set(key, name);
+        const buf = new CBuf();
+        if (kind === "get") {
+            const ret = this.prepareType(type.ret);
+            if (ret.kind === "void") unsupported(expr, "Object.defineProperty getter must return a value");
+            this.protos.line(`tsc_value_t ${name}(void* env, tsc_value_t receiver);`);
+            buf.open(`tsc_value_t ${name}(void* env, tsc_value_t receiver)`);
+            if (!type.thisParam) buf.line("(void)receiver;");
+            buf.line(`${type.c} fn = (${type.c})env;`);
+            const callArgs = [`fn->env`, ...(type.thisParam ? ["receiver"] : [])].join(", ");
+            const boxed = this.coerce({ c: `fn->fn(${callArgs})`, ty: ret }, T_VALUE, expr);
+            buf.line(`return ${boxed};`);
+        } else {
+            const params = type.params ?? [];
+            const param = this.prepareType(params[0]!);
+            this.protos.line(`bool ${name}(void* env, tsc_value_t receiver, tsc_value_t value);`);
+            buf.open(`bool ${name}(void* env, tsc_value_t receiver, tsc_value_t value)`);
+            if (!type.thisParam) buf.line("(void)receiver;");
+            buf.line(`${type.c} fn = (${type.c})env;`);
+            const arg = this.coerce({ c: "value", ty: T_VALUE }, param, expr);
+            const callArgs = [`fn->env`, ...(type.thisParam ? ["receiver"] : []), arg].join(", ");
+            buf.line(`fn->fn(${callArgs});`);
             buf.line("return true;");
         }
         buf.close();
@@ -6909,33 +12590,76 @@ class Emitter {
     private descriptorBoolean(expr: ts.Expression, name: string): string {
         if (expr.kind === ts.SyntaxKind.TrueKeyword) return "true";
         if (expr.kind === ts.SyntaxKind.FalseKeyword) return "false";
-        unsupported(expr, `Object.defineProperty descriptor ${name} must be a boolean literal`);
+        const value = this.emitExpr(expr);
+        if (value.ty.kind !== "boolean") {
+            unsupported(expr, `Object.defineProperty descriptor ${name} must be boolean`);
+        }
+        return value.c;
     }
 
     private emitNumberStatic(call: ts.CallExpression, name: string): EmitResult {
         const args = call.arguments;
+        if (name === "parseFloat") {
+            if (args.length !== 1) unsupported(call, "Number.parseFloat expects 1 arg");
+            return this.emitParseNumber(call, "parseFloat");
+        }
+        if (name === "parseInt") {
+            if (args.length < 1 || args.length > 2) unsupported(call, "Number.parseInt expects 1 or 2 args");
+            return this.emitParseNumber(call, "parseInt");
+        }
         if (args.length !== 1) unsupported(call, `Number.${name} expects 1 arg`);
         const r = this.emitExpr(args[0]!);
         switch (name) {
             case "isInteger": {
-                requireNumber(args[0]!, r.ty);
+                if (r.ty.kind === "value") {
+                    return this.emitSequencedCall("tsc_value_number_is_integer", T_BOOLEAN, [
+                        { value: r, target: T_VALUE, node: args[0]! },
+                    ]);
+                }
+                if (r.ty.kind !== "number") {
+                    return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }], () => "false");
+                }
                 return {
                     c: `(!isnan(${r.c}) && !isinf(${r.c}) && (${r.c}) == floor(${r.c}))`,
                     ty: T_BOOLEAN,
                 };
             }
             case "isFinite": {
-                requireNumber(args[0]!, r.ty);
+                if (r.ty.kind === "value") {
+                    return this.emitSequencedCall("tsc_value_number_is_finite", T_BOOLEAN, [
+                        { value: r, target: T_VALUE, node: args[0]! },
+                    ]);
+                }
+                if (r.ty.kind !== "number") {
+                    return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }], () => "false");
+                }
                 return { c: `(isfinite(${r.c}))`, ty: T_BOOLEAN };
             }
             case "isNaN": {
-                requireNumber(args[0]!, r.ty);
+                if (r.ty.kind === "value") {
+                    return this.emitSequencedCall("tsc_value_number_is_nan", T_BOOLEAN, [
+                        { value: r, target: T_VALUE, node: args[0]! },
+                    ]);
+                }
+                if (r.ty.kind !== "number") {
+                    return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }], () => "false");
+                }
                 return { c: `(isnan(${r.c}))`, ty: T_BOOLEAN };
             }
-            case "parseFloat":
-                return { c: `tsc_parse_float(${r.c})`, ty: T_NUMBER };
-            case "parseInt":
-                return { c: `tsc_parse_int(${r.c}, 10)`, ty: T_NUMBER };
+            case "isSafeInteger": {
+                if (r.ty.kind === "value") {
+                    return this.emitSequencedCall("tsc_value_number_is_safe_integer", T_BOOLEAN, [
+                        { value: r, target: T_VALUE, node: args[0]! },
+                    ]);
+                }
+                if (r.ty.kind !== "number") {
+                    return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }], () => "false");
+                }
+                return {
+                    c: `(!isnan(${r.c}) && !isinf(${r.c}) && (${r.c}) == floor(${r.c}) && fabs(${r.c}) <= 9007199254740991.0)`,
+                    ty: T_BOOLEAN,
+                };
+            }
         }
         unsupported(call, `Number.${name}`);
     }
@@ -6959,12 +12683,16 @@ class Emitter {
             specs.push({ value: radix, target: T_NUMBER, node: call.arguments[1]! });
             return this.emitSequencedCall(fn, T_NUMBER, specs);
         }
-        return this.emitSequencedExpr(T_NUMBER, specs, (args) => `${fn}(${args[0]}, 10)`);
+        return this.emitSequencedExpr(T_NUMBER, specs, (args) => `${fn}(${args[0]}, 0)`);
     }
 
     private emitConsole(call: ts.CallExpression, which: string): EmitResult {
+        // console.warn and console.error both write to stderr in Node;
+        // console.info and console.log both write to stdout.
         const fn =
-            which === "error" ? "tsc_console_error_n" : "tsc_console_log_n";
+            which === "error" || which === "warn"
+                ? "tsc_console_error_n"
+                : "tsc_console_log_n";
         const specs: SequencedCallArg[] = [];
         for (const a of call.arguments) {
             const r = this.emitExpr(a);
@@ -6994,6 +12722,57 @@ class Emitter {
                 unsupported(n, "new Map() requires <K, V> type parameters");
             const k = mapped.key!;
             const v = mapped.elem!;
+            const args = n.arguments ?? [];
+            if (args.length > 1) unsupported(n, "new Map() expects 0 or 1 arguments");
+            if (args.length === 1) {
+                const entries = this.emitExpr(args[0]!);
+                if (entries.ty.kind === "map") {
+                    if (
+                        !entries.ty.key ||
+                        !entries.ty.elem ||
+                        !sameCType(entries.ty.key, k) ||
+                        !sameCType(entries.ty.elem, v)
+                    ) {
+                        unsupported(args[0]!, "new Map(existingMap) key/value types must match the target Map");
+                    }
+                    return this.emitSequencedExpr(mapped, [{ value: entries }], ([source]) => {
+                        const map = this.freshTemp("_map_copy");
+                        const idx = this.freshTemp("_i");
+                        const keyPtr = this.freshTemp("_key");
+                        const valuePtr = this.freshTemp("_value");
+                        return (
+                            `({ tsc_map_t* const ${source}_src = ${source}; ` +
+                            `tsc_map_t* ${map} = tsc_map_new(sizeof(${k.c}), sizeof(${v.c}), ${keyKindOf(k)}, ${source}_src->len); ` +
+                            `for (size_t ${idx} = 0; ${idx} < ${source}_src->len; ${idx}++) { ` +
+                            `void* ${keyPtr} = (char*)${source}_src->keys + ${idx} * ${source}_src->ks; ` +
+                            `void* ${valuePtr} = (char*)${source}_src->values + ${idx} * ${source}_src->vs; ` +
+                            `tsc_map_set_raw(${map}, ${keyPtr}, ${valuePtr}); } ${map}; })`
+                        );
+                    });
+                }
+                if (k.kind !== "string") unsupported(args[0]!, "new Map(entries) currently supports string keys only");
+                const entryElem = entries.ty.kind === "array" ? entries.ty.elem : undefined;
+                if (!entryElem || entryElem.kind !== "entry") {
+                    unsupported(args[0]!, "new Map(entries) expects Object.entries-style tuples or another Map");
+                }
+                const entryValueType = entryElem.elem ?? T_VOID;
+                if (!sameCType(entryValueType, v)) {
+                    unsupported(args[0]!, `new Map(entries) value type ${entryValueType.c} does not match map value type ${v.c}`);
+                }
+                return this.emitSequencedExpr(mapped, [{ value: entries }], ([source]) => {
+                    const map = this.freshTemp("_map_init");
+                    const idx = this.freshTemp("_i");
+                    const entry = this.freshTemp("_entry");
+                    const value = this.freshTemp("_value");
+                    return (
+                        `({ tsc_map_t* ${map} = tsc_map_new(sizeof(${k.c}), sizeof(${v.c}), ${keyKindOf(k)}, ${source}->len); ` +
+                        `for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { ` +
+                        `${entryElem.c} ${entry} = TSC_ARR(${entryElem.c}, ${source}, ${idx}); ` +
+                        `${v.c} ${value} = ${this.objectEntryValue(entry, v)}; ` +
+                        `tsc_map_set_raw(${map}, &${entry}.key, &${value}); } ${map}; })`
+                    );
+                });
+            }
             return {
                 c: `tsc_map_new(sizeof(${k.c}), sizeof(${v.c}), ${keyKindOf(k)}, 0)`,
                 ty: mapped,
@@ -7005,6 +12784,32 @@ class Emitter {
             if (mapped.kind !== "set")
                 unsupported(n, "new Set() requires <T> type parameter");
             const e = mapped.elem!;
+            const args = n.arguments ?? [];
+            if (args.length > 1) unsupported(n, "new Set() expects 0 or 1 arguments");
+            if (args.length === 1) {
+                const values = this.emitExpr(args[0]!);
+                if (
+                    (values.ty.kind !== "array" && values.ty.kind !== "set") ||
+                    !values.ty.elem ||
+                    !sameCType(values.ty.elem, e)
+                ) {
+                    unsupported(args[0]!, "new Set(values) expects an array or Set whose element type matches the set");
+                }
+                return this.emitSequencedExpr(mapped, [{ value: values }], ([source]) => {
+                    const set = this.freshTemp("_set_init");
+                    const src = this.freshTemp("_set_src");
+                    const idx = this.freshTemp("_i");
+                    const value = this.freshTemp("_value");
+                    const sourceArray = values.ty.kind === "set" ? `tsc_set_values(${source})` : source;
+                    return (
+                        `({ tsc_array_t* const ${src} = ${sourceArray}; ` +
+                        `tsc_set_t* ${set} = tsc_set_new(sizeof(${e.c}), ${keyKindOf(e)}, ${src}->len); ` +
+                        `for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { ` +
+                        `${e.c} ${value} = TSC_ARR(${e.c}, ${src}, ${idx}); ` +
+                        `tsc_set_add_raw(${set}, &${value}); } ${set}; })`
+                    );
+                });
+            }
             return {
                 c: `tsc_set_new(sizeof(${e.c}), ${keyKindOf(e)}, 0)`,
                 ty: mapped,
@@ -7048,6 +12853,24 @@ class Emitter {
                 { value: r, target: mapped.elem, node: target },
             ], ([value]) => `tsc_weakref_new((void*)${value!})`);
         }
+        if (cls === "FinalizationRegistry") {
+            // The cleanup callback is accepted but never invoked — this AOT runtime
+            // has no GC-finalizer plumbing. We still evaluate it for side effects
+            // and to satisfy the type system, then discard the value.
+            const cb = n.arguments?.[0];
+            if (!cb) unsupported(n, "new FinalizationRegistry() expects cleanup callback");
+            const ty = this.checker.getTypeAtLocation(n);
+            const mapped = mapTsType(n, ty, this.checker);
+            if (mapped.kind !== "finregistry" || !mapped.elem)
+                unsupported(n, "new FinalizationRegistry() requires <T> type parameter");
+            // Evaluate the callback once for side effects; cast to void.
+            const r = this.emitExpr(cb);
+            return this.emitSequencedExpr(
+                mapped,
+                [{ value: r }],
+                ([_v]) => `((void)${_v!}, tsc_finregistry_new())`,
+            );
+        }
         if (cls === "Error") {
             // Simple Error as a string carrier.
             const msg = n.arguments?.[0];
@@ -7070,8 +12893,14 @@ class Emitter {
         const sig = this.checker.getResolvedSignature(n);
         if (!sig) unsupported(n, "unresolved constructor");
         const params = sig.getParameters();
-        const specs: SequencedCallArg[] = [];
         const argList = n.arguments ?? [];
+        if (
+            argList.some((arg) => ts.isSpreadElement(arg)) &&
+            !this.signatureHasRestParameter(params)
+        ) {
+            return this.emitStaticSpreadCall(n, `${cls}_new`, classType(cls), params);
+        }
+        const specs: SequencedCallArg[] = [];
         for (let i = 0; i < argList.length; i++) {
             const a = argList[i]!;
             const r = this.emitExpr(a);
@@ -7101,6 +12930,20 @@ class Emitter {
                     case "LOG2E": return { c: `((double)M_LOG2E)`, ty: T_NUMBER };
                     case "LOG10E": return { c: `((double)M_LOG10E)`, ty: T_NUMBER };
                     case "SQRT2": return { c: `((double)M_SQRT2)`, ty: T_NUMBER };
+                    case "SQRT1_2": return { c: `((double)M_SQRT1_2)`, ty: T_NUMBER };
+                }
+            }
+            if (pa.expression.text === "Number") {
+                const name = pa.name.text;
+                switch (name) {
+                    case "EPSILON": return { c: "2.220446049250313e-16", ty: T_NUMBER };
+                    case "MAX_SAFE_INTEGER": return { c: "9007199254740991.0", ty: T_NUMBER };
+                    case "MAX_VALUE": return { c: "1.7976931348623157e308", ty: T_NUMBER };
+                    case "MIN_SAFE_INTEGER": return { c: "-9007199254740991.0", ty: T_NUMBER };
+                    case "MIN_VALUE": return { c: "5e-324", ty: T_NUMBER };
+                    case "NaN": return { c: "NAN", ty: T_NUMBER };
+                    case "NEGATIVE_INFINITY": return { c: "(-INFINITY)", ty: T_NUMBER };
+                    case "POSITIVE_INFINITY": return { c: "INFINITY", ty: T_NUMBER };
                 }
             }
             if (pa.expression.text === "process" && pa.name.text === "argv") {
@@ -7146,8 +12989,7 @@ class Emitter {
                     (m) =>
                         ts.isPropertyDeclaration(m) &&
                         m.name &&
-                        ts.isIdentifier(m.name) &&
-                        m.name.text === pa.name.text &&
+                        this.staticPropertyName(m.name) === pa.name.text &&
                         isStatic(m),
                 );
                 if (field) {
@@ -7175,6 +13017,28 @@ class Emitter {
         }
         if (recv.ty.kind === "symbol" && pa.name.text === "description") {
             return { c: `tsc_symbol_description(${recv.c})`, ty: T_STRING };
+        }
+        if (recv.ty.kind === "regexp") {
+            switch (pa.name.text) {
+                case "source":
+                    return { c: `${recv.c}->source`, ty: T_STRING };
+                case "flags":
+                    return { c: `${recv.c}->flags`, ty: T_STRING };
+                case "global":
+                    return { c: `${recv.c}->global`, ty: T_BOOLEAN };
+                case "hasIndices":
+                    return { c: `${recv.c}->has_indices`, ty: T_BOOLEAN };
+                case "ignoreCase":
+                    return { c: `${recv.c}->ignore_case`, ty: T_BOOLEAN };
+                case "multiline":
+                    return { c: `${recv.c}->multiline`, ty: T_BOOLEAN };
+                case "dotAll":
+                    return { c: `${recv.c}->dot_all`, ty: T_BOOLEAN };
+                case "sticky":
+                    return { c: `${recv.c}->sticky`, ty: T_BOOLEAN };
+                case "unicode":
+                    return { c: `${recv.c}->unicode`, ty: T_BOOLEAN };
+            }
         }
         if (recv.ty.kind === "buffer" && pa.name.text === "length") {
             return { c: `tsc_buffer_length(${recv.c})`, ty: T_NUMBER };
@@ -7411,7 +13275,26 @@ class Emitter {
                 if (e.kind === ts.SyntaxKind.OmittedExpression)
                     unsupported(e, "sparse array literals");
                 if (ts.isSpreadElement(e)) {
-                    unsupported(e, "spread in dynamic array literals is not implemented yet");
+                    const r = this.emitExpr(e.expression);
+                    if (r.ty.kind === "array") {
+                        const src = this.freshTemp("_dynspread_src");
+                        const idx = this.freshTemp("_dynspread_i");
+                        const value = this.freshTemp("_dynspread_v");
+                        const elem = r.ty.elem!;
+                        const current = { c: `TSC_ARR(${elem.c}, ${src}, ${idx})`, ty: elem };
+                        const boxed = this.coerce(current, T_VALUE, e.expression);
+                        pieces.push(
+                            `{ tsc_array_t* const ${src} = ${r.c}; for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { tsc_value_t ${value} = ${boxed}; tsc_array_push_raw(${av}, &${value}); } }`,
+                        );
+                        continue;
+                    }
+                    if (r.ty.kind === "value" || r.ty.kind === "string") {
+                        const spread = this.freshTemp("_dynspread");
+                        pieces.push(`tsc_array_t* ${spread} = tsc_value_iter_values(${this.coerce(r, T_VALUE, e.expression)})`);
+                        pieces.push(`tsc_array_append(${av}, ${spread})`);
+                        continue;
+                    }
+                    unsupported(e, "dynamic array literal spread expects an array or string");
                 }
                 const r = this.emitExpr(e as ts.Expression);
                 const tmp = this.freshTemp("_dynv");
@@ -7492,7 +13375,18 @@ class Emitter {
 
     private coerceToString(r: EmitResult, node: ts.Node): string {
         if (r.ty.kind === "string") return r.c;
-        if (r.ty.kind === "number") return `tsc_str_from_num(${r.c})`;
+        if (r.ty.kind === "number") {
+            // Int-shape number → cheap snprintf("%lld") path. Skips the
+            // shortest-round-trip loop in tsc_str_from_num.
+            if (r.ty.c === "int64_t") return `tsc_str_from_int(${r.c})`;
+            // Static int-shape detection on the source AST: handles cases
+            // where the value comes from a non-int64_t typed expression
+            // (e.g. an integer literal) — also avoids the round-trip loop.
+            if (ts.isExpression(node) && this.isIntegerShape(node)) {
+                return `tsc_str_from_int((int64_t)(${r.c}))`;
+            }
+            return `tsc_str_from_num(${r.c})`;
+        }
         if (r.ty.kind === "bigint") return `tsc_bigint_to_string(${r.c}, 10.0)`;
         if (r.ty.kind === "symbol") return `tsc_symbol_to_string(${r.c})`;
         if (r.ty.kind === "boolean") return `tsc_str_from_bool(${r.c})`;
@@ -7500,6 +13394,8 @@ class Emitter {
         if (r.ty.kind === "weakmap") return `tsc_str_from_lit("[object WeakMap]", 16)`;
         if (r.ty.kind === "weakset") return `tsc_str_from_lit("[object WeakSet]", 16)`;
         if (r.ty.kind === "weakref") return `tsc_str_from_lit("[object WeakRef]", 16)`;
+        if (r.ty.kind === "finregistry") return `tsc_str_from_lit("[object FinalizationRegistry]", 29)`;
+        if (r.ty.kind === "regexp") return `tsc_regexp_to_string(${r.c})`;
         if (r.ty.kind === "url") return `${r.c}->href`;
         if (r.ty.kind === "buffer") return `tsc_buffer_to_string(${r.c}, tsc_str_from_lit("utf8", 4))`;
         if (r.ty.kind === "function") return `tsc_str_from_lit("[function]", 10)`;
@@ -7538,7 +13434,7 @@ class Emitter {
         // null (void) → any pointer type: emit typed NULL. Check before the
         // string-coerce branch since string is a pointer type too.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "regexp", "hash", "url", "buffer", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "regexp", "hash", "url", "buffer", "function",
         ];
         if (r.ty.kind === "void" && pointerKinds.includes(target.kind)) {
             return `((${target.c})NULL)`;
@@ -7600,6 +13496,7 @@ function isWeakObjectKey(t: CType): boolean {
         "weakmap",
         "weakset",
         "weakref",
+        "finregistry",
         "regexp",
         "hash",
         "url",
@@ -7609,7 +13506,7 @@ function isWeakObjectKey(t: CType): boolean {
 
 function isPointerKind(t: CType): boolean {
     const pointerKinds: readonly CType["kind"][] = [
-        "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "regexp", "hash", "url", "buffer", "function",
+        "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "regexp", "hash", "url", "buffer", "function",
     ];
     return pointerKinds.includes(t.kind);
 }
@@ -7622,6 +13519,7 @@ function sameCType(a: CType, b: CType): boolean {
         a.kind === "set" ||
         a.kind === "weakset" ||
         a.kind === "weakref" ||
+        a.kind === "finregistry" ||
         a.kind === "entry"
     ) {
         if (!a.elem || !b.elem) return a.elem === b.elem;

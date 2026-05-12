@@ -1,0 +1,4 @@
+plus: 5 1
+minus: -5 -1
+bitnot: -6 0
+bad: NaN NaN -1

@@ -1,0 +1,23 @@
+const nums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const parity = Object.groupBy(nums, (n) => n % 2 === 0 ? "even" : "odd") as any;
+console.log("even:", JSON.stringify(parity.even));
+console.log("odd:", JSON.stringify(parity.odd));
+const byHalf = Object.groupBy(nums, (_n, i) => {
+    return i < 5 ? "front" : "back";
+}) as any;
+console.log("front:", JSON.stringify(byHalf.front));
+console.log("back:", JSON.stringify(byHalf.back));
+
+const words = ["apple", "ant", "berry", "bee", "cat"];
+const byInitial = Object.groupBy(words, (w) => w.charAt(0)) as any;
+console.log("a:", JSON.stringify(byInitial.a));
+console.log("b:", JSON.stringify(byInitial.b));
+console.log("c:", JSON.stringify(byInitial.c));
+
+function classify(n: number, i: number): string {
+    return i < 3 ? "first" : "last";
+}
+const arr = [10, 20, 30, 40, 50];
+const halves = Object.groupBy(arr, classify) as any;
+console.log("first:", JSON.stringify(halves.first));
+console.log("last:", JSON.stringify(halves.last));

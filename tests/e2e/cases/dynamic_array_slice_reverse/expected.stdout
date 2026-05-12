@@ -1,0 +1,5 @@
+mid: b|c a|b|c|d
+tail: c|d
+clipped: a|b
+reverse: d|c|b|a d|c|b|a true
+copy reverse: a|b|c|d d|c|b|a

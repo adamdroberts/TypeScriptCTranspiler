@@ -1,0 +1,5 @@
+iface x|y
+class value|label
+keys side first|second 1
+names side first|second 2
+reflect side first|second 3

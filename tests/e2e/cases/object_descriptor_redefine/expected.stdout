@@ -1,0 +1,9 @@
+initial: true 1
+update: true 2
+partial: true 8
+partial desc: true true false
+lock: true 3
+set after lock: false 3
+same locked: true 3
+bad enum: false 3
+bad writable: false 3

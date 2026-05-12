@@ -1,0 +1,16 @@
+union [1,2,3,4,5,6]
+intersection [3,4]
+difference [1,2]
+symmetricDifference [1,2,5,6]
+subset(yes): true
+subset(no): false
+superset(yes): true
+superset(no): false
+disjoint(yes): true
+disjoint(no): false
+empty-subset: true
+empty-superset: true
+self-subset: true
+str-union [x,y,z]
+str-intersection [y]
+str-diff [x]

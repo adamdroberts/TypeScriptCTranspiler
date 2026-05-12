@@ -1,4 +1,9 @@
 count: 3
 x:a-b-c
 sum: 15
+pair:13
+pair:17
+x|a|b
+static: 13
+method: ab
 bag:a,b

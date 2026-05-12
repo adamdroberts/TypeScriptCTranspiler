@@ -1,0 +1,54 @@
+function readOne(): number {
+    return 1;
+}
+
+function readTwo(): number {
+    return 2;
+}
+
+function writeValue(value: any): boolean {
+    return value === 3;
+}
+
+const obj: any = {};
+
+console.log(
+    "initial:",
+    Reflect.defineProperty(obj, "x", {
+        get: readOne,
+        set: writeValue,
+        enumerable: true,
+        configurable: false,
+    }),
+    obj.x,
+);
+console.log(
+    "same:",
+    Reflect.defineProperty(obj, "x", {
+        get: readOne,
+        set: writeValue,
+        enumerable: true,
+        configurable: false,
+    }),
+    obj.x,
+);
+console.log(
+    "bad getter:",
+    Reflect.defineProperty(obj, "x", {
+        get: readTwo,
+        set: writeValue,
+        enumerable: true,
+        configurable: false,
+    }),
+    obj.x,
+);
+console.log(
+    "bad enum:",
+    Reflect.defineProperty(obj, "x", {
+        get: readOne,
+        set: writeValue,
+        enumerable: false,
+        configurable: false,
+    }),
+    obj.x,
+);

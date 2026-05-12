@@ -1,0 +1,12 @@
+number states: false true true 1
+number identity: 7 8 9
+string states: false true true
+string identity: ab cd ef
+boolean: false true true true
+bigint: true true
+symbol: true true
+keys: 0 0
+values: 0 0
+has: false false
+desc: undefined
+descs: 0

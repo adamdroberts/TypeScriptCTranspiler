@@ -1,0 +1,6 @@
+unreg-known: true
+unreg-other: true
+unreg-missing: false
+text: [object FinalizationRegistry]
+self: true
+cleaned: 0

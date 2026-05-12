@@ -1,9 +1,11 @@
 floor 3
 ceil 4
 round 4
+round negative zero: -Infinity
 abs 7
 sqrt 4
 pow 1024
 min 1
 max 8
+minmax nan: NaN NaN
 PI*2 rounded: 6.283

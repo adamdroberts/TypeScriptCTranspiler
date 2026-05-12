@@ -1,0 +1,11 @@
+keys: 0|1|2
+values: 4|5|6
+entry0: 0 4
+entry2: 2 6
+own: 0|1|2|length
+names: 0|1|2|length
+checks: true true false true
+reflect get: 5 3
+first desc: 4 true true true
+length desc: 3 true false false
+all desc: 6 3

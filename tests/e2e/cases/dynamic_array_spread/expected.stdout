@@ -1,0 +1,5 @@
+copy: 0|1|x|true 4
+chars: a,b,z 3
+typed chars: cd 2
+typed: a,2,3,b 4
+copy stable: 1 9

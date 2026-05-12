@@ -1,0 +1,7 @@
+proto: true base
+keys: own|secret
+values: value|2
+has: true false
+quiet: false hidden
+secret: 7
+json: {"own":"value","secret":7}

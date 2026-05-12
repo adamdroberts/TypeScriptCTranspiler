@@ -4,14 +4,20 @@ each: 3
 each: 4
 each: 5
 doubled: 2,4,6,8,10
+block squares: 1,4,9,16,25
 evens: 2,4
 sum: 15
 product: 120
+block sum: 30
 first > 3: 4
 index of 4: 3
 has even: true
 all positive: true
 0:1 1:2 2:3 3:4 4:5
+with receiver: 6,8,10,12,14
+receiver sum: 50
+named receiver: 5,11,17,23,29
+closure receiver: 8,10,12,14,16
 reversed: 5,4,3,2,1
 combined: 1,2,3,4,5,6,7,8
 indexOf 3: 2

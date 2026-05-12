@@ -49,6 +49,9 @@
 #ifndef M_SQRT2
 #  define M_SQRT2 1.41421356237309504880
 #endif
+#ifndef M_SQRT1_2
+#  define M_SQRT1_2 0.70710678118654752440
+#endif
 
 /* ------------- bootstrap ------------- */
 void tsc_bootstrap(int argc, char** argv);
@@ -63,9 +66,39 @@ typedef struct tsc_str {
 tsc_str_t* tsc_str_from_lit(const char* data, size_t len);
 tsc_str_t* tsc_str_from_cstr(const char* s);
 tsc_str_t* tsc_str_concat(const tsc_str_t* a, const tsc_str_t* b);
+tsc_str_t* tsc_str_concat_n(size_t n, ...);
+
+/* ------------- JSON build buffer -------------
+ * Single growable byte buffer with one final allocation. Used to lower
+ * JSON.stringify of typed values into a straight-line append walk instead
+ * of N+ tsc_str_concat calls.
+ */
+typedef struct {
+    char* data;
+    size_t len, cap;
+} tsc_jsonbuf_t;
+
+void tsc_jsonbuf_init(tsc_jsonbuf_t* b);
+void tsc_jsonbuf_reserve(tsc_jsonbuf_t* b, size_t need);
+void tsc_jsonbuf_append(tsc_jsonbuf_t* b, const char* p, size_t n);
+void tsc_jsonbuf_byte(tsc_jsonbuf_t* b, char c);
+void tsc_jsonbuf_num(tsc_jsonbuf_t* b, double n);
+void tsc_jsonbuf_int(tsc_jsonbuf_t* b, int64_t n);
+void tsc_jsonbuf_bool(tsc_jsonbuf_t* b, bool v);
+void tsc_jsonbuf_str(tsc_jsonbuf_t* b, const tsc_str_t* s);
+tsc_str_t* tsc_jsonbuf_finish(tsc_jsonbuf_t* b);
 tsc_str_t* tsc_str_from_num(double n);
+/* Fast path for integer-shape numbers — skips the up-to-17 snprintf+strtod
+ * round-trip loop in tsc_str_from_num. Used by the emitter when the operand
+ * is provably integer-valued (e.g. loop counters in a string concat). */
+tsc_str_t* tsc_str_from_int(int64_t n);
+tsc_str_t* tsc_str_from_num_radix(double n, double radix);
+tsc_str_t* tsc_str_from_num_fixed(double n, double fraction_digits);
+tsc_str_t* tsc_str_from_num_exponential(double n, double fraction_digits, bool has_digits);
+tsc_str_t* tsc_str_from_num_precision(double n, double precision, bool has_precision);
 tsc_str_t* tsc_str_from_bool(bool b);
 tsc_str_t* tsc_str_from_char_code_n(size_t n, ...);
+tsc_str_t* tsc_str_from_code_point_n(size_t n, ...);
 bool tsc_str_eq(const tsc_str_t* a, const tsc_str_t* b);
 int tsc_str_cmp(const tsc_str_t* a, const tsc_str_t* b);
 double tsc_str_locale_compare(const tsc_str_t* a, const tsc_str_t* b);
@@ -73,14 +106,16 @@ double tsc_str_length(const tsc_str_t* s);
 
 tsc_str_t* tsc_str_char_at(const tsc_str_t* s, double idx);
 tsc_str_t* tsc_str_at(const tsc_str_t* s, double idx);
+double tsc_str_char_code_at(const tsc_str_t* s, double idx);
 double tsc_str_code_point_at(const tsc_str_t* s, double idx);
-double tsc_str_index_of(const tsc_str_t* h, const tsc_str_t* n);
-double tsc_str_last_index_of(const tsc_str_t* h, const tsc_str_t* n);
-bool tsc_str_includes(const tsc_str_t* h, const tsc_str_t* n);
-bool tsc_str_starts_with(const tsc_str_t* s, const tsc_str_t* p);
-bool tsc_str_ends_with(const tsc_str_t* s, const tsc_str_t* p);
+double tsc_str_index_of(const tsc_str_t* h, const tsc_str_t* n, double position);
+double tsc_str_last_index_of(const tsc_str_t* h, const tsc_str_t* n, double position);
+bool tsc_str_includes(const tsc_str_t* h, const tsc_str_t* n, double position);
+bool tsc_str_starts_with(const tsc_str_t* s, const tsc_str_t* p, double position);
+bool tsc_str_ends_with(const tsc_str_t* s, const tsc_str_t* p, double end_position);
 tsc_str_t* tsc_str_slice(const tsc_str_t* s, double start, double end);
 tsc_str_t* tsc_str_substring(const tsc_str_t* s, double start, double end);
+tsc_str_t* tsc_str_substr(const tsc_str_t* s, double start, double length);
 tsc_str_t* tsc_str_to_upper(const tsc_str_t* s);
 tsc_str_t* tsc_str_to_lower(const tsc_str_t* s);
 tsc_str_t* tsc_str_normalize(const tsc_str_t* s, const tsc_str_t* form);
@@ -95,6 +130,8 @@ tsc_str_t* tsc_str_replace_all(const tsc_str_t* s, const tsc_str_t* search, cons
 
 struct tsc_array; /* fwd */
 struct tsc_array* tsc_str_split(const tsc_str_t* s, const tsc_str_t* sep);
+struct tsc_array* tsc_str_split_limit(const tsc_str_t* s, const tsc_str_t* sep, uint32_t limit);
+struct tsc_array* tsc_str_split_limit_num(const tsc_str_t* s, const tsc_str_t* sep, double limit);
 struct tsc_array* tsc_str_chars(const tsc_str_t* s);
 
 /* ------------- Symbol ------------- */
@@ -120,11 +157,43 @@ typedef struct tsc_weakref {
 tsc_weakref_t* tsc_weakref_new(void* target);
 void* tsc_weakref_deref(const tsc_weakref_t* ref);
 
+/* ------------- FinalizationRegistry -------------
+ * Stub: tracks registered entries so that `.unregister(token)` returns the
+ * right boolean, but the cleanup callback never fires (this AOT runtime has
+ * no GC-finalizer plumbing). */
+typedef struct tsc_finregistry_entry {
+    void* unregister_token; /* NULL if no token was supplied */
+} tsc_finregistry_entry_t;
+
+typedef struct tsc_finregistry {
+    tsc_finregistry_entry_t* entries;
+    size_t len;
+    size_t cap;
+} tsc_finregistry_t;
+
+tsc_finregistry_t* tsc_finregistry_new(void);
+void tsc_finregistry_register(tsc_finregistry_t* r, void* token);
+bool tsc_finregistry_unregister(tsc_finregistry_t* r, void* token);
+
 /* ------------- numbers ------------- */
-double tsc_num_mod(double a, double b);
+/* Inline fast path: fmod is libm-slow; when both operands fit in int64 (the
+ * common case for ECMAScript int-shape doubles), use C's integer modulo. */
+static inline double tsc_num_mod(double a, double b) {
+    long long ai = (long long)a;
+    long long bi = (long long)b;
+    if (bi != 0 && (double)ai == a && (double)bi == b) {
+        return (double)(ai % bi);
+    }
+    return fmod(a, b);
+}
 double tsc_parse_float(const tsc_str_t* s);
 double tsc_parse_int(const tsc_str_t* s, double radix);
 double tsc_math_random(void);
+double tsc_math_round(double x);
+double tsc_math_sign(double x);
+double tsc_math_imul(double a, double b);
+double tsc_math_clz32(double x);
+double tsc_math_fround(double x);
 
 /* ------------- BigInt (GMP-backed) ------------- */
 typedef struct tsc_bigint {
@@ -149,23 +218,40 @@ tsc_str_t* tsc_bigint_to_string(const tsc_bigint_t* a, double radix);
 /* ------------- RegExp (PCRE2-backed) ------------- */
 typedef struct tsc_regexp {
     pcre2_code* re;
+    pcre2_match_data* cached_md;  /* lazily allocated; reused across .test/.match/.replace */
     tsc_str_t* source;
     tsc_str_t* flags;
     bool global;
+    bool has_indices;
     bool ignore_case;
     bool multiline;
     bool dot_all;
+    bool sticky;
     bool unicode;
     bool compiled;
+    bool jit;
     uint32_t capture_count;
 } tsc_regexp_t;
 
 tsc_regexp_t* tsc_regexp_new(const tsc_str_t* pattern, const tsc_str_t* flags);
-bool tsc_regexp_test(const tsc_regexp_t* re, const tsc_str_t* s);
+struct tsc_array* tsc_regexp_exec(const tsc_regexp_t* re, const tsc_str_t* s);
+/* Inline test: skips a function call + lazy-init function call per match.
+ * Hot in tight regex loops (e.g. validators applied per line). */
+static inline bool tsc_regexp_test(const tsc_regexp_t* re, const tsc_str_t* s) {
+    if (!re->compiled) return false;
+    if (!re->cached_md) {
+        ((tsc_regexp_t*)re)->cached_md = pcre2_match_data_create_from_pattern(re->re, NULL);
+    }
+    return pcre2_match(re->re, (PCRE2_SPTR)s->data, s->len, 0, 0, re->cached_md, NULL) >= 0;
+}
+tsc_str_t* tsc_regexp_to_string(const tsc_regexp_t* re);
 struct tsc_array* tsc_str_match_regex(const tsc_str_t* s, const tsc_regexp_t* re);
 struct tsc_array* tsc_str_match_all_regex(const tsc_str_t* s, const tsc_regexp_t* re);
+double tsc_str_search_regex(const tsc_str_t* s, const tsc_regexp_t* re);
 tsc_str_t* tsc_str_replace_regex(const tsc_str_t* s, const tsc_regexp_t* re, const tsc_str_t* repl);
 struct tsc_array* tsc_str_split_regex(const tsc_str_t* s, const tsc_regexp_t* re);
+struct tsc_array* tsc_str_split_regex_limit(const tsc_str_t* s, const tsc_regexp_t* re, uint32_t limit);
+struct tsc_array* tsc_str_split_regex_limit_num(const tsc_str_t* s, const tsc_regexp_t* re, double limit);
 
 /* ------------- crypto ------------- */
 typedef struct tsc_hash tsc_hash_t;
@@ -212,6 +298,9 @@ typedef struct tsc_array {
     size_t len;
     size_t cap;
     size_t es;
+    bool extensible;
+    bool sealed;
+    bool frozen;
     void* data;
 } tsc_array_t;
 
@@ -232,6 +321,8 @@ tsc_array_t* tsc_array_slice(const tsc_array_t* a, double start, double end);
 tsc_array_t* tsc_array_append(tsc_array_t* dst, const tsc_array_t* src);
 tsc_array_t* tsc_array_flat_once(const tsc_array_t* outer, size_t elem_size);
 double tsc_array_length(const tsc_array_t* a);
+bool tsc_array_has_own_key(const tsc_array_t* a, const tsc_str_t* key);
+bool tsc_array_property_is_enumerable_key(const tsc_array_t* a, const tsc_str_t* key);
 void tsc_array_oob(const tsc_array_t* a, double i);
 
 #define TSC_ARR(T, a, i) (((T*)((a)->data))[(size_t)(i)])
@@ -240,8 +331,8 @@ void tsc_array_oob(const tsc_array_t* a, double i);
 typedef uint64_t tsc_value_t;
 
 typedef struct tsc_object tsc_object_t;
-typedef tsc_value_t (*tsc_accessor_getter_t)(void);
-typedef bool (*tsc_accessor_setter_t)(tsc_value_t value);
+typedef tsc_value_t (*tsc_accessor_getter_t)(void* env, tsc_value_t receiver);
+typedef bool (*tsc_accessor_setter_t)(void* env, tsc_value_t receiver, tsc_value_t value);
 
 tsc_value_t tsc_value_undefined(void);
 tsc_value_t tsc_value_null(void);
@@ -252,6 +343,10 @@ tsc_value_t tsc_value_array(tsc_array_t* a);
 tsc_value_t tsc_value_object(tsc_object_t* o);
 
 bool tsc_value_is_truthy(tsc_value_t v);
+bool tsc_value_number_is_integer(tsc_value_t v);
+bool tsc_value_number_is_finite(tsc_value_t v);
+bool tsc_value_number_is_nan(tsc_value_t v);
+bool tsc_value_number_is_safe_integer(tsc_value_t v);
 double tsc_value_as_num(tsc_value_t v);
 bool tsc_value_as_bool(tsc_value_t v);
 tsc_str_t* tsc_value_as_string(tsc_value_t v);
@@ -259,19 +354,22 @@ tsc_array_t* tsc_value_as_array(tsc_value_t v);
 tsc_str_t* tsc_value_to_string(tsc_value_t v);
 tsc_str_t* tsc_value_typeof(tsc_value_t v);
 tsc_str_t* tsc_value_json_stringify(tsc_value_t v);
+tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args);
 bool tsc_value_is_array(tsc_value_t v);
 bool tsc_value_is_nullish(tsc_value_t v);
 tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key);
+tsc_value_t tsc_value_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc_value_t receiver);
 tsc_value_t tsc_value_get_index(tsc_value_t v, double index);
 bool tsc_value_set_index(tsc_value_t v, double index, tsc_value_t value);
 tsc_value_t tsc_value_define_property(tsc_value_t v, tsc_str_t* key, tsc_value_t value);
-bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t value, bool writable, bool enumerable, bool configurable);
-bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_getter_t getter, tsc_accessor_setter_t setter, bool enumerable, bool configurable);
+bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);
+bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_getter_t getter, void* getter_env, bool has_getter, tsc_accessor_setter_t setter, void* setter_env, bool has_setter, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);
 tsc_value_t tsc_value_object_create(tsc_value_t prototype);
 bool tsc_value_is_prototype_of(tsc_value_t prototype, tsc_value_t object);
 tsc_value_t tsc_value_get_prototype_of(tsc_value_t v);
 bool tsc_value_set_prototype_of(tsc_value_t v, tsc_value_t prototype);
 bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value);
+bool tsc_value_set_prop_receiver(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver);
 bool tsc_value_has_own_prop(tsc_value_t v, const tsc_str_t* key);
 bool tsc_value_property_is_enumerable(tsc_value_t v, const tsc_str_t* key);
 bool tsc_value_has_prop(tsc_value_t v, const tsc_str_t* key);
@@ -287,6 +385,7 @@ tsc_value_t tsc_value_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key)
 tsc_value_t tsc_value_get_own_property_descriptors(tsc_value_t v);
 tsc_value_t tsc_value_object_assign(tsc_value_t target, tsc_value_t source);
 double tsc_value_length(tsc_value_t v);
+tsc_array_t* tsc_value_iter_values(tsc_value_t v);
 tsc_array_t* tsc_value_object_keys(tsc_value_t v);
 tsc_array_t* tsc_value_object_values(tsc_value_t v);
 tsc_array_t* tsc_value_object_entries(tsc_value_t v);
@@ -297,13 +396,24 @@ tsc_value_t tsc_value_mul(tsc_value_t a, tsc_value_t b);
 tsc_value_t tsc_value_div(tsc_value_t a, tsc_value_t b);
 tsc_value_t tsc_value_mod(tsc_value_t a, tsc_value_t b);
 tsc_value_t tsc_value_pow(tsc_value_t a, tsc_value_t b);
+tsc_value_t tsc_value_pos(tsc_value_t v);
+tsc_value_t tsc_value_neg(tsc_value_t v);
+tsc_value_t tsc_value_bit_not(tsc_value_t v);
+tsc_value_t tsc_value_bit_and(tsc_value_t a, tsc_value_t b);
+tsc_value_t tsc_value_bit_or(tsc_value_t a, tsc_value_t b);
+tsc_value_t tsc_value_bit_xor(tsc_value_t a, tsc_value_t b);
+tsc_value_t tsc_value_shl(tsc_value_t a, tsc_value_t b);
+tsc_value_t tsc_value_shr(tsc_value_t a, tsc_value_t b);
+tsc_value_t tsc_value_ushr(tsc_value_t a, tsc_value_t b);
 bool tsc_value_eq(tsc_value_t a, tsc_value_t b);
 bool tsc_value_object_is(tsc_value_t a, tsc_value_t b);
 int tsc_value_cmp(tsc_value_t a, tsc_value_t b);
 tsc_value_t tsc_value_method_char_at(tsc_value_t recv, tsc_value_t index);
-tsc_value_t tsc_value_method_includes(tsc_value_t recv, tsc_value_t needle);
-tsc_value_t tsc_value_method_index_of(tsc_value_t recv, tsc_value_t needle);
-tsc_value_t tsc_value_method_last_index_of(tsc_value_t recv, tsc_value_t needle);
+tsc_value_t tsc_value_method_char_code_at(tsc_value_t recv, tsc_value_t index);
+tsc_value_t tsc_value_method_code_point_at(tsc_value_t recv, tsc_value_t index);
+tsc_value_t tsc_value_method_includes(tsc_value_t recv, tsc_value_t needle, tsc_value_t position);
+tsc_value_t tsc_value_method_index_of(tsc_value_t recv, tsc_value_t needle, tsc_value_t position);
+tsc_value_t tsc_value_method_last_index_of(tsc_value_t recv, tsc_value_t needle, tsc_value_t position);
 tsc_value_t tsc_value_method_at(tsc_value_t recv, tsc_value_t index);
 tsc_value_t tsc_value_method_locale_compare(tsc_value_t recv, tsc_value_t other);
 tsc_value_t tsc_value_method_join(tsc_value_t recv, tsc_value_t separator);
@@ -324,12 +434,23 @@ void tsc_value_array_push_flat(tsc_array_t* out, tsc_value_t value);
 tsc_value_t tsc_value_method_reverse(tsc_value_t recv);
 tsc_value_t tsc_value_method_to_reversed(tsc_value_t recv);
 tsc_value_t tsc_value_method_slice(tsc_value_t recv, tsc_value_t start, tsc_value_t end);
+tsc_value_t tsc_value_method_keys(tsc_value_t recv);
+tsc_value_t tsc_value_method_values(tsc_value_t recv);
+tsc_value_t tsc_value_method_entries(tsc_value_t recv);
 tsc_value_t tsc_value_method_substring(tsc_value_t recv, tsc_value_t start, tsc_value_t end);
+tsc_value_t tsc_value_method_substr(tsc_value_t recv, tsc_value_t start, tsc_value_t length);
 tsc_value_t tsc_value_method_replace(tsc_value_t recv, tsc_value_t search, tsc_value_t replacement);
 tsc_value_t tsc_value_method_replace_all(tsc_value_t recv, tsc_value_t search, tsc_value_t replacement);
-tsc_value_t tsc_value_method_split(tsc_value_t recv, tsc_value_t separator);
-tsc_value_t tsc_value_method_starts_with(tsc_value_t recv, tsc_value_t needle);
-tsc_value_t tsc_value_method_ends_with(tsc_value_t recv, tsc_value_t needle);
+tsc_value_t tsc_value_method_split(tsc_value_t recv, tsc_value_t separator, tsc_value_t limit);
+tsc_value_t tsc_value_method_split_regex(tsc_value_t recv, const tsc_regexp_t* re, tsc_value_t limit);
+tsc_value_t tsc_value_method_match_regex(tsc_value_t recv, const tsc_regexp_t* re);
+tsc_value_t tsc_value_method_match_all_regex(tsc_value_t recv, const tsc_regexp_t* re);
+tsc_value_t tsc_value_method_starts_with(tsc_value_t recv, tsc_value_t needle, tsc_value_t position);
+tsc_value_t tsc_value_method_ends_with(tsc_value_t recv, tsc_value_t needle, tsc_value_t end_position);
+tsc_str_t* tsc_value_method_to_string(tsc_value_t recv, tsc_value_t radix);
+tsc_str_t* tsc_value_method_to_fixed(tsc_value_t recv, tsc_value_t fraction_digits);
+tsc_str_t* tsc_value_method_to_exponential(tsc_value_t recv, tsc_value_t fraction_digits);
+tsc_str_t* tsc_value_method_to_precision(tsc_value_t recv, tsc_value_t precision);
 tsc_value_t tsc_value_method_to_lower(tsc_value_t recv);
 tsc_value_t tsc_value_method_to_upper(tsc_value_t recv);
 tsc_value_t tsc_value_method_normalize(tsc_value_t recv, tsc_value_t form);
@@ -342,12 +463,14 @@ tsc_value_t tsc_value_method_pad_end(tsc_value_t recv, tsc_value_t target, tsc_v
 
 tsc_object_t* tsc_object_new(void);
 bool tsc_object_set(tsc_object_t* o, tsc_str_t* key, tsc_value_t value);
+bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver);
 bool tsc_object_define(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, bool writable, bool enumerable, bool configurable);
-bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_getter_t getter, tsc_accessor_setter_t setter, bool enumerable, bool configurable);
+bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_getter_t getter, void* getter_env, bool has_getter, tsc_accessor_setter_t setter, void* setter_env, bool has_setter, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);
 tsc_value_t tsc_object_get_prototype_of(const tsc_object_t* o);
 bool tsc_object_set_prototype_of(tsc_object_t* o, tsc_value_t prototype);
 bool tsc_object_is_prototype_of(const tsc_object_t* prototype, const tsc_object_t* object);
 tsc_value_t tsc_object_get(const tsc_object_t* o, const tsc_str_t* key);
+tsc_value_t tsc_object_get_receiver(const tsc_object_t* o, const tsc_str_t* key, tsc_value_t receiver);
 bool tsc_object_has_own(const tsc_object_t* o, const tsc_str_t* key);
 bool tsc_object_property_is_enumerable(const tsc_object_t* o, const tsc_str_t* key);
 bool tsc_object_has(const tsc_object_t* o, const tsc_str_t* key);
@@ -372,7 +495,7 @@ typedef struct tsc_object_entry {
     void* ptr;
 } tsc_object_entry_t;
 
-/* ------------- Map / Set (type-erased, linear scan) ------------- */
+/* ------------- Map / Set (open-addressed hash + insertion-order array) ------------- */
 typedef enum {
     TSC_KEY_NUM = 0,
     TSC_KEY_STR = 1,
@@ -383,9 +506,11 @@ typedef enum {
 typedef struct tsc_map {
     size_t ks, vs;
     tsc_key_kind_t kk;
-    size_t len, cap;
+    size_t len, cap;          /* ordered (insertion-order) keys/values arrays */
     void* keys;
     void* values;
+    size_t* buckets;          /* power-of-2-sized open-addressing index table */
+    size_t bucket_cap;        /* always a power of 2 (or 0 before first insert) */
 } tsc_map_t;
 
 tsc_map_t* tsc_map_new(size_t ks, size_t vs, int kk, size_t initial_cap);
@@ -401,8 +526,10 @@ struct tsc_array* tsc_map_values(const tsc_map_t* m);
 typedef struct tsc_set {
     size_t es;
     tsc_key_kind_t kk;
-    size_t len, cap;
+    size_t len, cap;          /* ordered (insertion-order) data array */
     void* data;
+    size_t* buckets;          /* power-of-2-sized open-addressing index table */
+    size_t bucket_cap;
 } tsc_set_t;
 
 tsc_set_t* tsc_set_new(size_t es, int kk, size_t initial_cap);
@@ -412,6 +539,14 @@ bool tsc_set_delete_raw(tsc_set_t* s, const void* v);
 void tsc_set_clear(tsc_set_t* s);
 double tsc_set_size(const tsc_set_t* s);
 struct tsc_array* tsc_set_values(const tsc_set_t* s);
+/* Set composition helpers — both operands must be Set<T> with matching es/kk. */
+tsc_set_t* tsc_set_union(const tsc_set_t* a, const tsc_set_t* b);
+tsc_set_t* tsc_set_intersection(const tsc_set_t* a, const tsc_set_t* b);
+tsc_set_t* tsc_set_difference(const tsc_set_t* a, const tsc_set_t* b);
+tsc_set_t* tsc_set_symmetric_difference(const tsc_set_t* a, const tsc_set_t* b);
+bool tsc_set_is_subset_of(const tsc_set_t* a, const tsc_set_t* b);
+bool tsc_set_is_superset_of(const tsc_set_t* a, const tsc_set_t* b);
+bool tsc_set_is_disjoint_from(const tsc_set_t* a, const tsc_set_t* b);
 
 /* ------------- console ------------- */
 void tsc_console_log_n(size_t n, ...);

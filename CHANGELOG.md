@@ -5,6 +5,164 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Synchronous `function*` declarations now support ordinary `yield expr` statements and bounded `yield*` over arrays, strings, or dynamic iterable values by materializing array-backed `Iterator<T>` / `IterableIterator<T>` results for existing `for...of` lowering. Test: `generator_functions`.
+- Permanent AOT-limit coverage now separately verifies direct `Function(...)` runtime compilation rejection in addition to `new Function(...)`. Test: `runtime_function_call`.
+- Buffer instances now expose numeric byte indexes through `Object.keys` / `values` / `entries` / `getOwnPropertyNames` / `getOwnPropertyDescriptor(s)` / `hasOwn`, inherited `hasOwnProperty` / `propertyIsEnumerable`, `Reflect.ownKeys` / `Reflect.getOwnPropertyDescriptor`, `Reflect.get` / `Reflect.has`, and the `in` operator; `length` remains non-own but is visible to `Reflect.get` / `Reflect.has` / `in`. Test: `buffer_object_methods`.
+- URL instances now expose empty own-property results through `Object.keys` / `getOwnPropertyNames` / `getOwnPropertyDescriptor(s)` / `hasOwn`, inherited `hasOwnProperty` / `propertyIsEnumerable`, and `Reflect.ownKeys` / `Reflect.getOwnPropertyDescriptor`, while keeping URL fields as prototype-style accessors. Test: `url_object_methods`.
+- Primitive `string`, `number`, `boolean`, `symbol`, and `bigint` receivers now support inherited `hasOwnProperty` / `propertyIsEnumerable`; strings report index and non-enumerable `length` ownership, while the other primitives evaluate the key and return false. Tests: `string_object_methods`, `primitive_object_methods`, `symbol_bigint_object_methods`.
+- Collection-like built-ins (`Map`, `Set`, `WeakMap`, `WeakSet`, `WeakRef`, `FinalizationRegistry`) now return empty own-property results for `Object.keys` / `values` / `entries` / `getOwnPropertyNames` / `getOwnPropertyDescriptor(s)` / `hasOwn`, inherited `hasOwnProperty` / `propertyIsEnumerable`, plus `Reflect.ownKeys` / `Reflect.getOwnPropertyDescriptor`, while still evaluating the receiver/key. Test: `collection_object_methods`.
+- `Object.assign(typedTarget, source)` now supports typed interface/class targets, copying matching typed source fields and matching own dynamic/array/string source properties while preserving target identity and primitive source evaluation. Test: `object_assign_typed_target`.
+- `Array.from(dynamic, mapfn)` now maps boxed dynamic array and string sources through inline/block-body or named callbacks, preserving the usual value/index callback arguments. Test: `array_from_dynamic_mapper`.
+- `Object.isExtensible` / `isSealed` / `isFrozen`, `Object.preventExtensions` / `seal` / `freeze`, and empty own-property helpers (`keys`, `values`, `entries`, `getOwnPropertyNames`, `getOwnPropertyDescriptor(s)`, `hasOwn`) now accept number, boolean, bigint, and symbol primitives with ES non-object primitive results while still evaluating the argument. Test: `object_primitive_extensibility`.
+- The `in` operator now supports typed arrays, checking numeric indexes and the non-enumerable `length` own property through the typed-array own-key path. Test: `array_own_properties`.
+- `Object.assign(typedArrayTarget, source)` now writes enumerable indexes from typed array, typed object, string, and dynamic object/array/string sources through typed-array-safe element assignment, ignores evaluated number/boolean/bigint/symbol primitive sources, and respects prevent-extensions, seal, and freeze state. Test: `object_assign_typed_array_target`.
+- Typed arrays now support `Object.isExtensible` / `isSealed` / `isFrozen` and `Object.preventExtensions` / `seal` / `freeze`, with typed-array-safe `Object.defineProperty`, `Object.defineProperties`, `Reflect.get` / `set` / `deleteProperty` / `defineProperty`, `delete array[index]`, descriptor flags, and core mutators observing the same extensibility state. Test: `array_extensibility`.
+- Generic instance/static class methods now support literal and const-literal computed method names. Test: `generic_methods`.
+- Erased generic class methods now accept fixed-arity spread argument lists, coercing spread values through the erased `tsc_value_t` method boundary. Test: `generic_classes`.
+- Direct fixed-arity function, namespace function, class/static method, and class constructor calls, including generic specializations, now accept spread arguments from typed arrays, dynamic arrays, and strings when the final runtime arity matches the target signature. Tests: `rest_spread`, `namespaces`, `classes`, `generic_functions`, `generic_methods`.
+- Inline callback support now accepts single-return block bodies (`{ return expr; }`) for typed/dynamic array higher-order methods, typed/dynamic array comparators, `Array.from(..., mapfn)`, and typed `Map`/`Set.forEach`. Tests: `array_hof`, `array_to_sorted`, `array_from_mapper`, `dynamic_array_hof`, `dynamic_array_reduce`, `dynamic_array_sort_comparator`, `map_set_for_each`.
+- `Object.groupBy` and `Map.groupBy` inline arrow/function-expression callbacks now accept single-return block bodies such as `{ return key; }`, in addition to expression bodies. Tests: `object_group_by`, `map_group_by`.
+- Class fields and methods now accept string/number literal and const-literal computed names, including static members; static field initializers are evaluated in module init so non-constant values such as strings work correctly. Test: `class_computed_members`.
+- First-class function value calls now support spread arguments from dynamic arrays/strings, with runtime arity checks and per-parameter coercion. Test: `function_value_spread`.
+- Dynamic `for...of` array-binding destructuring now supports a trailing rest binding such as `[head, ...tail]` over boxed dynamic arrays. Test: `dynamic_for_of_rest`.
+- `Reflect.apply` and `Reflect.construct` now accept spread elements inside array-literal argument lists, including typed-array, dynamic-array, and string spreads where the final runtime arity matches the target. Tests: `reflect_apply`, `reflect_construct`.
+- Interface `extends` now emits inherited fields into interface-backed structs in base-first order, including multiple and nested base interfaces. Test: `interface_inheritance`.
+- Typed `Array.prototype.concat(...)` now accepts spread elements inside array-literal arguments. Test: `array_concat_values`.
+- Dynamic array literals typed as `any` now support spread from dynamic arrays, dynamic/typed strings, and typed arrays, boxing spread elements into `tsc_value_t`. Test: `dynamic_array_spread`.
+- Dynamic pre/post `++`/`--` now work for local `any` variables plus dynamic property and index lvalues with JS-style numeric coercion and correct expression results. Test: `dynamic_update_ops`.
+- The comma operator now evaluates left-to-right and returns the right-hand value while preserving left operand side effects. Test: `comma_operator`.
+- The `void` operator now preserves operand side effects and produces `undefined` for typed coercion paths. Test: `void_operator`.
+- Dynamic unary numeric operators (`+`, `-`, `~`) now work over `any` values with JS-style numeric coercion and int32 bitwise-not semantics. Test: `dynamic_unary_ops`.
+- Dynamic bitwise operators (`&`, `|`, `^`, `<<`, `>>`, `>>>`) and matching compound assignments now work over `any` values, including dynamic property and index lvalues. Test: `dynamic_bitwise_ops`.
+- Dynamic property and index assignments now support exponentiation assignment (`**=`) and logical assignment (`&&=`, `||=`, `??=`), preserving RHS short-circuiting through descriptor-aware writes. Test: `dynamic_property_logical_assign`.
+- Logical assignment (`&&=`, `||=`, `??=`) now works for typed and dynamic lvalues while preserving RHS short-circuiting. Test: `logical_assign`.
+- Exponentiation compound assignment (`**=`) now works for typed numbers, BigInt values, and dynamic values. Test: `exponent_assign`.
+- Typed numeric bitwise compound assignments (`&=`, `|=`, `^=`, `<<=`, `>>=`, `>>>=`) now lower to JS-style int32/uint32 operations. Test: `bitwise_assign`.
+- Custom iterators that yield `ObjectEntry<T>` values now support `for (const [key, value] of iterator)` destructuring. Test: `custom_iterator_entry_destructure`.
+- Custom iterator classes can now inherit their `next()` method from a base class; for-of lowering resolves the owning method and casts the iterator receiver correctly. Test: `custom_iterator_inherited_next`.
+- `Object.fromEntries(map)` now accepts typed `Map<string, V>` sources when rebuilding a contextual interface/class object. Test: `object_from_entries_map`.
+- `Array.from(map)` and `Array.from(map, mapfn)` now work for typed `Map<string, V>` sources by materializing `ObjectEntry<V>[]` entries in insertion order. Test: `array_from_map`.
+- `new Map(existingMap)` now copies typed Map entries into an independent Map, including non-string key maps. Test: `map_constructor_from_map`.
+- `new Set(existingSet)` now copies typed Set values into an independent Set while preserving insertion order. Test: `set_constructor_from_set`.
+- `Array.from(set)` and `Array.from(set, mapfn)` now work for typed `Set<T>` values, preserving insertion order and supporting inline or function-reference mappers. Test: `array_from_set`.
+- Dynamic property descriptors now accept shorthand object-literal fields such as `{ value, writable }` plus boolean flag expressions, and shorthand accessor identifiers resolve to the underlying function values. Test: `object_descriptor_shorthand`.
+- Dynamic property descriptor kind transitions are now covered for configurable data-to-accessor and accessor-to-data redefinitions, with non-configurable data-to-accessor rejection. Test: `object_descriptor_kind_transition`.
+- Configurable dynamic accessor descriptors now preserve omitted `get`/`set` hooks and omitted `enumerable`/`configurable` flags during redefinition, while explicit `get: undefined` / `set: undefined` clears the hook. Test: `object_accessor_preserve`.
+- Direct custom iterator objects whose `[Symbol.iterator]()` returns themselves are now covered end-to-end. Test: `custom_iterator_self`.
+- Non-configurable dynamic accessor properties can now be redefined with the same getter/setter/enumerability, while changed accessor identities or enumerable/configurable flags are rejected. Test: `object_accessor_redefine`.
+- `Object.assign(dynamicArrayTarget, source)` now writes enumerable object/array/string source properties onto dynamic array targets, extending or updating indexes through normal array property semantics. Test: `object_assign_array_target`.
+- `Object.assign(dynamicTarget, source)` now copies enumerable index properties from dynamic array and string sources, not only dynamic object sources. Test: `object_assign_array_string`.
+- Dynamic `for...of` now supports array-binding destructuring over boxed pair arrays, covering patterns such as `for (const [key, value] of Object.entries(anyValue))`. Test: `dynamic_for_of_entries`.
+- `for...of` now supports dynamic `tsc_value_t` array and string receivers, yielding boxed elements through the existing loop lowering. Test: `dynamic_for_of`.
+- `FinalizationRegistry<T>` is constructible against any cleanup-callback type. `.register(target, heldValue, unregisterToken?)` records an entry, `.unregister(unregisterToken)` removes matching entries and reports whether any were removed, and `.toString()` returns `[object FinalizationRegistry]`. The cleanup callback is accepted but never invoked — this AOT runtime has no GC-finalizer plumbing. Test: `finalization_registry`.
+- ES2025 Set composition: `Set.prototype.union`, `intersection`, `difference`, `symmetricDifference`, `isSubsetOf`, `isSupersetOf`, and `isDisjointFrom` accept another `Set<T>` of the same element type, honoring SameValueZero element matching and insertion order. Test: `set_composition`.
+- ES2024 `Map.groupBy(items, keyFn)` groups a typed array into a typed `Map<K, T[]>`, accepting inline arrow/function-expression callbacks with expression bodies and function references (including generic functions). Test: `map_group_by`.
+- ES2024 `Object.groupBy(items, keyFn)` groups a typed array into a null-prototype dynamic object whose string keys map to dynamic arrays of boxed items. Items must be types boxable into `tsc_value_t`. Test: `object_group_by`.
+- Typed `string +=` compound assignment now concatenates via `tsc_str_concat`, with implicit coercion of the right-hand side via the existing string-coercion path. Test: `string_compound_plus`.
+- `Array.from(items, mapfn)` two-argument form now works for typed array sources and string code-point sequences, accepting inline arrow/function-expression callbacks with expression bodies and function references. Test: `array_from_mapper`.
+- `for (const k in expr)` enumerates own enumerable string keys. Supports typed classes/interfaces (compile-time field-name lists), typed arrays (numeric index strings), and dynamic `tsc_value_t` objects via `tsc_value_object_keys`. Test: `for_in`.
+- Typed `Map<string, V>.entries()` returns `ObjectEntry<V>[]` in insertion order, mirroring `Object.entries(...)` shape so the result can be passed back to `new Map(...)` for round-tripping. Test: `map_entries`.
+- `console.warn(...)` now writes to stderr like `console.error(...)`; `console.info(...)` continues to write to stdout like `console.log(...)`.
+- Typed strings now support Object/Reflect own-property helpers for string indexes and non-enumerable `length`, including keys, values, entries, descriptor maps, `Reflect.get`, `Reflect.has`, deletion refusal for indexes/length, and write refusal. Test: `string_object_enumeration`.
+- Dynamic strings now expose string indexes and non-enumerable `length` through Object/Reflect own-property helpers, including keys, values, entries, descriptor maps, `Reflect.get`, `Reflect.has`, deletion refusal for indexes/length, and write refusal. Test: `dynamic_string_object_enumeration`.
+- `Set` can now be constructed from typed arrays, and `Map` can be constructed from `Object.entries(...)` string-key entry arrays. Test: `map_set_constructors`.
+- Numeric `Map` keys and `Set` values now use SameValueZero semantics, including `NaN` matching and `-0` / `0` coalescing. Test: `map_set_same_value_zero`.
+- Typed and dynamic `Array.prototype.includes()` now use SameValueZero semantics, so `includes(NaN)` succeeds while `indexOf(NaN)` remains `-1`. Test: `array_includes_same_value_zero`.
+- Dynamic `Array.prototype.slice()` and `reverse()` now have focused coverage for negative/clipped slice bounds, receiver mutation, and returned array identity. Test: `dynamic_array_slice_reverse`.
+- Typed `Array.prototype.sort(compareFn)` / `toSorted(compareFn)` now accept first-class closure comparator values, not only inline arrows and direct function declarations. Test: `array_to_sorted`.
+- Typed array higher-order callbacks now receive the standard receiver array argument (`array` for element callbacks, fourth argument for `reduce` / `reduceRight`) across inline, direct function, and closure callback paths. Test: `array_hof`.
+- Dynamic array higher-order callbacks now receive the standard receiver array argument across inline callbacks, direct function references, closure callback values, and `reduce` / `reduceRight`. Tests: `dynamic_array_hof`, `dynamic_array_hof_refs`.
+- Typed `Array.prototype.flatMap()` now accepts scalar callback results as well as array results, matching JavaScript's one-level flatten behavior. Test: `array_flat`.
+- `String.prototype.split(RegExp)` now includes captured separator groups in the output, while still honoring split limits. Tests: `string_split_limit`, `dynamic_string_split_limit`.
+- Typed and dynamic `String.prototype.split(separator, limit)` now honor result limits for string and RegExp separators. Tests: `string_split_limit`, `dynamic_string_split_limit`.
+- Dynamic `Array.prototype.sort(compareFn)` and `toSorted(compareFn)` now support inline and named comparator callbacks over `tsc_value_t` arrays. Tests: `dynamic_array_sort_comparator`, `dynamic_array_to_sorted_comparator`.
+- Plain string replacement now expands dollar, whole-match, prefix, and suffix tokens for typed and dynamic string `replace` / `replaceAll`. Tests: `string_replace_string_tokens`, `dynamic_string_replace_string_tokens`.
+- RegExp replacement strings now expand dollar, whole-match, capture, prefix, and suffix tokens for typed and dynamic string `replace` / `replaceAll`. Tests: `string_replace_regex_groups`, `dynamic_string_replace_regex_groups`.
+- `parseInt` / `Number.parseInt` now use JS-style omitted/zero radix inference, including `0x` hexadecimal prefixes and invalid-radix `NaN` results. Test: `number_static_more`.
+- Dynamic `String.prototype.split()` now accepts RegExp separators over `tsc_value_t` string receivers, matching the typed string path. Test: `dynamic_string_split_regex`.
+- Dynamic `String.prototype.replace()` / `replaceAll()` now accept RegExp patterns, matching the typed string path. Test: `dynamic_string_replace_regex`.
+- Typed and dynamic `String.prototype.search()` now accepts string patterns by constructing a RegExp. Tests: `string_search_string`, `dynamic_string_search`.
+- Typed and dynamic `String.prototype.match()` / `matchAll()` now accept string patterns by constructing a RegExp, with string `matchAll()` using global matching. Tests: `string_match_string`, `dynamic_string_match_string`.
+- Dynamic `Reflect.get(target, key, receiver?)` and `Reflect.set(target, key, value, receiver?)` now accept receiver arguments; dynamic `Reflect.set` writes inherited or missing writable data properties onto the receiver instead of the target. Test: `reflect_receiver`.
+- Direct, lifted, and closure-valued functions declared with a TypeScript `this: any` parameter now receive the runtime accessor receiver for dynamic `Object.defineProperty` / `Reflect.defineProperty` getters and setters. Test: `reflect_receiver`.
+- Dynamic accessor descriptors now return stable boxed function identities for `get` and `set` from `Object.getOwnPropertyDescriptor(s)`, so `typeof`, `String(...)`, `Object.is`, and `===` behave consistently across repeated descriptor reads. Test: `reflect_receiver`.
+- Dynamic `Reflect.apply` can now invoke boxed accessor function identities returned from descriptor `get`/`set` fields, binding the supplied `thisArg` as the accessor receiver. Test: `reflect_receiver`.
+- Dynamic accessor descriptor objects now include own `get` and `set` fields with `undefined` when a hook is absent, matching accessor descriptor shape for getter-only, setter-only, and no-accessor cases. Test: `object_descriptor_defaults`.
+- Dynamic `JSON.stringify` now omits object properties whose values are `undefined` or boxed function identities while preserving `null` entries for array slots. Test: `object_descriptor_defaults`.
+- Dynamic object data descriptor redefinition now preserves omitted descriptor fields, allows compatible non-configurable writable updates, and rejects incompatible enumerable/configurable/writable changes. Test: `object_descriptor_redefine`.
+- Dynamic data descriptors now support omitted `value` defaults (`undefined`) and accessor descriptors accept explicit `get: undefined` / `set: undefined` hooks. Test: `object_descriptor_defaults`.
+- `Object.create(proto, descriptors)` now applies static descriptor maps while creating dynamic objects with a prototype, including closure-valued accessors. Test: `object_create_descriptors`.
+- `Object.defineProperties(dynamic, descriptors)` now batches dynamic data and accessor descriptors, including closure-valued getters/setters, over static descriptor-map keys. Test: `object_define_properties`.
+- Dynamic arrays now track bounded `Object.preventExtensions` / `Object.seal` / `Object.freeze` state for Reflect/Object index writes, dense-index definitions, descriptor flag reporting, `length` writes, deletion checks, and core mutator methods. Test: `dynamic_array_extensibility`.
+- Dynamic accessor descriptors for `Object.defineProperty` / `Reflect.defineProperty` can now use function-scope closure values and inline closure expressions as getters/setters, preserving captured state after the defining function returns. Test: `object_accessor_closures`.
+- Typed `Map.prototype.forEach()` and `Set.prototype.forEach()` now accept named callback references in addition to inline callbacks, including callback parameters for value/key-or-value2/receiver. Test: `map_set_for_each_refs`.
+- Dynamic arrays now support bounded `Reflect.defineProperty` / `Object.defineProperty` data descriptors for dense array indexes and `length`; unsupported flag combinations return `false` through `Reflect.defineProperty`. Test: `dynamic_array_define_property`.
+- Dynamic array higher-order methods (`map`, `filter`, `forEach`, `find*`, `some`, `every`, `flatMap`, `reduce`, and `reduceRight`) now accept named callback references as well as inline callbacks, coercing dynamic elements and accumulators into the callback's declared parameter types. Test: `dynamic_array_hof_refs`.
+- Dynamic arrays now support string-key property writes through `arr["1"] = value` and `Reflect.set(arr, "1", value)`, length writes through `Reflect.set(arr, "length", n)`, and non-configurable `length` deletion checks. Test: `dynamic_array_property_writes`.
+- `Array.prototype.entries()` support for typed and dynamic arrays, materializing `[string, value]` entry arrays alongside the existing `keys()`/`values()` behavior. Tests: `array_entries`, `dynamic_array_entries`.
+- `Object.getOwnPropertyNames(array)` support for typed arrays, plus typed-array `Reflect.ownKeys` coverage in the existing enumeration test. Test: `object_array_enumeration`.
+- `Reflect.apply` and `Reflect.construct` now accept typed-array and dynamic-array argument lists for statically known function/class targets, with runtime arity checks; `Reflect.apply` binds `thisArg` into function values that declare `this: any`. Tests: `reflect_apply`, `reflect_construct`.
+- Dynamic `String.prototype.match()` and `matchAll()` support over `tsc_value_t` string receivers with RegExp arguments. Test: `dynamic_string_match`.
+- Dynamic array `Object.keys`/`Object.values`/`Object.entries`, `Object.getOwnPropertyNames`, descriptor lookup, and `Reflect.ownKeys`/`Reflect.has`/`Reflect.get` coverage. Test: `dynamic_array_object_enumeration`.
+- Typed array property descriptors for `Object.getOwnPropertyDescriptor(s)`, including `length`, plus `Reflect.getOwnPropertyDescriptor(array, key)`. Test: `array_property_descriptors`.
+- Typed array own-property checks through `Object.hasOwn`, `Reflect.has`, `hasOwnProperty`, and `propertyIsEnumerable`. Test: `array_own_properties`.
+- Typed `Array.prototype.concat(...)` now accepts both array arguments and single element arguments. Test: `array_concat_values`.
+- `Object.keys(array)`, `Object.values(array)`, and `Object.entries(array)` support for typed arrays, with array-specific shim overloads for `[string, T]` entry reads. Test: `object_array_enumeration`.
+- Dynamic `String.prototype.codePointAt()` support over `tsc_value_t` string receivers. Test: `dynamic_string_code_point_at`.
+- Typed `Object.getOwnPropertyDescriptors(obj)` support for interface/class field descriptor maps. Test: `typed_property_descriptors`.
+- E2e coverage for `typeof` narrowing over dynamic `string | number | boolean` primitive unions. Test: `typeof_boolean_union`.
+- `Array.isArray(value)` is now declared as a type predicate, so guarded `unknown` dynamic values narrow to typed array operations. Test: `array_is_array_narrowing`.
+- Typed `key in obj` field-list checks for interface/class objects, plus coverage for `in`-operator narrowing over interface-shaped unions.
+- Dynamic accessor descriptors for `Object.defineProperty` / `Reflect.defineProperty` can now use module-scope lifted arrow consts as getters/setters.
+- Bounded `Reflect.construct(Class, args)` support for statically known class constructors with array-literal argument lists.
+- Bounded `Reflect.apply(fn, thisArg, args)` support for statically known function values with array-literal argument lists.
+- Callable `Number(value?)` constructor coercion for typed and dynamic values.
+- Callable `String(value?)` and `Boolean(value?)` constructor functions for typed and dynamic coercion.
+- Typed `Object.getOwnPropertyDescriptor(obj, key)` and `Reflect.getOwnPropertyDescriptor(obj, key)` support for interface/class field data descriptors.
+- Typed `Reflect.set(obj, key, value)` support for interface/class field writes.
+- Typed `Reflect.get(obj, key)` support for interface/class field reads.
+- Typed `Reflect.has(obj, key)` support for interface/class field checks.
+- Global `isNaN(value)` and `isFinite(value)` now accept typed and dynamic non-number inputs using JS-style numeric coercion.
+- Typed and dynamic `Number.prototype.toPrecision(precision?)` support for significant-digit formatting.
+- Typed and dynamic `Number.prototype.toExponential(fractionDigits?)` support for scientific notation formatting.
+- Typed and dynamic `Number.prototype.toFixed(fractionDigits?)` support for fixed-point formatting.
+- Typed and dynamic `String.prototype.substr(start, length?)` support with JS-style negative-start and length clamping semantics.
+- Typed `String.prototype.isWellFormed()` and `toWellFormed()` support for the runtime's validated UTF-8 string model.
+- `Array.from(string)` support, returning an array of one-code-point strings via the existing string-iteration runtime.
+- Typed interface/class `Reflect.ownKeys(...)` support using compile-time field-list expansion.
+- Typed interface/class `Object.getOwnPropertyNames(...)` support using the same compile-time field lists as typed object key enumeration.
+- Typed `Math.SQRT1_2` support, with direct `Math.trunc()` / `Math.sign()` e2e coverage.
+- Typed `String.fromCodePoint(...)` support for constructing UTF-8 strings from Unicode scalar values.
+- Typed `Math.imul()`, `Math.clz32()`, and `Math.fround()` support with JS-style int32/uint32 coercion helpers in the runtime.
+- Additional typed `Math` methods backed by libm: `cbrt`, variadic `hypot(...)`, `log1p`, `log2`, `log10`, `expm1`, inverse-trig, and hyperbolic/inverse-hyperbolic functions.
+- Typed `Number` static constants (`EPSILON`, safe integer bounds, infinities, `NaN`, min/max values).
+- Typed `Number.isSafeInteger()` plus `Number.parseInt(value, radix)` support.
+- Typed `RegExp.prototype.hasIndices` and `sticky` flag-property support for `d` and `y` regex flags.
+- Typed `RegExp.prototype.exec(string)` support for full-match and capture-array results.
+- Typed `String.prototype.search(RegExp)` support backed by PCRE2.
+- Typed `Map.prototype.forEach()` and `Set.prototype.forEach()` inline callback support.
+- Typed and dynamic `String.prototype.trimLeft()` / `trimRight()` aliases.
+- Typed and dynamic `String.prototype.charCodeAt()` with UTF-16 code-unit semantics.
+- Optional search-position arguments for typed and dynamic `String.prototype.indexOf()`, `lastIndexOf()`, `includes()`, `startsWith()`, `endsWith()`, and typed/dynamic array `indexOf()`/`includes()`/`lastIndexOf()`.
+- Dynamic `Array.prototype.reduce()` and `reduceRight()` without an explicit initial value.
+- Typed `Array.prototype.reduce()` and `reduceRight()` without an explicit initial value.
+- Focused dynamic `Array.prototype.valueOf()` identity coverage over `tsc_value_t` arrays.
+- Dynamic `Array.prototype.keys()` and `values()` support over `tsc_value_t` arrays.
+- Typed `Array.prototype.valueOf()` support as receiver identity.
+- Typed `Array.prototype.keys()` and `values()` support, returning index arrays and shallow value copies.
+- Typed `Buffer.prototype.toLocaleString()` and `valueOf()` object methods.
+- Typed `Set.prototype.keys()` as the standard alias for `Set.prototype.values()`.
+- Typed `URL.prototype.toString()`, `toJSON()`, `toLocaleString()`, and `valueOf()` support.
+- Typed `Map`, `Set`, `WeakMap`, `WeakSet`, and `WeakRef` `toString()`, `toLocaleString()`, and `valueOf()` object methods.
+- Typed `RegExp` properties (`source`, `flags`, and flag booleans) plus `toString()`, `toLocaleString()`, and `valueOf()` support.
+- Typed `Symbol.prototype.toLocaleString()` / `valueOf()` and `BigInt.prototype.toLocaleString()` / `valueOf()` object methods.
+- Typed interface/class `Object.prototype.toString()`, `toLocaleString()`, and `valueOf()` fallback handling, while preserving user-defined class methods.
+- Typed `Object.hasOwn`, `Object.prototype.hasOwnProperty`, and `Object.prototype.propertyIsEnumerable` field-list checks for interface/class values.
+- Dynamic number `.toString(radix?)` support for `tsc_value_t` receivers.
+- Typed `Number.prototype.toString(radix?)`, `toLocaleString()`, and `valueOf()` plus typed `Boolean.prototype.toString()`, `toLocaleString()`, and `valueOf()`.
+- Typed `String.prototype.toString()`, `toLocaleString()`, and `valueOf()` identity methods.
+- Typed `Array.prototype.toString()` and `toLocaleString()` support using the existing comma-join emitter.
+- Dynamic array `toString()` / `toLocaleString()` now use comma-join stringification instead of the old `[array]` placeholder.
 - Dedicated dynamic `Object.prototype.toString()` coverage for object, array, number, string, and boolean receivers.
 - Dynamic `Object.prototype.toLocaleString()` and `valueOf()` support over boxed dynamic receivers.
 - Dynamic `Object.prototype.isPrototypeOf(value)` support over dynamic prototype chains.
@@ -40,6 +198,16 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Dynamic default `Array.prototype.sort()` support over `tsc_value_t` arrays using JS-style string-conversion ordering.
 - Dynamic `Array.prototype.splice` support over `tsc_value_t` arrays, returning removed elements and mutating the receiver.
 - Dynamic array index assignment and compound numeric-index assignment for `tsc_value_t` arrays, including sparse extension with `undefined`.
+
+### Fixed
+- Typed interface/class `Object.keys(...)`, `Object.getOwnPropertyNames(...)`, and `Reflect.ownKeys(...)` now evaluate the receiver expression before returning the compile-time field list. Test: `typed_object_property_names`.
+- Global and `Number.*` `parseInt` / `parseFloat` declarations now accept any value, matching the emitter's JS-style stringification before parsing.
+- `Number.isFinite()`, `Number.isNaN()`, `Number.isInteger()`, and `Number.isSafeInteger()` now accept any typed or dynamic value and return `false` for non-number inputs.
+- `Math.min()` and `Math.max()` now propagate `NaN` when any argument is `NaN`.
+- `Math.sign()` now preserves JavaScript signed-zero and `NaN` behavior.
+- `Math.round()` now preserves JavaScript negative-zero behavior for values in `[-0.5, 0)`.
+- Preserved Map/Set insertion order after deletion while keeping bucket-table lookup acceleration.
+- Preserved JS division semantics when integer-shaped globals participate in `/`, while still allowing integer `%` lowering.
 - Dynamic direct property assignment and compound property assignment for `obj.x` / `obj["x"]` over `tsc_value_t` objects.
 - Dynamic object prototype chains with `Object.create`, `Object.getPrototypeOf`, `Object.setPrototypeOf`, `Reflect.getPrototypeOf`, `Reflect.setPrototypeOf`, and prototype-walking property reads / `in` / `Reflect.has`.
 - Dynamic `Reflect.getOwnPropertyDescriptor(dynamic, key)` support for descriptor lookup over dynamic object data properties.

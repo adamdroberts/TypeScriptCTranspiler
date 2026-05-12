@@ -1,0 +1,25 @@
+before: true false false
+prevent: true
+after: false false false
+prevent desc: true true
+set existing: true a|B
+set new: false 2 a|B
+define new: false
+sealed: false true false
+sealed desc: true false true
+sealed set: true 10
+sealed new: false 2
+sealed length: false 2
+sealed delete: false 10
+frozen: false true true
+frozen desc: false false false
+frozen set: false 3
+frozen length: false 2
+frozen delete: false 3
+sealed push: 2 m|n
+sealed pop: undefined m|n
+sealed fill: q|q
+frozen push: 2 z|a
+frozen pop: undefined z|a
+frozen fill: z|a
+frozen sort: z|a

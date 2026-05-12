@@ -22,4 +22,6 @@ console.log(MathBox.label, MathBox.add(2, 3), MathBox.count);
 console.log(MathBox.double(7));
 MathBox.count = 10;
 console.log(MathBox.add(1, 1), MathBox.count);
+const pair = [4, 5];
+console.log("spread:", MathBox.add(...(pair as [number, number])), MathBox.count);
 console.log(MathBox.Nested.join("ok"));

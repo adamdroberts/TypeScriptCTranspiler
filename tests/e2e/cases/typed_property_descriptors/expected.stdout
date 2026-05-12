@@ -1,0 +1,5 @@
+point keys: x|name
+x: 7 true true true
+name: Ada
+box keys: value
+box value: 3

@@ -1,0 +1,5 @@
+iface x: true
+iface z: false
+iface key: true
+class field: true
+class missing: false

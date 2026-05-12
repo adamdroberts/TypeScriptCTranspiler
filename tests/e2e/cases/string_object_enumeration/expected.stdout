@@ -1,0 +1,12 @@
+keys: 0|1|2
+values: c|a|t
+entry: 1 a
+names: 0|1|2|length
+own: 0|1|2|length
+reflect: 3 t true false
+has: true true false
+first desc: c false true false
+length desc: 3 false false false
+all desc: t 3
+delete: false true
+set: false a

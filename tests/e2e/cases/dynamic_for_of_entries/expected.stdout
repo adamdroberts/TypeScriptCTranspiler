@@ -1,0 +1,4 @@
+entry a 1 number
+entry b two string
+pair x 3
+pair y false

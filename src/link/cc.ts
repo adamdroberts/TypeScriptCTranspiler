@@ -20,11 +20,17 @@ export async function invokeCc(opts: CcOptions): Promise<CcResult> {
     const args: string[] = [
         "-std=c11",
         opts.release ? "-Os" : "-O2",
+        "-flto",
+        "-fno-plt",
+        "-fno-semantic-interposition",
+        "-fno-math-errno",
+        "-fno-trapping-math",
         "-Wall",
         "-Wno-unused-variable",
         "-Wno-unused-parameter",
         "-Wno-unused-but-set-variable",
         "-Wno-parentheses-equality",
+        "-Wno-stringop-overflow",
     ];
     if (opts.release) args.push("-s");
     for (const dir of opts.includeDirs) args.push("-I", dir);

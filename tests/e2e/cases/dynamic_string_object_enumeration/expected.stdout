@@ -1,0 +1,13 @@
+prop: 3 a t 3 c
+has: true true true false
+enum: true false
+keys: 0|1|2
+values: c|a|t
+entries: 0=c 2=t
+names: 0|1|2|length
+own: 0|1|2|length
+first desc: c false true false
+length desc: 3 false false false
+all desc: t 3
+delete: false true
+set: false a

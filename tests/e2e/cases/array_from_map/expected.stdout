@@ -1,0 +1,5 @@
+len: 2
+a 1
+b 2
+labels: a:1|b:3
+scores: 10|21

@@ -1,0 +1,18 @@
+--- typed class ---
+x
+y
+z
+--- typed class instance ---
+width
+height
+label
+--- typed array ---
+0
+1
+2
+--- dynamic object ---
+alpha = 1
+beta = 2
+gamma = 3
+--- continue/break ---
+alpha

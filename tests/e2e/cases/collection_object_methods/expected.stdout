@@ -1,0 +1,10 @@
+map: [object Map] [object Map] 3
+set: [object Set] [object Set] true
+weakmap: [object WeakMap] [object WeakMap] ok
+weakset: [object WeakSet] [object WeakSet] true
+weakref: [object WeakRef] [object WeakRef] 7
+map own: 0 0 0 0 false
+map desc: undefined 0
+weak own: 0 0 false
+reflect own: 0 undefined
+proto own: false false false

@@ -1,0 +1,3 @@
+fields: 2 3 origin-ish true A
+describe: origin-ish:A:5:true
+keys: x,y,name,visible,label

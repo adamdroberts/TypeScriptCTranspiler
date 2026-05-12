@@ -1,0 +1,4 @@
+nan strings: true false true
+finite strings: true false
+bool: false true
+dynamic: true true true

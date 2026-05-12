@@ -1,0 +1,6 @@
+num: 255 255 256
+hex: ff
+bin: -1010
+frac: 1010.1
+bool: true false yes
+own: false false

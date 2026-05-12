@@ -1,0 +1,6 @@
+epsilon: true
+safe: 9007199254740991 -9007199254740991
+infinity: true true
+nan: true
+max: true
+min: true

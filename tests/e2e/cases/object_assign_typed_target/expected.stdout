@@ -1,0 +1,4 @@
+typed: true typed 2 false
+dynamic: typed 7 true
+primitive: 1 typed 7 true
+class: true class 9

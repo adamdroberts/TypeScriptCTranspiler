@@ -1,0 +1,8 @@
+data: 1 true true true x
+to accessor: true
+accessor: 9 function true undefined true true x
+write accessor: false 9
+to data: true
+data again: 7 false true true x
+write data: false 7
+nonconfig: false 2

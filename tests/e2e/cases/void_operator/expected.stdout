@@ -1,0 +1,4 @@
+string: undefined 1
+number: NaN 2
+boolean: false 3
+statement: 4

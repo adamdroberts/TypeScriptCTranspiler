@@ -1,0 +1,12 @@
+add: 5
+bump: 9
+label: n:7
+add args: 14
+label args: v:3
+this direct: ctx!
+this closure: ctx?
+add spread: 14
+label spread: s:4
+pair string spread: ok
+this spread: ctx*
+ticks: 1
