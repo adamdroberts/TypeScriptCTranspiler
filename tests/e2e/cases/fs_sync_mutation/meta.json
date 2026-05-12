@@ -1,0 +1,3 @@
+{
+  "description": "fs mkdirSync/unlinkSync/rmSync/rmdirSync via node:fs namespace import"
+}

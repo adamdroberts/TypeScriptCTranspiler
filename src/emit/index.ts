@@ -10,11 +10,14 @@ import {
     mapType,
     mapTsType,
     mapType_,
+    promiseType,
     setType,
     TypeBindings,
     T_BIGINT,
     T_BOOLEAN,
     T_BUFFER,
+    T_EVENT_EMITTER,
+    T_FS_STATS,
     T_HASH,
     T_NUMBER,
     T_NUMBER_INT,
@@ -147,6 +150,8 @@ class Emitter {
     private closureCounter = 0;
     private functionRefAdapters = new Map<string, string>();
     private accessorAdapters = new Map<string, string>();
+    private eventListenerAdapters = new Map<string, string>();
+    private eventListenerIdentities = new Map<string, string>();
     private capturedCellsCache = new WeakMap<ts.FunctionLikeDeclaration, Map<ts.Symbol, CaptureCell>>();
     private cellScopes: Map<ts.Symbol, CaptureCell>[] = [];
     private closureEnvScopes: Map<ts.Symbol, ClosureEnvBinding>[] = [];
@@ -185,6 +190,7 @@ class Emitter {
             case "weakset":
             case "weakref":
             case "finregistry":
+            case "promise":
                 if (type.elem) this.prepareType(type.elem);
                 break;
             case "map":
@@ -496,6 +502,64 @@ class Emitter {
             }
         }
         return sym;
+    }
+
+    private isNamedImportFrom(id: ts.Identifier, moduleNames: readonly string[], exportedName: string): boolean {
+        const sym = this.checker.getSymbolAtLocation(id);
+        for (const decl of sym?.declarations ?? []) {
+            if (!ts.isImportSpecifier(decl) || decl.name.text !== id.text) continue;
+            const imported = decl.propertyName?.text ?? decl.name.text;
+            if (imported !== exportedName) continue;
+            const importDecl = decl.parent.parent.parent;
+            const spec = importDecl.moduleSpecifier;
+            if (ts.isStringLiteral(spec) && moduleNames.includes(spec.text)) return true;
+        }
+        return false;
+    }
+
+    private isNamespaceImportFrom(id: ts.Identifier, moduleNames: readonly string[]): boolean {
+        const sym = this.checker.getSymbolAtLocation(id);
+        for (const decl of sym?.declarations ?? []) {
+            if (!ts.isNamespaceImport(decl) || decl.name.text !== id.text) continue;
+            const importDecl = decl.parent.parent;
+            const spec = importDecl.moduleSpecifier;
+            if (ts.isStringLiteral(spec) && moduleNames.includes(spec.text)) return true;
+        }
+        for (const stmt of id.getSourceFile().statements) {
+            if (!ts.isImportDeclaration(stmt) || !stmt.importClause) continue;
+            const spec = stmt.moduleSpecifier;
+            const bindings = stmt.importClause.namedBindings;
+            if (
+                ts.isStringLiteral(spec) &&
+                moduleNames.includes(spec.text) &&
+                bindings &&
+                ts.isNamespaceImport(bindings) &&
+                bindings.name.text === id.text
+            ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private isFsModuleIdentifier(id: ts.Identifier): boolean {
+        return id.text === "fs" || this.isNamespaceImportFrom(id, ["fs", "node:fs"]);
+    }
+
+    private isPathModuleIdentifier(id: ts.Identifier): boolean {
+        return id.text === "path" || this.isNamespaceImportFrom(id, ["path", "node:path"]);
+    }
+
+    private isFsPromisesReceiver(expr: ts.Expression): boolean {
+        if (
+            ts.isPropertyAccessExpression(expr) &&
+            expr.name.text === "promises" &&
+            ts.isIdentifier(expr.expression) &&
+            this.isFsModuleIdentifier(expr.expression)
+        ) {
+            return true;
+        }
+        return ts.isIdentifier(expr) && this.isNamedImportFrom(expr, ["fs", "node:fs"], "promises");
     }
 
     private symbolForBindingName(name: ts.BindingName): ts.Symbol | undefined {
@@ -2887,6 +2951,12 @@ class Emitter {
             if (expr.text === "NaN") return { c: "((double)NAN)", ty: T_NUMBER };
             if (expr.text === "Infinity") return { c: "((double)INFINITY)", ty: T_NUMBER };
             if (expr.text === "undefined") return { c: "NULL", ty: T_VOID };
+            if (this.isNamedImportFrom(expr, ["path", "node:path"], "sep")) {
+                return { c: this.stringLit("/"), ty: T_STRING };
+            }
+            if (this.isNamedImportFrom(expr, ["path", "node:path"], "delimiter")) {
+                return { c: this.stringLit(":"), ty: T_STRING };
+            }
             const sym = this.symbolForIdentifier(expr);
             if (sym && this.catchStringSymbols.has(sym)) {
                 return { c: this.identifierRead(expr), ty: T_STRING };
@@ -3012,6 +3082,8 @@ class Emitter {
             case "weakset":
             case "weakref":
             case "finregistry":
+            case "promise":
+            case "eventemitter":
             case "regexp":
             case "hash":
             case "url":
@@ -3659,7 +3731,7 @@ class Emitter {
                     );
                 }
                 const pointerKinds: readonly CType["kind"][] = [
-                    "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "regexp", "hash", "url", "buffer", "function",
+                    "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "buffer", "fsstats", "function",
                 ];
                 if (pointerKinds.includes(left.ty.kind)) {
                     const tv = this.freshTemp("_nc");
@@ -4143,7 +4215,7 @@ class Emitter {
         }
         // Compare pointer-valued types (array, class, map, set, regexp, string) to null.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "regexp", "hash", "url", "buffer", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "buffer", "fsstats", "function",
         ];
         const leftIsNull = left.ty.kind === "void";
         const rightIsNull = right.ty.kind === "void";
@@ -4293,7 +4365,8 @@ class Emitter {
             }
             unsupported(call, `call target kind ${ts.SyntaxKind[call.expression.kind]}`);
         }
-        const name = call.expression.text;
+        const calleeId = call.expression;
+        const name = calleeId.text;
         if (name === "parseInt" || name === "parseFloat") {
             return this.emitParseNumber(call, name);
         }
@@ -4319,6 +4392,18 @@ class Emitter {
         if (name === "isFinite") {
             if (call.arguments.length !== 1) unsupported(call, "isFinite expects 1 arg");
             return this.emitGlobalNumberPredicate(call, "isFinite");
+        }
+        if (
+            this.isNamedImportFrom(calleeId, ["events", "node:events"], "listenerCount") ||
+            this.isNamedImportFrom(calleeId, ["events", "node:events"], "setMaxListeners") ||
+            this.isNamedImportFrom(calleeId, ["events", "node:events"], "getMaxListeners")
+        ) {
+            return this.emitEventsStaticCall(call, name);
+        }
+        const pathNamed = ["join", "resolve", "normalize", "isAbsolute", "relative", "basename", "dirname", "extname"]
+            .find((exported) => this.isNamedImportFrom(calleeId, ["path", "node:path"], exported));
+        if (pathNamed) {
+            return this.emitPathCall(call, pathNamed);
         }
 
         if (!this.isDirectCallableIdentifier(call.expression)) {
@@ -5040,6 +5125,7 @@ class Emitter {
             case "weakset":
             case "weakref":
             case "finregistry":
+            case "promise":
             case "entry":
                 return `${type.kind}_${type.elem ? this.typeKey(type.elem) : "void"}`;
             case "map":
@@ -5179,6 +5265,25 @@ class Emitter {
         const memberName = pa.name.text;
         const recvExpr = pa.expression;
 
+        if (this.isFsPromisesReceiver(recvExpr)) {
+            return this.emitFsPromisesCall(call, memberName);
+        }
+
+        if (ts.isIdentifier(recvExpr) && this.isFsModuleIdentifier(recvExpr)) {
+            return this.emitFsCall(call, memberName);
+        }
+
+        if (ts.isIdentifier(recvExpr) && this.isNamespaceImportFrom(recvExpr, ["events", "node:events"])) {
+            if (memberName === "listenerCount" || memberName === "setMaxListeners" || memberName === "getMaxListeners") {
+                return this.emitEventsStaticCall(call, memberName);
+            }
+            unsupported(call, `events.${memberName}`);
+        }
+
+        if (ts.isIdentifier(recvExpr) && this.isPathModuleIdentifier(recvExpr)) {
+            return this.emitPathCall(call, memberName);
+        }
+
         if (ts.isIdentifier(pa.name)) {
             const nsName = this.namespaceMemberName(pa.name);
             if (nsName) {
@@ -5286,12 +5391,6 @@ class Emitter {
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Math") {
             return this.emitMathCall(call, memberName);
         }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "fs") {
-            return this.emitFsCall(call, memberName);
-        }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "path") {
-            return this.emitPathCall(call, memberName);
-        }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "crypto") {
             return this.emitCryptoCall(call, memberName);
         }
@@ -5315,6 +5414,9 @@ class Emitter {
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Object") {
             return this.emitObjectCall(call, memberName);
+        }
+        if (ts.isIdentifier(recvExpr) && recvExpr.text === "Promise") {
+            return this.emitPromiseStatic(call, memberName);
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Reflect") {
             return this.emitReflectCall(call, memberName);
@@ -5420,6 +5522,10 @@ class Emitter {
             return this.emitWeakRefMethod(call, recv, memberName);
         if (recv.ty.kind === "finregistry")
             return this.emitFinRegistryMethod(call, recv, memberName);
+        if (recv.ty.kind === "promise")
+            return this.emitPromiseMethod(call, recv, memberName);
+        if (recv.ty.kind === "eventemitter")
+            return this.emitEventEmitterMethod(call, recv, memberName);
         if (recv.ty.kind === "regexp")
             return this.emitRegexpMethod(call, recv, memberName);
         if (recv.ty.kind === "hash")
@@ -5428,6 +5534,8 @@ class Emitter {
             return this.emitUrlMethod(call, recv, memberName);
         if (recv.ty.kind === "buffer")
             return this.emitBufferMethod(call, recv, memberName);
+        if (recv.ty.kind === "fsstats")
+            return this.emitFsStatsMethod(call, recv, memberName);
         if (recv.ty.kind === "class" && this.isObjectPrototypeFallback(call)) {
             return this.emitTypedObjectPrototypeMethod(call, recvExpr, recv, memberName);
         }
@@ -7271,6 +7379,495 @@ class Emitter {
         unsupported(call, `FinalizationRegistry method .${method}`);
     }
 
+    private emitPromiseStatic(call: ts.CallExpression, method: string): EmitResult {
+        const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
+        if (mapped.kind !== "promise") unsupported(call, `Promise.${method} result must be Promise<T>`);
+        switch (method) {
+            case "resolve": {
+                if (call.arguments.length > 1) unsupported(call, "Promise.resolve expects 0 or 1 args");
+                const arg = call.arguments[0];
+                const value = arg
+                    ? this.emitExpr(arg)
+                    : { c: "tsc_value_undefined()", ty: T_VALUE };
+                if (mapped.elem?.kind === "fsstats") {
+                    if (!arg) unsupported(call, "Promise.resolve<FSStats> expects a Stats value");
+                    return this.emitSequencedCall("tsc_promise_resolve_fs_stats", mapped, [
+                        { value, target: T_FS_STATS, node: arg },
+                    ]);
+                }
+                return this.emitSequencedCall("tsc_promise_resolve", mapped, [
+                    { value, target: T_VALUE, node: arg },
+                ]);
+            }
+            case "reject": {
+                if (call.arguments.length > 1) unsupported(call, "Promise.reject expects 0 or 1 args");
+                const arg = call.arguments[0];
+                const reason = arg
+                    ? this.emitExpr(arg)
+                    : { c: "tsc_value_undefined()", ty: T_VALUE };
+                return this.emitSequencedCall("tsc_promise_reject", mapped, [
+                    { value: reason, target: T_VALUE, node: arg },
+                ]);
+            }
+            case "all": {
+                if (call.arguments.length !== 1) unsupported(call, "Promise.all expects 1 arg");
+                const source = this.emitPromiseArrayArg(call, "Promise.all");
+                const resultArray = mapped.elem;
+                if (!resultArray || resultArray.kind !== "array" || !resultArray.elem) {
+                    unsupported(call, "Promise.all result must be Promise<T[]>");
+                }
+                const elem = this.prepareType(resultArray.elem);
+                return this.emitSequencedExpr(mapped, [{ value: source, node: call.arguments[0]! }], ([src]) => {
+                    const out = this.freshTemp("_promise_all");
+                    const result = this.freshTemp("_promise_result");
+                    const i = this.freshTemp("_i");
+                    const item = this.freshTemp("_promise_item");
+                    const value = this.freshTemp("_promise_value");
+                    const pushed = this.coerce(this.promiseFulfilledValue(elem, item), elem, call);
+                    return (
+                        `({ tsc_array_t* const _src = ${src}; ` +
+                        `tsc_array_t* ${out} = tsc_array_new(sizeof(${elem.c}), _src->len); ` +
+                        `tsc_promise_t* ${result} = NULL; ` +
+                        `for (size_t ${i} = 0; ${i} < _src->len; ${i}++) { ` +
+                        `tsc_promise_t* const ${item} = TSC_ARR(tsc_promise_t*, _src, ${i}); ` +
+                        `if (tsc_promise_is_rejected(${item})) { ${result} = tsc_promise_reject(tsc_promise_reason(${item})); break; } ` +
+                        `${elem.c} ${value} = ${pushed}; tsc_array_push_raw(${out}, &${value}); } ` +
+                        `${result} ? ${result} : tsc_promise_resolve(tsc_value_array(${out})); })`
+                    );
+                });
+            }
+            case "race": {
+                if (call.arguments.length !== 1) unsupported(call, "Promise.race expects 1 arg");
+                const source = this.emitPromiseArrayArg(call, "Promise.race");
+                return this.emitSequencedExpr(mapped, [{ value: source, node: call.arguments[0]! }], ([src]) => {
+                    const result = this.freshTemp("_promise_result");
+                    const item = this.freshTemp("_promise_item");
+                    return (
+                        `({ tsc_array_t* const _src = ${src}; tsc_promise_t* ${result}; ` +
+                        `if (_src->len == 0) { ${result} = tsc_promise_resolve(tsc_value_undefined()); } ` +
+                        `else { tsc_promise_t* const ${item} = TSC_ARR(tsc_promise_t*, _src, 0); ` +
+                        `${result} = tsc_promise_is_rejected(${item}) ? tsc_promise_reject(tsc_promise_reason(${item})) : ${this.promiseResolveStoredValue(mapped.elem, item)}; } ` +
+                        `${result}; })`
+                    );
+                });
+            }
+            case "any": {
+                if (call.arguments.length !== 1) unsupported(call, "Promise.any expects 1 arg");
+                const source = this.emitPromiseArrayArg(call, "Promise.any");
+                return this.emitSequencedExpr(mapped, [{ value: source, node: call.arguments[0]! }], ([src]) => {
+                    const result = this.freshTemp("_promise_result");
+                    const reason = this.freshTemp("_promise_reason");
+                    const i = this.freshTemp("_i");
+                    const item = this.freshTemp("_promise_item");
+                    return (
+                        `({ tsc_array_t* const _src = ${src}; tsc_promise_t* ${result} = NULL; ` +
+                        `tsc_value_t ${reason} = tsc_value_undefined(); ` +
+                        `for (size_t ${i} = 0; ${i} < _src->len; ${i}++) { ` +
+                        `tsc_promise_t* const ${item} = TSC_ARR(tsc_promise_t*, _src, ${i}); ` +
+                        `if (tsc_promise_is_fulfilled(${item})) { ${result} = ${this.promiseResolveStoredValue(mapped.elem, item)}; break; } ` +
+                        `${reason} = tsc_promise_reason(${item}); } ` +
+                        `${result} ? ${result} : tsc_promise_reject(${reason}); })`
+                    );
+                });
+            }
+            case "allSettled": {
+                if (call.arguments.length !== 1) unsupported(call, "Promise.allSettled expects 1 arg");
+                const source = this.emitPromiseArrayArg(call, "Promise.allSettled");
+                const resultArray = mapped.elem;
+                if (!resultArray || resultArray.kind !== "array") {
+                    unsupported(call, "Promise.allSettled result must be Promise<any[]>");
+                }
+                return this.emitSequencedExpr(mapped, [{ value: source, node: call.arguments[0]! }], ([src]) => {
+                    const out = this.freshTemp("_promise_settled");
+                    const i = this.freshTemp("_i");
+                    const item = this.freshTemp("_promise_item");
+                    const obj = this.freshTemp("_settled");
+                    const boxed = this.freshTemp("_settled_value");
+                    return (
+                        `({ tsc_array_t* const _src = ${src}; ` +
+                        `tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), _src->len); ` +
+                        `for (size_t ${i} = 0; ${i} < _src->len; ${i}++) { ` +
+                        `tsc_promise_t* const ${item} = TSC_ARR(tsc_promise_t*, _src, ${i}); ` +
+                        `tsc_object_t* ${obj} = tsc_object_new(); ` +
+                        `if (tsc_promise_is_fulfilled(${item})) { ` +
+                        `tsc_object_set(${obj}, tsc_str_from_lit("status", 6), tsc_value_string(tsc_str_from_lit("fulfilled", 9))); ` +
+                        `tsc_object_set(${obj}, tsc_str_from_lit("value", 5), tsc_promise_value(${item})); ` +
+                        `} else { ` +
+                        `tsc_object_set(${obj}, tsc_str_from_lit("status", 6), tsc_value_string(tsc_str_from_lit("rejected", 8))); ` +
+                        `tsc_object_set(${obj}, tsc_str_from_lit("reason", 6), tsc_promise_reason(${item})); } ` +
+                        `tsc_value_t ${boxed} = tsc_value_object(${obj}); tsc_array_push_raw(${out}, &${boxed}); } ` +
+                        `tsc_promise_resolve(tsc_value_array(${out})); })`
+                    );
+                });
+            }
+        }
+        unsupported(call, `Promise.${method}`);
+    }
+
+    private emitPromiseArrayArg(call: ts.CallExpression, label: string): EmitResult {
+        const arg = call.arguments[0];
+        if (!arg) unsupported(call, `${label} expects an array`);
+        const source = this.emitExpr(arg);
+        if (source.ty.kind !== "array" || !source.ty.elem || source.ty.elem.kind !== "promise") {
+            unsupported(arg, `${label} expects Promise<T>[]`);
+        }
+        return source;
+    }
+
+    private emitPromiseMethod(
+        call: ts.CallExpression,
+        recv: EmitResult,
+        method: string,
+    ): EmitResult {
+        const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
+        if (mapped.kind !== "promise") unsupported(call, `Promise.${method} result must be Promise<T>`);
+        switch (method) {
+            case "then": {
+                const args = call.arguments;
+                if (args.length < 1 || args.length > 2) unsupported(call, "Promise.then expects 1 or 2 args");
+                const fulfilled = this.emitExpr(args[0]!);
+                this.validatePromiseCallback(args[0]!, fulfilled, 1, "Promise.then onfulfilled");
+                const specs: SequencedCallArg[] = [
+                    { value: recv },
+                    { value: fulfilled, target: fulfilled.ty, node: args[0]! },
+                ];
+                let rejected: EmitResult | null = null;
+                if (args[1]) {
+                    rejected = this.emitExpr(args[1]);
+                    this.validatePromiseCallback(args[1], rejected, 1, "Promise.then onrejected");
+                    specs.push({ value: rejected, target: rejected.ty, node: args[1] });
+                }
+                return this.emitSequencedExpr(mapped, specs, (vals) => {
+                    const promise = vals[0]!;
+                    const onFulfilled = vals[1]!;
+                    const onRejected = vals[2];
+                    const okValue = this.promiseCallbackResolve(call, fulfilled.ty, onFulfilled, this.promiseFulfilledValue(recv.ty.elem, promise), args[0]!);
+                    const errValue = rejected && onRejected
+                        ? this.promiseCallbackResolve(call, rejected.ty, onRejected, { c: `tsc_promise_reason(${promise})`, ty: T_VALUE }, args[1]!)
+                        : `tsc_promise_reject(tsc_promise_reason(${promise}))`;
+                    return `({ tsc_promise_t* const _p = ${promise}; tsc_promise_is_fulfilled(_p) ? ${okValue} : ${errValue}; })`;
+                });
+            }
+            case "catch": {
+                if (call.arguments.length !== 1) unsupported(call, "Promise.catch expects 1 arg");
+                const rejected = this.emitExpr(call.arguments[0]!);
+                this.validatePromiseCallback(call.arguments[0]!, rejected, 1, "Promise.catch onrejected");
+                return this.emitSequencedExpr(mapped, [
+                    { value: recv },
+                    { value: rejected, target: rejected.ty, node: call.arguments[0]! },
+                ], (vals) => {
+                    const promise = vals[0]!;
+                    const onRejected = vals[1]!;
+                    const errValue = this.promiseCallbackResolve(call, rejected.ty, onRejected, { c: `tsc_promise_reason(${promise})`, ty: T_VALUE }, call.arguments[0]!);
+                    return `({ tsc_promise_t* const _p = ${promise}; tsc_promise_is_rejected(_p) ? ${errValue} : ${this.promiseResolveStoredValue(recv.ty.elem, "_p")}; })`;
+                });
+            }
+            case "finally": {
+                if (call.arguments.length !== 1) unsupported(call, "Promise.finally expects 1 arg");
+                const cb = this.emitExpr(call.arguments[0]!);
+                this.validatePromiseCallback(call.arguments[0]!, cb, 0, "Promise.finally callback");
+                return this.emitSequencedExpr(mapped, [
+                    { value: recv },
+                    { value: cb, target: cb.ty, node: call.arguments[0]! },
+                ], (vals) => {
+                    const promise = vals[0]!;
+                    const fn = vals[1]!;
+                    const callStmt = this.promiseCallbackCall(call, cb.ty, fn, [], call.arguments[0]!);
+                    return `({ tsc_promise_t* const _p = ${promise}; ${callStmt}; tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recv.ty.elem, "_p")}; })`;
+                });
+            }
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Promise");
+        }
+        unsupported(call, `Promise method .${method}`);
+    }
+
+    private validatePromiseCallback(
+        node: ts.Expression,
+        callback: EmitResult,
+        arity: number,
+        label: string,
+    ): void {
+        const type = this.prepareType(callback.ty);
+        if (type.kind !== "function" || !type.ret) unsupported(node, `${label} must be a function`);
+        const params = type.params ?? [];
+        if (params.length !== arity) unsupported(node, `${label} expects ${arity} parameter(s)`);
+    }
+
+    private promiseCallbackResolve(
+        call: ts.CallExpression,
+        callbackType: CType,
+        callbackValue: string,
+        value: EmitResult,
+        node: ts.Expression,
+    ): string {
+        if (callbackType.kind !== "function" || !callbackType.ret) unsupported(node, "Promise callback must be a function");
+        const ret = this.prepareType(callbackType.ret);
+        const result = this.promiseCallbackCall(call, callbackType, callbackValue, [value], node);
+        if (ret.kind === "void" || ret.kind === "never") {
+            return `({ ${result}; tsc_promise_resolve(tsc_value_undefined()); })`;
+        }
+        return this.promiseResolveResult({ c: result, ty: ret }, node);
+    }
+
+    private promiseCallbackCall(
+        call: ts.CallExpression,
+        callbackType: CType,
+        callbackValue: string,
+        values: readonly EmitResult[],
+        node: ts.Expression,
+    ): string {
+        if (callbackType.kind !== "function" || !callbackType.ret) unsupported(node, "Promise callback must be a function");
+        const params = callbackType.params ?? [];
+        const args = params.map((param, i) => this.coerce(values[i] ?? { c: "tsc_value_undefined()", ty: T_VALUE }, param, call));
+        return `${callbackValue}->fn(${[`${callbackValue}->env`, ...(callbackType.thisParam ? ["tsc_value_undefined()"] : []), ...args].join(", ")})`;
+    }
+
+    private promiseFulfilledValue(elem: CType | undefined, promise: string): EmitResult {
+        const stored = elem ? this.prepareType(elem) : T_VALUE;
+        if (stored.kind === "fsstats") {
+            return { c: `tsc_promise_fs_stats_value(${promise})`, ty: T_FS_STATS };
+        }
+        return { c: `tsc_promise_value(${promise})`, ty: T_VALUE };
+    }
+
+    private promiseResolveStoredValue(elem: CType | undefined, promise: string): string {
+        const stored = elem ? this.prepareType(elem) : T_VALUE;
+        if (stored.kind === "fsstats") {
+            return `tsc_promise_resolve_fs_stats(tsc_promise_fs_stats_value(${promise}))`;
+        }
+        return `tsc_promise_resolve(tsc_promise_value(${promise}))`;
+    }
+
+    private promiseResolveResult(result: EmitResult, node: ts.Node): string {
+        const stored = this.prepareType(result.ty);
+        if (stored.kind === "fsstats") {
+            return `tsc_promise_resolve_fs_stats(${result.c})`;
+        }
+        return `tsc_promise_resolve(${this.coerce(result, T_VALUE, node)})`;
+    }
+
+    private emitEventEmitterMethod(
+        call: ts.CallExpression,
+        recv: EmitResult,
+        method: string,
+    ): EmitResult {
+        const args = call.arguments;
+        switch (method) {
+            case "on":
+            case "addListener":
+            case "prependListener":
+            case "once":
+            case "prependOnceListener": {
+                if (args.length !== 2) unsupported(call, `EventEmitter.${method} expects eventName and listener`);
+                const eventName = this.emitExpr(args[0]!);
+                const listener = this.emitEventListenerExpression(args[1]!);
+                const adapter = this.ensureEventListenerAdapter(args[1]!, listener.ty);
+                return this.emitSequencedExpr(T_EVENT_EMITTER, [
+                    { value: recv },
+                    { value: eventName, target: T_STRING, node: args[0]! },
+                    { value: listener, target: listener.ty, node: args[1]! },
+                ], ([ee, event, fn]) =>
+                    `({ tsc_event_emitter_on(${ee}, ${event}, ${adapter}, (void*)${fn}, ${this.eventListenerIdentity(args[1]!, fn)}, ${method === "once" || method === "prependOnceListener" ? "true" : "false"}, ${method === "prependListener" || method === "prependOnceListener" ? "true" : "false"}); ${ee}; })`,
+                );
+            }
+            case "off":
+            case "removeListener": {
+                if (args.length !== 2) unsupported(call, `EventEmitter.${method} expects eventName and listener`);
+                const eventName = this.emitExpr(args[0]!);
+                const listener = this.emitEventListenerExpression(args[1]!);
+                const adapter = this.ensureEventListenerAdapter(args[1]!, listener.ty);
+                return this.emitSequencedExpr(T_EVENT_EMITTER, [
+                    { value: recv },
+                    { value: eventName, target: T_STRING, node: args[0]! },
+                    { value: listener, target: listener.ty, node: args[1]! },
+                ], ([ee, event, fn]) =>
+                    `({ tsc_event_emitter_off(${ee}, ${event}, ${adapter}, ${this.eventListenerIdentity(args[1]!, fn)}); ${ee}; })`,
+                );
+            }
+            case "removeAllListeners": {
+                if (args.length > 1) unsupported(call, "EventEmitter.removeAllListeners expects 0 or 1 args");
+                const specs: SequencedCallArg[] = [{ value: recv }];
+                if (args[0]) {
+                    const eventName = this.emitExpr(args[0]);
+                    specs.push({ value: eventName, target: T_STRING, node: args[0] });
+                }
+                return this.emitSequencedExpr(T_EVENT_EMITTER, specs, (vals) => {
+                    const ee = vals[0]!;
+                    const event = vals[1] ?? "NULL";
+                    return `({ tsc_event_emitter_remove_all(${ee}, ${event}); ${ee}; })`;
+                });
+            }
+            case "emit": {
+                if (args.length < 1) unsupported(call, "EventEmitter.emit expects eventName");
+                const eventName = this.emitExpr(args[0]!);
+                const specs: SequencedCallArg[] = [
+                    { value: recv },
+                    { value: eventName, target: T_STRING, node: args[0]! },
+                ];
+                for (let i = 1; i < args.length; i++) {
+                    const value = this.emitExpr(args[i]!);
+                    specs.push({ value, target: T_VALUE, node: args[i]! });
+                }
+                return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) => {
+                    const ee = vals[0]!;
+                    const event = vals[1]!;
+                    const av = this.freshTemp("_event_args");
+                    const pieces = [`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, vals.length - 2)})`];
+                    for (const value of vals.slice(2)) {
+                        pieces.push(`tsc_array_push_raw(${av}, &${value})`);
+                    }
+                    pieces.push(`tsc_event_emitter_emit(${ee}, ${event}, ${av})`);
+                    return `({ ${pieces.join("; ")}; })`;
+                });
+            }
+            case "listenerCount": {
+                if (args.length < 1 || args.length > 2) unsupported(call, "EventEmitter.listenerCount expects eventName and optional listener");
+                const eventName = this.emitExpr(args[0]!);
+                if (args[1]) {
+                    const listener = this.emitEventListenerExpression(args[1]);
+                    return this.emitSequencedExpr(T_NUMBER, [
+                        { value: recv },
+                        { value: eventName, target: T_STRING, node: args[0]! },
+                        { value: listener, target: listener.ty, node: args[1] },
+                    ], ([ee, event, fn]) =>
+                        `tsc_event_emitter_listener_count_identity(${ee}, ${event}, ${this.eventListenerIdentity(args[1]!, fn!)})`,
+                    );
+                }
+                return this.emitSequencedCall("tsc_event_emitter_listener_count", T_NUMBER, [
+                    { value: recv },
+                    { value: eventName, target: T_STRING, node: args[0]! },
+                ]);
+            }
+            case "eventNames": {
+                if (args.length !== 0) unsupported(call, "EventEmitter.eventNames expects no args");
+                return this.emitSequencedCall("tsc_event_emitter_event_names", arrayType(T_STRING), [
+                    { value: recv },
+                ]);
+            }
+            case "setMaxListeners": {
+                if (args.length !== 1) unsupported(call, "EventEmitter.setMaxListeners expects count");
+                const count = this.emitExpr(args[0]!);
+                return this.emitSequencedExpr(T_EVENT_EMITTER, [
+                    { value: recv },
+                    { value: count, target: T_NUMBER, node: args[0]! },
+                ], ([ee, n]) => `({ tsc_event_emitter_set_max_listeners(${ee}, ${n}); ${ee}; })`);
+            }
+            case "getMaxListeners": {
+                if (args.length !== 0) unsupported(call, "EventEmitter.getMaxListeners expects no args");
+                return this.emitSequencedCall("tsc_event_emitter_get_max_listeners", T_NUMBER, [
+                    { value: recv },
+                ]);
+            }
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "EventEmitter");
+        }
+        unsupported(call, `EventEmitter method .${method}`);
+    }
+
+    private emitEventsStaticCall(call: ts.CallExpression, method: string): EmitResult {
+        const args = call.arguments;
+        switch (method) {
+            case "listenerCount": {
+                if (args.length !== 2) unsupported(call, "events.listenerCount expects emitter and eventName");
+                const emitter = this.emitExpr(args[0]!);
+                const eventName = this.emitExpr(args[1]!);
+                return this.emitSequencedCall("tsc_event_emitter_listener_count", T_NUMBER, [
+                    { value: emitter, target: T_EVENT_EMITTER, node: args[0]! },
+                    { value: eventName, target: T_STRING, node: args[1]! },
+                ]);
+            }
+            case "setMaxListeners": {
+                if (args.length !== 2) unsupported(call, "events.setMaxListeners expects count and emitter");
+                const count = this.emitExpr(args[0]!);
+                const emitter = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(T_VOID, [
+                    { value: count, target: T_NUMBER, node: args[0]! },
+                    { value: emitter, target: T_EVENT_EMITTER, node: args[1]! },
+                ], ([n, ee]) => `tsc_event_emitter_set_max_listeners(${ee}, ${n})`);
+            }
+            case "getMaxListeners": {
+                if (args.length !== 1) unsupported(call, "events.getMaxListeners expects emitter");
+                const emitter = this.emitExpr(args[0]!);
+                return this.emitSequencedCall("tsc_event_emitter_get_max_listeners", T_NUMBER, [
+                    { value: emitter, target: T_EVENT_EMITTER, node: args[0]! },
+                ]);
+            }
+        }
+        unsupported(call, `events.${method}`);
+    }
+
+    private ensureEventListenerAdapter(expr: ts.Expression, type: CType): string {
+        const prepared = this.prepareType(type);
+        if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
+            unsupported(expr, "EventEmitter listener must be a function");
+        }
+        if (prepared.thisParam) unsupported(expr, "EventEmitter listener this parameters are not supported yet");
+        const key = `event:${this.typeKey(prepared)}`;
+        const existing = this.eventListenerAdapters.get(key);
+        if (existing) return existing;
+        const name = `tsc_event_listener_${this.eventListenerAdapters.size}`;
+        this.eventListenerAdapters.set(key, name);
+        this.protos.line(`void ${name}(void* env, tsc_array_t* args);`);
+        const buf = new CBuf();
+        buf.open(`void ${name}(void* env, tsc_array_t* args)`);
+        buf.line(`${prepared.c} fn = (${prepared.c})env;`);
+        const params = prepared.params ?? [];
+        const callArgs: string[] = ["fn->env"];
+        for (let i = 0; i < params.length; i++) {
+            const arg = this.coerce(
+                { c: `(args->len > ${i} ? TSC_ARR(tsc_value_t, args, ${i}) : tsc_value_undefined())`, ty: T_VALUE },
+                params[i]!,
+                expr,
+            );
+            callArgs.push(arg);
+        }
+        buf.line(`fn->fn(${callArgs.join(", ")});`);
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
+    private emitEventListenerExpression(expr: ts.Expression): EmitResult {
+        if (ts.isIdentifier(expr) && this.isDirectFunctionReferenceValue(expr)) {
+            const sym = this.symbolForIdentifier(expr);
+            const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+            if (sym && decl) {
+                const declaredType = this.prepareType(mapTsType(
+                    expr,
+                    this.checker.getTypeOfSymbolAtLocation(sym, decl),
+                    this.checker,
+                ));
+                if (declaredType.kind === "function") {
+                    return this.emitFunctionReferenceClosure(expr, declaredType);
+                }
+            }
+        }
+        return this.emitExpr(expr);
+    }
+
+    private eventListenerIdentity(expr: ts.Expression, fallback: string): string {
+        if (ts.isIdentifier(expr) && this.isDirectFunctionReferenceValue(expr)) {
+            const key = this.identifierName(expr);
+            const existing = this.eventListenerIdentities.get(key);
+            if (existing) return `(void*)&${existing}`;
+            const name = `tsc_event_identity_${this.eventListenerIdentities.size}`;
+            this.eventListenerIdentities.set(key, name);
+            this.globalDecls.line(`static int ${name};`);
+            return `(void*)&${name}`;
+        }
+        return `(void*)${fallback}`;
+    }
+
     private emitBuiltinObjectPrototypeMethod(
         call: ts.CallExpression,
         recv: EmitResult,
@@ -7647,6 +8244,52 @@ class Emitter {
                         `${this.objectEntrySet(entry, et, `TSC_ARR(${et.c}, ${av}, ${iv})`)}; ` +
                         `tsc_array_push_raw(${out}, &${entry}); } ${out}; })`,
                     ty: arrayType(elemType),
+                };
+            }
+            case "next": {
+                if (args.length > 1) unsupported(call, "next expects 0 or 1 args");
+                const av = this.freshTemp("_iter");
+                const out = this.freshTemp("_step");
+                const current = this.freshTemp("_current");
+                const boxed = this.coerce({ c: current, ty: et }, T_VALUE, call.expression);
+                return {
+                    c:
+                        `({ tsc_array_t* const ${av} = ${recv.c}; ` +
+                        `tsc_object_t* ${out} = tsc_object_new(); ` +
+                        `if (${av}->iter_pos < ${av}->len) { ` +
+                        `${et.c} ${current} = TSC_ARR(${et.c}, ${av}, ${av}->iter_pos++); ` +
+                        `tsc_object_set(${out}, tsc_str_from_lit("done", 4), tsc_value_bool(false)); ` +
+                        `tsc_object_set(${out}, tsc_str_from_lit("value", 5), ${boxed}); ` +
+                        `} else { ` +
+                        `tsc_object_set(${out}, tsc_str_from_lit("done", 4), tsc_value_bool(true)); ` +
+                        `tsc_object_set(${out}, tsc_str_from_lit("value", 5), tsc_value_undefined()); ` +
+                        `} tsc_value_object(${out}); })`,
+                    ty: T_VALUE,
+                };
+            }
+            case "return": {
+                if (args.length > 1) unsupported(call, "return expects 0 or 1 args");
+                const value = args[0]
+                    ? this.coerce(this.emitExpr(args[0]), T_VALUE, args[0])
+                    : "tsc_value_undefined()";
+                const av = this.freshTemp("_iter");
+                const out = this.freshTemp("_step");
+                return {
+                    c:
+                        `({ tsc_array_t* const ${av} = ${recv.c}; ${av}->iter_pos = ${av}->len; ` +
+                        `tsc_object_t* ${out} = tsc_object_new(); ` +
+                        `tsc_object_set(${out}, tsc_str_from_lit("done", 4), tsc_value_bool(true)); ` +
+                        `tsc_object_set(${out}, tsc_str_from_lit("value", 5), ${value}); ` +
+                        `tsc_value_object(${out}); })`,
+                    ty: T_VALUE,
+                };
+            }
+            case "throw": {
+                if (args.length !== 1) unsupported(call, "throw expects 1 arg");
+                const err = this.emitExpr(args[0]!);
+                return {
+                    c: `({ tsc_throw_str(${this.coerceToString(err, args[0]!)}); tsc_value_undefined(); })`,
+                    ty: T_VALUE,
                 };
             }
             case "hasOwnProperty":
@@ -9286,13 +9929,15 @@ class Emitter {
         const args = call.arguments;
         switch (name) {
             case "readFileSync": {
-                if (args.length < 1) unsupported(call, "fs.readFileSync needs a path");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.readFileSync needs path and optional UTF-8 encoding options");
+                this.validateFsEncodingOptions(args[1], "fs.readFileSync");
                 const p = this.emitExpr(args[0]!);
                 return { c: `tsc_fs_read_file_sync(${p.c})`, ty: T_STRING };
             }
             case "writeFileSync": {
-                if (args.length < 2)
-                    unsupported(call, "fs.writeFileSync needs path + data");
+                if (args.length < 2 || args.length > 3)
+                    unsupported(call, "fs.writeFileSync needs path, data, and optional UTF-8 encoding options");
+                this.validateFsEncodingOptions(args[2], "fs.writeFileSync");
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
                 return this.emitSequencedCall(
@@ -9303,6 +9948,16 @@ class Emitter {
                         { value: d, target: T_STRING, node: args[1]! },
                     ],
                 );
+            }
+            case "appendFileSync": {
+                if (args.length < 2 || args.length > 3) unsupported(call, "fs.appendFileSync needs path, data, and optional UTF-8 encoding options");
+                this.validateFsEncodingOptions(args[2], "fs.appendFileSync");
+                const p = this.emitExpr(args[0]!);
+                const d = this.emitExpr(args[1]!);
+                return this.emitSequencedCall("tsc_fs_append_file_sync", T_VOID, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                    { value: d, target: T_STRING, node: args[1]! },
+                ]);
             }
             case "existsSync": {
                 if (args.length !== 1) unsupported(call, "fs.existsSync needs path");
@@ -9317,8 +9972,357 @@ class Emitter {
                     ty: arrayType(T_STRING),
                 };
             }
+            case "statSync": {
+                if (args.length !== 1) unsupported(call, "fs.statSync needs path");
+                const p = this.emitExpr(args[0]!);
+                return this.emitSequencedCall("tsc_fs_stat_sync", T_FS_STATS, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                ]);
+            }
+            case "lstatSync": {
+                if (args.length !== 1) unsupported(call, "fs.lstatSync needs path");
+                const p = this.emitExpr(args[0]!);
+                return this.emitSequencedCall("tsc_fs_lstat_sync", T_FS_STATS, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                ]);
+            }
+            case "realpathSync": {
+                if (args.length !== 1) unsupported(call, "fs.realpathSync needs path");
+                const p = this.emitExpr(args[0]!);
+                return this.emitSequencedCall("tsc_fs_realpath_sync", T_STRING, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                ]);
+            }
+            case "readlinkSync": {
+                if (args.length !== 1) unsupported(call, "fs.readlinkSync needs path");
+                const p = this.emitExpr(args[0]!);
+                return this.emitSequencedCall("tsc_fs_readlink_sync", T_STRING, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                ]);
+            }
+            case "symlinkSync": {
+                if (args.length !== 2) unsupported(call, "fs.symlinkSync needs target and path");
+                const target = this.emitExpr(args[0]!);
+                const p = this.emitExpr(args[1]!);
+                return this.emitSequencedCall("tsc_fs_symlink_sync", T_VOID, [
+                    { value: target, target: T_STRING, node: args[0]! },
+                    { value: p, target: T_STRING, node: args[1]! },
+                ]);
+            }
+            case "linkSync": {
+                if (args.length !== 2) unsupported(call, "fs.linkSync needs existing path and new path");
+                const existingPath = this.emitExpr(args[0]!);
+                const newPath = this.emitExpr(args[1]!);
+                return this.emitSequencedCall("tsc_fs_link_sync", T_VOID, [
+                    { value: existingPath, target: T_STRING, node: args[0]! },
+                    { value: newPath, target: T_STRING, node: args[1]! },
+                ]);
+            }
+            case "mkdtempSync": {
+                if (args.length !== 1) unsupported(call, "fs.mkdtempSync needs prefix");
+                const prefix = this.emitExpr(args[0]!);
+                return this.emitSequencedCall("tsc_fs_mkdtemp_sync", T_STRING, [
+                    { value: prefix, target: T_STRING, node: args[0]! },
+                ]);
+            }
+            case "truncateSync": {
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.truncateSync needs path and optional length");
+                const p = this.emitExpr(args[0]!);
+                const len = args[1] ? this.emitExpr(args[1]) : undefined;
+                const specs: SequencedCallArg[] = [
+                    { value: p, target: T_STRING, node: args[0]! },
+                ];
+                if (len) specs.push({ value: len, target: T_NUMBER, node: args[1]! });
+                return this.emitSequencedExpr(T_VOID, specs, ([path, length]) =>
+                    `tsc_fs_truncate_sync(${path!}, ${length ?? "0"})`,
+                );
+            }
+            case "chmodSync": {
+                if (args.length !== 2) unsupported(call, "fs.chmodSync needs path and numeric mode");
+                const p = this.emitExpr(args[0]!);
+                const mode = this.emitExpr(args[1]!);
+                return this.emitSequencedCall("tsc_fs_chmod_sync", T_VOID, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                    { value: mode, target: T_NUMBER, node: args[1]! },
+                ]);
+            }
+            case "mkdirSync": {
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.mkdirSync needs path and optional options");
+                const p = this.emitExpr(args[0]!);
+                const options = this.emitFsBooleanOptions(args[1], ["recursive"], `fs.${name}`);
+                return this.emitSequencedExpr(T_VOID, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                ], ([path]) => `tsc_fs_mkdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"})`);
+            }
+            case "rmSync": {
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.rmSync needs path and optional options");
+                const p = this.emitExpr(args[0]!);
+                const options = this.emitFsBooleanOptions(args[1], ["recursive", "force"], `fs.${name}`);
+                return this.emitSequencedExpr(T_VOID, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                ], ([path]) => `tsc_fs_rm_sync_opts(${path!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"})`);
+            }
+            case "unlinkSync":
+            case "rmdirSync": {
+                if (args.length !== 1) unsupported(call, `fs.${name} needs path`);
+                const p = this.emitExpr(args[0]!);
+                const fn = name === "unlinkSync" ? "tsc_fs_unlink_sync" : "tsc_fs_rmdir_sync";
+                return this.emitSequencedCall(fn, T_VOID, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                ]);
+            }
+            case "copyFileSync":
+            case "renameSync": {
+                if (args.length !== 2) unsupported(call, `fs.${name} needs source and destination paths`);
+                const a = this.emitExpr(args[0]!);
+                const b = this.emitExpr(args[1]!);
+                const fn = name === "copyFileSync" ? "tsc_fs_copy_file_sync" : "tsc_fs_rename_sync";
+                return this.emitSequencedCall(fn, T_VOID, [
+                    { value: a, target: T_STRING, node: args[0]! },
+                    { value: b, target: T_STRING, node: args[1]! },
+                ]);
+            }
         }
         unsupported(call, `fs.${name} (Phase 10 sync subset only)`);
+    }
+
+    private emitFsBooleanOptions(
+        options: ts.Expression | undefined,
+        allowed: readonly string[],
+        label: string,
+    ): Record<string, boolean> {
+        const out: Record<string, boolean> = {};
+        for (const key of allowed) out[key] = false;
+        if (!options) return out;
+        if (!ts.isObjectLiteralExpression(options)) {
+            unsupported(options, `${label} options must be an object literal in this subset`);
+        }
+        for (const prop of options.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, `${label} options only support boolean property assignments`);
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (!key || !allowed.includes(key)) {
+                unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+            }
+            if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
+                out[key] = true;
+            } else if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) {
+                out[key] = false;
+            } else {
+                unsupported(prop.initializer, `${label}.${key} must be a boolean literal in this subset`);
+            }
+        }
+        return out;
+    }
+
+    private validateFsEncodingOptions(options: ts.Expression | undefined, label: string): void {
+        if (!options) return;
+        const checkEncoding = (node: ts.Expression): void => {
+            if (!ts.isStringLiteralLike(node) || (node.text !== "utf8" && node.text !== "utf-8")) {
+                unsupported(node, `${label} only supports UTF-8 encoding options in this subset`);
+            }
+        };
+        if (ts.isStringLiteralLike(options)) {
+            checkEncoding(options);
+            return;
+        }
+        if (!ts.isObjectLiteralExpression(options)) {
+            unsupported(options, `${label} options must be a UTF-8 string literal or object literal in this subset`);
+        }
+        for (const prop of options.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, `${label} options only support encoding property assignments`);
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (key !== "encoding") {
+                unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+            }
+            checkEncoding(prop.initializer);
+        }
+    }
+
+    private emitFsPromisesCall(call: ts.CallExpression, name: string): EmitResult {
+        const args = call.arguments;
+        const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
+        if (mapped.kind !== "promise") unsupported(call, `fs.promises.${name} result must be Promise<T>`);
+        switch (name) {
+            case "readFile": {
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.readFile needs path and optional UTF-8 encoding options");
+                this.validateFsEncodingOptions(args[1], "fs.promises.readFile");
+                const p = this.emitExpr(args[0]!);
+                return this.emitSequencedExpr(mapped, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                ], ([path]) => `tsc_promise_resolve(tsc_value_string(tsc_fs_read_file_sync(${path!})))`);
+            }
+            case "writeFile": {
+                if (args.length < 2 || args.length > 3) unsupported(call, "fs.promises.writeFile needs path, data, and optional UTF-8 encoding options");
+                this.validateFsEncodingOptions(args[2], "fs.promises.writeFile");
+                const p = this.emitExpr(args[0]!);
+                const d = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(mapped, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                    { value: d, target: T_STRING, node: args[1]! },
+                ], ([path, data]) =>
+                    `({ tsc_fs_write_file_sync(${path!}, ${data!}); tsc_promise_resolve(tsc_value_undefined()); })`,
+                );
+            }
+            case "appendFile": {
+                if (args.length < 2 || args.length > 3) unsupported(call, "fs.promises.appendFile needs path, data, and optional UTF-8 encoding options");
+                this.validateFsEncodingOptions(args[2], "fs.promises.appendFile");
+                const p = this.emitExpr(args[0]!);
+                const d = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(mapped, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                    { value: d, target: T_STRING, node: args[1]! },
+                ], ([path, data]) =>
+                    `({ tsc_fs_append_file_sync(${path!}, ${data!}); tsc_promise_resolve(tsc_value_undefined()); })`,
+                );
+            }
+            case "readdir": {
+                if (args.length !== 1) unsupported(call, "fs.promises.readdir needs a path");
+                const p = this.emitExpr(args[0]!);
+                return this.emitSequencedExpr(mapped, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                ], ([path]) => `tsc_promise_resolve(tsc_value_array(tsc_fs_readdir_sync(${path!})))`);
+            }
+            case "stat": {
+                if (args.length !== 1) unsupported(call, "fs.promises.stat needs a path");
+                if (mapped.elem?.kind !== "fsstats") unsupported(call, "fs.promises.stat result must be Promise<FSStats>");
+                const p = this.emitExpr(args[0]!);
+                return this.emitSequencedExpr(mapped, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                ], ([path]) => `tsc_promise_resolve_fs_stats(tsc_fs_stat_sync(${path!}))`);
+            }
+            case "lstat": {
+                if (args.length !== 1) unsupported(call, "fs.promises.lstat needs a path");
+                if (mapped.elem?.kind !== "fsstats") unsupported(call, "fs.promises.lstat result must be Promise<FSStats>");
+                const p = this.emitExpr(args[0]!);
+                return this.emitSequencedExpr(mapped, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                ], ([path]) => `tsc_promise_resolve_fs_stats(tsc_fs_lstat_sync(${path!}))`);
+            }
+            case "realpath": {
+                if (args.length !== 1) unsupported(call, "fs.promises.realpath needs a path");
+                const p = this.emitExpr(args[0]!);
+                return this.emitSequencedExpr(mapped, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                ], ([path]) => `tsc_promise_resolve(tsc_value_string(tsc_fs_realpath_sync(${path!})))`);
+            }
+            case "readlink": {
+                if (args.length !== 1) unsupported(call, "fs.promises.readlink needs a path");
+                const p = this.emitExpr(args[0]!);
+                return this.emitSequencedExpr(mapped, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                ], ([path]) => `tsc_promise_resolve(tsc_value_string(tsc_fs_readlink_sync(${path!})))`);
+            }
+            case "symlink": {
+                if (args.length !== 2) unsupported(call, "fs.promises.symlink needs target and path");
+                const target = this.emitExpr(args[0]!);
+                const p = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(mapped, [
+                    { value: target, target: T_STRING, node: args[0]! },
+                    { value: p, target: T_STRING, node: args[1]! },
+                ], ([targetPath, linkPath]) =>
+                    `({ tsc_fs_symlink_sync(${targetPath!}, ${linkPath!}); tsc_promise_resolve(tsc_value_undefined()); })`,
+                );
+            }
+            case "link": {
+                if (args.length !== 2) unsupported(call, "fs.promises.link needs existing path and new path");
+                const existingPath = this.emitExpr(args[0]!);
+                const newPath = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(mapped, [
+                    { value: existingPath, target: T_STRING, node: args[0]! },
+                    { value: newPath, target: T_STRING, node: args[1]! },
+                ], ([oldPath, newPathValue]) =>
+                    `({ tsc_fs_link_sync(${oldPath!}, ${newPathValue!}); tsc_promise_resolve(tsc_value_undefined()); })`,
+                );
+            }
+            case "mkdtemp": {
+                if (args.length !== 1) unsupported(call, "fs.promises.mkdtemp needs prefix");
+                const prefix = this.emitExpr(args[0]!);
+                return this.emitSequencedExpr(mapped, [
+                    { value: prefix, target: T_STRING, node: args[0]! },
+                ], ([path]) => `tsc_promise_resolve(tsc_value_string(tsc_fs_mkdtemp_sync(${path!})))`);
+            }
+            case "truncate": {
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.truncate needs path and optional length");
+                const p = this.emitExpr(args[0]!);
+                const len = args[1] ? this.emitExpr(args[1]) : undefined;
+                const specs: SequencedCallArg[] = [
+                    { value: p, target: T_STRING, node: args[0]! },
+                ];
+                if (len) specs.push({ value: len, target: T_NUMBER, node: args[1]! });
+                return this.emitSequencedExpr(mapped, specs, ([path, length]) =>
+                    `({ tsc_fs_truncate_sync(${path!}, ${length ?? "0"}); tsc_promise_resolve(tsc_value_undefined()); })`,
+                );
+            }
+            case "chmod": {
+                if (args.length !== 2) unsupported(call, "fs.promises.chmod needs path and numeric mode");
+                const p = this.emitExpr(args[0]!);
+                const mode = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(mapped, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                    { value: mode, target: T_NUMBER, node: args[1]! },
+                ], ([path, modeValue]) =>
+                    `({ tsc_fs_chmod_sync(${path!}, ${modeValue!}); tsc_promise_resolve(tsc_value_undefined()); })`,
+                );
+            }
+            case "access": {
+                if (args.length !== 1) unsupported(call, "fs.promises.access needs a path");
+                const p = this.emitExpr(args[0]!);
+                return this.emitSequencedExpr(mapped, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                ], ([path]) =>
+                    `({ tsc_fs_access_sync(${path!}); tsc_promise_resolve(tsc_value_undefined()); })`,
+                );
+            }
+            case "mkdir": {
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.mkdir needs path and optional options");
+                const p = this.emitExpr(args[0]!);
+                const options = this.emitFsBooleanOptions(args[1], ["recursive"], `fs.promises.${name}`);
+                return this.emitSequencedExpr(mapped, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                ], ([path]) =>
+                    `({ tsc_fs_mkdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`,
+                );
+            }
+            case "rm": {
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.rm needs path and optional options");
+                const p = this.emitExpr(args[0]!);
+                const options = this.emitFsBooleanOptions(args[1], ["recursive", "force"], `fs.promises.${name}`);
+                return this.emitSequencedExpr(mapped, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                ], ([path]) =>
+                    `({ tsc_fs_rm_sync_opts(${path!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`,
+                );
+            }
+            case "unlink":
+            case "rmdir": {
+                if (args.length !== 1) unsupported(call, `fs.promises.${name} needs a path`);
+                const p = this.emitExpr(args[0]!);
+                const fn = name === "unlink" ? "tsc_fs_unlink_sync" : "tsc_fs_rmdir_sync";
+                return this.emitSequencedExpr(mapped, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                ], ([path]) =>
+                    `({ ${fn}(${path!}); tsc_promise_resolve(tsc_value_undefined()); })`,
+                );
+            }
+            case "copyFile":
+            case "rename": {
+                if (args.length !== 2) unsupported(call, `fs.promises.${name} needs source and destination paths`);
+                const a = this.emitExpr(args[0]!);
+                const b = this.emitExpr(args[1]!);
+                const fn = name === "copyFile" ? "tsc_fs_copy_file_sync" : "tsc_fs_rename_sync";
+                return this.emitSequencedExpr(mapped, [
+                    { value: a, target: T_STRING, node: args[0]! },
+                    { value: b, target: T_STRING, node: args[1]! },
+                ], ([src, dest]) =>
+                    `({ ${fn}(${src!}, ${dest!}); tsc_promise_resolve(tsc_value_undefined()); })`,
+                );
+            }
+        }
+        unsupported(call, `fs.promises.${name} (settled subset only)`);
     }
 
     private emitPathCall(call: ts.CallExpression, name: string): EmitResult {
@@ -9333,11 +10337,23 @@ class Emitter {
                 const fn = name === "join" ? "tsc_path_join" : "tsc_path_resolve";
                 return this.emitSequencedCall(fn, T_STRING, specs, [args.length.toString()]);
             }
+            case "normalize":
+                if (args.length !== 1) unsupported(call, "path.normalize expects 1 arg");
+                return this.emitSequencedCall("tsc_path_normalize", T_STRING, specs);
+            case "isAbsolute":
+                if (args.length !== 1) unsupported(call, "path.isAbsolute expects 1 arg");
+                return this.emitSequencedCall("tsc_path_is_absolute", T_BOOLEAN, specs);
+            case "relative":
+                if (args.length !== 2) unsupported(call, "path.relative expects 2 args");
+                return this.emitSequencedCall("tsc_path_relative", T_STRING, specs);
             case "basename":
+                if (args.length !== 1) unsupported(call, "path.basename expects 1 arg");
                 return this.emitSequencedCall("tsc_path_basename", T_STRING, specs);
             case "dirname":
+                if (args.length !== 1) unsupported(call, "path.dirname expects 1 arg");
                 return this.emitSequencedCall("tsc_path_dirname", T_STRING, specs);
             case "extname":
+                if (args.length !== 1) unsupported(call, "path.extname expects 1 arg");
                 return this.emitSequencedCall("tsc_path_extname", T_STRING, specs);
         }
         unsupported(call, `path.${name} (Phase 10 subset only)`);
@@ -9458,6 +10474,36 @@ class Emitter {
             }
         }
         unsupported(call, `Buffer.${name}`);
+    }
+
+    private emitFsStatsMethod(
+        call: ts.CallExpression,
+        recv: EmitResult,
+        method: string,
+    ): EmitResult {
+        const args = call.arguments;
+        switch (method) {
+            case "isFile":
+                if (args.length !== 0) unsupported(call, "Stats.isFile expects no args");
+                return this.emitSequencedCall("tsc_fs_stats_is_file", T_BOOLEAN, [{ value: recv }]);
+            case "isDirectory":
+                if (args.length !== 0) unsupported(call, "Stats.isDirectory expects no args");
+                return this.emitSequencedCall("tsc_fs_stats_is_directory", T_BOOLEAN, [{ value: recv }]);
+            case "isSymbolicLink":
+                if (args.length !== 0) unsupported(call, "Stats.isSymbolicLink expects no args");
+                return this.emitSequencedCall("tsc_fs_stats_is_symbolic_link", T_BOOLEAN, [{ value: recv }]);
+            case "toLocaleString":
+            case "toString":
+                if (args.length !== 0) unsupported(call, `Stats.${method} expects no args`);
+                return {
+                    c: `tsc_str_from_lit("[object Stats]", 14)`,
+                    ty: T_STRING,
+                };
+            case "valueOf":
+                if (args.length !== 0) unsupported(call, "Stats.valueOf expects no args");
+                return recv;
+        }
+        unsupported(call, `Stats method .${method}`);
     }
 
     private emitBufferMethod(
@@ -12711,6 +13757,15 @@ class Emitter {
     }
 
     private emitNew(n: ts.NewExpression): EmitResult {
+        if (
+            ts.isPropertyAccessExpression(n.expression) &&
+            ts.isIdentifier(n.expression.expression) &&
+            this.isNamespaceImportFrom(n.expression.expression, ["events", "node:events"]) &&
+            n.expression.name.text === "EventEmitter"
+        ) {
+            if ((n.arguments ?? []).length !== 0) unsupported(n, "new events.EventEmitter() expects no args");
+            return { c: "tsc_event_emitter_new()", ty: T_EVENT_EMITTER };
+        }
         if (!ts.isIdentifier(n.expression))
             unsupported(n, "new expression must use a class identifier");
         const cls = n.expression.text;
@@ -12871,6 +13926,10 @@ class Emitter {
                 ([_v]) => `((void)${_v!}, tsc_finregistry_new())`,
             );
         }
+        if (cls === "EventEmitter") {
+            if ((n.arguments ?? []).length !== 0) unsupported(n, "new EventEmitter() expects no args");
+            return { c: "tsc_event_emitter_new()", ty: T_EVENT_EMITTER };
+        }
         if (cls === "Error") {
             // Simple Error as a string carrier.
             const msg = n.arguments?.[0];
@@ -12944,6 +14003,13 @@ class Emitter {
                     case "NaN": return { c: "NAN", ty: T_NUMBER };
                     case "NEGATIVE_INFINITY": return { c: "(-INFINITY)", ty: T_NUMBER };
                     case "POSITIVE_INFINITY": return { c: "INFINITY", ty: T_NUMBER };
+                }
+            }
+            if (this.isPathModuleIdentifier(pa.expression)) {
+                const name = pa.name.text;
+                switch (name) {
+                    case "sep": return { c: this.stringLit("/"), ty: T_STRING };
+                    case "delimiter": return { c: this.stringLit(":"), ty: T_STRING };
                 }
             }
             if (pa.expression.text === "process" && pa.name.text === "argv") {
@@ -13042,6 +14108,12 @@ class Emitter {
         }
         if (recv.ty.kind === "buffer" && pa.name.text === "length") {
             return { c: `tsc_buffer_length(${recv.c})`, ty: T_NUMBER };
+        }
+        if (recv.ty.kind === "fsstats" && pa.name.text === "size") {
+            return { c: `tsc_fs_stats_size(${recv.c})`, ty: T_NUMBER };
+        }
+        if (recv.ty.kind === "fsstats" && pa.name.text === "mode") {
+            return { c: `tsc_fs_stats_mode(${recv.c})`, ty: T_NUMBER };
         }
         if (recv.ty.kind === "value") {
             if (pa.name.text === "length") {
@@ -13395,9 +14467,12 @@ class Emitter {
         if (r.ty.kind === "weakset") return `tsc_str_from_lit("[object WeakSet]", 16)`;
         if (r.ty.kind === "weakref") return `tsc_str_from_lit("[object WeakRef]", 16)`;
         if (r.ty.kind === "finregistry") return `tsc_str_from_lit("[object FinalizationRegistry]", 29)`;
+        if (r.ty.kind === "promise") return `tsc_str_from_lit("[object Promise]", 16)`;
+        if (r.ty.kind === "eventemitter") return `tsc_str_from_lit("[object EventEmitter]", 21)`;
         if (r.ty.kind === "regexp") return `tsc_regexp_to_string(${r.c})`;
         if (r.ty.kind === "url") return `${r.c}->href`;
         if (r.ty.kind === "buffer") return `tsc_buffer_to_string(${r.c}, tsc_str_from_lit("utf8", 4))`;
+        if (r.ty.kind === "fsstats") return `tsc_str_from_lit("[object Stats]", 14)`;
         if (r.ty.kind === "function") return `tsc_str_from_lit("[function]", 10)`;
         if (r.ty.kind === "value") return `tsc_value_to_string(${r.c})`;
         if (r.ty.kind === "class") {
@@ -13434,7 +14509,7 @@ class Emitter {
         // null (void) → any pointer type: emit typed NULL. Check before the
         // string-coerce branch since string is a pointer type too.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "regexp", "hash", "url", "buffer", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "buffer", "fsstats", "function",
         ];
         if (r.ty.kind === "void" && pointerKinds.includes(target.kind)) {
             return `((${target.c})NULL)`;
@@ -13497,16 +14572,19 @@ function isWeakObjectKey(t: CType): boolean {
         "weakset",
         "weakref",
         "finregistry",
+        "promise",
+        "eventemitter",
         "regexp",
         "hash",
         "url",
         "buffer",
+        "fsstats",
     ].includes(t.kind);
 }
 
 function isPointerKind(t: CType): boolean {
     const pointerKinds: readonly CType["kind"][] = [
-        "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "regexp", "hash", "url", "buffer", "function",
+        "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "buffer", "fsstats", "function",
     ];
     return pointerKinds.includes(t.kind);
 }
@@ -13520,6 +14598,7 @@ function sameCType(a: CType, b: CType): boolean {
         a.kind === "weakset" ||
         a.kind === "weakref" ||
         a.kind === "finregistry" ||
+        a.kind === "promise" ||
         a.kind === "entry"
     ) {
         if (!a.elem || !b.elem) return a.elem === b.elem;

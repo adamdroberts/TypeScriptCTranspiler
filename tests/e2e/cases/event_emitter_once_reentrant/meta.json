@@ -1,0 +1,3 @@
+{
+  "description": "EventEmitter once listeners are removed before invocation for reentrant emit"
+}

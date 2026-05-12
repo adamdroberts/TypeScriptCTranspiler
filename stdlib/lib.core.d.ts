@@ -36,6 +36,23 @@ interface Generator<T = unknown, TReturn = any, TNext = unknown> extends Iterato
     [Symbol.iterator](): Generator<T, TReturn, TNext>;
 }
 
+interface Promise<T> {
+    then<TResult>(onfulfilled: (value: T) => TResult): Promise<TResult>;
+    then<TResult, TRejectResult>(onfulfilled: (value: T) => TResult, onrejected: (reason: any) => TRejectResult): Promise<TResult | TRejectResult>;
+    catch<TResult>(onrejected: (reason: any) => TResult): Promise<T | TResult>;
+    finally(onfinally: () => void): Promise<T>;
+}
+interface PromiseConstructor {
+    resolve<T>(value: T): Promise<T>;
+    resolve(): Promise<void>;
+    reject<T = never>(reason?: any): Promise<T>;
+    all<T>(values: Promise<T>[]): Promise<T[]>;
+    allSettled<T>(values: Promise<T>[]): Promise<any[]>;
+    race<T>(values: Promise<T>[]): Promise<T>;
+    any<T>(values: Promise<T>[]): Promise<T>;
+}
+declare var Promise: PromiseConstructor;
+
 interface TemplateStringsArray extends ReadonlyArray<string> {
     readonly raw: readonly string[];
 }
@@ -525,22 +542,155 @@ declare var Number: NumberConstructor;
 // Phase 10 sync-core Node stdlib — globally injected (no import needed).
 // Phase 4 module system will instead let users write `import * as fs from "fs"`
 // and we'll resolve to these same bindings.
+interface FSStats {
+    readonly size: number;
+    readonly mode: number;
+    isFile(): boolean;
+    isDirectory(): boolean;
+    isSymbolicLink(): boolean;
+}
+interface FSMkdirOptions {
+    recursive?: boolean;
+}
+interface FSRmOptions {
+    recursive?: boolean;
+    force?: boolean;
+}
+type FSEncoding = "utf8" | "utf-8";
+interface FSEncodingOptions {
+    encoding?: FSEncoding;
+}
+type FSFileEncodingOptions = FSEncoding | FSEncodingOptions;
 interface FS {
-    readFileSync(path: string): string;
-    writeFileSync(path: string, data: string): void;
+    readFileSync(path: string, options?: FSFileEncodingOptions): string;
+    writeFileSync(path: string, data: string, options?: FSFileEncodingOptions): void;
+    appendFileSync(path: string, data: string, options?: FSFileEncodingOptions): void;
     existsSync(path: string): boolean;
     readdirSync(path: string): string[];
+    statSync(path: string): FSStats;
+    lstatSync(path: string): FSStats;
+    realpathSync(path: string): string;
+    readlinkSync(path: string): string;
+    symlinkSync(target: string, path: string): void;
+    linkSync(existingPath: string, newPath: string): void;
+    mkdtempSync(prefix: string): string;
+    truncateSync(path: string, len?: number): void;
+    chmodSync(path: string, mode: number): void;
+    mkdirSync(path: string, options?: FSMkdirOptions): void;
+    unlinkSync(path: string): void;
+    rmSync(path: string, options?: FSRmOptions): void;
+    rmdirSync(path: string): void;
+    copyFileSync(src: string, dest: string): void;
+    renameSync(oldPath: string, newPath: string): void;
+    promises: FSPromises;
+}
+interface FSPromises {
+    readFile(path: string, options?: FSFileEncodingOptions): Promise<string>;
+    writeFile(path: string, data: string, options?: FSFileEncodingOptions): Promise<void>;
+    appendFile(path: string, data: string, options?: FSFileEncodingOptions): Promise<void>;
+    readdir(path: string): Promise<string[]>;
+    stat(path: string): Promise<FSStats>;
+    lstat(path: string): Promise<FSStats>;
+    realpath(path: string): Promise<string>;
+    readlink(path: string): Promise<string>;
+    symlink(target: string, path: string): Promise<void>;
+    link(existingPath: string, newPath: string): Promise<void>;
+    mkdtemp(prefix: string): Promise<string>;
+    truncate(path: string, len?: number): Promise<void>;
+    chmod(path: string, mode: number): Promise<void>;
+    access(path: string): Promise<void>;
+    mkdir(path: string, options?: FSMkdirOptions): Promise<void>;
+    unlink(path: string): Promise<void>;
+    rm(path: string, options?: FSRmOptions): Promise<void>;
+    rmdir(path: string): Promise<void>;
+    copyFile(src: string, dest: string): Promise<void>;
+    rename(oldPath: string, newPath: string): Promise<void>;
 }
 declare const fs: FS;
+declare module "fs" {
+    export const promises: FSPromises;
+    export function readFileSync(path: string, options?: FSFileEncodingOptions): string;
+    export function writeFileSync(path: string, data: string, options?: FSFileEncodingOptions): void;
+    export function appendFileSync(path: string, data: string, options?: FSFileEncodingOptions): void;
+    export function existsSync(path: string): boolean;
+    export function readdirSync(path: string): string[];
+    export function statSync(path: string): FSStats;
+    export function lstatSync(path: string): FSStats;
+    export function realpathSync(path: string): string;
+    export function readlinkSync(path: string): string;
+    export function symlinkSync(target: string, path: string): void;
+    export function linkSync(existingPath: string, newPath: string): void;
+    export function mkdtempSync(prefix: string): string;
+    export function truncateSync(path: string, len?: number): void;
+    export function chmodSync(path: string, mode: number): void;
+    export function mkdirSync(path: string, options?: FSMkdirOptions): void;
+    export function unlinkSync(path: string): void;
+    export function rmSync(path: string, options?: FSRmOptions): void;
+    export function rmdirSync(path: string): void;
+    export function copyFileSync(src: string, dest: string): void;
+    export function renameSync(oldPath: string, newPath: string): void;
+}
+declare module "node:fs" {
+    export const promises: FSPromises;
+    export function readFileSync(path: string, options?: FSFileEncodingOptions): string;
+    export function writeFileSync(path: string, data: string, options?: FSFileEncodingOptions): void;
+    export function appendFileSync(path: string, data: string, options?: FSFileEncodingOptions): void;
+    export function existsSync(path: string): boolean;
+    export function readdirSync(path: string): string[];
+    export function statSync(path: string): FSStats;
+    export function lstatSync(path: string): FSStats;
+    export function realpathSync(path: string): string;
+    export function readlinkSync(path: string): string;
+    export function symlinkSync(target: string, path: string): void;
+    export function linkSync(existingPath: string, newPath: string): void;
+    export function mkdtempSync(prefix: string): string;
+    export function truncateSync(path: string, len?: number): void;
+    export function chmodSync(path: string, mode: number): void;
+    export function mkdirSync(path: string, options?: FSMkdirOptions): void;
+    export function unlinkSync(path: string): void;
+    export function rmSync(path: string, options?: FSRmOptions): void;
+    export function rmdirSync(path: string): void;
+    export function copyFileSync(src: string, dest: string): void;
+    export function renameSync(oldPath: string, newPath: string): void;
+}
 
 interface Path {
+    readonly sep: string;
+    readonly delimiter: string;
     join(...parts: string[]): string;
     resolve(...parts: string[]): string;
+    normalize(p: string): string;
+    isAbsolute(p: string): boolean;
+    relative(from: string, to: string): string;
     basename(p: string): string;
     dirname(p: string): string;
     extname(p: string): string;
 }
 declare const path: Path;
+declare module "path" {
+    export const sep: string;
+    export const delimiter: string;
+    export function join(...parts: string[]): string;
+    export function resolve(...parts: string[]): string;
+    export function normalize(p: string): string;
+    export function isAbsolute(p: string): boolean;
+    export function relative(from: string, to: string): string;
+    export function basename(p: string): string;
+    export function dirname(p: string): string;
+    export function extname(p: string): string;
+}
+declare module "node:path" {
+    export const sep: string;
+    export const delimiter: string;
+    export function join(...parts: string[]): string;
+    export function resolve(...parts: string[]): string;
+    export function normalize(p: string): string;
+    export function isAbsolute(p: string): boolean;
+    export function relative(from: string, to: string): string;
+    export function basename(p: string): string;
+    export function dirname(p: string): string;
+    export function extname(p: string): string;
+}
 
 interface CryptoHash {
     update(data: string): CryptoHash;
@@ -570,6 +720,38 @@ interface BufferConstructor {
     isBuffer(value: unknown): boolean;
 }
 declare var Buffer: BufferConstructor;
+
+interface EventEmitter {
+    on(eventName: string, listener: (...args: any[]) => void): this;
+    addListener(eventName: string, listener: (...args: any[]) => void): this;
+    prependListener(eventName: string, listener: (...args: any[]) => void): this;
+    once(eventName: string, listener: (...args: any[]) => void): this;
+    prependOnceListener(eventName: string, listener: (...args: any[]) => void): this;
+    off(eventName: string, listener: (...args: any[]) => void): this;
+    removeListener(eventName: string, listener: (...args: any[]) => void): this;
+    removeAllListeners(eventName?: string): this;
+    emit(eventName: string, ...args: any[]): boolean;
+    listenerCount(eventName: string, listener?: (...args: any[]) => void): number;
+    eventNames(): string[];
+    setMaxListeners(n: number): this;
+    getMaxListeners(): number;
+}
+interface EventEmitterConstructor {
+    new(): EventEmitter;
+}
+declare var EventEmitter: EventEmitterConstructor;
+declare module "events" {
+    export const EventEmitter: EventEmitterConstructor;
+    export function listenerCount(emitter: EventEmitter, eventName: string): number;
+    export function setMaxListeners(n: number, emitter: EventEmitter): void;
+    export function getMaxListeners(emitter: EventEmitter): number;
+}
+declare module "node:events" {
+    export const EventEmitter: EventEmitterConstructor;
+    export function listenerCount(emitter: EventEmitter, eventName: string): number;
+    export function setMaxListeners(n: number, emitter: EventEmitter): void;
+    export function getMaxListeners(emitter: EventEmitter): number;
+}
 
 interface URL {
     readonly href: string;

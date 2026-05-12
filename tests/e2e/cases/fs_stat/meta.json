@@ -1,0 +1,3 @@
+{
+  "description": "fs.statSync Stats subset with size, isFile, and isDirectory"
+}

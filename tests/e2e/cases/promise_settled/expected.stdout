@@ -1,0 +1,8 @@
+fulfilled: 10
+recovered: 7
+then reject: bad!
+all: 3,4
+race: first
+any: kept
+settled: fulfilled 9 rejected nope
+events: then:2|finally|catch:boom

@@ -1,0 +1,5 @@
+file: true false 5
+dir: false true true
+string: [object Stats]
+promise: true false 5
+resolve: true 5

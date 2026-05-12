@@ -1,0 +1,8 @@
+collapse: a/b/c
+parent abs: /a/c
+parent rel: ../b
+empty: .
+trailing: foo/
+parent root: .
+abs true: true
+abs false: false

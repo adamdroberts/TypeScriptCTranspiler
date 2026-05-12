@@ -1,0 +1,3 @@
+{
+  "description": "fs copyFileSync/renameSync and immediate-settled fs.promises copyFile/rename"
+}

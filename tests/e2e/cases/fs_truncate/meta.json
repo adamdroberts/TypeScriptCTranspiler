@@ -1,0 +1,3 @@
+{
+  "description": "fs.truncateSync and immediate-settled fs.promises.truncate"
+}

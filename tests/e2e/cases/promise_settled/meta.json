@@ -1,0 +1,3 @@
+{
+  "description": "settled Promise.resolve/reject with synchronous then/catch/finally chaining and combinators"
+}

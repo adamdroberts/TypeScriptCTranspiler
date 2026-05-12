@@ -1,0 +1,3 @@
+caught: boom
+handled: ok
+handled emit: true

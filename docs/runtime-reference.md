@@ -105,6 +105,7 @@ Type-erased dynamic vector. Element size + kind known only to the emitter — th
 typedef struct tsc_array {
     size_t len, cap, es;  // element size in bytes
     bool extensible, sealed, frozen;  // dynamic Object/Reflect state
+    size_t iter_pos;  // materialized generator .next() cursor
     void* data;
 } tsc_array_t;
 ```
@@ -164,6 +165,11 @@ NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JS
 | `tsc_value_method_*(recv, ...)` | `tsc_value_t` | Runtime dispatch for common dynamic string/array methods such as `includes`, `indexOf`, `lastIndexOf`, `localeCompare`, `match`, `matchAll`, `normalize`, `padStart`, `padEnd`, `repeat`, `replace`, `replaceAll`, `slice`, `split`, `split(RegExp)`, `substr`, `substring`, `trimStart`, `trimEnd`, `join`, `push`, `pop`, `shift`, `unshift`, `at`, `concat`, `copyWithin`, `fill`, `flat`, `keys`, `values`, `sort`, `splice`, `toReversed`, `toSorted`, `toSpliced`, `with`, and casing/trim helpers |
 | `tsc_value_json_stringify(v)` | `tsc_str_t*` | Recursive dynamic JSON stringify; object properties whose values are `undefined` or boxed function identities are omitted, while array slots stringify as `null` |
 | `tsc_value_apply_function(fn, this_arg, args)` | `tsc_value_t` | Dynamic `Reflect.apply` dispatch for boxed accessor function identities returned from descriptor `get`/`set` fields |
+| `tsc_promise_resolve/reject(result)` | `tsc_promise_t*` | Allocates an immediately fulfilled/rejected Promise record used by the settled Promise subset |
+| `tsc_promise_resolve_fs_stats(result)` | `tsc_promise_t*` | Allocates an immediately fulfilled typed `Promise<FSStats>` side-channel record |
+| `tsc_promise_is_fulfilled/is_rejected(p)` | `bool` | State checks used by synchronous `then`/`catch`/`finally` lowering |
+| `tsc_promise_value/reason(p)` | `tsc_value_t` | Reads the stored fulfilled value or rejection reason |
+| `tsc_promise_fs_stats_value(p)` | `tsc_fs_stats_t*` | Reads the typed `FSStats` fulfilled value side-channel |
 | `tsc_value_get_prop(v, key)` | `tsc_value_t` | Dynamic object property read through the prototype chain plus array/string own-property reads, returning `undefined` when absent |
 | `tsc_value_get_prop_receiver(v, key, receiver)` | `tsc_value_t` | Dynamic `Reflect.get` read with an explicit receiver argument for accessor dispatch |
 | `tsc_value_get_index(v, index)` | `tsc_value_t` | Dynamic array or string index read, returning `undefined` when absent |
@@ -379,10 +385,36 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 
 | Symbol | Signature | JS equivalent |
 |--------|-----------|---------------|
-| `tsc_fs_read_file_sync(path)` | `tsc_str_t*` | `fs.readFileSync(path)` — throws via `tsc_throw_str` on error |
-| `tsc_fs_write_file_sync(path, data)` | `void` | `fs.writeFileSync(path, data)` |
+| `tsc_fs_read_file_sync(path)` | `tsc_str_t*` | `fs.readFileSync(path[, utf8Options])` and immediate-settled `fs.promises.readFile(path[, utf8Options])` — throws via `tsc_throw_str` on error |
+| `tsc_fs_write_file_sync(path, data)` | `void` | `fs.writeFileSync(path, data[, utf8Options])` and immediate-settled `fs.promises.writeFile(path, data[, utf8Options])` |
+| `tsc_fs_append_file_sync(path, data)` | `void` | `fs.appendFileSync(path, data[, utf8Options])` and immediate-settled `fs.promises.appendFile(path, data[, utf8Options])` |
 | `tsc_fs_exists_sync(path)` | `bool` | `fs.existsSync(path)` |
 | `tsc_fs_readdir_sync(path)` | `tsc_array_t*` | `fs.readdirSync(path)` — array of filenames |
+| `tsc_fs_stat_sync(path)` | `tsc_fs_stats_t*` | `fs.statSync(path)` and immediate-settled `fs.promises.stat(path)` — small `Stats` subset |
+| `tsc_fs_lstat_sync(path)` | `tsc_fs_stats_t*` | `fs.lstatSync(path)` and immediate-settled `fs.promises.lstat(path)` — small `Stats` subset without following symlinks |
+| `tsc_fs_realpath_sync(path)` | `tsc_str_t*` | `fs.realpathSync(path)` and immediate-settled `fs.promises.realpath(path)` |
+| `tsc_fs_readlink_sync(path)` | `tsc_str_t*` | `fs.readlinkSync(path)` and immediate-settled `fs.promises.readlink(path)` |
+| `tsc_fs_symlink_sync(target, path)` | `void` | `fs.symlinkSync(target, path)` and immediate-settled `fs.promises.symlink(target, path)` |
+| `tsc_fs_link_sync(existingPath, newPath)` | `void` | `fs.linkSync(existingPath, newPath)` and immediate-settled `fs.promises.link(existingPath, newPath)` |
+| `tsc_fs_mkdtemp_sync(prefix)` | `tsc_str_t*` | `fs.mkdtempSync(prefix)` and immediate-settled `fs.promises.mkdtemp(prefix)` |
+| `tsc_fs_truncate_sync(path, len)` | `void` | `fs.truncateSync(path, len?)` and immediate-settled `fs.promises.truncate(path, len?)` |
+| `tsc_fs_stats_size(st)` | `double` | `Stats.size` |
+| `tsc_fs_stats_mode(st)` | `double` | `Stats.mode` |
+| `tsc_fs_stats_is_file(st)` | `bool` | `Stats.isFile()` |
+| `tsc_fs_stats_is_directory(st)` | `bool` | `Stats.isDirectory()` |
+| `tsc_fs_stats_is_symbolic_link(st)` | `bool` | `Stats.isSymbolicLink()` |
+| `tsc_fs_access_sync(path)` | `void` | Used by the immediate-settled `fs.promises.access(path)` subset; throws via `tsc_throw_str` when missing |
+| `tsc_fs_chmod_sync(path, mode)` | `void` | `fs.chmodSync(path, mode)` and immediate-settled `fs.promises.chmod(path, mode)` |
+| `tsc_fs_mkdir_sync(path)` | `void` | `fs.mkdirSync(path)` and immediate-settled `fs.promises.mkdir(path)` for one path argument |
+| `tsc_fs_mkdir_sync_opts(path, recursive)` | `void` | `fs.mkdirSync(path, { recursive })` and immediate-settled `fs.promises.mkdir(path, { recursive })` bounded options subset |
+| `tsc_fs_unlink_sync(path)` | `void` | `fs.unlinkSync(path)` and immediate-settled `fs.promises.unlink(path)` |
+| `tsc_fs_rm_sync(path)` | `void` | `fs.rmSync(path)` and immediate-settled `fs.promises.rm(path)` for one path argument |
+| `tsc_fs_rm_sync_opts(path, recursive, force)` | `void` | `fs.rmSync(path, { recursive, force })` and immediate-settled `fs.promises.rm(path, { recursive, force })` bounded options subset |
+| `tsc_fs_rmdir_sync(path)` | `void` | `fs.rmdirSync(path)` and immediate-settled `fs.promises.rmdir(path)` for empty directories |
+| `tsc_fs_copy_file_sync(src, dest)` | `void` | `fs.copyFileSync(src, dest)` and immediate-settled `fs.promises.copyFile(src, dest)` |
+| `tsc_fs_rename_sync(oldPath, newPath)` | `void` | `fs.renameSync(oldPath, newPath)` and immediate-settled `fs.promises.rename(oldPath, newPath)` |
+
+`fs.promises.readFile`, `writeFile`, `appendFile`, `readdir`, `realpath`, `readlink`, `symlink`, `link`, `mkdtemp`, `truncate`, `chmod`, `access`, `mkdir`, `unlink`, `rm`, `rmdir`, `copyFile`, and `rename` are emitter-level wrappers over these sync runtime calls plus `tsc_promise_resolve(...)`. `fs.promises.stat` and `lstat` use the typed Stats promise side-channel. They are not libuv-backed yet.
 
 ## path
 
@@ -390,6 +422,9 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 |--------|-----------|
 | `tsc_path_join(n, ...)` | `tsc_str_t*` — variadic |
 | `tsc_path_resolve(n, ...)` | `tsc_str_t*` — variadic, absolute |
+| `tsc_path_normalize(p)` | `tsc_str_t*` — bounded POSIX segment cleanup |
+| `tsc_path_is_absolute(p)` | `bool` — leading-slash absolute check |
+| `tsc_path_relative(from, to)` | `tsc_str_t*` — bounded POSIX relative path construction |
 | `tsc_path_basename(p)` | `tsc_str_t*` |
 | `tsc_path_dirname(p)` | `tsc_str_t*` |
 | `tsc_path_extname(p)` | `tsc_str_t*` |
@@ -413,6 +448,21 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 | `tsc_crypto_create_hash(algorithm)` | `tsc_hash_t*` | `crypto.createHash("sha256")` |
 | `tsc_hash_update(hash, data)` | `tsc_hash_t*` | `.update(data)` |
 | `tsc_hash_digest(hash, encoding)` | `tsc_str_t*` | `.digest("hex")` |
+
+## EventEmitter
+
+| Symbol | Signature | JS equivalent |
+|--------|-----------|---------------|
+| `tsc_event_emitter_new()` | `tsc_event_emitter_t*` | `new EventEmitter()` |
+| `tsc_event_emitter_on(ee, event, fn, env, identity, once, prepend)` | `void` | `on` / `addListener` / `prependListener` / `once` / `prependOnceListener`; `fn` is a generated adapter and `identity` preserves listener removal semantics |
+| `tsc_event_emitter_off(ee, event, fn, identity)` | `void` | `off` / `removeListener` |
+| `tsc_event_emitter_remove_all(ee, event)` | `void` | `removeAllListeners(event?)` |
+| `tsc_event_emitter_emit(ee, event, args)` | `bool` | `emit(event, ...args)`; `args` is a boxed `tsc_value_t` array; unhandled `"error"` emits throw |
+| `tsc_event_emitter_listener_count(ee, event)` | `double` | `listenerCount(event)` |
+| `tsc_event_emitter_listener_count_identity(ee, event, identity)` | `double` | `listenerCount(event, listener)` filtered by preserved listener identity |
+| `tsc_event_emitter_event_names(ee)` | `tsc_array_t*` | `eventNames()` as a string array |
+| `tsc_event_emitter_set_max_listeners(ee, n)` | `void` | `setMaxListeners(n)`; stores the configured count but does not emit warnings yet |
+| `tsc_event_emitter_get_max_listeners(ee)` | `double` | `getMaxListeners()` |
 
 ## URL
 

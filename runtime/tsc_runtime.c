@@ -2019,6 +2019,7 @@ tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap) {
     a->extensible = true;
     a->sealed = false;
     a->frozen = false;
+    a->iter_pos = 0;
     a->data = initial_cap ? TSC_GC_MALLOC(initial_cap * elem_size) : NULL;
     return a;
 }
@@ -2430,6 +2431,34 @@ struct tsc_object {
     tsc_object_prop_t* props;
 };
 
+typedef enum {
+    TSC_PROMISE_FULFILLED,
+    TSC_PROMISE_REJECTED,
+} tsc_promise_state_t;
+
+struct tsc_promise {
+    tsc_promise_state_t state;
+    tsc_value_t result;
+    void* ptr_result;
+};
+
+typedef struct tsc_event_listener {
+    tsc_str_t* event;
+    tsc_event_listener_fn_t fn;
+    void* env;
+    void* identity;
+    uint64_t order;
+    bool once;
+} tsc_event_listener_t;
+
+struct tsc_event_emitter {
+    size_t len;
+    size_t cap;
+    uint64_t next_order;
+    double max_listeners;
+    tsc_event_listener_t* listeners;
+};
+
 static tsc_value_t value_box(tsc_value_tag_t tag, uintptr_t payload) {
     return TSC_VALUE_BOX_MASK | ((uint64_t)payload & TSC_VALUE_PAYLOAD_MASK) | (uint64_t)tag;
 }
@@ -2471,6 +2500,208 @@ tsc_value_t tsc_value_num(double n) {
 tsc_value_t tsc_value_string(tsc_str_t* s) { return value_box(TSC_VALUE_TAG_STRING, (uintptr_t)s); }
 tsc_value_t tsc_value_array(tsc_array_t* a) { return value_box(TSC_VALUE_TAG_ARRAY, (uintptr_t)a); }
 tsc_value_t tsc_value_object(tsc_object_t* o) { return value_box(TSC_VALUE_TAG_OBJECT, (uintptr_t)o); }
+
+tsc_promise_t* tsc_promise_resolve(tsc_value_t value) {
+    tsc_promise_t* p = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(tsc_promise_t));
+    p->state = TSC_PROMISE_FULFILLED;
+    p->result = value;
+    p->ptr_result = NULL;
+    return p;
+}
+
+tsc_promise_t* tsc_promise_resolve_fs_stats(tsc_fs_stats_t* value) {
+    tsc_promise_t* p = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(tsc_promise_t));
+    p->state = TSC_PROMISE_FULFILLED;
+    p->result = tsc_value_undefined();
+    p->ptr_result = value;
+    return p;
+}
+
+tsc_promise_t* tsc_promise_reject(tsc_value_t reason) {
+    tsc_promise_t* p = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(tsc_promise_t));
+    p->state = TSC_PROMISE_REJECTED;
+    p->result = reason;
+    p->ptr_result = NULL;
+    return p;
+}
+
+bool tsc_promise_is_fulfilled(const tsc_promise_t* p) {
+    return p && p->state == TSC_PROMISE_FULFILLED;
+}
+
+bool tsc_promise_is_rejected(const tsc_promise_t* p) {
+    return p && p->state == TSC_PROMISE_REJECTED;
+}
+
+tsc_value_t tsc_promise_value(const tsc_promise_t* p) {
+    return p ? p->result : tsc_value_undefined();
+}
+
+tsc_fs_stats_t* tsc_promise_fs_stats_value(const tsc_promise_t* p) {
+    return p ? (tsc_fs_stats_t*)p->ptr_result : NULL;
+}
+
+tsc_value_t tsc_promise_reason(const tsc_promise_t* p) {
+    return p ? p->result : tsc_value_undefined();
+}
+
+tsc_event_emitter_t* tsc_event_emitter_new(void) {
+    tsc_event_emitter_t* ee = (tsc_event_emitter_t*)TSC_GC_MALLOC(sizeof(tsc_event_emitter_t));
+    ee->len = 0;
+    ee->cap = 0;
+    ee->next_order = 1;
+    ee->max_listeners = 10.0;
+    ee->listeners = NULL;
+    return ee;
+}
+
+static void event_emitter_reserve(tsc_event_emitter_t* ee, size_t cap) {
+    if (!ee || ee->cap >= cap) return;
+    size_t next = ee->cap ? ee->cap * 2 : 4;
+    if (next < cap) next = cap;
+    tsc_event_listener_t* items = (tsc_event_listener_t*)TSC_GC_MALLOC(sizeof(tsc_event_listener_t) * next);
+    if (ee->listeners && ee->len > 0) {
+        memcpy(items, ee->listeners, sizeof(tsc_event_listener_t) * ee->len);
+    }
+    ee->listeners = items;
+    ee->cap = next;
+}
+
+void tsc_event_emitter_on(tsc_event_emitter_t* ee, tsc_str_t* event, tsc_event_listener_fn_t fn, void* env, void* identity, bool once, bool prepend) {
+    if (!ee || !event || !fn) return;
+    event_emitter_reserve(ee, ee->len + 1);
+    size_t idx = ee->len;
+    if (prepend) {
+        for (size_t i = 0; i < ee->len; i++) {
+            if (tsc_str_eq(ee->listeners[i].event, event)) {
+                idx = i;
+                break;
+            }
+        }
+        for (size_t i = ee->len; i > idx; i--) {
+            ee->listeners[i] = ee->listeners[i - 1];
+        }
+    }
+    ee->listeners[idx].event = event;
+    ee->listeners[idx].fn = fn;
+    ee->listeners[idx].env = env;
+    ee->listeners[idx].identity = identity ? identity : env;
+    ee->listeners[idx].order = ee->next_order++;
+    ee->listeners[idx].once = once;
+    ee->len++;
+}
+
+void tsc_event_emitter_off(tsc_event_emitter_t* ee, const tsc_str_t* event, tsc_event_listener_fn_t fn, void* identity) {
+    if (!ee || !event || !fn) return;
+    size_t found = SIZE_MAX;
+    uint64_t found_order = 0;
+    for (size_t i = 0; i < ee->len; i++) {
+        if (!tsc_str_eq(ee->listeners[i].event, event)) continue;
+        if (ee->listeners[i].fn != fn || ee->listeners[i].identity != identity) continue;
+        if (found == SIZE_MAX || ee->listeners[i].order > found_order) {
+            found = i;
+            found_order = ee->listeners[i].order;
+        }
+    }
+    if (found != SIZE_MAX) {
+        for (size_t j = found + 1; j < ee->len; j++) ee->listeners[j - 1] = ee->listeners[j];
+        ee->len--;
+    }
+}
+
+void tsc_event_emitter_remove_all(tsc_event_emitter_t* ee, const tsc_str_t* event) {
+    if (!ee) return;
+    if (!event) {
+        ee->len = 0;
+        return;
+    }
+    size_t out = 0;
+    for (size_t i = 0; i < ee->len; i++) {
+        if (tsc_str_eq(ee->listeners[i].event, event)) continue;
+        if (out != i) ee->listeners[out] = ee->listeners[i];
+        out++;
+    }
+    ee->len = out;
+}
+
+bool tsc_event_emitter_emit(tsc_event_emitter_t* ee, const tsc_str_t* event, tsc_array_t* args) {
+    if (!ee || !event) return false;
+    bool called = false;
+    for (size_t i = 0; i < ee->len; ) {
+        tsc_event_listener_t listener = ee->listeners[i];
+        if (!tsc_str_eq(listener.event, event)) {
+            i++;
+            continue;
+        }
+        called = true;
+        if (listener.once) {
+            for (size_t j = i + 1; j < ee->len; j++) ee->listeners[j - 1] = ee->listeners[j];
+            ee->len--;
+            listener.fn(listener.env, args);
+        } else {
+            listener.fn(listener.env, args);
+            i++;
+        }
+    }
+    if (!called && str_lit_eq(event, "error")) {
+        tsc_str_t* message = tsc_str_from_cstr("Unhandled error event");
+        if (args && args->len > 0) {
+            message = tsc_value_to_string(TSC_ARR(tsc_value_t, args, 0));
+        }
+        tsc_throw_str(message);
+    }
+    return called;
+}
+
+double tsc_event_emitter_listener_count(const tsc_event_emitter_t* ee, const tsc_str_t* event) {
+    if (!ee || !event) return 0.0;
+    size_t count = 0;
+    for (size_t i = 0; i < ee->len; i++) {
+        if (tsc_str_eq(ee->listeners[i].event, event)) count++;
+    }
+    return (double)count;
+}
+
+double tsc_event_emitter_listener_count_identity(const tsc_event_emitter_t* ee, const tsc_str_t* event, void* identity) {
+    if (!ee || !event || !identity) return 0.0;
+    size_t count = 0;
+    for (size_t i = 0; i < ee->len; i++) {
+        if (tsc_str_eq(ee->listeners[i].event, event) && ee->listeners[i].identity == identity) count++;
+    }
+    return (double)count;
+}
+
+tsc_array_t* tsc_event_emitter_event_names(const tsc_event_emitter_t* ee) {
+    tsc_array_t* names = tsc_array_new(sizeof(tsc_str_t*), ee ? ee->len : 0);
+    if (!ee) return names;
+    for (size_t i = 0; i < ee->len; i++) {
+        bool seen = false;
+        for (size_t j = 0; j < i; j++) {
+            if (tsc_str_eq(ee->listeners[j].event, ee->listeners[i].event)) {
+                seen = true;
+                break;
+            }
+        }
+        if (!seen) {
+            tsc_str_t* event = ee->listeners[i].event;
+            tsc_array_push_raw(names, &event);
+        }
+    }
+    return names;
+}
+
+void tsc_event_emitter_set_max_listeners(tsc_event_emitter_t* ee, double n) {
+    if (!ee) return;
+    if (isnan(n) || n < 0.0) {
+        tsc_throw_str(tsc_str_from_cstr("EventEmitter.setMaxListeners: invalid listener count"));
+        return;
+    }
+    ee->max_listeners = n;
+}
+
+double tsc_event_emitter_get_max_listeners(const tsc_event_emitter_t* ee) {
+    return ee ? ee->max_listeners : 0.0;
+}
 
 static tsc_value_t value_accessor_getter_identity(tsc_accessor_getter_t getter, void* env) {
     if (!getter) return tsc_value_undefined();
@@ -5062,6 +5293,14 @@ static char* cstr_dup(const tsc_str_t* s) {
     return c;
 }
 
+struct tsc_fs_stats {
+    double size;
+    double mode;
+    bool is_file;
+    bool is_directory;
+    bool is_symbolic_link;
+};
+
 tsc_str_t* tsc_fs_read_file_sync(const tsc_str_t* path) {
     char* p = cstr_dup(path);
     FILE* f = fopen(p, "rb");
@@ -5091,12 +5330,320 @@ void tsc_fs_write_file_sync(const tsc_str_t* path, const tsc_str_t* data) {
     fclose(f);
 }
 
+void tsc_fs_append_file_sync(const tsc_str_t* path, const tsc_str_t* data) {
+    char* p = cstr_dup(path);
+    FILE* f = fopen(p, "ab");
+    free(p);
+    if (!f) { tsc_throw_str(tsc_str_from_cstr("fs.appendFileSync: could not open")); return; }
+    fwrite(data->data, 1, data->len, f);
+    fclose(f);
+}
+
 bool tsc_fs_exists_sync(const tsc_str_t* path) {
     char* p = cstr_dup(path);
     struct stat st;
     int r = stat(p, &st);
     free(p);
     return r == 0;
+}
+
+tsc_fs_stats_t* tsc_fs_stat_sync(const tsc_str_t* path) {
+    char* p = cstr_dup(path);
+    struct stat st;
+    int r = stat(p, &st);
+    free(p);
+    if (r != 0) {
+        tsc_throw_str(tsc_str_from_cstr("fs.statSync: could not stat path"));
+        return NULL;
+    }
+    tsc_fs_stats_t* out = (tsc_fs_stats_t*)TSC_GC_MALLOC(sizeof(tsc_fs_stats_t));
+    out->size = (double)st.st_size;
+    out->mode = (double)st.st_mode;
+    out->is_file = S_ISREG(st.st_mode);
+    out->is_directory = S_ISDIR(st.st_mode);
+    out->is_symbolic_link = S_ISLNK(st.st_mode);
+    return out;
+}
+
+tsc_fs_stats_t* tsc_fs_lstat_sync(const tsc_str_t* path) {
+    char* p = cstr_dup(path);
+    struct stat st;
+    int r = lstat(p, &st);
+    free(p);
+    if (r != 0) {
+        tsc_throw_str(tsc_str_from_cstr("fs.lstatSync: could not stat path"));
+        return NULL;
+    }
+    tsc_fs_stats_t* out = (tsc_fs_stats_t*)TSC_GC_MALLOC(sizeof(tsc_fs_stats_t));
+    out->size = (double)st.st_size;
+    out->mode = (double)st.st_mode;
+    out->is_file = S_ISREG(st.st_mode);
+    out->is_directory = S_ISDIR(st.st_mode);
+    out->is_symbolic_link = S_ISLNK(st.st_mode);
+    return out;
+}
+
+tsc_str_t* tsc_fs_realpath_sync(const tsc_str_t* path) {
+    char* p = cstr_dup(path);
+    char* resolved = realpath(p, NULL);
+    free(p);
+    if (!resolved) {
+        tsc_throw_str(tsc_str_from_cstr("fs.realpathSync: could not resolve path"));
+        return NULL;
+    }
+    tsc_str_t* out = tsc_str_from_cstr(resolved);
+    free(resolved);
+    return out;
+}
+
+tsc_str_t* tsc_fs_readlink_sync(const tsc_str_t* path) {
+    char* p = cstr_dup(path);
+    size_t cap = PATH_MAX > 0 ? (size_t)PATH_MAX : 4096;
+    for (;;) {
+        char* buf = (char*)malloc(cap);
+        ssize_t n = readlink(p, buf, cap);
+        if (n < 0) {
+            free(buf);
+            free(p);
+            tsc_throw_str(tsc_str_from_cstr("fs.readlinkSync: could not read link"));
+            return NULL;
+        }
+        if ((size_t)n < cap) {
+            tsc_str_t* out = str_alloc((size_t)n);
+            memcpy((char*)out->data, buf, (size_t)n);
+            free(buf);
+            free(p);
+            return out;
+        }
+        free(buf);
+        if (cap >= (1u << 20)) {
+            free(p);
+            tsc_throw_str(tsc_str_from_cstr("fs.readlinkSync: link target too long"));
+            return NULL;
+        }
+        cap *= 2;
+    }
+}
+
+void tsc_fs_symlink_sync(const tsc_str_t* target, const tsc_str_t* path) {
+    char* t = cstr_dup(target);
+    char* p = cstr_dup(path);
+    int r = symlink(t, p);
+    free(t);
+    free(p);
+    if (r != 0) {
+        tsc_throw_str(tsc_str_from_cstr("fs.symlinkSync: could not create link"));
+    }
+}
+
+void tsc_fs_link_sync(const tsc_str_t* existing_path, const tsc_str_t* new_path) {
+    char* oldp = cstr_dup(existing_path);
+    char* newp = cstr_dup(new_path);
+    int r = link(oldp, newp);
+    free(oldp);
+    free(newp);
+    if (r != 0) {
+        tsc_throw_str(tsc_str_from_cstr("fs.linkSync: could not create link"));
+    }
+}
+
+tsc_str_t* tsc_fs_mkdtemp_sync(const tsc_str_t* prefix) {
+    char* p = cstr_dup(prefix);
+    size_t len = strlen(p);
+    char* tmpl = (char*)malloc(len + 7);
+    memcpy(tmpl, p, len);
+    memcpy(tmpl + len, "XXXXXX", 7);
+    free(p);
+    char* made = mkdtemp(tmpl);
+    if (!made) {
+        free(tmpl);
+        tsc_throw_str(tsc_str_from_cstr("fs.mkdtempSync: could not create directory"));
+        return NULL;
+    }
+    tsc_str_t* out = tsc_str_from_cstr(made);
+    free(tmpl);
+    return out;
+}
+
+void tsc_fs_truncate_sync(const tsc_str_t* path, double len) {
+    char* p = cstr_dup(path);
+    off_t n = len < 0 ? 0 : (off_t)len;
+    int r = truncate(p, n);
+    free(p);
+    if (r != 0) {
+        tsc_throw_str(tsc_str_from_cstr("fs.truncateSync: could not truncate path"));
+    }
+}
+
+double tsc_fs_stats_size(const tsc_fs_stats_t* st) {
+    return st ? st->size : 0.0;
+}
+
+double tsc_fs_stats_mode(const tsc_fs_stats_t* st) {
+    return st ? st->mode : 0.0;
+}
+
+bool tsc_fs_stats_is_file(const tsc_fs_stats_t* st) {
+    return st ? st->is_file : false;
+}
+
+bool tsc_fs_stats_is_directory(const tsc_fs_stats_t* st) {
+    return st ? st->is_directory : false;
+}
+
+bool tsc_fs_stats_is_symbolic_link(const tsc_fs_stats_t* st) {
+    return st ? st->is_symbolic_link : false;
+}
+
+void tsc_fs_access_sync(const tsc_str_t* path) {
+    char* p = cstr_dup(path);
+    struct stat st;
+    int r = stat(p, &st);
+    free(p);
+    if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.promises.access: path does not exist"));
+}
+
+void tsc_fs_chmod_sync(const tsc_str_t* path, double mode) {
+    char* p = cstr_dup(path);
+    mode_t m = mode < 0 ? 0 : (mode_t)mode;
+    int r = chmod(p, m);
+    free(p);
+    if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.chmodSync: could not change mode"));
+}
+
+void tsc_fs_mkdir_sync(const tsc_str_t* path) {
+    char* p = cstr_dup(path);
+    int r = mkdir(p, 0777);
+    free(p);
+    if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.mkdirSync: could not create directory"));
+}
+
+static int mkdir_recursive_cstr(const char* path) {
+    if (!path || path[0] == '\0') return -1;
+    char* tmp = strdup(path);
+    if (!tmp) return -1;
+    size_t len = strlen(tmp);
+    while (len > 1 && tmp[len - 1] == '/') {
+        tmp[--len] = '\0';
+    }
+    for (char* p = tmp + 1; *p; p++) {
+        if (*p != '/') continue;
+        *p = '\0';
+        if (tmp[0] != '\0' && mkdir(tmp, 0777) != 0 && errno != EEXIST) {
+            int saved = errno;
+            free(tmp);
+            errno = saved;
+            return -1;
+        }
+        *p = '/';
+    }
+    if (mkdir(tmp, 0777) != 0 && errno != EEXIST) {
+        int saved = errno;
+        free(tmp);
+        errno = saved;
+        return -1;
+    }
+    free(tmp);
+    return 0;
+}
+
+void tsc_fs_mkdir_sync_opts(const tsc_str_t* path, bool recursive) {
+    if (!recursive) {
+        tsc_fs_mkdir_sync(path);
+        return;
+    }
+    char* p = cstr_dup(path);
+    int r = mkdir_recursive_cstr(p);
+    free(p);
+    if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.mkdirSync: could not create directory recursively"));
+}
+
+void tsc_fs_unlink_sync(const tsc_str_t* path) {
+    char* p = cstr_dup(path);
+    int r = unlink(p);
+    free(p);
+    if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.unlinkSync: could not remove file"));
+}
+
+void tsc_fs_rm_sync(const tsc_str_t* path) {
+    char* p = cstr_dup(path);
+    int r = remove(p);
+    free(p);
+    if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.rmSync: could not remove path"));
+}
+
+static int rm_recursive_cstr(const char* path, bool force) {
+    struct stat st;
+    if (lstat(path, &st) != 0) {
+        return (force && errno == ENOENT) ? 0 : -1;
+    }
+    if (!S_ISDIR(st.st_mode)) {
+        return unlink(path);
+    }
+    DIR* d = opendir(path);
+    if (!d) return -1;
+    struct dirent* ent;
+    while ((ent = readdir(d))) {
+        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
+        size_t base_len = strlen(path);
+        size_t name_len = strlen(ent->d_name);
+        bool needs_slash = base_len > 0 && path[base_len - 1] != '/';
+        char* child = (char*)malloc(base_len + (needs_slash ? 1 : 0) + name_len + 1);
+        if (!child) {
+            closedir(d);
+            errno = ENOMEM;
+            return -1;
+        }
+        memcpy(child, path, base_len);
+        size_t pos = base_len;
+        if (needs_slash) child[pos++] = '/';
+        memcpy(child + pos, ent->d_name, name_len + 1);
+        if (rm_recursive_cstr(child, force) != 0) {
+            int saved = errno;
+            free(child);
+            closedir(d);
+            errno = saved;
+            return -1;
+        }
+        free(child);
+    }
+    closedir(d);
+    return rmdir(path);
+}
+
+void tsc_fs_rm_sync_opts(const tsc_str_t* path, bool recursive, bool force) {
+    char* p = cstr_dup(path);
+    int r;
+    if (recursive) {
+        r = rm_recursive_cstr(p, force);
+    } else {
+        r = remove(p);
+        if (r != 0 && force && errno == ENOENT) r = 0;
+    }
+    free(p);
+    if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.rmSync: could not remove path"));
+}
+
+void tsc_fs_rmdir_sync(const tsc_str_t* path) {
+    char* p = cstr_dup(path);
+    int r = rmdir(p);
+    free(p);
+    if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.rmdirSync: could not remove directory"));
+}
+
+void tsc_fs_copy_file_sync(const tsc_str_t* src, const tsc_str_t* dest) {
+    tsc_str_t* data = tsc_fs_read_file_sync(src);
+    if (!data) return;
+    tsc_fs_write_file_sync(dest, data);
+}
+
+void tsc_fs_rename_sync(const tsc_str_t* old_path, const tsc_str_t* new_path) {
+    char* oldp = cstr_dup(old_path);
+    char* newp = cstr_dup(new_path);
+    int r = rename(oldp, newp);
+    free(oldp);
+    free(newp);
+    if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.renameSync: could not rename path"));
 }
 
 tsc_array_t* tsc_fs_readdir_sync(const tsc_str_t* path) {
@@ -5162,6 +5709,142 @@ tsc_str_t* tsc_path_resolve(size_t n, ...) {
     va_list ap; va_start(ap, n);
     tsc_str_t* r = path_join_impl(n, ap, true);
     va_end(ap);
+    return r;
+}
+
+bool tsc_path_is_absolute(const tsc_str_t* p) {
+    return p && p->len > 0 && p->data[0] == '/';
+}
+
+tsc_str_t* tsc_path_normalize(const tsc_str_t* p) {
+    if (!p || p->len == 0) return tsc_str_from_lit(".", 1);
+    bool absolute = tsc_path_is_absolute(p);
+    bool trailing_slash = p->len > 1 && p->data[p->len - 1] == '/';
+    char buf[4096];
+    size_t pos = absolute ? 1 : 0;
+    if (absolute) buf[0] = '/';
+    size_t starts[256];
+    bool parents[256];
+    size_t top = 0;
+    bool last_normal = false;
+
+    for (size_t i = 0; i <= p->len;) {
+        while (i < p->len && p->data[i] == '/') i++;
+        size_t start = i;
+        while (i < p->len && p->data[i] != '/') i++;
+        size_t len = i - start;
+        if (len == 0) break;
+        if (len == 1 && p->data[start] == '.') {
+            last_normal = false;
+            continue;
+        }
+        if (len == 2 && p->data[start] == '.' && p->data[start + 1] == '.') {
+            if (top > 0 && !parents[top - 1]) {
+                pos = starts[--top];
+            } else if (!absolute) {
+                size_t prev = pos;
+                if (pos > 0) {
+                    if (pos + 1 >= sizeof buf) break;
+                    buf[pos++] = '/';
+                }
+                if (pos + 2 >= sizeof buf) break;
+                starts[top] = prev;
+                parents[top] = true;
+                top++;
+                memcpy(buf + pos, "..", 2);
+                pos += 2;
+            }
+            last_normal = false;
+            continue;
+        }
+
+        if (top >= 256) break;
+        size_t prev = pos;
+        if (pos > 0 && !(absolute && pos == 1)) {
+            if (pos + 1 >= sizeof buf) break;
+            buf[pos++] = '/';
+        }
+        if (pos + len >= sizeof buf) break;
+        starts[top] = prev;
+        parents[top] = false;
+        top++;
+        memcpy(buf + pos, p->data + start, len);
+        pos += len;
+        last_normal = true;
+    }
+
+    if (pos == 0) {
+        buf[pos++] = '.';
+    }
+    if (trailing_slash && last_normal && !(absolute && pos == 1)) {
+        if (pos + 1 < sizeof buf && buf[pos - 1] != '/') buf[pos++] = '/';
+    }
+    tsc_str_t* r = str_alloc(pos);
+    memcpy((char*)r->data, buf, pos);
+    return r;
+}
+
+static size_t path_split_components(const tsc_str_t* p, size_t starts[256], size_t lens[256]) {
+    size_t count = 0;
+    for (size_t i = 0; i < p->len && count < 256;) {
+        while (i < p->len && p->data[i] == '/') i++;
+        size_t start = i;
+        while (i < p->len && p->data[i] != '/') i++;
+        size_t len = i - start;
+        if (len == 0) break;
+        if (len == 1 && p->data[start] == '.') continue;
+        starts[count] = start;
+        lens[count] = len;
+        count++;
+    }
+    return count;
+}
+
+tsc_str_t* tsc_path_relative(const tsc_str_t* from, const tsc_str_t* to) {
+    tsc_str_t* from_norm = tsc_path_normalize(from);
+    tsc_str_t* to_norm = tsc_path_normalize(to);
+    if (from_norm->len == to_norm->len && memcmp(from_norm->data, to_norm->data, from_norm->len) == 0) {
+        return tsc_str_from_lit("", 0);
+    }
+    if (tsc_path_is_absolute(from_norm) != tsc_path_is_absolute(to_norm)) {
+        return to_norm;
+    }
+
+    size_t from_starts[256], from_lens[256], to_starts[256], to_lens[256];
+    size_t from_count = path_split_components(from_norm, from_starts, from_lens);
+    size_t to_count = path_split_components(to_norm, to_starts, to_lens);
+    size_t common = 0;
+    while (
+        common < from_count &&
+        common < to_count &&
+        from_lens[common] == to_lens[common] &&
+        memcmp(from_norm->data + from_starts[common], to_norm->data + to_starts[common], from_lens[common]) == 0
+    ) {
+        common++;
+    }
+
+    char buf[4096];
+    size_t pos = 0;
+    for (size_t i = common; i < from_count; i++) {
+        if (pos > 0) {
+            if (pos + 1 >= sizeof buf) break;
+            buf[pos++] = '/';
+        }
+        if (pos + 2 >= sizeof buf) break;
+        memcpy(buf + pos, "..", 2);
+        pos += 2;
+    }
+    for (size_t i = common; i < to_count; i++) {
+        if (pos > 0) {
+            if (pos + 1 >= sizeof buf) break;
+            buf[pos++] = '/';
+        }
+        if (pos + to_lens[i] >= sizeof buf) break;
+        memcpy(buf + pos, to_norm->data + to_starts[i], to_lens[i]);
+        pos += to_lens[i];
+    }
+    tsc_str_t* r = str_alloc(pos);
+    memcpy((char*)r->data, buf, pos);
     return r;
 }
 

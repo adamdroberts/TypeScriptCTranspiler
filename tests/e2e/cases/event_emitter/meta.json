@@ -1,0 +1,3 @@
+{
+  "description": "synchronous EventEmitter on/addListener/once/off/removeAllListeners/emit/listenerCount"
+}

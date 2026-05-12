@@ -1,0 +1,7 @@
+all: 4
+named: 3
+closure: 1
+named after once: 2
+named after off: 1
+all after off: 2
+seen: named:first|named:first|named:first|closure:first

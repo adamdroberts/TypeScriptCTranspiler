@@ -1,0 +1,3 @@
+{
+  "description": "path.normalize POSIX segment cleanup and path.isAbsolute checks"
+}

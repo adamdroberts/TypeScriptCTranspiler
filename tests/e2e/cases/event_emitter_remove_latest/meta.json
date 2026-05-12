@@ -1,0 +1,3 @@
+{
+  "description": "EventEmitter off/removeListener removes the most recently added matching listener"
+}

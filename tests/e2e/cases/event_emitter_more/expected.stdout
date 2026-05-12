@@ -1,0 +1,7 @@
+names: data|other
+static count: 3
+emit1: true
+after once: 2
+emit2: true
+names after clear: 
+seen: once:a|pre:a|on:a|pre:b|on:b

@@ -18,10 +18,13 @@ export type CTypeKind =
     | "weakset"
     | "weakref"
     | "finregistry"
+    | "promise"
+    | "eventemitter"
     | "regexp"
     | "hash"
     | "url"
     | "buffer"
+    | "fsstats"
     | "function"
     | "value"
     | "unsupported";
@@ -103,10 +106,16 @@ export function finRegistryType(elem: CType): CType {
     return { kind: "finregistry", c: "tsc_finregistry_t*", elem };
 }
 
+export function promiseType(elem: CType): CType {
+    return { kind: "promise", c: "tsc_promise_t*", elem };
+}
+
+export const T_EVENT_EMITTER: CType = { kind: "eventemitter", c: "tsc_event_emitter_t*" };
 export const T_REGEXP: CType = { kind: "regexp", c: "tsc_regexp_t*" };
 export const T_HASH: CType = { kind: "hash", c: "tsc_hash_t*" };
 export const T_URL: CType = { kind: "url", c: "tsc_url_t*" };
 export const T_BUFFER: CType = { kind: "buffer", c: "tsc_buffer_t*" };
+export const T_FS_STATS: CType = { kind: "fsstats", c: "tsc_fs_stats_t*" };
 export const T_VALUE: CType = { kind: "value", c: "tsc_value_t" };
 
 export function classType(className: string): CType {
@@ -369,6 +378,15 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
                 return finRegistryType(mapTsType(node, ta[0]!, checker));
             }
         }
+        if (sym?.getName() === "Promise") {
+            const tr = t as ts.TypeReference;
+            const ta = tr.typeArguments;
+            if (ta && ta.length >= 1) {
+                return promiseType(mapTsType(node, ta[0]!, checker));
+            }
+            return promiseType(T_VALUE);
+        }
+        if (sym?.getName() === "EventEmitter") return T_EVENT_EMITTER;
         if (sym?.getName() === "IterableIterator" || sym?.getName() === "Iterator" || sym?.getName() === "Generator") {
             const tr = t as ts.TypeReference;
             const ta = tr.typeArguments;
@@ -380,6 +398,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         if (sym?.getName() === "CryptoHash") return T_HASH;
         if (sym?.getName() === "URL") return T_URL;
         if (sym?.getName() === "Buffer") return T_BUFFER;
+        if (sym?.getName() === "FSStats") return T_FS_STATS;
         if (sym?.getName() === "TemplateStringsArray") return arrayType(T_STRING);
     }
 
@@ -432,6 +451,12 @@ function typeNamePart(t: CType): string {
             return `weakref_${t.elem ? typeNamePart(t.elem) : "void"}`;
         case "finregistry":
             return `finregistry_${t.elem ? typeNamePart(t.elem) : "void"}`;
+        case "promise":
+            return `promise_${t.elem ? typeNamePart(t.elem) : "void"}`;
+        case "eventemitter":
+            return "eventemitter";
+        case "fsstats":
+            return "fsstats";
         case "class":
             return sanitizeTypeName(`class_${t.className ?? t.c}`);
         case "function":

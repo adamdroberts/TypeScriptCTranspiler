@@ -2,7 +2,7 @@
 
 Everything in this file compiles end-to-end to a native binary via `./bin/tsc2c file.ts -o out`. Each bullet points at the test case under `tests/e2e/cases/` that exercises it and, where useful, at the runtime symbol or emitter method that implements it.
 
-Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 286 passed.
+Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 319 passed.
 
 ---
 
@@ -57,7 +57,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 286 passed.
 - `while`, `do` / `while`
 - `for (let i = 0; i < n; i++)`
 - `for (const x of arr)` — also works on arrays, strings, dynamic `tsc_value_t` arrays/strings, Map/Set, typed custom iterable classes whose `[Symbol.iterator]()` returns an array-backed `IterableIterator<T>`, custom iterable classes whose `[Symbol.iterator]()` returns a class iterator object, direct self-iterable custom iterator objects with `next()` returning `{ done, value }`, iterator classes that inherit `next()` from a base class, and custom iterators yielding `ObjectEntry<T>` values with `[key, value]` destructuring. Dynamic array-binding destructuring also supports trailing rest bindings. Tests: `arrays`, `captures`, `string_for_of`, `dynamic_for_of`, `dynamic_for_of_rest`, `map_set_for_of`, `custom_iterable`, `custom_iterator_object`, `custom_iterator_self`, `custom_iterator_inherited_next`, `custom_iterator_entry_destructure`
-- Synchronous `function*` declarations with ordinary `yield expr` statements and bounded `yield*` over arrays, strings, or dynamic iterable values lower to materialized array-backed `Iterator<T>` / `IterableIterator<T>` results consumable by existing `for...of` lowering. This is an eager subset; async generators and lazy suspend/resume state machines remain deferred. Test: `generator_functions`
+- Synchronous `function*` declarations with ordinary `yield expr` statements and bounded `yield*` over arrays, strings, or dynamic iterable values lower to materialized array-backed `Iterator<T>` / `IterableIterator<T>` results consumable by existing `for...of` lowering. The materialized iterator supports `.next()`, `.return(value)`, and `.throw(error)` cursor interactions. This is an eager subset; async generators and lazy suspend/resume state machines remain deferred. Test: `generator_functions`
 - `for (const k in obj)` enumerates own enumerable string keys. Supports typed classes/interfaces (compile-time field-name lists), typed arrays (numeric index strings), and dynamic `tsc_value_t` objects via `tsc_value_object_keys`. The binding type is always `string`. Test: `for_in`
 - `break`, `continue`
 - `switch` / `case` / `default` with correct **fall-through semantics** (empty cases merge via `||`). Test: `switch`
@@ -84,6 +84,9 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 286 passed.
 - Rest parameters lower to typed arrays, spread arguments append arrays into rest parameters in evaluation order, and direct fixed-arity function plus namespace/class/static method/constructor calls accept typed-array/dynamic-array/string spread argument lists with runtime arity checks. Tests: `rest_spread`, `namespaces`, `classes`, `generic_functions`, `generic_methods`
 - Direct self-tail calls in top-level functions lower to parameter temporaries plus `goto`, avoiding C stack growth for accumulator-style recursion. Test: `tail_calls`
 - Module-level `const` / `let` emitted as file-scope statics so top-level functions read/write them as captures. Test: `captures`
+
+### Promise subset
+- Settled `Promise<T>` values lower to `tsc_promise_t*`. `Promise.resolve(value)`, `Promise.reject(reason)`, synchronous `.then(...)`, `.catch(...)`, `.finally(...)`, and settled-array `Promise.all` / `allSettled` / `race` / `any` are implemented for compiler-known callbacks and promise arrays. This is a settled/immediate subset; async functions, pending promises, microtask ordering, timer integration, thenable assimilation, and standards-accurate empty-input combinator behavior remain deferred. Test: `promise_settled`
 
 ---
 
@@ -353,11 +356,23 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `fs.writeFileSync(path, data)` → `tsc_fs_write_file_sync`
 - `fs.existsSync(path)` → `tsc_fs_exists_sync`
 - `fs.readdirSync(path)` → `tsc_fs_readdir_sync`
+- `fs.statSync(path)` and immediate-settled `fs.promises.stat(path)` return a small typed `Stats` subset with `size`, `mode`, `isFile()`, `isDirectory()`, and `isSymbolicLink()`. Test: `fs_stat`
+- `fs.lstatSync(path)` and immediate-settled `fs.promises.lstat(path)` return the same small typed `Stats` subset without following symlinks. Test: `fs_lstat`
+- `fs.realpathSync(path)` and immediate-settled `fs.promises.realpath(path)` resolve paths through the host filesystem. Test: `fs_realpath`
+- `fs.readlinkSync(path)` and immediate-settled `fs.promises.readlink(path)` read symlink targets through the host filesystem. Test: `fs_readlink`
+- `fs.symlinkSync(target, path)` and immediate-settled `fs.promises.symlink(target, path)` create host filesystem symlinks. Test: `fs_symlink`
+- `fs.linkSync(existingPath, newPath)` and immediate-settled `fs.promises.link(existingPath, newPath)` create host filesystem hard links. Test: `fs_link`
+- `fs.mkdtempSync(prefix)` and immediate-settled `fs.promises.mkdtemp(prefix)` create temporary directories from a prefix. Test: `fs_mkdtemp`
+- `fs.truncateSync(path, len?)` and immediate-settled `fs.promises.truncate(path, len?)` truncate files by path. Test: `fs_truncate`
+- `fs.chmodSync(path, mode)` and immediate-settled `fs.promises.chmod(path, mode)` change numeric file modes. Test: `fs_chmod`
+- `fs.mkdirSync(path)`, `unlinkSync(path)`, `rmSync(path)`, `rmdirSync(path)`, `appendFileSync(path, data)`, `copyFileSync(src, dest)`, and `renameSync(oldPath, newPath)` are implemented for path-only/string-data calls. Read/write/append accept bounded UTF-8 string or object-literal encoding options; `mkdir` accepts bounded `{ recursive: boolean }` object-literal options; and `rm` accepts bounded `{ recursive: boolean, force: boolean }` object-literal options for sync and immediate-settled promise calls. Tests: `fs_sync_mutation`, `fs_copy_rename`, `fs_append`, `fs_recursive_options`, `fs_encoding_options`
 - Test: `fs_roundtrip`
+- `fs.promises.readFile(path)`, `writeFile(path, data)`, `appendFile(path, data)`, `readdir(path)`, `stat(path)`, `lstat(path)`, `realpath(path)`, `readlink(path)`, `symlink(target, path)`, `link(existingPath, newPath)`, `mkdtemp(prefix)`, `truncate(path, len?)`, `chmod(path, mode)`, `access(path)`, `mkdir(path)`, `unlink(path)`, `rm(path)`, `rmdir(path)`, `copyFile(src, dest)`, and `rename(oldPath, newPath)` are implemented as an immediate-settled subset on top of the sync runtime. They return fulfilled `Promise<T>` values usable with the settled Promise `.then(...)` lowering; real libuv-backed async scheduling, broader options objects, and promise rejection conversion remain deferred. Tests: `fs_promises`, `fs_promises_import`, `fs_promises_mutation`, `fs_copy_rename`, `fs_append`, `fs_stat`, `fs_lstat`, `fs_realpath`, `fs_readlink`, `fs_symlink`, `fs_link`, `fs_mkdtemp`, `fs_truncate`, `fs_chmod`, `fs_recursive_options`, `fs_encoding_options`
 
 ### `path`
 - `path.join(...parts)` → `tsc_path_join`
 - `path.resolve(...parts)` → `tsc_path_resolve` (against `getcwd()`)
+- `path.normalize(path)`, `path.isAbsolute(path)`, and `path.relative(from, to)` implement a bounded POSIX subset for segment cleanup, leading-slash absolute detection, and relative path construction. `path.sep` and `path.delimiter` expose POSIX constants. Named and namespace imports from `"path"` / `"node:path"` route to the same supported subset. Tests: `path_normalize`, `path_import`, `path_constants`, `path_relative`
 - `path.basename` / `dirname` / `extname`
 - Test: `fs_roundtrip`
 
@@ -367,6 +382,9 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 
 ### `crypto`
 - `crypto.createHash("sha256").update(data).digest("hex")` backed by OpenSSL SHA-256. Test: `crypto_sha256`
+
+### `EventEmitter`
+- `new EventEmitter()` creates a synchronous listener registry from the global constructor, named imports from `"events"` / `"node:events"`, or namespace imports such as `events.EventEmitter`. `on`, `addListener`, `prependListener`, `once`, `prependOnceListener`, `off`, `removeListener`, `removeAllListeners`, `emit`, `listenerCount(eventName, listener?)`, `eventNames`, `setMaxListeners`, `getMaxListeners`, and module-level `listenerCount(emitter, eventName)` / `events.listenerCount(emitter, eventName)` / `setMaxListeners(count, emitter)` / `getMaxListeners(emitter)` are implemented for string event names and typed listener callbacks. Emitted arguments are boxed as dynamic values and coerced into each listener's declared parameters by generated adapters. Emitting `"error"` with no registered listener throws the first emitted argument string, duplicate `off` / `removeListener` calls remove the most recently added matching listener, and once listeners are removed before invocation so reentrant emits do not call them twice. Tests: `event_emitter`, `event_emitter_import`, `event_emitter_more`, `event_emitter_namespace`, `event_emitter_max_listeners`, `event_emitter_listener_count_filter`, `event_emitter_error_event`, `event_emitter_remove_latest`, `event_emitter_once_reentrant`
 
 ### `Buffer`
 - `Buffer.from(string[, "utf8" | "hex"])`, `Buffer.from(number[])`, `Buffer.alloc(size, fill?)`, `Buffer.concat(list)`, `Buffer.isBuffer(value)`.
@@ -483,7 +501,18 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `custom_iterator_self` | direct self-iterable custom iterator object with `next()` |
 | `custom_predicates` | user-defined type predicate narrowing over interface-shaped union values |
 | `enums` | numeric enum constants |
+| `event_emitter` | synchronous EventEmitter listener registration, emit, once, removal, and listener counts |
+| `event_emitter_error_event` | unhandled EventEmitter `"error"` emits throw while handled errors emit normally |
+| `event_emitter_import` | named `EventEmitter` import from `node:events` backed by the same synchronous runtime |
+| `event_emitter_listener_count_filter` | EventEmitter listenerCount optional listener identity filtering |
+| `event_emitter_max_listeners` | EventEmitter get/set max listener count through instance and events module helpers |
+| `event_emitter_more` | EventEmitter prepend listeners, event-name enumeration, and module-level `events.listenerCount` |
+| `event_emitter_namespace` | namespace `node:events` import with `events.EventEmitter` and `events.listenerCount` |
+| `event_emitter_once_reentrant` | EventEmitter once listeners are removed before invocation for reentrant emit |
+| `event_emitter_remove_latest` | EventEmitter off/removeListener removes the most recently added matching listener |
 | `exponent_assign` | exponentiation compound assignment for number, BigInt, and dynamic values |
+| `fs_append` | fs appendFileSync and immediate-settled fs.promises appendFile |
+| `fs_chmod` | fs.chmodSync and immediate-settled fs.promises chmod with Stats.mode |
 | `inheritance` | extends + super() + static members |
 | `instanceof` | class instance ancestry checks |
 | `interface_inheritance` | interface extends fields and typed object key order |
@@ -500,10 +529,30 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `number_to_exponential` | Number.toExponential typed and dynamic scientific formatting |
 | `number_to_fixed` | Number.toFixed typed and dynamic fixed-point formatting |
 | `number_to_precision` | Number.toPrecision typed and dynamic significant-digit formatting |
+| `path_constants` | path sep and delimiter constants for global, named import, and namespace import forms |
+| `path_import` | path named and namespace imports from node:path/path |
+| `path_normalize` | bounded POSIX path.normalize segment cleanup and path.isAbsolute checks |
+| `path_relative` | bounded POSIX path.relative and named node:path import |
+| `promise_settled` | settled Promise.resolve/reject with synchronous then/catch/finally chaining and combinators |
+| `fs_copy_rename` | fs copyFileSync/renameSync and immediate-settled fs.promises copyFile/rename |
+| `fs_encoding_options` | fs UTF-8 encoding string/object options for read/write/append sync and immediate-settled promise calls |
+| `fs_lstat` | fs.lstatSync and immediate-settled fs.promises lstat with symbolic-link Stats |
+| `fs_link` | fs.linkSync and immediate-settled fs.promises link |
+| `fs_mkdtemp` | fs.mkdtempSync and immediate-settled fs.promises mkdtemp |
+| `fs_promises` | immediate-settled fs.promises readFile/writeFile/readdir/access over the sync fs runtime |
+| `fs_promises_import` | fs.promises named and namespace imports from node:fs/fs |
+| `fs_promises_mutation` | immediate-settled fs.promises mkdir/unlink/rm/rmdir over the sync fs runtime |
+| `fs_realpath` | fs.realpathSync and immediate-settled fs.promises realpath |
+| `fs_readlink` | fs.readlinkSync and immediate-settled fs.promises readlink |
+| `fs_recursive_options` | fs mkdir recursive and rm recursive/force options for sync and immediate-settled promise calls |
 | `fs_roundtrip` | fs.readFileSync + writeFileSync + path helpers |
+| `fs_stat` | fs.statSync, node:fs statSync, fs.promises.stat, and Promise.resolve over the typed Stats subset |
+| `fs_symlink` | fs.symlinkSync and immediate-settled fs.promises symlink |
+| `fs_sync_mutation` | fs mkdirSync/unlinkSync/rmSync/rmdirSync through node:fs namespace imports |
+| `fs_truncate` | fs.truncateSync and immediate-settled fs.promises truncate |
 | `function_closures` | returned closures with function-scope captures and mutable captured state |
 | `function_value_spread` | spread calls through first-class function values |
-| `generator_functions` | synchronous function* materialized Iterator/IterableIterator lowering with yield and bounded yield* |
+| `generator_functions` | synchronous function* materialized Iterator/IterableIterator lowering with yield, bounded yield*, next, return, and throw |
 | `generic_classes` | erased generic class fields/methods using dynamic value storage and spread method calls |
 | `generic_function_values` | generic top-level functions assigned to concrete function-typed values |
 | `global_number_predicates` | global isNaN/isFinite coercion for typed and dynamic values |

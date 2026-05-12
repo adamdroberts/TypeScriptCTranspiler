@@ -1,0 +1,3 @@
+{
+  "description": "immediate-settled fs.promises readFile/writeFile/readdir/access"
+}

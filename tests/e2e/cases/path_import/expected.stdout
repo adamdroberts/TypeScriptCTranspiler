@@ -1,0 +1,4 @@
+named normalize: x
+named absolute: true
+namespace basename: file.txt
+namespace normalize: /a/b

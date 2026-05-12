@@ -6,7 +6,7 @@ Goal: take a Node.js-style TypeScript app and get back a standalone executable t
 
 ## Status
 
-Substantial working subset, verified by **251 passing end-to-end tests** including a real word-count CLI that tokenizes via regex, counts via `Map`, sorts by a user comparator, and reads `process.env`. ~10,500 LOC across TypeScript compiler + C runtime + type shims.
+Substantial working subset, verified by **319 passing end-to-end tests** including a real word-count CLI that tokenizes via regex, counts via `Map`, sorts by a user comparator, and reads `process.env`. ~10,500 LOC across TypeScript compiler + C runtime + type shims.
 
 **Phases complete:**
 
@@ -24,7 +24,7 @@ Substantial working subset, verified by **251 passing end-to-end tests** includi
 | 7 (partial) | `Map<K,V>` + `Set<T>` with insertion-order hash tables, SameValueZero numeric keys, `new Set(array)`, `new Map(Object.entries(...))`, typed `WeakMap<K,V>`/`WeakSet<T>`/`WeakRef<T>`, `Set.keys`, collection `forEach` with inline or named callbacks, collection `toString`/`toLocaleString`/`valueOf`, and direct `for...of` over strings/Map/Set | ✅ |
 | 7 (partial) | JSON.stringify (type-driven, recursive for arrays and objects) | ✅ |
 | 8 (partial) | **RegExp via PCRE2** (`/pattern/flags`, `re.exec`, `re.test`, `re.source`/`flags`/flag booleans including `hasIndices`/`sticky`, `re.toString`/`toLocaleString`/`valueOf`, `s.replace`, `s.match`, `s.matchAll`, `s.search`, `s.split`, capture groups, lookahead/lookbehind, named capture syntax, Unicode properties) | ✅ |
-| 10 | Sync Node stdlib — `fs` (read/write/exists/readdir), `path`, `Math`, `os`, `Date.now`, `Number.*` statics, `Array.isArray`/`Array.from`/`Array.of`, `Buffer` fields + object methods, `URL` fields + `toString`/`toJSON`, **`process.env`**, **`process.cwd()`**, **`process.argv`** | ✅ |
+| 10+ | Sync Node stdlib — `fs` (read/write/append/exists/readdir/stat/lstat/realpath/readlink/symlink/link/mkdtemp/truncate/chmod/mkdir/unlink/rm/rmdir/copy/rename, plus bounded UTF-8 and recursive mkdir/rm options), immediate-settled `fs.promises` subset including `stat`, `lstat`, `realpath`, `readlink`, `symlink`, `link`, `mkdtemp`, `truncate`, and `chmod`, `path`, `Math`, `os`, `Date.now`, `Number.*` statics, `Array.isArray`/`Array.from`/`Array.of`, `Buffer` fields + object methods, `URL` fields + `toString`/`toJSON`, synchronous `EventEmitter`, **`process.env`**, **`process.cwd()`**, **`process.argv`** | ✅ |
 | 2d+ | **Module-level captures** — top-level `const/let` are emitted as file-scope statics, so top-level functions AND lifted arrow consts can read/write them as ordinary globals | ✅ |
 | 2e | **Function-scope closures** — first-class typed arrow/function expressions lower to generated `{fn, env}` closure structs with captured locals boxed in ref cells | ✅ |
 | 3 foundation | **Dynamic values** — `any`/`unknown` map to NaN-boxed `tsc_value_t`; supports `JSON.parse`, dynamic JSON stringify with object-property omission for `undefined`/function values, heterogeneous arrays/objects, dynamic property/index reads/writes, dynamic `in`/`delete`, dynamic binary/compound assignment operators, broader dynamic string/array methods including at/concat/copyWithin/fill/keys/values/lastIndexOf/localeCompare/normalize/pad/repeat/replace/string replace tokens/RegExp replace tokens/split/RegExp split/substr/substring/slice/reverse/toReversed/toSorted/toSpliced/with/trim edges/default and comparator sort/splice/toString/valueOf and inline/named/closure array HOFs with receiver callback args including reduceRight/findLast/findLastIndex, dynamic `Array.isArray`/`Array.from`/`Array.of`, typed coercion bridges, `Object.is`/assign/keys/values/entries/fromEntries/names/hasOwn/hasOwnProperty/isPrototypeOf/propertyIsEnumerable/toLocaleString/toString/valueOf/getOwnPropertyDescriptors/defineProperties, data descriptor flags, omitted-field/default handling, and compatible non-configurable redefinition, named-function/lifted-arrow/closure-valued/undefined accessor descriptors with receiver-bound `this`, own undefined absent-hook fields, boxed `get`/`set` identities callable through dynamic `Reflect.apply`, typed/dynamic string own-property enumeration/descriptors, bounded dynamic array extensibility/seal/freeze state and descriptor flags, Object.create with descriptor maps/prototype-chain lookup, and Reflect object helpers including receiver-aware dynamic data writes | ✅ |
@@ -32,10 +32,10 @@ Substantial working subset, verified by **251 passing end-to-end tests** includi
 **Not implemented in this session (deferred):**
 
 - **Phase 3 remainder** — hidden classes / shape trees, inline caches, remaining descriptor/prototype edge cases, complete built-in/prototype semantics, and npm-scale object behavior.
-- **Phase 6** — `async/await` + libuv event loop + Promise + microtask queue. ~3 weeks.
-- **Phase 7 remainder** — generators and broader iterator protocol edge cases.
+- **Phase 6 remainder** — `async/await` + libuv event loop + pending Promise/microtask semantics. Settled/immediate `Promise.resolve` / `reject`, synchronous `then` / `catch` / `finally`, and settled-array combinators are implemented.
+- **Phase 7 remainder** — lazy generator state machines, bidirectional `.next(value)`, async generators, and broader iterator protocol edge cases.
 - **Phase 9** — `Proxy`, `Reflect`, and full property descriptor semantics.
-- **Phases 11–13** — Async Node stdlib (streams, http, net, child_process, worker_threads).
+- **Phases 11–13** — Async Node stdlib (libuv-backed fs.promises, broader events module surface, streams, http, net, child_process, worker_threads).
 - **Phase 14** — `node_modules` transpilation (requires Phases 3, 6, 7 first).
 
 See `~/.claude/plans/make-a-typescript-to-floating-comet.md` for the full 15-phase plan.
@@ -560,7 +560,7 @@ Drop `TSC2C_NO_GC=1` after `sudo apt-get install libgc-dev`; OpenSSL, ICU, GMP, 
 The plan file at `~/.claude/plans/make-a-typescript-to-floating-comet.md` sequences the remaining phases. Highest leverage:
 
 1. **Phase 3 (NaN-boxing)** — unlocks untyped code paths, `any`/`unknown`, `JSON.parse` into objects, and the ability to compile most pure-JS npm packages.
-2. **Phase 6 (async/await + libuv)** — needed for real Node programs that do I/O concurrently.
+2. **Phase 6 remainder (async/await + libuv)** — needed for real Node programs that do I/O concurrently; the current Promise support is settled/immediate only.
 3. **Phase 14 (npm integration)** — walks `node_modules`, respects `package.json` `exports`, detects native addons. Depends on 3 + 6.
 
 Phases 3 and 6 are each multi-week undertakings. Phase 14 is about a month on top of those.

@@ -301,6 +301,7 @@ typedef struct tsc_array {
     bool extensible;
     bool sealed;
     bool frozen;
+    size_t iter_pos;
     void* data;
 } tsc_array_t;
 
@@ -331,8 +332,12 @@ void tsc_array_oob(const tsc_array_t* a, double i);
 typedef uint64_t tsc_value_t;
 
 typedef struct tsc_object tsc_object_t;
+typedef struct tsc_promise tsc_promise_t;
+typedef struct tsc_event_emitter tsc_event_emitter_t;
+typedef struct tsc_fs_stats tsc_fs_stats_t;
 typedef tsc_value_t (*tsc_accessor_getter_t)(void* env, tsc_value_t receiver);
 typedef bool (*tsc_accessor_setter_t)(void* env, tsc_value_t receiver, tsc_value_t value);
+typedef void (*tsc_event_listener_fn_t)(void* env, tsc_array_t* args);
 
 tsc_value_t tsc_value_undefined(void);
 tsc_value_t tsc_value_null(void);
@@ -390,6 +395,27 @@ tsc_array_t* tsc_value_object_keys(tsc_value_t v);
 tsc_array_t* tsc_value_object_values(tsc_value_t v);
 tsc_array_t* tsc_value_object_entries(tsc_value_t v);
 tsc_value_t tsc_value_object_from_entries(tsc_value_t entries);
+
+tsc_promise_t* tsc_promise_resolve(tsc_value_t value);
+tsc_promise_t* tsc_promise_resolve_fs_stats(tsc_fs_stats_t* value);
+tsc_promise_t* tsc_promise_reject(tsc_value_t reason);
+bool tsc_promise_is_fulfilled(const tsc_promise_t* p);
+bool tsc_promise_is_rejected(const tsc_promise_t* p);
+tsc_value_t tsc_promise_value(const tsc_promise_t* p);
+tsc_fs_stats_t* tsc_promise_fs_stats_value(const tsc_promise_t* p);
+tsc_value_t tsc_promise_reason(const tsc_promise_t* p);
+
+tsc_event_emitter_t* tsc_event_emitter_new(void);
+void tsc_event_emitter_on(tsc_event_emitter_t* ee, tsc_str_t* event, tsc_event_listener_fn_t fn, void* env, void* identity, bool once, bool prepend);
+void tsc_event_emitter_off(tsc_event_emitter_t* ee, const tsc_str_t* event, tsc_event_listener_fn_t fn, void* identity);
+void tsc_event_emitter_remove_all(tsc_event_emitter_t* ee, const tsc_str_t* event);
+bool tsc_event_emitter_emit(tsc_event_emitter_t* ee, const tsc_str_t* event, tsc_array_t* args);
+double tsc_event_emitter_listener_count(const tsc_event_emitter_t* ee, const tsc_str_t* event);
+double tsc_event_emitter_listener_count_identity(const tsc_event_emitter_t* ee, const tsc_str_t* event, void* identity);
+tsc_array_t* tsc_event_emitter_event_names(const tsc_event_emitter_t* ee);
+void tsc_event_emitter_set_max_listeners(tsc_event_emitter_t* ee, double n);
+double tsc_event_emitter_get_max_listeners(const tsc_event_emitter_t* ee);
+
 tsc_value_t tsc_value_add(tsc_value_t a, tsc_value_t b);
 tsc_value_t tsc_value_sub(tsc_value_t a, tsc_value_t b);
 tsc_value_t tsc_value_mul(tsc_value_t a, tsc_value_t b);
@@ -564,8 +590,32 @@ tsc_str_t* tsc_process_cwd(void);
 /* ------------- fs (sync subset) ------------- */
 tsc_str_t* tsc_fs_read_file_sync(const tsc_str_t* path);
 void tsc_fs_write_file_sync(const tsc_str_t* path, const tsc_str_t* data);
+void tsc_fs_append_file_sync(const tsc_str_t* path, const tsc_str_t* data);
 bool tsc_fs_exists_sync(const tsc_str_t* path);
 tsc_array_t* tsc_fs_readdir_sync(const tsc_str_t* path);
+tsc_fs_stats_t* tsc_fs_stat_sync(const tsc_str_t* path);
+tsc_fs_stats_t* tsc_fs_lstat_sync(const tsc_str_t* path);
+tsc_str_t* tsc_fs_realpath_sync(const tsc_str_t* path);
+tsc_str_t* tsc_fs_readlink_sync(const tsc_str_t* path);
+void tsc_fs_symlink_sync(const tsc_str_t* target, const tsc_str_t* path);
+void tsc_fs_link_sync(const tsc_str_t* existing_path, const tsc_str_t* new_path);
+tsc_str_t* tsc_fs_mkdtemp_sync(const tsc_str_t* prefix);
+void tsc_fs_truncate_sync(const tsc_str_t* path, double len);
+double tsc_fs_stats_size(const tsc_fs_stats_t* st);
+double tsc_fs_stats_mode(const tsc_fs_stats_t* st);
+bool tsc_fs_stats_is_file(const tsc_fs_stats_t* st);
+bool tsc_fs_stats_is_directory(const tsc_fs_stats_t* st);
+bool tsc_fs_stats_is_symbolic_link(const tsc_fs_stats_t* st);
+void tsc_fs_access_sync(const tsc_str_t* path);
+void tsc_fs_chmod_sync(const tsc_str_t* path, double mode);
+void tsc_fs_mkdir_sync(const tsc_str_t* path);
+void tsc_fs_mkdir_sync_opts(const tsc_str_t* path, bool recursive);
+void tsc_fs_unlink_sync(const tsc_str_t* path);
+void tsc_fs_rm_sync(const tsc_str_t* path);
+void tsc_fs_rm_sync_opts(const tsc_str_t* path, bool recursive, bool force);
+void tsc_fs_rmdir_sync(const tsc_str_t* path);
+void tsc_fs_copy_file_sync(const tsc_str_t* src, const tsc_str_t* dest);
+void tsc_fs_rename_sync(const tsc_str_t* old_path, const tsc_str_t* new_path);
 
 /* ------------- os ------------- */
 tsc_str_t* tsc_os_platform(void);
@@ -579,6 +629,9 @@ double tsc_date_now(void);
 /* ------------- path ------------- */
 tsc_str_t* tsc_path_join(size_t n, ...);
 tsc_str_t* tsc_path_resolve(size_t n, ...);
+tsc_str_t* tsc_path_normalize(const tsc_str_t* p);
+bool tsc_path_is_absolute(const tsc_str_t* p);
+tsc_str_t* tsc_path_relative(const tsc_str_t* from, const tsc_str_t* to);
 tsc_str_t* tsc_path_basename(const tsc_str_t* p);
 tsc_str_t* tsc_path_dirname(const tsc_str_t* p);
 tsc_str_t* tsc_path_extname(const tsc_str_t* p);

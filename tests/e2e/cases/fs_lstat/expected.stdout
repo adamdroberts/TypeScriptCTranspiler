@@ -1,0 +1,4 @@
+file: true false false
+dir: false true false
+link: false false true true
+promise: true
