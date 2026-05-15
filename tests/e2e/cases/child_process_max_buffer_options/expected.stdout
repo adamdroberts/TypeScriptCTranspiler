@@ -1,0 +1,4 @@
+callback: ENOBUFS abc 0
+spawn: ENOBUFS abc 0
+sync: short
+file-sync: file-short

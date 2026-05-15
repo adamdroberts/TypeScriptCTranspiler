@@ -2,7 +2,7 @@
 
 Everything in this file compiles end-to-end to a native binary via `./bin/tsc2c file.ts -o out`. Each bullet points at the test case under `tests/e2e/cases/` that exercises it and, where useful, at the runtime symbol or emitter method that implements it.
 
-Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 319 passed.
+Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 502 passed.
 
 ---
 
@@ -45,6 +45,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 319 passed.
 - `typeof` in typed code — JS type string with operand side effects preserved. Nullable pointer unions such as `string | null` and `string | undefined` produce the nullish runtime result and work in equality/inequality guards; dynamic primitive unions such as `string | number | boolean` narrow through the existing unbox bridge. Tests: `typeof`, `typeof_guards`, `typeof_boolean_union`
 - `void expr` evaluates `expr` for side effects and yields `undefined`. Test: `void_operator`
 - Comma operator expressions evaluate left-to-right and return the right-hand value. Test: `comma_operator`
+- TypeScript-only `expr satisfies T`, `expr as T`, `<T>expr`, and `expr!` assertions erase to the runtime operand. Test: `satisfies_expression`
 - Ternary `a ? b : c`
 - Nullish coalescing `??` — null-aware for pointer types. Test: `nullish`
 - Optional chaining `?.` — null-aware for class fields with zero-sentinel fallback. Test: `nullish`
@@ -69,11 +70,12 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 319 passed.
 ## 2. Functions
 
 - Top-level `function` declarations with typed params and return. Test: `greet`
+- Default-initialized parameters are supported for omitted trailing arguments on top-level functions, constructors, instance methods, and static methods when the default expression does not reference `this`, `arguments`, or another parameter. Omitted optional parameters without defaults are supported for pointer-like and dynamic parameter types, including strings, arrays, classes, function-typed parameters, and first-class closure values; numeric/boolean optional parameters still require explicit defaults. Tests: `default_parameters`, `optional_parameters`, `closure_optional_parameters`
 - Recursion (direct)
 - Top-level `const f = (...) => ...` **lifted to a static C function** — usable both as a call target and as an HOF callback. Test: `fn_refs`
 - Inline arrow functions in HOF call sites, including expression bodies and single-return block bodies (body expanded inline via GCC statement expressions). Test: `array_hof`
 - Function references passed as HOF callbacks — both declared functions and lifted-arrow consts. Test: `fn_refs`
-- First-class typed closures for arrow/function expressions that capture enclosing function-scope locals or parameters. Captured storage is boxed in GC-managed ref cells and closure values lower to generated `{fn, env}` structs per signature; calls through function-typed values support spread arguments from dynamic arrays/strings with runtime arity checks. Tests: `function_closures`, `function_value_spread`
+- First-class typed closures for arrow/function expressions that capture enclosing function-scope locals or parameters. Captured storage is boxed in GC-managed ref cells and closure values lower to generated `{fn, env}` structs per signature; calls through function-typed values support spread arguments from dynamic arrays/strings with runtime arity checks and omitted optional pointer-like/dynamic parameters without defaults. Tests: `function_closures`, `function_value_spread`, `closure_optional_parameters`
 - Direct calls to top-level generic functions are monomorphized per concrete call signature, with simple `T` and `T[]` annotations inside the function body and fixed-arity spread argument lists. Test: `generic_functions`
 - Top-level generic function references are specialized in typed array callback contexts such as `map(identity)`, `flatMap(wrap)`, `filter`, `reduce`, `forEach`, `find`/`some`/`every`, and `sort` comparators. Test: `generic_callbacks`
 - Top-level generic function references are specialized when assigned to concrete function-typed values, using generated adapter closures. Test: `generic_function_values`
@@ -86,7 +88,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 319 passed.
 - Module-level `const` / `let` emitted as file-scope statics so top-level functions read/write them as captures. Test: `captures`
 
 ### Promise subset
-- Settled `Promise<T>` values lower to `tsc_promise_t*`. `Promise.resolve(value)`, `Promise.reject(reason)`, synchronous `.then(...)`, `.catch(...)`, `.finally(...)`, and settled-array `Promise.all` / `allSettled` / `race` / `any` are implemented for compiler-known callbacks and promise arrays. This is a settled/immediate subset; async functions, pending promises, microtask ordering, timer integration, thenable assimilation, and standards-accurate empty-input combinator behavior remain deferred. Test: `promise_settled`
+- Settled `Promise<T>` values lower to `tsc_promise_t*`. `new Promise<T>(executor)` calls the executor synchronously with generated `resolve` / `reject` callbacks that settle at most once, converts executor throws into rejections unless the promise is already settled, and returns pending when the executor does not settle. `Promise.resolve(value)` resolves typed values and adopts existing native Promise records, `Promise.reject(reason)` rejects, synchronous `.then(...)`, `.then(undefined, onRejected)`, `.catch(...)`, `.finally(...)`, and settled-array `Promise.all` / `allSettled` / `race` / `any` are implemented for compiler-known callbacks and promise arrays. Omitted fulfillment handlers in `.then()` pass fulfilled values through, omitted/undefined `.catch()` / `.finally()` handlers preserve fulfilled, rejected, and pending state, and immediate `.then` / `.catch` / `.finally` callback throws convert into rejected Promise records. Top-level `async function` declarations, class `async` methods, and async function values return immediate Promise records for fulfilled values, adopted returned promises, implicit `undefined` returns, synchronous uncaught throw rejections, and immediate `await` over native Promise records or non-Promise values; fulfilled awaits unwrap values, non-Promise awaits evaluate once and continue with that value, local `try`/`catch` can catch rejected awaits, uncaught rejected awaits return rejected Promise records, and pending awaits return pending Promise records without scheduling a continuation. `Promise.any` rejects with an AggregateError-shaped dynamic object containing `name`, `message`, and `errors` when every input rejects, including empty input; empty `Promise.race([])` returns a pending promise; and pending records propagate through immediate `all` / `allSettled` / `race` / `any` without synchronously invoking chained callbacks. This is a settled/immediate subset; suspend/resume state machines, microtask ordering, timer integration, arbitrary thenable assimilation, and broader awaited rejection edge cases remain deferred. Tests: `promise_executor`, `promise_resolve_adopt`, `promise_settled`, `promise_then_passthrough`, `promise_empty_handlers`, `promise_callback_throw`, `async_function_immediate`, `async_methods_immediate`, `async_function_values_immediate`, `async_throw_rejection`, `async_await_immediate`, `async_await_values_immediate`, `async_await_try_catch`, `promise_any_aggregate`, `promise_race_empty_pending`, `promise_pending_combinators`
 
 ---
 
@@ -102,6 +104,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 319 passed.
 - **Single inheritance** via `extends` — base fields laid out at struct head for safe up-cast. Test: `inheritance`
 - `super(...)` call in subclass constructor → `Base_init((Base_t*)self, ...)`. Test: `inheritance`
 - **Static fields** — emitted as file-scope `ClassName_field` storage and initialized in module init, including computed names. Tests: `inheritance`, `class_computed_members`
+- **Static initialization blocks** — emitted in member order with static field initializers during module initialization. Test: `class_static_blocks`
 - **Static methods** — called as `ClassName_method(args)`, including computed names. Tests: `inheritance`, `class_computed_members`
 - Inherited method dispatch — `d.describe()` on `Dog extends Animal` resolves to `Animal_describe((Animal_t*)d)`. Test: `inheritance`
 - `abstract` classes, access modifiers, and `readonly` fields are accepted as TS-only modifiers. Test: `class_modifiers`
@@ -235,6 +238,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 ## 6. Regex (PCRE2-backed)
 
 - `/pattern/flags` literal syntax — parsed at emit time. Test: `regex`
+- `new RegExp(pattern, flags?)` and callable `RegExp(pattern, flags?)` construct the same PCRE2-backed runtime from string patterns and flags. Test: `regexp_constructor`
 - Flag support: `d`, `g`, `i`, `m`, `s`, `u`, `y` properties (`hasIndices`, global, ignore-case, multiline, dotAll, Unicode, sticky). Tests: `regexp_object_methods`, `regexp_extra_flags`
 - PCRE2 syntax support for lookahead/lookbehind, named capture syntax, and Unicode property escapes. Test: `regex_pcre2`
 - `re.exec(s)` → `tsc_regexp_exec`, returning the full match plus captures or `null`. Test: `regexp_exec`
@@ -255,6 +259,14 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `main()` calls `mod_init_*` in topological order (deps first)
 - Flat symbol namespace — function/class/const names are global across the program
 - Local relative imports: `import { x } from "./y"` resolves via `ts.resolveModuleName`
+- Default imports and renamed named imports resolve through TypeScript aliases to the exported declaration names during C emission, including default class imports, default imports of identifier export assignments, and anonymous default-exported functions. Tests: `module_import_aliases`, `module_default_class_import`, `module_default_export_assignment`, `module_default_anonymous_function`
+- Simple barrel re-exports through `export { name } from "./module"`, `export { default as name } from "./module"`, and `export * from "./module"` resolve to the original emitted declarations. Tests: `module_re_exports`, `module_default_re_export`, `module_export_star`
+- Module namespace imports resolve exported value/function members directly to emitted declarations for local modules and resolvable TypeScript package sources. Tests: `module_namespace_import`, `node_modules_package_namespace`
+- Resolvable TypeScript and basic JavaScript package sources under `node_modules` are included in the module graph when TypeScript resolves package `exports`, package-local JS import edges, package `main` fallback entries, package-internal `imports`, namespace import entries, and side-effect-only package entries to source files. JS package sources are loaded with `allowJs` / `checkJs: false` and lower through `any` / dynamic value erasure in this bounded subset. Tests: `node_modules_package_exports`, `node_modules_package_main`, `node_modules_package_imports`, `node_modules_package_namespace`, `node_modules_js_package`, `node_modules_js_package_relative_import`, `node_modules_package_side_effect`
+- A narrow CommonJS package-source subset lowers top-level `exports.name = ...`, `module.exports.name = ...`, string-literal and statically computed `exports["name"] = ...` / `module.exports["name"] = ...`, object-literal identifier/function-valued/arrow-function-valued/method/primitive-literal exports, function-valued / arrow-function-valued / identifier-valued / primitive-literal / array-valued / static object-or-array-literal `module.exports = ...` defaults, top-level literal `const pkg = require("pkg")` member reads/calls, top-level literal `require("pkg").name` member reads/calls, top-level literal `require("pkg")` reads for module-exported default values, top-level literal `require("pkg")(...)` calls for function-valued module exports, top-level literal `const { name, alias: local } = require("pkg")` bindings, top-level literal `const fn = require("pkg")` calls for function-valued module exports, package-local top-level literal `require("./local.js")` member/default/direct-default re-exports, top-level and package-local literal `module.require(...)` member reads/calls/re-exports, side-effect-only top-level `require("pkg")`, and read-only `module.filename` / `module.id` / `module.path` / `module.loaded` metadata to module-scoped exported bindings/init edges for named imports, default imports, namespace member reads/calls, require-bound package namespace reads/calls, direct require member reads/calls, direct require default-value reads/calls, require destructuring reads/calls, require-bound primitive/function calls and reads, package-local re-export calls, and eager side-effect package init. Tests: `node_modules_commonjs_package_named`, `node_modules_commonjs_bracket_exports`, `node_modules_commonjs_computed_exports`, `node_modules_commonjs_module_exports_array`, `node_modules_commonjs_module_exports_object`, `node_modules_commonjs_module_exports_object_default`, `node_modules_commonjs_module_exports_nested_object_default`, `node_modules_commonjs_module_exports_object_function`, `node_modules_commonjs_module_exports_object_arrow`, `node_modules_commonjs_module_exports_object_method`, `node_modules_commonjs_module_exports_object_literals`, `node_modules_commonjs_module_exports_function`, `node_modules_commonjs_module_exports_arrow`, `node_modules_commonjs_module_exports_identifier`, `node_modules_commonjs_module_exports_primitives`, `node_modules_commonjs_require_named`, `node_modules_commonjs_require_direct_member`, `node_modules_commonjs_require_direct_function`, `node_modules_commonjs_require_direct_value`, `node_modules_commonjs_require_destructure`, `node_modules_commonjs_require_function`, `node_modules_commonjs_relative_require`, `node_modules_commonjs_relative_require_default`, `node_modules_commonjs_relative_require_direct_default`, `node_modules_commonjs_module_require`, `node_modules_commonjs_require_side_effect`, `node_modules_commonjs_module_metadata`
+- CommonJS package sources can read `__filename` and `__dirname` as lowered string constants. Test: `node_modules_commonjs_wrapper_globals`
+- Side-effect-only imports remain runtime graph edges and execute dependency `mod_init` functions before the entry module. Test: `module_side_effect_import`
+- Type-only import/export edges contribute declarations without adding runtime `mod_init` calls, so `import type` and `export type ... from` do not trigger side effects. Tests: `module_type_only_import`, `module_type_only_re_export`
 - Namespace declarations for scoped values, functions, lifted arrow consts, nested namespaces, namespace member assignment, and fixed-arity spread calls into namespace functions. Test: `namespaces`
 - Circular imports don't crash — topo DFS stops at the back-edge
 
@@ -264,7 +276,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 
 - `throw expr` — stringifies `expr` and `longjmp`s to the nearest enclosing `try`. Test: `exceptions`
 - `try { } catch (e) { } finally { }` — catch binding is `tsc_str_t* e = tsc_current_error()`
-- `new Error("msg")` → treated as a string carrier (simple form)
+- `new Error(message?)`, callable `Error(message?)`, and the same constructor/callable forms for `TypeError`, `RangeError`, `SyntaxError`, and `AggregateError` create a narrow Error object subset exposing `.name`, `.message`, `.toString()`, `.toLocaleString()`, and `.valueOf()`. `AggregateError` stores `.errors`; throwing one of these errors still stringifies into the existing exception string channel. Tests: `error_instances`, `error_constructors`, `aggregate_error_constructor`
 - Nested try/catch with re-throw. Test: `exceptions`
 - Uncaught exceptions print `Uncaught: <msg>` and exit 1
 - Runtime: `tsc_try_push`, `tsc_try_pop`, `tsc_throw_str`, `tsc_rethrow`, `tsc_current_error` + `setjmp`/`longjmp`
@@ -355,7 +367,9 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `fs.readFileSync(path)` → `tsc_fs_read_file_sync`
 - `fs.writeFileSync(path, data)` → `tsc_fs_write_file_sync`
 - `fs.existsSync(path)` → `tsc_fs_exists_sync`
-- `fs.readdirSync(path)` → `tsc_fs_readdir_sync`
+- `fs.accessSync(path, mode?)` → `tsc_fs_access_sync` / `tsc_fs_access_sync_mode`, with POSIX `fs.constants.{F_OK,R_OK,W_OK,X_OK}` support for global, namespace, and named-import forms. Supported sync fs calls also route from named imports such as `import { accessSync } from "fs"`. Tests: `fs_access_sync`, `fs_access_modes`
+- `fs.constants.COPYFILE_EXCL`, `COPYFILE_FICLONE`, and `COPYFILE_FICLONE_FORCE` are exposed. `fs.copyFileSync(src, dest, mode?)` and immediate `fs.promises.copyFile(src, dest, mode?)` accept optional flags, with `COPYFILE_EXCL` enforcing no overwrite. Test: `fs_copy_flags`
+- `fs.readdirSync(path[, "utf8" | { encoding }])` → `tsc_fs_readdir_sync`, returning string arrays for the bounded UTF-8 encoding subset. Test: `fs_readdir_options`
 - `fs.statSync(path)` and immediate-settled `fs.promises.stat(path)` return a small typed `Stats` subset with `size`, `mode`, `isFile()`, `isDirectory()`, and `isSymbolicLink()`. Test: `fs_stat`
 - `fs.lstatSync(path)` and immediate-settled `fs.promises.lstat(path)` return the same small typed `Stats` subset without following symlinks. Test: `fs_lstat`
 - `fs.realpathSync(path)` and immediate-settled `fs.promises.realpath(path)` resolve paths through the host filesystem. Test: `fs_realpath`
@@ -365,34 +379,50 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `fs.mkdtempSync(prefix)` and immediate-settled `fs.promises.mkdtemp(prefix)` create temporary directories from a prefix. Test: `fs_mkdtemp`
 - `fs.truncateSync(path, len?)` and immediate-settled `fs.promises.truncate(path, len?)` truncate files by path. Test: `fs_truncate`
 - `fs.chmodSync(path, mode)` and immediate-settled `fs.promises.chmod(path, mode)` change numeric file modes. Test: `fs_chmod`
-- `fs.mkdirSync(path)`, `unlinkSync(path)`, `rmSync(path)`, `rmdirSync(path)`, `appendFileSync(path, data)`, `copyFileSync(src, dest)`, and `renameSync(oldPath, newPath)` are implemented for path-only/string-data calls. Read/write/append accept bounded UTF-8 string or object-literal encoding options; `mkdir` accepts bounded `{ recursive: boolean }` object-literal options; and `rm` accepts bounded `{ recursive: boolean, force: boolean }` object-literal options for sync and immediate-settled promise calls. Tests: `fs_sync_mutation`, `fs_copy_rename`, `fs_append`, `fs_recursive_options`, `fs_encoding_options`
+- `fs.mkdirSync(path)`, `unlinkSync(path)`, `rmSync(path)`, `rmdirSync(path)`, `appendFileSync(path, data)`, `copyFileSync(src, dest, mode?)`, and `renameSync(oldPath, newPath)` are implemented for path-only/string-data calls. Read/write/append/readdir accept bounded UTF-8 string or object-literal encoding options; `mkdir` accepts bounded `{ recursive: boolean }` object-literal options; and `rm` accepts bounded `{ recursive: boolean, force: boolean }` object-literal options for sync and immediate-settled promise calls. Tests: `fs_sync_mutation`, `fs_copy_rename`, `fs_copy_flags`, `fs_append`, `fs_readdir_options`, `fs_recursive_options`, `fs_encoding_options`
 - Test: `fs_roundtrip`
-- `fs.promises.readFile(path)`, `writeFile(path, data)`, `appendFile(path, data)`, `readdir(path)`, `stat(path)`, `lstat(path)`, `realpath(path)`, `readlink(path)`, `symlink(target, path)`, `link(existingPath, newPath)`, `mkdtemp(prefix)`, `truncate(path, len?)`, `chmod(path, mode)`, `access(path)`, `mkdir(path)`, `unlink(path)`, `rm(path)`, `rmdir(path)`, `copyFile(src, dest)`, and `rename(oldPath, newPath)` are implemented as an immediate-settled subset on top of the sync runtime. They return fulfilled `Promise<T>` values usable with the settled Promise `.then(...)` lowering; real libuv-backed async scheduling, broader options objects, and promise rejection conversion remain deferred. Tests: `fs_promises`, `fs_promises_import`, `fs_promises_mutation`, `fs_copy_rename`, `fs_append`, `fs_stat`, `fs_lstat`, `fs_realpath`, `fs_readlink`, `fs_symlink`, `fs_link`, `fs_mkdtemp`, `fs_truncate`, `fs_chmod`, `fs_recursive_options`, `fs_encoding_options`
+- `fs.promises.readFile(path)`, `writeFile(path, data)`, `appendFile(path, data)`, `readdir(path[, "utf8" | { encoding }])`, `stat(path)`, `lstat(path)`, `realpath(path)`, `readlink(path)`, `symlink(target, path)`, `link(existingPath, newPath)`, `mkdtemp(prefix)`, `truncate(path, len?)`, `chmod(path, mode)`, `access(path, mode?)`, `mkdir(path)`, `unlink(path)`, `rm(path)`, `rmdir(path)`, `copyFile(src, dest, mode?)`, and `rename(oldPath, newPath)` are implemented as an immediate-settled subset on top of the sync runtime. Successful calls return fulfilled `Promise<T>` values usable with the settled Promise `.then(...)` lowering, and sync filesystem throws are converted into rejected Promise records for `.catch(...)`; real libuv-backed async scheduling and broader options objects remain deferred. Tests: `fs_promises`, `fs_promises_import`, `fs_promises_mutation`, `fs_promises_rejections`, `fs_copy_rename`, `fs_copy_flags`, `fs_append`, `fs_readdir_options`, `fs_access_modes`, `fs_stat`, `fs_lstat`, `fs_realpath`, `fs_readlink`, `fs_symlink`, `fs_link`, `fs_mkdtemp`, `fs_truncate`, `fs_chmod`, `fs_recursive_options`, `fs_encoding_options`
 
 ### `path`
 - `path.join(...parts)` → `tsc_path_join`
 - `path.resolve(...parts)` → `tsc_path_resolve` (against `getcwd()`)
-- `path.normalize(path)`, `path.isAbsolute(path)`, and `path.relative(from, to)` implement a bounded POSIX subset for segment cleanup, leading-slash absolute detection, and relative path construction. `path.sep` and `path.delimiter` expose POSIX constants. Named and namespace imports from `"path"` / `"node:path"` route to the same supported subset. Tests: `path_normalize`, `path_import`, `path_constants`, `path_relative`
+- `path.normalize(path)`, `path.isAbsolute(path)`, `path.relative(from, to)`, `path.parse(path)`, and `path.format(pathObject)` implement a bounded POSIX subset for segment cleanup, leading-slash absolute detection, relative path construction, and dynamic parsed-path records. `path.sep`, `path.delimiter`, `path.posix.*`, and named `posix` imports expose the same POSIX subset. Named and namespace imports from `"path"` / `"node:path"` route to the same supported subset. Tests: `path_normalize`, `path_import`, `path_constants`, `path_relative`, `path_parse_format`, `path_posix`
 - `path.basename` / `dirname` / `extname`
 - Test: `fs_roundtrip`
 
 ### `os`
-- `os.platform()` / `arch()` / `hostname()` / `tmpdir()` / `homedir()` / `cpus()`
-- Runtime: `tsc_os_*`. Test: `stdlib_os`
+- `os.platform()` / `type()` / `release()` / `version()` / `endianness()` / `machine()` / `arch()` / `hostname()` / `tmpdir()` / `homedir()` / `cpus()` / `availableParallelism()` / `totalmem()` / `freemem()` / `uptime()` / `loadavg()` / `userInfo()` and `os.EOL`, with namespace and named imports from `"os"` / `"node:os"` for the supported subset.
+- Runtime: `tsc_os_*`. Tests: `stdlib_os`, `os_more`, `os_host_more`, `os_system_stats`, `os_user_info`
 
 ### `crypto`
-- `crypto.createHash("sha256").update(data).digest("hex")` backed by OpenSSL SHA-256. Test: `crypto_sha256`
+- `crypto.createHash("sha1" | "sha256" | "sha512").update(data).digest("hex" | "base64")` backed by OpenSSL SHA helpers from the global `crypto` object, named imports, and namespace imports from `"crypto"` / `"node:crypto"`. `Hash.update(...)` accepts strings and Buffers. Tests: `crypto_sha256`, `crypto_hash_more`, `crypto_import`, `crypto_digest_base64`
+- `crypto.randomBytes(size)` returns a Buffer filled by OpenSSL `RAND_bytes` with a libc `rand()` fallback, through the global crypto object and named/namespace imports from `"crypto"` / `"node:crypto"`. Test: `crypto_random_bytes`
+- `crypto.randomUUID()` returns RFC 4122 version 4 UUID strings through the global crypto object and named/namespace imports from `"crypto"` / `"node:crypto"`. Test: `crypto_random_uuid`
 
 ### `EventEmitter`
-- `new EventEmitter()` creates a synchronous listener registry from the global constructor, named imports from `"events"` / `"node:events"`, or namespace imports such as `events.EventEmitter`. `on`, `addListener`, `prependListener`, `once`, `prependOnceListener`, `off`, `removeListener`, `removeAllListeners`, `emit`, `listenerCount(eventName, listener?)`, `eventNames`, `setMaxListeners`, `getMaxListeners`, and module-level `listenerCount(emitter, eventName)` / `events.listenerCount(emitter, eventName)` / `setMaxListeners(count, emitter)` / `getMaxListeners(emitter)` are implemented for string event names and typed listener callbacks. Emitted arguments are boxed as dynamic values and coerced into each listener's declared parameters by generated adapters. Emitting `"error"` with no registered listener throws the first emitted argument string, duplicate `off` / `removeListener` calls remove the most recently added matching listener, and once listeners are removed before invocation so reentrant emits do not call them twice. Tests: `event_emitter`, `event_emitter_import`, `event_emitter_more`, `event_emitter_namespace`, `event_emitter_max_listeners`, `event_emitter_listener_count_filter`, `event_emitter_error_event`, `event_emitter_remove_latest`, `event_emitter_once_reentrant`
+- `new EventEmitter()` creates a synchronous listener registry from the global constructor, named imports from `"events"` / `"node:events"`, or namespace imports such as `events.EventEmitter`. `on`, `addListener`, `prependListener`, `once`, `prependOnceListener`, `off`, `removeListener`, `removeAllListeners`, `emit`, `listenerCount(eventName, listener?)`, `listeners(eventName)`, `rawListeners(eventName)`, `eventNames`, `setMaxListeners`, `getMaxListeners`, and module-level `listenerCount(emitter, eventName, listener?)` / `events.listenerCount(emitter, eventName, listener?)` / `EventEmitter.listenerCount(emitter, eventName, listener?)` / `events.EventEmitter.listenerCount(emitter, eventName, listener?)` / `getEventListeners(emitter, eventName)` / `events.once(emitter, eventName)` / `setMaxListeners(count, emitter)` / `getMaxListeners(emitter)` are implemented for string event names and typed listener callbacks. `EventEmitter.defaultMaxListeners`, `events.defaultMaxListeners`, and namespace/static constructor reads share a mutable default listener limit used by emitters without an own `setMaxListeners(...)` value. Emitted arguments are boxed as dynamic values and coerced into each listener's declared parameters by generated adapters. Listener inspection returns stable boxed function identities suitable for `typeof`, stringification, `Object.is`, and strict equality checks. `rawListeners` returns ordinary listener identities directly and once-listener wrapper identities with a `.listener` back-pointer to the original listener. `events.once(...)` returns a Promise fulfilled by the next matching synchronous `emit` with an array of emitted args, or rejected by an intervening `"error"` event. Emitting `"error"` with no registered listener throws the first emitted argument string, duplicate `off` / `removeListener` calls remove the most recently added matching listener, and once listeners are removed before invocation so reentrant emits do not call them twice. Tests: `event_emitter`, `event_emitter_import`, `event_emitter_more`, `event_emitter_namespace`, `event_emitter_max_listeners`, `event_emitter_default_max_listeners`, `event_emitter_listener_count_filter`, `event_emitter_error_event`, `event_emitter_remove_latest`, `event_emitter_once_reentrant`, `event_emitter_once_promise`, `event_emitter_listeners`, `event_emitter_raw_listeners`, `event_emitter_static_listener_count`
+
+### `dns`
+- `dns.lookup(hostname, callback)`, `dns.lookup(hostname, 4|6|0, callback)`, `dns.lookup(hostname, { family, all, hints, verbatim, order }, callback)`, and `dns.promises.lookup(hostname[, 4|6|0 | { family, all, hints, verbatim, order }])` are implemented as immediate subsets for global `dns`, named imports, named `promises` imports, and namespace imports from `"dns"` / `"node:dns"`. They resolve through host `getaddrinfo`, support bounded literal family selection for `0`, `4`, or `6`, expose `dns.ADDRCONFIG`, `dns.V4MAPPED`, and `dns.ALL` hint constants, pass `null`, the first IPv4/IPv6 address, and family `4` or `6` on single callback success, and pass an error string as the first callback argument on callback failure. `{ all: true }` returns an array of dynamic `{ address, family }` result objects for callback and Promise forms. Literal `verbatim` / `order` options are accepted in this immediate subset without adding libuv scheduling. The single-result Promise form returns a fulfilled dynamic `{ address, family }` object or a rejected Promise with the lookup error string. Tests: `dns_lookup`, `dns_lookup_options`, `dns_lookup_option_forms`, `dns_promises_lookup`, `dns_lookup_all`, `dns_lookup_hints`
+
+### `net`
+- `net.isIP(input)`, `net.isIPv4(input)`, and `net.isIPv6(input)` are implemented as a pure address-classification subset for global `net`, named imports, and namespace imports from `"net"` / `"node:net"`, backed by host `inet_pton`. Test: `net_is_ip`
+
+### `child_process`
+- `child_process.exec(command, { cwd?, env?, encoding?, shell?, maxBuffer?, timeout?, killSignal? }, callback)` / `execFile(file, argsOrOptionsOrCallback, optionsOrCallback?, callback?)` from `"child_process"` / `"node:child_process"` have immediate UTF-8 callback subsets: commands execute synchronously under the hood, accept explicit literal UTF-8 `encoding` options, accept `execFile(file, callback)` when no args array is needed, accept the options object as the second argument when no args array is needed, optionally route `exec` through a literal shell path string and `execFile` through `/bin/sh -c` for literal `shell: true` or a literal shell path string while preserving direct `execvp` routing for literal `shell: false`, optionally run in the requested child working directory, optionally with a literal string `env` overlay, optionally pass literal `argv0` to `execFile`, accept POSIX-inert `windowsHide` and `windowsVerbatimArguments`, optionally apply POSIX `uid` / `gid` before `execvp`, optionally truncate captured output and report `error: "ENOBUFS"` for numeric `maxBuffer`, optionally time out with `error: "ETIMEDOUT"` for numeric `timeout` and literal string or numeric `killSignal`, propagate child setup errors such as `ENOENT` to the callback `error`, then invoke the callback with `error`, `stdout`, and `stderr` strings. Tests: `child_process_exec_callbacks`, `child_process_exec_callbacks_cwd`, `child_process_exec_callback_error`, `child_process_exec_callback_encoding`, `child_process_exec_callback_timeout`, `child_process_numeric_kill_signal`, `child_process_exec_shell_string`, `child_process_env_options`, `child_process_options_second_arg`, `child_process_exec_file_shell`, `child_process_shell_string`, `child_process_shell_false`, `child_process_exec_file_callback_no_args`, `child_process_exec_file_callback_error`, `child_process_argv0_options`, `child_process_windows_hide_option`, `child_process_windows_verbatim_option`, `child_process_uid_gid_options`, `child_process_max_buffer_options`
+- `child_process.execSync(command, { cwd?, input?, encoding?, env?, shell?, maxBuffer?, timeout?, killSignal? })` / named `execSync(command, { cwd?, input?, encoding?, env?, shell?, maxBuffer?, timeout?, killSignal? })` from `"child_process"` / `"node:child_process"` executes a shell command synchronously, optionally changes the child working directory, optionally writes UTF-8 stdin, optionally applies a literal string `env` overlay, optionally selects a literal shell path string, accepts POSIX-inert `windowsHide`, optionally applies POSIX `uid` / `gid` before `execvp`, optionally panics when captured output exceeds numeric `maxBuffer`, optionally times out with `SIGTERM`, `SIGKILL`, or matching numeric `killSignal` for numeric `timeout`, captures stdout, returns it as a Buffer by default or for literal `encoding: "buffer"` and as a string for literal `encoding: "utf8"` / `"utf-8"`, and panics on command failure or timeout in this narrow subset. Tests: `child_process_exec_sync`, `child_process_exec_sync_options`, `child_process_exec_sync_encoding`, `child_process_exec_sync_buffer_encoding`, `child_process_env_options`, `child_process_exec_shell_string`, `child_process_exec_sync_timeout_options`, `child_process_numeric_kill_signal`, `child_process_windows_hide_option`, `child_process_uid_gid_options`, `child_process_max_buffer_options`
+- `child_process.execFileSync(file, argsOrOptions?, options?)` / named `execFileSync(file, argsOrOptions?, options?)` from `"child_process"` / `"node:child_process"` executes a binary synchronously with `fork` / `execvp`, accepts the options object as the second argument when no args array is needed, optionally routes through `/bin/sh -c` for literal `shell: true` or a literal shell path string while preserving direct `execvp` routing for literal `shell: false`, optionally changes the child working directory, optionally writes UTF-8 stdin, optionally applies a literal string `env` overlay, optionally passes literal `argv0`, accepts POSIX-inert `windowsHide` and `windowsVerbatimArguments`, optionally applies POSIX `uid` / `gid` before `execvp`, optionally panics when captured output exceeds numeric `maxBuffer`, optionally times out with `SIGTERM`, `SIGKILL`, or matching numeric `killSignal` for numeric `timeout`, captures stdout while draining stderr internally, returns stdout as a Buffer by default or for literal `encoding: "buffer"` and as a string for literal `encoding: "utf8"` / `"utf-8"`, and panics on command failure or timeout in this narrow subset. Tests: `child_process_exec_file_sync`, `child_process_exec_file_sync_cwd`, `child_process_exec_file_sync_input`, `child_process_exec_sync_encoding`, `child_process_exec_sync_buffer_encoding`, `child_process_env_options`, `child_process_exec_file_sync_options_second_arg`, `child_process_exec_file_shell`, `child_process_shell_string`, `child_process_shell_false`, `child_process_exec_file_sync_stderr_pipe`, `child_process_exec_sync_timeout_options`, `child_process_numeric_kill_signal`, `child_process_argv0_options`, `child_process_windows_hide_option`, `child_process_windows_verbatim_option`, `child_process_uid_gid_options`, `child_process_max_buffer_options`
+- `child_process.spawnSync(file, argsOrOptions, options?)` / named `spawnSync(...)` from `"child_process"` / `"node:child_process"` executes a binary synchronously with `fork` / `execvp`, accepts the options object as the second argument when no args array is needed, accepts explicit `stdio: "pipe"`, `stdio: "ignore"`, `stdio: "inherit"`, and three-entry `"pipe"` / `"ignore"` / `"inherit"` tuple forms with `null` / `undefined` entries treated as default pipes and matching numeric fd entries `0` / `1` / `2` treated as inherited standard fds for stdin piping/ignoring/inheritance, stdout/stderr capture, null result fields, or inherited parent output, optionally routes through `/bin/sh -c` for literal `shell: true` or a literal shell path string while preserving direct `execvp` routing for literal `shell: false`, optionally starts the child in a new POSIX session for literal `detached: true` while preserving attached/default behavior for literal `detached: false`, optionally changes the child working directory, optionally writes UTF-8 stdin, optionally applies a literal string `env` overlay, optionally passes literal `argv0`, accepts POSIX-inert `windowsHide` and `windowsVerbatimArguments`, optionally applies POSIX `uid` / `gid` before `execvp`, optionally truncates captured output and reports `error: "ENOBUFS"` for numeric `maxBuffer`, optionally times out with `SIGTERM`, `SIGKILL`, or matching numeric `killSignal` and `error: "ETIMEDOUT"` for numeric `timeout`, captures stdout/stderr as UTF-8 strings when piped, preserves nonzero child exit statuses without throwing, reports signal termination as `status: null` with a signal name, reports child setup / `execvp` failures through `error`, and returns a dynamic result object with `status`, `stdout`, `stderr`, `pid`, `output`, `signal`, and `error` fields. Tests: `child_process_spawn_sync`, `child_process_spawn_sync_cwd`, `child_process_spawn_sync_input`, `child_process_spawn_sync_result_metadata`, `child_process_spawn_sync_nonzero_status`, `child_process_spawn_sync_signal`, `child_process_spawn_sync_exec_error`, `child_process_env_options`, `child_process_options_second_arg`, `child_process_spawn_sync_shell`, `child_process_shell_string`, `child_process_shell_false`, `child_process_spawn_sync_stdio_pipe`, `child_process_spawn_sync_stdio_ignore`, `child_process_spawn_sync_stdio_inherit`, `child_process_spawn_sync_stdio_stdin`, `child_process_spawn_sync_stdio_default_entries`, `child_process_spawn_sync_stdio_fd`, `child_process_spawn_sync_detached`, `child_process_spawn_sync_detached_false`, `child_process_spawn_sync_timeout`, `child_process_spawn_sync_kill_signal`, `child_process_numeric_kill_signal`, `child_process_argv0_options`, `child_process_windows_hide_option`, `child_process_windows_verbatim_option`, `child_process_uid_gid_options`, `child_process_max_buffer_options`
 
 ### `Buffer`
-- `Buffer.from(string[, "utf8" | "hex"])`, `Buffer.from(number[])`, `Buffer.alloc(size, fill?)`, `Buffer.concat(list)`, `Buffer.isBuffer(value)`.
-- Buffer instances expose `.length`, numeric byte indexing/get-set, `.toString("utf8" | "hex")`, `.slice()`, `.subarray()`, and `.equals()`. Test: `buffer`
-- Buffer instances expose `.toLocaleString()` as UTF-8 text, `.valueOf()` identity, and numeric byte indexes through `Object.keys`, `Object.values`, `Object.entries`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty` / `propertyIsEnumerable`, `Reflect.ownKeys`, `Reflect.getOwnPropertyDescriptor`, `Reflect.get`, `Reflect.has`, and the `in` operator; `length` remains non-own but is visible to `Reflect.get` / `Reflect.has` / `in`. Test: `buffer_object_methods`
+- `Buffer.from(string[, "utf8" | "hex" | "base64"])`, `Buffer.from(number[])`, `Buffer.from(existingBuffer)`, `Buffer.alloc(size, fill?)`, `Buffer.allocUnsafe(size)`, `Buffer.allocUnsafeSlow(size)`, `Buffer.concat(list, totalLength?)`, `Buffer.isBuffer(value)`.
+- `Buffer.byteLength(value[, encoding])`, `Buffer.isEncoding(encoding)`, static `Buffer.compare(a, b)`, and instance `buf.compare(other)` are implemented for the supported UTF-8/hex/base64 Buffer subset, including `"utf-8"` aliases.
+- Buffer instances expose `.length`, numeric byte indexing/get-set, `.toString("utf8" | "hex")`, `.slice()`, `.subarray()`, `.fill()`, `.write()`, signed/unsigned integer and float/double reads/writes, `.swap16()` / `.swap32()` / `.swap64()`, `.copy()`, number/string/Buffer `.indexOf()` / `.lastIndexOf()` / `.includes()`, and `.equals()`. Tests: `buffer`, `buffer_fill`, `buffer_write`, `buffer_uint8_io`, `buffer_uint_multi_io`, `buffer_int_io`, `buffer_float_io`, `buffer_swap`, `buffer_copy`, `buffer_search`, `buffer_search_more`
+- Buffer instances expose `.toLocaleString()` as UTF-8 text, `.toJSON()` as `{ type: "Buffer", data: number[] }`, `.valueOf()` identity, and numeric byte indexes through `Object.keys`, `Object.values`, `Object.entries`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty` / `propertyIsEnumerable`, `Reflect.ownKeys`, `Reflect.getOwnPropertyDescriptor`, `Reflect.get`, `Reflect.has`, and the `in` operator; `length` remains non-own but is visible to `Reflect.get` / `Reflect.has` / `in`. Tests: `buffer_to_json`, `buffer_object_methods`
 
 ### `URL`
 - `new URL(input)` parses absolute URLs with `href`, `protocol`, `host`, `hostname`, `port`, `pathname`, `search`, `hash`, and `origin` fields. Test: `url_parse`
+- `URL.canParse(input)` checks whether the supported absolute `scheme://authority` URL subset can be constructed without throwing. Test: `url_can_parse`
 - URL instances expose `.toString()`, `.toJSON()`, `.toLocaleString()`, `.valueOf()`, and empty own-property results through `Object.keys`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty` / `propertyIsEnumerable`, `Reflect.ownKeys`, and `Reflect.getOwnPropertyDescriptor`. Test: `url_object_methods`
 
 ### `Math`
@@ -406,11 +436,19 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 
 ### `process`
 - `process.argv` → `tsc_process_argv` (string[] of command-line args)
+- `process.argv0`, `process.execPath`, and `process.execArgv` expose basic argv metadata.
 - `process.env.VAR` → `tsc_process_env_get(VAR)` (getenv)
 - `process.env["VAR"]` — same as above via element access
+- `process.env.VAR = value`, `process.env["VAR"] = value`, and `delete process.env[...]` mutate the local process environment through `setenv` / `unsetenv`.
 - `process.cwd()` → `tsc_process_cwd`
+- `process.chdir(directory)` → `tsc_process_chdir`
+- `process.platform`, `process.arch`, `process.pid`, `process.version`, `process.versions`, and `process.uptime()` expose synchronous process metadata.
+- `process.hrtime([previous])` returns a monotonic `[seconds, nanoseconds]` pair, with previous-mark diff support.
+- `process.getuid()`, `process.getgid()`, `process.geteuid()`, and `process.getegid()` expose POSIX process identity values.
+- `process.umask(mask?)` reads or updates the native process file mode creation mask.
+- `process.memoryUsage()` returns a Node-shaped dynamic object with numeric `rss`, `heapTotal`, `heapUsed`, `external`, and `arrayBuffers` fields. RSS is populated from `getrusage` where available; heap fields are placeholders until a tracked allocator lands.
 - `process.exit(code)` → `tsc_process_exit`
-- Test: `wordcount`, `stdlib_os`
+- Tests: `wordcount`, `stdlib_os`, `process_argv_meta`, `process_chdir`, `process_env_mutation`, `process_metadata`, `process_hrtime`, `process_memory_usage`, `process_posix_ids`, `process_umask`, `process_versions`
 
 ### `console`
 - `console.log` / `.error` / `.warn` / `.info` — variadic, auto-stringifies each arg
@@ -418,19 +456,20 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Runtime: `tsc_console_log_n`, `tsc_console_error_n`
 
 ### `Date`, `Number`, `Array`, `Object`
-- `Date.now()` → `tsc_date_now` (ms since epoch)
+- `Date.now()` → `tsc_date_now` (ms since epoch), `Date.UTC(year, month, ...)` returns normalized UTC epoch milliseconds, `Date.parse(text)` accepts a bounded deterministic ISO subset, and `new Date()` / `new Date(ms)` / `new Date(text)` / `new Date(existingDate)` produce a narrow Date instance subset with `.getTime()`, UTC component getters, `.setTime(ms)`, UTC mutators (`setUTCFullYear`, `setUTCMonth`, `setUTCDate`, `setUTCHours`, `setUTCMinutes`, `setUTCSeconds`, `setUTCMilliseconds`), `.valueOf()`, `.toString()`, `.toLocaleString()`, `.toISOString()`, `.toUTCString()` / `.toGMTString()`, and `.toJSON()` backed by stored millisecond timestamps. Tests: `date_instances`, `date_utc`, `date_parse`, `date_set_time`, `date_utc_getters`, `date_utc_setters`, `date_to_iso_string`, `date_to_utc_string`, `date_to_json`
 - `Math.*` covers the common libm/int32/fround surface: `floor`, `ceil`, `round` with negative-zero preservation, `abs`, `trunc`, `sign` with signed-zero preservation, `imul`, `clz32`, `fround`, `cbrt`, `sqrt`, `pow`, variadic `hypot(...)`, `min`/`max` with JS `NaN` propagation, `log`, `log1p`, `log2`, `log10`, `exp`, `expm1`, trigonometric/inverse-trigonometric and hyperbolic/inverse-hyperbolic functions, `atan2`, `random`, and constants. Tests: `math`, `math_more`, `math_constants_more`, `math_int32_float`
 - `Number.EPSILON`, `MAX_SAFE_INTEGER`, `MAX_VALUE`, `MIN_SAFE_INTEGER`, `MIN_VALUE`, `NaN`, `NEGATIVE_INFINITY`, `POSITIVE_INFINITY`, plus `Number.isInteger(value)`, `Number.isFinite(value)`, `Number.isNaN(value)`, `Number.isSafeInteger(value)`, `Number.parseFloat(value)`, `Number.parseInt(value, radix?)` with JS-style omitted/zero radix inference and invalid-radix `NaN`. Tests: `stdlib_os`, `number_static_more`, `number_constants`
 - `Array.isArray(x)`, `Array.from(arr)`, `Array.of(...items)`
 - `Object.keys(obj)`, `Object.values(obj)`, and `Object.hasOwn(obj, key)` — compile-time expanded from the type's property list, with `Object.keys` preserving receiver evaluation
 - `Object.keys(array)`, `Object.values(array)`, `Object.entries(array)`, `Object.getOwnPropertyNames(array)`, and `Reflect.ownKeys(array)` enumerate typed array indexes/values plus non-enumerable `length` where appropriate. Test: `object_array_enumeration`
 - `Object.getOwnPropertyNames(obj)` — compile-time expanded from typed interface/class field lists while preserving receiver evaluation. Test: `typed_object_property_names`
-- `Object.getOwnPropertyDescriptor(obj, key)`, `Object.getOwnPropertyDescriptors(obj)`, and `Reflect.getOwnPropertyDescriptor(obj, key)` return typed interface/class field data descriptors; `Reflect.get(obj, key)` reads typed interface/class fields as dynamic values, `Reflect.set(obj, key, value)` writes typed fields, `Reflect.has(obj, key)` checks typed field lists, and `Reflect.ownKeys(obj)` is compile-time expanded from typed field lists while preserving receiver evaluation. Tests: `typed_property_descriptor`, `typed_property_descriptors`, `typed_reflect_get`, `typed_reflect_set`, `typed_reflect_has`, `typed_reflect_own_keys`, `typed_object_property_names`
+- `Object.getOwnPropertyDescriptor(obj, key)`, `Object.getOwnPropertyDescriptors(obj)`, and `Reflect.getOwnPropertyDescriptor(obj, key)` return typed interface/class field data descriptors; `Reflect.get(obj, key)` reads typed interface/class fields as dynamic values, `Reflect.get(obj, key, receiver)` accepts and evaluates the optional receiver for typed arrays, typed interface/class objects, and Buffer data-property reads, `Reflect.set(obj, key, value)` writes typed fields, `Reflect.has(obj, key)` checks typed field lists, and `Reflect.ownKeys(obj)` is compile-time expanded from typed field lists while preserving receiver evaluation. Tests: `typed_property_descriptor`, `typed_property_descriptors`, `typed_reflect_get`, `reflect_get_receiver_typed`, `typed_reflect_set`, `typed_reflect_has`, `typed_reflect_own_keys`, `typed_object_property_names`
 - `obj.hasOwnProperty(key)` and `obj.propertyIsEnumerable(key)` work for typed interface/class fields. Test: `typed_object_has_own`
 - `obj.toString()`, `obj.toLocaleString()`, and `obj.valueOf()` fall back to Object-prototype behavior for typed interface/class values unless a class defines its own method. Test: `typed_object_methods`
 - `Object.entries(obj)`, `Object.fromEntries(entries)`, and `Object.fromEntries(map)` — typed `[string, T]` entry arrays or typed `Map<string, T>` sources for homogeneous object fields. Tests: `object_entries`, `object_from_entries_map`
 - `Map`, `Set`, `WeakMap`, `WeakSet`, `WeakRef`, and `FinalizationRegistry` instances expose empty own-property results through `Object.keys`, `Object.values`, `Object.entries`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty` / `propertyIsEnumerable`, `Reflect.ownKeys`, and `Reflect.getOwnPropertyDescriptor`, while preserving receiver/key evaluation. Test: `collection_object_methods`
-- Global `parseInt` / `parseFloat` / `isNaN` / `isFinite` → mapped to runtime or C math builtins, with global `parseInt` sharing the JS-style radix inference path and global numeric predicates coercing non-number inputs
+- Global `parseInt` / `parseFloat` / `isNaN` / `isFinite` → mapped to runtime or C math builtins, with global `parseInt` sharing the JS-style radix inference path and global numeric predicates coercing non-number inputs.
+- Global `btoa(value)` and `atob(value)` perform byte-string base64 encode/decode through the same runtime codec used by Buffer. Test: `base64_globals`
 
 ---
 
@@ -438,7 +477,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 
 - TypeScript type-checking via the official compiler API — any TS type error is surfaced with full source context (file:line:col + code frame) before emission. Test: try `/tmp/bad.ts` with `const x: number = "str"`.
 - Unsupported-feature diagnostics include source location and a one-line reason — exit code 3 distinguishes them from TS errors (exit 2) and gcc failures (exit 1).
-- Permanent AOT-limit diagnostics reject `eval`, `Function` / `new Function`, non-literal `require(variable)`, literal native addon specifiers ending in `.node`, and literal package imports/requires whose installed package root contains `build/Release/*.node`. Tests: `runtime_eval`, `runtime_function_call`, `runtime_function_constructor`, `dynamic_require`, `native_addon`, `native_addon_package`
+- Permanent AOT-limit diagnostics reject `eval`, `Function` / `new Function`, non-literal `require(variable)`, literal native addon specifiers ending in `.node`, and literal package imports/requires whose installed package root contains `build/Release/*.node`, including transitive imports from emitted package sources under `node_modules`. Tests: `runtime_eval`, `runtime_function_call`, `runtime_function_constructor`, `dynamic_require`, `native_addon`, `native_addon_package`, `node_modules_transitive_native_addon`
 - Generated C includes `#line` directives for emitted TypeScript statements so debugger and compiler locations can point back to TS source. Test: `line_directives`
 - `--emit-c-only` — skip gcc, just write the generated `main.c` for inspection.
 - `--keep-build-dir <path>` — keep intermediate files rather than using a tempdir.
@@ -460,6 +499,13 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `arith` | all arithmetic operators + JS number formatting |
 | `greet` | function declaration + template literals |
 | `arrays` | array literal + push/pop + for-of + length |
+| `async_await_immediate` | immediate await over fulfilled/rejected/pending native Promise records |
+| `async_await_try_catch` | local async try/catch handles rejected immediate await records |
+| `async_await_values_immediate` | immediate await of non-Promise values inside async functions |
+| `async_function_immediate` | async function declarations without await returning immediate Promise records |
+| `async_function_values_immediate` | async function values without await returning immediate Promise records |
+| `async_methods_immediate` | async class methods without await returning immediate Promise records |
+| `async_throw_rejection` | synchronous throws in immediate async functions become rejected Promise records |
 | `array_concat_values` | Array.concat with array, single-value, and spread-in-array-literal arguments |
 | `array_copy_within` | Array.copyWithin overlapping copy |
 | `array_entries` | Array.entries materialized `[string, value]` arrays |
@@ -483,41 +529,141 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_to_string` | Array.toString/toLocaleString typed comma-join conversion |
 | `array_value_of` | Array.valueOf typed receiver identity |
 | `array_with` | Array.with non-mutating replacement |
+| `aggregate_error_constructor` | AggregateError constructor/callable form with stored errors and Error stringification |
+| `base64_globals` | global btoa/atob byte-string base64 helpers |
 | `bigint` | GMP-backed BigInt literals, arithmetic, comparison, and toString |
 | `bitwise_assign` | typed numeric bitwise compound assignments |
 | `classes` | class + ctor/method + `this` + `new`, including spread constructor calls |
 | `buffer` | binary-safe Buffer construction, indexing, slicing, hex/utf8 conversion |
+| `buffer_concat_length` | Buffer.concat explicit totalLength truncation and zero padding |
+| `buffer_copy` | Buffer.copy clipped byte-range copying into target buffers |
+| `buffer_fill` | Buffer.fill numeric byte mutation with clipped indexes |
+| `buffer_float_io` | Buffer float/double little/big-endian read/write methods |
+| `buffer_from_buffer` | Buffer.from(Buffer) independent byte copy |
+| `buffer_alloc_unsafe` | Buffer.allocUnsafe/allocUnsafeSlow backed by deterministic Buffer allocation |
+| `buffer_base64` | Buffer base64 from/toString/byteLength/isEncoding support |
+| `buffer_int_io` | Buffer signed 8/16/32-bit little/big-endian read/write methods |
 | `buffer_object_methods` | Buffer toLocaleString/valueOf object methods |
+| `buffer_search` | Buffer numeric-byte indexOf/lastIndexOf/includes with offsets |
+| `buffer_search_more` | Buffer string and Buffer needle indexOf/lastIndexOf/includes |
+| `buffer_static_more` | Buffer.byteLength/isEncoding/compare static helpers |
+| `buffer_swap` | Buffer swap16/swap32/swap64 byte-order mutation |
+| `buffer_to_json` | Buffer.toJSON dynamic object shape |
+| `buffer_uint8_io` | Buffer readUInt8/writeUInt8 byte accessors |
+| `buffer_uint_multi_io` | Buffer unsigned 16/32-bit little/big-endian read/write methods |
+| `buffer_write` | Buffer.write UTF-8/hex string bytes with offset/length clipping |
 | `class_computed_members` | literal and const-literal computed class fields/methods |
 | `class_modifiers` | abstract/access/readonly modifiers accepted as TS-only |
+| `class_static_blocks` | class static initialization blocks execute in member order with static fields |
+| `closure_optional_parameters` | first-class closures accept omitted optional pointer and function parameters |
 | `collection_object_methods` | Map/Set/WeakMap/WeakSet/WeakRef toString/toLocaleString/valueOf |
 | `comma_operator` | comma operator side effects and right-hand value |
+| `child_process_exec_callbacks` | child_process exec/execFile immediate UTF-8 callback subset |
+| `child_process_exec_callbacks_cwd` | child_process exec/execFile immediate callback cwd option |
+| `child_process_exec_callback_error` | child_process.exec callback child setup error |
+| `child_process_exec_callback_encoding` | child_process exec/execFile callback UTF-8 encoding option |
+| `child_process_exec_callback_timeout` | child_process exec/execFile callback timeout option |
+| `child_process_numeric_kill_signal` | child_process timeout numeric killSignal options |
+| `child_process_exec_shell_string` | child_process.exec/execSync shell path string option |
+| `child_process_env_options` | child_process literal env overlays for sync and immediate callback subsets |
+| `child_process_argv0_options` | child_process spawnSync/execFile argv0 options |
+| `child_process_max_buffer_options` | child_process maxBuffer option for callback, sync, and spawnSync subsets |
+| `child_process_exec_file_callback_no_args` | child_process.execFile file/callback argument form |
+| `child_process_exec_file_callback_error` | child_process.execFile callback child setup error |
+| `child_process_exec_file_sync` | child_process.execFileSync stdout Buffer subset |
+| `child_process_exec_file_sync_cwd` | child_process.execFileSync cwd option |
+| `child_process_exec_file_sync_input` | child_process.execFileSync input option |
+| `child_process_exec_file_sync_options_second_arg` | child_process.execFileSync file/options argument form |
+| `child_process_exec_file_sync_stderr_pipe` | child_process.execFileSync drains child stderr |
+| `child_process_exec_file_shell` | child_process execFile/execFileSync shell option |
+| `child_process_exec_sync` | child_process.execSync stdout Buffer subset |
+| `child_process_exec_sync_encoding` | child_process.execSync and execFileSync UTF-8 string return options |
+| `child_process_exec_sync_buffer_encoding` | child_process.execSync and execFileSync explicit buffer encoding options |
+| `child_process_exec_sync_options` | child_process.execSync cwd/input options |
+| `child_process_exec_sync_timeout_options` | child_process.execSync and execFileSync timeout/killSignal options |
+| `child_process_options_second_arg` | child_process execFile/spawnSync file/options argument forms |
+| `child_process_spawn_sync` | child_process.spawnSync utf8 status/stdout/stderr subset |
+| `child_process_spawn_sync_cwd` | child_process.spawnSync cwd option in the UTF-8 subset |
+| `child_process_spawn_sync_detached` | child_process.spawnSync detached POSIX session option |
+| `child_process_spawn_sync_detached_false` | child_process.spawnSync explicit attached detached:false path |
+| `child_process_spawn_sync_exec_error` | child_process.spawnSync exec failure error metadata |
+| `child_process_spawn_sync_input` | child_process.spawnSync input option in the UTF-8 subset |
+| `child_process_spawn_sync_nonzero_status` | child_process.spawnSync nonzero exit status result |
+| `child_process_spawn_sync_result_metadata` | child_process.spawnSync result pid/output/signal/error metadata |
+| `child_process_spawn_sync_signal` | child_process.spawnSync signal-terminated result metadata |
+| `child_process_spawn_sync_shell` | child_process.spawnSync shell option in the UTF-8 subset |
+| `child_process_spawn_sync_stdio_pipe` | child_process.spawnSync explicit stdio pipe option forms |
+| `child_process_spawn_sync_stdio_ignore` | child_process.spawnSync explicit stdio ignore option forms |
+| `child_process_spawn_sync_stdio_inherit` | child_process.spawnSync explicit stdio inherit option forms |
+| `child_process_spawn_sync_stdio_stdin` | child_process.spawnSync stdio tuple stdin pipe/ignore handling |
+| `child_process_spawn_sync_stdio_default_entries` | child_process.spawnSync stdio tuple null/undefined default entries |
+| `child_process_spawn_sync_stdio_fd` | child_process.spawnSync stdio tuple numeric fd inherit entries |
+| `child_process_spawn_sync_timeout` | child_process.spawnSync timeout result metadata |
+| `child_process_spawn_sync_kill_signal` | child_process.spawnSync timeout killSignal option |
+| `child_process_uid_gid_options` | child_process applies POSIX uid/gid options |
+| `child_process_windows_hide_option` | child_process accepts inert windowsHide option |
+| `child_process_windows_verbatim_option` | child_process accepts inert windowsVerbatimArguments option |
+| `child_process_shell_string` | child_process shell path string option |
+| `child_process_shell_false` | child_process explicit shell:false direct exec option |
 | `computed_props` | computed object-literal keys resolved at compile time |
 | `console_format` | first-argument console `%` specifier formatting |
 | `crypto_sha256` | sha256 update + hex digest |
+| `crypto_hash_more` | sha1/sha512 digests and Buffer-backed hash updates |
+| `crypto_import` | crypto/node:crypto createHash named and namespace imports |
+| `crypto_digest_base64` | crypto Hash.digest base64 output |
+| `crypto_random_bytes` | crypto.randomBytes Buffer creation |
+| `crypto_random_uuid` | crypto.randomUUID version 4 UUID strings |
 | `custom_iterator_entry_destructure` | custom iterator yielding ObjectEntry values with `[key, value]` destructuring |
 | `custom_iterator_object` | class `[Symbol.iterator]()` returning an iterator object with `next()` |
 | `custom_iterator_inherited_next` | custom iterator object whose `next()` method is inherited from a base class |
 | `custom_iterator_self` | direct self-iterable custom iterator object with `next()` |
 | `custom_predicates` | user-defined type predicate narrowing over interface-shaped union values |
+| `dns_lookup` | immediate dns.lookup callback support through global, named, and namespace imports |
+| `dns_lookup_all` | dns.lookup and dns.promises.lookup all:true result arrays |
+| `dns_lookup_hints` | dns.lookup and dns.promises.lookup hints constants |
+| `dns_lookup_option_forms` | dns.lookup numeric family shorthand plus literal verbatim/order options |
+| `dns_lookup_options` | immediate dns.lookup family option support |
+| `dns_promises_lookup` | immediate dns.promises.lookup fulfilled result objects |
 | `enums` | numeric enum constants |
+| `error_constructors` | TypeError, RangeError, and SyntaxError constructors share Error object behavior |
+| `error_instances` | Error object subset with name/message/stringification/valueOf and throw stringification |
 | `event_emitter` | synchronous EventEmitter listener registration, emit, once, removal, and listener counts |
+| `event_emitter_default_max_listeners` | EventEmitter.defaultMaxListeners and events.defaultMaxListeners configure default max listeners |
 | `event_emitter_error_event` | unhandled EventEmitter `"error"` emits throw while handled errors emit normally |
 | `event_emitter_import` | named `EventEmitter` import from `node:events` backed by the same synchronous runtime |
 | `event_emitter_listener_count_filter` | EventEmitter listenerCount optional listener identity filtering |
+| `event_emitter_listeners` | EventEmitter listeners() and events.getEventListeners expose stable listener identities |
 | `event_emitter_max_listeners` | EventEmitter get/set max listener count through instance and events module helpers |
 | `event_emitter_more` | EventEmitter prepend listeners, event-name enumeration, and module-level `events.listenerCount` |
 | `event_emitter_namespace` | namespace `node:events` import with `events.EventEmitter` and `events.listenerCount` |
+| `event_emitter_once_promise` | module-level events.once Promise fulfillment and error rejection |
 | `event_emitter_once_reentrant` | EventEmitter once listeners are removed before invocation for reentrant emit |
+| `event_emitter_raw_listeners` | EventEmitter rawListeners returns stable once wrappers with listener back-pointers |
 | `event_emitter_remove_latest` | EventEmitter off/removeListener removes the most recently added matching listener |
+| `event_emitter_static_listener_count` | static EventEmitter.listenerCount helper with optional listener identity filtering |
 | `exponent_assign` | exponentiation compound assignment for number, BigInt, and dynamic values |
+| `fs_access_sync` | fs.accessSync global, namespace, and named import support |
+| `fs_access_modes` | fs.constants and POSIX access mode checks for fs.accessSync/fs.promises.access |
 | `fs_append` | fs appendFileSync and immediate-settled fs.promises appendFile |
 | `fs_chmod` | fs.chmodSync and immediate-settled fs.promises chmod with Stats.mode |
+| `fs_copy_flags` | fs copy constants and COPYFILE_EXCL behavior |
+| `fs_readdir_options` | fs readdir UTF-8 encoding options for sync and immediate promise forms |
 | `inheritance` | extends + super() + static members |
 | `instanceof` | class instance ancestry checks |
 | `interface_inheritance` | interface extends fields and typed object key order |
 | `interfaces` | interface + object literal + nested refs + shorthand |
 | `exceptions` | throw + try/catch/finally + re-throw + nested |
+| `module_default_anonymous_function` | default import of anonymous default-exported function |
+| `module_default_class_import` | default import of named default-exported class |
+| `module_default_export_assignment` | default import of identifier export assignment |
+| `module_default_re_export` | default re-export through a barrel module |
+| `module_export_star` | export-star barrel re-exports |
+| `module_import_aliases` | default imports and renamed named imports |
+| `module_namespace_import` | local module namespace import values and functions |
+| `module_re_exports` | simple barrel re-exports |
+| `module_side_effect_import` | side-effect-only imports execute dependency module initializers |
+| `module_type_only_import` | type-only imports do not run imported module initializers |
+| `module_type_only_re_export` | type-only re-exports do not run imported module initializers |
 | `modules` | multi-file import/export |
 | `namespaces` | namespace-scoped values/functions, lifted arrows, nested namespaces, and spread calls |
 | `strings` | every supported String method |
@@ -529,11 +675,32 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `number_to_exponential` | Number.toExponential typed and dynamic scientific formatting |
 | `number_to_fixed` | Number.toFixed typed and dynamic fixed-point formatting |
 | `number_to_precision` | Number.toPrecision typed and dynamic significant-digit formatting |
+| `optional_parameters` | omitted optional pointer and function parameters lower to undefined/null sentinels |
+| `os_more` | os.type/release/endianness/EOL through global, namespace, and named imports |
+| `os_host_more` | os.availableParallelism/machine/version through global, namespace, and named imports |
+| `os_system_stats` | os.totalmem/freemem/uptime/loadavg through global, namespace, and named imports |
+| `os_user_info` | os.userInfo dynamic object through global, namespace, and named imports |
 | `path_constants` | path sep and delimiter constants for global, named import, and namespace import forms |
 | `path_import` | path named and namespace imports from node:path/path |
 | `path_normalize` | bounded POSIX path.normalize segment cleanup and path.isAbsolute checks |
+| `path_parse_format` | bounded POSIX path.parse/path.format dynamic path objects |
+| `path_posix` | path.posix and named posix imports route to the supported POSIX path subset |
 | `path_relative` | bounded POSIX path.relative and named node:path import |
+| `process_argv_meta` | process argv0/execPath/execArgv metadata |
+| `process_chdir` | process.chdir updates cwd |
+| `process_env_mutation` | process.env property/element reads, writes, and deletes |
+| `process_hrtime` | process.hrtime monotonic timestamp and diff pairs |
+| `process_memory_usage` | process.memoryUsage numeric memory fields |
+| `process_metadata` | process.platform/arch/pid/uptime metadata |
+| `process_posix_ids` | process POSIX uid/gid/euid/egid helpers |
+| `process_umask` | process.umask read/update/restore behavior |
+| `process_versions` | process.version and process.versions metadata |
+| `promise_callback_throw` | Promise callbacks that throw become rejected Promise records in the immediate subset |
+| `promise_empty_handlers` | Promise.catch and finally omitted or undefined handlers pass settled and pending state through |
+| `promise_executor` | immediate new Promise executor settlement and pending fallback |
+| `promise_resolve_adopt` | Promise.resolve adopts existing native Promise records |
 | `promise_settled` | settled Promise.resolve/reject with synchronous then/catch/finally chaining and combinators |
+| `promise_then_passthrough` | Promise.then omitted or undefined fulfillment callbacks pass through settled values |
 | `fs_copy_rename` | fs copyFileSync/renameSync and immediate-settled fs.promises copyFile/rename |
 | `fs_encoding_options` | fs UTF-8 encoding string/object options for read/write/append sync and immediate-settled promise calls |
 | `fs_lstat` | fs.lstatSync and immediate-settled fs.promises lstat with symbolic-link Stats |
@@ -542,6 +709,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `fs_promises` | immediate-settled fs.promises readFile/writeFile/readdir/access over the sync fs runtime |
 | `fs_promises_import` | fs.promises named and namespace imports from node:fs/fs |
 | `fs_promises_mutation` | immediate-settled fs.promises mkdir/unlink/rm/rmdir over the sync fs runtime |
+| `fs_promises_rejections` | sync filesystem throws inside immediate fs.promises wrappers become rejected Promise records |
 | `fs_realpath` | fs.realpathSync and immediate-settled fs.promises realpath |
 | `fs_readlink` | fs.readlinkSync and immediate-settled fs.promises readlink |
 | `fs_recursive_options` | fs mkdir recursive and rm recursive/force options for sync and immediate-settled promise calls |
@@ -568,6 +736,43 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `map_set_same_value_zero` | Map and Set SameValueZero numeric key semantics |
 | `native_addon` | expected diagnostic for literal native addon imports |
 | `native_addon_package` | expected diagnostic for imported packages containing native addon binaries |
+| `net_is_ip` | net isIP/isIPv4/isIPv6 address classification |
+| `node_modules_commonjs_bracket_exports` | narrow CommonJS package string-literal bracket export assignments |
+| `node_modules_commonjs_computed_exports` | narrow CommonJS package statically computed bracket export assignments |
+| `node_modules_commonjs_module_exports_arrow` | narrow CommonJS package arrow-function-valued `module.exports` default |
+| `node_modules_commonjs_module_exports_array` | narrow CommonJS package array-valued `module.exports` default reads |
+| `node_modules_commonjs_module_exports_function` | narrow CommonJS package function-valued `module.exports` default import |
+| `node_modules_commonjs_module_exports_identifier` | narrow CommonJS package identifier-valued `module.exports` default import and require call |
+| `node_modules_commonjs_module_exports_object` | narrow CommonJS package object-literal `module.exports` identifier exports |
+| `node_modules_commonjs_module_exports_object_default` | narrow CommonJS package primitive object-literal `module.exports` whole-value default |
+| `node_modules_commonjs_module_exports_nested_object_default` | narrow CommonJS package nested static object/array-literal `module.exports` whole-value default |
+| `node_modules_commonjs_module_exports_object_arrow` | narrow CommonJS package object-literal arrow-function-valued `module.exports` exports |
+| `node_modules_commonjs_module_exports_object_function` | narrow CommonJS package object-literal function-valued `module.exports` exports |
+| `node_modules_commonjs_module_exports_object_method` | narrow CommonJS package object-literal method shorthand `module.exports` exports |
+| `node_modules_commonjs_module_exports_object_literals` | narrow CommonJS package object-literal primitive-valued `module.exports` exports |
+| `node_modules_commonjs_module_exports_primitives` | narrow CommonJS package primitive-valued `module.exports` defaults |
+| `node_modules_commonjs_module_metadata` | read-only CommonJS `module.filename` / `module.id` / `module.path` / `module.loaded` metadata |
+| `node_modules_commonjs_module_require` | narrow CommonJS package top-level and package-local literal `module.require(...)` member reads/calls/re-exports |
+| `node_modules_commonjs_package_named` | narrow CommonJS package named exports through `exports.name` / `module.exports.name` |
+| `node_modules_commonjs_relative_require` | package-local top-level literal `require("./local.js")` member re-export |
+| `node_modules_commonjs_relative_require_default` | package-local top-level literal `require("./local.js")` default re-export |
+| `node_modules_commonjs_relative_require_direct_default` | package-local direct literal `module.exports = module.require("./local.js")` default re-export |
+| `node_modules_commonjs_require_destructure` | top-level literal destructured `require("pkg")` bindings for narrow CommonJS named exports |
+| `node_modules_commonjs_require_direct_function` | top-level literal direct `require("pkg")(...)` calls for function-valued CommonJS module exports |
+| `node_modules_commonjs_require_direct_member` | top-level literal direct `require("pkg").name` reads/calls for narrow CommonJS named exports |
+| `node_modules_commonjs_require_direct_value` | top-level literal direct `require("pkg")` reads for primitive-valued CommonJS module exports |
+| `node_modules_commonjs_require_function` | top-level literal `require("pkg")` calls for function-valued CommonJS module exports |
+| `node_modules_commonjs_require_named` | top-level literal `require("pkg")` member reads/calls for narrow CommonJS named exports |
+| `node_modules_commonjs_require_side_effect` | side-effect-only top-level literal `require("pkg")` package initialization |
+| `node_modules_commonjs_wrapper_globals` | `__filename` / `__dirname` string constants in CommonJS package sources |
+| `node_modules_js_package` | basic pure-JS package import through allowJs |
+| `node_modules_js_package_relative_import` | pure-JS package entry importing a package-local JS module |
+| `node_modules_package_exports` | TypeScript package source imports through package exports |
+| `node_modules_package_imports` | TypeScript package source imports through package imports |
+| `node_modules_package_main` | JavaScript package source imports through package main fallback |
+| `node_modules_package_namespace` | TypeScript package namespace imports through package exports |
+| `node_modules_package_side_effect` | package side-effect-only imports through package exports |
+| `node_modules_transitive_native_addon` | expected diagnostic for package source importing a native addon package |
 | `number_constants` | Number static constants |
 | `number_static_more` | Number.is* predicates over any value plus parseInt/parseFloat coercion, radix support, radix inference, and invalid-radix handling |
 | `json` | JSON.stringify of primitives, arrays, typed objects |
@@ -583,6 +788,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `typed_object_property_names` | typed Object.getOwnPropertyNames field-list expansion |
 | `typed_property_descriptor` | typed Object/Reflect field data descriptors |
 | `typed_property_descriptors` | typed Object.getOwnPropertyDescriptors field descriptor maps |
+| `reflect_get_receiver_typed` | Reflect.get optional receiver evaluation for typed arrays, objects, and Buffer |
 | `typed_reflect_get` | typed Reflect.get field reads |
 | `typed_reflect_has` | typed Reflect.has field checks |
 | `typed_reflect_own_keys` | typed Reflect.ownKeys field-list expansion |
@@ -590,6 +796,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `regex` | PCRE2-backed regex: test, replace, match, split, flags |
 | `regex_captures` | capture groups for non-global `.match()` |
 | `regex_pcre2` | lookahead/lookbehind, named capture syntax, Unicode properties, dotAll |
+| `regexp_constructor` | new RegExp and callable RegExp from string pattern and flags |
 | `regexp_exec` | RegExp.exec capture-array results |
 | `regexp_extra_flags` | RegExp hasIndices/sticky flag properties |
 | `regexp_object_methods` | RegExp source/flags/flag booleans and toString/toLocaleString/valueOf |
@@ -708,6 +915,15 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_array_to_string` | dynamic Array.toString/toLocaleString comma-join conversion |
 | `dynamic_array_value_of` | dynamic Array.valueOf receiver identity |
 | `dynamic_array_with` | dynamic Array.with non-mutating replacement |
+| `date_instances` | Date instances from current time or millisecond timestamps with getTime/valueOf/stringification |
+| `date_parse` | Date.parse and string Date constructor over deterministic ISO strings |
+| `date_set_time` | Date.setTime mutation and copy construction from Date instances |
+| `date_to_iso_string` | Date.toISOString UTC formatting |
+| `date_to_json` | Date.toJSON delegates to UTC ISO formatting |
+| `date_to_utc_string` | Date.toUTCString/toGMTString UTC text formatting |
+| `date_utc` | Date.UTC numeric argument normalization |
+| `date_utc_getters` | Date UTC component getters |
+| `date_utc_setters` | Date UTC mutator methods with normalized timestamp return values |
 | `dynamic_bitwise_ops` | dynamic bitwise binary and compound operators |
 | `dynamic_methods` | runtime method dispatch for common dynamic string/array methods |
 | `dynamic_number_to_string` | dynamic Number.toString radix conversion |
@@ -722,6 +938,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `runtime_eval` | expected diagnostic for `eval(...)` runtime compilation |
 | `runtime_function_call` | expected diagnostic for direct `Function(...)` runtime compilation |
 | `runtime_function_constructor` | expected diagnostic for the `new Function(...)` constructor |
+| `satisfies_expression` | TypeScript satisfies expressions erase to their runtime operand |
 | `set_keys` | Set.keys alias for Set.values |
 | `string_char_code_at` | String.charCodeAt UTF-16 code-unit lookup |
 | `string_search_positions` | String indexOf/includes/startsWith/endsWith/lastIndexOf position args |
@@ -753,6 +970,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `typeof_guards` | typeof equality checks over nullable string values |
 | `union_narrowing` | `typeof` narrowing over `string | number` dynamic union storage |
 | `void_operator` | `void expr` side-effect preservation and undefined result |
+| `url_can_parse` | URL.canParse support for the bounded absolute URL subset |
 | `url_object_methods` | URL toString/toJSON/toLocaleString/valueOf |
 | `url_parse` | URL parsing fields |
 | `weak_collections` | typed WeakMap/WeakSet with object keys |

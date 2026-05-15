@@ -1,0 +1,4 @@
+all: AAAAA
+middle: ABBBA
+tail: ABBCC
+return: DDDDD

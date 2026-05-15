@@ -1,0 +1,4 @@
+str: 0 4 8 -1
+last str: 8 4 4 -1
+buf: 1 9
+includes: true false false

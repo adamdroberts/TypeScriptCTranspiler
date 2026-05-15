@@ -1,0 +1,3 @@
+{
+  "description": "EventEmitter rawListeners returns stable once wrappers with listener back-pointers"
+}

@@ -1,0 +1,3 @@
+aggregate: AggregateError many AggregateError: many 2 one two
+called: AggregateError  AggregateError 1 solo
+caught: AggregateError: many

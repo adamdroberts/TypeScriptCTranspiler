@@ -113,7 +113,6 @@ function permanentLimitDiagnostics(
     const diagnostics: PermanentLimitDiagnostic[] = [];
     for (const sf of program.getSourceFiles()) {
         if (sf.isDeclarationFile || sf.fileName === libCoreDts) continue;
-        if (sf.fileName.includes("/node_modules/")) continue;
         const visit = (node: ts.Node): void => {
             if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
                 const spec = node.moduleSpecifier;
@@ -162,6 +161,25 @@ function permanentLimitDiagnostics(
                             });
                         }
                     }
+                } else if (isModuleRequireAccess(expr)) {
+                    const spec = node.arguments[0];
+                    const literalSpec = spec ? stringSpecifierText(spec) : null;
+                    if (literalSpec && isNativeAddonSpecifier(literalSpec)) {
+                        diagnostics.push({
+                            node,
+                            message:
+                                "native C++ addon modules (*.node) cannot be AOT-compiled",
+                        });
+                    } else if (literalSpec) {
+                        const message = nativeAddonPackageMessage(literalSpec, sf.fileName);
+                        if (message) diagnostics.push({ node, message });
+                    } else if (!literalSpec) {
+                        diagnostics.push({
+                            node,
+                            message:
+                                "dynamic require(variable) cannot be AOT-compiled; use a string-literal specifier",
+                        });
+                    }
                 } else if (expr.kind === ts.SyntaxKind.ImportKeyword) {
                     const spec = node.arguments[0];
                     const literalSpec = spec ? stringSpecifierText(spec) : null;
@@ -202,6 +220,13 @@ function isStringSpecifier(
 
 function stringSpecifierText(expr: ts.Expression): string | null {
     return isStringSpecifier(expr) ? expr.text : null;
+}
+
+function isModuleRequireAccess(expr: ts.Expression): boolean {
+    return ts.isPropertyAccessExpression(expr) &&
+        expr.name.text === "require" &&
+        ts.isIdentifier(expr.expression) &&
+        expr.expression.text === "module";
 }
 
 function isNativeAddonSpecifier(spec: string): boolean {

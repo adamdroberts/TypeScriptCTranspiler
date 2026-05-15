@@ -1,0 +1,2 @@
+callback all: true 1 127.0.0.1 4
+promise all: 1 127.0.0.1 4

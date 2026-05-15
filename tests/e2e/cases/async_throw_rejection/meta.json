@@ -1,0 +1,3 @@
+{
+  "description": "synchronous throws in immediate async functions become rejected Promise records"
+}

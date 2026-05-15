@@ -1,0 +1,3 @@
+modes: true true true ok
+denied: fs.access: path is not accessible
+constants: 0 1

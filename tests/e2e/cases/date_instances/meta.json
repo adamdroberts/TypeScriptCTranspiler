@@ -1,0 +1,3 @@
+{
+  "description": "Date instances from current time or millisecond timestamps with getTime/valueOf/stringification"
+}

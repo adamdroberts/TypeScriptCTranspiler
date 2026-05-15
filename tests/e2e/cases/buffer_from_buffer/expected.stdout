@@ -1,0 +1,3 @@
+clone: copy 4
+original: Copy
+equals: true false

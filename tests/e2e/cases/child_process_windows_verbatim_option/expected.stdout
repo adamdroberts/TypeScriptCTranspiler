@@ -1,0 +1,3 @@
+file: true file-verbatim 0
+file-sync: file-sync-verbatim
+spawn: 0 spawn-verbatim

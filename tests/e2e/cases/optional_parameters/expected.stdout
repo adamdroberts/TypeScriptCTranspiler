@@ -1,0 +1,4 @@
+greet: hello missing hello Ada
+join: none a|b
+maybe: plain:x X
+labels: default! default? custom! [empty] [ok]

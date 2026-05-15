@@ -1,0 +1,3 @@
+{
+  "description": "omitted optional pointer and function parameters lower to undefined/null sentinels"
+}

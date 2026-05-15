@@ -1,0 +1,4 @@
+console.log("epoch:", Date.UTC(1970, 0));
+console.log("full:", Date.UTC(1970, 0, 2, 3, 4, 5, 6));
+console.log("short year:", Date.UTC(99, 0, 1));
+console.log("overflow:", Date.UTC(2020, 13, 1));

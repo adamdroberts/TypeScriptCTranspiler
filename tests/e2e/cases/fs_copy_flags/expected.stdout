@@ -1,0 +1,5 @@
+sync excl: fs.copyFileSync: destination already exists
+after excl: existing
+after overwrite: source
+promise excl: fs.copyFileSync: destination already exists
+constants: 1 2 4

@@ -1,0 +1,4 @@
+global: 4 6 0
+global bool: true true false false
+namespace: 4 true true
+named: 6 false true

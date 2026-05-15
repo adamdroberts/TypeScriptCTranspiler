@@ -1,0 +1,5 @@
+any rejected: AggregateError All promises were rejected
+errors: 2 first|second
+recovered: fallback
+empty rejected: AggregateError 0
+empty recovered: empty

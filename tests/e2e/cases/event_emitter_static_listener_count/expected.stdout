@@ -1,0 +1,6 @@
+global static: 3 2
+namespace static: 3 1
+named: x
+named: x
+other: x
+after once: 2 1

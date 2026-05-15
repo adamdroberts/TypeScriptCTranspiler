@@ -6,12 +6,15 @@ export interface ModuleInfo {
     moduleId: string;
     /** moduleIds this module imports from (direct deps). */
     imports: string[];
+    /** Literal module specifier to resolved module id for import/export/require edges. */
+    resolvedSpecifiers: Map<string, string>;
     /** absolute filename (same as sf.fileName, cached for readability). */
     fileName: string;
 }
 
 export interface ModuleGraph {
     modules: Map<string, ModuleInfo>;
+    emitOrder: string[];
     topoOrder: string[];
     entryModuleId: string;
     fileToModuleId: Map<string, string>;
@@ -36,8 +39,6 @@ export function moduleIdOf(fileName: string, rootDir: string): string {
 function isEmittable(sf: ts.SourceFile, libCoreDts: string): boolean {
     if (sf.isDeclarationFile) return false;
     if (sf.fileName === libCoreDts) return false;
-    // node_modules files are Phase 14 territory — skip for now.
-    if (sf.fileName.includes("/node_modules/")) return false;
     return true;
 }
 
@@ -62,6 +63,7 @@ export function buildModuleGraph(
             sf,
             moduleId: id,
             imports: [],
+            resolvedSpecifiers: new Map(),
             fileName: sf.fileName,
         });
         fileToModuleId.set(sf.fileName, id);
@@ -71,23 +73,29 @@ export function buildModuleGraph(
     const options = program.getCompilerOptions();
     for (const [id, info] of modules) {
         for (const stmt of info.sf.statements) {
-            let spec: string | undefined;
+            const specs: string[] = [];
             if (ts.isImportDeclaration(stmt) || ts.isExportDeclaration(stmt)) {
+                if (isTypeOnlyModuleEdge(stmt)) continue;
                 const m = stmt.moduleSpecifier;
-                if (m && ts.isStringLiteral(m)) spec = m.text;
+                if (m && ts.isStringLiteral(m)) specs.push(m.text);
             }
-            if (!spec) continue;
-            const resolved = ts.resolveModuleName(
-                spec,
-                info.sf.fileName,
-                options,
-                ts.sys,
-            );
-            const mod = resolved.resolvedModule;
-            if (!mod) continue;
-            const depId = fileToModuleId.get(mod.resolvedFileName);
-            if (depId && depId !== id && !info.imports.includes(depId)) {
-                info.imports.push(depId);
+            specs.push(...topLevelRequireSpecifiers(stmt));
+            for (const spec of specs) {
+                const resolved = ts.resolveModuleName(
+                    spec,
+                    info.sf.fileName,
+                    options,
+                    ts.sys,
+                );
+                const mod = resolved.resolvedModule;
+                if (!mod) continue;
+                const depId = fileToModuleId.get(mod.resolvedFileName);
+                if (depId) {
+                    info.resolvedSpecifiers.set(spec, depId);
+                    if (depId !== id && !info.imports.includes(depId)) {
+                        info.imports.push(depId);
+                    }
+                }
             }
         }
     }
@@ -112,9 +120,50 @@ export function buildModuleGraph(
         topo.push(id);
     }
     visit(entryModuleId);
-    // Also visit any other modules that aren't reachable from entry but
-    // are in the program (shouldn't normally happen, but just in case).
-    for (const id of modules.keys()) visit(id);
 
-    return { modules, topoOrder: topo, entryModuleId, fileToModuleId };
+    return { modules, emitOrder: [...modules.keys()], topoOrder: topo, entryModuleId, fileToModuleId };
+}
+
+function isTypeOnlyModuleEdge(stmt: ts.ImportDeclaration | ts.ExportDeclaration): boolean {
+    if (ts.isImportDeclaration(stmt)) return stmt.importClause?.isTypeOnly === true;
+    return stmt.isTypeOnly === true;
+}
+
+function topLevelRequireSpecifiers(stmt: ts.Statement): string[] {
+    const specs: string[] = [];
+    const visit = (node: ts.Node): void => {
+        const spec = ts.isExpression(node) ? requireCallSpecifier(node) : null;
+        if (spec) specs.push(spec);
+        if (node !== stmt && ts.isFunctionLike(node)) return;
+        ts.forEachChild(node, visit);
+    };
+    if (ts.isExpressionStatement(stmt)) visit(stmt.expression);
+    if (ts.isVariableStatement(stmt)) {
+        for (const decl of stmt.declarationList.declarations) {
+            if (decl.initializer) visit(decl.initializer);
+        }
+    }
+    return specs;
+}
+
+function requireCallSpecifier(expr: ts.Expression): string | null {
+    if (
+        ts.isCallExpression(expr) &&
+        isCommonJsRequireCallee(expr.expression) &&
+        expr.arguments.length === 1 &&
+        ts.isStringLiteralLike(expr.arguments[0])
+    ) {
+        return expr.arguments[0].text;
+    }
+    return null;
+}
+
+function isCommonJsRequireCallee(expr: ts.Expression): boolean {
+    return (ts.isIdentifier(expr) && expr.text === "require") ||
+        (
+            ts.isPropertyAccessExpression(expr) &&
+            expr.name.text === "require" &&
+            ts.isIdentifier(expr.expression) &&
+            expr.expression.text === "module"
+        );
 }

@@ -1,0 +1,2 @@
+spawn: ETIMEDOUT SIGKILL
+callback: ETIMEDOUT 0 0

@@ -1,0 +1,12 @@
+import * as nodeDns from "node:dns";
+import { ADDRCONFIG, ALL, V4MAPPED, lookup, promises } from "dns";
+
+console.log("constants:", dns.ADDRCONFIG, nodeDns.V4MAPPED, ADDRCONFIG, ALL);
+
+lookup("127.0.0.1", { family: 6, hints: V4MAPPED }, (err: any, address: string, family: number): void => {
+    console.log("callback hints:", err === null, address.indexOf("127.0.0.1") >= 0, family);
+});
+
+promises.lookup("127.0.0.1", { family: 6, hints: nodeDns.V4MAPPED | dns.ALL }).then((result: any): void => {
+    console.log("promise hints:", result.address.indexOf("127.0.0.1") >= 0, result.family);
+});

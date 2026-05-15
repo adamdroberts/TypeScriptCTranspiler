@@ -1,0 +1,4 @@
+stored: missing? Bob?
+callback: missing?|Ada?
+returned: items:none items:a,b
+function param: plain X

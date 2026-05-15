@@ -1,0 +1,3 @@
+{
+  "description": "Promise.race([]) returns a pending promise and does not invoke then/catch/finally callbacks in the settled subset"
+}

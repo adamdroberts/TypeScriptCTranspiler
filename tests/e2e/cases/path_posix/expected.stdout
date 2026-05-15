@@ -1,0 +1,3 @@
+global: alpha/beta / :
+namespace: /a true
+named: ../c /tmp/file.txt

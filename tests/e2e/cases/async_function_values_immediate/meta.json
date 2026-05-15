@@ -1,0 +1,3 @@
+{
+  "description": "async function values without await return immediate Promise records"
+}

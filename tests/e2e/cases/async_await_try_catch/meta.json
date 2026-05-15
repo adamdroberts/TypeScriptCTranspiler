@@ -1,0 +1,3 @@
+{
+  "description": "local try/catch catches rejected immediate await records inside async functions"
+}

@@ -1,0 +1,3 @@
+{
+  "description": "TypeError, RangeError, and SyntaxError constructors share Error object behavior"
+}

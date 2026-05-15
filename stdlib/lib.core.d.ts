@@ -37,12 +37,14 @@ interface Generator<T = unknown, TReturn = any, TNext = unknown> extends Iterato
 }
 
 interface Promise<T> {
-    then<TResult>(onfulfilled: (value: T) => TResult): Promise<TResult>;
-    then<TResult, TRejectResult>(onfulfilled: (value: T) => TResult, onrejected: (reason: any) => TRejectResult): Promise<TResult | TRejectResult>;
-    catch<TResult>(onrejected: (reason: any) => TResult): Promise<T | TResult>;
-    finally(onfinally: () => void): Promise<T>;
+    then<TResult = T>(onfulfilled?: (value: T) => TResult): Promise<TResult>;
+    then<TResult = T, TRejectResult = never>(onfulfilled: ((value: T) => TResult) | undefined, onrejected: (reason: any) => TRejectResult): Promise<TResult | TRejectResult>;
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult) | undefined): Promise<T | TResult>;
+    finally(onfinally?: (() => void) | undefined): Promise<T>;
 }
 interface PromiseConstructor {
+    new<T>(executor: (resolve: (value: T) => void, reject: (reason: any) => void) => void): Promise<T>;
+    resolve<T>(value: Promise<T>): Promise<T>;
     resolve<T>(value: T): Promise<T>;
     resolve(): Promise<void>;
     reject<T = never>(reason?: any): Promise<T>;
@@ -52,6 +54,18 @@ interface PromiseConstructor {
     any<T>(values: Promise<T>[]): Promise<T>;
 }
 declare var Promise: PromiseConstructor;
+
+declare function require(specifier: string): any;
+declare const __filename: string;
+declare const __dirname: string;
+declare const module: {
+    exports: any;
+    filename: string;
+    id: string;
+    path: string;
+    loaded: boolean;
+    require(specifier: string): any;
+};
 
 interface TemplateStringsArray extends ReadonlyArray<string> {
     readonly raw: readonly string[];
@@ -415,15 +429,50 @@ interface RegExp {
     readonly sticky: boolean;
     readonly unicode: boolean;
 }
+interface RegExpConstructor {
+    new(pattern: string, flags?: string): RegExp;
+    (pattern: string, flags?: string): RegExp;
+}
+declare var RegExp: RegExpConstructor;
 
 interface Error {
+    name: string;
     message: string;
+    toString(): string;
+    toLocaleString(): string;
+    valueOf(): Error;
 }
 interface ErrorConstructor {
     new (message?: string): Error;
     (message?: string): Error;
 }
 declare var Error: ErrorConstructor;
+interface TypeError extends Error {}
+interface TypeErrorConstructor {
+    new (message?: string): TypeError;
+    (message?: string): TypeError;
+}
+declare var TypeError: TypeErrorConstructor;
+interface RangeError extends Error {}
+interface RangeErrorConstructor {
+    new (message?: string): RangeError;
+    (message?: string): RangeError;
+}
+declare var RangeError: RangeErrorConstructor;
+interface SyntaxError extends Error {}
+interface SyntaxErrorConstructor {
+    new (message?: string): SyntaxError;
+    (message?: string): SyntaxError;
+}
+declare var SyntaxError: SyntaxErrorConstructor;
+interface AggregateError extends Error {
+    errors: any[];
+}
+interface AggregateErrorConstructor {
+    new(errors: any[], message?: string): AggregateError;
+    (errors: any[], message?: string): AggregateError;
+}
+declare var AggregateError: AggregateErrorConstructor;
 
 interface Console {
     log(...data: unknown[]): void;
@@ -436,11 +485,35 @@ declare const console: Console;
 interface ProcessEnv {
     [key: string]: string | undefined;
 }
+interface ProcessMemoryUsage {
+    rss: number;
+    heapTotal: number;
+    heapUsed: number;
+    external: number;
+    arrayBuffers: number;
+}
 interface Process {
+    readonly platform: string;
+    readonly arch: string;
+    readonly pid: number;
+    readonly version: string;
+    readonly versions: any;
     argv: string[];
+    argv0: string;
+    execPath: string;
+    execArgv: string[];
     env: ProcessEnv;
     exit(code?: number): never;
     cwd(): string;
+    chdir(directory: string): void;
+    uptime(): number;
+    hrtime(time?: number[]): number[];
+    getuid(): number;
+    getgid(): number;
+    geteuid(): number;
+    getegid(): number;
+    umask(mask?: number): number;
+    memoryUsage(): any;
 }
 declare const process: Process;
 
@@ -448,6 +521,8 @@ declare function parseInt(value: any, radix?: number): number;
 declare function parseFloat(value: any): number;
 declare function isNaN(value: any): boolean;
 declare function isFinite(value: any): boolean;
+declare function btoa(value: string): string;
+declare function atob(value: string): string;
 declare const NaN: number;
 declare const Infinity: number;
 declare const undefined: undefined;
@@ -506,17 +581,98 @@ interface JSON {
 declare const JSON: JSON;
 
 interface OS {
+    readonly EOL: string;
     platform(): string;
+    type(): string;
+    release(): string;
+    version(): string;
+    endianness(): string;
+    machine(): string;
     arch(): string;
     hostname(): string;
     tmpdir(): string;
     homedir(): string;
     cpus(): number[];
+    availableParallelism(): number;
+    totalmem(): number;
+    freemem(): number;
+    uptime(): number;
+    loadavg(): number[];
+    userInfo(): any;
 }
 declare const os: OS;
+declare module "os" {
+    export const EOL: string;
+    export function platform(): string;
+    export function type(): string;
+    export function release(): string;
+    export function version(): string;
+    export function endianness(): string;
+    export function machine(): string;
+    export function arch(): string;
+    export function hostname(): string;
+    export function tmpdir(): string;
+    export function homedir(): string;
+    export function cpus(): number[];
+    export function availableParallelism(): number;
+    export function totalmem(): number;
+    export function freemem(): number;
+    export function uptime(): number;
+    export function loadavg(): number[];
+    export function userInfo(): any;
+}
+declare module "node:os" {
+    export const EOL: string;
+    export function platform(): string;
+    export function type(): string;
+    export function release(): string;
+    export function version(): string;
+    export function endianness(): string;
+    export function machine(): string;
+    export function arch(): string;
+    export function hostname(): string;
+    export function tmpdir(): string;
+    export function homedir(): string;
+    export function cpus(): number[];
+    export function availableParallelism(): number;
+    export function totalmem(): number;
+    export function freemem(): number;
+    export function uptime(): number;
+    export function loadavg(): number[];
+    export function userInfo(): any;
+}
 
+interface Date {
+    getTime(): number;
+    getUTCFullYear(): number;
+    getUTCMonth(): number;
+    getUTCDate(): number;
+    getUTCDay(): number;
+    getUTCHours(): number;
+    getUTCMinutes(): number;
+    getUTCSeconds(): number;
+    getUTCMilliseconds(): number;
+    setTime(time: number): number;
+    setUTCFullYear(year: number, month?: number, date?: number): number;
+    setUTCMonth(month: number, date?: number): number;
+    setUTCDate(date: number): number;
+    setUTCHours(hours: number, minutes?: number, seconds?: number, ms?: number): number;
+    setUTCMinutes(minutes: number, seconds?: number, ms?: number): number;
+    setUTCSeconds(seconds: number, ms?: number): number;
+    setUTCMilliseconds(ms: number): number;
+    valueOf(): number;
+    toString(): string;
+    toLocaleString(): string;
+    toISOString(): string;
+    toUTCString(): string;
+    toGMTString(): string;
+    toJSON(): string;
+}
 interface DateConstructor {
+    new(value?: number | string | Date): Date;
     now(): number;
+    parse(text: string): number;
+    UTC(year: number, month: number, date?: number, hours?: number, minutes?: number, seconds?: number, ms?: number): number;
 }
 declare var Date: DateConstructor;
 
@@ -561,12 +717,23 @@ interface FSEncodingOptions {
     encoding?: FSEncoding;
 }
 type FSFileEncodingOptions = FSEncoding | FSEncodingOptions;
+interface FSConstants {
+    readonly F_OK: number;
+    readonly R_OK: number;
+    readonly W_OK: number;
+    readonly X_OK: number;
+    readonly COPYFILE_EXCL: number;
+    readonly COPYFILE_FICLONE: number;
+    readonly COPYFILE_FICLONE_FORCE: number;
+}
 interface FS {
+    readonly constants: FSConstants;
     readFileSync(path: string, options?: FSFileEncodingOptions): string;
     writeFileSync(path: string, data: string, options?: FSFileEncodingOptions): void;
     appendFileSync(path: string, data: string, options?: FSFileEncodingOptions): void;
     existsSync(path: string): boolean;
-    readdirSync(path: string): string[];
+    accessSync(path: string, mode?: number): void;
+    readdirSync(path: string, options?: FSFileEncodingOptions): string[];
     statSync(path: string): FSStats;
     lstatSync(path: string): FSStats;
     realpathSync(path: string): string;
@@ -580,7 +747,7 @@ interface FS {
     unlinkSync(path: string): void;
     rmSync(path: string, options?: FSRmOptions): void;
     rmdirSync(path: string): void;
-    copyFileSync(src: string, dest: string): void;
+    copyFileSync(src: string, dest: string, mode?: number): void;
     renameSync(oldPath: string, newPath: string): void;
     promises: FSPromises;
 }
@@ -588,7 +755,7 @@ interface FSPromises {
     readFile(path: string, options?: FSFileEncodingOptions): Promise<string>;
     writeFile(path: string, data: string, options?: FSFileEncodingOptions): Promise<void>;
     appendFile(path: string, data: string, options?: FSFileEncodingOptions): Promise<void>;
-    readdir(path: string): Promise<string[]>;
+    readdir(path: string, options?: FSFileEncodingOptions): Promise<string[]>;
     stat(path: string): Promise<FSStats>;
     lstat(path: string): Promise<FSStats>;
     realpath(path: string): Promise<string>;
@@ -598,22 +765,24 @@ interface FSPromises {
     mkdtemp(prefix: string): Promise<string>;
     truncate(path: string, len?: number): Promise<void>;
     chmod(path: string, mode: number): Promise<void>;
-    access(path: string): Promise<void>;
+    access(path: string, mode?: number): Promise<void>;
     mkdir(path: string, options?: FSMkdirOptions): Promise<void>;
     unlink(path: string): Promise<void>;
     rm(path: string, options?: FSRmOptions): Promise<void>;
     rmdir(path: string): Promise<void>;
-    copyFile(src: string, dest: string): Promise<void>;
+    copyFile(src: string, dest: string, mode?: number): Promise<void>;
     rename(oldPath: string, newPath: string): Promise<void>;
 }
 declare const fs: FS;
 declare module "fs" {
+    export const constants: FSConstants;
     export const promises: FSPromises;
     export function readFileSync(path: string, options?: FSFileEncodingOptions): string;
     export function writeFileSync(path: string, data: string, options?: FSFileEncodingOptions): void;
     export function appendFileSync(path: string, data: string, options?: FSFileEncodingOptions): void;
     export function existsSync(path: string): boolean;
-    export function readdirSync(path: string): string[];
+    export function accessSync(path: string, mode?: number): void;
+    export function readdirSync(path: string, options?: FSFileEncodingOptions): string[];
     export function statSync(path: string): FSStats;
     export function lstatSync(path: string): FSStats;
     export function realpathSync(path: string): string;
@@ -627,16 +796,18 @@ declare module "fs" {
     export function unlinkSync(path: string): void;
     export function rmSync(path: string, options?: FSRmOptions): void;
     export function rmdirSync(path: string): void;
-    export function copyFileSync(src: string, dest: string): void;
+    export function copyFileSync(src: string, dest: string, mode?: number): void;
     export function renameSync(oldPath: string, newPath: string): void;
 }
 declare module "node:fs" {
+    export const constants: FSConstants;
     export const promises: FSPromises;
     export function readFileSync(path: string, options?: FSFileEncodingOptions): string;
     export function writeFileSync(path: string, data: string, options?: FSFileEncodingOptions): void;
     export function appendFileSync(path: string, data: string, options?: FSFileEncodingOptions): void;
     export function existsSync(path: string): boolean;
-    export function readdirSync(path: string): string[];
+    export function accessSync(path: string, mode?: number): void;
+    export function readdirSync(path: string, options?: FSFileEncodingOptions): string[];
     export function statSync(path: string): FSStats;
     export function lstatSync(path: string): FSStats;
     export function realpathSync(path: string): string;
@@ -650,13 +821,14 @@ declare module "node:fs" {
     export function unlinkSync(path: string): void;
     export function rmSync(path: string, options?: FSRmOptions): void;
     export function rmdirSync(path: string): void;
-    export function copyFileSync(src: string, dest: string): void;
+    export function copyFileSync(src: string, dest: string, mode?: number): void;
     export function renameSync(oldPath: string, newPath: string): void;
 }
 
 interface Path {
     readonly sep: string;
     readonly delimiter: string;
+    readonly posix: Path;
     join(...parts: string[]): string;
     resolve(...parts: string[]): string;
     normalize(p: string): string;
@@ -665,11 +837,14 @@ interface Path {
     basename(p: string): string;
     dirname(p: string): string;
     extname(p: string): string;
+    parse(p: string): any;
+    format(pathObject: any): string;
 }
 declare const path: Path;
 declare module "path" {
     export const sep: string;
     export const delimiter: string;
+    export const posix: Path;
     export function join(...parts: string[]): string;
     export function resolve(...parts: string[]): string;
     export function normalize(p: string): string;
@@ -678,10 +853,13 @@ declare module "path" {
     export function basename(p: string): string;
     export function dirname(p: string): string;
     export function extname(p: string): string;
+    export function parse(p: string): any;
+    export function format(pathObject: any): string;
 }
 declare module "node:path" {
     export const sep: string;
     export const delimiter: string;
+    export const posix: Path;
     export function join(...parts: string[]): string;
     export function resolve(...parts: string[]): string;
     export function normalize(p: string): string;
@@ -690,34 +868,94 @@ declare module "node:path" {
     export function basename(p: string): string;
     export function dirname(p: string): string;
     export function extname(p: string): string;
+    export function parse(p: string): any;
+    export function format(pathObject: any): string;
 }
 
+type CryptoHashAlgorithm = "sha1" | "sha256" | "sha512";
 interface CryptoHash {
-    update(data: string): CryptoHash;
-    digest(encoding: "hex"): string;
+    update(data: string | Buffer): CryptoHash;
+    digest(encoding: "hex" | "base64"): string;
 }
 interface Crypto {
-    createHash(algorithm: "sha256"): CryptoHash;
+    createHash(algorithm: CryptoHashAlgorithm): CryptoHash;
+    randomBytes(size: number): Buffer;
+    randomUUID(): string;
 }
 declare const crypto: Crypto;
+declare module "crypto" {
+    export function createHash(algorithm: CryptoHashAlgorithm): CryptoHash;
+    export function randomBytes(size: number): Buffer;
+    export function randomUUID(): string;
+}
+declare module "node:crypto" {
+    export function createHash(algorithm: CryptoHashAlgorithm): CryptoHash;
+    export function randomBytes(size: number): Buffer;
+    export function randomUUID(): string;
+}
 
-type BufferEncoding = "utf8" | "hex";
+type BufferEncoding = "utf8" | "utf-8" | "hex" | "base64";
 interface Buffer {
     readonly length: number;
     toLocaleString(): string;
+    toJSON(): any;
     toString(encoding?: BufferEncoding): string;
     valueOf(): Buffer;
     slice(start?: number, end?: number): Buffer;
     subarray(start?: number, end?: number): Buffer;
+    fill(value: number, start?: number, end?: number): Buffer;
+    write(string: string, offset?: number, length?: number, encoding?: BufferEncoding): number;
+    readUInt8(offset?: number): number;
+    writeUInt8(value: number, offset?: number): number;
+    readInt8(offset?: number): number;
+    writeInt8(value: number, offset?: number): number;
+    readUInt16LE(offset?: number): number;
+    readUInt16BE(offset?: number): number;
+    writeUInt16LE(value: number, offset?: number): number;
+    writeUInt16BE(value: number, offset?: number): number;
+    readInt16LE(offset?: number): number;
+    readInt16BE(offset?: number): number;
+    writeInt16LE(value: number, offset?: number): number;
+    writeInt16BE(value: number, offset?: number): number;
+    readUInt32LE(offset?: number): number;
+    readUInt32BE(offset?: number): number;
+    writeUInt32LE(value: number, offset?: number): number;
+    writeUInt32BE(value: number, offset?: number): number;
+    readInt32LE(offset?: number): number;
+    readInt32BE(offset?: number): number;
+    writeInt32LE(value: number, offset?: number): number;
+    writeInt32BE(value: number, offset?: number): number;
+    readFloatLE(offset?: number): number;
+    readFloatBE(offset?: number): number;
+    writeFloatLE(value: number, offset?: number): number;
+    writeFloatBE(value: number, offset?: number): number;
+    readDoubleLE(offset?: number): number;
+    readDoubleBE(offset?: number): number;
+    writeDoubleLE(value: number, offset?: number): number;
+    writeDoubleBE(value: number, offset?: number): number;
+    swap16(): Buffer;
+    swap32(): Buffer;
+    swap64(): Buffer;
+    copy(target: Buffer, targetStart?: number, sourceStart?: number, sourceEnd?: number): number;
+    indexOf(value: number | string | Buffer, byteOffset?: number): number;
+    lastIndexOf(value: number | string | Buffer, byteOffset?: number): number;
+    includes(value: number | string | Buffer, byteOffset?: number): boolean;
     equals(other: Buffer): boolean;
+    compare(other: Buffer): number;
     [n: number]: number;
 }
 interface BufferConstructor {
     from(data: string, encoding?: BufferEncoding): Buffer;
     from(data: number[]): Buffer;
+    from(data: Buffer): Buffer;
     alloc(size: number, fill?: number): Buffer;
-    concat(list: Buffer[]): Buffer;
+    allocUnsafe(size: number): Buffer;
+    allocUnsafeSlow(size: number): Buffer;
+    concat(list: Buffer[], totalLength?: number): Buffer;
     isBuffer(value: unknown): boolean;
+    byteLength(value: string | Buffer, encoding?: BufferEncoding): number;
+    isEncoding(encoding: string): boolean;
+    compare(a: Buffer, b: Buffer): number;
 }
 declare var Buffer: BufferConstructor;
 
@@ -732,25 +970,218 @@ interface EventEmitter {
     removeAllListeners(eventName?: string): this;
     emit(eventName: string, ...args: any[]): boolean;
     listenerCount(eventName: string, listener?: (...args: any[]) => void): number;
+    listeners(eventName: string): any[];
+    rawListeners(eventName: string): any[];
     eventNames(): string[];
     setMaxListeners(n: number): this;
     getMaxListeners(): number;
 }
 interface EventEmitterConstructor {
     new(): EventEmitter;
+    defaultMaxListeners: number;
+    listenerCount(emitter: EventEmitter, eventName: string, listener?: (...args: any[]) => void): number;
 }
 declare var EventEmitter: EventEmitterConstructor;
 declare module "events" {
     export const EventEmitter: EventEmitterConstructor;
-    export function listenerCount(emitter: EventEmitter, eventName: string): number;
+    export let defaultMaxListeners: number;
+    export function listenerCount(emitter: EventEmitter, eventName: string, listener?: (...args: any[]) => void): number;
+    export function getEventListeners(emitter: EventEmitter, eventName: string): any[];
+    export function once(emitter: EventEmitter, eventName: string): Promise<any[]>;
     export function setMaxListeners(n: number, emitter: EventEmitter): void;
     export function getMaxListeners(emitter: EventEmitter): number;
 }
 declare module "node:events" {
     export const EventEmitter: EventEmitterConstructor;
-    export function listenerCount(emitter: EventEmitter, eventName: string): number;
+    export let defaultMaxListeners: number;
+    export function listenerCount(emitter: EventEmitter, eventName: string, listener?: (...args: any[]) => void): number;
+    export function getEventListeners(emitter: EventEmitter, eventName: string): any[];
+    export function once(emitter: EventEmitter, eventName: string): Promise<any[]>;
     export function setMaxListeners(n: number, emitter: EventEmitter): void;
     export function getMaxListeners(emitter: EventEmitter): number;
+}
+
+type DnsLookupCallback = (err: any, address: string, family: number) => void;
+type DnsLookupAllCallback = (err: any, addresses: any[]) => void;
+type DnsLookupFamily = 0 | 4 | 6;
+interface DnsLookupOptions {
+    family?: DnsLookupFamily;
+    all?: boolean;
+    hints?: number;
+    verbatim?: boolean;
+    order?: "verbatim" | "ipv4first" | "ipv6first";
+}
+interface DnsPromises {
+    lookup(hostname: string): Promise<any>;
+    lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily): Promise<any>;
+}
+interface DNS {
+    readonly ADDRCONFIG: number;
+    readonly V4MAPPED: number;
+    readonly ALL: number;
+    promises: DnsPromises;
+    lookup(hostname: string, callback: DnsLookupCallback): void;
+    lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupCallback): void;
+    lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupAllCallback): void;
+}
+declare const dns: DNS;
+declare module "dns" {
+    export const ADDRCONFIG: number;
+    export const V4MAPPED: number;
+    export const ALL: number;
+    export const promises: DnsPromises;
+    export function lookup(hostname: string, callback: DnsLookupCallback): void;
+    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupCallback): void;
+    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupAllCallback): void;
+}
+declare module "node:dns" {
+    export const ADDRCONFIG: number;
+    export const V4MAPPED: number;
+    export const ALL: number;
+    export const promises: DnsPromises;
+    export function lookup(hostname: string, callback: DnsLookupCallback): void;
+    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupCallback): void;
+    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupAllCallback): void;
+}
+
+interface Net {
+    isIP(input: string): number;
+    isIPv4(input: string): boolean;
+    isIPv6(input: string): boolean;
+}
+declare const net: Net;
+declare module "net" {
+    export function isIP(input: string): number;
+    export function isIPv4(input: string): boolean;
+    export function isIPv6(input: string): boolean;
+}
+declare module "node:net" {
+    export function isIP(input: string): number;
+    export function isIPv4(input: string): boolean;
+    export function isIPv6(input: string): boolean;
+}
+
+type ChildProcessExecCallback = (error: any, stdout: string, stderr: string) => void;
+type ChildProcessSpawnSyncStdioValue = "pipe" | "ignore" | "inherit" | number | null | undefined;
+type ChildProcessSpawnSyncStdio = ChildProcessSpawnSyncStdioValue | [ChildProcessSpawnSyncStdioValue, ChildProcessSpawnSyncStdioValue, ChildProcessSpawnSyncStdioValue];
+interface ChildProcessExecOptions {
+    cwd?: string;
+    env?: any;
+    encoding?: "utf8" | "utf-8";
+    shell?: string;
+    windowsHide?: boolean;
+    uid?: number;
+    gid?: number;
+    maxBuffer?: number;
+    timeout?: number;
+    killSignal?: "SIGTERM" | "SIGKILL" | 9 | 15;
+}
+interface ChildProcessExecFileOptions {
+    cwd?: string;
+    env?: any;
+    encoding?: "utf8" | "utf-8";
+    shell?: boolean | string;
+    argv0?: string;
+    windowsHide?: boolean;
+    windowsVerbatimArguments?: boolean;
+    uid?: number;
+    gid?: number;
+    maxBuffer?: number;
+    timeout?: number;
+    killSignal?: "SIGTERM" | "SIGKILL" | 9 | 15;
+}
+interface ChildProcessSpawnSyncUtf8Options {
+    encoding: "utf8" | "utf-8";
+    cwd?: string;
+    input?: string;
+    env?: any;
+    shell?: boolean | string;
+    stdio?: ChildProcessSpawnSyncStdio;
+    argv0?: string;
+    detached?: boolean;
+    windowsHide?: boolean;
+    windowsVerbatimArguments?: boolean;
+    uid?: number;
+    gid?: number;
+    maxBuffer?: number;
+    timeout?: number;
+    killSignal?: "SIGTERM" | "SIGKILL" | 9 | 15;
+}
+interface ChildProcessExecFileSyncOptions {
+    cwd?: string;
+    input?: string;
+    env?: any;
+    shell?: boolean | string;
+    argv0?: string;
+    windowsHide?: boolean;
+    windowsVerbatimArguments?: boolean;
+    uid?: number;
+    gid?: number;
+    maxBuffer?: number;
+    timeout?: number;
+    killSignal?: "SIGTERM" | "SIGKILL" | 9 | 15;
+}
+interface ChildProcessExecFileSyncStringOptions extends ChildProcessExecFileSyncOptions {
+    encoding: "utf8" | "utf-8";
+}
+interface ChildProcessExecFileSyncBufferOptions extends ChildProcessExecFileSyncOptions {
+    encoding: "buffer";
+}
+interface ChildProcessExecSyncOptions {
+    cwd?: string;
+    input?: string;
+    env?: any;
+    shell?: string;
+    windowsHide?: boolean;
+    uid?: number;
+    gid?: number;
+    maxBuffer?: number;
+    timeout?: number;
+    killSignal?: "SIGTERM" | "SIGKILL" | 9 | 15;
+}
+interface ChildProcessExecSyncStringOptions extends ChildProcessExecSyncOptions {
+    encoding: "utf8" | "utf-8";
+}
+interface ChildProcessExecSyncBufferOptions extends ChildProcessExecSyncOptions {
+    encoding: "buffer";
+}
+declare module "child_process" {
+    export function exec(command: string, callback: ChildProcessExecCallback): void;
+    export function exec(command: string, options: ChildProcessExecOptions, callback: ChildProcessExecCallback): void;
+    export function execFile(file: string, callback: ChildProcessExecCallback): void;
+    export function execFile(file: string, options: ChildProcessExecFileOptions, callback: ChildProcessExecCallback): void;
+    export function execFile(file: string, args: string[], callback: ChildProcessExecCallback): void;
+    export function execFile(file: string, args: string[], options: ChildProcessExecFileOptions, callback: ChildProcessExecCallback): void;
+    export function execSync(command: string, options: ChildProcessExecSyncStringOptions): string;
+    export function execSync(command: string, options: ChildProcessExecSyncBufferOptions): Buffer;
+    export function execSync(command: string, options?: ChildProcessExecSyncOptions): Buffer;
+    export function execFileSync(file: string, options: ChildProcessExecFileSyncStringOptions): string;
+    export function execFileSync(file: string, options: ChildProcessExecFileSyncBufferOptions): Buffer;
+    export function execFileSync(file: string, options: ChildProcessExecFileSyncOptions): Buffer;
+    export function execFileSync(file: string, args: string[], options: ChildProcessExecFileSyncStringOptions): string;
+    export function execFileSync(file: string, args: string[], options: ChildProcessExecFileSyncBufferOptions): Buffer;
+    export function execFileSync(file: string, args?: string[], options?: ChildProcessExecFileSyncOptions): Buffer;
+    export function spawnSync(file: string, options: ChildProcessSpawnSyncUtf8Options): any;
+    export function spawnSync(file: string, args: string[], options: ChildProcessSpawnSyncUtf8Options): any;
+}
+declare module "node:child_process" {
+    export function exec(command: string, callback: ChildProcessExecCallback): void;
+    export function exec(command: string, options: ChildProcessExecOptions, callback: ChildProcessExecCallback): void;
+    export function execFile(file: string, callback: ChildProcessExecCallback): void;
+    export function execFile(file: string, options: ChildProcessExecFileOptions, callback: ChildProcessExecCallback): void;
+    export function execFile(file: string, args: string[], callback: ChildProcessExecCallback): void;
+    export function execFile(file: string, args: string[], options: ChildProcessExecFileOptions, callback: ChildProcessExecCallback): void;
+    export function execSync(command: string, options: ChildProcessExecSyncStringOptions): string;
+    export function execSync(command: string, options: ChildProcessExecSyncBufferOptions): Buffer;
+    export function execSync(command: string, options?: ChildProcessExecSyncOptions): Buffer;
+    export function execFileSync(file: string, options: ChildProcessExecFileSyncStringOptions): string;
+    export function execFileSync(file: string, options: ChildProcessExecFileSyncBufferOptions): Buffer;
+    export function execFileSync(file: string, options: ChildProcessExecFileSyncOptions): Buffer;
+    export function execFileSync(file: string, args: string[], options: ChildProcessExecFileSyncStringOptions): string;
+    export function execFileSync(file: string, args: string[], options: ChildProcessExecFileSyncBufferOptions): Buffer;
+    export function execFileSync(file: string, args?: string[], options?: ChildProcessExecFileSyncOptions): Buffer;
+    export function spawnSync(file: string, options: ChildProcessSpawnSyncUtf8Options): any;
+    export function spawnSync(file: string, args: string[], options: ChildProcessSpawnSyncUtf8Options): any;
 }
 
 interface URL {
@@ -770,5 +1201,6 @@ interface URL {
 }
 interface URLConstructor {
     new (input: string): URL;
+    canParse(input: string): boolean;
 }
 declare var URL: URLConstructor;

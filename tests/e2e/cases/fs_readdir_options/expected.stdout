@@ -1,0 +1,4 @@
+global: item.txt
+namespace: item.txt
+named: item.txt
+promise: item.txt

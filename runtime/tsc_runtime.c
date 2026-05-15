@@ -4,12 +4,27 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <arpa/inet.h>
 #include <libgen.h>
 #include <limits.h>
+#include <netdb.h>
+#include <openssl/opensslv.h>
+#include <openssl/rand.h>
 #include <openssl/sha.h>
 #include <gmp.h>
+#include <poll.h>
+#include <pwd.h>
+#include <signal.h>
+#include <sys/resource.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
+#if defined(__linux__)
+#include <sys/sysinfo.h>
+#endif
 #include <sys/types.h>
+#include <sys/utsname.h>
 #include <time.h>
 #include <unicode/unorm2.h>
 #include <unicode/ustring.h>
@@ -24,9 +39,12 @@ char** tsc_argv;
 
 static tsc_try_frame_t* g_try_top = NULL;
 static tsc_str_t* g_current_error = NULL;
+static struct timespec g_boot_time;
+static bool g_boot_time_set = false;
 
 /* Forward decls for helpers used across sections. */
 static tsc_str_t* str_alloc(size_t len);
+static tsc_str_t* str_from_base64_bytes(const uint8_t* data, size_t len);
 static char* cstr_dup(const tsc_str_t* s);
 static void replace_append(char** out, size_t* pos, size_t* cap, const char* data, size_t len);
 static void replace_append_string_expanded(char** out, size_t* pos, size_t* cap, const tsc_str_t* source, const tsc_str_t* repl, size_t start, size_t end);
@@ -43,6 +61,9 @@ void tsc_bootstrap(int argc, char** argv) {
     tsc_argc = argc;
     tsc_argv = argv;
     srand((unsigned)time(NULL));
+    if (clock_gettime(CLOCK_MONOTONIC, &g_boot_time) == 0) {
+        g_boot_time_set = true;
+    }
 }
 
 void tsc_panic(const char* msg) {
@@ -67,6 +88,26 @@ tsc_array_t* tsc_process_argv(void) {
     return a;
 }
 
+tsc_str_t* tsc_process_argv0(void) {
+    return tsc_argc > 0 ? tsc_str_from_cstr(tsc_argv[0]) : tsc_str_from_lit("", 0);
+}
+
+tsc_array_t* tsc_process_exec_argv(void) {
+    return tsc_array_new(sizeof(tsc_str_t*), 1);
+}
+
+tsc_str_t* tsc_process_version(void) {
+    return tsc_str_from_lit("v0.0.0-tsc2c", 12);
+}
+
+tsc_value_t tsc_process_versions(void) {
+    tsc_object_t* out = tsc_object_new();
+    tsc_object_set(out, tsc_str_from_lit("node", 4), tsc_value_string(tsc_str_from_lit("0.0.0-tsc2c", 11)));
+    tsc_object_set(out, tsc_str_from_lit("openssl", 7), tsc_value_string(tsc_str_from_cstr(OPENSSL_VERSION_TEXT)));
+    tsc_object_set(out, tsc_str_from_lit("tsc2c", 5), tsc_value_string(tsc_str_from_lit("0.0.0", 5)));
+    return tsc_value_object(out);
+}
+
 tsc_str_t* tsc_process_env_get(const tsc_str_t* name) {
     char key[512];
     size_t n = name->len < 511 ? name->len : 511;
@@ -76,12 +117,127 @@ tsc_str_t* tsc_process_env_get(const tsc_str_t* name) {
     return v ? tsc_str_from_cstr(v) : NULL;
 }
 
+void tsc_process_env_set(const tsc_str_t* name, const tsc_str_t* value) {
+    char* key = cstr_dup(name);
+    if (!value) {
+        int r = unsetenv(key);
+        free(key);
+        if (r != 0) tsc_throw_str(tsc_str_from_cstr("process.env: could not unset variable"));
+        return;
+    }
+    char* val = cstr_dup(value);
+    int r = setenv(key, val, 1);
+    free(key);
+    free(val);
+    if (r != 0) tsc_throw_str(tsc_str_from_cstr("process.env: could not set variable"));
+}
+
+bool tsc_process_env_unset(const tsc_str_t* name) {
+    char* key = cstr_dup(name);
+    int r = unsetenv(key);
+    free(key);
+    if (r != 0) tsc_throw_str(tsc_str_from_cstr("process.env: could not unset variable"));
+    return true;
+}
+
 tsc_str_t* tsc_process_cwd(void) {
     char buf[4096];
     if (getcwd(buf, sizeof buf)) {
         return tsc_str_from_cstr(buf);
     }
     return tsc_str_from_lit("/", 1);
+}
+
+void tsc_process_chdir(const tsc_str_t* directory) {
+    char* path = cstr_dup(directory);
+    int r = chdir(path);
+    free(path);
+    if (r != 0) tsc_throw_str(tsc_str_from_cstr("process.chdir: could not change directory"));
+}
+
+double tsc_process_pid(void) {
+    return (double)getpid();
+}
+
+double tsc_process_getuid(void) {
+    return (double)getuid();
+}
+
+double tsc_process_getgid(void) {
+    return (double)getgid();
+}
+
+double tsc_process_geteuid(void) {
+    return (double)geteuid();
+}
+
+double tsc_process_getegid(void) {
+    return (double)getegid();
+}
+
+double tsc_process_umask_get(void) {
+    mode_t old_mask = umask(0);
+    umask(old_mask);
+    return (double)old_mask;
+}
+
+double tsc_process_umask_set(double mask) {
+    mode_t next = (mode_t)((isnan(mask) || isinf(mask) || mask < 0) ? 0 : (int)mask);
+    return (double)umask(next);
+}
+
+double tsc_process_uptime(void) {
+    if (!g_boot_time_set) return 0.0;
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0.0;
+    double seconds = (double)(now.tv_sec - g_boot_time.tv_sec);
+    seconds += (double)(now.tv_nsec - g_boot_time.tv_nsec) / 1e9;
+    return seconds < 0.0 ? 0.0 : seconds;
+}
+
+tsc_value_t tsc_process_memory_usage(void) {
+    double rss = 0.0;
+    struct rusage usage;
+    if (getrusage(RUSAGE_SELF, &usage) == 0) {
+#if defined(__APPLE__)
+        rss = (double)usage.ru_maxrss;
+#else
+        rss = (double)usage.ru_maxrss * 1024.0;
+#endif
+    }
+    tsc_object_t* out = tsc_object_new();
+    tsc_object_set(out, tsc_str_from_lit("rss", 3), tsc_value_num(rss));
+    tsc_object_set(out, tsc_str_from_lit("heapTotal", 9), tsc_value_num(0.0));
+    tsc_object_set(out, tsc_str_from_lit("heapUsed", 8), tsc_value_num(0.0));
+    tsc_object_set(out, tsc_str_from_lit("external", 8), tsc_value_num(0.0));
+    tsc_object_set(out, tsc_str_from_lit("arrayBuffers", 12), tsc_value_num(0.0));
+    return tsc_value_object(out);
+}
+
+tsc_array_t* tsc_process_hrtime(tsc_array_t* previous) {
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+        now.tv_sec = 0;
+        now.tv_nsec = 0;
+    }
+    double seconds = (double)now.tv_sec;
+    double nanos = (double)now.tv_nsec;
+    if (previous && previous->len >= 2) {
+        seconds -= TSC_ARR(double, previous, 0);
+        nanos -= TSC_ARR(double, previous, 1);
+        if (nanos < 0.0) {
+            seconds -= 1.0;
+            nanos += 1000000000.0;
+        }
+        if (seconds < 0.0) {
+            seconds = 0.0;
+            nanos = 0.0;
+        }
+    }
+    tsc_array_t* out = tsc_array_new(sizeof(double), 2);
+    tsc_array_push_raw(out, &seconds);
+    tsc_array_push_raw(out, &nanos);
+    return out;
 }
 
 /* ---------------- strings ---------------- */
@@ -1745,46 +1901,773 @@ tsc_array_t* tsc_str_split_regex_limit_num(const tsc_str_t* s, const tsc_regexp_
 
 /* ---------------- crypto ---------------- */
 
+typedef enum {
+    TSC_HASH_SHA1,
+    TSC_HASH_SHA256,
+    TSC_HASH_SHA512,
+} tsc_hash_algorithm_t;
+
 struct tsc_hash {
-    SHA256_CTX ctx;
+    tsc_hash_algorithm_t algorithm;
+    union {
+        SHA_CTX sha1;
+        SHA256_CTX sha256;
+        SHA512_CTX sha512;
+    } ctx;
     bool finalized;
-    unsigned char digest[SHA256_DIGEST_LENGTH];
+    size_t digest_len;
+    unsigned char digest[SHA512_DIGEST_LENGTH];
 };
 
 tsc_hash_t* tsc_crypto_create_hash(const tsc_str_t* algorithm) {
-    if (!str_lit_eq(algorithm, "sha256")) {
-        tsc_panic("crypto.createHash: only sha256 is supported");
-    }
     tsc_hash_t* h = (tsc_hash_t*)TSC_GC_MALLOC(sizeof(tsc_hash_t));
-    SHA256_Init(&h->ctx);
     h->finalized = false;
     memset(h->digest, 0, sizeof h->digest);
+    if (str_lit_eq(algorithm, "sha1")) {
+        h->algorithm = TSC_HASH_SHA1;
+        h->digest_len = SHA_DIGEST_LENGTH;
+        SHA1_Init(&h->ctx.sha1);
+        return h;
+    }
+    if (str_lit_eq(algorithm, "sha256")) {
+        h->algorithm = TSC_HASH_SHA256;
+        h->digest_len = SHA256_DIGEST_LENGTH;
+        SHA256_Init(&h->ctx.sha256);
+        return h;
+    }
+    if (str_lit_eq(algorithm, "sha512")) {
+        h->algorithm = TSC_HASH_SHA512;
+        h->digest_len = SHA512_DIGEST_LENGTH;
+        SHA512_Init(&h->ctx.sha512);
+        return h;
+    }
+    tsc_panic("crypto.createHash: only sha1, sha256, and sha512 are supported");
     return h;
 }
 
-tsc_hash_t* tsc_hash_update(tsc_hash_t* h, const tsc_str_t* data) {
-    if (!h->finalized) {
-        SHA256_Update(&h->ctx, data->data, data->len);
+tsc_buffer_t* tsc_crypto_random_bytes(double size) {
+    if (isnan(size) || isinf(size) || size < 0) {
+        tsc_panic("crypto.randomBytes size must be a non-negative finite number");
     }
+    tsc_buffer_t* out = tsc_buffer_alloc(size, 0);
+    if (out->len == 0) return out;
+    if (RAND_bytes(out->data, (int)out->len) != 1) {
+        for (size_t i = 0; i < out->len; i++) {
+            out->data[i] = (uint8_t)(rand() & 0xff);
+        }
+    }
+    return out;
+}
+
+tsc_str_t* tsc_crypto_random_uuid(void) {
+    tsc_buffer_t* bytes = tsc_crypto_random_bytes(16.0);
+    bytes->data[6] = (uint8_t)((bytes->data[6] & 0x0fu) | 0x40u);
+    bytes->data[8] = (uint8_t)((bytes->data[8] & 0x3fu) | 0x80u);
+    static const char hex[] = "0123456789abcdef";
+    tsc_str_t* out = str_alloc(36);
+    char* p = (char*)out->data;
+    size_t pos = 0;
+    for (size_t i = 0; i < 16; i++) {
+        if (i == 4 || i == 6 || i == 8 || i == 10) p[pos++] = '-';
+        p[pos++] = hex[bytes->data[i] >> 4];
+        p[pos++] = hex[bytes->data[i] & 0x0f];
+    }
+    return out;
+}
+
+static void hash_update_bytes(tsc_hash_t* h, const void* data, size_t len) {
+    if (h->finalized) return;
+    switch (h->algorithm) {
+        case TSC_HASH_SHA1:
+            SHA1_Update(&h->ctx.sha1, data, len);
+            return;
+        case TSC_HASH_SHA256:
+            SHA256_Update(&h->ctx.sha256, data, len);
+            return;
+        case TSC_HASH_SHA512:
+            SHA512_Update(&h->ctx.sha512, data, len);
+            return;
+    }
+}
+
+tsc_hash_t* tsc_hash_update(tsc_hash_t* h, const tsc_str_t* data) {
+    hash_update_bytes(h, data->data, data->len);
+    return h;
+}
+
+tsc_hash_t* tsc_hash_update_buffer(tsc_hash_t* h, const tsc_buffer_t* data) {
+    if (data) hash_update_bytes(h, data->data, data->len);
     return h;
 }
 
 tsc_str_t* tsc_hash_digest(tsc_hash_t* h, const tsc_str_t* encoding) {
-    if (!str_lit_eq(encoding, "hex")) {
-        tsc_panic("Hash.digest: only hex encoding is supported");
+    bool use_hex = str_lit_eq(encoding, "hex");
+    bool use_base64 = str_lit_eq(encoding, "base64");
+    if (!use_hex && !use_base64) {
+        tsc_panic("Hash.digest: only hex and base64 encodings are supported");
     }
     if (!h->finalized) {
-        SHA256_Final(h->digest, &h->ctx);
+        switch (h->algorithm) {
+            case TSC_HASH_SHA1:
+                SHA1_Final(h->digest, &h->ctx.sha1);
+                break;
+            case TSC_HASH_SHA256:
+                SHA256_Final(h->digest, &h->ctx.sha256);
+                break;
+            case TSC_HASH_SHA512:
+                SHA512_Final(h->digest, &h->ctx.sha512);
+                break;
+        }
         h->finalized = true;
     }
+    if (use_base64) {
+        return str_from_base64_bytes(h->digest, h->digest_len);
+    }
     static const char hex[] = "0123456789abcdef";
-    tsc_str_t* out = str_alloc(SHA256_DIGEST_LENGTH * 2);
+    tsc_str_t* out = str_alloc(h->digest_len * 2);
     char* p = (char*)out->data;
-    for (size_t i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+    for (size_t i = 0; i < h->digest_len; i++) {
         p[i * 2] = hex[h->digest[i] >> 4];
         p[i * 2 + 1] = hex[h->digest[i] & 0x0f];
     }
     return out;
+}
+
+tsc_buffer_t* tsc_child_process_exec_sync(const tsc_str_t* command, const tsc_str_t* cwd, const tsc_str_t* input, const tsc_array_t* env, const tsc_str_t* shell, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal) {
+    if (!command) tsc_panic("child_process.execSync command required");
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_str_t*), 2);
+    tsc_str_t* flag = tsc_str_from_lit("-c", 2);
+    tsc_str_t* cmd = (tsc_str_t*)command;
+    tsc_array_push_raw(args, &flag);
+    tsc_array_push_raw(args, &cmd);
+    return tsc_child_process_exec_file_sync(shell ? shell : tsc_str_from_lit("/bin/sh", 7), args, cwd, input, env, NULL, NULL, uid, gid, max_buffer, timeout_ms, timeout_signal);
+}
+
+static tsc_array_t* child_shell_args(const tsc_str_t* command, const tsc_array_t* args);
+static void child_capture_append(uint8_t** data, size_t* len, size_t* cap, const uint8_t* chunk, size_t n);
+static void child_capture_append_limited(uint8_t** data, size_t* len, size_t* cap, const uint8_t* chunk, size_t n, size_t max_len, bool* exceeded);
+
+static double child_now_millis(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return 0.0;
+    return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1000000.0;
+}
+
+static void child_apply_env(const tsc_array_t* env) {
+    if (!env) return;
+    for (size_t i = 0; i < env->len; i++) {
+        tsc_str_t* pair = TSC_ARR(tsc_str_t*, env, i);
+        if (!pair) continue;
+        char* raw = cstr_dup(pair);
+        (void)putenv(raw);
+    }
+}
+
+static bool child_has_id_option(double value) {
+    return !isnan(value) && !isinf(value) && value >= 0.0;
+}
+
+static int child_apply_ids(double uid, double gid) {
+    if (child_has_id_option(gid) && setgid((gid_t)gid) != 0) return errno;
+    if (child_has_id_option(uid) && setuid((uid_t)uid) != 0) return errno;
+    return 0;
+}
+
+static size_t child_max_buffer_limit(double max_buffer) {
+    if (isnan(max_buffer) || isinf(max_buffer) || max_buffer < 0.0) return SIZE_MAX;
+    if (max_buffer >= (double)SIZE_MAX) return SIZE_MAX;
+    return (size_t)floor(max_buffer);
+}
+
+tsc_buffer_t* tsc_child_process_exec_file_sync(const tsc_str_t* file, const tsc_array_t* args, const tsc_str_t* cwd, const tsc_str_t* input, const tsc_array_t* env, const tsc_str_t* shell, const tsc_str_t* argv0, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal) {
+    if (!file) tsc_panic("child_process.execFileSync file required");
+    const tsc_str_t* actual_file = file;
+    const tsc_array_t* actual_args = args;
+    if (shell) {
+        actual_file = shell;
+        actual_args = child_shell_args(file, args);
+    }
+    int out_pipe[2];
+    int err_pipe[2];
+    int in_pipe[2] = { -1, -1 };
+    if (pipe(out_pipe) != 0) tsc_panic("child_process.execFileSync pipe failed");
+    if (pipe(err_pipe) != 0) {
+        close(out_pipe[0]);
+        close(out_pipe[1]);
+        tsc_panic("child_process.execFileSync stderr pipe failed");
+    }
+    if (input && pipe(in_pipe) != 0) {
+        close(out_pipe[0]);
+        close(out_pipe[1]);
+        close(err_pipe[0]);
+        close(err_pipe[1]);
+        tsc_panic("child_process.execFileSync stdin pipe failed");
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        close(out_pipe[0]);
+        close(out_pipe[1]);
+        close(err_pipe[0]);
+        close(err_pipe[1]);
+        if (input) {
+            close(in_pipe[0]);
+            close(in_pipe[1]);
+        }
+        tsc_panic("child_process.execFileSync fork failed");
+    }
+    if (pid == 0) {
+        close(out_pipe[0]);
+        close(err_pipe[0]);
+        if (input) close(in_pipe[1]);
+        if (dup2(out_pipe[1], STDOUT_FILENO) < 0) _exit(127);
+        if (dup2(err_pipe[1], STDERR_FILENO) < 0) _exit(127);
+        if (input && dup2(in_pipe[0], STDIN_FILENO) < 0) _exit(127);
+        close(out_pipe[1]);
+        close(err_pipe[1]);
+        if (input) close(in_pipe[0]);
+        if (cwd) {
+            char* cwd_cstr = cstr_dup(cwd);
+            if (chdir(cwd_cstr) != 0) _exit(127);
+            free(cwd_cstr);
+        }
+        child_apply_env(env);
+        if (child_apply_ids(uid, gid) != 0) _exit(127);
+
+        size_t argc = 1 + (actual_args ? actual_args->len : 0);
+        char** argv = (char**)calloc(argc + 1, sizeof(char*));
+        if (!argv) _exit(127);
+        argv[0] = cstr_dup(argv0 ? argv0 : actual_file);
+        for (size_t i = 1; i < argc; i++) {
+            tsc_str_t* arg = TSC_ARR(tsc_str_t*, actual_args, i - 1);
+            argv[i] = cstr_dup(arg ? arg : tsc_str_from_lit("", 0));
+        }
+        argv[argc] = NULL;
+        char* exec_file = cstr_dup(actual_file);
+        execvp(exec_file, argv);
+        _exit(127);
+    }
+
+    close(out_pipe[1]);
+    close(err_pipe[1]);
+    if (input) {
+        close(in_pipe[0]);
+        size_t written = 0;
+        while (written < input->len) {
+            ssize_t n = write(in_pipe[1], input->data + written, input->len - written);
+            if (n > 0) {
+                written += (size_t)n;
+            } else if (n < 0 && errno == EINTR) {
+                continue;
+            } else {
+                break;
+            }
+        }
+        close(in_pipe[1]);
+    }
+
+    size_t len = 0;
+    size_t cap = 256;
+    size_t stderr_len = 0;
+    size_t stderr_cap = 256;
+    uint8_t* data = (uint8_t*)malloc(cap);
+    uint8_t* stderr_data = (uint8_t*)malloc(stderr_cap);
+    if (!data || !stderr_data) tsc_panic("child_process.execFileSync out of memory");
+
+    struct pollfd fds[2];
+    fds[0].fd = out_pipe[0];
+    fds[0].events = POLLIN;
+    fds[1].fd = err_pipe[0];
+    fds[1].events = POLLIN;
+    int open_fds = 2;
+    bool timed_out = false;
+    bool max_buffer_exceeded = false;
+    bool killed_for_max_buffer = false;
+    size_t max_buffer_len = child_max_buffer_limit(max_buffer);
+    int kill_signal = timeout_signal > 0 ? timeout_signal : SIGTERM;
+    double deadline = (!isnan(timeout_ms) && !isinf(timeout_ms) && timeout_ms >= 0.0)
+        ? child_now_millis() + timeout_ms
+        : -1.0;
+    while (open_fds > 0) {
+        int poll_timeout = -1;
+        if (!timed_out && deadline >= 0.0) {
+            double remaining = deadline - child_now_millis();
+            if (remaining <= 0.0) {
+                (void)kill(pid, kill_signal);
+                timed_out = true;
+            } else if (remaining > (double)INT_MAX) {
+                poll_timeout = INT_MAX;
+            } else {
+                poll_timeout = (int)ceil(remaining);
+                if (poll_timeout < 1) poll_timeout = 1;
+            }
+        }
+        int rc = poll(fds, 2, poll_timeout);
+        if (rc < 0) {
+            if (errno == EINTR) continue;
+            free(data);
+            free(stderr_data);
+            tsc_panic("child_process.execFileSync poll failed");
+        }
+        if (rc == 0 && !timed_out && deadline >= 0.0) {
+            (void)kill(pid, kill_signal);
+            timed_out = true;
+            continue;
+        }
+        for (int i = 0; i < 2; i++) {
+            if (fds[i].fd < 0) continue;
+            if ((fds[i].revents & (POLLIN | POLLHUP | POLLERR)) == 0) continue;
+            uint8_t chunk[256];
+            ssize_t n = read(fds[i].fd, chunk, sizeof(chunk));
+            if (n > 0) {
+                if (i == 0) {
+                    child_capture_append_limited(&data, &len, &cap, chunk, (size_t)n, max_buffer_len, &max_buffer_exceeded);
+                } else {
+                    child_capture_append_limited(&stderr_data, &stderr_len, &stderr_cap, chunk, (size_t)n, max_buffer_len, &max_buffer_exceeded);
+                }
+                if (max_buffer_exceeded && !killed_for_max_buffer && !timed_out) {
+                    (void)kill(pid, SIGTERM);
+                    killed_for_max_buffer = true;
+                }
+            } else if (n == 0) {
+                close(fds[i].fd);
+                fds[i].fd = -1;
+                open_fds--;
+            } else if (errno != EINTR) {
+                free(data);
+                free(stderr_data);
+                tsc_panic("child_process.execFileSync failed while reading output");
+            }
+        }
+    }
+
+    int status = 0;
+    while (waitpid(pid, &status, 0) < 0) {
+        if (errno != EINTR) {
+            free(data);
+            free(stderr_data);
+            tsc_panic("child_process.execFileSync wait failed");
+        }
+    }
+    if (timed_out) {
+        free(data);
+        free(stderr_data);
+        tsc_panic("child_process.execFileSync command timed out");
+    }
+    if (max_buffer_exceeded) {
+        free(data);
+        free(stderr_data);
+        tsc_panic("child_process.execFileSync maxBuffer exceeded");
+    }
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        free(data);
+        free(stderr_data);
+        tsc_panic("child_process.execFileSync command failed");
+    }
+
+    tsc_buffer_t* out = tsc_buffer_alloc((double)len, 0);
+    if (len > 0) memcpy(out->data, data, len);
+    free(data);
+    free(stderr_data);
+    return out;
+}
+
+static void child_capture_append(uint8_t** data, size_t* len, size_t* cap, const uint8_t* chunk, size_t n) {
+    if (*len + n > *cap) {
+        while (*len + n > *cap) *cap *= 2;
+        *data = (uint8_t*)realloc(*data, *cap);
+        if (!*data) tsc_panic("child_process.spawnSync out of memory");
+    }
+    memcpy(*data + *len, chunk, n);
+    *len += n;
+}
+
+static void child_capture_append_limited(uint8_t** data, size_t* len, size_t* cap, const uint8_t* chunk, size_t n, size_t max_len, bool* exceeded) {
+    size_t remaining = *len < max_len ? max_len - *len : 0;
+    size_t take = n < remaining ? n : remaining;
+    if (take > 0) child_capture_append(data, len, cap, chunk, take);
+    if (take < n) *exceeded = true;
+}
+
+static tsc_str_t* child_capture_string(const uint8_t* data, size_t len) {
+    tsc_str_t* out = str_alloc(len);
+    if (len > 0) memcpy((char*)out->data, data, len);
+    return out;
+}
+
+static tsc_str_t* child_signal_name(int sig) {
+    switch (sig) {
+#ifdef SIGHUP
+        case SIGHUP: return tsc_str_from_lit("SIGHUP", 6);
+#endif
+#ifdef SIGINT
+        case SIGINT: return tsc_str_from_lit("SIGINT", 6);
+#endif
+#ifdef SIGQUIT
+        case SIGQUIT: return tsc_str_from_lit("SIGQUIT", 7);
+#endif
+#ifdef SIGILL
+        case SIGILL: return tsc_str_from_lit("SIGILL", 6);
+#endif
+#ifdef SIGTRAP
+        case SIGTRAP: return tsc_str_from_lit("SIGTRAP", 7);
+#endif
+#ifdef SIGABRT
+        case SIGABRT: return tsc_str_from_lit("SIGABRT", 7);
+#endif
+#ifdef SIGBUS
+        case SIGBUS: return tsc_str_from_lit("SIGBUS", 6);
+#endif
+#ifdef SIGFPE
+        case SIGFPE: return tsc_str_from_lit("SIGFPE", 6);
+#endif
+#ifdef SIGKILL
+        case SIGKILL: return tsc_str_from_lit("SIGKILL", 7);
+#endif
+#ifdef SIGUSR1
+        case SIGUSR1: return tsc_str_from_lit("SIGUSR1", 7);
+#endif
+#ifdef SIGSEGV
+        case SIGSEGV: return tsc_str_from_lit("SIGSEGV", 7);
+#endif
+#ifdef SIGUSR2
+        case SIGUSR2: return tsc_str_from_lit("SIGUSR2", 7);
+#endif
+#ifdef SIGPIPE
+        case SIGPIPE: return tsc_str_from_lit("SIGPIPE", 7);
+#endif
+#ifdef SIGALRM
+        case SIGALRM: return tsc_str_from_lit("SIGALRM", 7);
+#endif
+#ifdef SIGTERM
+        case SIGTERM: return tsc_str_from_lit("SIGTERM", 7);
+#endif
+        default: return tsc_str_from_lit("SIGUNKNOWN", 10);
+    }
+}
+
+static tsc_str_t* child_errno_name(int err) {
+    switch (err) {
+#ifdef EACCES
+        case EACCES: return tsc_str_from_lit("EACCES", 6);
+#endif
+#ifdef ELOOP
+        case ELOOP: return tsc_str_from_lit("ELOOP", 5);
+#endif
+#ifdef ENAMETOOLONG
+        case ENAMETOOLONG: return tsc_str_from_lit("ENAMETOOLONG", 12);
+#endif
+#ifdef ENOENT
+        case ENOENT: return tsc_str_from_lit("ENOENT", 6);
+#endif
+#ifdef ENOEXEC
+        case ENOEXEC: return tsc_str_from_lit("ENOEXEC", 7);
+#endif
+#ifdef ENOMEM
+        case ENOMEM: return tsc_str_from_lit("ENOMEM", 6);
+#endif
+#ifdef ENOTDIR
+        case ENOTDIR: return tsc_str_from_lit("ENOTDIR", 7);
+#endif
+        default: return tsc_str_from_lit("EUNKNOWN", 8);
+    }
+}
+
+static tsc_str_t* child_shell_quote_arg(const tsc_str_t* arg) {
+    if (!arg) return tsc_str_from_lit("''", 2);
+    size_t extra = 2;
+    for (size_t i = 0; i < arg->len; i++) {
+        extra += arg->data[i] == '\'' ? 4 : 1;
+    }
+    tsc_str_t* out = str_alloc(extra);
+    char* p = (char*)out->data;
+    size_t pos = 0;
+    p[pos++] = '\'';
+    for (size_t i = 0; i < arg->len; i++) {
+        if (arg->data[i] == '\'') {
+            p[pos++] = '\'';
+            p[pos++] = '\\';
+            p[pos++] = '\'';
+            p[pos++] = '\'';
+        } else {
+            p[pos++] = arg->data[i];
+        }
+    }
+    p[pos++] = '\'';
+    return out;
+}
+
+static tsc_array_t* child_shell_args(const tsc_str_t* command, const tsc_array_t* args) {
+    tsc_str_t* joined = (tsc_str_t*)command;
+    if (!joined) joined = tsc_str_from_lit("", 0);
+    for (size_t i = 0; args && i < args->len; i++) {
+        tsc_str_t* arg = TSC_ARR(tsc_str_t*, args, i);
+        joined = tsc_str_concat_n(3, joined, tsc_str_from_lit(" ", 1), child_shell_quote_arg(arg));
+    }
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_str_t*), 2);
+    tsc_str_t* flag = tsc_str_from_lit("-c", 2);
+    tsc_array_push_raw(out, &flag);
+    tsc_array_push_raw(out, &joined);
+    return out;
+}
+
+tsc_value_t tsc_child_process_spawn_sync(const tsc_str_t* file, const tsc_array_t* args, const tsc_str_t* cwd, const tsc_str_t* input, const tsc_array_t* env, const tsc_str_t* shell, const tsc_str_t* argv0, bool pipe_stdin, bool ignore_stdin, bool capture_stdout, bool capture_stderr, bool inherit_stdout, bool inherit_stderr, bool detached, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal) {
+    if (!file) tsc_panic("child_process.spawnSync file required");
+    const tsc_str_t* actual_file = file;
+    const tsc_array_t* actual_args = args;
+    if (shell) {
+        actual_file = shell;
+        actual_args = child_shell_args(file, args);
+    }
+    int out_pipe[2];
+    int err_pipe[2];
+    int exec_err_pipe[2];
+    int in_pipe[2] = { -1, -1 };
+    if (pipe(out_pipe) != 0 || pipe(err_pipe) != 0) {
+        tsc_panic("child_process.spawnSync pipe failed");
+    }
+    if (pipe(exec_err_pipe) != 0) {
+        close(out_pipe[0]);
+        close(out_pipe[1]);
+        close(err_pipe[0]);
+        close(err_pipe[1]);
+        tsc_panic("child_process.spawnSync exec-error pipe failed");
+    }
+    int flags = fcntl(exec_err_pipe[1], F_GETFD);
+    if (flags >= 0) (void)fcntl(exec_err_pipe[1], F_SETFD, flags | FD_CLOEXEC);
+    if (pipe_stdin && pipe(in_pipe) != 0) {
+        close(exec_err_pipe[0]);
+        close(exec_err_pipe[1]);
+        tsc_panic("child_process.spawnSync stdin pipe failed");
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        close(out_pipe[0]);
+        close(out_pipe[1]);
+        close(err_pipe[0]);
+        close(err_pipe[1]);
+        close(exec_err_pipe[0]);
+        close(exec_err_pipe[1]);
+        if (pipe_stdin) {
+            close(in_pipe[0]);
+            close(in_pipe[1]);
+        }
+        tsc_panic("child_process.spawnSync fork failed");
+    }
+    if (pid == 0) {
+        close(out_pipe[0]);
+        close(err_pipe[0]);
+        close(exec_err_pipe[0]);
+        if (pipe_stdin) close(in_pipe[1]);
+        if (ignore_stdin) {
+            int null_fd = open("/dev/null", O_RDONLY);
+            if (null_fd < 0) _exit(127);
+            if (dup2(null_fd, STDIN_FILENO) < 0) _exit(127);
+            close(null_fd);
+        }
+        if (!inherit_stdout && dup2(out_pipe[1], STDOUT_FILENO) < 0) _exit(127);
+        if (!inherit_stderr && dup2(err_pipe[1], STDERR_FILENO) < 0) _exit(127);
+        if (pipe_stdin && dup2(in_pipe[0], STDIN_FILENO) < 0) _exit(127);
+        close(out_pipe[1]);
+        close(err_pipe[1]);
+        if (pipe_stdin) close(in_pipe[0]);
+        if (detached && setsid() < 0) {
+            int err = errno;
+            (void)write(exec_err_pipe[1], &err, sizeof(err));
+            _exit(127);
+        }
+        if (cwd) {
+            char* cwd_cstr = cstr_dup(cwd);
+            if (chdir(cwd_cstr) != 0) {
+                int err = errno;
+                (void)write(exec_err_pipe[1], &err, sizeof(err));
+                _exit(127);
+            }
+            free(cwd_cstr);
+        }
+        child_apply_env(env);
+        int id_err = child_apply_ids(uid, gid);
+        if (id_err != 0) {
+            (void)write(exec_err_pipe[1], &id_err, sizeof(id_err));
+            _exit(127);
+        }
+
+        size_t argc = 1 + (actual_args ? actual_args->len : 0);
+        char** argv = (char**)calloc(argc + 1, sizeof(char*));
+        if (!argv) _exit(127);
+        argv[0] = cstr_dup(argv0 ? argv0 : actual_file);
+        for (size_t i = 1; i < argc; i++) {
+            tsc_str_t* arg = TSC_ARR(tsc_str_t*, actual_args, i - 1);
+            argv[i] = cstr_dup(arg ? arg : tsc_str_from_lit("", 0));
+        }
+        argv[argc] = NULL;
+        char* exec_file = cstr_dup(actual_file);
+        execvp(exec_file, argv);
+        int err = errno;
+        (void)write(exec_err_pipe[1], &err, sizeof(err));
+        _exit(127);
+    }
+
+    close(out_pipe[1]);
+    close(err_pipe[1]);
+    close(exec_err_pipe[1]);
+    if (pipe_stdin) {
+        close(in_pipe[0]);
+        size_t written = 0;
+        while (input && written < input->len) {
+            ssize_t n = write(in_pipe[1], input->data + written, input->len - written);
+            if (n > 0) {
+                written += (size_t)n;
+            } else if (n < 0 && errno == EINTR) {
+                continue;
+            } else {
+                break;
+            }
+        }
+        close(in_pipe[1]);
+    }
+    size_t stdout_len = 0;
+    size_t stderr_len = 0;
+    size_t stdout_cap = 256;
+    size_t stderr_cap = 256;
+    uint8_t* stdout_data = (uint8_t*)malloc(stdout_cap);
+    uint8_t* stderr_data = (uint8_t*)malloc(stderr_cap);
+    if (!stdout_data || !stderr_data) tsc_panic("child_process.spawnSync out of memory");
+
+    struct pollfd fds[2];
+    fds[0].fd = out_pipe[0];
+    fds[0].events = POLLIN;
+    fds[1].fd = err_pipe[0];
+    fds[1].events = POLLIN;
+    int open_fds = 2;
+    bool timed_out = false;
+    bool max_buffer_exceeded = false;
+    bool killed_for_max_buffer = false;
+    size_t max_buffer_len = child_max_buffer_limit(max_buffer);
+    int kill_signal = timeout_signal > 0 ? timeout_signal : SIGTERM;
+    double deadline = (!isnan(timeout_ms) && !isinf(timeout_ms) && timeout_ms >= 0.0)
+        ? child_now_millis() + timeout_ms
+        : -1.0;
+    while (open_fds > 0) {
+        int poll_timeout = -1;
+        if (!timed_out && deadline >= 0.0) {
+            double remaining = deadline - child_now_millis();
+            if (remaining <= 0.0) {
+                (void)kill(pid, kill_signal);
+                timed_out = true;
+            } else if (remaining > (double)INT_MAX) {
+                poll_timeout = INT_MAX;
+            } else {
+                poll_timeout = (int)ceil(remaining);
+                if (poll_timeout < 1) poll_timeout = 1;
+            }
+        }
+        int rc = poll(fds, 2, poll_timeout);
+        if (rc < 0) {
+            if (errno == EINTR) continue;
+            free(stdout_data);
+            free(stderr_data);
+            tsc_panic("child_process.spawnSync poll failed");
+        }
+        if (rc == 0 && !timed_out && deadline >= 0.0) {
+            (void)kill(pid, kill_signal);
+            timed_out = true;
+            continue;
+        }
+        for (int i = 0; i < 2; i++) {
+            if (fds[i].fd < 0) continue;
+            if ((fds[i].revents & (POLLIN | POLLHUP | POLLERR)) == 0) continue;
+            uint8_t chunk[256];
+            ssize_t n = read(fds[i].fd, chunk, sizeof(chunk));
+            if (n > 0) {
+                if (i == 0) {
+                    if (capture_stdout) {
+                        child_capture_append_limited(&stdout_data, &stdout_len, &stdout_cap, chunk, (size_t)n, max_buffer_len, &max_buffer_exceeded);
+                    }
+                } else {
+                    if (capture_stderr) {
+                        child_capture_append_limited(&stderr_data, &stderr_len, &stderr_cap, chunk, (size_t)n, max_buffer_len, &max_buffer_exceeded);
+                    }
+                }
+                if (max_buffer_exceeded && !killed_for_max_buffer && !timed_out) {
+                    (void)kill(pid, SIGTERM);
+                    killed_for_max_buffer = true;
+                }
+            } else if (n == 0) {
+                close(fds[i].fd);
+                fds[i].fd = -1;
+                open_fds--;
+            } else if (errno != EINTR) {
+                free(stdout_data);
+                free(stderr_data);
+                tsc_panic("child_process.spawnSync failed while reading output");
+            }
+        }
+    }
+
+    int status = 0;
+    while (waitpid(pid, &status, 0) < 0) {
+        if (errno != EINTR) {
+            free(stdout_data);
+            free(stderr_data);
+            close(exec_err_pipe[0]);
+            tsc_panic("child_process.spawnSync wait failed");
+        }
+    }
+
+    int exec_error = 0;
+    for (;;) {
+        ssize_t n = read(exec_err_pipe[0], &exec_error, sizeof(exec_error));
+        if (n >= 0 || errno != EINTR) break;
+    }
+    close(exec_err_pipe[0]);
+
+    tsc_value_t status_value = (exec_error || timed_out || max_buffer_exceeded)
+        ? tsc_value_null()
+        : (WIFEXITED(status) ? tsc_value_num((double)WEXITSTATUS(status)) : tsc_value_null());
+    tsc_value_t signal_value = (!exec_error && WIFSIGNALED(status))
+        ? tsc_value_string(child_signal_name(WTERMSIG(status)))
+        : tsc_value_null();
+    tsc_value_t error_value = timed_out
+        ? tsc_value_string(tsc_str_from_lit("ETIMEDOUT", 9))
+        : (max_buffer_exceeded
+            ? tsc_value_string(tsc_str_from_lit("ENOBUFS", 7))
+        : (exec_error
+            ? tsc_value_string(child_errno_name(exec_error))
+            : tsc_value_undefined()));
+    tsc_value_t stdin_value = tsc_value_null();
+    tsc_value_t stdout_value = capture_stdout
+        ? tsc_value_string(child_capture_string(stdout_data, stdout_len))
+        : tsc_value_null();
+    tsc_value_t stderr_value = capture_stderr
+        ? tsc_value_string(child_capture_string(stderr_data, stderr_len))
+        : tsc_value_null();
+    tsc_array_t* output = tsc_array_new(sizeof(tsc_value_t), 3);
+    tsc_array_push_raw(output, &stdin_value);
+    tsc_array_push_raw(output, &stdout_value);
+    tsc_array_push_raw(output, &stderr_value);
+
+    tsc_object_t* out = tsc_object_new();
+    tsc_object_set(out, tsc_str_from_lit("status", 6), status_value);
+    tsc_object_set(out, tsc_str_from_lit("stdout", 6), stdout_value);
+    tsc_object_set(out, tsc_str_from_lit("stderr", 6), stderr_value);
+    tsc_object_set(out, tsc_str_from_lit("output", 6), tsc_value_array(output));
+    tsc_object_set(out, tsc_str_from_lit("pid", 3), tsc_value_num((double)pid));
+    tsc_object_set(out, tsc_str_from_lit("signal", 6), signal_value);
+    tsc_object_set(out, tsc_str_from_lit("error", 5), error_value);
+    free(stdout_data);
+    free(stderr_data);
+    return tsc_value_object(out);
+}
+
+tsc_value_t tsc_child_process_exec_utf8(const tsc_str_t* command, const tsc_str_t* cwd, const tsc_array_t* env, const tsc_str_t* shell, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal) {
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_str_t*), 2);
+    tsc_str_t* flag = tsc_str_from_lit("-c", 2);
+    tsc_str_t* cmd = (tsc_str_t*)command;
+    tsc_array_push_raw(args, &flag);
+    tsc_array_push_raw(args, &cmd);
+    return tsc_child_process_spawn_sync(shell ? shell : tsc_str_from_lit("/bin/sh", 7), args, cwd, NULL, env, NULL, NULL, true, false, true, true, false, false, false, uid, gid, max_buffer, timeout_ms, timeout_signal);
 }
 
 /* ---------------- URL ---------------- */
@@ -1810,6 +2693,16 @@ static size_t first_of_url_tail(const char* data, size_t start, size_t end) {
     return end;
 }
 
+bool tsc_url_can_parse(const tsc_str_t* input) {
+    const char* d = input->data;
+    size_t n = input->len;
+    size_t scheme_colon = find_byte(d, 0, n, ':');
+    return scheme_colon != (size_t)-1 &&
+        scheme_colon + 2 < n &&
+        d[scheme_colon + 1] == '/' &&
+        d[scheme_colon + 2] == '/';
+}
+
 tsc_url_t* tsc_url_new(const tsc_str_t* input) {
     const char* d = input->data;
     size_t n = input->len;
@@ -1825,8 +2718,7 @@ tsc_url_t* tsc_url_new(const tsc_str_t* input) {
     u->origin = tsc_str_from_lit("", 0);
 
     size_t scheme_colon = find_byte(d, 0, n, ':');
-    if (scheme_colon == (size_t)-1 || scheme_colon + 2 >= n ||
-        d[scheme_colon + 1] != '/' || d[scheme_colon + 2] != '/') {
+    if (!tsc_url_can_parse(input)) {
         tsc_panic("URL: only absolute URLs with // authority are supported");
     }
     u->protocol = str_from_range(d, 0, scheme_colon + 1);
@@ -2266,6 +3158,14 @@ static int hex_value(unsigned char c) {
     return -1;
 }
 
+static bool buffer_encoding_is_utf8(const tsc_str_t* encoding) {
+    return !encoding || str_lit_eq(encoding, "utf8") || str_lit_eq(encoding, "utf-8");
+}
+
+static bool buffer_encoding_is_base64(const tsc_str_t* encoding) {
+    return str_lit_eq(encoding, "base64");
+}
+
 static size_t buffer_index(double raw, size_t len) {
     int64_t i = (int64_t)raw;
     if (i < 0) i = (int64_t)len + i;
@@ -2274,8 +3174,66 @@ static size_t buffer_index(double raw, size_t len) {
     return (size_t)i;
 }
 
+static int base64_value(unsigned char c) {
+    if (c >= 'A' && c <= 'Z') return (int)(c - 'A');
+    if (c >= 'a' && c <= 'z') return 26 + (int)(c - 'a');
+    if (c >= '0' && c <= '9') return 52 + (int)(c - '0');
+    if (c == '+') return 62;
+    if (c == '/') return 63;
+    return -1;
+}
+
+static void base64_decode_group(tsc_buffer_t* out, size_t* pos, const int* q, int qlen) {
+    if (qlen < 2 || q[0] < 0 || q[1] < 0) return;
+    out->data[(*pos)++] = (uint8_t)(((uint32_t)q[0] << 2) | ((uint32_t)q[1] >> 4));
+    if (qlen >= 3 && q[2] >= 0) {
+        out->data[(*pos)++] = (uint8_t)((((uint32_t)q[1] & 0x0fu) << 4) | ((uint32_t)q[2] >> 2));
+    }
+    if (qlen >= 4 && q[2] >= 0 && q[3] >= 0) {
+        out->data[(*pos)++] = (uint8_t)((((uint32_t)q[2] & 0x03u) << 6) | (uint32_t)q[3]);
+    }
+}
+
+static tsc_buffer_t* buffer_from_base64(const tsc_str_t* input) {
+    tsc_buffer_t* out = buffer_alloc_len((input->len / 4) * 3 + 3);
+    size_t pos = 0;
+    int q[4];
+    int qlen = 0;
+    for (size_t i = 0; i < input->len; i++) {
+        unsigned char ch = (unsigned char)input->data[i];
+        if (isspace(ch)) continue;
+        int v = ch == '=' ? -2 : base64_value(ch);
+        if (v < 0 && v != -2) tsc_panic("Buffer.from base64 input contains non-base64 digit");
+        q[qlen++] = v;
+        if (qlen == 4) {
+            base64_decode_group(out, &pos, q, qlen);
+            qlen = 0;
+        }
+    }
+    if (qlen > 0) base64_decode_group(out, &pos, q, qlen);
+    out->len = pos;
+    return out;
+}
+
+static tsc_str_t* str_from_base64_bytes(const uint8_t* data, size_t len) {
+    static const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    tsc_str_t* out = str_alloc(4 * ((len + 2) / 3));
+    char* p = (char*)out->data;
+    size_t pos = 0;
+    for (size_t i = 0; i < len; i += 3) {
+        uint32_t a = data[i];
+        uint32_t b = i + 1 < len ? data[i + 1] : 0;
+        uint32_t c = i + 2 < len ? data[i + 2] : 0;
+        p[pos++] = alphabet[a >> 2];
+        p[pos++] = alphabet[((a & 0x03u) << 4) | (b >> 4)];
+        p[pos++] = i + 1 < len ? alphabet[((b & 0x0fu) << 2) | (c >> 6)] : '=';
+        p[pos++] = i + 2 < len ? alphabet[c & 0x3fu] : '=';
+    }
+    return out;
+}
+
 tsc_buffer_t* tsc_buffer_from_str(const tsc_str_t* input, const tsc_str_t* encoding) {
-    if (!encoding || str_lit_eq(encoding, "utf8")) {
+    if (buffer_encoding_is_utf8(encoding)) {
         tsc_buffer_t* b = buffer_alloc_len(input->len);
         if (input->len > 0) memcpy(b->data, input->data, input->len);
         return b;
@@ -2291,7 +3249,10 @@ tsc_buffer_t* tsc_buffer_from_str(const tsc_str_t* input, const tsc_str_t* encod
         }
         return b;
     }
-    tsc_panic("Buffer.from: only utf8 and hex encodings are supported");
+    if (buffer_encoding_is_base64(encoding)) {
+        return buffer_from_base64(input);
+    }
+    tsc_panic("Buffer.from: only utf8, hex, and base64 encodings are supported");
     return NULL;
 }
 
@@ -2301,6 +3262,12 @@ tsc_buffer_t* tsc_buffer_from_array(const tsc_array_t* input) {
         double n = TSC_ARR(double, input, i);
         b->data[i] = byte_from_double(n);
     }
+    return b;
+}
+
+tsc_buffer_t* tsc_buffer_from_buffer(const tsc_buffer_t* input) {
+    tsc_buffer_t* b = buffer_alloc_len(input ? input->len : 0);
+    if (input && input->len > 0) memcpy(b->data, input->data, input->len);
     return b;
 }
 
@@ -2332,8 +3299,27 @@ tsc_buffer_t* tsc_buffer_concat(const tsc_array_t* list) {
     return out;
 }
 
+tsc_buffer_t* tsc_buffer_concat_len(const tsc_array_t* list, double total_length) {
+    if (isnan(total_length) || isinf(total_length) || total_length < 0) {
+        tsc_panic("Buffer.concat totalLength must be a non-negative finite number");
+    }
+    size_t total = (size_t)total_length;
+    tsc_buffer_t* out = buffer_alloc_len(total);
+    if (total > 0) memset(out->data, 0, total);
+    size_t pos = 0;
+    for (size_t i = 0; i < list->len && pos < total; i++) {
+        tsc_buffer_t* part = TSC_ARR(tsc_buffer_t*, list, i);
+        if (!part || part->len == 0) continue;
+        size_t n = part->len;
+        if (n > total - pos) n = total - pos;
+        memcpy(out->data + pos, part->data, n);
+        pos += n;
+    }
+    return out;
+}
+
 tsc_str_t* tsc_buffer_to_string(const tsc_buffer_t* b, const tsc_str_t* encoding) {
-    if (!encoding || str_lit_eq(encoding, "utf8")) {
+    if (buffer_encoding_is_utf8(encoding)) {
         tsc_str_t* out = str_alloc(b->len);
         if (b->len > 0) memcpy((char*)out->data, b->data, b->len);
         return out;
@@ -2348,8 +3334,32 @@ tsc_str_t* tsc_buffer_to_string(const tsc_buffer_t* b, const tsc_str_t* encoding
         }
         return out;
     }
-    tsc_panic("Buffer.toString: only utf8 and hex encodings are supported");
+    if (buffer_encoding_is_base64(encoding)) {
+        return str_from_base64_bytes(b->data, b->len);
+    }
+    tsc_panic("Buffer.toString: only utf8, hex, and base64 encodings are supported");
     return NULL;
+}
+
+tsc_value_t tsc_buffer_to_json(const tsc_buffer_t* b) {
+    tsc_object_t* out = tsc_object_new();
+    tsc_array_t* data = tsc_array_new(sizeof(tsc_value_t), b->len);
+    for (size_t i = 0; i < b->len; i++) {
+        tsc_value_t value = tsc_value_num((double)b->data[i]);
+        tsc_array_push_raw(data, &value);
+    }
+    tsc_object_set(out, tsc_str_from_lit("type", 4), tsc_value_string(tsc_str_from_lit("Buffer", 6)));
+    tsc_object_set(out, tsc_str_from_lit("data", 4), tsc_value_array(data));
+    return tsc_value_object(out);
+}
+
+tsc_str_t* tsc_btoa(const tsc_str_t* input) {
+    return str_from_base64_bytes((const uint8_t*)input->data, input->len);
+}
+
+tsc_str_t* tsc_atob(const tsc_str_t* input) {
+    tsc_buffer_t* decoded = buffer_from_base64(input);
+    return tsc_buffer_to_string(decoded, tsc_str_from_lit("utf8", 4));
 }
 
 tsc_buffer_t* tsc_buffer_slice(const tsc_buffer_t* b, double start, double end) {
@@ -2362,10 +3372,152 @@ tsc_buffer_t* tsc_buffer_slice(const tsc_buffer_t* b, double start, double end) 
     return out;
 }
 
+tsc_buffer_t* tsc_buffer_fill(tsc_buffer_t* b, double value, double start, double end) {
+    size_t i0 = buffer_index(start, b->len);
+    size_t i1 = buffer_index(end, b->len);
+    if (i0 > i1) i0 = i1;
+    if (i1 > i0) memset(b->data + i0, byte_from_double(value), i1 - i0);
+    return b;
+}
+
+double tsc_buffer_write(tsc_buffer_t* b, const tsc_str_t* input, double offset, double length, const tsc_str_t* encoding) {
+    size_t start = buffer_index(offset, b->len);
+    if (start >= b->len) return 0.0;
+    size_t max = b->len - start;
+    if (!isnan(length)) {
+        if (isinf(length) || length <= 0) return 0.0;
+        size_t requested = (size_t)length;
+        if (requested < max) max = requested;
+    }
+    tsc_buffer_t* source = tsc_buffer_from_str(input, encoding);
+    size_t n = source->len < max ? source->len : max;
+    if (n > 0) memcpy(b->data + start, source->data, n);
+    return (double)n;
+}
+
+double tsc_buffer_copy(const tsc_buffer_t* source, tsc_buffer_t* target, double target_start, double source_start, double source_end) {
+    size_t t0 = buffer_index(target_start, target->len);
+    size_t s0 = buffer_index(source_start, source->len);
+    size_t s1 = buffer_index(source_end, source->len);
+    if (s0 > s1) s0 = s1;
+    size_t n = s1 - s0;
+    if (n > target->len - t0) n = target->len - t0;
+    if (n > 0) memmove(target->data + t0, source->data + s0, n);
+    return (double)n;
+}
+
+double tsc_buffer_index_of_byte(const tsc_buffer_t* b, double value, double offset) {
+    int64_t start = (int64_t)offset;
+    if (start < 0) start = (int64_t)b->len + start;
+    if (start < 0) start = 0;
+    if ((size_t)start >= b->len) return -1.0;
+    uint8_t needle = byte_from_double(value);
+    for (size_t i = (size_t)start; i < b->len; i++) {
+        if (b->data[i] == needle) return (double)i;
+    }
+    return -1.0;
+}
+
+double tsc_buffer_last_index_of_byte(const tsc_buffer_t* b, double value, double offset) {
+    if (b->len == 0) return -1.0;
+    int64_t start;
+    if (isnan(offset)) {
+        start = (int64_t)b->len - 1;
+    } else {
+        start = (int64_t)offset;
+        if (start < 0) start = (int64_t)b->len + start;
+        if (start >= (int64_t)b->len) start = (int64_t)b->len - 1;
+    }
+    if (start < 0) return -1.0;
+    uint8_t needle = byte_from_double(value);
+    for (int64_t i = start; i >= 0; i--) {
+        if (b->data[i] == needle) return (double)i;
+    }
+    return -1.0;
+}
+
+static double buffer_index_of_bytes(const tsc_buffer_t* b, const uint8_t* needle, size_t needle_len, double offset) {
+    int64_t start = (int64_t)offset;
+    if (start < 0) start = (int64_t)b->len + start;
+    if (start < 0) start = 0;
+    if ((size_t)start > b->len) start = (int64_t)b->len;
+    if (needle_len == 0) return (double)start;
+    if (needle_len > b->len || (size_t)start > b->len - needle_len) return -1.0;
+    for (size_t i = (size_t)start; i <= b->len - needle_len; i++) {
+        if (memcmp(b->data + i, needle, needle_len) == 0) return (double)i;
+    }
+    return -1.0;
+}
+
+static double buffer_last_index_of_bytes(const tsc_buffer_t* b, const uint8_t* needle, size_t needle_len, double offset) {
+    int64_t start;
+    if (isnan(offset)) {
+        start = (int64_t)b->len;
+    } else {
+        start = (int64_t)offset;
+        if (start < 0) start = (int64_t)b->len + start;
+    }
+    if (start < 0) return -1.0;
+    if (needle_len == 0) {
+        if (start > (int64_t)b->len) start = (int64_t)b->len;
+        return (double)start;
+    }
+    if (needle_len > b->len) return -1.0;
+    int64_t max_start = (int64_t)(b->len - needle_len);
+    if (start > max_start) start = max_start;
+    for (int64_t i = start; i >= 0; i--) {
+        if (memcmp(b->data + i, needle, needle_len) == 0) return (double)i;
+    }
+    return -1.0;
+}
+
+double tsc_buffer_index_of_str(const tsc_buffer_t* b, const tsc_str_t* value, double offset) {
+    return buffer_index_of_bytes(b, (const uint8_t*)value->data, value->len, offset);
+}
+
+double tsc_buffer_last_index_of_str(const tsc_buffer_t* b, const tsc_str_t* value, double offset) {
+    return buffer_last_index_of_bytes(b, (const uint8_t*)value->data, value->len, offset);
+}
+
+double tsc_buffer_index_of_buffer(const tsc_buffer_t* b, const tsc_buffer_t* value, double offset) {
+    if (!value) return -1.0;
+    return buffer_index_of_bytes(b, value->data, value->len, offset);
+}
+
+double tsc_buffer_last_index_of_buffer(const tsc_buffer_t* b, const tsc_buffer_t* value, double offset) {
+    if (!value) return -1.0;
+    return buffer_last_index_of_bytes(b, value->data, value->len, offset);
+}
+
 bool tsc_buffer_equals(const tsc_buffer_t* a, const tsc_buffer_t* b) {
     if (a == b) return true;
     if (!a || !b || a->len != b->len) return false;
     return a->len == 0 || memcmp(a->data, b->data, a->len) == 0;
+}
+
+double tsc_buffer_compare(const tsc_buffer_t* a, const tsc_buffer_t* b) {
+    if (a == b) return 0.0;
+    if (!a) return b && b->len > 0 ? -1.0 : 0.0;
+    if (!b) return a->len > 0 ? 1.0 : 0.0;
+    size_t n = a->len < b->len ? a->len : b->len;
+    int cmp = n > 0 ? memcmp(a->data, b->data, n) : 0;
+    if (cmp < 0) return -1.0;
+    if (cmp > 0) return 1.0;
+    if (a->len < b->len) return -1.0;
+    if (a->len > b->len) return 1.0;
+    return 0.0;
+}
+
+double tsc_buffer_byte_length_str(const tsc_str_t* input, const tsc_str_t* encoding) {
+    if (buffer_encoding_is_utf8(encoding)) return (double)input->len;
+    if (str_lit_eq(encoding, "hex")) return floor((double)input->len / 2.0);
+    if (buffer_encoding_is_base64(encoding)) return (double)buffer_from_base64(input)->len;
+    tsc_panic("Buffer.byteLength: only utf8, hex, and base64 encodings are supported");
+    return 0.0;
+}
+
+bool tsc_buffer_is_encoding(const tsc_str_t* encoding) {
+    return buffer_encoding_is_utf8(encoding) || str_lit_eq(encoding, "hex") || buffer_encoding_is_base64(encoding);
 }
 
 double tsc_buffer_length(const tsc_buffer_t* b) { return (double)b->len; }
@@ -2373,6 +3525,302 @@ double tsc_buffer_length(const tsc_buffer_t* b) { return (double)b->len; }
 double tsc_buffer_get(const tsc_buffer_t* b, double idx) {
     if (isnan(idx) || isinf(idx) || idx < 0 || (size_t)idx >= b->len) return NAN;
     return (double)b->data[(size_t)idx];
+}
+
+double tsc_buffer_read_uint8(const tsc_buffer_t* b, double offset) {
+    if (isnan(offset) || isinf(offset) || offset < 0 || (size_t)offset >= b->len) {
+        tsc_panic("Buffer.readUInt8 offset out of range");
+    }
+    return (double)b->data[(size_t)offset];
+}
+
+double tsc_buffer_write_uint8(tsc_buffer_t* b, double value, double offset) {
+    if (isnan(offset) || isinf(offset) || offset < 0 || (size_t)offset >= b->len) {
+        tsc_panic("Buffer.writeUInt8 offset out of range");
+    }
+    size_t i = (size_t)offset;
+    b->data[i] = byte_from_double(value);
+    return (double)(i + 1);
+}
+
+double tsc_buffer_read_int8(const tsc_buffer_t* b, double offset) {
+    if (isnan(offset) || isinf(offset) || offset < 0 || (size_t)offset >= b->len) {
+        tsc_panic("Buffer.readInt8 offset out of range");
+    }
+    uint8_t n = b->data[(size_t)offset];
+    return n >= 0x80u ? (double)n - 256.0 : (double)n;
+}
+
+double tsc_buffer_write_int8(tsc_buffer_t* b, double value, double offset) {
+    if (isnan(offset) || isinf(offset) || offset < 0 || (size_t)offset >= b->len) {
+        tsc_panic("Buffer.writeInt8 offset out of range");
+    }
+    size_t i = (size_t)offset;
+    b->data[i] = byte_from_double(value);
+    return (double)(i + 1);
+}
+
+static size_t buffer_checked_offset(const tsc_buffer_t* b, double offset, size_t width, const char* label) {
+    if (isnan(offset) || isinf(offset) || offset < 0 || (size_t)offset > b->len || width > b->len - (size_t)offset) {
+        tsc_panic(label);
+    }
+    return (size_t)offset;
+}
+
+static uint32_t uint_from_double(double value) {
+    if (isnan(value) || isinf(value) || value <= 0) return 0;
+    return (uint32_t)value;
+}
+
+double tsc_buffer_read_uint16_le(const tsc_buffer_t* b, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 2, "Buffer.readUInt16LE offset out of range");
+    return (double)((uint16_t)b->data[i] | ((uint16_t)b->data[i + 1] << 8));
+}
+
+double tsc_buffer_read_uint16_be(const tsc_buffer_t* b, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 2, "Buffer.readUInt16BE offset out of range");
+    return (double)(((uint16_t)b->data[i] << 8) | (uint16_t)b->data[i + 1]);
+}
+
+double tsc_buffer_write_uint16_le(tsc_buffer_t* b, double value, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 2, "Buffer.writeUInt16LE offset out of range");
+    uint32_t n = uint_from_double(value);
+    b->data[i] = (uint8_t)(n & 0xffu);
+    b->data[i + 1] = (uint8_t)((n >> 8) & 0xffu);
+    return (double)(i + 2);
+}
+
+double tsc_buffer_write_uint16_be(tsc_buffer_t* b, double value, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 2, "Buffer.writeUInt16BE offset out of range");
+    uint32_t n = uint_from_double(value);
+    b->data[i] = (uint8_t)((n >> 8) & 0xffu);
+    b->data[i + 1] = (uint8_t)(n & 0xffu);
+    return (double)(i + 2);
+}
+
+double tsc_buffer_read_int16_le(const tsc_buffer_t* b, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 2, "Buffer.readInt16LE offset out of range");
+    uint16_t n = (uint16_t)b->data[i] | ((uint16_t)b->data[i + 1] << 8);
+    return n >= 0x8000u ? (double)n - 65536.0 : (double)n;
+}
+
+double tsc_buffer_read_int16_be(const tsc_buffer_t* b, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 2, "Buffer.readInt16BE offset out of range");
+    uint16_t n = ((uint16_t)b->data[i] << 8) | (uint16_t)b->data[i + 1];
+    return n >= 0x8000u ? (double)n - 65536.0 : (double)n;
+}
+
+double tsc_buffer_write_int16_le(tsc_buffer_t* b, double value, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 2, "Buffer.writeInt16LE offset out of range");
+    uint16_t n = (uint16_t)(int32_t)((isnan(value) || isinf(value)) ? 0 : value);
+    b->data[i] = (uint8_t)(n & 0xffu);
+    b->data[i + 1] = (uint8_t)((n >> 8) & 0xffu);
+    return (double)(i + 2);
+}
+
+double tsc_buffer_write_int16_be(tsc_buffer_t* b, double value, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 2, "Buffer.writeInt16BE offset out of range");
+    uint16_t n = (uint16_t)(int32_t)((isnan(value) || isinf(value)) ? 0 : value);
+    b->data[i] = (uint8_t)((n >> 8) & 0xffu);
+    b->data[i + 1] = (uint8_t)(n & 0xffu);
+    return (double)(i + 2);
+}
+
+double tsc_buffer_read_uint32_le(const tsc_buffer_t* b, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 4, "Buffer.readUInt32LE offset out of range");
+    uint32_t n = (uint32_t)b->data[i] |
+        ((uint32_t)b->data[i + 1] << 8) |
+        ((uint32_t)b->data[i + 2] << 16) |
+        ((uint32_t)b->data[i + 3] << 24);
+    return (double)n;
+}
+
+double tsc_buffer_read_uint32_be(const tsc_buffer_t* b, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 4, "Buffer.readUInt32BE offset out of range");
+    uint32_t n = ((uint32_t)b->data[i] << 24) |
+        ((uint32_t)b->data[i + 1] << 16) |
+        ((uint32_t)b->data[i + 2] << 8) |
+        (uint32_t)b->data[i + 3];
+    return (double)n;
+}
+
+double tsc_buffer_write_uint32_le(tsc_buffer_t* b, double value, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 4, "Buffer.writeUInt32LE offset out of range");
+    uint32_t n = uint_from_double(value);
+    b->data[i] = (uint8_t)(n & 0xffu);
+    b->data[i + 1] = (uint8_t)((n >> 8) & 0xffu);
+    b->data[i + 2] = (uint8_t)((n >> 16) & 0xffu);
+    b->data[i + 3] = (uint8_t)((n >> 24) & 0xffu);
+    return (double)(i + 4);
+}
+
+double tsc_buffer_write_uint32_be(tsc_buffer_t* b, double value, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 4, "Buffer.writeUInt32BE offset out of range");
+    uint32_t n = uint_from_double(value);
+    b->data[i] = (uint8_t)((n >> 24) & 0xffu);
+    b->data[i + 1] = (uint8_t)((n >> 16) & 0xffu);
+    b->data[i + 2] = (uint8_t)((n >> 8) & 0xffu);
+    b->data[i + 3] = (uint8_t)(n & 0xffu);
+    return (double)(i + 4);
+}
+
+double tsc_buffer_read_int32_le(const tsc_buffer_t* b, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 4, "Buffer.readInt32LE offset out of range");
+    uint32_t n = (uint32_t)b->data[i] |
+        ((uint32_t)b->data[i + 1] << 8) |
+        ((uint32_t)b->data[i + 2] << 16) |
+        ((uint32_t)b->data[i + 3] << 24);
+    return n >= 0x80000000u ? (double)(uint64_t)n - 4294967296.0 : (double)n;
+}
+
+double tsc_buffer_read_int32_be(const tsc_buffer_t* b, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 4, "Buffer.readInt32BE offset out of range");
+    uint32_t n = ((uint32_t)b->data[i] << 24) |
+        ((uint32_t)b->data[i + 1] << 16) |
+        ((uint32_t)b->data[i + 2] << 8) |
+        (uint32_t)b->data[i + 3];
+    return n >= 0x80000000u ? (double)(uint64_t)n - 4294967296.0 : (double)n;
+}
+
+double tsc_buffer_write_int32_le(tsc_buffer_t* b, double value, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 4, "Buffer.writeInt32LE offset out of range");
+    uint32_t n = (uint32_t)(int32_t)((isnan(value) || isinf(value)) ? 0 : value);
+    b->data[i] = (uint8_t)(n & 0xffu);
+    b->data[i + 1] = (uint8_t)((n >> 8) & 0xffu);
+    b->data[i + 2] = (uint8_t)((n >> 16) & 0xffu);
+    b->data[i + 3] = (uint8_t)((n >> 24) & 0xffu);
+    return (double)(i + 4);
+}
+
+double tsc_buffer_write_int32_be(tsc_buffer_t* b, double value, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 4, "Buffer.writeInt32BE offset out of range");
+    uint32_t n = (uint32_t)(int32_t)((isnan(value) || isinf(value)) ? 0 : value);
+    b->data[i] = (uint8_t)((n >> 24) & 0xffu);
+    b->data[i + 1] = (uint8_t)((n >> 16) & 0xffu);
+    b->data[i + 2] = (uint8_t)((n >> 8) & 0xffu);
+    b->data[i + 3] = (uint8_t)(n & 0xffu);
+    return (double)(i + 4);
+}
+
+static double double_from_float_bits(uint32_t bits) {
+    float value;
+    memcpy(&value, &bits, sizeof value);
+    return (double)value;
+}
+
+static uint32_t float_bits_from_double(double value) {
+    float narrowed = (float)value;
+    uint32_t bits;
+    memcpy(&bits, &narrowed, sizeof bits);
+    return bits;
+}
+
+static double double_from_bits(uint64_t bits) {
+    double value;
+    memcpy(&value, &bits, sizeof value);
+    return value;
+}
+
+static uint64_t double_bits_from_double(double value) {
+    uint64_t bits;
+    memcpy(&bits, &value, sizeof bits);
+    return bits;
+}
+
+double tsc_buffer_read_float_le(const tsc_buffer_t* b, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 4, "Buffer.readFloatLE offset out of range");
+    uint32_t bits = (uint32_t)b->data[i] |
+        ((uint32_t)b->data[i + 1] << 8) |
+        ((uint32_t)b->data[i + 2] << 16) |
+        ((uint32_t)b->data[i + 3] << 24);
+    return double_from_float_bits(bits);
+}
+
+double tsc_buffer_read_float_be(const tsc_buffer_t* b, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 4, "Buffer.readFloatBE offset out of range");
+    uint32_t bits = ((uint32_t)b->data[i] << 24) |
+        ((uint32_t)b->data[i + 1] << 16) |
+        ((uint32_t)b->data[i + 2] << 8) |
+        (uint32_t)b->data[i + 3];
+    return double_from_float_bits(bits);
+}
+
+double tsc_buffer_write_float_le(tsc_buffer_t* b, double value, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 4, "Buffer.writeFloatLE offset out of range");
+    uint32_t bits = float_bits_from_double(value);
+    b->data[i] = (uint8_t)(bits & 0xffu);
+    b->data[i + 1] = (uint8_t)((bits >> 8) & 0xffu);
+    b->data[i + 2] = (uint8_t)((bits >> 16) & 0xffu);
+    b->data[i + 3] = (uint8_t)((bits >> 24) & 0xffu);
+    return (double)(i + 4);
+}
+
+double tsc_buffer_write_float_be(tsc_buffer_t* b, double value, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 4, "Buffer.writeFloatBE offset out of range");
+    uint32_t bits = float_bits_from_double(value);
+    b->data[i] = (uint8_t)((bits >> 24) & 0xffu);
+    b->data[i + 1] = (uint8_t)((bits >> 16) & 0xffu);
+    b->data[i + 2] = (uint8_t)((bits >> 8) & 0xffu);
+    b->data[i + 3] = (uint8_t)(bits & 0xffu);
+    return (double)(i + 4);
+}
+
+double tsc_buffer_read_double_le(const tsc_buffer_t* b, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 8, "Buffer.readDoubleLE offset out of range");
+    uint64_t bits = (uint64_t)b->data[i] |
+        ((uint64_t)b->data[i + 1] << 8) |
+        ((uint64_t)b->data[i + 2] << 16) |
+        ((uint64_t)b->data[i + 3] << 24) |
+        ((uint64_t)b->data[i + 4] << 32) |
+        ((uint64_t)b->data[i + 5] << 40) |
+        ((uint64_t)b->data[i + 6] << 48) |
+        ((uint64_t)b->data[i + 7] << 56);
+    return double_from_bits(bits);
+}
+
+double tsc_buffer_read_double_be(const tsc_buffer_t* b, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 8, "Buffer.readDoubleBE offset out of range");
+    uint64_t bits = ((uint64_t)b->data[i] << 56) |
+        ((uint64_t)b->data[i + 1] << 48) |
+        ((uint64_t)b->data[i + 2] << 40) |
+        ((uint64_t)b->data[i + 3] << 32) |
+        ((uint64_t)b->data[i + 4] << 24) |
+        ((uint64_t)b->data[i + 5] << 16) |
+        ((uint64_t)b->data[i + 6] << 8) |
+        (uint64_t)b->data[i + 7];
+    return double_from_bits(bits);
+}
+
+double tsc_buffer_write_double_le(tsc_buffer_t* b, double value, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 8, "Buffer.writeDoubleLE offset out of range");
+    uint64_t bits = double_bits_from_double(value);
+    for (size_t j = 0; j < 8; j++) {
+        b->data[i + j] = (uint8_t)((bits >> (8 * j)) & 0xffu);
+    }
+    return (double)(i + 8);
+}
+
+double tsc_buffer_write_double_be(tsc_buffer_t* b, double value, double offset) {
+    size_t i = buffer_checked_offset(b, offset, 8, "Buffer.writeDoubleBE offset out of range");
+    uint64_t bits = double_bits_from_double(value);
+    for (size_t j = 0; j < 8; j++) {
+        b->data[i + j] = (uint8_t)((bits >> (8 * (7 - j))) & 0xffu);
+    }
+    return (double)(i + 8);
+}
+
+tsc_buffer_t* tsc_buffer_swap(tsc_buffer_t* b, size_t width) {
+    if (width == 0 || (b->len % width) != 0) {
+        tsc_panic("Buffer.swap length must be a multiple of the element size");
+    }
+    for (size_t i = 0; i < b->len; i += width) {
+        for (size_t j = 0; j < width / 2; j++) {
+            uint8_t tmp = b->data[i + j];
+            b->data[i + j] = b->data[i + width - 1 - j];
+            b->data[i + width - 1 - j] = tmp;
+        }
+    }
+    return b;
 }
 
 /* ---------------- dynamic values (NaN-boxed) ---------------- */
@@ -2409,6 +3857,8 @@ typedef struct tsc_object_prop {
 typedef enum {
     TSC_FUNCTION_IDENTITY_GETTER,
     TSC_FUNCTION_IDENTITY_SETTER,
+    TSC_FUNCTION_IDENTITY_EVENT_LISTENER,
+    TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER,
 } tsc_function_identity_kind_t;
 
 typedef struct tsc_function_identity {
@@ -2416,6 +3866,11 @@ typedef struct tsc_function_identity {
     union {
         tsc_accessor_getter_t getter;
         tsc_accessor_setter_t setter;
+        void* event_identity;
+        struct {
+            void* identity;
+            uint64_t order;
+        } event_raw_identity;
     } code;
     void* env;
     struct tsc_function_identity* next;
@@ -2432,6 +3887,7 @@ struct tsc_object {
 };
 
 typedef enum {
+    TSC_PROMISE_PENDING,
     TSC_PROMISE_FULFILLED,
     TSC_PROMISE_REJECTED,
 } tsc_promise_state_t;
@@ -2456,8 +3912,17 @@ struct tsc_event_emitter {
     size_t cap;
     uint64_t next_order;
     double max_listeners;
+    bool has_own_max_listeners;
     tsc_event_listener_t* listeners;
 };
+
+static double g_event_emitter_default_max_listeners = 10.0;
+
+typedef struct tsc_event_once_promise_env {
+    tsc_event_emitter_t* emitter;
+    tsc_str_t* event;
+    tsc_promise_t* promise;
+} tsc_event_once_promise_env_t;
 
 static tsc_value_t value_box(tsc_value_tag_t tag, uintptr_t payload) {
     return TSC_VALUE_BOX_MASK | ((uint64_t)payload & TSC_VALUE_PAYLOAD_MASK) | (uint64_t)tag;
@@ -2501,6 +3966,44 @@ tsc_value_t tsc_value_string(tsc_str_t* s) { return value_box(TSC_VALUE_TAG_STRI
 tsc_value_t tsc_value_array(tsc_array_t* a) { return value_box(TSC_VALUE_TAG_ARRAY, (uintptr_t)a); }
 tsc_value_t tsc_value_object(tsc_object_t* o) { return value_box(TSC_VALUE_TAG_OBJECT, (uintptr_t)o); }
 
+static tsc_value_t value_event_listener_identity(void* identity) {
+    if (!identity) return tsc_value_undefined();
+    for (tsc_function_identity_t* cur = g_function_identities; cur; cur = cur->next) {
+        if (cur->kind == TSC_FUNCTION_IDENTITY_EVENT_LISTENER && cur->code.event_identity == identity) {
+            return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cur);
+        }
+    }
+    tsc_function_identity_t* entry = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
+    entry->kind = TSC_FUNCTION_IDENTITY_EVENT_LISTENER;
+    entry->code.event_identity = identity;
+    entry->env = NULL;
+    entry->next = g_function_identities;
+    g_function_identities = entry;
+    return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)entry);
+}
+
+static tsc_value_t value_event_raw_listener_identity(void* identity, uint64_t order, bool once) {
+    if (!once) return value_event_listener_identity(identity);
+    if (!identity) return tsc_value_undefined();
+    for (tsc_function_identity_t* cur = g_function_identities; cur; cur = cur->next) {
+        if (
+            cur->kind == TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER &&
+            cur->code.event_raw_identity.identity == identity &&
+            cur->code.event_raw_identity.order == order
+        ) {
+            return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cur);
+        }
+    }
+    tsc_function_identity_t* entry = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
+    entry->kind = TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER;
+    entry->code.event_raw_identity.identity = identity;
+    entry->code.event_raw_identity.order = order;
+    entry->env = NULL;
+    entry->next = g_function_identities;
+    g_function_identities = entry;
+    return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)entry);
+}
+
 tsc_promise_t* tsc_promise_resolve(tsc_value_t value) {
     tsc_promise_t* p = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(tsc_promise_t));
     p->state = TSC_PROMISE_FULFILLED;
@@ -2525,12 +4028,42 @@ tsc_promise_t* tsc_promise_reject(tsc_value_t reason) {
     return p;
 }
 
+tsc_promise_t* tsc_promise_pending(void) {
+    tsc_promise_t* p = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(tsc_promise_t));
+    p->state = TSC_PROMISE_PENDING;
+    p->result = tsc_value_undefined();
+    p->ptr_result = NULL;
+    return p;
+}
+
+tsc_promise_t* tsc_promise_adopt(tsc_promise_t* promise) {
+    return promise ? promise : tsc_promise_resolve(tsc_value_undefined());
+}
+
+void tsc_promise_fulfill_in_place(tsc_promise_t* p, tsc_value_t value) {
+    if (!p || p->state != TSC_PROMISE_PENDING) return;
+    p->state = TSC_PROMISE_FULFILLED;
+    p->result = value;
+    p->ptr_result = NULL;
+}
+
+void tsc_promise_reject_in_place(tsc_promise_t* p, tsc_value_t reason) {
+    if (!p || p->state != TSC_PROMISE_PENDING) return;
+    p->state = TSC_PROMISE_REJECTED;
+    p->result = reason;
+    p->ptr_result = NULL;
+}
+
 bool tsc_promise_is_fulfilled(const tsc_promise_t* p) {
     return p && p->state == TSC_PROMISE_FULFILLED;
 }
 
 bool tsc_promise_is_rejected(const tsc_promise_t* p) {
     return p && p->state == TSC_PROMISE_REJECTED;
+}
+
+bool tsc_promise_is_pending(const tsc_promise_t* p) {
+    return p && p->state == TSC_PROMISE_PENDING;
 }
 
 tsc_value_t tsc_promise_value(const tsc_promise_t* p) {
@@ -2550,7 +4083,8 @@ tsc_event_emitter_t* tsc_event_emitter_new(void) {
     ee->len = 0;
     ee->cap = 0;
     ee->next_order = 1;
-    ee->max_listeners = 10.0;
+    ee->max_listeners = 0.0;
+    ee->has_own_max_listeners = false;
     ee->listeners = NULL;
     return ee;
 }
@@ -2624,6 +4158,212 @@ void tsc_event_emitter_remove_all(tsc_event_emitter_t* ee, const tsc_str_t* even
     ee->len = out;
 }
 
+static tsc_array_t* event_args_copy_as_values(tsc_array_t* args) {
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), args && args->len ? args->len : 1);
+    if (!args) return out;
+    for (size_t i = 0; i < args->len; i++) {
+        tsc_value_t value = TSC_ARR(tsc_value_t, args, i);
+        tsc_array_push_raw(out, &value);
+    }
+    return out;
+}
+
+static void event_once_promise_resolve_listener(void* env, tsc_array_t* args);
+static void event_once_promise_reject_listener(void* env, tsc_array_t* args);
+
+static void event_once_promise_resolve_listener(void* env, tsc_array_t* args) {
+    tsc_event_once_promise_env_t* state = (tsc_event_once_promise_env_t*)env;
+    if (!state || !state->promise) return;
+    tsc_event_emitter_off(state->emitter, tsc_str_from_lit("error", 5), event_once_promise_reject_listener, state);
+    tsc_promise_fulfill_in_place(state->promise, tsc_value_array(event_args_copy_as_values(args)));
+}
+
+static void event_once_promise_reject_listener(void* env, tsc_array_t* args) {
+    tsc_event_once_promise_env_t* state = (tsc_event_once_promise_env_t*)env;
+    if (!state || !state->promise) return;
+    tsc_event_emitter_off(state->emitter, state->event, event_once_promise_resolve_listener, state);
+    tsc_value_t reason = args && args->len > 0
+        ? TSC_ARR(tsc_value_t, args, 0)
+        : tsc_value_string(tsc_str_from_lit("Unhandled error event", 21));
+    tsc_promise_reject_in_place(state->promise, reason);
+}
+
+tsc_promise_t* tsc_event_emitter_once_promise(tsc_event_emitter_t* ee, tsc_str_t* event) {
+    tsc_promise_t* promise = tsc_promise_pending();
+    if (!ee || !event) return promise;
+    tsc_event_once_promise_env_t* env = (tsc_event_once_promise_env_t*)TSC_GC_MALLOC(sizeof(tsc_event_once_promise_env_t));
+    env->emitter = ee;
+    env->event = event;
+    env->promise = promise;
+    tsc_event_emitter_on(ee, event, event_once_promise_resolve_listener, env, env, true, false);
+    if (!str_lit_eq(event, "error")) {
+        tsc_event_emitter_on(ee, tsc_str_from_lit("error", 5), event_once_promise_reject_listener, env, env, true, false);
+    }
+    return promise;
+}
+
+static int tsc_dns_lookup_ai_flags(double hints) {
+    if (isnan(hints) || isinf(hints)) return 0;
+    int flags = (int)hints;
+    int out = 0;
+#ifdef AI_V4MAPPED
+    if ((flags & 8) != 0) out |= AI_V4MAPPED;
+#endif
+#ifdef AI_ALL
+    if ((flags & 16) != 0) out |= AI_ALL;
+#endif
+#ifdef AI_ADDRCONFIG
+    if ((flags & 32) != 0) out |= AI_ADDRCONFIG;
+#endif
+    return out;
+}
+
+tsc_dns_lookup_result_t tsc_dns_lookup(tsc_str_t* hostname, double family, double hints_value) {
+    tsc_dns_lookup_result_t out;
+    out.error = NULL;
+    out.address = NULL;
+    out.family = 0.0;
+    if (!hostname) {
+        out.error = tsc_str_from_lit("dns.lookup: hostname required", 29);
+        return out;
+    }
+    int ai_family = AF_UNSPEC;
+    if (family == 4.0) {
+        ai_family = AF_INET;
+    } else if (family == 6.0) {
+        ai_family = AF_INET6;
+    } else if (family != 0.0) {
+        out.error = tsc_str_from_lit("dns.lookup: unsupported family", 30);
+        return out;
+    }
+    char* host = cstr_dup(hostname);
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = ai_family;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = tsc_dns_lookup_ai_flags(hints_value);
+    struct addrinfo* result = NULL;
+    int rc = getaddrinfo(host, NULL, &hints, &result);
+    free(host);
+    if (rc != 0) {
+        out.error = tsc_str_from_cstr(gai_strerror(rc));
+        return out;
+    }
+    char buf[INET6_ADDRSTRLEN];
+    for (struct addrinfo* cur = result; cur; cur = cur->ai_next) {
+        void* src = NULL;
+        if (cur->ai_family == AF_INET) {
+            src = &((struct sockaddr_in*)cur->ai_addr)->sin_addr;
+            out.family = 4.0;
+        } else if (cur->ai_family == AF_INET6) {
+            src = &((struct sockaddr_in6*)cur->ai_addr)->sin6_addr;
+            out.family = 6.0;
+        }
+        if (src && inet_ntop(cur->ai_family, src, buf, sizeof(buf))) {
+            out.address = tsc_str_from_cstr(buf);
+            break;
+        }
+    }
+    freeaddrinfo(result);
+    if (!out.address) {
+        out.error = tsc_str_from_lit("dns.lookup: no address found", 28);
+    }
+    return out;
+}
+
+tsc_dns_lookup_all_result_t tsc_dns_lookup_all(tsc_str_t* hostname, double family, double hints_value) {
+    tsc_dns_lookup_all_result_t out;
+    out.error = NULL;
+    out.addresses = NULL;
+    if (!hostname) {
+        out.error = tsc_str_from_lit("dns.lookup: hostname required", 29);
+        return out;
+    }
+    int ai_family = AF_UNSPEC;
+    if (family == 4.0) {
+        ai_family = AF_INET;
+    } else if (family == 6.0) {
+        ai_family = AF_INET6;
+    } else if (family != 0.0) {
+        out.error = tsc_str_from_lit("dns.lookup: unsupported family", 30);
+        return out;
+    }
+    char* host = cstr_dup(hostname);
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = ai_family;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = tsc_dns_lookup_ai_flags(hints_value);
+    struct addrinfo* result = NULL;
+    int rc = getaddrinfo(host, NULL, &hints, &result);
+    free(host);
+    if (rc != 0) {
+        out.error = tsc_str_from_cstr(gai_strerror(rc));
+        return out;
+    }
+    out.addresses = tsc_array_new(sizeof(tsc_value_t), 4);
+    char buf[INET6_ADDRSTRLEN];
+    for (struct addrinfo* cur = result; cur; cur = cur->ai_next) {
+        void* src = NULL;
+        double resolved_family = 0.0;
+        if (cur->ai_family == AF_INET) {
+            src = &((struct sockaddr_in*)cur->ai_addr)->sin_addr;
+            resolved_family = 4.0;
+        } else if (cur->ai_family == AF_INET6) {
+            src = &((struct sockaddr_in6*)cur->ai_addr)->sin6_addr;
+            resolved_family = 6.0;
+        }
+        if (src && inet_ntop(cur->ai_family, src, buf, sizeof(buf))) {
+            tsc_object_t* entry = tsc_object_new();
+            tsc_object_set(entry, tsc_str_from_lit("address", 7), tsc_value_string(tsc_str_from_cstr(buf)));
+            tsc_object_set(entry, tsc_str_from_lit("family", 6), tsc_value_num(resolved_family));
+            tsc_value_t boxed = tsc_value_object(entry);
+            tsc_array_push_raw(out.addresses, &boxed);
+        }
+    }
+    freeaddrinfo(result);
+    if (out.addresses->len == 0) {
+        out.error = tsc_str_from_lit("dns.lookup: no address found", 28);
+    }
+    return out;
+}
+
+bool tsc_net_is_ipv4(tsc_str_t* input) {
+    if (!input) return false;
+    char* cstr = cstr_dup(input);
+    struct in_addr addr4;
+    int ok = inet_pton(AF_INET, cstr, &addr4) == 1;
+    free(cstr);
+    return ok;
+}
+
+bool tsc_net_is_ipv6(tsc_str_t* input) {
+    if (!input) return false;
+    char* cstr = cstr_dup(input);
+    struct in6_addr addr6;
+    int ok = inet_pton(AF_INET6, cstr, &addr6) == 1;
+    free(cstr);
+    return ok;
+}
+
+double tsc_net_is_ip(tsc_str_t* input) {
+    if (tsc_net_is_ipv4(input)) return 4.0;
+    if (tsc_net_is_ipv6(input)) return 6.0;
+    return 0.0;
+}
+
+double tsc_event_emitter_get_default_max_listeners(void) {
+    return g_event_emitter_default_max_listeners;
+}
+
+void tsc_event_emitter_set_default_max_listeners(double n) {
+    if (isnan(n) || n < 0.0) {
+        tsc_throw_str(tsc_str_from_cstr("EventEmitter.defaultMaxListeners: invalid listener count"));
+        return;
+    }
+    g_event_emitter_default_max_listeners = n;
+}
+
 bool tsc_event_emitter_emit(tsc_event_emitter_t* ee, const tsc_str_t* event, tsc_array_t* args) {
     if (!ee || !event) return false;
     bool called = false;
@@ -2671,6 +4411,28 @@ double tsc_event_emitter_listener_count_identity(const tsc_event_emitter_t* ee, 
     return (double)count;
 }
 
+tsc_array_t* tsc_event_emitter_listeners(const tsc_event_emitter_t* ee, const tsc_str_t* event) {
+    tsc_array_t* listeners = tsc_array_new(sizeof(tsc_value_t), ee ? ee->len : 0);
+    if (!ee || !event) return listeners;
+    for (size_t i = 0; i < ee->len; i++) {
+        if (!tsc_str_eq(ee->listeners[i].event, event)) continue;
+        tsc_value_t listener = value_event_listener_identity(ee->listeners[i].identity);
+        tsc_array_push_raw(listeners, &listener);
+    }
+    return listeners;
+}
+
+tsc_array_t* tsc_event_emitter_raw_listeners(const tsc_event_emitter_t* ee, const tsc_str_t* event) {
+    tsc_array_t* listeners = tsc_array_new(sizeof(tsc_value_t), ee ? ee->len : 0);
+    if (!ee || !event) return listeners;
+    for (size_t i = 0; i < ee->len; i++) {
+        if (!tsc_str_eq(ee->listeners[i].event, event)) continue;
+        tsc_value_t listener = value_event_raw_listener_identity(ee->listeners[i].identity, ee->listeners[i].order, ee->listeners[i].once);
+        tsc_array_push_raw(listeners, &listener);
+    }
+    return listeners;
+}
+
 tsc_array_t* tsc_event_emitter_event_names(const tsc_event_emitter_t* ee) {
     tsc_array_t* names = tsc_array_new(sizeof(tsc_str_t*), ee ? ee->len : 0);
     if (!ee) return names;
@@ -2697,10 +4459,11 @@ void tsc_event_emitter_set_max_listeners(tsc_event_emitter_t* ee, double n) {
         return;
     }
     ee->max_listeners = n;
+    ee->has_own_max_listeners = true;
 }
 
 double tsc_event_emitter_get_max_listeners(const tsc_event_emitter_t* ee) {
-    return ee ? ee->max_listeners : 0.0;
+    return ee ? (ee->has_own_max_listeners ? ee->max_listeners : g_event_emitter_default_max_listeners) : 0.0;
 }
 
 static tsc_value_t value_accessor_getter_identity(tsc_accessor_getter_t getter, void* env) {
@@ -2864,6 +4627,10 @@ bool tsc_value_is_nullish(tsc_value_t v) {
     return tag == TSC_VALUE_TAG_UNDEFINED || tag == TSC_VALUE_TAG_NULL;
 }
 
+bool tsc_value_is_undefined(tsc_value_t v) {
+    return value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_UNDEFINED;
+}
+
 bool tsc_value_is_array(tsc_value_t v) {
     return value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY;
 }
@@ -2880,6 +4647,9 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
     if (ident->kind == TSC_FUNCTION_IDENTITY_GETTER) {
         return ident->code.getter(ident->env, this_arg);
     }
+    if (ident->kind != TSC_FUNCTION_IDENTITY_SETTER) {
+        tsc_panic("Reflect.apply target is not a callable function identity");
+    }
     tsc_value_t value = list->len > 0 ? TSC_ARR(tsc_value_t, list, 0) : tsc_value_undefined();
     ident->code.setter(ident->env, this_arg, value);
     return tsc_value_undefined();
@@ -2887,6 +4657,13 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
 
 tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
     if (!value_is_box(v)) return tsc_value_undefined();
+    if (value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+        tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(v);
+        if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER && str_lit_eq(key, "listener")) {
+            return value_event_listener_identity(ident->code.event_raw_identity.identity);
+        }
+        return tsc_value_undefined();
+    }
     if (value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_get((tsc_object_t*)value_ptr(v), key);
     }
@@ -5496,11 +7273,15 @@ bool tsc_fs_stats_is_symbolic_link(const tsc_fs_stats_t* st) {
 }
 
 void tsc_fs_access_sync(const tsc_str_t* path) {
+    tsc_fs_access_sync_mode(path, (double)F_OK);
+}
+
+void tsc_fs_access_sync_mode(const tsc_str_t* path, double mode) {
     char* p = cstr_dup(path);
-    struct stat st;
-    int r = stat(p, &st);
+    int m = isnan(mode) ? F_OK : (int)mode;
+    int r = access(p, m);
     free(p);
-    if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.promises.access: path does not exist"));
+    if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.access: path is not accessible"));
 }
 
 void tsc_fs_chmod_sync(const tsc_str_t* path, double mode) {
@@ -5631,10 +7412,21 @@ void tsc_fs_rmdir_sync(const tsc_str_t* path) {
     if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.rmdirSync: could not remove directory"));
 }
 
-void tsc_fs_copy_file_sync(const tsc_str_t* src, const tsc_str_t* dest) {
+void tsc_fs_copy_file_sync_mode(const tsc_str_t* src, const tsc_str_t* dest, double mode) {
+    char* dest_path = cstr_dup(dest);
+    int flags = (isnan(mode) || isinf(mode)) ? 0 : (int)mode;
+    if ((flags & 1) && access(dest_path, F_OK) == 0) {
+        free(dest_path);
+        tsc_throw_str(tsc_str_from_cstr("fs.copyFileSync: destination already exists"));
+    }
+    free(dest_path);
     tsc_str_t* data = tsc_fs_read_file_sync(src);
     if (!data) return;
     tsc_fs_write_file_sync(dest, data);
+}
+
+void tsc_fs_copy_file_sync(const tsc_str_t* src, const tsc_str_t* dest) {
+    tsc_fs_copy_file_sync_mode(src, dest, 0.0);
 }
 
 void tsc_fs_rename_sync(const tsc_str_t* old_path, const tsc_str_t* new_path) {
@@ -5886,6 +7678,47 @@ tsc_str_t* tsc_os_platform(void) {
 #endif
 }
 
+tsc_str_t* tsc_os_type(void) {
+#if defined(__linux__)
+    return tsc_str_from_lit("Linux", 5);
+#elif defined(__APPLE__)
+    return tsc_str_from_lit("Darwin", 6);
+#elif defined(_WIN32)
+    return tsc_str_from_lit("Windows_NT", 10);
+#else
+    return tsc_str_from_lit("Unknown", 7);
+#endif
+}
+
+tsc_str_t* tsc_os_release(void) {
+    struct utsname u;
+    if (uname(&u) == 0) {
+        return tsc_str_from_cstr(u.release);
+    }
+    return tsc_str_from_lit("unknown", 7);
+}
+
+tsc_str_t* tsc_os_version(void) {
+    struct utsname u;
+    if (uname(&u) == 0) {
+        return tsc_str_from_cstr(u.version);
+    }
+    return tsc_str_from_lit("unknown", 7);
+}
+
+tsc_str_t* tsc_os_endianness(void) {
+    uint16_t value = 1;
+    return (*(uint8_t*)&value) == 1 ? tsc_str_from_lit("LE", 2) : tsc_str_from_lit("BE", 2);
+}
+
+tsc_str_t* tsc_os_machine(void) {
+    struct utsname u;
+    if (uname(&u) == 0) {
+        return tsc_str_from_cstr(u.machine);
+    }
+    return tsc_os_arch();
+}
+
 tsc_str_t* tsc_os_arch(void) {
 #if defined(__x86_64__) || defined(_M_X64)
     return tsc_str_from_lit("x64", 3);
@@ -5929,12 +7762,395 @@ double tsc_os_cpu_count(void) {
     return 1.0;
 }
 
+double tsc_os_available_parallelism(void) {
+    return tsc_os_cpu_count();
+}
+
+double tsc_os_totalmem(void) {
+#if defined(__linux__)
+    struct sysinfo info;
+    if (sysinfo(&info) == 0) {
+        return (double)info.totalram * (double)info.mem_unit;
+    }
+#elif defined(_SC_PHYS_PAGES) && defined(_SC_PAGESIZE)
+    long pages = sysconf(_SC_PHYS_PAGES);
+    long page_size = sysconf(_SC_PAGESIZE);
+    if (pages > 0 && page_size > 0) {
+        return (double)pages * (double)page_size;
+    }
+#endif
+    return 0.0;
+}
+
+double tsc_os_freemem(void) {
+#if defined(__linux__)
+    struct sysinfo info;
+    if (sysinfo(&info) == 0) {
+        return (double)info.freeram * (double)info.mem_unit;
+    }
+#elif defined(_SC_AVPHYS_PAGES) && defined(_SC_PAGESIZE)
+    long pages = sysconf(_SC_AVPHYS_PAGES);
+    long page_size = sysconf(_SC_PAGESIZE);
+    if (pages > 0 && page_size > 0) {
+        return (double)pages * (double)page_size;
+    }
+#endif
+    return 0.0;
+}
+
+double tsc_os_uptime(void) {
+#if defined(__linux__)
+    struct sysinfo info;
+    if (sysinfo(&info) == 0) {
+        return (double)info.uptime;
+    }
+#endif
+    return 0.0;
+}
+
+tsc_array_t* tsc_os_loadavg(void) {
+    double values[3] = { 0.0, 0.0, 0.0 };
+#if defined(__linux__)
+    struct sysinfo info;
+    if (sysinfo(&info) == 0) {
+        values[0] = (double)info.loads[0] / 65536.0;
+        values[1] = (double)info.loads[1] / 65536.0;
+        values[2] = (double)info.loads[2] / 65536.0;
+    }
+#endif
+    tsc_array_t* a = tsc_array_new(sizeof(double), 3);
+    for (size_t i = 0; i < 3; i++) {
+        tsc_array_push_raw(a, &values[i]);
+    }
+    return a;
+}
+
+tsc_value_t tsc_os_user_info(void) {
+    uid_t uid = getuid();
+    gid_t gid = getgid();
+    struct passwd* pw = getpwuid(uid);
+    tsc_object_t* out = tsc_object_new();
+    tsc_object_set(out, tsc_str_from_lit("uid", 3), tsc_value_num((double)uid));
+    tsc_object_set(out, tsc_str_from_lit("gid", 3), tsc_value_num((double)gid));
+    tsc_object_set(out, tsc_str_from_lit("username", 8), tsc_value_string(tsc_str_from_cstr(pw && pw->pw_name ? pw->pw_name : "")));
+    tsc_object_set(out, tsc_str_from_lit("homedir", 7), tsc_value_string(pw && pw->pw_dir ? tsc_str_from_cstr(pw->pw_dir) : tsc_os_homedir()));
+    tsc_object_set(out, tsc_str_from_lit("shell", 5), tsc_value_string(tsc_str_from_cstr(pw && pw->pw_shell ? pw->pw_shell : "")));
+    return tsc_value_object(out);
+}
+
 double tsc_date_now(void) {
     struct timespec ts;
     if (clock_gettime(CLOCK_REALTIME, &ts) == 0) {
         return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1e6;
     }
     return 0.0;
+}
+
+tsc_date_t* tsc_date_new_now(void) {
+    return tsc_date_from_ms(tsc_date_now());
+}
+
+tsc_date_t* tsc_date_from_ms(double ms) {
+    tsc_date_t* d = (tsc_date_t*)TSC_GC_MALLOC(sizeof(tsc_date_t));
+    d->ms = ms;
+    return d;
+}
+
+double tsc_date_get_time(const tsc_date_t* d) {
+    return d ? d->ms : NAN;
+}
+
+double tsc_date_set_time(tsc_date_t* d, double ms) {
+    if (!d) return NAN;
+    d->ms = ms;
+    return ms;
+}
+
+double tsc_date_set_utc_part(tsc_date_t* d, int part, double a, double b, double c, double e, int arg_count) {
+    if (!d || isnan(d->ms)) return NAN;
+    double provided[] = { a, b, c, e };
+    for (int i = 0; i < arg_count && i < 4; i++) {
+        if (isnan(provided[i])) {
+            d->ms = NAN;
+            return NAN;
+        }
+    }
+    double seconds_double = floor(d->ms / 1000.0);
+    time_t seconds = (time_t)seconds_double;
+    struct tm tm;
+    if (!gmtime_r(&seconds, &tm)) {
+        d->ms = NAN;
+        return NAN;
+    }
+    double rem = fmod(d->ms, 1000.0);
+    if (rem < 0) rem += 1000.0;
+    int millis = (int)floor(rem);
+
+    switch (part) {
+        case 0:
+            tm.tm_year = (int)a - 1900;
+            if (arg_count > 1) tm.tm_mon = (int)b;
+            if (arg_count > 2) tm.tm_mday = (int)c;
+            break;
+        case 1:
+            tm.tm_mon = (int)a;
+            if (arg_count > 1) tm.tm_mday = (int)b;
+            break;
+        case 2:
+            tm.tm_mday = (int)a;
+            break;
+        case 3:
+            tm.tm_hour = (int)a;
+            if (arg_count > 1) tm.tm_min = (int)b;
+            if (arg_count > 2) tm.tm_sec = (int)c;
+            if (arg_count > 3) millis = (int)e;
+            break;
+        case 4:
+            tm.tm_min = (int)a;
+            if (arg_count > 1) tm.tm_sec = (int)b;
+            if (arg_count > 2) millis = (int)c;
+            break;
+        case 5:
+            tm.tm_sec = (int)a;
+            if (arg_count > 1) millis = (int)b;
+            break;
+        case 6:
+            millis = (int)a;
+            break;
+        default:
+            return NAN;
+    }
+
+    time_t t = timegm(&tm);
+    d->ms = ((double)t) * 1000.0 + (double)millis;
+    return d->ms;
+}
+
+static bool date_parse_fixed_int(const tsc_str_t* text, size_t* pos, size_t digits, int* out) {
+    if (!text || !pos || !out || *pos + digits > text->len) return false;
+    int value = 0;
+    for (size_t i = 0; i < digits; i++) {
+        unsigned char ch = (unsigned char)text->data[*pos + i];
+        if (!isdigit(ch)) return false;
+        value = value * 10 + (int)(ch - '0');
+    }
+    *pos += digits;
+    *out = value;
+    return true;
+}
+
+static bool date_parse_char(const tsc_str_t* text, size_t* pos, char ch) {
+    if (!text || !pos || *pos >= text->len || text->data[*pos] != ch) return false;
+    *pos += 1;
+    return true;
+}
+
+double tsc_date_parse(const tsc_str_t* text) {
+    if (!text || text->len == 0) return NAN;
+    size_t pos = 0;
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    int hour = 0;
+    int minute = 0;
+    int second = 0;
+    int ms = 0;
+    int offset_minutes = 0;
+
+    if (!date_parse_fixed_int(text, &pos, 4, &year)) return NAN;
+    if (!date_parse_char(text, &pos, '-')) return NAN;
+    if (!date_parse_fixed_int(text, &pos, 2, &month)) return NAN;
+    if (!date_parse_char(text, &pos, '-')) return NAN;
+    if (!date_parse_fixed_int(text, &pos, 2, &day)) return NAN;
+    if (month < 1 || month > 12 || day < 1 || day > 31) return NAN;
+
+    bool has_time = false;
+    if (pos < text->len) {
+        char sep = text->data[pos];
+        if (sep != 'T' && sep != 't') return NAN;
+        pos += 1;
+        has_time = true;
+        if (!date_parse_fixed_int(text, &pos, 2, &hour)) return NAN;
+        if (!date_parse_char(text, &pos, ':')) return NAN;
+        if (!date_parse_fixed_int(text, &pos, 2, &minute)) return NAN;
+        if (!date_parse_char(text, &pos, ':')) return NAN;
+        if (!date_parse_fixed_int(text, &pos, 2, &second)) return NAN;
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) return NAN;
+        if (pos < text->len && text->data[pos] == '.') {
+            pos += 1;
+            int digits = 0;
+            while (pos < text->len && isdigit((unsigned char)text->data[pos])) {
+                if (digits < 3) {
+                    ms = ms * 10 + (int)(text->data[pos] - '0');
+                    digits++;
+                }
+                pos += 1;
+            }
+            if (digits == 0) return NAN;
+            while (digits < 3) {
+                ms *= 10;
+                digits++;
+            }
+        }
+        if (pos >= text->len) return NAN;
+        if (text->data[pos] == 'Z' || text->data[pos] == 'z') {
+            pos += 1;
+        } else if (text->data[pos] == '+' || text->data[pos] == '-') {
+            int sign = text->data[pos] == '+' ? 1 : -1;
+            int tz_hour = 0;
+            int tz_minute = 0;
+            pos += 1;
+            if (!date_parse_fixed_int(text, &pos, 2, &tz_hour)) return NAN;
+            if (!date_parse_char(text, &pos, ':')) return NAN;
+            if (!date_parse_fixed_int(text, &pos, 2, &tz_minute)) return NAN;
+            if (tz_hour > 23 || tz_minute > 59) return NAN;
+            offset_minutes = sign * (tz_hour * 60 + tz_minute);
+        } else {
+            return NAN;
+        }
+    }
+    if (pos != text->len) return NAN;
+
+    struct tm tm;
+    memset(&tm, 0, sizeof(tm));
+    tm.tm_year = year - 1900;
+    tm.tm_mon = month - 1;
+    tm.tm_mday = day;
+    tm.tm_hour = hour;
+    tm.tm_min = minute;
+    tm.tm_sec = second;
+    time_t t = timegm(&tm);
+    struct tm check;
+    if (!gmtime_r(&t, &check)) return NAN;
+    if (check.tm_year != tm.tm_year || check.tm_mon != tm.tm_mon || check.tm_mday != tm.tm_mday ||
+        check.tm_hour != tm.tm_hour || check.tm_min != tm.tm_min || check.tm_sec != tm.tm_sec) {
+        return NAN;
+    }
+
+    double result = ((double)t) * 1000.0 + (double)ms;
+    if (has_time) result -= (double)offset_minutes * 60000.0;
+    return result;
+}
+
+double tsc_date_utc(double year, double month, double day, double hours, double minutes, double seconds, double ms) {
+    if (isnan(year) || isnan(month) || isnan(day) || isnan(hours) || isnan(minutes) || isnan(seconds) || isnan(ms)) {
+        return NAN;
+    }
+    int y = (int)year;
+    if (y >= 0 && y <= 99) y += 1900;
+    struct tm tm;
+    memset(&tm, 0, sizeof(tm));
+    tm.tm_year = y - 1900;
+    tm.tm_mon = (int)month;
+    tm.tm_mday = (int)day;
+    tm.tm_hour = (int)hours;
+    tm.tm_min = (int)minutes;
+    tm.tm_sec = (int)seconds;
+    time_t t = timegm(&tm);
+    if (t == (time_t)-1) return NAN;
+    return ((double)t) * 1000.0 + ms;
+}
+
+double tsc_date_get_utc_part(const tsc_date_t* d, int part) {
+    if (!d || isnan(d->ms)) return NAN;
+    double seconds_double = floor(d->ms / 1000.0);
+    time_t seconds = (time_t)seconds_double;
+    struct tm tm;
+    if (!gmtime_r(&seconds, &tm)) return NAN;
+    switch (part) {
+        case 0: return (double)(tm.tm_year + 1900);
+        case 1: return (double)tm.tm_mon;
+        case 2: return (double)tm.tm_mday;
+        case 3: return (double)tm.tm_wday;
+        case 4: return (double)tm.tm_hour;
+        case 5: return (double)tm.tm_min;
+        case 6: return (double)tm.tm_sec;
+        case 7: {
+            double rem = fmod(d->ms, 1000.0);
+            if (rem < 0) rem += 1000.0;
+            return floor(rem);
+        }
+    }
+    return NAN;
+}
+
+tsc_str_t* tsc_date_to_iso_string(const tsc_date_t* d) {
+    if (!d || isnan(d->ms)) return tsc_str_from_lit("Invalid Date", 12);
+    double seconds_double = floor(d->ms / 1000.0);
+    time_t seconds = (time_t)seconds_double;
+    struct tm tm;
+    if (!gmtime_r(&seconds, &tm)) return tsc_str_from_lit("Invalid Date", 12);
+    double rem = fmod(d->ms, 1000.0);
+    if (rem < 0) rem += 1000.0;
+    char buf[32];
+    snprintf(
+        buf,
+        sizeof(buf),
+        "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
+        tm.tm_year + 1900,
+        tm.tm_mon + 1,
+        tm.tm_mday,
+        tm.tm_hour,
+        tm.tm_min,
+        tm.tm_sec,
+        (int)floor(rem)
+    );
+    return tsc_str_from_cstr(buf);
+}
+
+tsc_str_t* tsc_date_to_utc_string(const tsc_date_t* d) {
+    if (!d || isnan(d->ms)) return tsc_str_from_lit("Invalid Date", 12);
+    double seconds_double = floor(d->ms / 1000.0);
+    time_t seconds = (time_t)seconds_double;
+    struct tm tm;
+    if (!gmtime_r(&seconds, &tm)) return tsc_str_from_lit("Invalid Date", 12);
+    static const char* weekdays[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+    static const char* months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+    char buf[40];
+    snprintf(
+        buf,
+        sizeof(buf),
+        "%s, %02d %s %04d %02d:%02d:%02d GMT",
+        weekdays[tm.tm_wday],
+        tm.tm_mday,
+        months[tm.tm_mon],
+        tm.tm_year + 1900,
+        tm.tm_hour,
+        tm.tm_min,
+        tm.tm_sec
+    );
+    return tsc_str_from_cstr(buf);
+}
+
+tsc_str_t* tsc_date_to_string(const tsc_date_t* d) {
+    return d ? tsc_str_from_num(d->ms) : tsc_str_from_lit("Invalid Date", 12);
+}
+
+tsc_error_t* tsc_error_new(tsc_str_t* message) {
+    return tsc_error_new_named(tsc_str_from_lit("Error", 5), message);
+}
+
+tsc_error_t* tsc_error_new_named(tsc_str_t* name, tsc_str_t* message) {
+    tsc_error_t* e = (tsc_error_t*)TSC_GC_MALLOC(sizeof(tsc_error_t));
+    e->name = name ? name : tsc_str_from_lit("Error", 5);
+    e->message = message ? message : tsc_str_from_lit("", 0);
+    e->errors = NULL;
+    return e;
+}
+
+tsc_error_t* tsc_aggregate_error_new(tsc_array_t* errors, tsc_str_t* message) {
+    tsc_error_t* e = tsc_error_new_named(tsc_str_from_lit("AggregateError", 14), message);
+    e->errors = errors ? errors : tsc_array_new(sizeof(tsc_value_t), 1);
+    return e;
+}
+
+tsc_str_t* tsc_error_to_string(const tsc_error_t* e) {
+    if (!e) return tsc_str_from_lit("Error", 5);
+    tsc_str_t* name = e->name ? e->name : tsc_str_from_lit("Error", 5);
+    tsc_str_t* message = e->message ? e->message : tsc_str_from_lit("", 0);
+    if (name->len == 0) return message;
+    if (message->len == 0) return name;
+    return tsc_str_concat_n(3, name, tsc_str_from_lit(": ", 2), message);
 }
 
 tsc_str_t* tsc_path_extname(const tsc_str_t* p) {
@@ -5949,6 +8165,65 @@ tsc_str_t* tsc_path_extname(const tsc_str_t* p) {
         }
     }
     return tsc_str_from_lit("", 0);
+}
+
+static tsc_str_t* path_str_slice(const tsc_str_t* p, size_t start, size_t len) {
+    if (!p || start > p->len) return tsc_str_from_lit("", 0);
+    if (start + len > p->len) len = p->len - start;
+    tsc_str_t* out = str_alloc(len);
+    memcpy((char*)out->data, p->data + start, len);
+    return out;
+}
+
+tsc_value_t tsc_path_parse(const tsc_str_t* p) {
+    tsc_object_t* out = tsc_object_new();
+    if (!p) p = tsc_str_from_lit("", 0);
+    tsc_str_t* root = tsc_path_is_absolute(p) ? tsc_str_from_lit("/", 1) : tsc_str_from_lit("", 0);
+    tsc_str_t* dir = tsc_path_dirname(p);
+    if (str_lit_eq(dir, ".") && !tsc_path_is_absolute(p)) dir = tsc_str_from_lit("", 0);
+    tsc_str_t* base = tsc_path_basename(p);
+    tsc_str_t* ext = tsc_path_extname(base);
+    size_t name_len = base->len >= ext->len ? base->len - ext->len : base->len;
+    tsc_str_t* name = path_str_slice(base, 0, name_len);
+    tsc_object_set(out, tsc_str_from_lit("root", 4), tsc_value_string(root));
+    tsc_object_set(out, tsc_str_from_lit("dir", 3), tsc_value_string(dir));
+    tsc_object_set(out, tsc_str_from_lit("base", 4), tsc_value_string(base));
+    tsc_object_set(out, tsc_str_from_lit("ext", 3), tsc_value_string(ext));
+    tsc_object_set(out, tsc_str_from_lit("name", 4), tsc_value_string(name));
+    return tsc_value_object(out);
+}
+
+static tsc_str_t* path_get_string_prop(tsc_value_t object, const char* key, size_t key_len) {
+    if (!value_is_box(object) || value_tag(object) != TSC_VALUE_TAG_OBJECT) return NULL;
+    tsc_value_t value = tsc_object_get((tsc_object_t*)value_ptr(object), tsc_str_from_lit(key, key_len));
+    if (tsc_value_is_nullish(value)) return NULL;
+    return tsc_value_to_string(value);
+}
+
+tsc_str_t* tsc_path_format(tsc_value_t path_object) {
+    tsc_str_t* root = path_get_string_prop(path_object, "root", 4);
+    tsc_str_t* dir = path_get_string_prop(path_object, "dir", 3);
+    tsc_str_t* base = path_get_string_prop(path_object, "base", 4);
+    if (!base) {
+        tsc_str_t* name = path_get_string_prop(path_object, "name", 4);
+        tsc_str_t* ext = path_get_string_prop(path_object, "ext", 3);
+        if (!name) name = tsc_str_from_lit("", 0);
+        if (!ext) ext = tsc_str_from_lit("", 0);
+        base = tsc_str_concat(name, ext);
+    }
+    if (!root) root = tsc_str_from_lit("", 0);
+    if (!dir) dir = tsc_str_from_lit("", 0);
+    if (dir->len > 0) {
+        if (base->len == 0) return dir;
+        if (dir->data[dir->len - 1] == '/') return tsc_str_concat(dir, base);
+        return tsc_str_concat_n(3, dir, tsc_str_from_lit("/", 1), base);
+    }
+    if (root->len > 0) {
+        if (base->len == 0) return root;
+        if (root->data[root->len - 1] == '/') return tsc_str_concat(root, base);
+        return tsc_str_concat_n(3, root, tsc_str_from_lit("/", 1), base);
+    }
+    return base;
 }
 
 /* ---------------- exceptions ---------------- */

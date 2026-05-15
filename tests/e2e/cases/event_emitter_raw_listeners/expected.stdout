@@ -1,0 +1,11 @@
+lengths: 3 3
+types: function function [function]|[function]|[function]
+normal: true undefined
+once: false true function
+duplicates: false true
+stable: true true
+copy: 4 3
+emit: true
+seen: normal:x|once:x|once:x
+after: 1 true
+missing: 0

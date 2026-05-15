@@ -1,0 +1,3 @@
+config: A:A1B2:A1B
+later: A1B2!
+events: block1:A|block2:A1B|after class:A1B2|later:A1B2

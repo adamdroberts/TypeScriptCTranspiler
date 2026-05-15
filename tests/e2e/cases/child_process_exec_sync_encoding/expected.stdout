@@ -1,0 +1,2 @@
+exec encoding: string sync-text
+file encoding: string file-text

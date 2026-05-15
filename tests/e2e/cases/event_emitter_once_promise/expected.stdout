@@ -1,0 +1,7 @@
+listeners before: 1 1
+listeners after: 0 0
+resolved: alpha:7
+reject listeners before: 1 1
+reject listeners after: 0 0
+rejected: boom
+error resolved: handled 0

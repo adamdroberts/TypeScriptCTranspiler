@@ -36,11 +36,19 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
         // Crucial: disable default lib; we supply our own via rootFiles.
         noLib: true,
         types: [],
-        allowJs: false,
+        allowJs: true,
+        checkJs: false,
+        maxNodeModuleJsDepth: 5,
     };
 
+    const rootNames = [
+        libCoreDts,
+        opts.entry,
+        ...collectStaticRequireRoots(opts.entry, compilerOptions),
+    ];
+
     const program = ts.createProgram({
-        rootNames: [libCoreDts, opts.entry],
+        rootNames,
         options: compilerOptions,
     });
 
@@ -51,4 +59,82 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
     }
 
     return { program, checker, entrySourceFile, libCoreDts };
+}
+
+function collectStaticRequireRoots(
+    entry: string,
+    compilerOptions: ts.CompilerOptions,
+): string[] {
+    const roots: string[] = [];
+    const seen = new Set<string>([path.resolve(entry)]);
+    const queue = [path.resolve(entry)];
+    while (queue.length > 0) {
+        const fileName = queue.shift()!;
+        const sourceText = ts.sys.readFile(fileName);
+        if (sourceText === undefined) continue;
+        const sf = ts.createSourceFile(
+            fileName,
+            sourceText,
+            compilerOptions.target ?? ts.ScriptTarget.ES2022,
+            true,
+            scriptKindForFile(fileName),
+        );
+        for (const stmt of sf.statements) {
+            for (const spec of topLevelRequireSpecifiers(stmt)) {
+                const resolved = ts.resolveModuleName(spec, fileName, compilerOptions, ts.sys);
+                const resolvedFile = resolved.resolvedModule?.resolvedFileName;
+                if (!resolvedFile || seen.has(resolvedFile)) continue;
+                seen.add(resolvedFile);
+                roots.push(resolvedFile);
+                queue.push(resolvedFile);
+            }
+        }
+    }
+    return roots;
+}
+
+function scriptKindForFile(fileName: string): ts.ScriptKind {
+    if (/\.[cm]?js$/i.test(fileName)) return ts.ScriptKind.JS;
+    if (/\.jsx$/i.test(fileName)) return ts.ScriptKind.JSX;
+    if (/\.tsx$/i.test(fileName)) return ts.ScriptKind.TSX;
+    return ts.ScriptKind.TS;
+}
+
+function topLevelRequireSpecifiers(stmt: ts.Statement): string[] {
+    const specs: string[] = [];
+    const visit = (node: ts.Node): void => {
+        const spec = ts.isExpression(node) ? requireCallSpecifier(node) : null;
+        if (spec) specs.push(spec);
+        if (node !== stmt && ts.isFunctionLike(node)) return;
+        ts.forEachChild(node, visit);
+    };
+    if (ts.isExpressionStatement(stmt)) visit(stmt.expression);
+    if (ts.isVariableStatement(stmt)) {
+        for (const decl of stmt.declarationList.declarations) {
+            if (decl.initializer) visit(decl.initializer);
+        }
+    }
+    return specs;
+}
+
+function requireCallSpecifier(expr: ts.Expression): string | null {
+    if (
+        ts.isCallExpression(expr) &&
+        isCommonJsRequireCallee(expr.expression) &&
+        expr.arguments.length === 1 &&
+        ts.isStringLiteralLike(expr.arguments[0])
+    ) {
+        return expr.arguments[0].text;
+    }
+    return null;
+}
+
+function isCommonJsRequireCallee(expr: ts.Expression): boolean {
+    return (ts.isIdentifier(expr) && expr.text === "require") ||
+        (
+            ts.isPropertyAccessExpression(expr) &&
+            expr.name.text === "require" &&
+            ts.isIdentifier(expr.expression) &&
+            expr.expression.text === "module"
+        );
 }

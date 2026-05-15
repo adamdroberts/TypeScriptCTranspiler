@@ -1,0 +1,3 @@
+{
+  "description": "immediate await of non-Promise values inside async functions"
+}

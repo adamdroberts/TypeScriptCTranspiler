@@ -1,0 +1,3 @@
+shell command: 0 shell-env
+shell args: 0 arg:two words
+shell input: 0 stdin-shell

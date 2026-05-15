@@ -1,0 +1,2 @@
+exec: true child-process
+namespace: true namespace

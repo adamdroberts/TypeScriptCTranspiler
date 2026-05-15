@@ -1,0 +1,5 @@
+exec: true exec-hide 0
+file: true file-hide 0
+sync: sync-hide
+file-sync: file-sync-hide
+spawn: 0 spawn-hide

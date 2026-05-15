@@ -1,0 +1,3 @@
+{
+  "description": "pending Promise records propagate through immediate Promise combinators without invoking callbacks"
+}

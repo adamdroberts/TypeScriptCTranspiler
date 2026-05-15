@@ -1,0 +1,3 @@
+spawn: spawn-argv0
+file: file-argv0
+callback: true callback-argv0 0

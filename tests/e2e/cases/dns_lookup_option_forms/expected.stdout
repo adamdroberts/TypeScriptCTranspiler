@@ -1,0 +1,3 @@
+numeric callback: true 127.0.0.1 4
+object extras: true 127.0.0.1 4
+numeric promise: 127.0.0.1 4

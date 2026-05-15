@@ -1,0 +1,3 @@
+{
+  "description": "Promise.any rejects with AggregateError-shaped reason containing all rejection reasons"
+}

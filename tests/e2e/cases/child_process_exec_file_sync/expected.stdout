@@ -1,0 +1,2 @@
+execFile: true file-sync
+namespace: true namespace-file

@@ -1,0 +1,3 @@
+{
+  "description": "Error instances expose name/message, stringification, valueOf, and throw stringification"
+}

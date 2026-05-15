@@ -53,6 +53,8 @@
 #  define M_SQRT1_2 0.70710678118654752440
 #endif
 
+typedef uint64_t tsc_value_t;
+
 /* ------------- bootstrap ------------- */
 void tsc_bootstrap(int argc, char** argv);
 void tsc_panic(const char* msg);
@@ -129,6 +131,7 @@ tsc_str_t* tsc_str_replace(const tsc_str_t* s, const tsc_str_t* search, const ts
 tsc_str_t* tsc_str_replace_all(const tsc_str_t* s, const tsc_str_t* search, const tsc_str_t* repl);
 
 struct tsc_array; /* fwd */
+struct tsc_buffer; /* fwd */
 struct tsc_array* tsc_str_split(const tsc_str_t* s, const tsc_str_t* sep);
 struct tsc_array* tsc_str_split_limit(const tsc_str_t* s, const tsc_str_t* sep, uint32_t limit);
 struct tsc_array* tsc_str_split_limit_num(const tsc_str_t* s, const tsc_str_t* sep, double limit);
@@ -256,8 +259,15 @@ struct tsc_array* tsc_str_split_regex_limit_num(const tsc_str_t* s, const tsc_re
 /* ------------- crypto ------------- */
 typedef struct tsc_hash tsc_hash_t;
 tsc_hash_t* tsc_crypto_create_hash(const tsc_str_t* algorithm);
+struct tsc_buffer* tsc_crypto_random_bytes(double size);
+tsc_str_t* tsc_crypto_random_uuid(void);
 tsc_hash_t* tsc_hash_update(tsc_hash_t* h, const tsc_str_t* data);
+tsc_hash_t* tsc_hash_update_buffer(tsc_hash_t* h, const struct tsc_buffer* data);
 tsc_str_t* tsc_hash_digest(tsc_hash_t* h, const tsc_str_t* encoding);
+struct tsc_buffer* tsc_child_process_exec_sync(const tsc_str_t* command, const tsc_str_t* cwd, const tsc_str_t* input, const struct tsc_array* env, const tsc_str_t* shell, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal);
+struct tsc_buffer* tsc_child_process_exec_file_sync(const tsc_str_t* file, const struct tsc_array* args, const tsc_str_t* cwd, const tsc_str_t* input, const struct tsc_array* env, const tsc_str_t* shell, const tsc_str_t* argv0, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal);
+tsc_value_t tsc_child_process_spawn_sync(const tsc_str_t* file, const struct tsc_array* args, const tsc_str_t* cwd, const tsc_str_t* input, const struct tsc_array* env, const tsc_str_t* shell, const tsc_str_t* argv0, bool pipe_stdin, bool ignore_stdin, bool capture_stdout, bool capture_stderr, bool inherit_stdout, bool inherit_stderr, bool detached, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal);
+tsc_value_t tsc_child_process_exec_utf8(const tsc_str_t* command, const tsc_str_t* cwd, const struct tsc_array* env, const tsc_str_t* shell, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal);
 
 /* ------------- URL ------------- */
 typedef struct tsc_url {
@@ -271,7 +281,35 @@ typedef struct tsc_url {
     tsc_str_t* hash;
     tsc_str_t* origin;
 } tsc_url_t;
+bool tsc_url_can_parse(const tsc_str_t* input);
 tsc_url_t* tsc_url_new(const tsc_str_t* input);
+
+/* ------------- Date ------------- */
+typedef struct tsc_date {
+    double ms;
+} tsc_date_t;
+tsc_date_t* tsc_date_new_now(void);
+tsc_date_t* tsc_date_from_ms(double ms);
+double tsc_date_get_time(const tsc_date_t* d);
+double tsc_date_set_time(tsc_date_t* d, double ms);
+double tsc_date_set_utc_part(tsc_date_t* d, int part, double a, double b, double c, double e, int arg_count);
+double tsc_date_parse(const tsc_str_t* text);
+double tsc_date_utc(double year, double month, double day, double hours, double minutes, double seconds, double ms);
+double tsc_date_get_utc_part(const tsc_date_t* d, int part);
+tsc_str_t* tsc_date_to_iso_string(const tsc_date_t* d);
+tsc_str_t* tsc_date_to_utc_string(const tsc_date_t* d);
+tsc_str_t* tsc_date_to_string(const tsc_date_t* d);
+
+/* ------------- Error ------------- */
+typedef struct tsc_error {
+    tsc_str_t* name;
+    tsc_str_t* message;
+    struct tsc_array* errors;
+} tsc_error_t;
+tsc_error_t* tsc_error_new(tsc_str_t* message);
+tsc_error_t* tsc_error_new_named(tsc_str_t* name, tsc_str_t* message);
+tsc_error_t* tsc_aggregate_error_new(struct tsc_array* errors, tsc_str_t* message);
+tsc_str_t* tsc_error_to_string(const tsc_error_t* e);
 
 /* ------------- Buffer ------------- */
 typedef struct tsc_buffer {
@@ -280,13 +318,59 @@ typedef struct tsc_buffer {
 } tsc_buffer_t;
 tsc_buffer_t* tsc_buffer_from_str(const tsc_str_t* input, const tsc_str_t* encoding);
 tsc_buffer_t* tsc_buffer_from_array(const struct tsc_array* input);
+tsc_buffer_t* tsc_buffer_from_buffer(const tsc_buffer_t* input);
 tsc_buffer_t* tsc_buffer_alloc(double size, double fill);
 tsc_buffer_t* tsc_buffer_concat(const struct tsc_array* list);
+tsc_buffer_t* tsc_buffer_concat_len(const struct tsc_array* list, double total_length);
 tsc_str_t* tsc_buffer_to_string(const tsc_buffer_t* b, const tsc_str_t* encoding);
+tsc_value_t tsc_buffer_to_json(const tsc_buffer_t* b);
+tsc_str_t* tsc_btoa(const tsc_str_t* input);
+tsc_str_t* tsc_atob(const tsc_str_t* input);
 tsc_buffer_t* tsc_buffer_slice(const tsc_buffer_t* b, double start, double end);
+tsc_buffer_t* tsc_buffer_fill(tsc_buffer_t* b, double value, double start, double end);
+double tsc_buffer_write(tsc_buffer_t* b, const tsc_str_t* input, double offset, double length, const tsc_str_t* encoding);
+double tsc_buffer_copy(const tsc_buffer_t* source, tsc_buffer_t* target, double target_start, double source_start, double source_end);
+double tsc_buffer_index_of_byte(const tsc_buffer_t* b, double value, double offset);
+double tsc_buffer_last_index_of_byte(const tsc_buffer_t* b, double value, double offset);
+double tsc_buffer_index_of_str(const tsc_buffer_t* b, const tsc_str_t* value, double offset);
+double tsc_buffer_last_index_of_str(const tsc_buffer_t* b, const tsc_str_t* value, double offset);
+double tsc_buffer_index_of_buffer(const tsc_buffer_t* b, const tsc_buffer_t* value, double offset);
+double tsc_buffer_last_index_of_buffer(const tsc_buffer_t* b, const tsc_buffer_t* value, double offset);
 bool tsc_buffer_equals(const tsc_buffer_t* a, const tsc_buffer_t* b);
+double tsc_buffer_compare(const tsc_buffer_t* a, const tsc_buffer_t* b);
+double tsc_buffer_byte_length_str(const tsc_str_t* input, const tsc_str_t* encoding);
+bool tsc_buffer_is_encoding(const tsc_str_t* encoding);
 double tsc_buffer_length(const tsc_buffer_t* b);
 double tsc_buffer_get(const tsc_buffer_t* b, double idx);
+double tsc_buffer_read_uint8(const tsc_buffer_t* b, double offset);
+double tsc_buffer_write_uint8(tsc_buffer_t* b, double value, double offset);
+double tsc_buffer_read_int8(const tsc_buffer_t* b, double offset);
+double tsc_buffer_write_int8(tsc_buffer_t* b, double value, double offset);
+double tsc_buffer_read_uint16_le(const tsc_buffer_t* b, double offset);
+double tsc_buffer_read_uint16_be(const tsc_buffer_t* b, double offset);
+double tsc_buffer_write_uint16_le(tsc_buffer_t* b, double value, double offset);
+double tsc_buffer_write_uint16_be(tsc_buffer_t* b, double value, double offset);
+double tsc_buffer_read_int16_le(const tsc_buffer_t* b, double offset);
+double tsc_buffer_read_int16_be(const tsc_buffer_t* b, double offset);
+double tsc_buffer_write_int16_le(tsc_buffer_t* b, double value, double offset);
+double tsc_buffer_write_int16_be(tsc_buffer_t* b, double value, double offset);
+double tsc_buffer_read_uint32_le(const tsc_buffer_t* b, double offset);
+double tsc_buffer_read_uint32_be(const tsc_buffer_t* b, double offset);
+double tsc_buffer_write_uint32_le(tsc_buffer_t* b, double value, double offset);
+double tsc_buffer_write_uint32_be(tsc_buffer_t* b, double value, double offset);
+double tsc_buffer_read_int32_le(const tsc_buffer_t* b, double offset);
+double tsc_buffer_read_int32_be(const tsc_buffer_t* b, double offset);
+double tsc_buffer_write_int32_le(tsc_buffer_t* b, double value, double offset);
+double tsc_buffer_write_int32_be(tsc_buffer_t* b, double value, double offset);
+double tsc_buffer_read_float_le(const tsc_buffer_t* b, double offset);
+double tsc_buffer_read_float_be(const tsc_buffer_t* b, double offset);
+double tsc_buffer_write_float_le(tsc_buffer_t* b, double value, double offset);
+double tsc_buffer_write_float_be(tsc_buffer_t* b, double value, double offset);
+double tsc_buffer_read_double_le(const tsc_buffer_t* b, double offset);
+double tsc_buffer_read_double_be(const tsc_buffer_t* b, double offset);
+double tsc_buffer_write_double_le(tsc_buffer_t* b, double value, double offset);
+double tsc_buffer_write_double_be(tsc_buffer_t* b, double value, double offset);
+tsc_buffer_t* tsc_buffer_swap(tsc_buffer_t* b, size_t width);
 #define TSC_BUF(b, i) ((b)->data[(size_t)(i)])
 
 /* ------------- JSON ------------- */
@@ -329,12 +413,12 @@ void tsc_array_oob(const tsc_array_t* a, double i);
 #define TSC_ARR(T, a, i) (((T*)((a)->data))[(size_t)(i)])
 
 /* ------------- dynamic values (NaN-boxed) ------------- */
-typedef uint64_t tsc_value_t;
-
 typedef struct tsc_object tsc_object_t;
 typedef struct tsc_promise tsc_promise_t;
 typedef struct tsc_event_emitter tsc_event_emitter_t;
 typedef struct tsc_fs_stats tsc_fs_stats_t;
+typedef struct tsc_dns_lookup_result tsc_dns_lookup_result_t;
+typedef struct tsc_dns_lookup_all_result tsc_dns_lookup_all_result_t;
 typedef tsc_value_t (*tsc_accessor_getter_t)(void* env, tsc_value_t receiver);
 typedef bool (*tsc_accessor_setter_t)(void* env, tsc_value_t receiver, tsc_value_t value);
 typedef void (*tsc_event_listener_fn_t)(void* env, tsc_array_t* args);
@@ -362,6 +446,7 @@ tsc_str_t* tsc_value_json_stringify(tsc_value_t v);
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args);
 bool tsc_value_is_array(tsc_value_t v);
 bool tsc_value_is_nullish(tsc_value_t v);
+bool tsc_value_is_undefined(tsc_value_t v);
 tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key);
 tsc_value_t tsc_value_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc_value_t receiver);
 tsc_value_t tsc_value_get_index(tsc_value_t v, double index);
@@ -399,8 +484,13 @@ tsc_value_t tsc_value_object_from_entries(tsc_value_t entries);
 tsc_promise_t* tsc_promise_resolve(tsc_value_t value);
 tsc_promise_t* tsc_promise_resolve_fs_stats(tsc_fs_stats_t* value);
 tsc_promise_t* tsc_promise_reject(tsc_value_t reason);
+tsc_promise_t* tsc_promise_pending(void);
+tsc_promise_t* tsc_promise_adopt(tsc_promise_t* promise);
+void tsc_promise_fulfill_in_place(tsc_promise_t* p, tsc_value_t value);
+void tsc_promise_reject_in_place(tsc_promise_t* p, tsc_value_t reason);
 bool tsc_promise_is_fulfilled(const tsc_promise_t* p);
 bool tsc_promise_is_rejected(const tsc_promise_t* p);
+bool tsc_promise_is_pending(const tsc_promise_t* p);
 tsc_value_t tsc_promise_value(const tsc_promise_t* p);
 tsc_fs_stats_t* tsc_promise_fs_stats_value(const tsc_promise_t* p);
 tsc_value_t tsc_promise_reason(const tsc_promise_t* p);
@@ -412,9 +502,29 @@ void tsc_event_emitter_remove_all(tsc_event_emitter_t* ee, const tsc_str_t* even
 bool tsc_event_emitter_emit(tsc_event_emitter_t* ee, const tsc_str_t* event, tsc_array_t* args);
 double tsc_event_emitter_listener_count(const tsc_event_emitter_t* ee, const tsc_str_t* event);
 double tsc_event_emitter_listener_count_identity(const tsc_event_emitter_t* ee, const tsc_str_t* event, void* identity);
+tsc_array_t* tsc_event_emitter_listeners(const tsc_event_emitter_t* ee, const tsc_str_t* event);
+tsc_array_t* tsc_event_emitter_raw_listeners(const tsc_event_emitter_t* ee, const tsc_str_t* event);
 tsc_array_t* tsc_event_emitter_event_names(const tsc_event_emitter_t* ee);
+tsc_promise_t* tsc_event_emitter_once_promise(tsc_event_emitter_t* ee, tsc_str_t* event);
+double tsc_event_emitter_get_default_max_listeners(void);
+void tsc_event_emitter_set_default_max_listeners(double n);
 void tsc_event_emitter_set_max_listeners(tsc_event_emitter_t* ee, double n);
 double tsc_event_emitter_get_max_listeners(const tsc_event_emitter_t* ee);
+
+struct tsc_dns_lookup_result {
+    tsc_str_t* error;
+    tsc_str_t* address;
+    double family;
+};
+struct tsc_dns_lookup_all_result {
+    tsc_str_t* error;
+    tsc_array_t* addresses;
+};
+tsc_dns_lookup_result_t tsc_dns_lookup(tsc_str_t* hostname, double family, double hints);
+tsc_dns_lookup_all_result_t tsc_dns_lookup_all(tsc_str_t* hostname, double family, double hints);
+double tsc_net_is_ip(tsc_str_t* input);
+bool tsc_net_is_ipv4(tsc_str_t* input);
+bool tsc_net_is_ipv6(tsc_str_t* input);
 
 tsc_value_t tsc_value_add(tsc_value_t a, tsc_value_t b);
 tsc_value_t tsc_value_sub(tsc_value_t a, tsc_value_t b);
@@ -584,8 +694,25 @@ void tsc_process_exit(double code);
 extern int tsc_argc;
 extern char** tsc_argv;
 tsc_array_t* tsc_process_argv(void);
+tsc_str_t* tsc_process_argv0(void);
+tsc_array_t* tsc_process_exec_argv(void);
+tsc_str_t* tsc_process_version(void);
+tsc_value_t tsc_process_versions(void);
 tsc_str_t* tsc_process_env_get(const tsc_str_t* name);
+void tsc_process_env_set(const tsc_str_t* name, const tsc_str_t* value);
+bool tsc_process_env_unset(const tsc_str_t* name);
 tsc_str_t* tsc_process_cwd(void);
+void tsc_process_chdir(const tsc_str_t* directory);
+double tsc_process_pid(void);
+double tsc_process_getuid(void);
+double tsc_process_getgid(void);
+double tsc_process_geteuid(void);
+double tsc_process_getegid(void);
+double tsc_process_umask_get(void);
+double tsc_process_umask_set(double mask);
+double tsc_process_uptime(void);
+tsc_value_t tsc_process_memory_usage(void);
+tsc_array_t* tsc_process_hrtime(tsc_array_t* previous);
 
 /* ------------- fs (sync subset) ------------- */
 tsc_str_t* tsc_fs_read_file_sync(const tsc_str_t* path);
@@ -607,6 +734,7 @@ bool tsc_fs_stats_is_file(const tsc_fs_stats_t* st);
 bool tsc_fs_stats_is_directory(const tsc_fs_stats_t* st);
 bool tsc_fs_stats_is_symbolic_link(const tsc_fs_stats_t* st);
 void tsc_fs_access_sync(const tsc_str_t* path);
+void tsc_fs_access_sync_mode(const tsc_str_t* path, double mode);
 void tsc_fs_chmod_sync(const tsc_str_t* path, double mode);
 void tsc_fs_mkdir_sync(const tsc_str_t* path);
 void tsc_fs_mkdir_sync_opts(const tsc_str_t* path, bool recursive);
@@ -615,15 +743,27 @@ void tsc_fs_rm_sync(const tsc_str_t* path);
 void tsc_fs_rm_sync_opts(const tsc_str_t* path, bool recursive, bool force);
 void tsc_fs_rmdir_sync(const tsc_str_t* path);
 void tsc_fs_copy_file_sync(const tsc_str_t* src, const tsc_str_t* dest);
+void tsc_fs_copy_file_sync_mode(const tsc_str_t* src, const tsc_str_t* dest, double mode);
 void tsc_fs_rename_sync(const tsc_str_t* old_path, const tsc_str_t* new_path);
 
 /* ------------- os ------------- */
 tsc_str_t* tsc_os_platform(void);
+tsc_str_t* tsc_os_type(void);
+tsc_str_t* tsc_os_release(void);
+tsc_str_t* tsc_os_version(void);
+tsc_str_t* tsc_os_endianness(void);
+tsc_str_t* tsc_os_machine(void);
 tsc_str_t* tsc_os_arch(void);
 tsc_str_t* tsc_os_hostname(void);
 tsc_str_t* tsc_os_tmpdir(void);
 tsc_str_t* tsc_os_homedir(void);
 double tsc_os_cpu_count(void);
+double tsc_os_available_parallelism(void);
+double tsc_os_totalmem(void);
+double tsc_os_freemem(void);
+double tsc_os_uptime(void);
+tsc_array_t* tsc_os_loadavg(void);
+tsc_value_t tsc_os_user_info(void);
 double tsc_date_now(void);
 
 /* ------------- path ------------- */
@@ -635,6 +775,8 @@ tsc_str_t* tsc_path_relative(const tsc_str_t* from, const tsc_str_t* to);
 tsc_str_t* tsc_path_basename(const tsc_str_t* p);
 tsc_str_t* tsc_path_dirname(const tsc_str_t* p);
 tsc_str_t* tsc_path_extname(const tsc_str_t* p);
+tsc_value_t tsc_path_parse(const tsc_str_t* p);
+tsc_str_t* tsc_path_format(tsc_value_t path_object);
 
 /* ------------- exceptions ------------- */
 typedef struct tsc_try_frame {

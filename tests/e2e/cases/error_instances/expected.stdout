@@ -1,0 +1,4 @@
+with: Error boom Error: boom Error: boom
+empty: Error  Error
+called: Error called Error: called true
+caught: Error: boom

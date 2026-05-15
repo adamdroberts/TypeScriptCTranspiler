@@ -1,0 +1,4 @@
+type: TypeError bad type TypeError: bad type
+range: RangeError bad range RangeError: bad range
+syntax: SyntaxError  SyntaxError
+caught: RangeError: bad range

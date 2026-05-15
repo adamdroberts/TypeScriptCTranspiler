@@ -1,0 +1,10 @@
+lengths: 3 3 3
+types: function function [function]|[function]|[function]
+same list: true true
+module filtered: 2
+namespace filtered: 2 true
+copy: 4 3
+emit: true
+seen: early:x|named:x|named:x
+after once: 2 true
+missing: 0

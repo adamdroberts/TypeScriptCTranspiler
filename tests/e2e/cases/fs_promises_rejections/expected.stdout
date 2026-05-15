@@ -1,0 +1,5 @@
+read: fs.readFileSync: could not open file
+stat: fs.statSync: could not stat path
+access: fs.access: path is not accessible
+write: fs.writeFileSync: could not open
+recovered: read recovered

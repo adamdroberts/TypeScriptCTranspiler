@@ -23,6 +23,8 @@ export type CTypeKind =
     | "regexp"
     | "hash"
     | "url"
+    | "date"
+    | "error"
     | "buffer"
     | "fsstats"
     | "function"
@@ -114,6 +116,8 @@ export const T_EVENT_EMITTER: CType = { kind: "eventemitter", c: "tsc_event_emit
 export const T_REGEXP: CType = { kind: "regexp", c: "tsc_regexp_t*" };
 export const T_HASH: CType = { kind: "hash", c: "tsc_hash_t*" };
 export const T_URL: CType = { kind: "url", c: "tsc_url_t*" };
+export const T_DATE: CType = { kind: "date", c: "tsc_date_t*" };
+export const T_ERROR: CType = { kind: "error", c: "tsc_error_t*" };
 export const T_BUFFER: CType = { kind: "buffer", c: "tsc_buffer_t*" };
 export const T_FS_STATS: CType = { kind: "fsstats", c: "tsc_fs_stats_t*" };
 export const T_VALUE: CType = { kind: "value", c: "tsc_value_t" };
@@ -397,6 +401,14 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         if (sym?.getName() === "RegExp") return T_REGEXP;
         if (sym?.getName() === "CryptoHash") return T_HASH;
         if (sym?.getName() === "URL") return T_URL;
+        if (sym?.getName() === "Date") return T_DATE;
+        if (
+            sym?.getName() === "Error" ||
+            sym?.getName() === "TypeError" ||
+            sym?.getName() === "RangeError" ||
+            sym?.getName() === "SyntaxError" ||
+            sym?.getName() === "AggregateError"
+        ) return T_ERROR;
         if (sym?.getName() === "Buffer") return T_BUFFER;
         if (sym?.getName() === "FSStats") return T_FS_STATS;
         if (sym?.getName() === "TemplateStringsArray") return arrayType(T_STRING);

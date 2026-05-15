@@ -1,0 +1,2 @@
+env: spawn exec file
+callbacks: ok:exec-cb|ok:file-cb
