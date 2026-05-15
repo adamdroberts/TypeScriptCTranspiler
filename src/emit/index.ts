@@ -1912,10 +1912,10 @@ class Emitter {
         const ctorParams = this.collectParams(ctor?.parameters ?? []);
         const initParams = [`${name}_t* self`, ...ctorParams];
         this.protos.line(
-            `void ${name}_init(${initParams.join(", ")});`,
+            `static inline void ${name}_init(${initParams.join(", ")});`,
         );
         this.protos.line(
-            `${name}_t* ${name}_new(${ctorParams.length ? ctorParams.join(", ") : "void"});`,
+            `static inline ${name}_t* ${name}_new(${ctorParams.length ? ctorParams.join(", ") : "void"});`,
         );
         // Static field externs
         for (const m of cd.members) {
@@ -1939,10 +1939,108 @@ class Emitter {
                     ? this.collectParams(m.parameters)
                     : [`${name}_t* self`, ...this.collectParams(m.parameters)];
                 this.protos.line(
-                    `${ret.c} ${name}_${methodName}(${params.length ? params.join(", ") : "void"});`,
+                    `static inline ${ret.c} ${name}_${methodName}(${params.length ? params.join(", ") : "void"});`,
                 );
             }
         }
+    }
+
+    private classConstructorInitializesAllFields(cd: ts.ClassDeclaration): boolean {
+        const ownFields = new Set<string>();
+        for (const m of cd.members) {
+            if (ts.isPropertyDeclaration(m) && !isStatic(m)) {
+                const fieldName = this.staticPropertyName(m.name);
+                if (!fieldName) return false;
+                ownFields.add(fieldName);
+            }
+        }
+
+        const inheritedFields = new Set(this.collectInheritedFields(cd).map((f) => f.name));
+        const initialized = new Set<string>();
+        for (const m of cd.members) {
+            if (ts.isPropertyDeclaration(m) && !isStatic(m) && m.initializer) {
+                const fieldName = this.staticPropertyName(m.name);
+                if (!fieldName) return false;
+                initialized.add(fieldName);
+            }
+        }
+
+        const ctor = cd.members.find((m) => ts.isConstructorDeclaration(m)) as
+            | ts.ConstructorDeclaration
+            | undefined;
+        let callsSuper = false;
+        if (ctor?.body) {
+            const visit = (n: ts.Node): void => {
+                if (
+                    ts.isCallExpression(n) &&
+                    n.expression.kind === ts.SyntaxKind.SuperKeyword
+                ) {
+                    callsSuper = true;
+                }
+                if (
+                    ts.isBinaryExpression(n) &&
+                    n.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                    ts.isPropertyAccessExpression(n.left) &&
+                    n.left.expression.kind === ts.SyntaxKind.ThisKeyword
+                ) {
+                    initialized.add(n.left.name.text);
+                }
+                ts.forEachChild(n, visit);
+            };
+            visit(ctor.body);
+        } else if (inheritedFields.size > 0) {
+            callsSuper = true;
+        }
+
+        if (inheritedFields.size > 0 && !callsSuper) return false;
+        for (const field of ownFields) {
+            if (!initialized.has(field)) return false;
+        }
+        return true;
+    }
+
+    private nonEscapingLocalNewClass(
+        d: ts.VariableDeclaration,
+    ): { cls: string; init: ts.NewExpression; decl: ts.ClassDeclaration } | null {
+        if (!ts.isIdentifier(d.name) || !d.initializer || !ts.isNewExpression(d.initializer)) {
+            return null;
+        }
+        const init = d.initializer;
+        if (!ts.isIdentifier(init.expression) || init.arguments?.some(ts.isSpreadElement)) {
+            return null;
+        }
+        const cls = this.identifierName(init.expression);
+        if (["Map", "Set", "WeakMap", "WeakSet", "WeakRef", "FinalizationRegistry", "Promise", "EventEmitter", "Date", "AggregateError", "RegExp", "URL"].includes(cls) ||
+            this.isErrorConstructorName(cls)) {
+            return null;
+        }
+        const decl = this.findClassDecl(cls);
+        if (!decl || decl.typeParameters?.length || !this.classConstructorInitializesAllFields(decl)) {
+            return null;
+        }
+        const sym = this.symbolForIdentifier(d.name);
+        if (!sym) return null;
+        const stmt = d.parent.parent;
+        const scope = stmt?.parent;
+        if (!scope || !ts.isBlock(scope)) return null;
+
+        let escapes = false;
+        const visit = (n: ts.Node): void => {
+            if (escapes) return;
+            if (n !== scope && ts.isFunctionLike(n)) return;
+            if (ts.isIdentifier(n) && this.checker.getSymbolAtLocation(n) === sym) {
+                if (n === d.name) return;
+                const parent = n.parent;
+                if (ts.isPropertyAccessExpression(parent) && parent.expression === n) {
+                    return;
+                }
+                escapes = true;
+                return;
+            }
+            ts.forEachChild(n, visit);
+        };
+        visit(scope);
+        return escapes ? null : { cls, init, decl };
     }
 
     private emitClassBodies(cd: ts.ClassDeclaration): void {
@@ -1968,7 +2066,7 @@ class Emitter {
 
         // ClassName_init: runs ctor body + initializers on a pre-allocated self.
         const initParams = [`${name}_t* self`, ...ctorParams];
-        this.defs.open(`void ${name}_init(${initParams.join(", ")})`);
+        this.defs.open(`static inline void ${name}_init(${initParams.join(", ")})`);
         const typeChain = this.classTypeChain(cd);
         this.defs.line(`self->__tsc_type = "${escapeCString(typeChain)}";`);
         // Instance field initializers (only emitted if base hasn't run them; for
@@ -2012,10 +2110,13 @@ class Emitter {
 
         // ClassName_new: allocate + call init.
         this.defs.open(
-            `${name}_t* ${name}_new(${ctorParams.length ? ctorParams.join(", ") : "void"})`,
+            `static inline ${name}_t* ${name}_new(${ctorParams.length ? ctorParams.join(", ") : "void"})`,
         );
+        const alloc = this.classConstructorInitializesAllFields(cd)
+            ? "TSC_GC_MALLOC_UNINIT"
+            : "TSC_GC_MALLOC";
         this.defs.line(
-            `${name}_t* self = (${name}_t*)TSC_GC_MALLOC(sizeof(${name}_t));`,
+            `${name}_t* self = (${name}_t*)${alloc}(sizeof(${name}_t));`,
         );
         const initArgs = ["self"];
         for (const p of ctor?.parameters ?? []) {
@@ -2038,7 +2139,7 @@ class Emitter {
                     ? this.collectParams(m.parameters)
                     : [`${name}_t* self`, ...this.collectParams(m.parameters)];
                 this.defs.open(
-                    `${ret.c} ${name}_${methodName}(${params.length ? params.join(", ") : "void"})`,
+                    `static inline ${ret.c} ${name}_${methodName}(${params.length ? params.join(", ") : "void"})`,
                 );
                 const isAsync = this.isAsyncDeclaration(m);
                 const mappedRet = this.prepareType(ret);
@@ -2562,6 +2663,9 @@ class Emitter {
             compoundOnlyOps: Set<ts.SyntaxKind>; // operators used in `s op= rhs` and ++/--
         }
         const candidates = new Map<ts.Symbol, Cand>();
+        const constNumberValues = new Map<ts.Symbol, number>();
+        const smallBoundedIntSymbols = new Set<ts.Symbol>();
+        const SMALL_LIT_BOUND = 1 << 20; // 1M — products with two of these stay < 2^40
 
         const recordCand = (sym: ts.Symbol, initExpr: ts.Expression | null) => {
             if (!candidates.has(sym)) {
@@ -2580,13 +2684,63 @@ class Emitter {
             if (rhs) c.assignments.push(rhs);
             if (op !== null) c.compoundOnlyOps.add(op);
         };
+        const numericBound = (e: ts.Expression): number | null => {
+            let cur: ts.Expression = e;
+            while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+            if (ts.isNumericLiteral(cur)) {
+                const n = Number(cur.text);
+                return Number.isFinite(n) ? n : null;
+            }
+            if (ts.isIdentifier(cur)) {
+                const sym = this.checker.getSymbolAtLocation(cur);
+                return sym ? constNumberValues.get(sym) ?? null : null;
+            }
+            return null;
+        };
+        const markSmallBoundedForCounter = (fs: ts.ForStatement): void => {
+            if (!fs.initializer || !ts.isVariableDeclarationList(fs.initializer)) return;
+            if (fs.initializer.declarations.length !== 1) return;
+            const decl = fs.initializer.declarations[0]!;
+            if (!ts.isIdentifier(decl.name) || !decl.initializer || !this.isIntegerShape(decl.initializer)) return;
+            if (!fs.condition || !ts.isBinaryExpression(fs.condition)) return;
+            const op = fs.condition.operatorToken.kind;
+            if (op !== ts.SyntaxKind.LessThanToken && op !== ts.SyntaxKind.LessThanEqualsToken) return;
+            if (!ts.isIdentifier(fs.condition.left) || fs.condition.left.text !== decl.name.text) return;
+            const bound = numericBound(fs.condition.right);
+            if (bound === null || bound < 0 || bound > SMALL_LIT_BOUND) return;
+            if (!fs.incrementor) return;
+            let increments = false;
+            if (
+                (ts.isPostfixUnaryExpression(fs.incrementor) || ts.isPrefixUnaryExpression(fs.incrementor)) &&
+                fs.incrementor.operator === ts.SyntaxKind.PlusPlusToken &&
+                ts.isIdentifier(fs.incrementor.operand) &&
+                fs.incrementor.operand.text === decl.name.text
+            ) {
+                increments = true;
+            }
+            if (!increments) return;
+            const sym = this.checker.getSymbolAtLocation(decl.name);
+            if (sym) smallBoundedIntSymbols.add(sym);
+        };
 
         const visit = (n: ts.Node) => {
             // Capture declarations.
             if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name)) {
                 const sym = this.checker.getSymbolAtLocation(n.name);
-                if (sym) recordCand(sym, n.initializer ?? null);
+                if (sym) {
+                    recordCand(sym, n.initializer ?? null);
+                    const parent = n.parent;
+                    if (
+                        n.initializer &&
+                        ts.isVariableDeclarationList(parent) &&
+                        (parent.flags & ts.NodeFlags.Const) !== 0
+                    ) {
+                        const value = numericBound(n.initializer);
+                        if (value !== null) constNumberValues.set(sym, value);
+                    }
+                }
             }
+            if (ts.isForStatement(n)) markSmallBoundedForCounter(n);
             // Function/method parameters that have a default integer initializer
             // are not common in our hot paths — skip for now.
 
@@ -2677,7 +2831,6 @@ class Emitter {
         // would round under JS but stay exact in our int-spec emit, giving
         // observably-different results. Demote any symbol that participates
         // in a multiplication where the other operand isn't a tiny literal.
-        const SMALL_LIT_BOUND = 1 << 20; // 1M — products with two of these stay < 2^40
         const isSmallLit = (e: ts.Expression): boolean => {
             let cur: ts.Expression = e;
             while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
@@ -2690,6 +2843,13 @@ class Emitter {
             if (!ts.isNumericLiteral(cur)) return false;
             const n = Math.abs(Number(cur.text));
             return isFinite(n) && n <= SMALL_LIT_BOUND;
+        };
+        const isSmallBoundedIdent = (e: ts.Expression): boolean => {
+            let cur: ts.Expression = e;
+            while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+            if (!ts.isIdentifier(cur)) return false;
+            const sym = this.checker.getSymbolAtLocation(cur);
+            return !!sym && smallBoundedIntSymbols.has(sym);
         };
         const demoteIfCandidateIdent = (e: ts.Expression): void => {
             let cur: ts.Expression = e;
@@ -2704,7 +2864,8 @@ class Emitter {
                 n.operatorToken.kind === ts.SyntaxKind.AsteriskToken) {
                 const lSmall = isSmallLit(n.left);
                 const rSmall = isSmallLit(n.right);
-                if (!lSmall && !rSmall) {
+                const boundedProduct = isSmallBoundedIdent(n.left) && isSmallBoundedIdent(n.right);
+                if (!lSmall && !rSmall && !boundedProduct) {
                     demoteIfCandidateIdent(n.left);
                     demoteIfCandidateIdent(n.right);
                 }
@@ -3019,6 +3180,35 @@ class Emitter {
             }
             const name = mangleIdent(d.name.text);
             const sym = this.symbolForIdentifier(d.name);
+            const stackNew = this.nonEscapingLocalNewClass(d);
+            if (stackNew) {
+                const sig = this.checker.getResolvedSignature(stackNew.init);
+                if (!sig) unsupported(stackNew.init, "unresolved constructor");
+                const specs = this.callSpecsFromSignature(
+                    stackNew.init,
+                    stackNew.init.arguments ?? [],
+                    sig.getParameters(),
+                );
+                const args: string[] = [];
+                for (const spec of specs) {
+                    const target = spec.stringify ? T_STRING : (spec.target ?? spec.value.ty);
+                    const node = spec.node ?? this.currentSf!;
+                    const init = spec.stringify
+                        ? this.coerceToString(spec.value, node)
+                        : spec.target
+                            ? this.coerce(spec.value, spec.target, node)
+                            : spec.value.c;
+                    const tmp = this.freshTemp("_arg");
+                    buf.line(`${target.c} ${tmp} = ${init};`);
+                    args.push(spec.pass ? spec.pass(tmp) : tmp);
+                }
+                const storage = this.freshTemp(`_${name}_stack`);
+                const qual = isConst ? " const" : "";
+                buf.line(`${stackNew.cls}_t ${storage};`);
+                buf.line(`${stackNew.cls}_init(&${storage}${args.length ? ", " + args.join(", ") : ""});`);
+                buf.line(`${stackNew.cls}_t*${qual} ${name} = &${storage};`);
+                continue;
+            }
             // Lifted strbuf: declare the per-scope `tsc_jsonbuf_t` instead of
             // a tsc_str_t*. The init is empty by definition (analyzer only
             // accepts `let X = ""`).
@@ -3137,10 +3327,41 @@ class Emitter {
 
     private emitStmtInBlock(buf: CBuf, s: ts.Statement): void {
         if (ts.isBlock(s)) {
-            for (const child of s.statements) this.emitStmt(buf, child);
+            for (let i = 0; i < s.statements.length; i++) {
+                const child = s.statements[i]!;
+                if (
+                    i + 1 < s.statements.length &&
+                    this.isDuplicateSimpleSetAdd(child, s.statements[i + 1]!)
+                ) {
+                    this.emitStmt(buf, child);
+                    i++;
+                    continue;
+                }
+                this.emitStmt(buf, child);
+            }
         } else {
             this.emitStmt(buf, s);
         }
+    }
+
+    private isDuplicateSimpleSetAdd(a: ts.Statement, b: ts.Statement): boolean {
+        const parse = (stmt: ts.Statement): { recv: string; arg: string } | null => {
+            if (!ts.isExpressionStatement(stmt) || !ts.isCallExpression(stmt.expression)) return null;
+            const call = stmt.expression;
+            if (!ts.isPropertyAccessExpression(call.expression) || call.expression.name.text !== "add") {
+                return null;
+            }
+            if (call.arguments.length !== 1) return null;
+            const recv = call.expression.expression;
+            const arg = call.arguments[0]!;
+            if (!ts.isIdentifier(recv) || !ts.isIdentifier(arg)) return null;
+            const recvType = mapType(recv, this.checker);
+            if (recvType.kind !== "set") return null;
+            return { recv: recv.text, arg: arg.text };
+        };
+        const left = parse(a);
+        const right = parse(b);
+        return !!left && !!right && left.recv === right.recv && left.arg === right.arg;
     }
 
     private emitWhile(buf: CBuf, ws: ts.WhileStatement): void {
@@ -4774,6 +4995,49 @@ class Emitter {
         };
     }
 
+    private stringLiteralInfo(expr: ts.Expression): { text: string; escaped: string; len: number } | null {
+        if (
+            ts.isStringLiteral(expr) ||
+            expr.kind === ts.SyntaxKind.NoSubstitutionTemplateLiteral
+        ) {
+            const text = (expr as ts.StringLiteral | ts.NoSubstitutionTemplateLiteral).text;
+            return { text, escaped: escapeCString(text), len: utf8ByteLen(text) };
+        }
+        return null;
+    }
+
+    private tryEmitLiteralNumberConcat(bin: ts.BinaryExpression): EmitResult | null {
+        if (mapType(bin, this.checker).kind !== "string") return null;
+
+        const leftLit = this.stringLiteralInfo(bin.left);
+        if (leftLit) {
+            const right = this.emitExpr(bin.right);
+            if (right.ty.kind !== "number") return null;
+            const n = right.ty.c === "int64_t" || this.isIntegerShape(bin.right)
+                ? `(int64_t)(${right.c})`
+                : null;
+            const c = n
+                ? `tsc_str_concat_lit_int("${leftLit.escaped}", ${leftLit.len}, ${n})`
+                : `tsc_str_concat_lit_num("${leftLit.escaped}", ${leftLit.len}, ${right.c})`;
+            return { c, ty: T_STRING };
+        }
+
+        const rightLit = this.stringLiteralInfo(bin.right);
+        if (rightLit) {
+            const left = this.emitExpr(bin.left);
+            if (left.ty.kind !== "number") return null;
+            const n = left.ty.c === "int64_t" || this.isIntegerShape(bin.left)
+                ? `(int64_t)(${left.c})`
+                : null;
+            const c = n
+                ? `tsc_str_concat_int_lit(${n}, "${rightLit.escaped}", ${rightLit.len})`
+                : `tsc_str_concat_num_lit(${left.c}, "${rightLit.escaped}", ${rightLit.len})`;
+            return { c, ty: T_STRING };
+        }
+
+        return null;
+    }
+
     private emitBinary(bin: ts.BinaryExpression): EmitResult {
         const op = bin.operatorToken.kind;
 
@@ -4820,6 +5084,8 @@ class Emitter {
         // a single tsc_str_concat_n call with one allocation, vs N-1 nested
         // tsc_str_concat calls each doing its own GC_MALLOC + memcpys.
         if (op === ts.SyntaxKind.PlusToken) {
+            const litNum = this.tryEmitLiteralNumberConcat(bin);
+            if (litNum) return litNum;
             const chain = this.tryFoldStringConcatChain(bin);
             if (chain) return chain;
         }
@@ -8749,6 +9015,12 @@ class Emitter {
                 const kc = this.coerce(kv, k, args[0]!);
                 const vc = this.coerce(vv, v, args[1]!);
                 const mt = this.freshTemp("_map");
+                if (k.kind === "string" && v.kind === "number") {
+                    return {
+                        c: `({ tsc_map_t* const ${mt} = ${recv.c}; tsc_map_set_str_num(${mt}, ${kc}, ${vc}); ${mt}; })`,
+                        ty: recv.ty,
+                    };
+                }
                 const kt = this.freshTemp("_mk");
                 const vt = this.freshTemp("_mv");
                 return {
@@ -8762,6 +9034,12 @@ class Emitter {
                 const kv = this.emitExpr(args[0]!);
                 const kc = this.coerce(kv, k, args[0]!);
                 const mt = this.freshTemp("_map");
+                if (k.kind === "string" && v.kind === "number") {
+                    return {
+                        c: `({ tsc_map_t* const ${mt} = ${recv.c}; tsc_map_get_str_num(${mt}, ${kc}, (double)0); })`,
+                        ty: v,
+                    };
+                }
                 const kt = this.freshTemp("_mk");
                 const vt = this.freshTemp("_mv");
                 return {
@@ -8775,6 +9053,12 @@ class Emitter {
                 const kv = this.emitExpr(args[0]!);
                 const kc = this.coerce(kv, k, args[0]!);
                 const mt = this.freshTemp("_map");
+                if (k.kind === "string") {
+                    return {
+                        c: `({ tsc_map_t* const ${mt} = ${recv.c}; tsc_map_has_str(${mt}, ${kc}); })`,
+                        ty: T_BOOLEAN,
+                    };
+                }
                 const kt = this.freshTemp("_mk");
                 return {
                     c: `({ tsc_map_t* const ${mt} = ${recv.c}; ${k.c} ${kt} = ${kc}; tsc_map_has_raw(${mt}, &${kt}); })`,
@@ -8905,6 +9189,17 @@ class Emitter {
                 const r = this.emitExpr(args[0]!);
                 const c = this.coerce(r, e, args[0]!);
                 const st = this.freshTemp("_set");
+                if (e.kind === "number") {
+                    const intArg = r.ty.c === "int64_t" || this.isIntegerShape(args[0]!)
+                        ? `(int64_t)(${r.c})`
+                        : null;
+                    return {
+                        c: intArg
+                            ? `({ tsc_set_t* const ${st} = ${recv.c}; tsc_set_add_int(${st}, ${intArg}); ${st}; })`
+                            : `({ tsc_set_t* const ${st} = ${recv.c}; tsc_set_add_num(${st}, ${c}); ${st}; })`,
+                        ty: recv.ty,
+                    };
+                }
                 const vt = this.freshTemp("_sv");
                 return {
                     c: `({ tsc_set_t* const ${st} = ${recv.c}; ${e.c} ${vt} = ${c}; tsc_set_add_raw(${st}, &${vt}); ${st}; })`,
@@ -8915,6 +9210,17 @@ class Emitter {
                 const r = this.emitExpr(args[0]!);
                 const c = this.coerce(r, e, args[0]!);
                 const st = this.freshTemp("_set");
+                if (e.kind === "number") {
+                    const intArg = r.ty.c === "int64_t" || this.isIntegerShape(args[0]!)
+                        ? `(int64_t)(${r.c})`
+                        : null;
+                    return {
+                        c: intArg
+                            ? `({ tsc_set_t* const ${st} = ${recv.c}; tsc_set_has_int(${st}, ${intArg}); })`
+                            : `({ tsc_set_t* const ${st} = ${recv.c}; tsc_set_has_num(${st}, ${c}); })`,
+                        ty: T_BOOLEAN,
+                    };
+                }
                 const vt = this.freshTemp("_sv");
                 return {
                     c: `({ tsc_set_t* const ${st} = ${recv.c}; ${e.c} ${vt} = ${c}; tsc_set_has_raw(${st}, &${vt}); })`,
@@ -10853,12 +11159,12 @@ class Emitter {
                     const coerced = this.coerce(r, et, args[i]!);
                     const vv = this.freshTemp("_pv");
                     pieces.push(`${et.c} ${vv} = ${coerced}`);
-                    pushes.push(`tsc_array_push_raw(${av}, &${vv})`);
+                    pushes.push(`if (${av}->len + 1 > ${av}->cap) tsc_array_reserve(${av}, ${av}->len + 1); TSC_ARR(${et.c}, ${av}, ${av}->len) = ${vv}; ${av}->len++`);
                 }
                 if (pushes.length > 0) {
                     pieces.push(`if (${av}->extensible && !${av}->sealed && !${av}->frozen) { ${pushes.join("; ")}; }`);
                 }
-                pieces.push(`tsc_array_length(${av})`);
+                pieces.push(`(double)${av}->len`);
                 return { c: `({ ${pieces.join("; ")}; })`, ty: T_NUMBER };
             }
             case "pop": {
@@ -12806,17 +13112,19 @@ class Emitter {
             }
             case "writeFileSync": {
                 if (args.length < 2 || args.length > 3)
-                    unsupported(call, "fs.writeFileSync needs path, data, and optional UTF-8 encoding options");
-                this.validateFsEncodingOptions(args[2], "fs.writeFileSync");
+                    unsupported(call, "fs.writeFileSync needs path, data, and optional UTF-8 encoding/flag options");
+                const options = this.validateFsWriteFileOptions(args[2], "fs.writeFileSync");
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.writeFileSync data must be string or Buffer");
                 return this.emitSequencedCall(
-                    d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync" : "tsc_fs_write_file_sync",
+                    d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync_opts" : "tsc_fs_write_file_sync_opts",
                     T_VOID,
                     [
                         { value: p, target: T_STRING, node: args[0]! },
                         { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
+                        { value: { c: options.append ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
+                        { value: { c: options.exclusive ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
                     ],
                 );
             }
@@ -13169,6 +13477,44 @@ class Emitter {
         }
     }
 
+    private validateFsWriteFileOptions(options: ts.Expression | undefined, label: string): { append: boolean; exclusive: boolean } {
+        const out = { append: false, exclusive: false };
+        if (!options || this.isUndefinedExpression(options)) return out;
+        const checkEncoding = (node: ts.Expression): void => {
+            if (!ts.isStringLiteralLike(node) || (node.text !== "utf8" && node.text !== "utf-8")) {
+                unsupported(node, `${label} only supports UTF-8 encoding options in this subset`);
+            }
+        };
+        const checkFlag = (node: ts.Expression): void => {
+            if (!ts.isStringLiteralLike(node) || !["w", "wx", "a", "ax"].includes(node.text)) {
+                unsupported(node, `${label} only supports literal "w", "wx", "a", or "ax" flags in this subset`);
+            }
+            out.append = node.text === "a" || node.text === "ax";
+            out.exclusive = node.text === "wx" || node.text === "ax";
+        };
+        if (ts.isStringLiteralLike(options)) {
+            checkEncoding(options);
+            return out;
+        }
+        if (!ts.isObjectLiteralExpression(options)) {
+            unsupported(options, `${label} options must be a UTF-8 string literal or object literal in this subset`);
+        }
+        for (const prop of options.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, `${label} options only support encoding and flag property assignments`);
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (key === "encoding") {
+                checkEncoding(prop.initializer);
+            } else if (key === "flag") {
+                checkFlag(prop.initializer);
+            } else {
+                unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+            }
+        }
+        return out;
+    }
+
     private validateFsReaddirOptions(
         options: ts.Expression | undefined,
         label: string,
@@ -13280,17 +13626,17 @@ class Emitter {
                 ], ([path]) => settle(`tsc_promise_resolve(tsc_value_string(tsc_fs_read_file_sync(${path!})))`));
             }
             case "writeFile": {
-                if (args.length < 2 || args.length > 3) unsupported(call, "fs.promises.writeFile needs path, data, and optional UTF-8 encoding options");
-                this.validateFsEncodingOptions(args[2], "fs.promises.writeFile");
+                if (args.length < 2 || args.length > 3) unsupported(call, "fs.promises.writeFile needs path, data, and optional UTF-8 encoding/flag options");
+                const options = this.validateFsWriteFileOptions(args[2], "fs.promises.writeFile");
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.promises.writeFile data must be string or Buffer");
-                const fn = d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync" : "tsc_fs_write_file_sync";
+                const fn = d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync_opts" : "tsc_fs_write_file_sync_opts";
                 return this.emitSequencedExpr(mapped, [
                     { value: p, target: T_STRING, node: args[0]! },
                     { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
                 ], ([path, data]) =>
-                    settle(`({ ${fn}(${path!}, ${data!}); tsc_promise_resolve(tsc_value_undefined()); })`),
+                    settle(`({ ${fn}(${path!}, ${data!}, ${options.append ? "true" : "false"}, ${options.exclusive ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "appendFile": {
@@ -17947,7 +18293,7 @@ class Emitter {
             return { c: `tsc_str_length(${recv.c})`, ty: T_NUMBER };
         }
         if (recv.ty.kind === "array" && pa.name.text === "length") {
-            return { c: `tsc_array_length(${recv.c})`, ty: T_NUMBER };
+            return { c: `((double)${recv.c}->len)`, ty: T_NUMBER };
         }
         if (recv.ty.kind === "map" && pa.name.text === "size") {
             return { c: `tsc_map_size(${recv.c})`, ty: T_NUMBER };
@@ -18178,6 +18524,27 @@ class Emitter {
         unsupported(ea, `index access on ${recv.ty.c}`);
     }
 
+    private objectLiteralInitializesAllFields(
+        ol: ts.ObjectLiteralExpression,
+        targetType: ts.Type,
+    ): boolean {
+        const props = this.objectProperties(targetType);
+        if (props.length === 0) return false;
+        const seen = new Set<string>();
+        for (const prop of ol.properties) {
+            if (ts.isPropertyAssignment(prop)) {
+                const name = this.staticPropertyName(prop.name);
+                if (!name) return false;
+                seen.add(name);
+            } else if (ts.isShorthandPropertyAssignment(prop)) {
+                seen.add(prop.name.text);
+            } else {
+                return false;
+            }
+        }
+        return props.every((p) => seen.has(p.getName()));
+    }
+
     private emitObjectLiteral(ol: ts.ObjectLiteralExpression): EmitResult {
         const targetType =
             this.checker.getContextualType(ol) ??
@@ -18220,8 +18587,11 @@ class Emitter {
         }
         const cls = mapped.className!;
         const tmp = this.freshTemp("_obj");
+        const alloc = this.objectLiteralInitializesAllFields(ol, targetType)
+            ? "TSC_GC_MALLOC_UNINIT"
+            : "TSC_GC_MALLOC";
         const pieces: string[] = [
-            `${cls}_t* ${tmp} = (${cls}_t*)TSC_GC_MALLOC(sizeof(${cls}_t))`,
+            `${cls}_t* ${tmp} = (${cls}_t*)${alloc}(sizeof(${cls}_t))`,
         ];
         for (const prop of ol.properties) {
             if (ts.isPropertyAssignment(prop)) {
@@ -18309,8 +18679,14 @@ class Emitter {
         const et = mapped.elem!;
         const pieces: string[] = [];
         const av = this.freshTemp("_al");
+        const initialCap = al.elements.length === 0 && et.kind === "number"
+            ? 2048
+            : Math.max(8, al.elements.length);
+        const arrayCtor = et.kind === "number" || et.kind === "boolean"
+            ? "tsc_array_new_atomic"
+            : "tsc_array_new";
         pieces.push(
-            `tsc_array_t* ${av} = tsc_array_new(sizeof(${et.c}), ${Math.max(1, al.elements.length)})`,
+            `tsc_array_t* ${av} = ${arrayCtor}(sizeof(${et.c}), ${initialCap})`,
         );
         for (const e of al.elements) {
             if (e.kind === ts.SyntaxKind.OmittedExpression)
@@ -18326,7 +18702,7 @@ class Emitter {
             const coerced = this.coerce(r, et, e as ts.Expression);
             const tv = this.freshTemp("_el");
             pieces.push(`${et.c} ${tv} = ${coerced}`);
-            pieces.push(`tsc_array_push_raw(${av}, &${tv})`);
+            pieces.push(`TSC_ARR(${et.c}, ${av}, ${av}->len) = ${tv}; ${av}->len++`);
         }
         pieces.push(av);
         return { c: `({ ${pieces.join("; ")}; })`, ty: mapped };

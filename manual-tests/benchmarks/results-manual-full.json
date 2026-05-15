@@ -1,0 +1,361 @@
+{
+  "when": "2026-05-15T19:28:01.305Z",
+  "runs_per_backend": 9,
+  "source": "manual",
+  "tsc2c_flags": [
+    "--no-gc"
+  ],
+  "results": [
+    {
+      "name": "arith",
+      "mode": "self",
+      "compile_ms": 1304.717731,
+      "bundle_ms": 8.504740999999967,
+      "samples": [
+        {
+          "backend": "tsc2c",
+          "bench_ms": 56.040283203125,
+          "wall_ms": 58.3274100000001,
+          "checksum": "502570737"
+        },
+        {
+          "backend": "bun",
+          "bench_ms": 66,
+          "wall_ms": 80.38293899999985,
+          "checksum": "502570737"
+        },
+        {
+          "backend": "node",
+          "bench_ms": 63,
+          "wall_ms": 92.82574700000032,
+          "checksum": "502570737"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "array_alloc",
+      "mode": "self",
+      "compile_ms": 1279.5383209999995,
+      "bundle_ms": 8.14305399999921,
+      "samples": [
+        {
+          "backend": "tsc2c",
+          "bench_ms": 10.53466796875,
+          "wall_ms": 14.428202000000056,
+          "checksum": "2998000000"
+        },
+        {
+          "backend": "bun",
+          "bench_ms": 26,
+          "wall_ms": 44.7716649999993,
+          "checksum": "2998000000"
+        },
+        {
+          "backend": "node",
+          "bench_ms": 11,
+          "wall_ms": 38.8076200000005,
+          "checksum": "2998000000"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "array_hof",
+      "mode": "self",
+      "compile_ms": 1317.661747,
+      "bundle_ms": 8.286837999999989,
+      "samples": [
+        {
+          "backend": "tsc2c",
+          "bench_ms": 15.25732421875,
+          "wall_ms": 19.064957000000504,
+          "checksum": "998999001"
+        },
+        {
+          "backend": "bun",
+          "bench_ms": 21,
+          "wall_ms": 40.581293999999616,
+          "checksum": "998999001"
+        },
+        {
+          "backend": "node",
+          "bench_ms": 19,
+          "wall_ms": 50.97282600000017,
+          "checksum": "998999001"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "array_sort",
+      "mode": "self",
+      "compile_ms": 1342.8757619999997,
+      "bundle_ms": 8.834075999999186,
+      "samples": [
+        {
+          "backend": "tsc2c",
+          "bench_ms": 5.2861328125,
+          "wall_ms": 7.991337999999814,
+          "checksum": "9991402"
+        },
+        {
+          "backend": "bun",
+          "bench_ms": 21,
+          "wall_ms": 35.05236200000036,
+          "checksum": "9991402"
+        },
+        {
+          "backend": "node",
+          "bench_ms": 12,
+          "wall_ms": 41.17315899999994,
+          "checksum": "9991402"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "classes",
+      "mode": "self",
+      "compile_ms": 1304.6213939999998,
+      "bundle_ms": 9.649428999999145,
+      "samples": [
+        {
+          "backend": "tsc2c",
+          "bench_ms": 0.618408203125,
+          "wall_ms": 2.9157839999988937,
+          "checksum": "416041750000"
+        },
+        {
+          "backend": "bun",
+          "bench_ms": 20,
+          "wall_ms": 38.26953400000093,
+          "checksum": "416041750000"
+        },
+        {
+          "backend": "node",
+          "bench_ms": 10,
+          "wall_ms": 40.24604800000088,
+          "checksum": "416041750000"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "closures",
+      "mode": "self",
+      "compile_ms": 1281.7488549999998,
+      "bundle_ms": 8.63009299999976,
+      "samples": [
+        {
+          "backend": "tsc2c",
+          "bench_ms": 3.230712890625,
+          "wall_ms": 5.422418000000107,
+          "checksum": "20835830000000"
+        },
+        {
+          "backend": "bun",
+          "bench_ms": 6,
+          "wall_ms": 21.012643000000025,
+          "checksum": "20835830000000"
+        },
+        {
+          "backend": "node",
+          "bench_ms": 5,
+          "wall_ms": 34.15907999999945,
+          "checksum": "20835830000000"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "exceptions",
+      "mode": "self",
+      "compile_ms": 1283.9251409999997,
+      "bundle_ms": 8.304503999999724,
+      "samples": [
+        {
+          "backend": "tsc2c",
+          "bench_ms": 3.144287109375,
+          "wall_ms": 5.71629700000085,
+          "checksum": "2500000"
+        },
+        {
+          "backend": "bun",
+          "bench_ms": 28,
+          "wall_ms": 45.66243399999985,
+          "checksum": "2500000"
+        },
+        {
+          "backend": "node",
+          "bench_ms": 8,
+          "wall_ms": 38.435953000000154,
+          "checksum": "2500000"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "json",
+      "mode": "self",
+      "compile_ms": 1358.0264390000011,
+      "bundle_ms": 9.120877999997901,
+      "samples": [
+        {
+          "backend": "tsc2c",
+          "bench_ms": 3.701416015625,
+          "wall_ms": 6.181118000000424,
+          "checksum": "895772"
+        },
+        {
+          "backend": "bun",
+          "bench_ms": 5,
+          "wall_ms": 19.49162399999841,
+          "checksum": "895772"
+        },
+        {
+          "backend": "node",
+          "bench_ms": 4,
+          "wall_ms": 32.71057099999962,
+          "checksum": "895772"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "map_ops",
+      "mode": "self",
+      "compile_ms": 1318.2595069999988,
+      "bundle_ms": 8.367895999999746,
+      "samples": [
+        {
+          "backend": "tsc2c",
+          "bench_ms": 6.5625,
+          "wall_ms": 10.133664000000863,
+          "checksum": "120000000"
+        },
+        {
+          "backend": "bun",
+          "bench_ms": 19,
+          "wall_ms": 37.41210999999748,
+          "checksum": "120000000"
+        },
+        {
+          "backend": "node",
+          "bench_ms": 8,
+          "wall_ms": 36.6226170000009,
+          "checksum": "120000000"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "recursion",
+      "mode": "self",
+      "compile_ms": 1272.8897880000004,
+      "bundle_ms": 9.099014999999781,
+      "samples": [
+        {
+          "backend": "tsc2c",
+          "bench_ms": 3.931396484375,
+          "wall_ms": 6.226214000002074,
+          "checksum": "46368000"
+        },
+        {
+          "backend": "bun",
+          "bench_ms": 214,
+          "wall_ms": 227.2623249999997,
+          "checksum": "46368000"
+        },
+        {
+          "backend": "node",
+          "bench_ms": 347,
+          "wall_ms": 374.386437000001,
+          "checksum": "46368000"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "regex",
+      "mode": "self",
+      "compile_ms": 1289.6440059999986,
+      "bundle_ms": 9.066045000003214,
+      "samples": [
+        {
+          "backend": "tsc2c",
+          "bench_ms": 1.714111328125,
+          "wall_ms": 3.6387979999999516,
+          "checksum": "115000"
+        },
+        {
+          "backend": "bun",
+          "bench_ms": 3,
+          "wall_ms": 16.37849699999788,
+          "checksum": "115000"
+        },
+        {
+          "backend": "node",
+          "bench_ms": 2,
+          "wall_ms": 30.386247000002186,
+          "checksum": "115000"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "set_ops",
+      "mode": "self",
+      "compile_ms": 1249.7441059999983,
+      "bundle_ms": 7.956535999997868,
+      "samples": [
+        {
+          "backend": "tsc2c",
+          "bench_ms": 9.58935546875,
+          "wall_ms": 12.765364999999292,
+          "checksum": "1000000"
+        },
+        {
+          "backend": "bun",
+          "bench_ms": 36,
+          "wall_ms": 54.56290199999785,
+          "checksum": "1000000"
+        },
+        {
+          "backend": "node",
+          "bench_ms": 11,
+          "wall_ms": 39.68763800000306,
+          "checksum": "1000000"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "string_concat",
+      "mode": "self",
+      "compile_ms": 1249.439667999999,
+      "bundle_ms": 8.491893000002165,
+      "samples": [
+        {
+          "backend": "tsc2c",
+          "bench_ms": 1.708740234375,
+          "wall_ms": 3.663885999998456,
+          "checksum": "690000"
+        },
+        {
+          "backend": "bun",
+          "bench_ms": 5,
+          "wall_ms": 18.323397000000114,
+          "checksum": "690000"
+        },
+        {
+          "backend": "node",
+          "bench_ms": 3,
+          "wall_ms": 31.61267500000031,
+          "checksum": "690000"
+        }
+      ],
+      "notes": []
+    }
+  ]
+}

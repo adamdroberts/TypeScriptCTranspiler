@@ -386,7 +386,7 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 | Symbol | Signature | JS equivalent |
 |--------|-----------|---------------|
 | `tsc_fs_read_file_sync(path)` | `tsc_str_t*` | `fs.readFileSync(path[, utf8Options])` and immediate-settled `fs.promises.readFile(path[, utf8Options])` — throws via `tsc_throw_str` on error |
-| `tsc_fs_write_file_sync(path, data)` | `void` | `fs.writeFileSync(path, data[, utf8Options])` and immediate-settled `fs.promises.writeFile(path, data[, utf8Options])` |
+| `tsc_fs_write_file_sync(path, data)` / `tsc_fs_write_file_sync_opts(path, data, append, exclusive)` | `void` | `fs.writeFileSync(path, data[, utf8OrFlagOptions])` and immediate-settled `fs.promises.writeFile(path, data[, utf8OrFlagOptions])` |
 | `tsc_fs_append_file_sync(path, data)` | `void` | `fs.appendFileSync(path, data[, utf8Options])` and immediate-settled `fs.promises.appendFile(path, data[, utf8Options])` |
 | `tsc_fs_exists_sync(path)` | `bool` | `fs.existsSync(path)` |
 | `tsc_fs_readdir_sync(path)` | `tsc_array_t*` | `fs.readdirSync(path)` — array of filenames |

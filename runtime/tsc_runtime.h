@@ -15,13 +15,16 @@
 #include <pcre2.h>
 
 #ifdef TSC_NO_GC
+void* tsc_no_gc_malloc_uninit(size_t n);
 #  define TSC_GC_MALLOC(n)         calloc(1, (n))
-#  define TSC_GC_MALLOC_ATOMIC(n)  calloc(1, (n))
+#  define TSC_GC_MALLOC_UNINIT(n)  tsc_no_gc_malloc_uninit((n))
+#  define TSC_GC_MALLOC_ATOMIC(n)  malloc((n))
 #  define TSC_GC_REALLOC(p, n)     realloc((p), (n))
 #  define TSC_GC_INIT()            ((void)0)
 #else
 #  include <gc/gc.h>
 #  define TSC_GC_MALLOC(n)         GC_MALLOC(n)
+#  define TSC_GC_MALLOC_UNINIT(n)  GC_MALLOC((n))
 #  define TSC_GC_MALLOC_ATOMIC(n)  GC_MALLOC_ATOMIC(n)
 #  define TSC_GC_REALLOC(p, n)     GC_REALLOC((p), (n))
 #  define TSC_GC_INIT()            GC_INIT()
@@ -63,11 +66,16 @@ void tsc_panic(const char* msg);
 typedef struct tsc_str {
     size_t len;
     const char* data;
+    uint64_t hash;
 } tsc_str_t;
 
 tsc_str_t* tsc_str_from_lit(const char* data, size_t len);
 tsc_str_t* tsc_str_from_cstr(const char* s);
 tsc_str_t* tsc_str_concat(const tsc_str_t* a, const tsc_str_t* b);
+tsc_str_t* tsc_str_concat_lit_int(const char* lit, size_t lit_len, int64_t n);
+tsc_str_t* tsc_str_concat_int_lit(int64_t n, const char* lit, size_t lit_len);
+tsc_str_t* tsc_str_concat_lit_num(const char* lit, size_t lit_len, double n);
+tsc_str_t* tsc_str_concat_num_lit(double n, const char* lit, size_t lit_len);
 tsc_str_t* tsc_str_concat_n(size_t n, ...);
 
 /* ------------- JSON build buffer -------------
@@ -245,6 +253,9 @@ static inline bool tsc_regexp_test(const tsc_regexp_t* re, const tsc_str_t* s) {
     if (!re->cached_md) {
         ((tsc_regexp_t*)re)->cached_md = pcre2_match_data_create_from_pattern(re->re, NULL);
     }
+    if (re->jit) {
+        return pcre2_jit_match(re->re, (PCRE2_SPTR)s->data, s->len, 0, 0, re->cached_md, NULL) >= 0;
+    }
     return pcre2_match(re->re, (PCRE2_SPTR)s->data, s->len, 0, 0, re->cached_md, NULL) >= 0;
 }
 tsc_str_t* tsc_regexp_to_string(const tsc_regexp_t* re);
@@ -390,6 +401,7 @@ typedef struct tsc_array {
 } tsc_array_t;
 
 tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap);
+tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap);
 tsc_array_t* tsc_array_from_buf(size_t elem_size, const void* src, size_t n);
 void tsc_array_reserve(tsc_array_t* a, size_t new_cap);
 void tsc_array_push_raw(tsc_array_t* a, const void* elem);
@@ -652,8 +664,11 @@ typedef struct tsc_map {
 
 tsc_map_t* tsc_map_new(size_t ks, size_t vs, int kk, size_t initial_cap);
 void tsc_map_set_raw(tsc_map_t* m, const void* k, const void* v);
+void tsc_map_set_str_num(tsc_map_t* m, tsc_str_t* k, double v);
 bool tsc_map_get_raw(const tsc_map_t* m, const void* k, void* out);
+double tsc_map_get_str_num(const tsc_map_t* m, tsc_str_t* k, double fallback);
 bool tsc_map_has_raw(const tsc_map_t* m, const void* k);
+bool tsc_map_has_str(const tsc_map_t* m, tsc_str_t* k);
 bool tsc_map_delete_raw(tsc_map_t* m, const void* k);
 void tsc_map_clear(tsc_map_t* m);
 double tsc_map_size(const tsc_map_t* m);
@@ -671,7 +686,11 @@ typedef struct tsc_set {
 
 tsc_set_t* tsc_set_new(size_t es, int kk, size_t initial_cap);
 void tsc_set_add_raw(tsc_set_t* s, const void* v);
+void tsc_set_add_int(tsc_set_t* s, int64_t v);
+void tsc_set_add_num(tsc_set_t* s, double v);
 bool tsc_set_has_raw(const tsc_set_t* s, const void* v);
+bool tsc_set_has_int(const tsc_set_t* s, int64_t v);
+bool tsc_set_has_num(const tsc_set_t* s, double v);
 bool tsc_set_delete_raw(tsc_set_t* s, const void* v);
 void tsc_set_clear(tsc_set_t* s);
 double tsc_set_size(const tsc_set_t* s);
@@ -734,6 +753,8 @@ void tsc_process_drain_next_ticks(void);
 tsc_str_t* tsc_fs_read_file_sync(const tsc_str_t* path);
 void tsc_fs_write_file_sync(const tsc_str_t* path, const tsc_str_t* data);
 void tsc_fs_write_file_buffer_sync(const tsc_str_t* path, const tsc_buffer_t* data);
+void tsc_fs_write_file_sync_opts(const tsc_str_t* path, const tsc_str_t* data, bool append, bool exclusive);
+void tsc_fs_write_file_buffer_sync_opts(const tsc_str_t* path, const tsc_buffer_t* data, bool append, bool exclusive);
 void tsc_fs_append_file_sync(const tsc_str_t* path, const tsc_str_t* data);
 void tsc_fs_append_file_buffer_sync(const tsc_str_t* path, const tsc_buffer_t* data);
 bool tsc_fs_exists_sync(const tsc_str_t* path);

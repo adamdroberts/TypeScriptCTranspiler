@@ -9,9 +9,9 @@
 #include <libgen.h>
 #include <limits.h>
 #include <netdb.h>
+#include <openssl/evp.h>
 #include <openssl/opensslv.h>
 #include <openssl/rand.h>
-#include <openssl/sha.h>
 #include <gmp.h>
 #include <poll.h>
 #include <pwd.h>
@@ -36,6 +36,34 @@
 
 int tsc_argc;
 char** tsc_argv;
+
+#ifdef TSC_NO_GC
+typedef struct tsc_no_gc_chunk {
+    struct tsc_no_gc_chunk* next;
+    size_t cap;
+    size_t used;
+    unsigned char data[];
+} tsc_no_gc_chunk_t;
+
+static tsc_no_gc_chunk_t* tsc_no_gc_chunks = NULL;
+
+void* tsc_no_gc_malloc_uninit(size_t n) {
+    const size_t align = sizeof(max_align_t);
+    n = (n + align - 1) & ~(align - 1);
+    if (!tsc_no_gc_chunks || tsc_no_gc_chunks->used + n > tsc_no_gc_chunks->cap) {
+        size_t cap = n > (1u << 20) ? n : (1u << 20);
+        tsc_no_gc_chunk_t* chunk = (tsc_no_gc_chunk_t*)malloc(sizeof(tsc_no_gc_chunk_t) + cap);
+        if (!chunk) tsc_panic("out of memory");
+        chunk->next = tsc_no_gc_chunks;
+        chunk->cap = cap;
+        chunk->used = 0;
+        tsc_no_gc_chunks = chunk;
+    }
+    void* p = tsc_no_gc_chunks->data + tsc_no_gc_chunks->used;
+    tsc_no_gc_chunks->used += n;
+    return p;
+}
+#endif
 
 static tsc_try_frame_t* g_try_top = NULL;
 static tsc_str_t* g_current_error = NULL;
@@ -419,6 +447,8 @@ void tsc_process_drain_next_ticks(void) {
 
 /* ---------------- strings ---------------- */
 
+static inline size_t fast_itoa(char* dst, int64_t n);
+
 static tsc_str_t* str_alloc(size_t len) {
     tsc_str_t* s = (tsc_str_t*)TSC_GC_MALLOC(sizeof(tsc_str_t));
     char* buf = (char*)TSC_GC_MALLOC_ATOMIC(len + 1);
@@ -449,6 +479,38 @@ tsc_str_t* tsc_str_concat(const tsc_str_t* a, const tsc_str_t* b) {
     return s;
 }
 
+tsc_str_t* tsc_str_concat_lit_int(const char* lit, size_t lit_len, int64_t n) {
+    char num[21];
+    size_t num_len = fast_itoa(num, n);
+    tsc_str_t* s = str_alloc(lit_len + num_len);
+    memcpy((char*)s->data, lit, lit_len);
+    memcpy((char*)s->data + lit_len, num, num_len);
+    return s;
+}
+
+tsc_str_t* tsc_str_concat_int_lit(int64_t n, const char* lit, size_t lit_len) {
+    char num[21];
+    size_t num_len = fast_itoa(num, n);
+    tsc_str_t* s = str_alloc(num_len + lit_len);
+    memcpy((char*)s->data, num, num_len);
+    memcpy((char*)s->data + num_len, lit, lit_len);
+    return s;
+}
+
+tsc_str_t* tsc_str_concat_lit_num(const char* lit, size_t lit_len, double n) {
+    if (n == (double)(int64_t)n && n > -1e16 && n < 1e16) {
+        return tsc_str_concat_lit_int(lit, lit_len, (int64_t)n);
+    }
+    return tsc_str_concat(tsc_str_from_lit(lit, lit_len), tsc_str_from_num(n));
+}
+
+tsc_str_t* tsc_str_concat_num_lit(double n, const char* lit, size_t lit_len) {
+    if (n == (double)(int64_t)n && n > -1e16 && n < 1e16) {
+        return tsc_str_concat_int_lit((int64_t)n, lit, lit_len);
+    }
+    return tsc_str_concat(tsc_str_from_num(n), tsc_str_from_lit(lit, lit_len));
+}
+
 /* Variadic n-way concat — single str_alloc + n memcpy. Used by the emitter
  * when it folds a chain of `+` over strings (e.g. `s + "x" + j`) into one
  * call, dropping N-1 intermediate allocations + their byte copies. */
@@ -477,6 +539,23 @@ tsc_str_t* tsc_str_concat_n(size_t n, ...) {
     return s;
 }
 
+/* Inline integer to decimal: faster than snprintf("%lld") in hot string,
+ * JSON, and array-index paths. Returns chars written. */
+static inline size_t fast_itoa(char* dst, int64_t n) {
+    char tmp[21];
+    size_t i = sizeof tmp;
+    bool neg = n < 0;
+    uint64_t u = neg ? (uint64_t)-(n + 1) + 1 : (uint64_t)n;
+    do {
+        tmp[--i] = (char)('0' + (u % 10));
+        u /= 10;
+    } while (u > 0);
+    if (neg) tmp[--i] = '-';
+    size_t k = sizeof tmp - i;
+    memcpy(dst, tmp + i, k);
+    return k;
+}
+
 tsc_str_t* tsc_str_from_num(double n) {
     char buf[64];
     int len;
@@ -490,9 +569,9 @@ tsc_str_t* tsc_str_from_num(double n) {
         return tsc_str_from_lit("0", 1);
     }
     if (n == (double)(int64_t)n && n > -1e16 && n < 1e16) {
-        len = (int)snprintf(buf, sizeof buf, "%lld", (long long)n);
-        tsc_str_t* s = str_alloc((size_t)len);
-        memcpy((char*)s->data, buf, (size_t)len);
+        size_t int_len = fast_itoa(buf, (int64_t)n);
+        tsc_str_t* s = str_alloc(int_len);
+        memcpy((char*)s->data, buf, int_len);
         return s;
     }
     /* Shortest round-trip: try 1..17 significant digits. */
@@ -508,10 +587,10 @@ tsc_str_t* tsc_str_from_num(double n) {
 }
 
 tsc_str_t* tsc_str_from_int(int64_t n) {
-    char buf[24];
-    int len = (int)snprintf(buf, sizeof buf, "%lld", (long long)n);
-    tsc_str_t* s = str_alloc((size_t)len);
-    memcpy((char*)s->data, buf, (size_t)len);
+    char buf[21];
+    size_t len = fast_itoa(buf, n);
+    tsc_str_t* s = str_alloc(len);
+    memcpy((char*)s->data, buf, len);
     return s;
 }
 
@@ -1791,12 +1870,25 @@ static pcre2_match_data* re_md(const tsc_regexp_t* re) {
     return re->cached_md;
 }
 
+static inline int re_match(
+    const tsc_regexp_t* re,
+    const tsc_str_t* s,
+    size_t offset,
+    uint32_t options,
+    pcre2_match_data* md
+) {
+    if (re->jit) {
+        return pcre2_jit_match(re->re, (PCRE2_SPTR)s->data, s->len, offset, options, md, NULL);
+    }
+    return pcre2_match(re->re, (PCRE2_SPTR)s->data, s->len, offset, options, md, NULL);
+}
+
 /* tsc_regexp_test is now `static inline` in tsc_runtime.h. */
 
 tsc_array_t* tsc_regexp_exec(const tsc_regexp_t* re, const tsc_str_t* s) {
     if (!re->compiled) return NULL;
     pcre2_match_data* md = re_md(re);
-    int rc = pcre2_match(re->re, (PCRE2_SPTR)s->data, s->len, 0, 0, md, NULL);
+    int rc = re_match(re, s, 0, 0, md);
     if (rc < 0) return NULL;
     PCRE2_SIZE* ovec = pcre2_get_ovector_pointer(md);
     if (ovec[0] == PCRE2_UNSET) return NULL;
@@ -1828,7 +1920,7 @@ tsc_array_t* tsc_str_match_regex(const tsc_str_t* s, const tsc_regexp_t* re) {
     pcre2_match_data* md = re_md(re);
     size_t offset = 0;
     while (offset <= s->len) {
-        int rc = pcre2_match(re->re, (PCRE2_SPTR)s->data, s->len, offset, offset == 0 ? 0 : PCRE2_NOTBOL, md, NULL);
+        int rc = re_match(re, s, offset, offset == 0 ? 0 : PCRE2_NOTBOL, md);
         if (rc < 0) break;
         PCRE2_SIZE* ovec = pcre2_get_ovector_pointer(md);
         if (ovec[0] == PCRE2_UNSET) break;
@@ -1867,7 +1959,7 @@ tsc_array_t* tsc_str_match_all_regex(const tsc_str_t* s, const tsc_regexp_t* re)
     pcre2_match_data* md = re_md(re);
     size_t offset = 0;
     while (offset <= s->len) {
-        int rc = pcre2_match(re->re, (PCRE2_SPTR)s->data, s->len, offset, offset == 0 ? 0 : PCRE2_NOTBOL, md, NULL);
+        int rc = re_match(re, s, offset, offset == 0 ? 0 : PCRE2_NOTBOL, md);
         if (rc < 0) break;
         PCRE2_SIZE* ovec = pcre2_get_ovector_pointer(md);
         if (ovec[0] == PCRE2_UNSET) break;
@@ -1898,7 +1990,7 @@ tsc_array_t* tsc_str_match_all_regex(const tsc_str_t* s, const tsc_regexp_t* re)
 double tsc_str_search_regex(const tsc_str_t* s, const tsc_regexp_t* re) {
     if (!re->compiled) return -1.0;
     pcre2_match_data* md = re_md(re);
-    int rc = pcre2_match(re->re, (PCRE2_SPTR)s->data, s->len, 0, 0, md, NULL);
+    int rc = re_match(re, s, 0, 0, md);
     if (rc < 0) return -1.0;
     PCRE2_SIZE* ovec = pcre2_get_ovector_pointer(md);
     if (ovec[0] == PCRE2_UNSET) return -1.0;
@@ -1997,7 +2089,7 @@ tsc_str_t* tsc_str_replace_regex(const tsc_str_t* s, const tsc_regexp_t* re, con
     size_t offset = 0;
     pcre2_match_data* md = re_md(re);
     while (offset <= s->len) {
-        int rc = pcre2_match(re->re, (PCRE2_SPTR)s->data, s->len, offset, offset == 0 ? 0 : PCRE2_NOTBOL, md, NULL);
+        int rc = re_match(re, s, offset, offset == 0 ? 0 : PCRE2_NOTBOL, md);
         if (rc < 0) {
             size_t n = s->len - offset;
             if (pos + n >= cap) { cap = pos + n + 32; out = (char*)realloc(out, cap); }
@@ -2046,7 +2138,7 @@ tsc_array_t* tsc_str_split_regex_limit(const tsc_str_t* s, const tsc_regexp_t* r
     size_t offset = 0;
     pcre2_match_data* md = re_md(re);
     while (offset <= s->len && a->len < limit) {
-        int rc = pcre2_match(re->re, (PCRE2_SPTR)s->data, s->len, offset, offset == 0 ? 0 : PCRE2_NOTBOL, md, NULL);
+        int rc = re_match(re, s, offset, offset == 0 ? 0 : PCRE2_NOTBOL, md);
         if (rc < 0) break;
         PCRE2_SIZE* ovec = pcre2_get_ovector_pointer(md);
         if (ovec[0] == PCRE2_UNSET) break;
@@ -2091,47 +2183,41 @@ tsc_array_t* tsc_str_split_regex_limit_num(const tsc_str_t* s, const tsc_regexp_
 
 /* ---------------- crypto ---------------- */
 
-typedef enum {
-    TSC_HASH_SHA1,
-    TSC_HASH_SHA256,
-    TSC_HASH_SHA512,
-} tsc_hash_algorithm_t;
-
 struct tsc_hash {
-    tsc_hash_algorithm_t algorithm;
-    union {
-        SHA_CTX sha1;
-        SHA256_CTX sha256;
-        SHA512_CTX sha512;
-    } ctx;
+    const EVP_MD* md;
+    EVP_MD_CTX* ctx;
     bool finalized;
     size_t digest_len;
-    unsigned char digest[SHA512_DIGEST_LENGTH];
+    unsigned char digest[EVP_MAX_MD_SIZE];
 };
 
 tsc_hash_t* tsc_crypto_create_hash(const tsc_str_t* algorithm) {
+    const EVP_MD* md = NULL;
+    if (str_lit_eq(algorithm, "sha1")) {
+        md = EVP_sha1();
+    } else if (str_lit_eq(algorithm, "sha256")) {
+        md = EVP_sha256();
+    } else if (str_lit_eq(algorithm, "sha512")) {
+        md = EVP_sha512();
+    } else {
+        tsc_panic("crypto.createHash: only sha1, sha256, and sha512 are supported");
+    }
+
     tsc_hash_t* h = (tsc_hash_t*)TSC_GC_MALLOC(sizeof(tsc_hash_t));
+    h->md = md;
+    h->ctx = EVP_MD_CTX_new();
     h->finalized = false;
     memset(h->digest, 0, sizeof h->digest);
-    if (str_lit_eq(algorithm, "sha1")) {
-        h->algorithm = TSC_HASH_SHA1;
-        h->digest_len = SHA_DIGEST_LENGTH;
-        SHA1_Init(&h->ctx.sha1);
-        return h;
+    int digest_size = EVP_MD_size(md);
+    if (!h->ctx || digest_size <= 0 || (size_t)digest_size > sizeof h->digest) {
+        tsc_panic("crypto.createHash: could not initialize digest");
     }
-    if (str_lit_eq(algorithm, "sha256")) {
-        h->algorithm = TSC_HASH_SHA256;
-        h->digest_len = SHA256_DIGEST_LENGTH;
-        SHA256_Init(&h->ctx.sha256);
-        return h;
+    h->digest_len = (size_t)digest_size;
+    if (EVP_DigestInit_ex(h->ctx, h->md, NULL) != 1) {
+        EVP_MD_CTX_free(h->ctx);
+        h->ctx = NULL;
+        tsc_panic("crypto.createHash: could not initialize digest");
     }
-    if (str_lit_eq(algorithm, "sha512")) {
-        h->algorithm = TSC_HASH_SHA512;
-        h->digest_len = SHA512_DIGEST_LENGTH;
-        SHA512_Init(&h->ctx.sha512);
-        return h;
-    }
-    tsc_panic("crypto.createHash: only sha1, sha256, and sha512 are supported");
     return h;
 }
 
@@ -2167,16 +2253,9 @@ tsc_str_t* tsc_crypto_random_uuid(void) {
 
 static void hash_update_bytes(tsc_hash_t* h, const void* data, size_t len) {
     if (h->finalized) return;
-    switch (h->algorithm) {
-        case TSC_HASH_SHA1:
-            SHA1_Update(&h->ctx.sha1, data, len);
-            return;
-        case TSC_HASH_SHA256:
-            SHA256_Update(&h->ctx.sha256, data, len);
-            return;
-        case TSC_HASH_SHA512:
-            SHA512_Update(&h->ctx.sha512, data, len);
-            return;
+    if (len == 0) return;
+    if (!h->ctx || EVP_DigestUpdate(h->ctx, data, len) != 1) {
+        tsc_panic("Hash.update: could not update digest");
     }
 }
 
@@ -2197,17 +2276,13 @@ tsc_str_t* tsc_hash_digest(tsc_hash_t* h, const tsc_str_t* encoding) {
         tsc_panic("Hash.digest: only hex and base64 encodings are supported");
     }
     if (!h->finalized) {
-        switch (h->algorithm) {
-            case TSC_HASH_SHA1:
-                SHA1_Final(h->digest, &h->ctx.sha1);
-                break;
-            case TSC_HASH_SHA256:
-                SHA256_Final(h->digest, &h->ctx.sha256);
-                break;
-            case TSC_HASH_SHA512:
-                SHA512_Final(h->digest, &h->ctx.sha512);
-                break;
+        unsigned int digest_len = 0;
+        if (!h->ctx || EVP_DigestFinal_ex(h->ctx, h->digest, &digest_len) != 1) {
+            tsc_panic("Hash.digest: could not finalize digest");
         }
+        h->digest_len = (size_t)digest_len;
+        EVP_MD_CTX_free(h->ctx);
+        h->ctx = NULL;
         h->finalized = true;
     }
     if (use_base64) {
@@ -2990,7 +3065,7 @@ tsc_str_t* tsc_json_num(double n) {
 void tsc_jsonbuf_init(tsc_jsonbuf_t* b) {
     /* Larger initial cap saves reallocations on the typical "stringify a
      * small object" case (where the result is hundreds of bytes). */
-    b->cap = 512;
+    b->cap = 1024;
     b->len = 0;
     b->data = (char*)TSC_GC_MALLOC_ATOMIC(b->cap);
 }
@@ -3016,23 +3091,6 @@ void tsc_jsonbuf_byte(tsc_jsonbuf_t* b, char c) {
     b->data[b->len++] = c;
 }
 
-/* Inline integer → decimal: ~5x faster than snprintf("%lld") because no
- * format-string parsing. Returns chars written. */
-static inline size_t fast_itoa(char* dst, int64_t n) {
-    char tmp[21];
-    size_t i = sizeof tmp;
-    bool neg = n < 0;
-    uint64_t u = neg ? (uint64_t)-(n + 1) + 1 : (uint64_t)n;
-    do {
-        tmp[--i] = (char)('0' + (u % 10));
-        u /= 10;
-    } while (u > 0);
-    if (neg) tmp[--i] = '-';
-    size_t k = sizeof tmp - i;
-    memcpy(dst, tmp + i, k);
-    return k;
-}
-
 void tsc_jsonbuf_int(tsc_jsonbuf_t* b, int64_t n) {
     tsc_jsonbuf_reserve(b, 21);
     b->len += fast_itoa(b->data + b->len, n);
@@ -3044,6 +3102,19 @@ void tsc_jsonbuf_num(tsc_jsonbuf_t* b, double n) {
     if (n == (double)(int64_t)n && n > -1e16 && n < 1e16) {
         tsc_jsonbuf_int(b, (int64_t)n);
         return;
+    }
+    if (n > -4503599627370495.0 && n < 4503599627370495.0) {
+        double twice_d = n * 2.0;
+        int64_t twice = (int64_t)twice_d;
+        if ((double)twice == twice_d && (twice & 1) != 0) {
+            if (twice < 0) {
+                tsc_jsonbuf_byte(b, '-');
+                twice = -twice;
+            }
+            tsc_jsonbuf_int(b, twice / 2);
+            tsc_jsonbuf_append(b, ".5", 2);
+            return;
+        }
     }
     char buf[64];
     for (int prec = 1; prec <= 17; prec++) {
@@ -3060,6 +3131,22 @@ void tsc_jsonbuf_bool(tsc_jsonbuf_t* b, bool v) {
 }
 
 void tsc_jsonbuf_str(tsc_jsonbuf_t* b, const tsc_str_t* s) {
+    bool needs_escape = false;
+    for (size_t i = 0; i < s->len; i++) {
+        unsigned char c = (unsigned char)s->data[i];
+        if (c < 0x20 || c == '"' || c == '\\') {
+            needs_escape = true;
+            break;
+        }
+    }
+    if (!needs_escape) {
+        tsc_jsonbuf_reserve(b, s->len + 2);
+        b->data[b->len++] = '"';
+        if (s->len > 0) memcpy(b->data + b->len, s->data, s->len);
+        b->len += s->len;
+        b->data[b->len++] = '"';
+        return;
+    }
     /* Upper bound: open quote + 6x expansion + close quote. */
     tsc_jsonbuf_reserve(b, s->len * 6 + 2);
     b->data[b->len++] = '"';
@@ -3086,8 +3173,12 @@ void tsc_jsonbuf_str(tsc_jsonbuf_t* b, const tsc_str_t* s) {
 }
 
 tsc_str_t* tsc_jsonbuf_finish(tsc_jsonbuf_t* b) {
-    tsc_str_t* s = str_alloc(b->len);
-    if (b->len > 0) memcpy((char*)s->data, b->data, b->len);
+    tsc_jsonbuf_reserve(b, 1);
+    b->data[b->len] = '\0';
+    tsc_str_t* s = (tsc_str_t*)TSC_GC_MALLOC(sizeof(tsc_str_t));
+    s->len = b->len;
+    s->data = b->data;
+    s->hash = 0;
     return s;
 }
 
@@ -3103,6 +3194,19 @@ tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap) {
     a->frozen = false;
     a->iter_pos = 0;
     a->data = initial_cap ? TSC_GC_MALLOC(initial_cap * elem_size) : NULL;
+    return a;
+}
+
+tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap) {
+    tsc_array_t* a = (tsc_array_t*)TSC_GC_MALLOC(sizeof(tsc_array_t));
+    a->len = 0;
+    a->cap = initial_cap;
+    a->es = elem_size;
+    a->extensible = true;
+    a->sealed = false;
+    a->frozen = false;
+    a->iter_pos = 0;
+    a->data = initial_cap ? TSC_GC_MALLOC_ATOMIC(initial_cap * elem_size) : NULL;
     return a;
 }
 
@@ -3150,8 +3254,7 @@ void tsc_array_reserve(tsc_array_t* a, size_t new_cap) {
     /* Start growth at 8 so a fresh `[]` followed by N pushes amortizes well. */
     size_t cap = a->cap ? a->cap : 8;
     while (cap < new_cap) cap *= 2;
-    void* nd = TSC_GC_MALLOC(cap * a->es);
-    if (a->data && a->len > 0) memcpy(nd, a->data, a->len * a->es);
+    void* nd = a->data ? TSC_GC_REALLOC(a->data, cap * a->es) : TSC_GC_MALLOC(cap * a->es);
     a->data = nd;
     a->cap = cap;
 }
@@ -6843,18 +6946,41 @@ static inline uint64_t fnv1a64(const unsigned char* p, size_t len) {
     return h;
 }
 
+static inline uint64_t tsc_str_cached_hash(const tsc_str_t* s) {
+    uint64_t h = s->hash;
+    if (h != 0) return h;
+    h = fnv1a64((const unsigned char*)s->data, s->len);
+    if (h == 0) h = 1;
+    ((tsc_str_t*)s)->hash = h;
+    return h;
+}
+
+static inline uint64_t num_hash(double x) {
+    if (isnan(x)) return splitmix64_mix(0x7ff8000000000000ULL);
+    if (x == 0.0) x = 0.0; /* normalize -0 to +0 */
+    if (x >= -9007199254740991.0 && x <= 9007199254740991.0) {
+        int64_t i = (int64_t)x;
+        if ((double)i == x) {
+            return (uint64_t)i * 11400714819323198485ULL;
+        }
+    }
+    uint64_t bits; memcpy(&bits, &x, sizeof bits);
+    return splitmix64_mix(bits);
+}
+
+static inline bool num_eq(double x, double y) {
+    return x == y || (isnan(x) && isnan(y));
+}
+
 static uint64_t key_hash(tsc_key_kind_t kk, const void* k) {
     switch (kk) {
         case TSC_KEY_NUM: {
             double x; memcpy(&x, k, sizeof x);
-            if (isnan(x)) return splitmix64_mix(0x7ff8000000000000ULL);
-            if (x == 0.0) x = 0.0; /* normalize -0 to +0 */
-            uint64_t bits; memcpy(&bits, &x, sizeof bits);
-            return splitmix64_mix(bits);
+            return num_hash(x);
         }
         case TSC_KEY_STR: {
             const tsc_str_t* s; memcpy(&s, k, sizeof s);
-            return fnv1a64((const unsigned char*)s->data, s->len);
+            return tsc_str_cached_hash(s);
         }
         case TSC_KEY_PTR: {
             void* p; memcpy(&p, k, sizeof p);
@@ -6869,7 +6995,7 @@ static uint64_t key_hash(tsc_key_kind_t kk, const void* k) {
 }
 
 static void map_rebuild_buckets(tsc_map_t* m, size_t new_bucket_cap) {
-    size_t* nb = (size_t*)TSC_GC_MALLOC(new_bucket_cap * sizeof(size_t));
+    size_t* nb = (size_t*)TSC_GC_MALLOC_ATOMIC(new_bucket_cap * sizeof(size_t));
     for (size_t i = 0; i < new_bucket_cap; i++) nb[i] = TSC_BKT_EMPTY;
     size_t mask = new_bucket_cap - 1;
     for (size_t i = 0; i < m->len; i++) {
@@ -6884,14 +7010,10 @@ static void map_rebuild_buckets(tsc_map_t* m, size_t new_bucket_cap) {
 
 static void map_grow_ordered(tsc_map_t* m, size_t want) {
     if (want <= m->cap) return;
-    size_t cap = m->cap ? m->cap : 8;
+    size_t cap = m->cap ? m->cap : 256;
     while (cap < want) cap *= 2;
-    void* nk = TSC_GC_MALLOC(cap * m->ks);
-    void* nv = TSC_GC_MALLOC(cap * m->vs);
-    if (m->len > 0) {
-        memcpy(nk, m->keys, m->len * m->ks);
-        memcpy(nv, m->values, m->len * m->vs);
-    }
+    void* nk = m->keys ? TSC_GC_REALLOC(m->keys, cap * m->ks) : TSC_GC_MALLOC(cap * m->ks);
+    void* nv = m->values ? TSC_GC_REALLOC(m->values, cap * m->vs) : TSC_GC_MALLOC(cap * m->vs);
     m->keys = nk; m->values = nv; m->cap = cap;
 }
 
@@ -6915,6 +7037,31 @@ static size_t map_lookup(const tsc_map_t* m, const void* k, size_t* slot_out) {
         if (e == TSC_BKT_TOMBSTONE) {
             if (first_tomb == TSC_BKT_EMPTY) first_tomb = slot;
         } else if (key_eq(m->kk, m->ks, (const char*)m->keys + e * m->ks, k)) {
+            if (slot_out) *slot_out = slot;
+            return e;
+        }
+        slot = (slot + 1) & mask;
+    }
+}
+
+static size_t map_lookup_str(const tsc_map_t* m, const tsc_str_t* k, size_t* slot_out) {
+    if (m->bucket_cap == 0) {
+        if (slot_out) *slot_out = TSC_BKT_EMPTY;
+        return TSC_BKT_EMPTY;
+    }
+    size_t mask = m->bucket_cap - 1;
+    size_t slot = (size_t)(tsc_str_cached_hash(k) & mask);
+    size_t first_tomb = TSC_BKT_EMPTY;
+    tsc_str_t** keys = (tsc_str_t**)m->keys;
+    while (1) {
+        size_t e = m->buckets[slot];
+        if (e == TSC_BKT_EMPTY) {
+            if (slot_out) *slot_out = (first_tomb != TSC_BKT_EMPTY) ? first_tomb : slot;
+            return TSC_BKT_EMPTY;
+        }
+        if (e == TSC_BKT_TOMBSTONE) {
+            if (first_tomb == TSC_BKT_EMPTY) first_tomb = slot;
+        } else if (tsc_str_eq(keys[e], k)) {
             if (slot_out) *slot_out = slot;
             return e;
         }
@@ -6954,6 +7101,25 @@ void tsc_map_set_raw(tsc_map_t* m, const void* k, const void* v) {
     m->len++;
 }
 
+void tsc_map_set_str_num(tsc_map_t* m, tsc_str_t* k, double v) {
+    if (m->bucket_cap == 0 || (m->len + 1) * 4 > m->bucket_cap * 3) {
+        size_t bc = m->bucket_cap ? m->bucket_cap * 2 : 512;
+        while ((m->len + 1) * 4 > bc * 3) bc *= 2;
+        map_rebuild_buckets(m, bc);
+    }
+    size_t slot;
+    size_t e = map_lookup_str(m, k, &slot);
+    if (e != TSC_BKT_EMPTY) {
+        ((double*)m->values)[e] = v;
+        return;
+    }
+    map_grow_ordered(m, m->len + 1);
+    ((tsc_str_t**)m->keys)[m->len] = k;
+    ((double*)m->values)[m->len] = v;
+    m->buckets[slot] = m->len;
+    m->len++;
+}
+
 bool tsc_map_get_raw(const tsc_map_t* m, const void* k, void* out) {
     size_t e = map_lookup(m, k, NULL);
     if (e == TSC_BKT_EMPTY) return false;
@@ -6961,8 +7127,17 @@ bool tsc_map_get_raw(const tsc_map_t* m, const void* k, void* out) {
     return true;
 }
 
+double tsc_map_get_str_num(const tsc_map_t* m, tsc_str_t* k, double fallback) {
+    size_t e = map_lookup_str(m, k, NULL);
+    return e == TSC_BKT_EMPTY ? fallback : ((double*)m->values)[e];
+}
+
 bool tsc_map_has_raw(const tsc_map_t* m, const void* k) {
     return map_lookup(m, k, NULL) != TSC_BKT_EMPTY;
+}
+
+bool tsc_map_has_str(const tsc_map_t* m, tsc_str_t* k) {
+    return map_lookup_str(m, k, NULL) != TSC_BKT_EMPTY;
 }
 
 bool tsc_map_delete_raw(tsc_map_t* m, const void* k) {
@@ -7005,7 +7180,7 @@ tsc_array_t* tsc_map_values(const tsc_map_t* m) {
 /* Set ------------ — same architecture, single data array. */
 
 static void set_rebuild_buckets(tsc_set_t* s, size_t new_bucket_cap) {
-    size_t* nb = (size_t*)TSC_GC_MALLOC(new_bucket_cap * sizeof(size_t));
+    size_t* nb = (size_t*)TSC_GC_MALLOC_ATOMIC(new_bucket_cap * sizeof(size_t));
     for (size_t i = 0; i < new_bucket_cap; i++) nb[i] = TSC_BKT_EMPTY;
     size_t mask = new_bucket_cap - 1;
     for (size_t i = 0; i < s->len; i++) {
@@ -7020,10 +7195,17 @@ static void set_rebuild_buckets(tsc_set_t* s, size_t new_bucket_cap) {
 
 static void set_grow_ordered(tsc_set_t* s, size_t want) {
     if (want <= s->cap) return;
-    size_t cap = s->cap ? s->cap : 8;
+    size_t cap = s->cap ? s->cap : 512;
     while (cap < want) cap *= 2;
-    void* nd = TSC_GC_MALLOC(cap * s->es);
-    if (s->len > 0) memcpy(nd, s->data, s->len * s->es);
+    void* nd = s->data ? TSC_GC_REALLOC(s->data, cap * s->es) : TSC_GC_MALLOC(cap * s->es);
+    s->data = nd; s->cap = cap;
+}
+
+static void set_grow_ordered_atomic(tsc_set_t* s, size_t want) {
+    if (want <= s->cap) return;
+    size_t cap = s->cap ? s->cap : 512;
+    while (cap < want) cap *= 2;
+    void* nd = s->data ? TSC_GC_REALLOC(s->data, cap * s->es) : TSC_GC_MALLOC_ATOMIC(cap * s->es);
     s->data = nd; s->cap = cap;
 }
 
@@ -7051,6 +7233,57 @@ static size_t set_lookup(const tsc_set_t* s, const void* v, size_t* slot_out) {
     }
 }
 
+static size_t set_lookup_num(const tsc_set_t* s, double v, size_t* slot_out) {
+    if (s->bucket_cap == 0) {
+        if (slot_out) *slot_out = TSC_BKT_EMPTY;
+        return TSC_BKT_EMPTY;
+    }
+    size_t mask = s->bucket_cap - 1;
+    size_t slot = (size_t)(num_hash(v) & mask);
+    size_t first_tomb = TSC_BKT_EMPTY;
+    double* data = (double*)s->data;
+    while (1) {
+        size_t e = s->buckets[slot];
+        if (e == TSC_BKT_EMPTY) {
+            if (slot_out) *slot_out = (first_tomb != TSC_BKT_EMPTY) ? first_tomb : slot;
+            return TSC_BKT_EMPTY;
+        }
+        if (e == TSC_BKT_TOMBSTONE) {
+            if (first_tomb == TSC_BKT_EMPTY) first_tomb = slot;
+        } else if (num_eq(data[e], v)) {
+            if (slot_out) *slot_out = slot;
+            return e;
+        }
+        slot = (slot + 1) & mask;
+    }
+}
+
+static size_t set_lookup_int(const tsc_set_t* s, int64_t v, size_t* slot_out) {
+    if (s->bucket_cap == 0) {
+        if (slot_out) *slot_out = TSC_BKT_EMPTY;
+        return TSC_BKT_EMPTY;
+    }
+    size_t mask = s->bucket_cap - 1;
+    size_t slot = (size_t)(((uint64_t)v * 11400714819323198485ULL) & mask);
+    size_t first_tomb = TSC_BKT_EMPTY;
+    double dv = (double)v;
+    double* data = (double*)s->data;
+    while (1) {
+        size_t e = s->buckets[slot];
+        if (e == TSC_BKT_EMPTY) {
+            if (slot_out) *slot_out = (first_tomb != TSC_BKT_EMPTY) ? first_tomb : slot;
+            return TSC_BKT_EMPTY;
+        }
+        if (e == TSC_BKT_TOMBSTONE) {
+            if (first_tomb == TSC_BKT_EMPTY) first_tomb = slot;
+        } else if (data[e] == dv) {
+            if (slot_out) *slot_out = slot;
+            return e;
+        }
+        slot = (slot + 1) & mask;
+    }
+}
+
 tsc_set_t* tsc_set_new(size_t es, int kk, size_t initial_cap) {
     tsc_set_t* s = (tsc_set_t*)TSC_GC_MALLOC(sizeof(tsc_set_t));
     s->es = es; s->kk = (tsc_key_kind_t)kk;
@@ -7069,14 +7302,52 @@ void tsc_set_add_raw(tsc_set_t* s, const void* v) {
     size_t slot;
     size_t e = set_lookup(s, v, &slot);
     if (e != TSC_BKT_EMPTY) return;
-    set_grow_ordered(s, s->len + 1);
+    set_grow_ordered_atomic(s, s->len + 1);
     memcpy((char*)s->data + s->len * s->es, v, s->es);
+    s->buckets[slot] = s->len;
+    s->len++;
+}
+
+void tsc_set_add_int(tsc_set_t* s, int64_t v) {
+    if (s->bucket_cap == 0 || (s->len + 1) * 4 > s->bucket_cap * 3) {
+        size_t bc = s->bucket_cap ? s->bucket_cap * 2 : 1024;
+        while ((s->len + 1) * 4 > bc * 3) bc *= 2;
+        set_rebuild_buckets(s, bc);
+    }
+    size_t slot;
+    size_t e = set_lookup_int(s, v, &slot);
+    if (e != TSC_BKT_EMPTY) return;
+    set_grow_ordered_atomic(s, s->len + 1);
+    ((double*)s->data)[s->len] = (double)v;
+    s->buckets[slot] = s->len;
+    s->len++;
+}
+
+void tsc_set_add_num(tsc_set_t* s, double v) {
+    if (s->bucket_cap == 0 || (s->len + 1) * 4 > s->bucket_cap * 3) {
+        size_t bc = s->bucket_cap ? s->bucket_cap * 2 : 1024;
+        while ((s->len + 1) * 4 > bc * 3) bc *= 2;
+        set_rebuild_buckets(s, bc);
+    }
+    size_t slot;
+    size_t e = set_lookup_num(s, v, &slot);
+    if (e != TSC_BKT_EMPTY) return;
+    set_grow_ordered(s, s->len + 1);
+    ((double*)s->data)[s->len] = v;
     s->buckets[slot] = s->len;
     s->len++;
 }
 
 bool tsc_set_has_raw(const tsc_set_t* s, const void* v) {
     return set_lookup(s, v, NULL) != TSC_BKT_EMPTY;
+}
+
+bool tsc_set_has_int(const tsc_set_t* s, int64_t v) {
+    return set_lookup_int(s, v, NULL) != TSC_BKT_EMPTY;
+}
+
+bool tsc_set_has_num(const tsc_set_t* s, double v) {
+    return set_lookup_num(s, v, NULL) != TSC_BKT_EMPTY;
 }
 
 bool tsc_set_delete_raw(tsc_set_t* s, const void* v) {
@@ -7439,13 +7710,23 @@ tsc_str_t* tsc_fs_read_file_sync(const tsc_str_t* path) {
     return s;
 }
 
-static void fs_write_bytes(const tsc_str_t* path, const uint8_t* data, size_t len, const char* mode, const char* label) {
+static void fs_write_bytes_opts(const tsc_str_t* path, const uint8_t* data, size_t len, bool append, bool exclusive, const char* label) {
     char* p = cstr_dup(path);
+    if (exclusive && access(p, F_OK) == 0) {
+        free(p);
+        tsc_throw_str(tsc_str_from_cstr("fs.writeFileSync: file already exists"));
+        return;
+    }
+    const char* mode = append ? "ab" : "wb";
     FILE* f = fopen(p, mode);
     free(p);
     if (!f) { tsc_throw_str(tsc_str_from_cstr(label)); return; }
     fwrite(data, 1, len, f);
     fclose(f);
+}
+
+static void fs_write_bytes(const tsc_str_t* path, const uint8_t* data, size_t len, const char* mode, const char* label) {
+    fs_write_bytes_opts(path, data, len, mode[0] == 'a', false, label);
 }
 
 void tsc_fs_write_file_sync(const tsc_str_t* path, const tsc_str_t* data) {
@@ -7454,6 +7735,14 @@ void tsc_fs_write_file_sync(const tsc_str_t* path, const tsc_str_t* data) {
 
 void tsc_fs_write_file_buffer_sync(const tsc_str_t* path, const tsc_buffer_t* data) {
     fs_write_bytes(path, data->data, data->len, "wb", "fs.writeFileSync: could not open");
+}
+
+void tsc_fs_write_file_sync_opts(const tsc_str_t* path, const tsc_str_t* data, bool append, bool exclusive) {
+    fs_write_bytes_opts(path, (const uint8_t*)data->data, data->len, append, exclusive, "fs.writeFileSync: could not open");
+}
+
+void tsc_fs_write_file_buffer_sync_opts(const tsc_str_t* path, const tsc_buffer_t* data, bool append, bool exclusive) {
+    fs_write_bytes_opts(path, data->data, data->len, append, exclusive, "fs.writeFileSync: could not open");
 }
 
 void tsc_fs_append_file_sync(const tsc_str_t* path, const tsc_str_t* data) {

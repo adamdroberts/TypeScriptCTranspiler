@@ -4,7 +4,13 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+### Changed
+- The benchmark harness can now run the manual suite, generated operation-loop benchmarks for stdout-producing e2e cases via `--full` / `BENCH_SOURCE=e2e`, or both, records ops/sec in JSON/table output, and writes selectable JSON result files.
+- Runtime and emitter hot paths for classes, typed object literals, string/number concatenation, JSON stringification, Map/Set, regex matching, arrays, and no-GC allocation were optimized for the benchmark suite.
+- Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
+
 ### Added
+- `fs.writeFileSync` and immediate `fs.promises.writeFile` now accept bounded literal `{ flag: "w" | "wx" | "a" | "ax" }` options for overwrite, exclusive-create, and append writes, including Buffer data. Test: `fs_write_file_flags`.
 - `fs.cpSync` and immediate `fs.promises.cp` now copy symlinks by default and accept bounded literal `dereference` / `verbatimSymlinks` options. Test: `fs_cp_symlink_options`.
 - `fs.cpSync` and immediate `fs.promises.cp` now copy regular files and recursive directory trees with bounded boolean options. Test: `fs_cp_recursive`.
 - `fs.mkdirSync` and immediate `fs.promises.mkdir` now accept numeric mode options as a direct second argument or `{ mode }`, including recursive directory creation. Test: `fs_mkdir_mode_options`.

@@ -1,0 +1,5 @@
+sync append: one-two
+sync exclusive: fs.writeFileSync: file already exists
+sync exclusive content: first
+promise exclusive: fs.writeFileSync: file already exists
+promise append: alpha-beta

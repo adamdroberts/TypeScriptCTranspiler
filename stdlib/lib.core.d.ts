@@ -796,6 +796,10 @@ type FSEncoding = "utf8" | "utf-8";
 interface FSEncodingOptions {
     encoding?: FSEncoding;
 }
+type FSWriteFileFlag = "w" | "wx" | "a" | "ax";
+interface FSWriteFileOptions extends FSEncodingOptions {
+    flag?: FSWriteFileFlag;
+}
 interface FSReaddirOptions extends FSEncodingOptions {
     recursive?: boolean;
     withFileTypes?: false;
@@ -818,7 +822,7 @@ interface FSConstants {
 interface FS {
     readonly constants: FSConstants;
     readFileSync(path: string, options?: FSFileEncodingOptions): string;
-    writeFileSync(path: string, data: string | Buffer, options?: FSFileEncodingOptions): void;
+    writeFileSync(path: string, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions): void;
     appendFileSync(path: string, data: string | Buffer, options?: FSFileEncodingOptions): void;
     existsSync(path: string): boolean;
     accessSync(path: string, mode?: number): void;
@@ -848,7 +852,7 @@ interface FS {
 }
 interface FSPromises {
     readFile(path: string, options?: FSFileEncodingOptions): Promise<string>;
-    writeFile(path: string, data: string | Buffer, options?: FSFileEncodingOptions): Promise<void>;
+    writeFile(path: string, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions): Promise<void>;
     appendFile(path: string, data: string | Buffer, options?: FSFileEncodingOptions): Promise<void>;
     readdir(path: string, options: FSReaddirDirentOptions): Promise<FSDirent[]>;
     readdir(path: string, options?: FSFileEncodingOptions | FSReaddirOptions): Promise<string[]>;
