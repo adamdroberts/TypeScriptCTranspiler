@@ -1,0 +1,3 @@
+{
+  "description": "fs stat/lstat bigint:false options for sync and promises"
+}

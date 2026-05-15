@@ -390,6 +390,8 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 | `tsc_fs_append_file_sync(path, data)` | `void` | `fs.appendFileSync(path, data[, utf8Options])` and immediate-settled `fs.promises.appendFile(path, data[, utf8Options])` |
 | `tsc_fs_exists_sync(path)` | `bool` | `fs.existsSync(path)` |
 | `tsc_fs_readdir_sync(path)` | `tsc_array_t*` | `fs.readdirSync(path)` — array of filenames |
+| `tsc_fs_readdir_recursive_sync(path)` | `tsc_array_t*` | `fs.readdirSync(path, { recursive: true })` and immediate-settled `fs.promises.readdir(path, { recursive: true })` — recursive relative filename strings |
+| `tsc_fs_readdir_dirents_sync(path)` | `tsc_array_t*` | `fs.readdirSync(path, { withFileTypes: true })` and immediate-settled `fs.promises.readdir(path, { withFileTypes: true })` — array of bounded `Dirent` records |
 | `tsc_fs_stat_sync(path)` | `tsc_fs_stats_t*` | `fs.statSync(path)` and immediate-settled `fs.promises.stat(path)` — small `Stats` subset |
 | `tsc_fs_lstat_sync(path)` | `tsc_fs_stats_t*` | `fs.lstatSync(path)` and immediate-settled `fs.promises.lstat(path)` — small `Stats` subset without following symlinks |
 | `tsc_fs_realpath_sync(path)` | `tsc_str_t*` | `fs.realpathSync(path)` and immediate-settled `fs.promises.realpath(path)` |
@@ -398,23 +400,33 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 | `tsc_fs_link_sync(existingPath, newPath)` | `void` | `fs.linkSync(existingPath, newPath)` and immediate-settled `fs.promises.link(existingPath, newPath)` |
 | `tsc_fs_mkdtemp_sync(prefix)` | `tsc_str_t*` | `fs.mkdtempSync(prefix)` and immediate-settled `fs.promises.mkdtemp(prefix)` |
 | `tsc_fs_truncate_sync(path, len)` | `void` | `fs.truncateSync(path, len?)` and immediate-settled `fs.promises.truncate(path, len?)` |
-| `tsc_fs_stats_size(st)` | `double` | `Stats.size` |
-| `tsc_fs_stats_mode(st)` | `double` | `Stats.mode` |
+| `tsc_fs_utimes_sync(path, atime, mtime)` | `void` | `fs.utimesSync(path, atime, mtime)` and immediate-settled `fs.promises.utimes(path, atime, mtime)` |
+| `tsc_fs_lutimes_sync(path, atime, mtime)` | `void` | `fs.lutimesSync(path, atime, mtime)` and immediate-settled `fs.promises.lutimes(path, atime, mtime)` |
+| `tsc_fs_chown_sync(path, uid, gid)` | `void` | `fs.chownSync(path, uid, gid)` and immediate-settled `fs.promises.chown(path, uid, gid)` |
+| `tsc_fs_lchown_sync(path, uid, gid)` | `void` | `fs.lchownSync(path, uid, gid)` and immediate-settled `fs.promises.lchown(path, uid, gid)` |
+| `tsc_fs_stats_dev(st)` / `tsc_fs_stats_ino(st)` | `double` | `Stats.dev` / `Stats.ino` |
+| `tsc_fs_stats_size(st)` / `tsc_fs_stats_mode(st)` | `double` | `Stats.size` / `Stats.mode` |
+| `tsc_fs_stats_nlink(st)` / `uid` / `gid` / `rdev` / `blksize` / `blocks` | `double` | `Stats.nlink` / `uid` / `gid` / `rdev` / `blksize` / `blocks` |
+| `tsc_fs_stats_atime_ms(st)` | `double` | `Stats.atimeMs` |
+| `tsc_fs_stats_mtime_ms(st)` | `double` | `Stats.mtimeMs` |
+| `tsc_fs_stats_ctime_ms(st)` | `double` | `Stats.ctimeMs` |
+| `tsc_fs_stats_birthtime_ms(st)` | `double` | `Stats.birthtimeMs` |
 | `tsc_fs_stats_is_file(st)` | `bool` | `Stats.isFile()` |
 | `tsc_fs_stats_is_directory(st)` | `bool` | `Stats.isDirectory()` |
 | `tsc_fs_stats_is_symbolic_link(st)` | `bool` | `Stats.isSymbolicLink()` |
 | `tsc_fs_access_sync(path)` | `void` | Used by the immediate-settled `fs.promises.access(path)` subset; throws via `tsc_throw_str` when missing |
 | `tsc_fs_chmod_sync(path, mode)` | `void` | `fs.chmodSync(path, mode)` and immediate-settled `fs.promises.chmod(path, mode)` |
 | `tsc_fs_mkdir_sync(path)` | `void` | `fs.mkdirSync(path)` and immediate-settled `fs.promises.mkdir(path)` for one path argument |
-| `tsc_fs_mkdir_sync_opts(path, recursive)` | `void` | `fs.mkdirSync(path, { recursive })` and immediate-settled `fs.promises.mkdir(path, { recursive })` bounded options subset |
+| `tsc_fs_mkdir_sync_opts(path, recursive, mode)` | `void` | `fs.mkdirSync(path, mode \| { recursive, mode })` and immediate-settled `fs.promises.mkdir(path, mode \| { recursive, mode })` bounded options subset |
 | `tsc_fs_unlink_sync(path)` | `void` | `fs.unlinkSync(path)` and immediate-settled `fs.promises.unlink(path)` |
 | `tsc_fs_rm_sync(path)` | `void` | `fs.rmSync(path)` and immediate-settled `fs.promises.rm(path)` for one path argument |
 | `tsc_fs_rm_sync_opts(path, recursive, force)` | `void` | `fs.rmSync(path, { recursive, force })` and immediate-settled `fs.promises.rm(path, { recursive, force })` bounded options subset |
 | `tsc_fs_rmdir_sync(path)` | `void` | `fs.rmdirSync(path)` and immediate-settled `fs.promises.rmdir(path)` for empty directories |
+| `tsc_fs_cp_sync_opts(src, dest, recursive, force, errorOnExist, dereference, verbatimSymlinks)` | `void` | `fs.cpSync(src, dest, { recursive, force, errorOnExist, dereference, verbatimSymlinks })` and immediate-settled `fs.promises.cp(src, dest, options)` for regular files, recursive directory trees, and symlinks |
 | `tsc_fs_copy_file_sync(src, dest)` | `void` | `fs.copyFileSync(src, dest)` and immediate-settled `fs.promises.copyFile(src, dest)` |
 | `tsc_fs_rename_sync(oldPath, newPath)` | `void` | `fs.renameSync(oldPath, newPath)` and immediate-settled `fs.promises.rename(oldPath, newPath)` |
 
-`fs.promises.readFile`, `writeFile`, `appendFile`, `readdir`, `realpath`, `readlink`, `symlink`, `link`, `mkdtemp`, `truncate`, `chmod`, `access`, `mkdir`, `unlink`, `rm`, `rmdir`, `copyFile`, and `rename` are emitter-level wrappers over these sync runtime calls plus `tsc_promise_resolve(...)`. `fs.promises.stat` and `lstat` use the typed Stats promise side-channel. They are not libuv-backed yet.
+`fs.promises.readFile`, `writeFile`, `appendFile`, `readdir`, `realpath`, `readlink`, `symlink`, `link`, `mkdtemp`, `truncate`, `utimes`, `lutimes`, `chown`, `lchown`, `chmod`, `access`, `mkdir`, `unlink`, `rm`, `rmdir`, `cp`, `copyFile`, and `rename` are emitter-level wrappers over these sync runtime calls plus `tsc_promise_resolve(...)`. `fs.promises.stat` and `lstat` use the typed Stats promise side-channel. They are not libuv-backed yet.
 
 ## path
 

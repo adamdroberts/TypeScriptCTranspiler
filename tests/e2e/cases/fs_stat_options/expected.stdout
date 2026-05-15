@@ -1,0 +1,3 @@
+sync: true true number 5
+promise stat: true number 5
+promise lstat: true number 5

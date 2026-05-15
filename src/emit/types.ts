@@ -27,6 +27,7 @@ export type CTypeKind =
     | "error"
     | "buffer"
     | "fsstats"
+    | "fsdirent"
     | "function"
     | "value"
     | "unsupported";
@@ -120,6 +121,7 @@ export const T_DATE: CType = { kind: "date", c: "tsc_date_t*" };
 export const T_ERROR: CType = { kind: "error", c: "tsc_error_t*" };
 export const T_BUFFER: CType = { kind: "buffer", c: "tsc_buffer_t*" };
 export const T_FS_STATS: CType = { kind: "fsstats", c: "tsc_fs_stats_t*" };
+export const T_FS_DIRENT: CType = { kind: "fsdirent", c: "tsc_fs_dirent_t*" };
 export const T_VALUE: CType = { kind: "value", c: "tsc_value_t" };
 
 export function classType(className: string): CType {
@@ -407,10 +409,14 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
             sym?.getName() === "TypeError" ||
             sym?.getName() === "RangeError" ||
             sym?.getName() === "SyntaxError" ||
+            sym?.getName() === "ReferenceError" ||
+            sym?.getName() === "EvalError" ||
+            sym?.getName() === "URIError" ||
             sym?.getName() === "AggregateError"
         ) return T_ERROR;
         if (sym?.getName() === "Buffer") return T_BUFFER;
         if (sym?.getName() === "FSStats") return T_FS_STATS;
+        if (sym?.getName() === "FSDirent") return T_FS_DIRENT;
         if (sym?.getName() === "TemplateStringsArray") return arrayType(T_STRING);
     }
 
@@ -469,6 +475,8 @@ function typeNamePart(t: CType): string {
             return "eventemitter";
         case "fsstats":
             return "fsstats";
+        case "fsdirent":
+            return "fsdirent";
         case "class":
             return sanitizeTypeName(`class_${t.className ?? t.c}`);
         case "function":

@@ -20,6 +20,7 @@ import {
     T_DATE,
     T_ERROR,
     T_EVENT_EMITTER,
+    T_FS_DIRENT,
     T_FS_STATS,
     T_HASH,
     T_NUMBER,
@@ -166,6 +167,7 @@ class Emitter {
     private promiseExecutorEnvDeclared = false;
     private commonJsExportGlobals = new Set<string>();
     private requireDestructureTypes = new Map<ts.Symbol, CType>();
+    private nextTickAdapters = new Map<string, string>();
     private eventListenerAdapters = new Map<string, string>();
     private eventListenerIdentities = new Map<string, string>();
     private capturedCellsCache = new WeakMap<ts.FunctionLikeDeclaration, Map<ts.Symbol, CaptureCell>>();
@@ -314,6 +316,7 @@ class Emitter {
         for (const modId of this.graph.topoOrder) {
             out.line(`    mod_init_${modId}();`);
         }
+        out.line("    tsc_process_drain_next_ticks();");
         out.line("    return 0;");
         out.line("}");
         return { mainC: out.toString(), diagnostics: this.diagnostics };
@@ -398,6 +401,11 @@ class Emitter {
                 if (ts.isImportDeclaration(inner)) continue;
                 if (ts.isExportDeclaration(inner)) continue; // re-exports - metadata only
                 if (ts.isImportEqualsDeclaration(inner)) continue;
+                if (ts.isExportAssignment(inner)) {
+                    this.emitDefaultExportAssignment(initBuf, inner);
+                    continue;
+                }
+                if (this.commonJsEsModuleMarker(inner)) continue;
                 const commonJsExport = this.commonJsExportAssignment(inner);
                 if (commonJsExport) {
                     this.emitCommonJsExportAssignment(initBuf, commonJsExport);
@@ -434,8 +442,6 @@ class Emitter {
      * to the inner declaration. Returns null for plain export/import passthrough.
      */
     private unwrapExportDecl(stmt: ts.Statement): ts.Statement | null {
-        // ExportAssignment: `export default expr`
-        if (ts.isExportAssignment(stmt)) return null;
         return stmt;
     }
 
@@ -540,6 +546,30 @@ class Emitter {
         }
     }
 
+    private jsDefaultExportAssignmentForImport(id: ts.Identifier): ts.ExportAssignment | null {
+        const raw = this.checker.getSymbolAtLocation(id);
+        const importClause = (raw?.declarations ?? []).find((decl): decl is ts.ImportClause =>
+            ts.isImportClause(decl) && decl.name?.text === id.text,
+        );
+        if (!importClause || !ts.isImportDeclaration(importClause.parent)) return null;
+        const specifier = importClause.parent.moduleSpecifier;
+        if (!ts.isStringLiteralLike(specifier)) return null;
+        const info = this.resolvedModuleInfoForSpecifier(specifier.text, id.getSourceFile().fileName);
+        const sf = info?.sf;
+        if (!sf || !this.isJavaScriptSourceFile(sf)) return null;
+        return sf.statements.find(ts.isExportAssignment) ?? null;
+    }
+
+    private commonJsDefaultImportDeclaration(id: ts.Identifier): ts.BinaryExpression | null {
+        const target = this.importAliasTargetDeclaration(id);
+        return target &&
+            ts.isBinaryExpression(target) &&
+            ts.isPropertyAccessExpression(target.left) &&
+            this.isModuleExportsAccess(target.left)
+                ? target
+                : null;
+    }
+
     private declarationName(decl: ts.Node): ts.Identifier | null {
         if (ts.isFunctionDeclaration(decl) || ts.isClassDeclaration(decl) || ts.isInterfaceDeclaration(decl) || ts.isEnumDeclaration(decl)) {
             return decl.name && ts.isIdentifier(decl.name) ? decl.name : null;
@@ -583,6 +613,9 @@ class Emitter {
         if (ts.isShorthandPropertyAssignment(decl)) {
             const valueDecl = this.commonJsObjectExportValueDeclaration(decl);
             return valueDecl ? this.declarationCName(valueDecl) : this.declaredName(decl.name);
+        }
+        if (ts.isExportAssignment(decl)) {
+            return this.defaultExportCName(decl);
         }
         const name = this.declarationName(decl);
         if (name) return this.declaredName(name);
@@ -629,6 +662,27 @@ class Emitter {
             : null;
     }
 
+    private commonJsEsModuleMarker(stmt: ts.Statement): boolean {
+        if (!this.isJavaScriptSourceFile(stmt.getSourceFile())) return false;
+        if (!ts.isExpressionStatement(stmt) || !ts.isCallExpression(stmt.expression)) return false;
+        const call = stmt.expression;
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            call.expression.name.text !== "defineProperty" ||
+            !ts.isIdentifier(call.expression.expression) ||
+            call.expression.expression.text !== "Object"
+        ) {
+            return false;
+        }
+        const target = call.arguments[0];
+        const key = call.arguments[1];
+        if (!target || !key || !ts.isStringLiteralLike(key) || key.text !== "__esModule") return false;
+        return (
+            (ts.isIdentifier(target) && target.text === "exports") ||
+            (ts.isPropertyAccessExpression(target) && this.isModuleExportsAccess(target))
+        );
+    }
+
     private commonJsModuleExportsValueAssignment(
         stmt: ts.Statement,
     ): { left: ts.PropertyAccessExpression; right: ts.Expression } | null {
@@ -649,9 +703,11 @@ class Emitter {
             !ts.isIdentifier(expr.right) &&
             !ts.isArrayLiteralExpression(expr.right) &&
             !this.requireCallModuleExportsDeclaration(expr.right) &&
+            !(ts.isPropertyAccessExpression(expr.right) && this.requireModuleMemberDeclaration(expr.right)) &&
+            !this.isCommonJsRuntimeComputedModuleExportsValue(expr.right) &&
             !this.isCommonJsObjectLiteralExportValue(expr.right)
         ) {
-            unsupported(expr.right, "CommonJS module.exports value assignment currently supports functions, arrays, declared identifiers, literal require re-exports, and primitive literals only");
+            unsupported(expr.right, "CommonJS module.exports value assignment currently supports functions, arrays, declared identifiers, literal require re-exports, literal require member re-exports, runtime-computed dynamic objects, and primitive literals only");
         }
         return { left: expr.left, right: expr.right };
     }
@@ -680,6 +736,30 @@ class Emitter {
             return this.isCommonJsObjectLiteralDefaultValue(cur);
         }
         return false;
+    }
+
+    private isCommonJsRuntimeComputedModuleExportsValue(expr: ts.Expression): boolean {
+        const objectCallName = this.objectStaticCallName(expr);
+        return objectCallName === "assign" ||
+            objectCallName === "create" ||
+            objectCallName === "fromEntries" ||
+            objectCallName === "defineProperty" ||
+            objectCallName === "defineProperties" ||
+            objectCallName === "setPrototypeOf" ||
+            objectCallName === "preventExtensions" ||
+            objectCallName === "seal" ||
+            objectCallName === "freeze";
+    }
+
+    private objectStaticCallName(expr: ts.Expression): string | null {
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        return ts.isCallExpression(cur) &&
+            ts.isPropertyAccessExpression(cur.expression) &&
+            ts.isIdentifier(cur.expression.expression) &&
+            cur.expression.expression.text === "Object"
+            ? cur.expression.name.text
+            : null;
     }
 
     private commonJsModuleExportsObjectAssignment(
@@ -741,7 +821,8 @@ class Emitter {
     }
 
     private commonJsExportedCType(node: ts.Node): CType {
-        const valueNode = this.commonJsExportValueNode(node);
+        let valueNode = this.commonJsExportValueNode(node);
+        while (ts.isParenthesizedExpression(valueNode)) valueNode = valueNode.expression;
         if (ts.isObjectLiteralExpression(valueNode) && this.isCommonJsObjectLiteralDefaultValue(valueNode)) {
             return T_VALUE;
         }
@@ -756,6 +837,7 @@ class Emitter {
         if (ts.isCallExpression(valueNode)) {
             const decl = this.requireCallModuleExportsDeclaration(valueNode);
             if (decl) return this.commonJsExportedCType(decl);
+            if (this.isCommonJsRuntimeComputedModuleExportsValue(valueNode)) return T_VALUE;
         }
         return this.prepareType(mapType(valueNode, this.checker));
     }
@@ -820,6 +902,29 @@ class Emitter {
                 : this.emitExpr(prop.initializer);
             buf.line(`${cName} = ${this.coerce(value, ty, valueNode)};`);
         }
+    }
+
+    private defaultExportAssignmentCType(stmt: ts.ExportAssignment): CType {
+        let expr: ts.Expression = stmt.expression;
+        while (ts.isParenthesizedExpression(expr)) expr = expr.expression;
+        if (
+            (ts.isObjectLiteralExpression(expr) && this.isUntypedJsObjectLiteral(expr)) ||
+            (ts.isArrayLiteralExpression(expr) && this.isUntypedJsArrayLiteral(expr))
+        ) {
+            return T_VALUE;
+        }
+        return this.prepareType(mapType(expr, this.checker));
+    }
+
+    private emitDefaultExportAssignment(buf: CBuf, stmt: ts.ExportAssignment): void {
+        const cName = this.defaultExportCName(stmt);
+        const ty = this.defaultExportAssignmentCType(stmt);
+        if (!this.commonJsExportGlobals.has(cName)) {
+            this.commonJsExportGlobals.add(cName);
+            this.globalDecls.line(`static ${ty.c} ${cName};`);
+        }
+        const value = this.emitExpr(stmt.expression);
+        buf.line(`${cName} = ${this.coerce(value, ty, stmt.expression)};`);
     }
 
     private isCommonJsExportAccess(expr: ts.Expression): expr is CommonJsExportAccess {
@@ -910,18 +1015,18 @@ class Emitter {
 
     private requireDestructureExportName(element: ts.BindingElement): string {
         if (element.dotDotDotToken) {
-            unsupported(element, "top-level require destructuring does not support rest bindings");
+            unsupported(element, "require destructuring does not support rest bindings");
         }
         if (!ts.isIdentifier(element.name)) {
-            unsupported(element.name, "top-level require destructuring requires identifier bindings");
+            unsupported(element.name, "require destructuring requires identifier bindings");
         }
         if (element.initializer) {
-            unsupported(element.initializer, "top-level require destructuring does not support default values");
+            unsupported(element.initializer, "require destructuring does not support default values");
         }
         if (!element.propertyName) return element.name.text;
         const name = this.staticPropertyName(element.propertyName);
         if (name == null) {
-            unsupported(element.propertyName, "top-level require destructuring requires static property names");
+            unsupported(element.propertyName, "require destructuring requires static property names");
         }
         return name;
     }
@@ -1255,6 +1360,25 @@ class Emitter {
         return decl ? this.declarationCName(decl) : null;
     }
 
+    private moduleNamespaceMemberType(pa: ts.PropertyAccessExpression): CType {
+        const decl = this.moduleNamespaceMemberDeclaration(pa);
+        if (decl) {
+            if (ts.isExportAssignment(decl)) {
+                return this.defaultExportAssignmentCType(decl);
+            }
+            if (this.isUntypedJsLiteralVariableDeclaration(decl)) {
+                return T_VALUE;
+            }
+            if (
+                (ts.isPropertyAccessExpression(decl) || ts.isElementAccessExpression(decl)) &&
+                this.commonJsExportName(decl)
+            ) {
+                return this.commonJsExportedCType(decl);
+            }
+        }
+        return this.prepareType(mapType(pa, this.checker));
+    }
+
     private isNodeBuiltinModuleSpecifier(spec: string): boolean {
         const bare = spec.startsWith("node:") ? spec.slice(5) : spec;
         return [
@@ -1396,6 +1520,9 @@ class Emitter {
         if (requireDestructureType) return requireDestructureType;
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         if (!decl) return null;
+        if (this.isUntypedJsLiteralVariableDeclaration(decl)) {
+            return T_VALUE;
+        }
         try {
             const base = this.prepareType(
                 mapTsType(
@@ -1429,6 +1556,52 @@ class Emitter {
             }
         }
         return this.checker.getTypeAtLocation(expr);
+    }
+
+    private isJavaScriptSourceFile(sf: ts.SourceFile): boolean {
+        return /\.[cm]?jsx?$/i.test(sf.fileName);
+    }
+
+    private isUntypedJsObjectLiteral(expr: ts.ObjectLiteralExpression): boolean {
+        return this.isJavaScriptSourceFile(expr.getSourceFile());
+    }
+
+    private isUntypedJsArrayLiteral(expr: ts.ArrayLiteralExpression): boolean {
+        return this.isJavaScriptSourceFile(expr.getSourceFile());
+    }
+
+    private isUntypedJsLiteralVariableDeclaration(decl: ts.Node | undefined): decl is ts.VariableDeclaration {
+        return !!decl &&
+            ts.isVariableDeclaration(decl) &&
+            !!decl.initializer &&
+            ((ts.isObjectLiteralExpression(decl.initializer) &&
+                this.isUntypedJsObjectLiteral(decl.initializer)) ||
+                (ts.isArrayLiteralExpression(decl.initializer) &&
+                    this.isUntypedJsArrayLiteral(decl.initializer)));
+    }
+
+    private untypedJsLiteralVariableDeclaration(id: ts.Identifier): ts.VariableDeclaration | null {
+        const sym = this.symbolForIdentifier(id);
+        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        return this.isUntypedJsLiteralVariableDeclaration(decl) ? decl : null;
+    }
+
+    private untypedJsObjectLiteralVariableDeclaration(id: ts.Identifier): ts.VariableDeclaration | null {
+        const decl = this.untypedJsLiteralVariableDeclaration(id);
+        return decl &&
+            decl.initializer &&
+            ts.isObjectLiteralExpression(decl.initializer)
+                ? decl
+                : null;
+    }
+
+    private untypedJsArrayLiteralVariableDeclaration(id: ts.Identifier): ts.VariableDeclaration | null {
+        const decl = this.untypedJsLiteralVariableDeclaration(id);
+        return decl &&
+            decl.initializer &&
+            ts.isArrayLiteralExpression(decl.initializer)
+                ? decl
+                : null;
     }
 
     private identifierHasDynamicAnnotation(id: ts.Identifier): boolean {
@@ -2329,6 +2502,14 @@ class Emitter {
             const name = this.declaredName(d.name);
             const baseCt = d.initializer && this.requireCallSpecifier(d.initializer)
                 ? T_VALUE
+                : d.initializer &&
+                    ts.isObjectLiteralExpression(d.initializer) &&
+                    this.isUntypedJsObjectLiteral(d.initializer)
+                ? T_VALUE
+                : d.initializer &&
+                    ts.isArrayLiteralExpression(d.initializer) &&
+                    this.isUntypedJsArrayLiteral(d.initializer)
+                ? T_VALUE
                 : this.prepareType(mapType(d, this.checker));
 
             // If this number is provably integer-shape, store as int64_t.
@@ -2829,6 +3010,11 @@ class Emitter {
             (vs.declarationList.flags & ts.NodeFlags.Const) !== 0;
         for (const d of vs.declarationList.declarations) {
             if (!ts.isIdentifier(d.name)) {
+                const spec = d.initializer ? this.requireCallSpecifier(d.initializer) : null;
+                if (spec && ts.isObjectBindingPattern(d.name)) {
+                    this.emitLocalRequireDestructuring(buf, d, spec, isConst);
+                    continue;
+                }
                 unsupported(d, "destructuring declarations");
             }
             const name = mangleIdent(d.name.text);
@@ -2873,6 +3059,47 @@ class Emitter {
             }
             const qual = isConst ? " const" : "";
             buf.line(`${ct.c}${qual} ${name}${init};`);
+        }
+    }
+
+    private emitLocalRequireDestructuring(
+        buf: CBuf,
+        d: ts.VariableDeclaration,
+        spec: string,
+        isConst: boolean,
+    ): void {
+        if (!ts.isObjectBindingPattern(d.name)) {
+            unsupported(d.name, "require destructuring requires an object binding pattern");
+        }
+        const info = this.resolvedModuleInfoForSpecifier(spec, d.getSourceFile().fileName);
+        if (!info) {
+            unsupported(d.initializer ?? d, `unresolved require("${spec}")`);
+        }
+        for (const element of d.name.elements) {
+            const exportName = this.requireDestructureExportName(element);
+            if (!ts.isIdentifier(element.name)) {
+                unsupported(element.name, "require destructuring requires identifier bindings");
+            }
+            const decl = this.commonJsExportedMemberDeclaration(info.sf, exportName);
+            if (!decl) {
+                unsupported(element, `CommonJS require destructuring could not resolve export "${exportName}"`);
+            }
+            const cName = this.declarationCName(decl);
+            if (!cName) {
+                unsupported(decl, `unsupported CommonJS export "${exportName}"`);
+            }
+            const ty = this.commonJsExportedCType(decl);
+            const localName = mangleIdent(element.name.text);
+            const sym = this.symbolForIdentifier(element.name);
+            if (sym) this.requireDestructureTypes.set(sym, ty);
+            const cell = this.currentFunctionCellForSymbol(sym);
+            if (cell) {
+                buf.line(`${ty.c}* ${cell.cellName} = (${ty.c}*)TSC_GC_MALLOC(sizeof(${ty.c}));`);
+                buf.line(`*${cell.cellName} = ${cName};`);
+                continue;
+            }
+            const qual = isConst ? " const" : "";
+            buf.line(`${ty.c}${qual} ${localName} = ${cName};`);
         }
     }
 
@@ -3905,6 +4132,9 @@ class Emitter {
             if (this.isNamedImportFrom(expr, ["os", "node:os"], "EOL")) {
                 return { c: this.stringLit("\n"), ty: T_STRING };
             }
+            if (this.isNamedImportFrom(expr, ["os", "node:os"], "devNull")) {
+                return { c: this.stringLit("/dev/null"), ty: T_STRING };
+            }
             const dnsHint = this.dnsLookupHintConstant(expr.text);
             if (dnsHint !== null && this.isNamedImportFrom(expr, ["dns", "node:dns"], expr.text)) {
                 return { c: dnsHint.toFixed(1), ty: T_NUMBER };
@@ -3922,6 +4152,25 @@ class Emitter {
                 const decl = this.requireBindingModuleExportsDeclaration(expr);
                 const ty = decl ? this.commonJsExportedCType(decl) : this.prepareType(mapType(expr, this.checker));
                 return { c: requireDefault, ty };
+            }
+            const commonJsDefaultImport = this.commonJsDefaultImportDeclaration(expr);
+            if (commonJsDefaultImport) {
+                const cName = this.declarationCName(commonJsDefaultImport);
+                if (!cName) unsupported(expr, "unsupported CommonJS default import");
+                return { c: cName, ty: this.commonJsExportedCType(commonJsDefaultImport) };
+            }
+            const jsDefaultExport = this.jsDefaultExportAssignmentForImport(expr);
+            if (jsDefaultExport) {
+                return {
+                    c: this.defaultExportCName(jsDefaultExport),
+                    ty: this.defaultExportAssignmentCType(jsDefaultExport),
+                };
+            }
+            if (this.untypedJsObjectLiteralVariableDeclaration(expr)) {
+                return { c: this.identifierRead(expr), ty: T_VALUE };
+            }
+            if (this.untypedJsArrayLiteralVariableDeclaration(expr)) {
+                return { c: this.identifierRead(expr), ty: T_VALUE };
             }
             const ty = this.prepareType(mapType(expr, this.checker));
             const declaredTy = this.identifierDeclaredType(expr);
@@ -4082,6 +4331,8 @@ class Emitter {
             case "date":
             case "error":
             case "buffer":
+            case "fsstats":
+            case "fsdirent":
                 return "object";
             case "function":
                 return "function";
@@ -4741,7 +4992,7 @@ class Emitter {
                     );
                 }
                 const pointerKinds: readonly CType["kind"][] = [
-                    "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "date", "error", "buffer", "fsstats", "function",
+                    "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "date", "error", "buffer", "fsstats", "fsdirent", "function",
                 ];
                 if (pointerKinds.includes(left.ty.kind)) {
                     const tv = this.freshTemp("_nc");
@@ -5286,7 +5537,7 @@ class Emitter {
         }
         // Compare pointer-valued types (array, class, map, set, regexp, string) to null.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "date", "error", "buffer", "fsstats", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "date", "error", "buffer", "fsstats", "fsdirent", "function",
         ];
         const leftIsNull = left.ty.kind === "void";
         const rightIsNull = right.ty.kind === "void";
@@ -5537,18 +5788,23 @@ class Emitter {
             "linkSync",
             "mkdtempSync",
             "truncateSync",
+            "utimesSync",
+            "lutimesSync",
+            "chownSync",
+            "lchownSync",
             "chmodSync",
             "mkdirSync",
             "unlinkSync",
             "rmSync",
             "rmdirSync",
+            "cpSync",
             "copyFileSync",
             "renameSync",
         ].find((exported) => this.isNamedImportFrom(calleeId, ["fs", "node:fs"], exported));
         if (fsNamed) {
             return this.emitFsCall(call, fsNamed);
         }
-        const pathNamed = ["join", "resolve", "normalize", "isAbsolute", "relative", "basename", "dirname", "extname", "parse", "format"]
+        const pathNamed = ["join", "resolve", "normalize", "isAbsolute", "relative", "toNamespacedPath", "basename", "dirname", "extname", "parse", "format"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["path", "node:path"], exported));
         if (pathNamed) {
             return this.emitPathCall(call, pathNamed);
@@ -6582,7 +6838,7 @@ class Emitter {
         const moduleNsMember = this.moduleNamespaceMemberCName(pa);
         if (moduleNsMember) {
             const decl = this.moduleNamespaceMemberDeclaration(pa);
-            const memberTy = this.prepareType(mapType(pa, this.checker));
+            const memberTy = this.moduleNamespaceMemberType(pa);
             if (
                 decl &&
                 ts.isPropertyAccessExpression(decl) &&
@@ -6732,8 +6988,46 @@ class Emitter {
             if (call.arguments.length !== 0) unsupported(call, "process.uptime expects no args");
             return { c: `tsc_process_uptime()`, ty: T_NUMBER };
         }
+        if (
+            ts.isPropertyAccessExpression(recvExpr) &&
+            ts.isIdentifier(recvExpr.expression) &&
+            recvExpr.expression.text === "process" &&
+            recvExpr.name.text === "hrtime" &&
+            memberName === "bigint"
+        ) {
+            if (call.arguments.length !== 0) unsupported(call, "process.hrtime.bigint expects no args");
+            return { c: `tsc_process_hrtime_bigint()`, ty: T_BIGINT };
+        }
+        if (
+            ts.isPropertyAccessExpression(recvExpr) &&
+            ts.isIdentifier(recvExpr.expression) &&
+            recvExpr.expression.text === "process" &&
+            (recvExpr.name.text === "stdout" || recvExpr.name.text === "stderr") &&
+            memberName === "write"
+        ) {
+            if (call.arguments.length !== 1) unsupported(call, `process.${recvExpr.name.text}.write expects a string or Buffer`);
+            const chunk = this.emitExpr(call.arguments[0]!);
+            if (chunk.ty.kind !== "string" && chunk.ty.kind !== "buffer") {
+                unsupported(call.arguments[0]!, `process.${recvExpr.name.text}.write expects a string or Buffer`);
+            }
+            const fn = recvExpr.name.text === "stdout"
+                ? (chunk.ty.kind === "buffer" ? "tsc_process_stdout_write_buffer" : "tsc_process_stdout_write")
+                : (chunk.ty.kind === "buffer" ? "tsc_process_stderr_write_buffer" : "tsc_process_stderr_write");
+            return this.emitSequencedCall(fn, T_BOOLEAN, [
+                { value: chunk, target: chunk.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: call.arguments[0]! },
+            ]);
+        }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "process") {
             switch (memberName) {
+                case "nextTick": {
+                    if (call.arguments.length !== 1) unsupported(call, "process.nextTick expects a zero-argument callback in this subset");
+                    const callbackNode = call.arguments[0]!;
+                    const callback = this.emitExpr(callbackNode);
+                    const adapter = this.ensureNextTickAdapter(callbackNode, callback.ty);
+                    return this.emitSequencedExpr(T_VOID, [
+                        { value: callback, target: callback.ty, node: callbackNode },
+                    ], ([fn]) => `tsc_process_next_tick(${adapter}, ${fn})`);
+                }
                 case "getuid":
                     if (call.arguments.length !== 0) unsupported(call, "process.getuid expects no args");
                     return { c: `tsc_process_getuid()`, ty: T_NUMBER };
@@ -6746,6 +7040,9 @@ class Emitter {
                 case "getegid":
                     if (call.arguments.length !== 0) unsupported(call, "process.getegid expects no args");
                     return { c: `tsc_process_getegid()`, ty: T_NUMBER };
+                case "getgroups":
+                    if (call.arguments.length !== 0) unsupported(call, "process.getgroups expects no args");
+                    return { c: `tsc_process_getgroups()`, ty: arrayType(T_NUMBER) };
                 case "umask":
                     if (call.arguments.length > 1) unsupported(call, "process.umask expects optional mask");
                     if (call.arguments.length === 0) return { c: `tsc_process_umask_get()`, ty: T_NUMBER };
@@ -6755,6 +7052,20 @@ class Emitter {
                 case "memoryUsage":
                     if (call.arguments.length !== 0) unsupported(call, "process.memoryUsage expects no args");
                     return { c: `tsc_process_memory_usage()`, ty: T_VALUE };
+                case "cpuUsage":
+                    if (call.arguments.length !== 0) unsupported(call, "process.cpuUsage expects no args in this subset");
+                    return { c: `tsc_process_cpu_usage()`, ty: T_VALUE };
+                case "resourceUsage":
+                    if (call.arguments.length !== 0) unsupported(call, "process.resourceUsage expects no args");
+                    return { c: `tsc_process_resource_usage()`, ty: T_VALUE };
+                case "kill": {
+                    if (call.arguments.length < 1 || call.arguments.length > 2) unsupported(call, "process.kill expects pid and optional signal");
+                    const signal = this.processSignalArgument(call.arguments[1]);
+                    return this.emitSequencedCall("tsc_process_kill", T_BOOLEAN, [
+                        { value: this.emitExpr(call.arguments[0]!), target: T_NUMBER, node: call.arguments[0]! },
+                        { value: { c: signal, ty: T_NUMBER } },
+                    ]);
+                }
             }
         }
         if (
@@ -6943,6 +7254,8 @@ class Emitter {
             return this.emitBufferMethod(call, recv, memberName);
         if (recv.ty.kind === "fsstats")
             return this.emitFsStatsMethod(call, recv, memberName);
+        if (recv.ty.kind === "fsdirent")
+            return this.emitFsDirentMethod(call, recv, memberName);
         if (recv.ty.kind === "class" && this.isObjectPrototypeFallback(call)) {
             return this.emitTypedObjectPrototypeMethod(call, recvExpr, recv, memberName);
         }
@@ -9955,6 +10268,24 @@ class Emitter {
         }
     }
 
+    private processSignalArgument(signal: ts.Expression | undefined): string {
+        if (!signal || signal.kind === ts.SyntaxKind.UndefinedKeyword) return "15.0";
+        if (ts.isNumericLiteral(signal)) {
+            const numeric = Number(signal.text);
+            if (numeric === 0 || numeric === 9 || numeric === 15) return `${numeric}.0`;
+            unsupported(signal, "process.kill only supports signals 0, SIGTERM, SIGKILL, 9, and 15");
+        }
+        if (!ts.isStringLiteral(signal)) {
+            unsupported(signal, "process.kill signal must be a literal signal string or numeric signal in this subset");
+        }
+        switch (signal.text) {
+            case "SIGTERM": return "15.0";
+            case "SIGKILL": return "9.0";
+            default:
+                unsupported(signal, "process.kill only supports SIGTERM and SIGKILL string signals in this subset");
+        }
+    }
+
     private childProcessSpawnSyncStdioOption(options: ts.ObjectLiteralExpression): { pipeStdin: string; ignoreStdin: string; captureStdout: string; captureStderr: string; inheritStdout: string; inheritStderr: string } {
         const prop = options.properties.find((entry): entry is ts.PropertyAssignment =>
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === "stdio",
@@ -10160,6 +10491,28 @@ class Emitter {
         buf.line(`fn->fn(${callArgs.join(", ")});`);
         buf.close();
         buf.line();
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
+    private ensureNextTickAdapter(expr: ts.Expression, type: CType): string {
+        const prepared = this.prepareType(type);
+        if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
+            unsupported(expr, "process.nextTick callback must be a function");
+        }
+        if (prepared.thisParam) unsupported(expr, "process.nextTick callback this parameters are not supported");
+        if ((prepared.params ?? []).length !== 0) unsupported(expr, "process.nextTick callback must take no parameters in this subset");
+        const key = `nextTick:${this.typeKey(prepared)}`;
+        const existing = this.nextTickAdapters.get(key);
+        if (existing) return existing;
+        const name = `tsc_next_tick_callback_${this.nextTickAdapters.size}`;
+        this.nextTickAdapters.set(key, name);
+        this.protos.line(`void ${name}(void* env);`);
+        const buf = new CBuf();
+        buf.open(`void ${name}(void* env)`);
+        buf.line(`${prepared.c} fn = (${prepared.c})env;`);
+        buf.line("(void)fn->fn(fn->env);");
+        buf.close();
         this.closureDefs.write(buf.toString());
         return name;
     }
@@ -10380,7 +10733,15 @@ class Emitter {
     }
 
     private isErrorConstructorName(name: string): boolean {
-        return name === "Error" || name === "TypeError" || name === "RangeError" || name === "SyntaxError";
+        return (
+            name === "Error" ||
+            name === "TypeError" ||
+            name === "RangeError" ||
+            name === "SyntaxError" ||
+            name === "ReferenceError" ||
+            name === "EvalError" ||
+            name === "URIError"
+        );
     }
 
     private emitErrorConstructor(call: ts.CallExpression | ts.NewExpression, name: string): EmitResult {
@@ -12449,12 +12810,13 @@ class Emitter {
                 this.validateFsEncodingOptions(args[2], "fs.writeFileSync");
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
+                if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.writeFileSync data must be string or Buffer");
                 return this.emitSequencedCall(
-                    "tsc_fs_write_file_sync",
+                    d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync" : "tsc_fs_write_file_sync",
                     T_VOID,
                     [
                         { value: p, target: T_STRING, node: args[0]! },
-                        { value: d, target: T_STRING, node: args[1]! },
+                        { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
                     ],
                 );
             }
@@ -12463,9 +12825,10 @@ class Emitter {
                 this.validateFsEncodingOptions(args[2], "fs.appendFileSync");
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
-                return this.emitSequencedCall("tsc_fs_append_file_sync", T_VOID, [
+                if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.appendFileSync data must be string or Buffer");
+                return this.emitSequencedCall(d.ty.kind === "buffer" ? "tsc_fs_append_file_buffer_sync" : "tsc_fs_append_file_sync", T_VOID, [
                     { value: p, target: T_STRING, node: args[0]! },
-                    { value: d, target: T_STRING, node: args[1]! },
+                    { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
                 ]);
             }
             case "existsSync": {
@@ -12486,44 +12849,55 @@ class Emitter {
                 return this.emitSequencedCall("tsc_fs_access_sync", T_VOID, specs);
             }
             case "readdirSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.readdirSync needs path and optional UTF-8 encoding options");
-                this.validateFsEncodingOptions(args[1], "fs.readdirSync");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.readdirSync needs path and optional UTF-8 encoding or withFileTypes options");
+                const options = this.validateFsReaddirOptions(args[1], "fs.readdirSync");
                 const p = this.emitExpr(args[0]!);
+                if (options.withFileTypes) {
+                    return {
+                        c: `tsc_fs_readdir_dirents_sync(${p.c})`,
+                        ty: arrayType(T_FS_DIRENT),
+                    };
+                }
                 return {
-                    c: `tsc_fs_readdir_sync(${p.c})`,
+                    c: `${options.recursive ? "tsc_fs_readdir_recursive_sync" : "tsc_fs_readdir_sync"}(${p.c})`,
                     ty: arrayType(T_STRING),
                 };
             }
             case "statSync": {
-                if (args.length !== 1) unsupported(call, "fs.statSync needs path");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.statSync needs path and optional { bigint: false } options");
+                this.validateFsStatsOptions(args[1], "fs.statSync");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedCall("tsc_fs_stat_sync", T_FS_STATS, [
                     { value: p, target: T_STRING, node: args[0]! },
                 ]);
             }
             case "lstatSync": {
-                if (args.length !== 1) unsupported(call, "fs.lstatSync needs path");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.lstatSync needs path and optional { bigint: false } options");
+                this.validateFsStatsOptions(args[1], "fs.lstatSync");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedCall("tsc_fs_lstat_sync", T_FS_STATS, [
                     { value: p, target: T_STRING, node: args[0]! },
                 ]);
             }
             case "realpathSync": {
-                if (args.length !== 1) unsupported(call, "fs.realpathSync needs path");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.realpathSync needs path and optional UTF-8 encoding options");
+                this.validateFsEncodingOptions(args[1], "fs.realpathSync");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedCall("tsc_fs_realpath_sync", T_STRING, [
                     { value: p, target: T_STRING, node: args[0]! },
                 ]);
             }
             case "readlinkSync": {
-                if (args.length !== 1) unsupported(call, "fs.readlinkSync needs path");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.readlinkSync needs path and optional UTF-8 encoding options");
+                this.validateFsEncodingOptions(args[1], "fs.readlinkSync");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedCall("tsc_fs_readlink_sync", T_STRING, [
                     { value: p, target: T_STRING, node: args[0]! },
                 ]);
             }
             case "symlinkSync": {
-                if (args.length !== 2) unsupported(call, "fs.symlinkSync needs target and path");
+                if (args.length < 2 || args.length > 3) unsupported(call, "fs.symlinkSync needs target, path, and optional type");
+                this.validateFsSymlinkType(args[2], "fs.symlinkSync");
                 const target = this.emitExpr(args[0]!);
                 const p = this.emitExpr(args[1]!);
                 return this.emitSequencedCall("tsc_fs_symlink_sync", T_VOID, [
@@ -12541,7 +12915,8 @@ class Emitter {
                 ]);
             }
             case "mkdtempSync": {
-                if (args.length !== 1) unsupported(call, "fs.mkdtempSync needs prefix");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.mkdtempSync needs prefix and optional UTF-8 encoding options");
+                this.validateFsEncodingOptions(args[1], "fs.mkdtempSync");
                 const prefix = this.emitExpr(args[0]!);
                 return this.emitSequencedCall("tsc_fs_mkdtemp_sync", T_STRING, [
                     { value: prefix, target: T_STRING, node: args[0]! },
@@ -12559,6 +12934,43 @@ class Emitter {
                     `tsc_fs_truncate_sync(${path!}, ${length ?? "0"})`,
                 );
             }
+            case "utimesSync":
+            case "lutimesSync": {
+                if (args.length !== 3) unsupported(call, `fs.${name} needs path, atime, and mtime`);
+                const p = this.emitExpr(args[0]!);
+                const atime = this.emitFsTimeArg(args[1]!, `fs.${name} atime`);
+                const mtime = this.emitFsTimeArg(args[2]!, `fs.${name} mtime`);
+                const fn = name === "lutimesSync" ? "tsc_fs_lutimes_sync" : "tsc_fs_utimes_sync";
+                return this.emitSequencedExpr(T_VOID, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                    atime,
+                    mtime,
+                ], ([path, atimeValue, mtimeValue]) =>
+                    `${fn}(${path!}, ${this.fsTimeArgC(atimeValue!, atime.value.ty)}, ${this.fsTimeArgC(mtimeValue!, mtime.value.ty)})`,
+                );
+            }
+            case "chownSync": {
+                if (args.length !== 3) unsupported(call, "fs.chownSync needs path, uid, and gid");
+                const p = this.emitExpr(args[0]!);
+                const uid = this.emitExpr(args[1]!);
+                const gid = this.emitExpr(args[2]!);
+                return this.emitSequencedCall("tsc_fs_chown_sync", T_VOID, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                    { value: uid, target: T_NUMBER, node: args[1]! },
+                    { value: gid, target: T_NUMBER, node: args[2]! },
+                ]);
+            }
+            case "lchownSync": {
+                if (args.length !== 3) unsupported(call, "fs.lchownSync needs path, uid, and gid");
+                const p = this.emitExpr(args[0]!);
+                const uid = this.emitExpr(args[1]!);
+                const gid = this.emitExpr(args[2]!);
+                return this.emitSequencedCall("tsc_fs_lchown_sync", T_VOID, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                    { value: uid, target: T_NUMBER, node: args[1]! },
+                    { value: gid, target: T_NUMBER, node: args[2]! },
+                ]);
+            }
             case "chmodSync": {
                 if (args.length !== 2) unsupported(call, "fs.chmodSync needs path and numeric mode");
                 const p = this.emitExpr(args[0]!);
@@ -12571,10 +12983,11 @@ class Emitter {
             case "mkdirSync": {
                 if (args.length < 1 || args.length > 2) unsupported(call, "fs.mkdirSync needs path and optional options");
                 const p = this.emitExpr(args[0]!);
-                const options = this.emitFsBooleanOptions(args[1], ["recursive"], `fs.${name}`);
+                const options = this.emitFsMkdirOptions(args[1], `fs.${name}`);
                 return this.emitSequencedExpr(T_VOID, [
                     { value: p, target: T_STRING, node: args[0]! },
-                ], ([path]) => `tsc_fs_mkdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"})`);
+                    options.mode,
+                ], ([path, mode]) => `tsc_fs_mkdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"}, ${mode!})`);
             }
             case "rmSync": {
                 if (args.length < 1 || args.length > 2) unsupported(call, "fs.rmSync needs path and optional options");
@@ -12592,6 +13005,18 @@ class Emitter {
                 return this.emitSequencedCall(fn, T_VOID, [
                     { value: p, target: T_STRING, node: args[0]! },
                 ]);
+            }
+            case "cpSync": {
+                if (args.length < 2 || args.length > 3) unsupported(call, "fs.cpSync needs source, destination, and optional options");
+                const options = this.emitFsCpOptions(args[2], "fs.cpSync");
+                const src = this.emitExpr(args[0]!);
+                const dest = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(T_VOID, [
+                    { value: src, target: T_STRING, node: args[0]! },
+                    { value: dest, target: T_STRING, node: args[1]! },
+                ], ([srcPath, destPath]) =>
+                    `tsc_fs_cp_sync_opts(${srcPath!}, ${destPath!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"})`,
+                );
             }
             case "copyFileSync":
             case "renameSync": {
@@ -12617,6 +13042,75 @@ class Emitter {
             }
         }
         unsupported(call, `fs.${name} (Phase 10 sync subset only)`);
+    }
+
+    private emitFsMkdirOptions(options: ts.Expression | undefined, label: string): { recursive: boolean; mode: SequencedCallArg } {
+        const defaultMode: SequencedCallArg = { value: { c: "511.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
+        if (!options || this.isUndefinedExpression(options)) {
+            return { recursive: false, mode: { ...defaultMode, node: options ?? undefined } };
+        }
+        if (!ts.isObjectLiteralExpression(options)) {
+            const mode = this.emitExpr(options);
+            if (mode.ty.kind !== "number") unsupported(options, `${label} mode must be numeric in this subset`);
+            return { recursive: false, mode: { value: mode, target: T_NUMBER, node: options } };
+        }
+        let recursive = false;
+        let modeArg = defaultMode;
+        for (const prop of options.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, `${label} options only support recursive and mode property assignments`);
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (key === "recursive") {
+                if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
+                    recursive = true;
+                } else if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) {
+                    recursive = false;
+                } else {
+                    unsupported(prop.initializer, `${label}.recursive must be a boolean literal in this subset`);
+                }
+                continue;
+            }
+            if (key === "mode") {
+                const mode = this.emitExpr(prop.initializer);
+                if (mode.ty.kind !== "number") unsupported(prop.initializer, `${label}.mode must be numeric in this subset`);
+                modeArg = { value: mode, target: T_NUMBER, node: prop.initializer };
+                continue;
+            }
+            unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+        }
+        return { recursive, mode: modeArg };
+    }
+
+    private emitFsCpOptions(options: ts.Expression | undefined, label: string): { recursive: boolean; force: boolean; errorOnExist: boolean; dereference: boolean; verbatimSymlinks: boolean } {
+        const out = { recursive: false, force: true, errorOnExist: false, dereference: false, verbatimSymlinks: false };
+        if (!options || this.isUndefinedExpression(options)) return out;
+        if (!ts.isObjectLiteralExpression(options)) {
+            unsupported(options, `${label} options must be an object literal in this subset`);
+        }
+        for (const prop of options.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, `${label} options only support boolean property assignments`);
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (key !== "recursive" && key !== "force" && key !== "errorOnExist" && key !== "dereference" && key !== "verbatimSymlinks") {
+                unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+            }
+            let value: boolean;
+            if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
+                value = true;
+            } else if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) {
+                value = false;
+            } else {
+                unsupported(prop.initializer, `${label}.${key} must be a boolean literal in this subset`);
+            }
+            if (key === "recursive") out.recursive = value;
+            else if (key === "force") out.force = value;
+            else if (key === "errorOnExist") out.errorOnExist = value;
+            else if (key === "dereference") out.dereference = value;
+            else out.verbatimSymlinks = value;
+        }
+        return out;
     }
 
     private emitFsBooleanOptions(
@@ -12675,6 +13169,102 @@ class Emitter {
         }
     }
 
+    private validateFsReaddirOptions(
+        options: ts.Expression | undefined,
+        label: string,
+    ): { withFileTypes: boolean; recursive: boolean } {
+        if (!options || this.isUndefinedExpression(options)) return { withFileTypes: false, recursive: false };
+        const checkEncoding = (node: ts.Expression): void => {
+            if (!ts.isStringLiteralLike(node) || (node.text !== "utf8" && node.text !== "utf-8")) {
+                unsupported(node, `${label} only supports UTF-8 encoding options in this subset`);
+            }
+        };
+        if (ts.isStringLiteralLike(options)) {
+            checkEncoding(options);
+            return { withFileTypes: false, recursive: false };
+        }
+        if (!ts.isObjectLiteralExpression(options)) {
+            unsupported(options, `${label} options must be a UTF-8 string literal or object literal in this subset`);
+        }
+        let withFileTypes = false;
+        let recursive = false;
+        for (const prop of options.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, `${label} options only support encoding, withFileTypes, and recursive property assignments`);
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (key === "encoding") {
+                checkEncoding(prop.initializer);
+                continue;
+            }
+            if (key === "withFileTypes") {
+                if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
+                    withFileTypes = true;
+                } else if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) {
+                    withFileTypes = false;
+                } else {
+                    unsupported(prop.initializer, `${label}.withFileTypes must be a boolean literal in this subset`);
+                }
+                continue;
+            }
+            if (key === "recursive") {
+                if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
+                    recursive = true;
+                } else if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) {
+                    recursive = false;
+                } else {
+                    unsupported(prop.initializer, `${label}.recursive must be a boolean literal in this subset`);
+                }
+                continue;
+            }
+            unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+        }
+        if (withFileTypes && recursive) unsupported(options, `${label} does not support combining withFileTypes and recursive yet`);
+        return { withFileTypes, recursive };
+    }
+
+    private validateFsStatsOptions(options: ts.Expression | undefined, label: string): void {
+        if (!options) return;
+        if (!ts.isObjectLiteralExpression(options)) {
+            unsupported(options, `${label} options must be an object literal in this subset`);
+        }
+        for (const prop of options.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, `${label} options only support bigint property assignments`);
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (key !== "bigint") {
+                unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+            }
+            if (prop.initializer.kind !== ts.SyntaxKind.FalseKeyword && !this.isUndefinedExpression(prop.initializer)) {
+                unsupported(prop.initializer, `${label} only supports bigint: false in this subset`);
+            }
+        }
+    }
+
+    private validateFsSymlinkType(type: ts.Expression | undefined, label: string): void {
+        if (!type || this.isUndefinedExpression(type)) return;
+        if (!ts.isStringLiteralLike(type) || !["file", "dir", "junction"].includes(type.text)) {
+            unsupported(type, `${label} only supports literal "file", "dir", or "junction" symlink types`);
+        }
+    }
+
+    private emitFsTimeArg(expr: ts.Expression, label: string): SequencedCallArg {
+        const value = this.emitExpr(expr);
+        if (value.ty.kind !== "number" && value.ty.kind !== "date") {
+            unsupported(expr, `${label} expects a number or Date in this subset`);
+        }
+        return {
+            value,
+            target: value.ty.kind === "date" ? T_DATE : T_NUMBER,
+            node: expr,
+        };
+    }
+
+    private fsTimeArgC(value: string, originalType: CType): string {
+        return originalType.kind === "date" ? `(tsc_date_get_time(${value}) / 1000.0)` : value;
+    }
+
     private emitFsPromisesCall(call: ts.CallExpression, name: string): EmitResult {
         const args = call.arguments;
         const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
@@ -12694,11 +13284,13 @@ class Emitter {
                 this.validateFsEncodingOptions(args[2], "fs.promises.writeFile");
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
+                if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.promises.writeFile data must be string or Buffer");
+                const fn = d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync" : "tsc_fs_write_file_sync";
                 return this.emitSequencedExpr(mapped, [
                     { value: p, target: T_STRING, node: args[0]! },
-                    { value: d, target: T_STRING, node: args[1]! },
+                    { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
                 ], ([path, data]) =>
-                    settle(`({ tsc_fs_write_file_sync(${path!}, ${data!}); tsc_promise_resolve(tsc_value_undefined()); })`),
+                    settle(`({ ${fn}(${path!}, ${data!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "appendFile": {
@@ -12706,23 +13298,33 @@ class Emitter {
                 this.validateFsEncodingOptions(args[2], "fs.promises.appendFile");
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
+                if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.promises.appendFile data must be string or Buffer");
+                const fn = d.ty.kind === "buffer" ? "tsc_fs_append_file_buffer_sync" : "tsc_fs_append_file_sync";
                 return this.emitSequencedExpr(mapped, [
                     { value: p, target: T_STRING, node: args[0]! },
-                    { value: d, target: T_STRING, node: args[1]! },
+                    { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
                 ], ([path, data]) =>
-                    settle(`({ tsc_fs_append_file_sync(${path!}, ${data!}); tsc_promise_resolve(tsc_value_undefined()); })`),
+                    settle(`({ ${fn}(${path!}, ${data!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "readdir": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.readdir needs path and optional UTF-8 encoding options");
-                this.validateFsEncodingOptions(args[1], "fs.promises.readdir");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.readdir needs path and optional UTF-8 encoding or withFileTypes options");
+                const options = this.validateFsReaddirOptions(args[1], "fs.promises.readdir");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
                     { value: p, target: T_STRING, node: args[0]! },
-                ], ([path]) => settle(`tsc_promise_resolve(tsc_value_array(tsc_fs_readdir_sync(${path!})))`));
+                ], ([path]) => {
+                    const fn = options.withFileTypes
+                        ? "tsc_fs_readdir_dirents_sync"
+                        : options.recursive
+                            ? "tsc_fs_readdir_recursive_sync"
+                            : "tsc_fs_readdir_sync";
+                    return settle(`tsc_promise_resolve(tsc_value_array(${fn}(${path!})))`);
+                });
             }
             case "stat": {
-                if (args.length !== 1) unsupported(call, "fs.promises.stat needs a path");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.stat needs path and optional { bigint: false } options");
+                this.validateFsStatsOptions(args[1], "fs.promises.stat");
                 if (mapped.elem?.kind !== "fsstats") unsupported(call, "fs.promises.stat result must be Promise<FSStats>");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
@@ -12730,7 +13332,8 @@ class Emitter {
                 ], ([path]) => settle(`tsc_promise_resolve_fs_stats(tsc_fs_stat_sync(${path!}))`));
             }
             case "lstat": {
-                if (args.length !== 1) unsupported(call, "fs.promises.lstat needs a path");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.lstat needs path and optional { bigint: false } options");
+                this.validateFsStatsOptions(args[1], "fs.promises.lstat");
                 if (mapped.elem?.kind !== "fsstats") unsupported(call, "fs.promises.lstat result must be Promise<FSStats>");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
@@ -12738,21 +13341,24 @@ class Emitter {
                 ], ([path]) => settle(`tsc_promise_resolve_fs_stats(tsc_fs_lstat_sync(${path!}))`));
             }
             case "realpath": {
-                if (args.length !== 1) unsupported(call, "fs.promises.realpath needs a path");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.realpath needs a path and optional UTF-8 encoding options");
+                this.validateFsEncodingOptions(args[1], "fs.promises.realpath");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
                     { value: p, target: T_STRING, node: args[0]! },
                 ], ([path]) => settle(`tsc_promise_resolve(tsc_value_string(tsc_fs_realpath_sync(${path!})))`));
             }
             case "readlink": {
-                if (args.length !== 1) unsupported(call, "fs.promises.readlink needs a path");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.readlink needs a path and optional UTF-8 encoding options");
+                this.validateFsEncodingOptions(args[1], "fs.promises.readlink");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
                     { value: p, target: T_STRING, node: args[0]! },
                 ], ([path]) => settle(`tsc_promise_resolve(tsc_value_string(tsc_fs_readlink_sync(${path!})))`));
             }
             case "symlink": {
-                if (args.length !== 2) unsupported(call, "fs.promises.symlink needs target and path");
+                if (args.length < 2 || args.length > 3) unsupported(call, "fs.promises.symlink needs target, path, and optional type");
+                this.validateFsSymlinkType(args[2], "fs.promises.symlink");
                 const target = this.emitExpr(args[0]!);
                 const p = this.emitExpr(args[1]!);
                 return this.emitSequencedExpr(mapped, [
@@ -12774,7 +13380,8 @@ class Emitter {
                 );
             }
             case "mkdtemp": {
-                if (args.length !== 1) unsupported(call, "fs.promises.mkdtemp needs prefix");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.mkdtemp needs prefix and optional UTF-8 encoding options");
+                this.validateFsEncodingOptions(args[1], "fs.promises.mkdtemp");
                 const prefix = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
                     { value: prefix, target: T_STRING, node: args[0]! },
@@ -12790,6 +13397,47 @@ class Emitter {
                 if (len) specs.push({ value: len, target: T_NUMBER, node: args[1]! });
                 return this.emitSequencedExpr(mapped, specs, ([path, length]) =>
                     settle(`({ tsc_fs_truncate_sync(${path!}, ${length ?? "0"}); tsc_promise_resolve(tsc_value_undefined()); })`),
+                );
+            }
+            case "utimes":
+            case "lutimes": {
+                if (args.length !== 3) unsupported(call, `fs.promises.${name} needs path, atime, and mtime`);
+                const p = this.emitExpr(args[0]!);
+                const atime = this.emitFsTimeArg(args[1]!, `fs.promises.${name} atime`);
+                const mtime = this.emitFsTimeArg(args[2]!, `fs.promises.${name} mtime`);
+                const fn = name === "lutimes" ? "tsc_fs_lutimes_sync" : "tsc_fs_utimes_sync";
+                return this.emitSequencedExpr(mapped, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                    atime,
+                    mtime,
+                ], ([path, atimeValue, mtimeValue]) =>
+                    settle(`({ ${fn}(${path!}, ${this.fsTimeArgC(atimeValue!, atime.value.ty)}, ${this.fsTimeArgC(mtimeValue!, mtime.value.ty)}); tsc_promise_resolve(tsc_value_undefined()); })`),
+                );
+            }
+            case "chown": {
+                if (args.length !== 3) unsupported(call, "fs.promises.chown needs path, uid, and gid");
+                const p = this.emitExpr(args[0]!);
+                const uid = this.emitExpr(args[1]!);
+                const gid = this.emitExpr(args[2]!);
+                return this.emitSequencedExpr(mapped, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                    { value: uid, target: T_NUMBER, node: args[1]! },
+                    { value: gid, target: T_NUMBER, node: args[2]! },
+                ], ([path, uidValue, gidValue]) =>
+                    settle(`({ tsc_fs_chown_sync(${path!}, ${uidValue!}, ${gidValue!}); tsc_promise_resolve(tsc_value_undefined()); })`),
+                );
+            }
+            case "lchown": {
+                if (args.length !== 3) unsupported(call, "fs.promises.lchown needs path, uid, and gid");
+                const p = this.emitExpr(args[0]!);
+                const uid = this.emitExpr(args[1]!);
+                const gid = this.emitExpr(args[2]!);
+                return this.emitSequencedExpr(mapped, [
+                    { value: p, target: T_STRING, node: args[0]! },
+                    { value: uid, target: T_NUMBER, node: args[1]! },
+                    { value: gid, target: T_NUMBER, node: args[2]! },
+                ], ([path, uidValue, gidValue]) =>
+                    settle(`({ tsc_fs_lchown_sync(${path!}, ${uidValue!}, ${gidValue!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "chmod": {
@@ -12819,11 +13467,12 @@ class Emitter {
             case "mkdir": {
                 if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.mkdir needs path and optional options");
                 const p = this.emitExpr(args[0]!);
-                const options = this.emitFsBooleanOptions(args[1], ["recursive"], `fs.promises.${name}`);
+                const options = this.emitFsMkdirOptions(args[1], `fs.promises.${name}`);
                 return this.emitSequencedExpr(mapped, [
                     { value: p, target: T_STRING, node: args[0]! },
-                ], ([path]) =>
-                    settle(`({ tsc_fs_mkdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`),
+                    options.mode,
+                ], ([path, mode]) =>
+                    settle(`({ tsc_fs_mkdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"}, ${mode!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "rm": {
@@ -12845,6 +13494,18 @@ class Emitter {
                     { value: p, target: T_STRING, node: args[0]! },
                 ], ([path]) =>
                     settle(`({ ${fn}(${path!}); tsc_promise_resolve(tsc_value_undefined()); })`),
+                );
+            }
+            case "cp": {
+                if (args.length < 2 || args.length > 3) unsupported(call, "fs.promises.cp needs source, destination, and optional options");
+                const options = this.emitFsCpOptions(args[2], "fs.promises.cp");
+                const src = this.emitExpr(args[0]!);
+                const dest = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(mapped, [
+                    { value: src, target: T_STRING, node: args[0]! },
+                    { value: dest, target: T_STRING, node: args[1]! },
+                ], ([srcPath, destPath]) =>
+                    settle(`({ tsc_fs_cp_sync_opts(${srcPath!}, ${destPath!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "copyFile":
@@ -12901,9 +13562,16 @@ class Emitter {
             case "relative":
                 if (args.length !== 2) unsupported(call, "path.relative expects 2 args");
                 return this.emitSequencedCall("tsc_path_relative", T_STRING, stringSpecs());
+            case "toNamespacedPath":
+                if (args.length !== 1) unsupported(call, "path.toNamespacedPath expects 1 arg");
+                return this.emitSequencedExpr(T_STRING, stringSpecs(), ([path]) => path);
             case "basename":
-                if (args.length !== 1) unsupported(call, "path.basename expects 1 arg");
-                return this.emitSequencedCall("tsc_path_basename", T_STRING, stringSpecs());
+                if (args.length < 1 || args.length > 2) unsupported(call, "path.basename expects 1 or 2 args");
+                return this.emitSequencedCall(
+                    args.length === 1 ? "tsc_path_basename" : "tsc_path_basename_suffix",
+                    T_STRING,
+                    stringSpecs(),
+                );
             case "dirname":
                 if (args.length !== 1) unsupported(call, "path.dirname expects 1 arg");
                 return this.emitSequencedCall("tsc_path_dirname", T_STRING, stringSpecs());
@@ -13133,6 +13801,18 @@ class Emitter {
             case "isSymbolicLink":
                 if (args.length !== 0) unsupported(call, "Stats.isSymbolicLink expects no args");
                 return this.emitSequencedCall("tsc_fs_stats_is_symbolic_link", T_BOOLEAN, [{ value: recv }]);
+            case "isBlockDevice":
+                if (args.length !== 0) unsupported(call, "Stats.isBlockDevice expects no args");
+                return this.emitSequencedCall("tsc_fs_stats_is_block_device", T_BOOLEAN, [{ value: recv }]);
+            case "isCharacterDevice":
+                if (args.length !== 0) unsupported(call, "Stats.isCharacterDevice expects no args");
+                return this.emitSequencedCall("tsc_fs_stats_is_character_device", T_BOOLEAN, [{ value: recv }]);
+            case "isFIFO":
+                if (args.length !== 0) unsupported(call, "Stats.isFIFO expects no args");
+                return this.emitSequencedCall("tsc_fs_stats_is_fifo", T_BOOLEAN, [{ value: recv }]);
+            case "isSocket":
+                if (args.length !== 0) unsupported(call, "Stats.isSocket expects no args");
+                return this.emitSequencedCall("tsc_fs_stats_is_socket", T_BOOLEAN, [{ value: recv }]);
             case "toLocaleString":
             case "toString":
                 if (args.length !== 0) unsupported(call, `Stats.${method} expects no args`);
@@ -13145,6 +13825,48 @@ class Emitter {
                 return recv;
         }
         unsupported(call, `Stats method .${method}`);
+    }
+
+    private emitFsDirentMethod(
+        call: ts.CallExpression,
+        recv: EmitResult,
+        method: string,
+    ): EmitResult {
+        const args = call.arguments;
+        switch (method) {
+            case "isFile":
+                if (args.length !== 0) unsupported(call, "Dirent.isFile expects no args");
+                return this.emitSequencedCall("tsc_fs_dirent_is_file", T_BOOLEAN, [{ value: recv }]);
+            case "isDirectory":
+                if (args.length !== 0) unsupported(call, "Dirent.isDirectory expects no args");
+                return this.emitSequencedCall("tsc_fs_dirent_is_directory", T_BOOLEAN, [{ value: recv }]);
+            case "isSymbolicLink":
+                if (args.length !== 0) unsupported(call, "Dirent.isSymbolicLink expects no args");
+                return this.emitSequencedCall("tsc_fs_dirent_is_symbolic_link", T_BOOLEAN, [{ value: recv }]);
+            case "isBlockDevice":
+                if (args.length !== 0) unsupported(call, "Dirent.isBlockDevice expects no args");
+                return this.emitSequencedCall("tsc_fs_dirent_is_block_device", T_BOOLEAN, [{ value: recv }]);
+            case "isCharacterDevice":
+                if (args.length !== 0) unsupported(call, "Dirent.isCharacterDevice expects no args");
+                return this.emitSequencedCall("tsc_fs_dirent_is_character_device", T_BOOLEAN, [{ value: recv }]);
+            case "isFIFO":
+                if (args.length !== 0) unsupported(call, "Dirent.isFIFO expects no args");
+                return this.emitSequencedCall("tsc_fs_dirent_is_fifo", T_BOOLEAN, [{ value: recv }]);
+            case "isSocket":
+                if (args.length !== 0) unsupported(call, "Dirent.isSocket expects no args");
+                return this.emitSequencedCall("tsc_fs_dirent_is_socket", T_BOOLEAN, [{ value: recv }]);
+            case "toLocaleString":
+            case "toString":
+                if (args.length !== 0) unsupported(call, `Dirent.${method} expects no args`);
+                return {
+                    c: `tsc_str_from_lit("[object Dirent]", 15)`,
+                    ty: T_STRING,
+                };
+            case "valueOf":
+                if (args.length !== 0) unsupported(call, "Dirent.valueOf expects no args");
+                return recv;
+        }
+        unsupported(call, `Dirent method .${method}`);
     }
 
     private emitBufferMethod(
@@ -14173,7 +14895,10 @@ class Emitter {
         if (args.length < 1) unsupported(call, `Object.${name} needs an argument`);
         const arg = args[0]!;
         const tsType = this.expressionDeclaredOrCurrentType(arg);
-        const mapped = this.prepareType(mapTsType(arg, tsType, this.checker));
+        const mapped = this.isUntypedJsObjectCallTarget(arg) ||
+            (ts.isIdentifier(arg) && this.untypedJsLiteralVariableDeclaration(arg))
+            ? T_VALUE
+            : this.prepareType(mapTsType(arg, tsType, this.checker));
         const primitiveObjectArg =
             mapped.kind === "number" ||
             mapped.kind === "boolean" ||
@@ -14819,6 +15544,11 @@ class Emitter {
             return this.emitObjectGroupBy(call);
         }
         unsupported(call, `Object.${name}`);
+    }
+
+    private isUntypedJsObjectCallTarget(expr: ts.Expression): boolean {
+        return this.isJavaScriptSourceFile(expr.getSourceFile()) &&
+            (ts.isObjectLiteralExpression(expr) || ts.isArrayLiteralExpression(expr));
     }
 
     private emitTypedObjectAssign(
@@ -17077,8 +17807,13 @@ class Emitter {
                     case "delimiter": return { c: this.stringLit(":"), ty: T_STRING };
                 }
             }
-            if (this.isOsModuleIdentifier(pa.expression) && pa.name.text === "EOL") {
-                return { c: this.stringLit("\n"), ty: T_STRING };
+            if (this.isOsModuleIdentifier(pa.expression)) {
+                if (pa.name.text === "EOL") {
+                    return { c: this.stringLit("\n"), ty: T_STRING };
+                }
+                if (pa.name.text === "devNull") {
+                    return { c: this.stringLit("/dev/null"), ty: T_STRING };
+                }
             }
             if (pa.expression.text === "process" && pa.name.text === "argv") {
                 return { c: `tsc_process_argv()`, ty: arrayType(T_STRING) };
@@ -17087,6 +17822,9 @@ class Emitter {
                 return { c: `tsc_process_argv0()`, ty: T_STRING };
             }
             if (pa.expression.text === "process" && pa.name.text === "execPath") {
+                return { c: `tsc_process_argv0()`, ty: T_STRING };
+            }
+            if (pa.expression.text === "process" && pa.name.text === "title") {
                 return { c: `tsc_process_argv0()`, ty: T_STRING };
             }
             if (pa.expression.text === "process" && pa.name.text === "execArgv") {
@@ -17098,6 +17836,12 @@ class Emitter {
             if (pa.expression.text === "process" && pa.name.text === "versions") {
                 return { c: `tsc_process_versions()`, ty: T_VALUE };
             }
+            if (pa.expression.text === "process" && pa.name.text === "release") {
+                return { c: `tsc_process_release()`, ty: T_VALUE };
+            }
+            if (pa.expression.text === "process" && pa.name.text === "features") {
+                return { c: `tsc_process_features()`, ty: T_VALUE };
+            }
             if (pa.expression.text === "process" && pa.name.text === "platform") {
                 return { c: `tsc_os_platform()`, ty: T_STRING };
             }
@@ -17106,6 +17850,9 @@ class Emitter {
             }
             if (pa.expression.text === "process" && pa.name.text === "pid") {
                 return { c: `tsc_process_pid()`, ty: T_NUMBER };
+            }
+            if (pa.expression.text === "process" && pa.name.text === "ppid") {
+                return { c: `tsc_process_ppid()`, ty: T_NUMBER };
             }
             if (pa.expression.text === "module") {
                 const sym = this.symbolForIdentifier(pa.expression);
@@ -17165,7 +17912,7 @@ class Emitter {
             }
             const moduleNsMember = this.moduleNamespaceMemberCName(pa);
             if (moduleNsMember) {
-                const ty = mapType(pa, this.checker);
+                const ty = this.moduleNamespaceMemberType(pa);
                 return { c: moduleNsMember, ty };
             }
         }
@@ -17236,11 +17983,40 @@ class Emitter {
         if (recv.ty.kind === "buffer" && pa.name.text === "length") {
             return { c: `tsc_buffer_length(${recv.c})`, ty: T_NUMBER };
         }
-        if (recv.ty.kind === "fsstats" && pa.name.text === "size") {
-            return { c: `tsc_fs_stats_size(${recv.c})`, ty: T_NUMBER };
+        if (recv.ty.kind === "fsstats") {
+            const numericStatsProps: Record<string, string> = {
+                dev: "tsc_fs_stats_dev",
+                ino: "tsc_fs_stats_ino",
+                size: "tsc_fs_stats_size",
+                mode: "tsc_fs_stats_mode",
+                nlink: "tsc_fs_stats_nlink",
+                uid: "tsc_fs_stats_uid",
+                gid: "tsc_fs_stats_gid",
+                rdev: "tsc_fs_stats_rdev",
+                blksize: "tsc_fs_stats_blksize",
+                blocks: "tsc_fs_stats_blocks",
+                atimeMs: "tsc_fs_stats_atime_ms",
+                mtimeMs: "tsc_fs_stats_mtime_ms",
+                ctimeMs: "tsc_fs_stats_ctime_ms",
+                birthtimeMs: "tsc_fs_stats_birthtime_ms",
+            };
+            const fn = numericStatsProps[pa.name.text];
+            if (fn) return { c: `${fn}(${recv.c})`, ty: T_NUMBER };
         }
-        if (recv.ty.kind === "fsstats" && pa.name.text === "mode") {
-            return { c: `tsc_fs_stats_mode(${recv.c})`, ty: T_NUMBER };
+        if (recv.ty.kind === "fsstats" && pa.name.text === "atime") {
+            return { c: `tsc_date_from_ms(tsc_fs_stats_atime_ms(${recv.c}))`, ty: T_DATE };
+        }
+        if (recv.ty.kind === "fsstats" && pa.name.text === "mtime") {
+            return { c: `tsc_date_from_ms(tsc_fs_stats_mtime_ms(${recv.c}))`, ty: T_DATE };
+        }
+        if (recv.ty.kind === "fsstats" && pa.name.text === "ctime") {
+            return { c: `tsc_date_from_ms(tsc_fs_stats_ctime_ms(${recv.c}))`, ty: T_DATE };
+        }
+        if (recv.ty.kind === "fsstats" && pa.name.text === "birthtime") {
+            return { c: `tsc_date_from_ms(tsc_fs_stats_birthtime_ms(${recv.c}))`, ty: T_DATE };
+        }
+        if (recv.ty.kind === "fsdirent" && pa.name.text === "name") {
+            return { c: `tsc_fs_dirent_name(${recv.c})`, ty: T_STRING };
         }
         if (recv.ty.kind === "value") {
             if (pa.name.text === "length") {
@@ -17406,7 +18182,9 @@ class Emitter {
         const targetType =
             this.checker.getContextualType(ol) ??
             this.checker.getTypeAtLocation(ol);
-        const mapped = this.prepareType(mapTsType(ol, targetType, this.checker));
+        const mapped = this.isUntypedJsObjectLiteral(ol)
+            ? T_VALUE
+            : this.prepareType(mapTsType(ol, targetType, this.checker));
         if (mapped.kind === "value") {
             const obj = this.freshTemp("_dynobj");
             const pieces: string[] = [`tsc_object_t* ${obj} = tsc_object_new()`];
@@ -17480,7 +18258,9 @@ class Emitter {
         const litType =
             this.checker.getContextualType(al) ??
             this.checker.getTypeAtLocation(al);
-        const mapped = mapTsType(al, litType, this.checker);
+        const mapped = this.isUntypedJsArrayLiteral(al)
+            ? T_VALUE
+            : mapTsType(al, litType, this.checker);
         if (mapped.kind === "value") {
             const pieces: string[] = [];
             const av = this.freshTemp("_dynarr");
@@ -17619,6 +18399,7 @@ class Emitter {
         if (r.ty.kind === "error") return `tsc_error_to_string(${r.c})`;
         if (r.ty.kind === "buffer") return `tsc_buffer_to_string(${r.c}, tsc_str_from_lit("utf8", 4))`;
         if (r.ty.kind === "fsstats") return `tsc_str_from_lit("[object Stats]", 14)`;
+        if (r.ty.kind === "fsdirent") return `tsc_str_from_lit("[object Dirent]", 15)`;
         if (r.ty.kind === "function") return `tsc_str_from_lit("[function]", 10)`;
         if (r.ty.kind === "value") return `tsc_value_to_string(${r.c})`;
         if (r.ty.kind === "class") {
@@ -17655,7 +18436,7 @@ class Emitter {
         // null (void) → any pointer type: emit typed NULL. Check before the
         // string-coerce branch since string is a pointer type too.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "date", "error", "buffer", "fsstats", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "date", "error", "buffer", "fsstats", "fsdirent", "function",
         ];
         if (r.ty.kind === "void" && pointerKinds.includes(target.kind)) {
             return `((${target.c})NULL)`;
@@ -17727,12 +18508,13 @@ function isWeakObjectKey(t: CType): boolean {
         "error",
         "buffer",
         "fsstats",
+        "fsdirent",
     ].includes(t.kind);
 }
 
 function isPointerKind(t: CType): boolean {
     const pointerKinds: readonly CType["kind"][] = [
-        "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "date", "error", "buffer", "fsstats", "function",
+        "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "date", "error", "buffer", "fsstats", "fsdirent", "function",
     ];
     return pointerKinds.includes(t.kind);
 }

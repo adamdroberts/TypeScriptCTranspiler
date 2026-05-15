@@ -1,0 +1,5 @@
+sync force false: old
+sync errorOnExist: fs.cpSync: could not copy path
+sync force true: new
+promise force false: old-promise
+promise errorOnExist: fs.cpSync: could not copy path

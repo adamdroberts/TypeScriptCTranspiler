@@ -2,7 +2,7 @@
 
 Everything in this file compiles end-to-end to a native binary via `./bin/tsc2c file.ts -o out`. Each bullet points at the test case under `tests/e2e/cases/` that exercises it and, where useful, at the runtime symbol or emitter method that implements it.
 
-Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 502 passed.
+Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` → 543 passed.
 
 ---
 
@@ -262,8 +262,9 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Default imports and renamed named imports resolve through TypeScript aliases to the exported declaration names during C emission, including default class imports, default imports of identifier export assignments, and anonymous default-exported functions. Tests: `module_import_aliases`, `module_default_class_import`, `module_default_export_assignment`, `module_default_anonymous_function`
 - Simple barrel re-exports through `export { name } from "./module"`, `export { default as name } from "./module"`, and `export * from "./module"` resolve to the original emitted declarations. Tests: `module_re_exports`, `module_default_re_export`, `module_export_star`
 - Module namespace imports resolve exported value/function members directly to emitted declarations for local modules and resolvable TypeScript package sources. Tests: `module_namespace_import`, `node_modules_package_namespace`
-- Resolvable TypeScript and basic JavaScript package sources under `node_modules` are included in the module graph when TypeScript resolves package `exports`, package-local JS import edges, package `main` fallback entries, package-internal `imports`, namespace import entries, and side-effect-only package entries to source files. JS package sources are loaded with `allowJs` / `checkJs: false` and lower through `any` / dynamic value erasure in this bounded subset. Tests: `node_modules_package_exports`, `node_modules_package_main`, `node_modules_package_imports`, `node_modules_package_namespace`, `node_modules_js_package`, `node_modules_js_package_relative_import`, `node_modules_package_side_effect`
-- A narrow CommonJS package-source subset lowers top-level `exports.name = ...`, `module.exports.name = ...`, string-literal and statically computed `exports["name"] = ...` / `module.exports["name"] = ...`, object-literal identifier/function-valued/arrow-function-valued/method/primitive-literal exports, function-valued / arrow-function-valued / identifier-valued / primitive-literal / array-valued / static object-or-array-literal `module.exports = ...` defaults, top-level literal `const pkg = require("pkg")` member reads/calls, top-level literal `require("pkg").name` member reads/calls, top-level literal `require("pkg")` reads for module-exported default values, top-level literal `require("pkg")(...)` calls for function-valued module exports, top-level literal `const { name, alias: local } = require("pkg")` bindings, top-level literal `const fn = require("pkg")` calls for function-valued module exports, package-local top-level literal `require("./local.js")` member/default/direct-default re-exports, top-level and package-local literal `module.require(...)` member reads/calls/re-exports, side-effect-only top-level `require("pkg")`, and read-only `module.filename` / `module.id` / `module.path` / `module.loaded` metadata to module-scoped exported bindings/init edges for named imports, default imports, namespace member reads/calls, require-bound package namespace reads/calls, direct require member reads/calls, direct require default-value reads/calls, require destructuring reads/calls, require-bound primitive/function calls and reads, package-local re-export calls, and eager side-effect package init. Tests: `node_modules_commonjs_package_named`, `node_modules_commonjs_bracket_exports`, `node_modules_commonjs_computed_exports`, `node_modules_commonjs_module_exports_array`, `node_modules_commonjs_module_exports_object`, `node_modules_commonjs_module_exports_object_default`, `node_modules_commonjs_module_exports_nested_object_default`, `node_modules_commonjs_module_exports_object_function`, `node_modules_commonjs_module_exports_object_arrow`, `node_modules_commonjs_module_exports_object_method`, `node_modules_commonjs_module_exports_object_literals`, `node_modules_commonjs_module_exports_function`, `node_modules_commonjs_module_exports_arrow`, `node_modules_commonjs_module_exports_identifier`, `node_modules_commonjs_module_exports_primitives`, `node_modules_commonjs_require_named`, `node_modules_commonjs_require_direct_member`, `node_modules_commonjs_require_direct_function`, `node_modules_commonjs_require_direct_value`, `node_modules_commonjs_require_destructure`, `node_modules_commonjs_require_function`, `node_modules_commonjs_relative_require`, `node_modules_commonjs_relative_require_default`, `node_modules_commonjs_relative_require_direct_default`, `node_modules_commonjs_module_require`, `node_modules_commonjs_require_side_effect`, `node_modules_commonjs_module_metadata`
+- Resolvable TypeScript and basic JavaScript package sources under `node_modules` are included in the module graph when TypeScript resolves package `exports`, package-local JS import edges, package `main` fallback entries, package-internal `imports`, namespace import entries, and side-effect-only package entries to source files. JS package sources are loaded with `allowJs` / `checkJs: false` and lower through `any` / dynamic value erasure in this bounded subset, including untyped JS object literals as dynamic objects, untyped JS array literals as dynamic arrays, default-exported object literals, and named/default/namespace imports that reference those literals. Tests: `node_modules_package_exports`, `node_modules_package_main`, `node_modules_package_imports`, `node_modules_package_namespace`, `node_modules_js_package`, `node_modules_js_package_relative_import`, `node_modules_package_side_effect`, `node_modules_commonjs_module_exports_object_assign_default`, `node_modules_commonjs_module_exports_object_create_default`, `node_modules_commonjs_module_exports_object_define_property_default`, `node_modules_commonjs_module_exports_object_from_entries_default`
+- Function-scoped static literal CommonJS `require(...)` bindings are included in the module graph and lower eagerly for namespace member calls, destructured member calls, bound default-function calls, and direct default-function calls. Test: `node_modules_commonjs_function_scope_require`
+- A narrow CommonJS package-source subset lowers top-level `exports.name = ...`, `module.exports.name = ...`, `exports.default = ...`, string-literal and statically computed `exports["name"] = ...` / `module.exports["name"] = ...`, object-literal identifier/function-valued/arrow-function-valued/method/primitive-literal exports, function-valued / arrow-function-valued / identifier-valued / primitive-literal / array-valued / static object-or-array-literal and supported runtime-computed dynamic-object `module.exports = ...` defaults, top-level literal `const pkg = require("pkg")` member reads/calls, top-level literal `require("pkg").name` member reads/calls, top-level literal `require("pkg")` reads for module-exported default values, top-level literal `require("pkg")(...)` calls for function-valued module exports, top-level literal `const { name, alias: local } = require("pkg")` bindings, top-level literal `const fn = require("pkg")` calls for function-valued module exports, package-local top-level literal `require("./local.js")` member/default/direct-default/member-default re-exports, top-level and package-local literal `module.require(...)` member reads/calls/re-exports, side-effect-only top-level `require("pkg")`, transpiled-ESM `__esModule` marker elision, and read-only `module.filename` / `module.id` / `module.path` / `module.loaded` metadata to module-scoped exported bindings/init edges for named imports, default imports including `exports.default` and object-valued whole-value defaults, namespace member reads/calls including `default` and object-literal default members, require-bound package namespace reads/calls, direct require member reads/calls, direct require default-value reads/calls, require destructuring reads/calls, require-bound primitive/function calls and reads, package-local re-export calls, and eager side-effect package init. Tests: `node_modules_commonjs_exports_default_interop`, `node_modules_commonjs_package_named`, `node_modules_commonjs_bracket_exports`, `node_modules_commonjs_computed_exports`, `node_modules_commonjs_module_exports_array`, `node_modules_commonjs_module_exports_object`, `node_modules_commonjs_module_exports_object_assign_default`, `node_modules_commonjs_module_exports_object_create_default`, `node_modules_commonjs_module_exports_object_define_property_default`, `node_modules_commonjs_module_exports_object_from_entries_default`, `node_modules_commonjs_module_exports_object_default`, `node_modules_commonjs_module_exports_nested_object_default`, `node_modules_commonjs_module_exports_object_function`, `node_modules_commonjs_module_exports_object_arrow`, `node_modules_commonjs_module_exports_object_method`, `node_modules_commonjs_module_exports_object_literals`, `node_modules_commonjs_module_exports_function`, `node_modules_commonjs_module_exports_arrow`, `node_modules_commonjs_module_exports_identifier`, `node_modules_commonjs_module_exports_primitives`, `node_modules_commonjs_require_named`, `node_modules_commonjs_require_direct_member`, `node_modules_commonjs_require_direct_function`, `node_modules_commonjs_require_direct_value`, `node_modules_commonjs_require_destructure`, `node_modules_commonjs_require_function`, `node_modules_commonjs_relative_require`, `node_modules_commonjs_relative_require_default`, `node_modules_commonjs_relative_require_direct_default`, `node_modules_commonjs_relative_require_member_default`, `node_modules_commonjs_module_require`, `node_modules_commonjs_require_side_effect`, `node_modules_commonjs_module_metadata`
 - CommonJS package sources can read `__filename` and `__dirname` as lowered string constants. Test: `node_modules_commonjs_wrapper_globals`
 - Side-effect-only imports remain runtime graph edges and execute dependency `mod_init` functions before the entry module. Test: `module_side_effect_import`
 - Type-only import/export edges contribute declarations without adding runtime `mod_init` calls, so `import type` and `export type ... from` do not trigger side effects. Tests: `module_type_only_import`, `module_type_only_re_export`
@@ -276,7 +277,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 
 - `throw expr` — stringifies `expr` and `longjmp`s to the nearest enclosing `try`. Test: `exceptions`
 - `try { } catch (e) { } finally { }` — catch binding is `tsc_str_t* e = tsc_current_error()`
-- `new Error(message?)`, callable `Error(message?)`, and the same constructor/callable forms for `TypeError`, `RangeError`, `SyntaxError`, and `AggregateError` create a narrow Error object subset exposing `.name`, `.message`, `.toString()`, `.toLocaleString()`, and `.valueOf()`. `AggregateError` stores `.errors`; throwing one of these errors still stringifies into the existing exception string channel. Tests: `error_instances`, `error_constructors`, `aggregate_error_constructor`
+- `new Error(message?)`, callable `Error(message?)`, and the same constructor/callable forms for `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError`, `URIError`, and `AggregateError` create a narrow Error object subset exposing `.name`, `.message`, `.toString()`, `.toLocaleString()`, and `.valueOf()`. `AggregateError` stores `.errors`; throwing one of these errors still stringifies into the existing exception string channel. Tests: `error_instances`, `error_constructors`, `error_more_constructors`, `aggregate_error_constructor`
 - Nested try/catch with re-throw. Test: `exceptions`
 - Uncaught exceptions print `Uncaught: <msg>` and exit 1
 - Runtime: `tsc_try_push`, `tsc_try_pop`, `tsc_throw_str`, `tsc_rethrow`, `tsc_current_error` + `setjmp`/`longjmp`
@@ -369,30 +370,35 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `fs.existsSync(path)` → `tsc_fs_exists_sync`
 - `fs.accessSync(path, mode?)` → `tsc_fs_access_sync` / `tsc_fs_access_sync_mode`, with POSIX `fs.constants.{F_OK,R_OK,W_OK,X_OK}` support for global, namespace, and named-import forms. Supported sync fs calls also route from named imports such as `import { accessSync } from "fs"`. Tests: `fs_access_sync`, `fs_access_modes`
 - `fs.constants.COPYFILE_EXCL`, `COPYFILE_FICLONE`, and `COPYFILE_FICLONE_FORCE` are exposed. `fs.copyFileSync(src, dest, mode?)` and immediate `fs.promises.copyFile(src, dest, mode?)` accept optional flags, with `COPYFILE_EXCL` enforcing no overwrite. Test: `fs_copy_flags`
-- `fs.readdirSync(path[, "utf8" | { encoding }])` → `tsc_fs_readdir_sync`, returning string arrays for the bounded UTF-8 encoding subset. Test: `fs_readdir_options`
-- `fs.statSync(path)` and immediate-settled `fs.promises.stat(path)` return a small typed `Stats` subset with `size`, `mode`, `isFile()`, `isDirectory()`, and `isSymbolicLink()`. Test: `fs_stat`
-- `fs.lstatSync(path)` and immediate-settled `fs.promises.lstat(path)` return the same small typed `Stats` subset without following symlinks. Test: `fs_lstat`
-- `fs.realpathSync(path)` and immediate-settled `fs.promises.realpath(path)` resolve paths through the host filesystem. Test: `fs_realpath`
-- `fs.readlinkSync(path)` and immediate-settled `fs.promises.readlink(path)` read symlink targets through the host filesystem. Test: `fs_readlink`
-- `fs.symlinkSync(target, path)` and immediate-settled `fs.promises.symlink(target, path)` create host filesystem symlinks. Test: `fs_symlink`
+- `fs.cpSync(src, dest[, { recursive, force, errorOnExist, dereference, verbatimSymlinks }])` and immediate-settled `fs.promises.cp(src, dest[, options])` copy regular files, recursive directory trees, and symlinks in a bounded subset, with `force: false` skip behavior, `errorOnExist` errors only when `force` is false, default resolved symlink targets, verbatim symlink target preservation, and dereferenced symlink copies. Tests: `fs_cp_recursive`, `fs_cp_options`, `fs_cp_symlink_options`
+- `fs.readdirSync(path[, "utf8" | { encoding }])` → `tsc_fs_readdir_sync`, returning string arrays for the bounded UTF-8 encoding subset; `fs.readdirSync(path, { recursive: true })` and immediate-settled `fs.promises.readdir(path, { recursive: true })` return recursive relative string results; `fs.readdirSync(path, { withFileTypes: true })` and immediate-settled `fs.promises.readdir(path, { withFileTypes: true })` return a bounded `Dirent` subset with `name`, `isFile()`, `isDirectory()`, `isSymbolicLink()`, `isBlockDevice()`, `isCharacterDevice()`, `isFIFO()`, and `isSocket()`. Tests: `fs_readdir_options`, `fs_readdir_recursive`, `fs_readdir_dirents`
+- `fs.statSync(path[, { bigint: false }])` and immediate-settled `fs.promises.stat(path[, { bigint: false }])` return a small typed `Stats` subset with `dev`, `ino`, `size`, `mode`, `nlink`, `uid`, `gid`, `rdev`, `blksize`, `blocks`, numeric `atimeMs` / `mtimeMs` / `ctimeMs` / `birthtimeMs` timestamps, Date-object `atime` / `mtime` / `ctime` / `birthtime` timestamps, `isFile()`, `isDirectory()`, `isSymbolicLink()`, `isBlockDevice()`, `isCharacterDevice()`, `isFIFO()`, and `isSocket()`. Tests: `fs_stat`, `fs_stats_kinds`, `fs_stat_options`, `fs_stats_times`, `fs_stats_metadata`
+- `fs.lstatSync(path[, { bigint: false }])` and immediate-settled `fs.promises.lstat(path[, { bigint: false }])` return the same small typed `Stats` subset without following symlinks. Tests: `fs_lstat`, `fs_stats_kinds`, `fs_stat_options`, `fs_stats_times`, `fs_stats_metadata`
+- `fs.realpathSync(path[, "utf8" | { encoding }])` and immediate-settled `fs.promises.realpath(path[, "utf8" | { encoding }])` resolve paths through the host filesystem for the bounded UTF-8 encoding subset. Tests: `fs_realpath`, `fs_link_path_encoding_options`
+- `fs.readlinkSync(path[, "utf8" | { encoding }])` and immediate-settled `fs.promises.readlink(path[, "utf8" | { encoding }])` read symlink targets through the host filesystem for the bounded UTF-8 encoding subset. Tests: `fs_readlink`, `fs_link_path_encoding_options`
+- `fs.symlinkSync(target, path[, "file" | "dir" | "junction"])` and immediate-settled `fs.promises.symlink(target, path[, "file" | "dir" | "junction"])` create host filesystem symlinks; the literal type argument is accepted for portable Node call sites and is POSIX-inert in this runtime. Tests: `fs_symlink`, `fs_symlink_type_options`
 - `fs.linkSync(existingPath, newPath)` and immediate-settled `fs.promises.link(existingPath, newPath)` create host filesystem hard links. Test: `fs_link`
-- `fs.mkdtempSync(prefix)` and immediate-settled `fs.promises.mkdtemp(prefix)` create temporary directories from a prefix. Test: `fs_mkdtemp`
+- `fs.mkdtempSync(prefix[, "utf8" | { encoding }])` and immediate-settled `fs.promises.mkdtemp(prefix[, "utf8" | { encoding }])` create temporary directories from a prefix for the bounded UTF-8 encoding subset. Tests: `fs_mkdtemp`, `fs_mkdtemp_encoding_options`
 - `fs.truncateSync(path, len?)` and immediate-settled `fs.promises.truncate(path, len?)` truncate files by path. Test: `fs_truncate`
+- `fs.utimesSync(path, atime, mtime)` and immediate-settled `fs.promises.utimes(path, atime, mtime)` update file access/modification timestamps for numeric seconds and `Date` values. Test: `fs_utimes`
+- `fs.lutimesSync(path, atime, mtime)` and immediate-settled `fs.promises.lutimes(path, atime, mtime)` update symlink access/modification timestamps without following the target. Test: `fs_lutimes`
+- `fs.chownSync(path, uid, gid)` and immediate-settled `fs.promises.chown(path, uid, gid)` change numeric uid/gid ownership through POSIX `chown`; `chownSync` also routes from named imports. Test: `fs_chown`
+- `fs.lchownSync(path, uid, gid)` and immediate-settled `fs.promises.lchown(path, uid, gid)` change numeric uid/gid ownership on symlink paths through POSIX `lchown`. Test: `fs_lchown`
 - `fs.chmodSync(path, mode)` and immediate-settled `fs.promises.chmod(path, mode)` change numeric file modes. Test: `fs_chmod`
-- `fs.mkdirSync(path)`, `unlinkSync(path)`, `rmSync(path)`, `rmdirSync(path)`, `appendFileSync(path, data)`, `copyFileSync(src, dest, mode?)`, and `renameSync(oldPath, newPath)` are implemented for path-only/string-data calls. Read/write/append/readdir accept bounded UTF-8 string or object-literal encoding options; `mkdir` accepts bounded `{ recursive: boolean }` object-literal options; and `rm` accepts bounded `{ recursive: boolean, force: boolean }` object-literal options for sync and immediate-settled promise calls. Tests: `fs_sync_mutation`, `fs_copy_rename`, `fs_copy_flags`, `fs_append`, `fs_readdir_options`, `fs_recursive_options`, `fs_encoding_options`
+- `fs.mkdirSync(path)`, `unlinkSync(path)`, `rmSync(path)`, `rmdirSync(path)`, `appendFileSync(path, data)`, `cpSync(src, dest, options?)`, `copyFileSync(src, dest, mode?)`, and `renameSync(oldPath, newPath)` are implemented for path-only calls, string data, Buffer data for write/append, and bounded recursive regular-file/directory/symlink copies. Read/write/append/readdir accept bounded UTF-8 string or object-literal encoding options, readdir accepts literal `{ recursive: true }` and `{ withFileTypes: true }` options, `mkdir` accepts bounded numeric mode options and `{ recursive: boolean, mode?: number }` object-literal options, and `rm` accepts bounded `{ recursive: boolean, force: boolean }` object-literal options for sync and immediate-settled promise calls. Tests: `fs_sync_mutation`, `fs_mkdir_mode_options`, `fs_cp_recursive`, `fs_cp_options`, `fs_cp_symlink_options`, `fs_copy_rename`, `fs_copy_flags`, `fs_append`, `fs_buffer_write_append`, `fs_readdir_options`, `fs_readdir_recursive`, `fs_readdir_dirents`, `fs_recursive_options`, `fs_encoding_options`
 - Test: `fs_roundtrip`
-- `fs.promises.readFile(path)`, `writeFile(path, data)`, `appendFile(path, data)`, `readdir(path[, "utf8" | { encoding }])`, `stat(path)`, `lstat(path)`, `realpath(path)`, `readlink(path)`, `symlink(target, path)`, `link(existingPath, newPath)`, `mkdtemp(prefix)`, `truncate(path, len?)`, `chmod(path, mode)`, `access(path, mode?)`, `mkdir(path)`, `unlink(path)`, `rm(path)`, `rmdir(path)`, `copyFile(src, dest, mode?)`, and `rename(oldPath, newPath)` are implemented as an immediate-settled subset on top of the sync runtime. Successful calls return fulfilled `Promise<T>` values usable with the settled Promise `.then(...)` lowering, and sync filesystem throws are converted into rejected Promise records for `.catch(...)`; real libuv-backed async scheduling and broader options objects remain deferred. Tests: `fs_promises`, `fs_promises_import`, `fs_promises_mutation`, `fs_promises_rejections`, `fs_copy_rename`, `fs_copy_flags`, `fs_append`, `fs_readdir_options`, `fs_access_modes`, `fs_stat`, `fs_lstat`, `fs_realpath`, `fs_readlink`, `fs_symlink`, `fs_link`, `fs_mkdtemp`, `fs_truncate`, `fs_chmod`, `fs_recursive_options`, `fs_encoding_options`
+- `fs.promises.readFile(path)`, `writeFile(path, data)`, `appendFile(path, data)`, `readdir(path[, "utf8" | { encoding } | { recursive: true } | { withFileTypes: true }])`, `stat(path)`, `lstat(path)`, `realpath(path[, "utf8" | { encoding }])`, `readlink(path[, "utf8" | { encoding }])`, `symlink(target, path[, "file" | "dir" | "junction"])`, `link(existingPath, newPath)`, `mkdtemp(prefix[, "utf8" | { encoding }])`, `truncate(path, len?)`, `utimes(path, atime, mtime)`, `lutimes(path, atime, mtime)`, `chown(path, uid, gid)`, `lchown(path, uid, gid)`, `chmod(path, mode)`, `access(path, mode?)`, `mkdir(path[, mode | { recursive, mode }])`, `unlink(path)`, `rm(path)`, `rmdir(path)`, `cp(src, dest[, options])`, `copyFile(src, dest, mode?)`, and `rename(oldPath, newPath)` are implemented as an immediate-settled subset on top of the sync runtime, with `writeFile` / `appendFile` accepting string or Buffer data. Successful calls return fulfilled `Promise<T>` values usable with the settled Promise `.then(...)` lowering, and sync filesystem throws are converted into rejected Promise records for `.catch(...)`; real libuv-backed async scheduling and broader options objects remain deferred. Tests: `fs_promises`, `fs_promises_import`, `fs_promises_mutation`, `fs_promises_rejections`, `fs_cp_recursive`, `fs_cp_options`, `fs_cp_symlink_options`, `fs_copy_rename`, `fs_copy_flags`, `fs_append`, `fs_buffer_write_append`, `fs_readdir_options`, `fs_readdir_recursive`, `fs_readdir_dirents`, `fs_access_modes`, `fs_stat`, `fs_lstat`, `fs_realpath`, `fs_readlink`, `fs_link_path_encoding_options`, `fs_symlink`, `fs_symlink_type_options`, `fs_link`, `fs_mkdtemp`, `fs_mkdtemp_encoding_options`, `fs_truncate`, `fs_utimes`, `fs_lutimes`, `fs_chown`, `fs_lchown`, `fs_chmod`, `fs_mkdir_mode_options`, `fs_recursive_options`, `fs_encoding_options`
 
 ### `path`
 - `path.join(...parts)` → `tsc_path_join`
 - `path.resolve(...parts)` → `tsc_path_resolve` (against `getcwd()`)
-- `path.normalize(path)`, `path.isAbsolute(path)`, `path.relative(from, to)`, `path.parse(path)`, and `path.format(pathObject)` implement a bounded POSIX subset for segment cleanup, leading-slash absolute detection, relative path construction, and dynamic parsed-path records. `path.sep`, `path.delimiter`, `path.posix.*`, and named `posix` imports expose the same POSIX subset. Named and namespace imports from `"path"` / `"node:path"` route to the same supported subset. Tests: `path_normalize`, `path_import`, `path_constants`, `path_relative`, `path_parse_format`, `path_posix`
-- `path.basename` / `dirname` / `extname`
+- `path.normalize(path)`, `path.isAbsolute(path)`, `path.relative(from, to)`, `path.toNamespacedPath(path)`, `path.parse(path)`, and `path.format(pathObject)` implement a bounded POSIX subset for segment cleanup, leading-slash absolute detection, relative path construction, POSIX no-op namespacing, and dynamic parsed-path records. `path.sep`, `path.delimiter`, `path.posix.*`, and named `posix` imports expose the same POSIX subset. Named and namespace imports from `"path"` / `"node:path"` route to the same supported subset. Tests: `path_normalize`, `path_import`, `path_constants`, `path_relative`, `path_to_namespaced`, `path_parse_format`, `path_posix`
+- `path.basename(path, suffix?)` / `dirname` / `extname`. Test: `path_basename_suffix`
 - Test: `fs_roundtrip`
 
 ### `os`
-- `os.platform()` / `type()` / `release()` / `version()` / `endianness()` / `machine()` / `arch()` / `hostname()` / `tmpdir()` / `homedir()` / `cpus()` / `availableParallelism()` / `totalmem()` / `freemem()` / `uptime()` / `loadavg()` / `userInfo()` and `os.EOL`, with namespace and named imports from `"os"` / `"node:os"` for the supported subset.
-- Runtime: `tsc_os_*`. Tests: `stdlib_os`, `os_more`, `os_host_more`, `os_system_stats`, `os_user_info`
+- `os.platform()` / `type()` / `release()` / `version()` / `endianness()` / `machine()` / `arch()` / `hostname()` / `tmpdir()` / `homedir()` / `cpus()` / `availableParallelism()` / `totalmem()` / `freemem()` / `uptime()` / `loadavg()` / `userInfo()`, `os.EOL`, and `os.devNull`, with namespace and named imports from `"os"` / `"node:os"` for the supported subset.
+- Runtime: `tsc_os_*`. Tests: `stdlib_os`, `os_more`, `os_dev_null`, `os_host_more`, `os_system_stats`, `os_user_info`
 
 ### `crypto`
 - `crypto.createHash("sha1" | "sha256" | "sha512").update(data).digest("hex" | "base64")` backed by OpenSSL SHA helpers from the global `crypto` object, named imports, and namespace imports from `"crypto"` / `"node:crypto"`. `Hash.update(...)` accepts strings and Buffers. Tests: `crypto_sha256`, `crypto_hash_more`, `crypto_import`, `crypto_digest_base64`
@@ -436,19 +442,24 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 
 ### `process`
 - `process.argv` → `tsc_process_argv` (string[] of command-line args)
-- `process.argv0`, `process.execPath`, and `process.execArgv` expose basic argv metadata.
+- `process.argv0`, `process.execPath`, `process.execArgv`, and read-only `process.title` expose basic argv metadata.
 - `process.env.VAR` → `tsc_process_env_get(VAR)` (getenv)
 - `process.env["VAR"]` — same as above via element access
 - `process.env.VAR = value`, `process.env["VAR"] = value`, and `delete process.env[...]` mutate the local process environment through `setenv` / `unsetenv`.
+- `process.stdout.write(string | Buffer)` and `process.stderr.write(string | Buffer)` write directly to stdout/stderr and return a boolean write-success flag.
 - `process.cwd()` → `tsc_process_cwd`
 - `process.chdir(directory)` → `tsc_process_chdir`
-- `process.platform`, `process.arch`, `process.pid`, `process.version`, `process.versions`, and `process.uptime()` expose synchronous process metadata.
-- `process.hrtime([previous])` returns a monotonic `[seconds, nanoseconds]` pair, with previous-mark diff support.
-- `process.getuid()`, `process.getgid()`, `process.geteuid()`, and `process.getegid()` expose POSIX process identity values.
+- `process.platform`, `process.arch`, `process.pid`, `process.ppid`, `process.version`, `process.versions`, `process.release`, `process.features`, and `process.uptime()` expose synchronous process metadata.
+- `process.hrtime([previous])` returns a monotonic `[seconds, nanoseconds]` pair, with previous-mark diff support, and `process.hrtime.bigint()` returns a monotonic nanosecond BigInt timestamp.
+- `process.nextTick(callback)` supports a bounded zero-argument callback queue drained after module initialization and before process exit.
+- `process.getuid()`, `process.getgid()`, `process.geteuid()`, `process.getegid()`, and `process.getgroups()` expose POSIX process identity values.
 - `process.umask(mask?)` reads or updates the native process file mode creation mask.
 - `process.memoryUsage()` returns a Node-shaped dynamic object with numeric `rss`, `heapTotal`, `heapUsed`, `external`, and `arrayBuffers` fields. RSS is populated from `getrusage` where available; heap fields are placeholders until a tracked allocator lands.
+- `process.cpuUsage()` returns a Node-shaped dynamic object with numeric `user` and `system` microsecond counters populated from `getrusage`.
+- `process.resourceUsage()` returns a Node-shaped dynamic object with numeric `getrusage` counters for CPU time, RSS, page faults, filesystem I/O, IPC, signals, and context switches.
+- `process.kill(pid, signal?)` supports a narrow POSIX signal subset: omitted signal / `SIGTERM` / `15`, `SIGKILL` / `9`, and numeric signal `0` existence probes.
 - `process.exit(code)` → `tsc_process_exit`
-- Tests: `wordcount`, `stdlib_os`, `process_argv_meta`, `process_chdir`, `process_env_mutation`, `process_metadata`, `process_hrtime`, `process_memory_usage`, `process_posix_ids`, `process_umask`, `process_versions`
+- Tests: `wordcount`, `stdlib_os`, `process_argv_meta`, `process_chdir`, `process_cpu_usage`, `process_env_mutation`, `process_features`, `process_metadata`, `process_ppid`, `process_getgroups`, `process_hrtime`, `process_hrtime_bigint`, `process_kill_signal_zero`, `process_memory_usage`, `process_next_tick`, `process_posix_ids`, `process_release`, `process_resource_usage`, `process_stdio_write`, `process_stdio_write_buffer`, `process_title`, `process_umask`, `process_versions`
 
 ### `console`
 - `console.log` / `.error` / `.warn` / `.info` — variadic, auto-stringifies each arg
@@ -627,6 +638,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `enums` | numeric enum constants |
 | `error_constructors` | TypeError, RangeError, and SyntaxError constructors share Error object behavior |
 | `error_instances` | Error object subset with name/message/stringification/valueOf and throw stringification |
+| `error_more_constructors` | ReferenceError, EvalError, and URIError constructors share Error object behavior |
 | `event_emitter` | synchronous EventEmitter listener registration, emit, once, removal, and listener counts |
 | `event_emitter_default_max_listeners` | EventEmitter.defaultMaxListeners and events.defaultMaxListeners configure default max listeners |
 | `event_emitter_error_event` | unhandled EventEmitter `"error"` emits throw while handled errors emit normally |
@@ -647,7 +659,9 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `fs_append` | fs appendFileSync and immediate-settled fs.promises appendFile |
 | `fs_chmod` | fs.chmodSync and immediate-settled fs.promises chmod with Stats.mode |
 | `fs_copy_flags` | fs copy constants and COPYFILE_EXCL behavior |
+| `fs_readdir_dirents` | fs readdir with withFileTypes Dirent subset for sync, named import, and promises |
 | `fs_readdir_options` | fs readdir UTF-8 encoding options for sync and immediate promise forms |
+| `fs_readdir_recursive` | fs readdir recursive string results for sync, named import, and promises |
 | `inheritance` | extends + super() + static members |
 | `instanceof` | class instance ancestry checks |
 | `interface_inheritance` | interface extends fields and typed object key order |
@@ -678,21 +692,36 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `optional_parameters` | omitted optional pointer and function parameters lower to undefined/null sentinels |
 | `os_more` | os.type/release/endianness/EOL through global, namespace, and named imports |
 | `os_host_more` | os.availableParallelism/machine/version through global, namespace, and named imports |
+| `os_dev_null` | os.devNull constant for global, namespace, and named import forms |
 | `os_system_stats` | os.totalmem/freemem/uptime/loadavg through global, namespace, and named imports |
 | `os_user_info` | os.userInfo dynamic object through global, namespace, and named imports |
 | `path_constants` | path sep and delimiter constants for global, named import, and namespace import forms |
+| `path_basename_suffix` | path.basename optional suffix for global, namespace, named, and posix forms |
 | `path_import` | path named and namespace imports from node:path/path |
 | `path_normalize` | bounded POSIX path.normalize segment cleanup and path.isAbsolute checks |
 | `path_parse_format` | bounded POSIX path.parse/path.format dynamic path objects |
 | `path_posix` | path.posix and named posix imports route to the supported POSIX path subset |
 | `path_relative` | bounded POSIX path.relative and named node:path import |
+| `path_to_namespaced` | path.toNamespacedPath POSIX no-op for global, namespace, named, and posix forms |
 | `process_argv_meta` | process argv0/execPath/execArgv metadata |
 | `process_chdir` | process.chdir updates cwd |
+| `process_cpu_usage` | process.cpuUsage numeric user/system fields |
 | `process_env_mutation` | process.env property/element reads, writes, and deletes |
+| `process_features` | process.features bounded boolean metadata object |
+| `process_getgroups` | process.getgroups POSIX supplementary group metadata |
 | `process_hrtime` | process.hrtime monotonic timestamp and diff pairs |
+| `process_hrtime_bigint` | process.hrtime.bigint monotonic nanosecond BigInt timestamp |
+| `process_kill_signal_zero` | process.kill signal 0 existence probe |
 | `process_memory_usage` | process.memoryUsage numeric memory fields |
 | `process_metadata` | process.platform/arch/pid/uptime metadata |
+| `process_next_tick` | bounded zero-argument process.nextTick queue drained before exit |
+| `process_ppid` | process.ppid parent process metadata |
 | `process_posix_ids` | process POSIX uid/gid/euid/egid helpers |
+| `process_release` | process.release Node-shaped metadata object |
+| `process_resource_usage` | process.resourceUsage numeric getrusage fields |
+| `process_stdio_write` | process.stdout.write and process.stderr.write string subset |
+| `process_stdio_write_buffer` | process.stdout.write and process.stderr.write Buffer subset |
+| `process_title` | process.title readonly argv0-backed metadata |
 | `process_umask` | process.umask read/update/restore behavior |
 | `process_versions` | process.version and process.versions metadata |
 | `promise_callback_throw` | Promise callbacks that throw become rejected Promise records in the immediate subset |
@@ -701,11 +730,19 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `promise_resolve_adopt` | Promise.resolve adopts existing native Promise records |
 | `promise_settled` | settled Promise.resolve/reject with synchronous then/catch/finally chaining and combinators |
 | `promise_then_passthrough` | Promise.then omitted or undefined fulfillment callbacks pass through settled values |
+| `fs_buffer_write_append` | fs writeFile/appendFile Buffer data for sync and promises |
+| `fs_chown` | fs.chownSync and immediate fs.promises.chown numeric uid/gid |
+| `fs_lchown` | fs.lchownSync and immediate fs.promises.lchown numeric uid/gid for symlinks |
 | `fs_copy_rename` | fs copyFileSync/renameSync and immediate-settled fs.promises copyFile/rename |
+| `fs_cp_recursive` | fs.cpSync and immediate-settled fs.promises.cp recursive regular file and directory copy |
+| `fs_cp_options` | fs.cpSync and immediate-settled fs.promises.cp force/errorOnExist behavior |
+| `fs_cp_symlink_options` | fs.cpSync and immediate-settled fs.promises.cp symlink dereference/verbatim options |
 | `fs_encoding_options` | fs UTF-8 encoding string/object options for read/write/append sync and immediate-settled promise calls |
 | `fs_lstat` | fs.lstatSync and immediate-settled fs.promises lstat with symbolic-link Stats |
 | `fs_link` | fs.linkSync and immediate-settled fs.promises link |
+| `fs_link_path_encoding_options` | fs realpath/readlink UTF-8 encoding options for sync and promises |
 | `fs_mkdtemp` | fs.mkdtempSync and immediate-settled fs.promises mkdtemp |
+| `fs_mkdtemp_encoding_options` | fs mkdtemp UTF-8 encoding options for sync and promises |
 | `fs_promises` | immediate-settled fs.promises readFile/writeFile/readdir/access over the sync fs runtime |
 | `fs_promises_import` | fs.promises named and namespace imports from node:fs/fs |
 | `fs_promises_mutation` | immediate-settled fs.promises mkdir/unlink/rm/rmdir over the sync fs runtime |
@@ -715,9 +752,17 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `fs_recursive_options` | fs mkdir recursive and rm recursive/force options for sync and immediate-settled promise calls |
 | `fs_roundtrip` | fs.readFileSync + writeFileSync + path helpers |
 | `fs_stat` | fs.statSync, node:fs statSync, fs.promises.stat, and Promise.resolve over the typed Stats subset |
+| `fs_stat_options` | fs stat/lstat bigint:false options for sync and promises |
+| `fs_stats_kinds` | fs.Stats extra POSIX kind predicates |
+| `fs_stats_metadata` | fs.Stats numeric metadata fields |
+| `fs_stats_times` | fs.Stats numeric and Date timestamp fields |
 | `fs_symlink` | fs.symlinkSync and immediate-settled fs.promises symlink |
+| `fs_symlink_type_options` | fs symlink literal type options for sync and promises |
 | `fs_sync_mutation` | fs mkdirSync/unlinkSync/rmSync/rmdirSync through node:fs namespace imports |
 | `fs_truncate` | fs.truncateSync and immediate-settled fs.promises truncate |
+| `fs_utimes` | fs.utimesSync and immediate-settled fs.promises.utimes |
+| `fs_lutimes` | fs.lutimesSync and immediate-settled fs.promises.lutimes on symlinks |
+| `fs_mkdir_mode_options` | fs.mkdirSync and immediate-settled fs.promises.mkdir numeric mode options |
 | `function_closures` | returned closures with function-scope captures and mutable captured state |
 | `function_value_spread` | spread calls through first-class function values |
 | `generator_functions` | synchronous function* materialized Iterator/IterableIterator lowering with yield, bounded yield*, next, return, and throw |
@@ -739,12 +784,18 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `net_is_ip` | net isIP/isIPv4/isIPv6 address classification |
 | `node_modules_commonjs_bracket_exports` | narrow CommonJS package string-literal bracket export assignments |
 | `node_modules_commonjs_computed_exports` | narrow CommonJS package statically computed bracket export assignments |
+| `node_modules_commonjs_exports_default_interop` | narrow CommonJS `exports.default` interop with transpiled-ESM `__esModule` marker elision |
+| `node_modules_commonjs_function_scope_require` | function-scoped static literal CommonJS require namespace, destructured, bound-default, and direct-default calls |
 | `node_modules_commonjs_module_exports_arrow` | narrow CommonJS package arrow-function-valued `module.exports` default |
 | `node_modules_commonjs_module_exports_array` | narrow CommonJS package array-valued `module.exports` default reads |
 | `node_modules_commonjs_module_exports_function` | narrow CommonJS package function-valued `module.exports` default import |
 | `node_modules_commonjs_module_exports_identifier` | narrow CommonJS package identifier-valued `module.exports` default import and require call |
 | `node_modules_commonjs_module_exports_object` | narrow CommonJS package object-literal `module.exports` identifier exports |
-| `node_modules_commonjs_module_exports_object_default` | narrow CommonJS package primitive object-literal `module.exports` whole-value default |
+| `node_modules_commonjs_module_exports_object_assign_default` | narrow CommonJS package `Object.assign(...)` dynamic-object `module.exports` whole-value default |
+| `node_modules_commonjs_module_exports_object_create_default` | narrow CommonJS package `Object.create(...)` / `Object.freeze(...)` dynamic-object `module.exports` whole-value default |
+| `node_modules_commonjs_module_exports_object_define_property_default` | narrow CommonJS package `Object.defineProperty(...)` dynamic-object `module.exports` whole-value default |
+| `node_modules_commonjs_module_exports_object_from_entries_default` | narrow CommonJS package `Object.fromEntries(...)` dynamic-object `module.exports` whole-value default |
+| `node_modules_commonjs_module_exports_object_default` | narrow CommonJS package primitive object-literal `module.exports` whole-value default plus object-valued default and namespace imports |
 | `node_modules_commonjs_module_exports_nested_object_default` | narrow CommonJS package nested static object/array-literal `module.exports` whole-value default |
 | `node_modules_commonjs_module_exports_object_arrow` | narrow CommonJS package object-literal arrow-function-valued `module.exports` exports |
 | `node_modules_commonjs_module_exports_object_function` | narrow CommonJS package object-literal function-valued `module.exports` exports |
@@ -757,6 +808,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_commonjs_relative_require` | package-local top-level literal `require("./local.js")` member re-export |
 | `node_modules_commonjs_relative_require_default` | package-local top-level literal `require("./local.js")` default re-export |
 | `node_modules_commonjs_relative_require_direct_default` | package-local direct literal `module.exports = module.require("./local.js")` default re-export |
+| `node_modules_commonjs_relative_require_member_default` | package-local direct literal `module.exports = require("./local.js").member` default re-export |
 | `node_modules_commonjs_require_destructure` | top-level literal destructured `require("pkg")` bindings for narrow CommonJS named exports |
 | `node_modules_commonjs_require_direct_function` | top-level literal direct `require("pkg")(...)` calls for function-valued CommonJS module exports |
 | `node_modules_commonjs_require_direct_member` | top-level literal direct `require("pkg").name` reads/calls for narrow CommonJS named exports |

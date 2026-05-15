@@ -465,6 +465,24 @@ interface SyntaxErrorConstructor {
     (message?: string): SyntaxError;
 }
 declare var SyntaxError: SyntaxErrorConstructor;
+interface ReferenceError extends Error {}
+interface ReferenceErrorConstructor {
+    new (message?: string): ReferenceError;
+    (message?: string): ReferenceError;
+}
+declare var ReferenceError: ReferenceErrorConstructor;
+interface EvalError extends Error {}
+interface EvalErrorConstructor {
+    new (message?: string): EvalError;
+    (message?: string): EvalError;
+}
+declare var EvalError: EvalErrorConstructor;
+interface URIError extends Error {}
+interface URIErrorConstructor {
+    new (message?: string): URIError;
+    (message?: string): URIError;
+}
+declare var URIError: URIErrorConstructor;
 interface AggregateError extends Error {
     errors: any[];
 }
@@ -492,28 +510,46 @@ interface ProcessMemoryUsage {
     external: number;
     arrayBuffers: number;
 }
+interface ProcessHrtime {
+    (time?: number[]): number[];
+    bigint(): bigint;
+}
+interface ProcessWritableStream {
+    write(chunk: string | Buffer): boolean;
+}
 interface Process {
     readonly platform: string;
     readonly arch: string;
     readonly pid: number;
+    readonly ppid: number;
     readonly version: string;
     readonly versions: any;
+    readonly release: any;
+    readonly features: any;
+    readonly title: string;
     argv: string[];
     argv0: string;
     execPath: string;
     execArgv: string[];
     env: ProcessEnv;
+    readonly stdout: ProcessWritableStream;
+    readonly stderr: ProcessWritableStream;
     exit(code?: number): never;
     cwd(): string;
     chdir(directory: string): void;
     uptime(): number;
-    hrtime(time?: number[]): number[];
+    hrtime: ProcessHrtime;
+    nextTick(callback: () => void): void;
     getuid(): number;
     getgid(): number;
     geteuid(): number;
     getegid(): number;
+    getgroups(): number[];
     umask(mask?: number): number;
     memoryUsage(): any;
+    cpuUsage(): any;
+    resourceUsage(): any;
+    kill(pid: number, signal?: 0 | 9 | 15 | "SIGTERM" | "SIGKILL"): boolean;
 }
 declare const process: Process;
 
@@ -582,6 +618,7 @@ declare const JSON: JSON;
 
 interface OS {
     readonly EOL: string;
+    readonly devNull: string;
     platform(): string;
     type(): string;
     release(): string;
@@ -603,6 +640,7 @@ interface OS {
 declare const os: OS;
 declare module "os" {
     export const EOL: string;
+    export const devNull: string;
     export function platform(): string;
     export function type(): string;
     export function release(): string;
@@ -623,6 +661,7 @@ declare module "os" {
 }
 declare module "node:os" {
     export const EOL: string;
+    export const devNull: string;
     export function platform(): string;
     export function type(): string;
     export function release(): string;
@@ -699,24 +738,74 @@ declare var Number: NumberConstructor;
 // Phase 4 module system will instead let users write `import * as fs from "fs"`
 // and we'll resolve to these same bindings.
 interface FSStats {
+    readonly dev: number;
+    readonly ino: number;
     readonly size: number;
     readonly mode: number;
+    readonly nlink: number;
+    readonly uid: number;
+    readonly gid: number;
+    readonly rdev: number;
+    readonly blksize: number;
+    readonly blocks: number;
+    readonly atimeMs: number;
+    readonly mtimeMs: number;
+    readonly ctimeMs: number;
+    readonly birthtimeMs: number;
+    readonly atime: Date;
+    readonly mtime: Date;
+    readonly ctime: Date;
+    readonly birthtime: Date;
     isFile(): boolean;
     isDirectory(): boolean;
     isSymbolicLink(): boolean;
+    isBlockDevice(): boolean;
+    isCharacterDevice(): boolean;
+    isFIFO(): boolean;
+    isSocket(): boolean;
+}
+interface FSDirent {
+    readonly name: string;
+    isFile(): boolean;
+    isDirectory(): boolean;
+    isSymbolicLink(): boolean;
+    isBlockDevice(): boolean;
+    isCharacterDevice(): boolean;
+    isFIFO(): boolean;
+    isSocket(): boolean;
+}
+interface FSStatsOptions {
+    bigint?: false;
 }
 interface FSMkdirOptions {
     recursive?: boolean;
+    mode?: number;
 }
 interface FSRmOptions {
     recursive?: boolean;
     force?: boolean;
 }
+interface FSCpOptions {
+    recursive?: boolean;
+    force?: boolean;
+    errorOnExist?: boolean;
+    dereference?: boolean;
+    verbatimSymlinks?: boolean;
+}
 type FSEncoding = "utf8" | "utf-8";
 interface FSEncodingOptions {
     encoding?: FSEncoding;
 }
+interface FSReaddirOptions extends FSEncodingOptions {
+    recursive?: boolean;
+    withFileTypes?: false;
+}
+interface FSReaddirDirentOptions extends FSEncodingOptions {
+    withFileTypes: true;
+}
 type FSFileEncodingOptions = FSEncoding | FSEncodingOptions;
+type FSFileTime = number | Date;
+type FSSymlinkType = "file" | "dir" | "junction";
 interface FSConstants {
     readonly F_OK: number;
     readonly R_OK: number;
@@ -729,47 +818,59 @@ interface FSConstants {
 interface FS {
     readonly constants: FSConstants;
     readFileSync(path: string, options?: FSFileEncodingOptions): string;
-    writeFileSync(path: string, data: string, options?: FSFileEncodingOptions): void;
-    appendFileSync(path: string, data: string, options?: FSFileEncodingOptions): void;
+    writeFileSync(path: string, data: string | Buffer, options?: FSFileEncodingOptions): void;
+    appendFileSync(path: string, data: string | Buffer, options?: FSFileEncodingOptions): void;
     existsSync(path: string): boolean;
     accessSync(path: string, mode?: number): void;
-    readdirSync(path: string, options?: FSFileEncodingOptions): string[];
-    statSync(path: string): FSStats;
-    lstatSync(path: string): FSStats;
-    realpathSync(path: string): string;
-    readlinkSync(path: string): string;
-    symlinkSync(target: string, path: string): void;
+    readdirSync(path: string, options: FSReaddirDirentOptions): FSDirent[];
+    readdirSync(path: string, options?: FSFileEncodingOptions | FSReaddirOptions): string[];
+    statSync(path: string, options?: FSStatsOptions): FSStats;
+    lstatSync(path: string, options?: FSStatsOptions): FSStats;
+    realpathSync(path: string, options?: FSFileEncodingOptions): string;
+    readlinkSync(path: string, options?: FSFileEncodingOptions): string;
+    symlinkSync(target: string, path: string, type?: FSSymlinkType): void;
     linkSync(existingPath: string, newPath: string): void;
-    mkdtempSync(prefix: string): string;
+    mkdtempSync(prefix: string, options?: FSFileEncodingOptions): string;
     truncateSync(path: string, len?: number): void;
+    utimesSync(path: string, atime: FSFileTime, mtime: FSFileTime): void;
+    lutimesSync(path: string, atime: FSFileTime, mtime: FSFileTime): void;
+    chownSync(path: string, uid: number, gid: number): void;
+    lchownSync(path: string, uid: number, gid: number): void;
     chmodSync(path: string, mode: number): void;
-    mkdirSync(path: string, options?: FSMkdirOptions): void;
+    mkdirSync(path: string, options?: number | FSMkdirOptions): void;
     unlinkSync(path: string): void;
     rmSync(path: string, options?: FSRmOptions): void;
     rmdirSync(path: string): void;
+    cpSync(src: string, dest: string, options?: FSCpOptions): void;
     copyFileSync(src: string, dest: string, mode?: number): void;
     renameSync(oldPath: string, newPath: string): void;
     promises: FSPromises;
 }
 interface FSPromises {
     readFile(path: string, options?: FSFileEncodingOptions): Promise<string>;
-    writeFile(path: string, data: string, options?: FSFileEncodingOptions): Promise<void>;
-    appendFile(path: string, data: string, options?: FSFileEncodingOptions): Promise<void>;
-    readdir(path: string, options?: FSFileEncodingOptions): Promise<string[]>;
-    stat(path: string): Promise<FSStats>;
-    lstat(path: string): Promise<FSStats>;
-    realpath(path: string): Promise<string>;
-    readlink(path: string): Promise<string>;
-    symlink(target: string, path: string): Promise<void>;
+    writeFile(path: string, data: string | Buffer, options?: FSFileEncodingOptions): Promise<void>;
+    appendFile(path: string, data: string | Buffer, options?: FSFileEncodingOptions): Promise<void>;
+    readdir(path: string, options: FSReaddirDirentOptions): Promise<FSDirent[]>;
+    readdir(path: string, options?: FSFileEncodingOptions | FSReaddirOptions): Promise<string[]>;
+    stat(path: string, options?: FSStatsOptions): Promise<FSStats>;
+    lstat(path: string, options?: FSStatsOptions): Promise<FSStats>;
+    realpath(path: string, options?: FSFileEncodingOptions): Promise<string>;
+    readlink(path: string, options?: FSFileEncodingOptions): Promise<string>;
+    symlink(target: string, path: string, type?: FSSymlinkType): Promise<void>;
     link(existingPath: string, newPath: string): Promise<void>;
-    mkdtemp(prefix: string): Promise<string>;
+    mkdtemp(prefix: string, options?: FSFileEncodingOptions): Promise<string>;
     truncate(path: string, len?: number): Promise<void>;
+    utimes(path: string, atime: FSFileTime, mtime: FSFileTime): Promise<void>;
+    lutimes(path: string, atime: FSFileTime, mtime: FSFileTime): Promise<void>;
+    chown(path: string, uid: number, gid: number): Promise<void>;
+    lchown(path: string, uid: number, gid: number): Promise<void>;
     chmod(path: string, mode: number): Promise<void>;
     access(path: string, mode?: number): Promise<void>;
-    mkdir(path: string, options?: FSMkdirOptions): Promise<void>;
+    mkdir(path: string, options?: number | FSMkdirOptions): Promise<void>;
     unlink(path: string): Promise<void>;
     rm(path: string, options?: FSRmOptions): Promise<void>;
     rmdir(path: string): Promise<void>;
+    cp(src: string, dest: string, options?: FSCpOptions): Promise<void>;
     copyFile(src: string, dest: string, mode?: number): Promise<void>;
     rename(oldPath: string, newPath: string): Promise<void>;
 }
@@ -778,24 +879,30 @@ declare module "fs" {
     export const constants: FSConstants;
     export const promises: FSPromises;
     export function readFileSync(path: string, options?: FSFileEncodingOptions): string;
-    export function writeFileSync(path: string, data: string, options?: FSFileEncodingOptions): void;
-    export function appendFileSync(path: string, data: string, options?: FSFileEncodingOptions): void;
+    export function writeFileSync(path: string, data: string | Buffer, options?: FSFileEncodingOptions): void;
+    export function appendFileSync(path: string, data: string | Buffer, options?: FSFileEncodingOptions): void;
     export function existsSync(path: string): boolean;
     export function accessSync(path: string, mode?: number): void;
-    export function readdirSync(path: string, options?: FSFileEncodingOptions): string[];
-    export function statSync(path: string): FSStats;
-    export function lstatSync(path: string): FSStats;
-    export function realpathSync(path: string): string;
-    export function readlinkSync(path: string): string;
-    export function symlinkSync(target: string, path: string): void;
+    export function readdirSync(path: string, options: FSReaddirDirentOptions): FSDirent[];
+    export function readdirSync(path: string, options?: FSFileEncodingOptions | FSReaddirOptions): string[];
+    export function statSync(path: string, options?: FSStatsOptions): FSStats;
+    export function lstatSync(path: string, options?: FSStatsOptions): FSStats;
+    export function realpathSync(path: string, options?: FSFileEncodingOptions): string;
+    export function readlinkSync(path: string, options?: FSFileEncodingOptions): string;
+    export function symlinkSync(target: string, path: string, type?: FSSymlinkType): void;
     export function linkSync(existingPath: string, newPath: string): void;
-    export function mkdtempSync(prefix: string): string;
+    export function mkdtempSync(prefix: string, options?: FSFileEncodingOptions): string;
     export function truncateSync(path: string, len?: number): void;
+    export function utimesSync(path: string, atime: FSFileTime, mtime: FSFileTime): void;
+    export function lutimesSync(path: string, atime: FSFileTime, mtime: FSFileTime): void;
+    export function chownSync(path: string, uid: number, gid: number): void;
+    export function lchownSync(path: string, uid: number, gid: number): void;
     export function chmodSync(path: string, mode: number): void;
-    export function mkdirSync(path: string, options?: FSMkdirOptions): void;
+    export function mkdirSync(path: string, options?: number | FSMkdirOptions): void;
     export function unlinkSync(path: string): void;
     export function rmSync(path: string, options?: FSRmOptions): void;
     export function rmdirSync(path: string): void;
+    export function cpSync(src: string, dest: string, options?: FSCpOptions): void;
     export function copyFileSync(src: string, dest: string, mode?: number): void;
     export function renameSync(oldPath: string, newPath: string): void;
 }
@@ -803,24 +910,30 @@ declare module "node:fs" {
     export const constants: FSConstants;
     export const promises: FSPromises;
     export function readFileSync(path: string, options?: FSFileEncodingOptions): string;
-    export function writeFileSync(path: string, data: string, options?: FSFileEncodingOptions): void;
-    export function appendFileSync(path: string, data: string, options?: FSFileEncodingOptions): void;
+    export function writeFileSync(path: string, data: string | Buffer, options?: FSFileEncodingOptions): void;
+    export function appendFileSync(path: string, data: string | Buffer, options?: FSFileEncodingOptions): void;
     export function existsSync(path: string): boolean;
     export function accessSync(path: string, mode?: number): void;
-    export function readdirSync(path: string, options?: FSFileEncodingOptions): string[];
-    export function statSync(path: string): FSStats;
-    export function lstatSync(path: string): FSStats;
-    export function realpathSync(path: string): string;
-    export function readlinkSync(path: string): string;
-    export function symlinkSync(target: string, path: string): void;
+    export function readdirSync(path: string, options: FSReaddirDirentOptions): FSDirent[];
+    export function readdirSync(path: string, options?: FSFileEncodingOptions | FSReaddirOptions): string[];
+    export function statSync(path: string, options?: FSStatsOptions): FSStats;
+    export function lstatSync(path: string, options?: FSStatsOptions): FSStats;
+    export function realpathSync(path: string, options?: FSFileEncodingOptions): string;
+    export function readlinkSync(path: string, options?: FSFileEncodingOptions): string;
+    export function symlinkSync(target: string, path: string, type?: FSSymlinkType): void;
     export function linkSync(existingPath: string, newPath: string): void;
-    export function mkdtempSync(prefix: string): string;
+    export function mkdtempSync(prefix: string, options?: FSFileEncodingOptions): string;
     export function truncateSync(path: string, len?: number): void;
+    export function utimesSync(path: string, atime: FSFileTime, mtime: FSFileTime): void;
+    export function lutimesSync(path: string, atime: FSFileTime, mtime: FSFileTime): void;
+    export function chownSync(path: string, uid: number, gid: number): void;
+    export function lchownSync(path: string, uid: number, gid: number): void;
     export function chmodSync(path: string, mode: number): void;
-    export function mkdirSync(path: string, options?: FSMkdirOptions): void;
+    export function mkdirSync(path: string, options?: number | FSMkdirOptions): void;
     export function unlinkSync(path: string): void;
     export function rmSync(path: string, options?: FSRmOptions): void;
     export function rmdirSync(path: string): void;
+    export function cpSync(src: string, dest: string, options?: FSCpOptions): void;
     export function copyFileSync(src: string, dest: string, mode?: number): void;
     export function renameSync(oldPath: string, newPath: string): void;
 }
@@ -834,7 +947,8 @@ interface Path {
     normalize(p: string): string;
     isAbsolute(p: string): boolean;
     relative(from: string, to: string): string;
-    basename(p: string): string;
+    toNamespacedPath(p: string): string;
+    basename(p: string, suffix?: string): string;
     dirname(p: string): string;
     extname(p: string): string;
     parse(p: string): any;
@@ -850,7 +964,8 @@ declare module "path" {
     export function normalize(p: string): string;
     export function isAbsolute(p: string): boolean;
     export function relative(from: string, to: string): string;
-    export function basename(p: string): string;
+    export function toNamespacedPath(p: string): string;
+    export function basename(p: string, suffix?: string): string;
     export function dirname(p: string): string;
     export function extname(p: string): string;
     export function parse(p: string): any;
@@ -865,7 +980,8 @@ declare module "node:path" {
     export function normalize(p: string): string;
     export function isAbsolute(p: string): boolean;
     export function relative(from: string, to: string): string;
-    export function basename(p: string): string;
+    export function toNamespacedPath(p: string): string;
+    export function basename(p: string, suffix?: string): string;
     export function dirname(p: string): string;
     export function extname(p: string): string;
     export function parse(p: string): any;

@@ -80,7 +80,7 @@ function collectStaticRequireRoots(
             scriptKindForFile(fileName),
         );
         for (const stmt of sf.statements) {
-            for (const spec of topLevelRequireSpecifiers(stmt)) {
+            for (const spec of staticRequireSpecifiers(stmt)) {
                 const resolved = ts.resolveModuleName(spec, fileName, compilerOptions, ts.sys);
                 const resolvedFile = resolved.resolvedModule?.resolvedFileName;
                 if (!resolvedFile || seen.has(resolvedFile)) continue;
@@ -100,20 +100,14 @@ function scriptKindForFile(fileName: string): ts.ScriptKind {
     return ts.ScriptKind.TS;
 }
 
-function topLevelRequireSpecifiers(stmt: ts.Statement): string[] {
+function staticRequireSpecifiers(stmt: ts.Statement): string[] {
     const specs: string[] = [];
     const visit = (node: ts.Node): void => {
         const spec = ts.isExpression(node) ? requireCallSpecifier(node) : null;
         if (spec) specs.push(spec);
-        if (node !== stmt && ts.isFunctionLike(node)) return;
         ts.forEachChild(node, visit);
     };
-    if (ts.isExpressionStatement(stmt)) visit(stmt.expression);
-    if (ts.isVariableStatement(stmt)) {
-        for (const decl of stmt.declarationList.declarations) {
-            if (decl.initializer) visit(decl.initializer);
-        }
-    }
+    visit(stmt);
     return specs;
 }
 

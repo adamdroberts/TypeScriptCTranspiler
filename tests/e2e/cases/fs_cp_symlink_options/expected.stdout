@@ -1,0 +1,4 @@
+default link: true /tmp/tsc2c-fs-cp-symlink-options/target.txt
+verbatim link: target.txt
+dereference file: false target
+promise verbatim: target.txt

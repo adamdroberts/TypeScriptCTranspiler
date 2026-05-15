@@ -1,0 +1,6 @@
+global: file
+namespace: archive.tar
+named: beta
+posix: report
+partial: file.
+miss: file.txt

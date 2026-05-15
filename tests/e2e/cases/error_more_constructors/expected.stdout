@@ -1,0 +1,4 @@
+reference: ReferenceError missing name ReferenceError: missing name
+eval: EvalError bad eval EvalError: bad eval
+uri: URIError  URIError true
+caught: ReferenceError: missing name

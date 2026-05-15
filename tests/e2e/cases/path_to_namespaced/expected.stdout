@@ -1,0 +1,4 @@
+global: /tmp/demo
+namespace: /tmp/ns
+named: relative/file.txt
+posix: /data/report.txt

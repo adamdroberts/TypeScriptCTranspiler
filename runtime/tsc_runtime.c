@@ -41,6 +41,13 @@ static tsc_try_frame_t* g_try_top = NULL;
 static tsc_str_t* g_current_error = NULL;
 static struct timespec g_boot_time;
 static bool g_boot_time_set = false;
+typedef struct {
+    tsc_next_tick_fn_t fn;
+    void* env;
+} tsc_next_tick_entry_t;
+static tsc_next_tick_entry_t* g_next_tick_queue = NULL;
+static size_t g_next_tick_len = 0;
+static size_t g_next_tick_cap = 0;
 
 /* Forward decls for helpers used across sections. */
 static tsc_str_t* str_alloc(size_t len);
@@ -108,6 +115,29 @@ tsc_value_t tsc_process_versions(void) {
     return tsc_value_object(out);
 }
 
+tsc_value_t tsc_process_release(void) {
+    tsc_object_t* out = tsc_object_new();
+    tsc_object_set(out, tsc_str_from_lit("name", 4), tsc_value_string(tsc_str_from_lit("node", 4)));
+    tsc_object_set(out, tsc_str_from_lit("sourceUrl", 9), tsc_value_string(tsc_str_from_lit("", 0)));
+    tsc_object_set(out, tsc_str_from_lit("headersUrl", 10), tsc_value_string(tsc_str_from_lit("", 0)));
+    tsc_object_set(out, tsc_str_from_lit("libUrl", 6), tsc_value_string(tsc_str_from_lit("", 0)));
+    return tsc_value_object(out);
+}
+
+tsc_value_t tsc_process_features(void) {
+    tsc_object_t* out = tsc_object_new();
+    tsc_object_set(out, tsc_str_from_lit("inspector", 9), tsc_value_bool(false));
+    tsc_object_set(out, tsc_str_from_lit("debug", 5), tsc_value_bool(false));
+    tsc_object_set(out, tsc_str_from_lit("uv", 2), tsc_value_bool(false));
+    tsc_object_set(out, tsc_str_from_lit("ipv6", 4), tsc_value_bool(false));
+    tsc_object_set(out, tsc_str_from_lit("tls", 3), tsc_value_bool(false));
+    tsc_object_set(out, tsc_str_from_lit("tls_alpn", 8), tsc_value_bool(false));
+    tsc_object_set(out, tsc_str_from_lit("tls_sni", 7), tsc_value_bool(false));
+    tsc_object_set(out, tsc_str_from_lit("tls_ocsp", 8), tsc_value_bool(false));
+    tsc_object_set(out, tsc_str_from_lit("cached_builtins", 15), tsc_value_bool(false));
+    return tsc_value_object(out);
+}
+
 tsc_str_t* tsc_process_env_get(const tsc_str_t* name) {
     char key[512];
     size_t n = name->len < 511 ? name->len : 511;
@@ -159,6 +189,10 @@ double tsc_process_pid(void) {
     return (double)getpid();
 }
 
+double tsc_process_ppid(void) {
+    return (double)getppid();
+}
+
 double tsc_process_getuid(void) {
     return (double)getuid();
 }
@@ -173,6 +207,38 @@ double tsc_process_geteuid(void) {
 
 double tsc_process_getegid(void) {
     return (double)getegid();
+}
+
+tsc_array_t* tsc_process_getgroups(void) {
+    int n = getgroups(0, NULL);
+    if (n < 0) tsc_throw_str(tsc_str_from_cstr("process.getgroups: could not read groups"));
+
+    gid_t* groups = NULL;
+    if (n > 0) {
+        groups = (gid_t*)TSC_GC_MALLOC_ATOMIC(sizeof(gid_t) * (size_t)n);
+        n = getgroups(n, groups);
+        if (n < 0) tsc_throw_str(tsc_str_from_cstr("process.getgroups: could not read groups"));
+    }
+
+    gid_t effective = getegid();
+    bool has_effective = false;
+    for (int i = 0; i < n; i++) {
+        if (groups[i] == effective) {
+            has_effective = true;
+            break;
+        }
+    }
+
+    tsc_array_t* out = tsc_array_new(sizeof(double), (size_t)n + (has_effective ? 0 : 1));
+    for (int i = 0; i < n; i++) {
+        double group_id = (double)groups[i];
+        tsc_array_push_raw(out, &group_id);
+    }
+    if (!has_effective) {
+        double group_id = (double)effective;
+        tsc_array_push_raw(out, &group_id);
+    }
+    return out;
 }
 
 double tsc_process_umask_get(void) {
@@ -214,6 +280,60 @@ tsc_value_t tsc_process_memory_usage(void) {
     return tsc_value_object(out);
 }
 
+tsc_value_t tsc_process_cpu_usage(void) {
+    double user = 0.0;
+    double system = 0.0;
+    struct rusage usage;
+    if (getrusage(RUSAGE_SELF, &usage) == 0) {
+        user = (double)usage.ru_utime.tv_sec * 1000000.0 + (double)usage.ru_utime.tv_usec;
+        system = (double)usage.ru_stime.tv_sec * 1000000.0 + (double)usage.ru_stime.tv_usec;
+    }
+    tsc_object_t* out = tsc_object_new();
+    tsc_object_set(out, tsc_str_from_lit("user", 4), tsc_value_num(user));
+    tsc_object_set(out, tsc_str_from_lit("system", 6), tsc_value_num(system));
+    return tsc_value_object(out);
+}
+
+tsc_value_t tsc_process_resource_usage(void) {
+    struct rusage usage;
+    memset(&usage, 0, sizeof usage);
+    (void)getrusage(RUSAGE_SELF, &usage);
+
+    tsc_object_t* out = tsc_object_new();
+    tsc_object_set(out, tsc_str_from_lit("userCPUTime", 11), tsc_value_num((double)usage.ru_utime.tv_sec * 1000000.0 + (double)usage.ru_utime.tv_usec));
+    tsc_object_set(out, tsc_str_from_lit("systemCPUTime", 13), tsc_value_num((double)usage.ru_stime.tv_sec * 1000000.0 + (double)usage.ru_stime.tv_usec));
+    tsc_object_set(out, tsc_str_from_lit("maxRSS", 6), tsc_value_num((double)usage.ru_maxrss));
+    tsc_object_set(out, tsc_str_from_lit("sharedMemorySize", 16), tsc_value_num((double)usage.ru_ixrss));
+    tsc_object_set(out, tsc_str_from_lit("unsharedDataSize", 16), tsc_value_num((double)usage.ru_idrss));
+    tsc_object_set(out, tsc_str_from_lit("unsharedStackSize", 17), tsc_value_num((double)usage.ru_isrss));
+    tsc_object_set(out, tsc_str_from_lit("minorPageFault", 14), tsc_value_num((double)usage.ru_minflt));
+    tsc_object_set(out, tsc_str_from_lit("majorPageFault", 14), tsc_value_num((double)usage.ru_majflt));
+    tsc_object_set(out, tsc_str_from_lit("swappedOut", 10), tsc_value_num((double)usage.ru_nswap));
+    tsc_object_set(out, tsc_str_from_lit("fsRead", 6), tsc_value_num((double)usage.ru_inblock));
+    tsc_object_set(out, tsc_str_from_lit("fsWrite", 7), tsc_value_num((double)usage.ru_oublock));
+    tsc_object_set(out, tsc_str_from_lit("ipcSent", 7), tsc_value_num((double)usage.ru_msgsnd));
+    tsc_object_set(out, tsc_str_from_lit("ipcReceived", 11), tsc_value_num((double)usage.ru_msgrcv));
+    tsc_object_set(out, tsc_str_from_lit("signalsCount", 12), tsc_value_num((double)usage.ru_nsignals));
+    tsc_object_set(out, tsc_str_from_lit("voluntaryContextSwitches", 24), tsc_value_num((double)usage.ru_nvcsw));
+    tsc_object_set(out, tsc_str_from_lit("involuntaryContextSwitches", 26), tsc_value_num((double)usage.ru_nivcsw));
+    return tsc_value_object(out);
+}
+
+bool tsc_process_kill(double pid_value, double signal_value) {
+    if (isnan(pid_value) || isinf(pid_value)) {
+        tsc_throw_str(tsc_str_from_cstr("process.kill: invalid pid"));
+    }
+    if (isnan(signal_value) || isinf(signal_value)) {
+        tsc_throw_str(tsc_str_from_cstr("process.kill: invalid signal"));
+    }
+    pid_t pid = (pid_t)pid_value;
+    int sig = (int)signal_value;
+    if (kill(pid, sig) != 0) {
+        tsc_throw_str(tsc_str_from_cstr("process.kill: signal failed"));
+    }
+    return true;
+}
+
 tsc_array_t* tsc_process_hrtime(tsc_array_t* previous) {
     struct timespec now;
     if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
@@ -238,6 +358,63 @@ tsc_array_t* tsc_process_hrtime(tsc_array_t* previous) {
     tsc_array_push_raw(out, &seconds);
     tsc_array_push_raw(out, &nanos);
     return out;
+}
+
+static bool process_stream_write(FILE* f, const tsc_str_t* data) {
+    if (!data || data->len == 0) {
+        fflush(f);
+        return ferror(f) == 0;
+    }
+    size_t written = fwrite(data->data, 1, data->len, f);
+    fflush(f);
+    return written == data->len && ferror(f) == 0;
+}
+
+static bool process_stream_write_bytes(FILE* f, const uint8_t* data, size_t len) {
+    if (!data || len == 0) {
+        fflush(f);
+        return ferror(f) == 0;
+    }
+    size_t written = fwrite(data, 1, len, f);
+    fflush(f);
+    return written == len && ferror(f) == 0;
+}
+
+bool tsc_process_stdout_write(const tsc_str_t* data) {
+    return process_stream_write(stdout, data);
+}
+
+bool tsc_process_stderr_write(const tsc_str_t* data) {
+    return process_stream_write(stderr, data);
+}
+
+bool tsc_process_stdout_write_buffer(const tsc_buffer_t* data) {
+    return data ? process_stream_write_bytes(stdout, data->data, data->len) : process_stream_write_bytes(stdout, NULL, 0);
+}
+
+bool tsc_process_stderr_write_buffer(const tsc_buffer_t* data) {
+    return data ? process_stream_write_bytes(stderr, data->data, data->len) : process_stream_write_bytes(stderr, NULL, 0);
+}
+
+void tsc_process_next_tick(tsc_next_tick_fn_t fn, void* env) {
+    if (!fn) return;
+    if (g_next_tick_len == g_next_tick_cap) {
+        size_t next = g_next_tick_cap ? g_next_tick_cap * 2 : 8;
+        tsc_next_tick_entry_t* entries = (tsc_next_tick_entry_t*)TSC_GC_REALLOC(g_next_tick_queue, next * sizeof(tsc_next_tick_entry_t));
+        if (!entries) tsc_panic("process.nextTick: out of memory");
+        g_next_tick_queue = entries;
+        g_next_tick_cap = next;
+    }
+    g_next_tick_queue[g_next_tick_len++] = (tsc_next_tick_entry_t){ fn, env };
+}
+
+void tsc_process_drain_next_ticks(void) {
+    size_t idx = 0;
+    while (idx < g_next_tick_len) {
+        tsc_next_tick_entry_t entry = g_next_tick_queue[idx++];
+        if (entry.fn) entry.fn(entry.env);
+    }
+    g_next_tick_len = 0;
 }
 
 /* ---------------- strings ---------------- */
@@ -1538,6 +1715,19 @@ tsc_str_t* tsc_bigint_to_string(const tsc_bigint_t* a, double radix) {
     char* raw = mpz_get_str(NULL, base, a->value);
     tsc_str_t* out = tsc_str_from_cstr(raw);
     free(raw);
+    return out;
+}
+
+tsc_bigint_t* tsc_process_hrtime_bigint(void) {
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+        now.tv_sec = 0;
+        now.tv_nsec = 0;
+    }
+    tsc_bigint_t* out = bigint_alloc();
+    mpz_set_ui(out->value, (unsigned long)now.tv_sec);
+    mpz_mul_ui(out->value, out->value, 1000000000ul);
+    mpz_add_ui(out->value, out->value, (unsigned long)now.tv_nsec);
     return out;
 }
 
@@ -7071,12 +7261,163 @@ static char* cstr_dup(const tsc_str_t* s) {
 }
 
 struct tsc_fs_stats {
+    double dev;
+    double ino;
     double size;
     double mode;
+    double nlink;
+    double uid;
+    double gid;
+    double rdev;
+    double blksize;
+    double blocks;
+    double atime_ms;
+    double mtime_ms;
+    double ctime_ms;
+    double birthtime_ms;
     bool is_file;
     bool is_directory;
     bool is_symbolic_link;
+    bool is_block_device;
+    bool is_character_device;
+    bool is_fifo;
+    bool is_socket;
 };
+
+struct tsc_fs_dirent {
+    tsc_str_t* name;
+    bool is_file;
+    bool is_directory;
+    bool is_symbolic_link;
+    bool is_block_device;
+    bool is_character_device;
+    bool is_fifo;
+    bool is_socket;
+};
+
+static void fs_kind_from_mode(mode_t mode, bool* is_file, bool* is_directory, bool* is_symbolic_link, bool* is_block_device, bool* is_character_device, bool* is_fifo, bool* is_socket) {
+    *is_file = S_ISREG(mode);
+    *is_directory = S_ISDIR(mode);
+    *is_symbolic_link = S_ISLNK(mode);
+    *is_block_device = S_ISBLK(mode);
+    *is_character_device = S_ISCHR(mode);
+    *is_fifo = S_ISFIFO(mode);
+    *is_socket = S_ISSOCK(mode);
+}
+
+static double fs_timespec_to_ms(time_t sec, long nsec) {
+    return ((double)sec * 1000.0) + ((double)nsec / 1000000.0);
+}
+
+static double fs_stat_atime_ms(const struct stat* st) {
+#if defined(__APPLE__) && defined(__MACH__)
+    return fs_timespec_to_ms(st->st_atimespec.tv_sec, st->st_atimespec.tv_nsec);
+#else
+    return fs_timespec_to_ms(st->st_atim.tv_sec, st->st_atim.tv_nsec);
+#endif
+}
+
+static double fs_stat_mtime_ms(const struct stat* st) {
+#if defined(__APPLE__) && defined(__MACH__)
+    return fs_timespec_to_ms(st->st_mtimespec.tv_sec, st->st_mtimespec.tv_nsec);
+#else
+    return fs_timespec_to_ms(st->st_mtim.tv_sec, st->st_mtim.tv_nsec);
+#endif
+}
+
+static double fs_stat_ctime_ms(const struct stat* st) {
+#if defined(__APPLE__) && defined(__MACH__)
+    return fs_timespec_to_ms(st->st_ctimespec.tv_sec, st->st_ctimespec.tv_nsec);
+#else
+    return fs_timespec_to_ms(st->st_ctim.tv_sec, st->st_ctim.tv_nsec);
+#endif
+}
+
+static double fs_stat_birthtime_ms(const struct stat* st) {
+#if defined(__APPLE__) && defined(__MACH__)
+    return fs_timespec_to_ms(st->st_birthtimespec.tv_sec, st->st_birthtimespec.tv_nsec);
+#else
+    return fs_stat_ctime_ms(st);
+#endif
+}
+
+static void fs_stats_fill(tsc_fs_stats_t* out, const struct stat* st) {
+    out->dev = (double)st->st_dev;
+    out->ino = (double)st->st_ino;
+    out->size = (double)st->st_size;
+    out->mode = (double)st->st_mode;
+    out->nlink = (double)st->st_nlink;
+    out->uid = (double)st->st_uid;
+    out->gid = (double)st->st_gid;
+    out->rdev = (double)st->st_rdev;
+    out->blksize = (double)st->st_blksize;
+    out->blocks = (double)st->st_blocks;
+    out->atime_ms = fs_stat_atime_ms(st);
+    out->mtime_ms = fs_stat_mtime_ms(st);
+    out->ctime_ms = fs_stat_ctime_ms(st);
+    out->birthtime_ms = fs_stat_birthtime_ms(st);
+    fs_kind_from_mode(
+        st->st_mode,
+        &out->is_file,
+        &out->is_directory,
+        &out->is_symbolic_link,
+        &out->is_block_device,
+        &out->is_character_device,
+        &out->is_fifo,
+        &out->is_socket
+    );
+}
+
+static tsc_fs_dirent_t* fs_dirent_from_path(const char* dir_path, const char* name) {
+    tsc_fs_dirent_t* out = (tsc_fs_dirent_t*)TSC_GC_MALLOC(sizeof(tsc_fs_dirent_t));
+    out->name = tsc_str_from_cstr(name);
+    out->is_file = false;
+    out->is_directory = false;
+    out->is_symbolic_link = false;
+    out->is_block_device = false;
+    out->is_character_device = false;
+    out->is_fifo = false;
+    out->is_socket = false;
+
+    size_t dir_len = strlen(dir_path);
+    size_t name_len = strlen(name);
+    bool need_slash = dir_len > 0 && dir_path[dir_len - 1] != '/';
+    char* full = (char*)malloc(dir_len + (need_slash ? 1 : 0) + name_len + 1);
+    memcpy(full, dir_path, dir_len);
+    size_t pos = dir_len;
+    if (need_slash) full[pos++] = '/';
+    memcpy(full + pos, name, name_len);
+    full[pos + name_len] = '\0';
+
+    struct stat st;
+    if (lstat(full, &st) == 0) {
+        fs_kind_from_mode(
+            st.st_mode,
+            &out->is_file,
+            &out->is_directory,
+            &out->is_symbolic_link,
+            &out->is_block_device,
+            &out->is_character_device,
+            &out->is_fifo,
+            &out->is_socket
+        );
+    }
+    free(full);
+    return out;
+}
+
+static char* fs_join_path(const char* left, const char* right) {
+    size_t left_len = strlen(left);
+    size_t right_len = strlen(right);
+    bool need_slash = left_len > 0 && left[left_len - 1] != '/';
+    char* out = (char*)malloc(left_len + (need_slash ? 1 : 0) + right_len + 1);
+    memcpy(out, left, left_len);
+    size_t pos = left_len;
+    if (need_slash) out[pos++] = '/';
+    memcpy(out + pos, right, right_len);
+    out[pos + right_len] = '\0';
+    return out;
+}
 
 tsc_str_t* tsc_fs_read_file_sync(const tsc_str_t* path) {
     char* p = cstr_dup(path);
@@ -7098,22 +7439,29 @@ tsc_str_t* tsc_fs_read_file_sync(const tsc_str_t* path) {
     return s;
 }
 
-void tsc_fs_write_file_sync(const tsc_str_t* path, const tsc_str_t* data) {
+static void fs_write_bytes(const tsc_str_t* path, const uint8_t* data, size_t len, const char* mode, const char* label) {
     char* p = cstr_dup(path);
-    FILE* f = fopen(p, "wb");
+    FILE* f = fopen(p, mode);
     free(p);
-    if (!f) { tsc_throw_str(tsc_str_from_cstr("fs.writeFileSync: could not open")); return; }
-    fwrite(data->data, 1, data->len, f);
+    if (!f) { tsc_throw_str(tsc_str_from_cstr(label)); return; }
+    fwrite(data, 1, len, f);
     fclose(f);
 }
 
+void tsc_fs_write_file_sync(const tsc_str_t* path, const tsc_str_t* data) {
+    fs_write_bytes(path, (const uint8_t*)data->data, data->len, "wb", "fs.writeFileSync: could not open");
+}
+
+void tsc_fs_write_file_buffer_sync(const tsc_str_t* path, const tsc_buffer_t* data) {
+    fs_write_bytes(path, data->data, data->len, "wb", "fs.writeFileSync: could not open");
+}
+
 void tsc_fs_append_file_sync(const tsc_str_t* path, const tsc_str_t* data) {
-    char* p = cstr_dup(path);
-    FILE* f = fopen(p, "ab");
-    free(p);
-    if (!f) { tsc_throw_str(tsc_str_from_cstr("fs.appendFileSync: could not open")); return; }
-    fwrite(data->data, 1, data->len, f);
-    fclose(f);
+    fs_write_bytes(path, (const uint8_t*)data->data, data->len, "ab", "fs.appendFileSync: could not open");
+}
+
+void tsc_fs_append_file_buffer_sync(const tsc_str_t* path, const tsc_buffer_t* data) {
+    fs_write_bytes(path, data->data, data->len, "ab", "fs.appendFileSync: could not open");
 }
 
 bool tsc_fs_exists_sync(const tsc_str_t* path) {
@@ -7134,11 +7482,7 @@ tsc_fs_stats_t* tsc_fs_stat_sync(const tsc_str_t* path) {
         return NULL;
     }
     tsc_fs_stats_t* out = (tsc_fs_stats_t*)TSC_GC_MALLOC(sizeof(tsc_fs_stats_t));
-    out->size = (double)st.st_size;
-    out->mode = (double)st.st_mode;
-    out->is_file = S_ISREG(st.st_mode);
-    out->is_directory = S_ISDIR(st.st_mode);
-    out->is_symbolic_link = S_ISLNK(st.st_mode);
+    fs_stats_fill(out, &st);
     return out;
 }
 
@@ -7152,11 +7496,7 @@ tsc_fs_stats_t* tsc_fs_lstat_sync(const tsc_str_t* path) {
         return NULL;
     }
     tsc_fs_stats_t* out = (tsc_fs_stats_t*)TSC_GC_MALLOC(sizeof(tsc_fs_stats_t));
-    out->size = (double)st.st_size;
-    out->mode = (double)st.st_mode;
-    out->is_file = S_ISREG(st.st_mode);
-    out->is_directory = S_ISDIR(st.st_mode);
-    out->is_symbolic_link = S_ISLNK(st.st_mode);
+    fs_stats_fill(out, &st);
     return out;
 }
 
@@ -7252,12 +7592,114 @@ void tsc_fs_truncate_sync(const tsc_str_t* path, double len) {
     }
 }
 
+static struct timespec fs_seconds_to_timespec(double seconds) {
+    if (isnan(seconds) || isinf(seconds)) seconds = 0.0;
+    double whole = floor(seconds);
+    double fraction = seconds - whole;
+    long nsec = (long)floor((fraction * 1000000000.0) + 0.5);
+    time_t sec = (time_t)whole;
+    if (nsec >= 1000000000L) {
+        sec += 1;
+        nsec -= 1000000000L;
+    }
+    if (nsec < 0) {
+        sec -= 1;
+        nsec += 1000000000L;
+    }
+    struct timespec out;
+    out.tv_sec = sec;
+    out.tv_nsec = nsec;
+    return out;
+}
+
+static void fs_utimes_path_sync(const tsc_str_t* path, double atime, double mtime, int flags, const char* message) {
+    char* p = cstr_dup(path);
+    struct timespec times[2];
+    times[0] = fs_seconds_to_timespec(atime);
+    times[1] = fs_seconds_to_timespec(mtime);
+    int r = utimensat(AT_FDCWD, p, times, flags);
+    free(p);
+    if (r != 0) {
+        tsc_throw_str(tsc_str_from_cstr(message));
+    }
+}
+
+void tsc_fs_utimes_sync(const tsc_str_t* path, double atime, double mtime) {
+    fs_utimes_path_sync(path, atime, mtime, 0, "fs.utimesSync: could not update timestamps");
+}
+
+void tsc_fs_lutimes_sync(const tsc_str_t* path, double atime, double mtime) {
+    fs_utimes_path_sync(path, atime, mtime, AT_SYMLINK_NOFOLLOW, "fs.lutimesSync: could not update symlink timestamps");
+}
+
+void tsc_fs_chown_sync(const tsc_str_t* path, double uid, double gid) {
+    char* p = cstr_dup(path);
+    int r = chown(p, (uid_t)uid, (gid_t)gid);
+    free(p);
+    if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.chownSync: could not change ownership"));
+}
+
+void tsc_fs_lchown_sync(const tsc_str_t* path, double uid, double gid) {
+    char* p = cstr_dup(path);
+    int r = lchown(p, (uid_t)uid, (gid_t)gid);
+    free(p);
+    if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.lchownSync: could not change ownership"));
+}
+
+double tsc_fs_stats_dev(const tsc_fs_stats_t* st) {
+    return st ? st->dev : 0.0;
+}
+
+double tsc_fs_stats_ino(const tsc_fs_stats_t* st) {
+    return st ? st->ino : 0.0;
+}
+
 double tsc_fs_stats_size(const tsc_fs_stats_t* st) {
     return st ? st->size : 0.0;
 }
 
 double tsc_fs_stats_mode(const tsc_fs_stats_t* st) {
     return st ? st->mode : 0.0;
+}
+
+double tsc_fs_stats_nlink(const tsc_fs_stats_t* st) {
+    return st ? st->nlink : 0.0;
+}
+
+double tsc_fs_stats_uid(const tsc_fs_stats_t* st) {
+    return st ? st->uid : 0.0;
+}
+
+double tsc_fs_stats_gid(const tsc_fs_stats_t* st) {
+    return st ? st->gid : 0.0;
+}
+
+double tsc_fs_stats_rdev(const tsc_fs_stats_t* st) {
+    return st ? st->rdev : 0.0;
+}
+
+double tsc_fs_stats_blksize(const tsc_fs_stats_t* st) {
+    return st ? st->blksize : 0.0;
+}
+
+double tsc_fs_stats_blocks(const tsc_fs_stats_t* st) {
+    return st ? st->blocks : 0.0;
+}
+
+double tsc_fs_stats_atime_ms(const tsc_fs_stats_t* st) {
+    return st ? st->atime_ms : 0.0;
+}
+
+double tsc_fs_stats_mtime_ms(const tsc_fs_stats_t* st) {
+    return st ? st->mtime_ms : 0.0;
+}
+
+double tsc_fs_stats_ctime_ms(const tsc_fs_stats_t* st) {
+    return st ? st->ctime_ms : 0.0;
+}
+
+double tsc_fs_stats_birthtime_ms(const tsc_fs_stats_t* st) {
+    return st ? st->birthtime_ms : 0.0;
 }
 
 bool tsc_fs_stats_is_file(const tsc_fs_stats_t* st) {
@@ -7270,6 +7712,54 @@ bool tsc_fs_stats_is_directory(const tsc_fs_stats_t* st) {
 
 bool tsc_fs_stats_is_symbolic_link(const tsc_fs_stats_t* st) {
     return st ? st->is_symbolic_link : false;
+}
+
+bool tsc_fs_stats_is_block_device(const tsc_fs_stats_t* st) {
+    return st ? st->is_block_device : false;
+}
+
+bool tsc_fs_stats_is_character_device(const tsc_fs_stats_t* st) {
+    return st ? st->is_character_device : false;
+}
+
+bool tsc_fs_stats_is_fifo(const tsc_fs_stats_t* st) {
+    return st ? st->is_fifo : false;
+}
+
+bool tsc_fs_stats_is_socket(const tsc_fs_stats_t* st) {
+    return st ? st->is_socket : false;
+}
+
+tsc_str_t* tsc_fs_dirent_name(const tsc_fs_dirent_t* ent) {
+    return ent ? ent->name : tsc_str_from_lit("", 0);
+}
+
+bool tsc_fs_dirent_is_file(const tsc_fs_dirent_t* ent) {
+    return ent ? ent->is_file : false;
+}
+
+bool tsc_fs_dirent_is_directory(const tsc_fs_dirent_t* ent) {
+    return ent ? ent->is_directory : false;
+}
+
+bool tsc_fs_dirent_is_symbolic_link(const tsc_fs_dirent_t* ent) {
+    return ent ? ent->is_symbolic_link : false;
+}
+
+bool tsc_fs_dirent_is_block_device(const tsc_fs_dirent_t* ent) {
+    return ent ? ent->is_block_device : false;
+}
+
+bool tsc_fs_dirent_is_character_device(const tsc_fs_dirent_t* ent) {
+    return ent ? ent->is_character_device : false;
+}
+
+bool tsc_fs_dirent_is_fifo(const tsc_fs_dirent_t* ent) {
+    return ent ? ent->is_fifo : false;
+}
+
+bool tsc_fs_dirent_is_socket(const tsc_fs_dirent_t* ent) {
+    return ent ? ent->is_socket : false;
 }
 
 void tsc_fs_access_sync(const tsc_str_t* path) {
@@ -7292,14 +7782,23 @@ void tsc_fs_chmod_sync(const tsc_str_t* path, double mode) {
     if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.chmodSync: could not change mode"));
 }
 
-void tsc_fs_mkdir_sync(const tsc_str_t* path) {
-    char* p = cstr_dup(path);
-    int r = mkdir(p, 0777);
-    free(p);
-    if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.mkdirSync: could not create directory"));
+static mode_t fs_mode_from_double(double mode) {
+    if (isnan(mode) || isinf(mode) || mode < 0) return 0777;
+    return (mode_t)mode;
 }
 
-static int mkdir_recursive_cstr(const char* path) {
+void tsc_fs_mkdir_sync(const tsc_str_t* path) {
+    tsc_fs_mkdir_sync_opts(path, false, 0777.0);
+}
+
+static void fs_mkdir_one_sync(const tsc_str_t* path, mode_t mode, const char* message) {
+    char* p = cstr_dup(path);
+    int r = mkdir(p, mode);
+    free(p);
+    if (r != 0) tsc_throw_str(tsc_str_from_cstr(message));
+}
+
+static int mkdir_recursive_cstr(const char* path, mode_t mode) {
     if (!path || path[0] == '\0') return -1;
     char* tmp = strdup(path);
     if (!tmp) return -1;
@@ -7310,7 +7809,7 @@ static int mkdir_recursive_cstr(const char* path) {
     for (char* p = tmp + 1; *p; p++) {
         if (*p != '/') continue;
         *p = '\0';
-        if (tmp[0] != '\0' && mkdir(tmp, 0777) != 0 && errno != EEXIST) {
+        if (tmp[0] != '\0' && mkdir(tmp, mode) != 0 && errno != EEXIST) {
             int saved = errno;
             free(tmp);
             errno = saved;
@@ -7318,7 +7817,7 @@ static int mkdir_recursive_cstr(const char* path) {
         }
         *p = '/';
     }
-    if (mkdir(tmp, 0777) != 0 && errno != EEXIST) {
+    if (mkdir(tmp, mode) != 0 && errno != EEXIST) {
         int saved = errno;
         free(tmp);
         errno = saved;
@@ -7328,13 +7827,14 @@ static int mkdir_recursive_cstr(const char* path) {
     return 0;
 }
 
-void tsc_fs_mkdir_sync_opts(const tsc_str_t* path, bool recursive) {
+void tsc_fs_mkdir_sync_opts(const tsc_str_t* path, bool recursive, double mode) {
+    mode_t m = fs_mode_from_double(mode);
     if (!recursive) {
-        tsc_fs_mkdir_sync(path);
+        fs_mkdir_one_sync(path, m, "fs.mkdirSync: could not create directory");
         return;
     }
     char* p = cstr_dup(path);
-    int r = mkdir_recursive_cstr(p);
+    int r = mkdir_recursive_cstr(p, m);
     free(p);
     if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.mkdirSync: could not create directory recursively"));
 }
@@ -7412,6 +7912,174 @@ void tsc_fs_rmdir_sync(const tsc_str_t* path) {
     if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.rmdirSync: could not remove directory"));
 }
 
+static char* fs_join_path_cstr(const char* base, const char* name) {
+    size_t base_len = strlen(base);
+    size_t name_len = strlen(name);
+    bool needs_slash = base_len > 0 && base[base_len - 1] != '/';
+    char* out = (char*)malloc(base_len + (needs_slash ? 1 : 0) + name_len + 1);
+    if (!out) return NULL;
+    memcpy(out, base, base_len);
+    size_t pos = base_len;
+    if (needs_slash) out[pos++] = '/';
+    memcpy(out + pos, name, name_len + 1);
+    return out;
+}
+
+static int fs_copy_file_bytes_cstr(const char* src, const char* dest, bool force, bool error_on_exist) {
+    if (access(dest, F_OK) == 0) {
+        if (!force && error_on_exist) {
+            errno = EEXIST;
+            return -1;
+        }
+        if (!force) return 0;
+    }
+    FILE* in = fopen(src, "rb");
+    if (!in) return -1;
+    FILE* out = fopen(dest, "wb");
+    if (!out) {
+        int saved = errno;
+        fclose(in);
+        errno = saved;
+        return -1;
+    }
+    char buf[8192];
+    int result = 0;
+    for (;;) {
+        size_t n = fread(buf, 1, sizeof(buf), in);
+        if (n > 0 && fwrite(buf, 1, n, out) != n) {
+            result = -1;
+            break;
+        }
+        if (n < sizeof(buf)) {
+            if (ferror(in)) result = -1;
+            break;
+        }
+    }
+    int saved = errno;
+    if (fclose(out) != 0 && result == 0) {
+        result = -1;
+        saved = errno;
+    }
+    fclose(in);
+    if (result != 0) errno = saved;
+    return result;
+}
+
+static char* fs_readlink_alloc_cstr(const char* path) {
+    size_t cap = PATH_MAX > 0 ? (size_t)PATH_MAX : 4096;
+    for (;;) {
+        char* buf = (char*)malloc(cap + 1);
+        if (!buf) {
+            errno = ENOMEM;
+            return NULL;
+        }
+        ssize_t n = readlink(path, buf, cap);
+        if (n < 0) {
+            int saved = errno;
+            free(buf);
+            errno = saved;
+            return NULL;
+        }
+        if ((size_t)n < cap) {
+            buf[n] = '\0';
+            return buf;
+        }
+        free(buf);
+        if (cap >= (1u << 20)) {
+            errno = ENAMETOOLONG;
+            return NULL;
+        }
+        cap *= 2;
+    }
+}
+
+static int fs_copy_symlink_cstr(const char* src, const char* dest, bool force, bool error_on_exist, bool verbatim_symlinks) {
+    struct stat dest_st;
+    if (lstat(dest, &dest_st) == 0) {
+        if (!force && error_on_exist) {
+            errno = EEXIST;
+            return -1;
+        }
+        if (!force) return 0;
+        if (unlink(dest) != 0) return -1;
+    } else if (errno != ENOENT) {
+        return -1;
+    }
+    char* target = verbatim_symlinks ? fs_readlink_alloc_cstr(src) : realpath(src, NULL);
+    if (!target) return -1;
+    int r = symlink(target, dest);
+    int saved = errno;
+    free(target);
+    if (r != 0) errno = saved;
+    return r;
+}
+
+static int fs_cp_recursive_cstr(const char* src, const char* dest, bool recursive, bool force, bool error_on_exist, bool dereference, bool verbatim_symlinks) {
+    struct stat st;
+    if ((dereference ? stat(src, &st) : lstat(src, &st)) != 0) return -1;
+    if (!dereference && S_ISLNK(st.st_mode)) {
+        return fs_copy_symlink_cstr(src, dest, force, error_on_exist, verbatim_symlinks);
+    }
+    if (S_ISDIR(st.st_mode)) {
+        if (!recursive) {
+            errno = EISDIR;
+            return -1;
+        }
+        struct stat dest_st;
+        if (lstat(dest, &dest_st) == 0) {
+            if (!S_ISDIR(dest_st.st_mode)) {
+                errno = ENOTDIR;
+                return -1;
+            }
+        } else if (errno == ENOENT) {
+            if (mkdir(dest, st.st_mode & 0777) != 0) return -1;
+        } else {
+            return -1;
+        }
+        DIR* d = opendir(src);
+        if (!d) return -1;
+        struct dirent* ent;
+        while ((ent = readdir(d)) != NULL) {
+            if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
+            char* child_src = fs_join_path_cstr(src, ent->d_name);
+            char* child_dest = fs_join_path_cstr(dest, ent->d_name);
+            if (!child_src || !child_dest) {
+                free(child_src);
+                free(child_dest);
+                closedir(d);
+                errno = ENOMEM;
+                return -1;
+            }
+            if (fs_cp_recursive_cstr(child_src, child_dest, recursive, force, error_on_exist, dereference, verbatim_symlinks) != 0) {
+                int saved = errno;
+                free(child_src);
+                free(child_dest);
+                closedir(d);
+                errno = saved;
+                return -1;
+            }
+            free(child_src);
+            free(child_dest);
+        }
+        closedir(d);
+        return 0;
+    }
+    if (S_ISREG(st.st_mode)) {
+        return fs_copy_file_bytes_cstr(src, dest, force, error_on_exist);
+    }
+    errno = EINVAL;
+    return -1;
+}
+
+void tsc_fs_cp_sync_opts(const tsc_str_t* src, const tsc_str_t* dest, bool recursive, bool force, bool error_on_exist, bool dereference, bool verbatim_symlinks) {
+    char* s = cstr_dup(src);
+    char* d = cstr_dup(dest);
+    int r = fs_cp_recursive_cstr(s, d, recursive, force, error_on_exist, dereference, verbatim_symlinks);
+    free(s);
+    free(d);
+    if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.cpSync: could not copy path"));
+}
+
 void tsc_fs_copy_file_sync_mode(const tsc_str_t* src, const tsc_str_t* dest, double mode) {
     char* dest_path = cstr_dup(dest);
     int flags = (isnan(mode) || isinf(mode)) ? 0 : (int)mode;
@@ -7454,6 +8122,67 @@ tsc_array_t* tsc_fs_readdir_sync(const tsc_str_t* path) {
         tsc_array_push_raw(a, &s);
     }
     closedir(d);
+    return a;
+}
+
+static void fs_readdir_recursive_into(const char* root, const char* rel, tsc_array_t* out) {
+    char* dir_path = rel[0] == '\0' ? strdup(root) : fs_join_path(root, rel);
+    DIR* d = opendir(dir_path);
+    if (!d) {
+        free(dir_path);
+        tsc_throw_str(tsc_str_from_cstr("fs.readdirSync: could not open dir"));
+        return;
+    }
+    struct dirent* ent;
+    while ((ent = readdir(d))) {
+        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
+        char* child_rel = rel[0] == '\0' ? strdup(ent->d_name) : fs_join_path(rel, ent->d_name);
+        tsc_str_t* child_name = tsc_str_from_cstr(child_rel);
+        tsc_array_push_raw(out, &child_name);
+
+        char* child_path = fs_join_path(root, child_rel);
+        struct stat st;
+        bool descend = lstat(child_path, &st) == 0 && S_ISDIR(st.st_mode);
+        free(child_path);
+        if (descend) fs_readdir_recursive_into(root, child_rel, out);
+        free(child_rel);
+    }
+    closedir(d);
+    free(dir_path);
+}
+
+tsc_array_t* tsc_fs_readdir_recursive_sync(const tsc_str_t* path) {
+    char* p = cstr_dup(path);
+    DIR* d = opendir(p);
+    if (!d) {
+        free(p);
+        tsc_throw_str(tsc_str_from_cstr("fs.readdirSync: could not open dir"));
+        return NULL;
+    }
+    closedir(d);
+    tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), 16);
+    fs_readdir_recursive_into(p, "", a);
+    free(p);
+    return a;
+}
+
+tsc_array_t* tsc_fs_readdir_dirents_sync(const tsc_str_t* path) {
+    char* p = cstr_dup(path);
+    DIR* d = opendir(p);
+    if (!d) {
+        free(p);
+        tsc_throw_str(tsc_str_from_cstr("fs.readdirSync: could not open dir"));
+        return NULL;
+    }
+    tsc_array_t* a = tsc_array_new(sizeof(tsc_fs_dirent_t*), 16);
+    struct dirent* ent;
+    while ((ent = readdir(d))) {
+        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
+        tsc_fs_dirent_t* dirent = fs_dirent_from_path(p, ent->d_name);
+        tsc_array_push_raw(a, &dirent);
+    }
+    closedir(d);
+    free(p);
     return a;
 }
 
@@ -7648,6 +8377,16 @@ tsc_str_t* tsc_path_basename(const tsc_str_t* p) {
     while (start > 0 && p->data[start - 1] != '/') start--;
     tsc_str_t* r = str_alloc(end - start);
     memcpy((char*)r->data, p->data + start, end - start);
+    return r;
+}
+
+tsc_str_t* tsc_path_basename_suffix(const tsc_str_t* p, const tsc_str_t* suffix) {
+    tsc_str_t* base = tsc_path_basename(p);
+    if (!suffix || suffix->len == 0 || suffix->len > base->len) return base;
+    size_t start = base->len - suffix->len;
+    if (memcmp(base->data + start, suffix->data, suffix->len) != 0) return base;
+    tsc_str_t* r = str_alloc(start);
+    memcpy((char*)r->data, base->data, start);
     return r;
 }
 

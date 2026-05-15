@@ -79,7 +79,7 @@ export function buildModuleGraph(
                 const m = stmt.moduleSpecifier;
                 if (m && ts.isStringLiteral(m)) specs.push(m.text);
             }
-            specs.push(...topLevelRequireSpecifiers(stmt));
+            specs.push(...staticRequireSpecifiers(stmt));
             for (const spec of specs) {
                 const resolved = ts.resolveModuleName(
                     spec,
@@ -129,20 +129,14 @@ function isTypeOnlyModuleEdge(stmt: ts.ImportDeclaration | ts.ExportDeclaration)
     return stmt.isTypeOnly === true;
 }
 
-function topLevelRequireSpecifiers(stmt: ts.Statement): string[] {
+function staticRequireSpecifiers(stmt: ts.Statement): string[] {
     const specs: string[] = [];
     const visit = (node: ts.Node): void => {
         const spec = ts.isExpression(node) ? requireCallSpecifier(node) : null;
         if (spec) specs.push(spec);
-        if (node !== stmt && ts.isFunctionLike(node)) return;
         ts.forEachChild(node, visit);
     };
-    if (ts.isExpressionStatement(stmt)) visit(stmt.expression);
-    if (ts.isVariableStatement(stmt)) {
-        for (const decl of stmt.declarationList.declarations) {
-            if (decl.initializer) visit(decl.initializer);
-        }
-    }
+    visit(stmt);
     return specs;
 }
 
