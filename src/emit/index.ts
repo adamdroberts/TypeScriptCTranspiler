@@ -714,11 +714,33 @@ class Emitter {
 
     private isCommonJsObjectLiteralDefaultValue(expr: ts.ObjectLiteralExpression): boolean {
         for (const prop of expr.properties) {
+            if (ts.isSpreadAssignment(prop)) {
+                if (!this.isCommonJsModuleExportsSpreadValue(prop.expression)) return false;
+                continue;
+            }
             if (!ts.isPropertyAssignment(prop)) return false;
             if (this.staticPropertyName(prop.name) == null) return false;
             if (!this.isCommonJsModuleExportsDefaultValue(prop.initializer)) return false;
         }
         return true;
+    }
+
+    private isCommonJsModuleExportsSpreadValue(expr: ts.Expression): boolean {
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (this.isCommonJsModuleExportsDefaultValue(cur)) return true;
+        if (ts.isIdentifier(cur)) {
+            return !!this.untypedJsLiteralVariableDeclaration(cur) ||
+                !!this.requireBindingModuleExportsDeclaration(cur);
+        }
+        if (ts.isPropertyAccessExpression(cur)) {
+            return !!this.requireModuleMemberDeclaration(cur);
+        }
+        if (ts.isCallExpression(cur)) {
+            return this.isCommonJsRuntimeComputedModuleExportsValue(cur) ||
+                !!this.requireCallModuleExportsDeclaration(cur);
+        }
+        return false;
     }
 
     private isCommonJsModuleExportsDefaultValue(expr: ts.Expression): boolean {
@@ -779,6 +801,7 @@ class Emitter {
             unsupported(expr.right, "CommonJS module.exports assignment currently requires an object literal");
         }
         for (const prop of expr.right.properties) {
+            if (ts.isSpreadAssignment(prop) && this.isCommonJsModuleExportsSpreadValue(prop.expression)) continue;
             if (ts.isShorthandPropertyAssignment(prop)) continue;
             if (ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.initializer)) continue;
             if (ts.isPropertyAssignment(prop) && ts.isFunctionExpression(prop.initializer)) continue;
@@ -1219,6 +1242,14 @@ class Emitter {
         const obj = this.freshTemp("_cjsobj");
         const pieces: string[] = [`tsc_object_t* ${obj} = tsc_object_new()`];
         for (const prop of ol.properties) {
+            if (ts.isSpreadAssignment(prop)) {
+                if (!this.isCommonJsModuleExportsSpreadValue(prop.expression)) {
+                    unsupported(prop.expression, "CommonJS module.exports object spread requires a static dynamic-object value");
+                }
+                const value = this.emitExpr(prop.expression);
+                pieces.push(`tsc_value_object_assign(tsc_value_object(${obj}), ${this.coerce(value, T_VALUE, prop.expression)})`);
+                continue;
+            }
             if (!ts.isPropertyAssignment(prop)) {
                 unsupported(prop, "CommonJS module.exports object default only supports property assignments");
             }

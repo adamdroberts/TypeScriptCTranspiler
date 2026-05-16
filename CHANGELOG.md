@@ -5,11 +5,13 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Documentation drift sync: top-level `README.md` and `llms.txt` were rewritten to reflect the current 545-passing test suite, ~31,900 LOC inventory, and full phase status — the previous claims of "319 passing tests / ~10,500 LOC" were stale by many sessions. The README's phase table now lists Phase 6 (immediate Promise + `async`/`await`), Phase 7 (eager generators + custom iterables + `FinalizationRegistry`), Phase 11 (immediate `fs.promises` + `dns.lookup` + `net.isIP` + `EventEmitter`), Phase 13 (sync + immediate-callback `child_process`), and Phase 14 (TS/JS package source transpilation + narrow CommonJS subset) as implemented; the previous "still deferred" list now matches the real remaining work. `docs/done.md` tally bumped from 544 → 545 to include the new `node_modules_commonjs_object_spread_default` case. `llms-full.txt` regenerated from the updated source pages.
 - The benchmark harness can now run the manual suite, generated operation-loop benchmarks for stdout-producing e2e cases via `--full` / `BENCH_SOURCE=e2e`, or both, records ops/sec in JSON/table output, and writes selectable JSON result files.
 - Runtime and emitter hot paths for classes, typed object literals, string/number concatenation, JSON stringification, Map/Set, regex matching, arrays, and no-GC allocation were optimized for the benchmark suite.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- CommonJS `module.exports = { ...base, extra }` whole-value defaults now support static object-spread properties over dynamic JS object values. Test: `node_modules_commonjs_object_spread_default`.
 - `fs.writeFileSync` and immediate `fs.promises.writeFile` now accept bounded literal `{ flag: "w" | "wx" | "a" | "ax" }` options for overwrite, exclusive-create, and append writes, including Buffer data. Test: `fs_write_file_flags`.
 - `fs.cpSync` and immediate `fs.promises.cp` now copy symlinks by default and accept bounded literal `dereference` / `verbatimSymlinks` options. Test: `fs_cp_symlink_options`.
 - `fs.cpSync` and immediate `fs.promises.cp` now copy regular files and recursive directory trees with bounded boolean options. Test: `fs_cp_recursive`.

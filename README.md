@@ -6,45 +6,50 @@ Goal: take a Node.js-style TypeScript app and get back a standalone executable t
 
 ## Status
 
-Substantial working subset, verified by **319 passing end-to-end tests** including a real word-count CLI that tokenizes via regex, counts via `Map`, sorts by a user comparator, and reads `process.env`. ~10,500 LOC across TypeScript compiler + C runtime + type shims.
+Substantial working subset, verified by **545 passing end-to-end tests** including a real word-count CLI that tokenizes via regex, counts via `Map`, sorts by a user comparator, and reads `process.env`. ~31,900 LOC across the TypeScript compiler (~20,700 LOC), C runtime (~10,150 LOC), and `@types/node` replacement shim (~1,330 LOC).
 
 **Phases complete:**
 
 | Phase | Feature | Status |
 |-------|---------|--------|
 | 0 | Bootstrap (gcc driver, build dir, CLI, `--no-gc` fallback) | ✅ |
-| 1 | Typed core — primitives, operators, control flow, functions, `switch`, nullish coalescing `??`, optional chaining `?.` | ✅ |
-| 2a | Typed arrays — literal (with spread `[...a, b]`), indexing, `.length`, push/pop/shift/unshift, `for-of`, keys/values, at, reverse/toReversed, fill, copyWithin, with, toSpliced, **sort/toSorted (default + user comparator for typed arrays)**, slice, concat, join, toString/toLocaleString/valueOf, indexOf, lastIndexOf, includes | ✅ |
-| 2b | Classes — fields, ctor, methods, `new`, `this`, `extends`, `super()`, static fields + methods | ✅ |
-| 2c | Higher-order array methods (`forEach`/`map`/`filter`/`reduce`/`reduceRight`/`find`/`findIndex`/`findLast`/`findLastIndex`/`some`/`every`) with **inline arrows OR named function references**, including receiver array callback arguments | ✅ |
+| 1 | Typed core — primitives, operators, control flow, `switch` (with exhaustiveness), `??`, `?.`, `for-in`, `void`, comma operator, tagged templates | ✅ |
+| 2a | Typed arrays — literal (with spread `[...a, b]`), indexing, `.length`, push/pop/shift/unshift, every non-mutating method (`at`, `slice`, `concat`, `join`, `keys`/`values`/`entries`, `flat`/`flatMap`, `toReversed`/`toSorted`/`toSpliced`/`with`, `lastIndexOf`/`indexOf`/`includes`, `reduce`/`reduceRight`, `findLast`/`findLastIndex`), every mutating method (`sort`/`reverse`/`splice`/`copyWithin`/`fill`), and statics (`Array.from`/`Array.of`/`Array.isArray`) | ✅ |
+| 2b | Classes — fields, ctor, methods, `new`, `this`, `extends`, `super()`, static fields/methods, **static initialization blocks**, abstract/access/readonly modifiers, generic classes (erased), computed member names | ✅ |
+| 2c | Higher-order array methods (`forEach`/`map`/`filter`/`reduce`/`reduceRight`/`find`/`findIndex`/`findLast`/`findLastIndex`/`some`/`every`) with **inline arrows OR named function references OR closure callback values**, receiver array callback arguments | ✅ |
 | 2d | Top-level `const f = (...) => ...` lifts to a static C function — usable as a call target AND as an HOF callback | ✅ |
-| 2.5 | Interfaces + object literals with typed shape; `Object.keys`/`values`/`entries`/`fromEntries` | ✅ |
-| 4 | Multi-file module graph — flat namespace, local imports, topological init | ✅ |
-| 5 | Exceptions — `throw` / `try` / `catch` / `finally` via setjmp/longjmp | ✅ |
-| 7 (partial) | `Map<K,V>` + `Set<T>` with insertion-order hash tables, SameValueZero numeric keys, `new Set(array)`, `new Map(Object.entries(...))`, typed `WeakMap<K,V>`/`WeakSet<T>`/`WeakRef<T>`, `Set.keys`, collection `forEach` with inline or named callbacks, collection `toString`/`toLocaleString`/`valueOf`, and direct `for...of` over strings/Map/Set | ✅ |
-| 7 (partial) | JSON.stringify (type-driven, recursive for arrays and objects) | ✅ |
-| 8 (partial) | **RegExp via PCRE2** (`/pattern/flags`, `re.exec`, `re.test`, `re.source`/`flags`/flag booleans including `hasIndices`/`sticky`, `re.toString`/`toLocaleString`/`valueOf`, `s.replace`, `s.match`, `s.matchAll`, `s.search`, `s.split`, capture groups, lookahead/lookbehind, named capture syntax, Unicode properties) | ✅ |
-| 10+ | Sync Node stdlib — `fs` (read/write/append/exists/readdir/stat/lstat/realpath/readlink/symlink/link/mkdtemp/truncate/chmod/mkdir/unlink/rm/rmdir/copy/rename, plus bounded UTF-8 and recursive mkdir/rm options), immediate-settled `fs.promises` subset including `stat`, `lstat`, `realpath`, `readlink`, `symlink`, `link`, `mkdtemp`, `truncate`, and `chmod`, `path`, `Math`, `os`, `Date.now`, `Number.*` statics, `Array.isArray`/`Array.from`/`Array.of`, `Buffer` fields + object methods, `URL` fields + `toString`/`toJSON`, synchronous `EventEmitter`, **`process.env`**, **`process.cwd()`**, **`process.argv`** | ✅ |
+| 2.5 | Interfaces (incl. `extends`), object literals with typed shape, computed property names, `Object.keys`/`values`/`entries`/`fromEntries`/`groupBy` | ✅ |
+| 4 | Multi-file module graph — flat namespace, local imports, topological init, type-only imports, barrel/star/default re-exports, default class/anonymous-function/export-assignment imports | ✅ |
+| 5 | Exceptions — `throw` / `try` / `catch` / `finally` via setjmp/longjmp, full `Error`/`TypeError`/`RangeError`/`SyntaxError`/`ReferenceError`/`EvalError`/`URIError`/`AggregateError` object subset | ✅ |
+| 6 (immediate) | **Promise + `async`/`await` (immediate subset)** — `new Promise(executor)` synchronous executor, `Promise.resolve`/`reject` with native adoption, `.then`/`.catch`/`.finally` with handler passthrough and throw→rejection conversion, settled-array `Promise.all`/`allSettled`/`race`/`any` (incl. AggregateError + pending propagation), `async function`/method/value returning immediate Promise records, immediate `await` over native promises and non-Promise values, `try`/`catch` over rejected awaits. Suspend/resume state machines, microtask scheduling, and libuv timers still deferred. | ✅ |
+| 7 (partial) | `Map<K,V>` + `Set<T>` with insertion-order hash tables, SameValueZero numeric keys, `new Set(array)`/`new Map(Object.entries(...))`/`new Map(map)`/`new Set(set)`, typed `WeakMap<K,V>`/`WeakSet<T>`/`WeakRef<T>`/`FinalizationRegistry<T>` (register/unregister; cleanup never fires in AOT), `Set.keys`, ES2025 Set composition (`union`/`intersection`/`difference`/`symmetricDifference`/`isSubsetOf`/`isSupersetOf`/`isDisjointFrom`), ES2024 `Map.groupBy`/`Object.groupBy`, collection `forEach` (inline/named/closure), collection `toString`/`toLocaleString`/`valueOf`, direct `for...of` over strings/Map/Set, **custom iterable classes** (array-backed and class-iterator-object form), **direct self-iterable iterator objects**, inherited `next()`, `ObjectEntry<T>` destructuring, **eager `function*` generators** (yield, `yield*` over arrays/strings/dynamic iterables, `.next()`/`.return(value)`/`.throw(error)`; lazy suspend/resume still deferred) | ✅ |
+| 7 (partial) | JSON.stringify (type-driven, recursive for arrays and objects; object-property omission for `undefined`/function values) + JSON.parse via dynamic values | ✅ |
+| 8 (partial) | **RegExp via PCRE2** (`/pattern/flags`, `new RegExp(pattern, flags?)`, `re.exec`, `re.test`, `re.source`/`flags`/flag booleans including `hasIndices`/`sticky`, `re.toString`/`toLocaleString`/`valueOf`, `s.replace`/`replaceAll`/`match`/`matchAll`/`search`/`split` with both string and RegExp patterns and full replacement-token expansion `$&`/`$1`/`$<name>`/`` $` ``/`$'`, capture groups, lookahead/lookbehind, named capture syntax, Unicode properties) | ✅ |
+| 10+ | **Sync Node stdlib** — `fs` (read/write/append/exists/readdir incl. recursive + Dirent, stat/lstat with full numeric metadata + timestamps + kind predicates, realpath/readlink/symlink/link/mkdtemp/truncate/utimes/lutimes/chown/lchown/chmod/access with constants/mkdir with mode/unlink/rm/rmdir/cp recursive with symlink options/copyFile/rename plus literal encoding/recursive/withFileTypes/bigint/flag options), `path` (incl. `posix`, `parse`/`format`, `normalize`, `relative`, `basename(p, suffix?)`, `toNamespacedPath`, constants), `Math` (full libm + int32 + fround + constants), `os` (incl. `devNull`, system stats, user info), `Date` (`UTC`/`parse`/`now`, instance methods, UTC getters/setters, ISO/UTC/JSON formatting), `Number.*` statics + predicates + global `isNaN`/`isFinite` coercion, `Buffer` (alloc/allocUnsafe/concat/copy/fill/from(Buffer)/base64/int IO/uint IO/uint multi-byte IO/float IO/swap/search/static methods/write/toJSON + object methods), `URL` (incl. `canParse`), synchronous `EventEmitter` (full subset: `on`/`addListener`/`prependListener`/`once`/`prependOnceListener`/`off`/`removeListener`/`removeAllListeners`/`emit`/`listenerCount`/`listeners`/`rawListeners`/`eventNames`/`setMaxListeners`/`getMaxListeners`, module-level helpers, `events.once` promise form, static `EventEmitter.listenerCount`, `defaultMaxListeners`, unhandled `error` throwing), **`process.env`/`cwd`/`chdir`/`argv`/`argv0`/`pid`/`ppid`/`platform`/`arch`/`title`/`versions`/`release`/`features`/`hrtime`/`hrtime.bigint`/`memoryUsage`/`resourceUsage`/`cpuUsage`/`getgroups`/`umask`/`uid`/`gid`/`euid`/`egid`/`kill`/`stdout.write`/`stderr.write`/`nextTick` (bounded zero-arg queue)** | ✅ |
+| 11 (immediate) | **`fs.promises` immediate-settled wrappers** around every supported sync fs call, **`dns.lookup` and `dns.promises.lookup`** (host `getaddrinfo`, `family`/`all`/`hints`/literal `verbatim`/`order` options), **`net.isIP`/`isIPv4`/`isIPv6`**, minimal `process.stdout`/`stderr.write` stream subset, named + namespace + node-prefixed imports. libuv-backed async scheduling, sockets, http/https, http2, broader stream APIs all still deferred. | ✅ |
+| 13 (partial) | **`child_process.exec`/`execFile`/`execSync`/`execFileSync`/`spawnSync`** — immediate-callback and sync subsets with full literal-option coverage (`cwd`/`env`/`encoding`/`shell` literal/false/string/`argv0`/`detached`/`maxBuffer` numeric/`timeout` numeric/`killSignal` string|numeric/`uid`/`gid`/POSIX-inert `windowsHide`/`windowsVerbatimArguments`), explicit `stdio` `pipe`/`ignore`/`inherit` forms and numeric fd tuples, `ENOENT`/`ETIMEDOUT`/`ENOBUFS` propagation, signal-terminated child reporting, nonzero status capture. Async event-loop child handles, `fork`, `cluster`, `worker_threads` deferred. | ✅ |
+| 14 (partial) | **`node_modules` package source transpilation** — TypeScript packages and basic JavaScript packages via `allowJs` enter the module graph (package `exports`, `main` fallback, `imports`, namespace imports, side-effect-only imports). Untyped JS object/array literals lower as dynamic values. **CommonJS package source subset** lowers `exports.name = ...`, `module.exports.name = ...`, `exports.default = ...`, computed string-key exports, object-literal/function-valued/arrow-valued/method-valued/identifier-valued/primitive/array `module.exports = ...` defaults, runtime-computed `Object.assign`/`Object.create`/`Object.defineProperty`/`Object.fromEntries`/`Object.freeze`/object-spread defaults, top-level and function-scope literal `require("pkg")` namespace/destructure/direct-default/member calls and reads, package-local `require("./local.js")`, `module.require(...)`, side-effect-only requires, `__filename`/`__dirname`/`module.filename`/`module.id`/`module.path`/`module.loaded` wrapper globals, transpiled-ESM `__esModule` marker elision. Native addon detection rejects `build/Release/*.node` package roots including transitively. Lazy require timing, dual CJS/ESM runtime semantics, broader dynamic computed exports still deferred. | ✅ |
 | 2d+ | **Module-level captures** — top-level `const/let` are emitted as file-scope statics, so top-level functions AND lifted arrow consts can read/write them as ordinary globals | ✅ |
-| 2e | **Function-scope closures** — first-class typed arrow/function expressions lower to generated `{fn, env}` closure structs with captured locals boxed in ref cells | ✅ |
-| 3 foundation | **Dynamic values** — `any`/`unknown` map to NaN-boxed `tsc_value_t`; supports `JSON.parse`, dynamic JSON stringify with object-property omission for `undefined`/function values, heterogeneous arrays/objects, dynamic property/index reads/writes, dynamic `in`/`delete`, dynamic binary/compound assignment operators, broader dynamic string/array methods including at/concat/copyWithin/fill/keys/values/lastIndexOf/localeCompare/normalize/pad/repeat/replace/string replace tokens/RegExp replace tokens/split/RegExp split/substr/substring/slice/reverse/toReversed/toSorted/toSpliced/with/trim edges/default and comparator sort/splice/toString/valueOf and inline/named/closure array HOFs with receiver callback args including reduceRight/findLast/findLastIndex, dynamic `Array.isArray`/`Array.from`/`Array.of`, typed coercion bridges, `Object.is`/assign/keys/values/entries/fromEntries/names/hasOwn/hasOwnProperty/isPrototypeOf/propertyIsEnumerable/toLocaleString/toString/valueOf/getOwnPropertyDescriptors/defineProperties, data descriptor flags, omitted-field/default handling, and compatible non-configurable redefinition, named-function/lifted-arrow/closure-valued/undefined accessor descriptors with receiver-bound `this`, own undefined absent-hook fields, boxed `get`/`set` identities callable through dynamic `Reflect.apply`, typed/dynamic string own-property enumeration/descriptors, bounded dynamic array extensibility/seal/freeze state and descriptor flags, Object.create with descriptor maps/prototype-chain lookup, and Reflect object helpers including receiver-aware dynamic data writes | ✅ |
+| 2e | **Function-scope closures** — first-class typed arrow/function expressions lower to generated `{fn, env}` closure structs with captured locals boxed in ref cells; spread calls through function values; optional pointer/dynamic parameters without defaults | ✅ |
+| 3 foundation | **Dynamic values** — `any`/`unknown` map to NaN-boxed `tsc_value_t`. Full dynamic property/index reads + writes (incl. compound, logical, exponent, bitwise), `in`/`delete`, every dynamic operator (arithmetic/equality/relational/logical/nullish/bitwise/unary/update), every dynamic string and array method shipped on the typed path, dynamic `Array.isArray`/`Array.from`/`Array.of`/`Array.from(..., mapfn)`, dynamic `Object.is`/`assign`/`keys`/`values`/`entries`/`fromEntries`/`hasOwn`/`hasOwnProperty`/`isPrototypeOf`/`propertyIsEnumerable`/`getOwnPropertyNames`/`getOwnPropertyDescriptors`/`defineProperties`/`getPrototypeOf`/`setPrototypeOf`/`create` (incl. descriptor maps)/`seal`/`freeze`/`preventExtensions` with state, data + accessor (named-function, lifted-arrow, closure-valued, undefined absent-hook) descriptors with stable boxed `get`/`set` identities, configurable/non-configurable redefinition rules, kind transitions, descriptor shorthand, receiver-bound `this`, dynamic `Reflect.get`/`set`/`has`/`deleteProperty`/`ownKeys`/`defineProperty`/`getPrototypeOf`/`setPrototypeOf`/`getOwnPropertyDescriptor`/`isExtensible`/`preventExtensions`/`apply` (dispatching boxed accessor identities). Typed/dynamic string and array Object/Reflect own-property enumeration + descriptors. Bounded dynamic array extensibility/seal/freeze + descriptor flags. | ✅ |
 
-**Not implemented in this session (deferred):**
+**Still deferred:**
 
-- **Phase 3 remainder** — hidden classes / shape trees, inline caches, remaining descriptor/prototype edge cases, complete built-in/prototype semantics, and npm-scale object behavior.
-- **Phase 6 remainder** — `async/await` + libuv event loop + pending Promise/microtask semantics. Settled/immediate `Promise.resolve` / `reject`, synchronous `then` / `catch` / `finally`, and settled-array combinators are implemented.
-- **Phase 7 remainder** — lazy generator state machines, bidirectional `.next(value)`, async generators, and broader iterator protocol edge cases.
-- **Phase 9** — `Proxy`, `Reflect`, and full property descriptor semantics.
-- **Phases 11–13** — Async Node stdlib (libuv-backed fs.promises, broader events module surface, streams, http, net, child_process, worker_threads).
-- **Phase 14** — `node_modules` transpilation (requires Phases 3, 6, 7 first).
+- **Phase 3 remainder** — hidden classes / shape trees, inline caches and diagnostics, complete built-in prototype semantics for arbitrary npm-shaped objects.
+- **Phase 6 remainder** — real suspend/resume `await` state-machine lowering, microtask-scheduled `.then` dispatch, libuv-backed `setTimeout`/`setInterval`/`setImmediate`, arbitrary thenable assimilation.
+- **Phase 7 remainder** — lazy generator state machines with suspend/resume `yield`, bidirectional `.next(value)`, async generators (`async function*`), broader iterator-protocol edge cases.
+- **Phase 9** — `Proxy` (all 13 traps).
+- **Phases 11–13 remainder** — libuv-backed async `fs.promises` scheduling, broader `events` (EventTarget, async iterator helpers), full readable/writable/transform `stream`, `http`/`https`/`http2` (OpenSSL), `net` sockets/connect/listen, async `child_process` lifecycle handles, `cluster`, `worker_threads`.
+- **Phase 14 remainder** — true lazy `require(...)` execution timing, broader CommonJS wrapper semantics, dual CJS/ESM interop edge cases, broader untyped JavaScript package patterns.
+- **Decorators** — require metadata + Proxy support.
 
-See `~/.claude/plans/make-a-typescript-to-floating-comet.md` for the full 15-phase plan.
+See `~/.claude/plans/make-a-typescript-to-floating-comet.md` for the full 15-phase plan, and [`docs/todo.md`](docs/todo.md) for the line-item remaining work with effort estimates.
 
 ## Documentation
 
 Full docs live in [`docs/`](docs/). Fast routing:
 
-- [`docs/done.md`](docs/done.md) — every implemented feature with test pointers
+- [`docs/done.md`](docs/done.md) — every implemented feature with test pointers (~1,000 lines)
 - [`docs/todo.md`](docs/todo.md) — every remaining item with effort estimates
 - [`docs/architecture.md`](docs/architecture.md) — pipeline + Mermaid diagrams
 - [`docs/cli.md`](docs/cli.md) — CLI flags, exit codes, env vars
@@ -53,6 +58,7 @@ Full docs live in [`docs/`](docs/). Fast routing:
 - [`CHANGELOG.md`](CHANGELOG.md) — session-by-session history
 - [`llms.txt`](llms.txt) / [`llms-full.txt`](llms-full.txt) — LLM-oriented index + full bundle
 - [`examples/README.md`](examples/README.md) — 7 runnable demo programs
+- [`.claude/skills/tsc2c-add-feature/SKILL.md`](.claude/skills/tsc2c-add-feature/SKILL.md) — procedural skill for adding a new language feature
 
 ## Quick start
 
@@ -84,9 +90,11 @@ tsc2c <entry.ts> [options]
   --verbose                 print compile steps + gcc command
 ```
 
+See [`docs/cli.md`](docs/cli.md) for exit codes and environment variables.
+
 ## Feature tour
 
-Each of the following compiles and runs end-to-end. See `tests/e2e/cases/` for full examples.
+Each of the following compiles and runs end-to-end. See [`tests/e2e/cases/`](tests/e2e/cases/) for the full 545-case suite and [`docs/done.md`](docs/done.md) for the complete capability inventory.
 
 ### Classes with inheritance + static
 
@@ -107,6 +115,7 @@ class Dog extends Animal {
 
 class Counter {
     static current: number = 0;
+    static { Counter.current = 1; }       // static initialization block
     static increment(): number { return ++Counter.current; }
 }
 ```
@@ -115,9 +124,10 @@ class Counter {
 
 ```ts
 interface Point { x: number; y: number; }
-interface Line  { from: Point; to: Point; label: string; }
+interface Line  extends Point { from: Point; to: Point; label: string; }
 
 const line: Line = {
+    x: 0, y: 0,
     from: { x: 0, y: 0 },
     to:   { x: 3, y: 4 },
     label: "hypotenuse",
@@ -140,7 +150,7 @@ function isEven(n: number): boolean { return n % 2 === 0; }
 nums.map(doubler).filter(isEven);
 ```
 
-### Regex
+### Regex (PCRE2)
 
 ```ts
 const re = /\d+/;
@@ -150,6 +160,86 @@ re.test("42");                                   // true
 "pi=3.14 e=2.71".match(/\d+\.\d+/g);             // ["3.14", "2.71"]
 "one  two   three".split(/\s+/);                 // ["one","two","three"]
 /hello/i.test("HELLO");                          // true
+new RegExp("(?<year>\\d{4})", "u").exec("2026"); // named capture + Unicode
+```
+
+### Map + Set (incl. ES2025 composition)
+
+```ts
+const ages = new Map<string, number>();
+ages.set("alice", 30).set("bob", 25);
+ages.get("alice");          // 30
+ages.has("carol");          // false
+
+const seen = new Set<number>([1, 2, 3]);
+const more = new Set<number>([2, 3, 4]);
+seen.union(more);           // Set {1,2,3,4}
+seen.intersection(more);    // Set {2,3}
+seen.isSubsetOf(more);      // false
+
+// ES2024 groupBy
+const items = [{ k: "a", v: 1 }, { k: "b", v: 2 }, { k: "a", v: 3 }];
+Map.groupBy(items, (it) => it.k);   // Map { "a" => [...], "b" => [...] }
+```
+
+### Generators (eager) + custom iterators
+
+```ts
+function* range(n: number): Generator<number> {
+    for (let i = 0; i < n; i++) yield i;
+    yield* [100, 101];
+}
+for (const x of range(3)) console.log(x);    // 0 1 2 100 101
+
+class Counter implements Iterable<number> {
+    constructor(private max: number) {}
+    [Symbol.iterator](): Iterator<number> {
+        let i = 0;
+        const max = this.max;
+        return { next: () => i < max ? { value: i++, done: false } : { value: undefined, done: true } };
+    }
+}
+```
+
+### Promise + async/await (immediate subset)
+
+```ts
+async function fetchValue(): Promise<number> { return 42; }
+async function main(): Promise<void> {
+    try {
+        const v = await fetchValue();         // immediate await over a fulfilled value
+        console.log(v);
+    } catch (e) { console.log("err", e); }
+}
+main();
+
+Promise.all([Promise.resolve(1), Promise.resolve(2)])
+    .then((xs) => console.log(xs.reduce((a, b) => a + b, 0)));   // 3
+```
+
+### Exceptions + Error hierarchy
+
+```ts
+function parsePort(s: string): number {
+    const n = Number(s);
+    if (Number.isNaN(n)) throw new TypeError("not a number: " + s);
+    if (n < 0 || n > 65535) throw new RangeError("out of range: " + n);
+    return n;
+}
+try { parsePort("nope"); }
+catch (e) { if (e instanceof TypeError) console.log("type:", e.message); }
+```
+
+### JSON (type-driven stringify + dynamic parse)
+
+```ts
+interface Person { name: string; age: number; active: boolean; }
+const alice: Person = { name: "Alice", age: 30, active: true };
+console.log(JSON.stringify(alice));
+// => {"name":"Alice","age":30,"active":true}
+
+const parsed: any = JSON.parse('{"x": 1, "y": [2, 3]}');
+console.log(parsed.y[1]);                       // 3
 ```
 
 ### Spread + Object helpers + nullish
@@ -164,79 +254,45 @@ const u = find(2);
 console.log(u?.name ?? "not found");             // optional chaining + nullish
 ```
 
-### Map + Set
-
-```ts
-const ages = new Map<string, number>();
-ages.set("alice", 30).set("bob", 25);
-ages.get("alice");          // 30
-ages.has("carol");          // false
-ages.keys().forEach((n) => console.log(n));
-
-const seen = new Set<number>();
-seen.add(1); seen.add(2); seen.add(2);
-console.log(seen.size);     // 2
-```
-
-### Exceptions
-
-```ts
-function mayThrow(n: number): number {
-    if (n < 0) throw "negative: " + n;
-    return n * 2;
-}
-try {
-    console.log(mayThrow(-3));
-} catch (e) {
-    console.log("caught:", e);
-}
-```
-
-### JSON (type-driven stringify)
-
-```ts
-interface Person { name: string; age: number; active: boolean; }
-const alice: Person = { name: "Alice", age: 30, active: true };
-console.log(JSON.stringify(alice));
-// => {"name":"Alice","age":30,"active":true}
-```
-
-### fs + path + os + Date
+### fs + fs.promises (immediate) + path + os + Date
 
 ```ts
 fs.writeFileSync("/tmp/hello.txt", "hi");
 const s = fs.readFileSync("/tmp/hello.txt");
-console.log(path.join("/tmp", "sub", "x.txt"));
-console.log(os.platform(), os.arch(), os.cpus().length);
+const st = fs.statSync("/tmp/hello.txt");
+console.log(st.size, st.isFile(), st.mtimeMs);
+
+await fs.promises.writeFile("/tmp/p.txt", "hello", { flag: "wx" });
+const entries = await fs.promises.readdir("/tmp", { withFileTypes: true });
+
+console.log(path.join("/tmp", "sub", "x.txt"), path.parse("/a/b/c.txt"));
+console.log(os.platform(), os.arch(), os.cpus().length, os.devNull);
 const t = Date.now();
 ```
 
-### switch / case
+### child_process (sync + immediate-callback subset)
 
 ```ts
-function describe(n: number): string {
-    switch (n) {
-        case 0:        return "zero";
-        case 1: case 2: case 3:
-                       return "small";
-        case 10:       return "ten";
-        default:       return "other";
-    }
-}
+import { execSync, spawnSync } from "node:child_process";
+
+const out = execSync("echo hi", { encoding: "utf8" });          // "hi\n"
+const r = spawnSync("ls", ["-la"], { encoding: "utf8", cwd: "/tmp" });
+console.log(r.status, r.stdout.length);
 ```
 
-### Multi-file imports
+### Multi-file imports + node_modules subset
 
 ```ts
 // src/math.ts
 export function add(a: number, b: number): number { return a + b; }
 
 // src/main.ts
-import { add } from "./math";
+import { add } from "./math";                 // local module
+import lodash from "lodash";                  // resolvable TS/JS package source
 console.log(add(2, 3));
 ```
 
-The entry file plus every reachable `.ts` is compiled together. Each module's top-level code becomes `mod_init_<id>()` — called by `main()` in topological order.
+The entry file plus every reachable `.ts` / supported `.js` (and resolved CommonJS package source) is compiled together. Each module's top-level code becomes `mod_init_<id>()` — called by `main()` in topological order.
 
 ## Architecture
 
@@ -254,19 +310,25 @@ The entry file plus every reachable `.ts` is compiled together. Each module's to
            • consults TypeChecker for each expression type
            • picks a specialized C type (double / tsc_str_t* / tsc_array_t* /
              tsc_map_t* / Class_t*) — no boxing overhead in the typed path
+           • NaN-boxes `any` / `unknown` / unions into `tsc_value_t`
            • wraps each module's top-level code in mod_init_<id>()
    │
    ▼
  runtime/ — hand-written C11 linked into every binary:
-           • UTF-8 strings, dynamic arrays, Map/Set, JS-compatible number formatting
-           • console / process / fs / path / Math / os / Date / Number
+           • UTF-8 strings, dynamic arrays, Map/Set/WeakMap/WeakSet/WeakRef,
+             FinalizationRegistry, PCRE2 regex, GMP BigInt, ICU normalization
+           • console / process / fs / fs.promises immediate / path / Math /
+             os / Date / Number / Buffer / URL / dns / net / child_process
+           • EventEmitter, Error hierarchy, Promise (immediate), generators (eager)
            • exceptions (setjmp / longjmp + single-string error state)
            • Boehm GC behind a wrapper (malloc fallback for --no-gc)
    │
    ▼
- gcc -std=c11 -O2 main.c runtime/tsc_runtime.c -lgc -lm -o <output>
+ gcc -std=c11 -O2 main.c runtime/tsc_runtime.c -lgc -lm -lpcre2-8 -lssl -lcrypto -licuuc -licui18n -lgmp -o <output>
  # --release switches the gcc optimization/link mode to -Os -s.
 ```
+
+For pipeline diagrams (Mermaid), see [`docs/architecture.md`](docs/architecture.md).
 
 ### Memory model
 
@@ -284,7 +346,7 @@ Every `.ts` file reachable from the entry is compiled into the same `main.c`. Ea
 
 Three TS/JS features can't be AOT-compiled regardless of engineering effort:
 
-1. **Native C++ addons** under `node_modules/*/build/Release/*.node` — compiled against Node's V8 ABI. Literal `.node` imports/requires and imported package roots containing `build/Release/*.node` are rejected before TypeScript diagnostics; broader package export/condition handling remains Phase 14.
+1. **Native C++ addons** under `node_modules/*/build/Release/*.node` — compiled against Node's V8 ABI. Literal `.node` imports/requires and imported package roots containing `build/Release/*.node` are rejected before TypeScript diagnostics, including transitively from emitted package sources.
 2. **`eval`** and the `Function` constructor — require a compiler at runtime. Calls are rejected before TypeScript diagnostics.
 3. **Dynamic `require(variable)`** where the module path isn't a string literal — can't be walked statically. Non-literal calls are rejected before emission.
 
@@ -294,245 +356,7 @@ Three TS/JS features can't be AOT-compiled regardless of engineering effort:
 TSC2C_NO_GC=1 bun tests/e2e/run.ts
 ```
 
-```
-e2e: advanced      … OK      (spread + Object.keys + padStart/pad/replace + Array.from)
-e2e: arith         … OK
-e2e: array_concat_values … OK (Array.concat with array and single-value args)
-e2e: array_copy_within … OK (Array.copyWithin)
-e2e: array_entries … OK (Array.entries string-index entry arrays)
-e2e: array_fill    … OK      (Array.fill)
-e2e: array_flat    … OK      (flat + flatMap array/scalar callbacks)
-e2e: array_from_string … OK (Array.from over strings)
-e2e: array_hof     … OK      (map/filter/reduce/find/some/every + receiver callback args)
-e2e: array_includes_same_value_zero … OK (Array.includes SameValueZero)
-e2e: array_is_array_narrowing … OK (Array.isArray narrows unknown dynamic values)
-e2e: array_keys_values … OK (Array.keys/values copies)
-e2e: array_at      … OK      (Array.at positive/negative indexes)
-e2e: array_find_last … OK (Array.findLast/findLastIndex)
-e2e: array_last_index_of … OK (Array.lastIndexOf)
-e2e: array_of … OK (Array.of typed construction)
-e2e: array_own_properties … OK (typed array own-property checks)
-e2e: array_property_descriptors … OK (typed array property descriptors)
-e2e: array_reduce_no_initial … OK (Array.reduce/reduceRight without initial value)
-e2e: array_reduce_right … OK (Array.reduceRight with initial value)
-e2e: array_search_from_index … OK (Array indexOf/includes/lastIndexOf fromIndex)
-e2e: array_sort_default … OK (JS-style default Array.sort)
-e2e: array_static_dynamic … OK (dynamic Array.isArray/from)
-e2e: array_to_reversed … OK (Array.toReversed)
-e2e: array_to_sorted … OK (Array.toSorted default copy)
-e2e: array_to_spliced … OK (Array.toSpliced non-mutating splice)
-e2e: array_to_string … OK (Array.toString/toLocaleString)
-e2e: array_value_of … OK (Array.valueOf identity)
-e2e: array_with    … OK      (Array.with non-mutating replacement)
-e2e: arrays        … OK
-e2e: bigint        … OK      (GMP-backed BigInt arithmetic)
-e2e: buffer        … OK      (binary-safe Buffer subset)
-e2e: buffer_object_methods … OK (Buffer toLocaleString/valueOf)
-e2e: captures      … OK      (module-level let/const used inside functions + arrows)
-e2e: call_arg_order … OK     (left-to-right call argument evaluation)
-e2e: class_modifiers … OK    (abstract/access/readonly modifiers)
-e2e: classes       … OK
-e2e: computed_props … OK    (computed object-literal keys)
-e2e: console_format … OK     (console % specifiers)
-e2e: crypto_sha256 … OK      (sha256 hex hashing)
-e2e: custom_predicates … OK  (user-defined type predicate narrowing)
-e2e: custom_iterator_object … OK (class iterator object with next())
-e2e: discriminated_unions … OK (basic discriminated-union narrowing)
-e2e: dynamic_coercions … OK  (any/unknown unbox into typed destinations)
-e2e: dynamic_index_assignment … OK (dynamic array index writes)
-e2e: dynamic_last_index_of … OK (dynamic string/array lastIndexOf)
-e2e: dynamic_array_copy_within … OK (dynamic Array.copyWithin)
-e2e: dynamic_array_define_property … OK (dynamic array defineProperty)
-e2e: dynamic_array_entries … OK (dynamic Array.entries)
-e2e: dynamic_array_extensibility … OK (dynamic array preventExtensions/seal/freeze descriptors and mutators)
-e2e: dynamic_array_fill … OK (dynamic Array.fill)
-e2e: dynamic_array_find_last … OK (dynamic findLast/findLastIndex)
-e2e: dynamic_array_flat … OK (dynamic Array.flat depth)
-e2e: dynamic_array_flatmap … OK (dynamic flatMap inline arrows)
-e2e: dynamic_array_hof … OK  (dynamic map/filter inline arrows + receiver args)
-e2e: dynamic_array_hof_more … OK (dynamic forEach/some/every/find/findIndex)
-e2e: dynamic_array_hof_refs … OK (dynamic array HOF named/closure callback refs + receiver args)
-e2e: dynamic_array_keys_values … OK (dynamic Array.keys/values copies)
-e2e: dynamic_array_methods … OK (dynamic shift/unshift/push/concat)
-e2e: dynamic_array_object_enumeration … OK (dynamic array Object/Reflect enumeration)
-e2e: dynamic_array_of … OK (Array.of<any> dynamic values)
-e2e: dynamic_array_property_writes … OK (dynamic array string-key/length writes)
-e2e: dynamic_array_reduce … OK (dynamic reduce with initial value)
-e2e: dynamic_array_reduce_no_initial … OK (dynamic reduce/reduceRight without initial value)
-e2e: dynamic_array_reduce_right … OK (dynamic reduceRight with initial value)
-e2e: dynamic_array_slice_reverse … OK (dynamic Array.slice/reverse)
-e2e: dynamic_array_sort … OK (dynamic default sort)
-e2e: dynamic_array_sort_comparator … OK (dynamic Array.sort comparator)
-e2e: dynamic_array_splice … OK (dynamic splice mutation/removal)
-e2e: dynamic_array_at … OK (dynamic Array.at positive/negative indexes)
-e2e: dynamic_array_to_reversed … OK (dynamic toReversed)
-e2e: dynamic_array_to_sorted … OK (dynamic toSorted default copy)
-e2e: dynamic_array_to_sorted_comparator … OK (dynamic toSorted comparator copy)
-e2e: dynamic_array_to_spliced … OK (dynamic toSpliced non-mutating splice)
-e2e: dynamic_array_to_string … OK (dynamic Array.toString/toLocaleString join)
-e2e: dynamic_array_value_of … OK (dynamic Array.valueOf identity)
-e2e: dynamic_array_with … OK (dynamic Array.with non-mutating replacement)
-e2e: dynamic_methods … OK    (dynamic string/array method dispatch)
-e2e: dynamic_string_match … OK (dynamic string match/matchAll)
-e2e: dynamic_string_match_string … OK (dynamic string match/matchAll with string patterns)
-e2e: dynamic_number_to_string … OK (dynamic Number.toString radix conversion)
-e2e: dynamic_ops  … OK       (dynamic arithmetic/equality/relational/logical ops)
-e2e: dynamic_property_assignment … OK (dynamic property writes and compound writes)
-e2e: dynamic_property_ops … OK (dynamic in/delete property operations)
-e2e: dynamic_search_positions … OK (dynamic string/array search positions)
-e2e: dynamic_string_at … OK (dynamic String.at positive/negative indexes)
-e2e: dynamic_string_code_point_at … OK (dynamic string codePointAt)
-e2e: dynamic_string_concat … OK (dynamic string concat)
-e2e: dynamic_string_locale_compare … OK (dynamic string localeCompare)
-e2e: dynamic_string_normalize … OK (dynamic string normalize)
-e2e: dynamic_string_object_enumeration … OK (dynamic string Object/Reflect enumeration)
-e2e: dynamic_string_pad_repeat … OK (dynamic repeat/padStart/padEnd)
-e2e: dynamic_string_replace … OK (dynamic string replace/replaceAll)
-e2e: dynamic_string_replace_regex … OK (dynamic string RegExp replace/replaceAll)
-e2e: dynamic_string_replace_regex_groups … OK (dynamic string RegExp replacement tokens)
-e2e: dynamic_string_replace_string_tokens … OK (dynamic string replacement tokens)
-e2e: dynamic_string_search … OK (dynamic String.search RegExp/string patterns)
-e2e: dynamic_string_split … OK (dynamic string split)
-e2e: dynamic_string_split_limit … OK (dynamic string split limit)
-e2e: dynamic_string_split_regex … OK (dynamic string RegExp split)
-e2e: dynamic_string_substr … OK (dynamic string substr)
-e2e: dynamic_string_substring … OK (dynamic string substring)
-e2e: dynamic_string_trim_edges … OK (dynamic trimStart/trimEnd)
-e2e: dynamic_require … OK    (expected AOT-limit diagnostic)
-e2e: enums         … OK      (numeric enum constants)
-e2e: exceptions    … OK
-e2e: fizzbuzz      … OK
-e2e: fn_refs       … OK      (named function references as HOF callbacks)
-e2e: fs_roundtrip  … OK
-e2e: generic_classes … OK (erased generic class fields/methods)
-e2e: generic_function_values … OK (generic functions as concrete function values)
-e2e: global_number_predicates … OK (global isNaN/isFinite coercion)
-e2e: greet         … OK
-e2e: hello         … OK
-e2e: in_operator_narrowing … OK (in-operator narrowing and typed field checks)
-e2e: inheritance   … OK
-e2e: instanceof    … OK      (class ancestry checks)
-e2e: interfaces    … OK
-e2e: json          … OK
-e2e: map_set       … OK
-e2e: map_set_constructors … OK (Map/Set typed constructor initialization)
-e2e: map_set_for_each … OK (Map/Set forEach inline callbacks)
-e2e: map_set_for_each_refs … OK (Map/Set forEach named callback refs)
-e2e: map_set_for_of … OK    (direct Map/Set for-of)
-e2e: map_set_same_value_zero … OK (Map/Set SameValueZero numeric keys)
-e2e: math          … OK
-e2e: math_constants_more … OK (Math.SQRT1_2 plus trunc/sign coverage)
-e2e: math_int32_float … OK (Math.imul/clz32/fround)
-e2e: math_more … OK (additional libm-backed Math methods, including variadic hypot and inverse trig)
-e2e: modules       … OK      (multi-file imports)
-e2e: native_addon  … OK      (expected AOT-limit diagnostic)
-e2e: native_addon_package … OK (expected native package diagnostic)
-e2e: namespaces    … OK      (namespace-scoped values and functions)
-e2e: nullish       … OK      (?. and ??)
-e2e: number_constants … OK (Number static constants)
-e2e: number_constructor … OK (callable Number coercion)
-e2e: number_static_more … OK (Number.is* predicates and parseInt/parseFloat radix/coercion behavior)
-e2e: number_to_exponential … OK (Number.toExponential typed and dynamic formatting)
-e2e: number_to_fixed … OK (Number.toFixed typed and dynamic formatting)
-e2e: number_to_precision … OK (Number.toPrecision typed and dynamic formatting)
-e2e: object_accessor_arrows … OK (dynamic lifted-arrow accessor descriptors)
-e2e: object_accessor_closures … OK (dynamic closure-valued accessor descriptors)
-e2e: object_accessors … OK   (dynamic named-function/lifted-arrow accessor descriptors)
-e2e: object_array_enumeration … OK (typed array Object enumeration)
-e2e: object_create_descriptors … OK (dynamic Object.create descriptor maps)
-e2e: object_define_properties … OK (dynamic descriptor maps)
-e2e: object_define_property … OK (dynamic data descriptors)
-e2e: object_descriptor_defaults … OK (descriptor defaults and absent accessor hooks)
-e2e: object_descriptor_redefine … OK (non-configurable descriptor redefinition)
-e2e: object_descriptors … OK (writable/enumerable/configurable data descriptors)
-e2e: object_entries … OK     (typed Object.entries/fromEntries)
-e2e: dynamic_object_entries … OK (dynamic Object.entries)
-e2e: dynamic_object_from_entries … OK (dynamic Object.fromEntries)
-e2e: object_extensibility … OK (Object/Reflect preventExtensions/isExtensible)
-e2e: object_get_own_property_descriptors … OK (dynamic Object.getOwnPropertyDescriptors)
-e2e: object_has_own_property … OK (dynamic Object.prototype.hasOwnProperty)
-e2e: object_is … OK (Object.is SameValue semantics)
-e2e: object_is_prototype_of … OK (dynamic Object.prototype.isPrototypeOf)
-e2e: object_property_is_enumerable … OK (dynamic Object.prototype.propertyIsEnumerable)
-e2e: object_prototypes … OK (dynamic Object.create/getPrototypeOf/setPrototypeOf)
-e2e: object_seal_freeze … OK (dynamic Object.seal/freeze state)
-e2e: object_static_methods … OK (dynamic Object.assign/hasOwn/getOwnPropertyNames)
-e2e: object_to_locale_string … OK (dynamic Object.prototype.toLocaleString)
-e2e: object_to_string … OK (dynamic Object.prototype.toString)
-e2e: object_value_of … OK (dynamic Object.prototype.valueOf)
-e2e: primitive_object_methods … OK (Number/Boolean toString/toLocaleString/valueOf)
-e2e: reflect_apply … OK (Reflect.apply over known functions + array args + thisArg)
-e2e: reflect_construct … OK (Reflect.construct over known classes + array args)
-e2e: reflect_dynamic … OK    (Reflect.get/set on dynamic objects)
-e2e: reflect_get_own_property_descriptor … OK (Reflect descriptor lookup)
-e2e: reflect_receiver … OK (Reflect.get/set receiver arguments + accessor this/function identity/apply)
-e2e: regex         … OK      (PCRE2 regex)
-e2e: regex_captures … OK     (non-global match groups)
-e2e: regex_pcre2  … OK      (lookaround, named syntax, Unicode properties)
-e2e: regexp_exec … OK (RegExp.exec capture arrays)
-e2e: regexp_extra_flags … OK (RegExp hasIndices/sticky flags)
-e2e: regexp_object_methods … OK (RegExp properties/toString/valueOf)
-e2e: collection_object_methods … OK (collection toString/toLocaleString/valueOf)
-e2e: release_build … OK     (--release uses size-optimized linking)
-e2e: rest_spread   … OK      (rest params + spread calls)
-e2e: runtime_eval  … OK      (expected AOT-limit diagnostic)
-e2e: runtime_function_constructor … OK (expected AOT-limit diagnostic)
-e2e: set_keys      … OK      (Set.keys alias for values)
-e2e: stdlib_os     … OK
-e2e: string_at     … OK      (String.at positive/negative indexes)
-e2e: string_boolean_constructors … OK (callable String/Boolean coercion)
-e2e: string_char_code_at … OK (String.charCodeAt UTF-16 code units)
-e2e: string_codepoints … OK  (fromCharCode + codePointAt)
-e2e: string_concat … OK      (String.concat)
-e2e: string_for_of … OK      (Unicode string iteration)
-e2e: string_from_code_point … OK (String.fromCodePoint)
-e2e: string_last_index_of … OK (String.lastIndexOf)
-e2e: string_locale_compare … OK (String.localeCompare)
-e2e: string_match_all … OK   (matchAll capture groups)
-e2e: string_match_string … OK (String.match/matchAll with string patterns)
-e2e: string_normalize … OK   (ICU Unicode normalization)
-e2e: string_object_enumeration … OK (typed string Object/Reflect enumeration)
-e2e: string_object_methods … OK (String toString/toLocaleString/valueOf)
-e2e: string_replace_regex_groups … OK (String.replace RegExp replacement tokens)
-e2e: string_replace_string_tokens … OK (String.replace string replacement tokens)
-e2e: string_search_positions … OK (String search position/endPosition args)
-e2e: string_search_regex … OK (String.search with RegExp)
-e2e: string_search_string … OK (String.search with string patterns)
-e2e: string_split_limit … OK (String.split limit)
-e2e: string_substr … OK      (String.substr start/length semantics)
-e2e: string_substring … OK   (substring clamp/swap semantics)
-e2e: string_trim_aliases … OK (trimLeft/trimRight aliases)
-e2e: string_trim_edges … OK  (trimStart/trimEnd)
-e2e: string_well_formed … OK (String isWellFormed/toWellFormed)
-e2e: strings       … OK
-e2e: switch        … OK
-e2e: switch_exhaustive … OK (finite-domain exhaustiveness)
-e2e: switch_exhaustive_missing … OK (expected diagnostic)
-e2e: symbol_bigint_object_methods … OK (Symbol/BigInt toLocaleString/valueOf)
-e2e: symbols       … OK      (Symbol values and registry)
-e2e: tagged_templates … OK (tagged template calls)
-e2e: tail_calls    … OK      (self-tail recursion lowered to goto)
-e2e: typed_object_has_own … OK (typed Object.hasOwn/hasOwnProperty/propertyIsEnumerable)
-e2e: typed_object_methods … OK (typed Object toString/toLocaleString/valueOf)
-e2e: typed_object_property_names … OK (typed Object.getOwnPropertyNames)
-e2e: typed_property_descriptor … OK (typed Object/Reflect property descriptors)
-e2e: typed_property_descriptors … OK (typed Object.getOwnPropertyDescriptors)
-e2e: typed_reflect_get … OK (typed Reflect.get field reads)
-e2e: typed_reflect_has … OK (typed Reflect.has field checks)
-e2e: typed_reflect_own_keys … OK (typed Reflect.ownKeys)
-e2e: typed_reflect_set … OK (typed Reflect.set field writes)
-e2e: typeof        … OK      (typed typeof results)
-e2e: typeof_boolean_union … OK (typeof narrowing over dynamic string/number/boolean unions)
-e2e: typeof_guards … OK      (typeof checks over nullable strings)
-e2e: url_object_methods … OK (URL toString/toJSON/valueOf)
-e2e: url_parse     … OK      (URL parsing fields)
-e2e: weak_collections … OK  (typed WeakMap/WeakSet)
-e2e: weak_ref      … OK      (typed WeakRef deref)
-e2e: wordcount     … OK      (real-world demo: fs+regex+Map+sort+captures)
-e2e: line_directives … OK   (generated C carries TS #line markers)
-
-251 passed, 0 failed
-```
+545 e2e cases under [`tests/e2e/cases/`](tests/e2e/cases/), each a directory containing `in.ts` (and any support files) plus `expected.stdout` / `expected.exitcode`. The harness compiles each case, executes the binary, and diffs the output. See [`docs/testing.md`](docs/testing.md) for how to add a case and [`docs/done.md`](docs/done.md) for what each one exercises.
 
 Drop `TSC2C_NO_GC=1` after `sudo apt-get install libgc-dev`; OpenSSL, ICU, GMP, and PCRE2 are still required for crypto, Unicode normalization, BigInt, and regex.
 
@@ -540,27 +364,35 @@ Drop `TSC2C_NO_GC=1` after `sudo apt-get install libgc-dev`; OpenSSL, ICU, GMP, 
 
 | Path | What |
 |------|------|
+| `bin/tsc2c` | POSIX shell entrypoint — picks `bun` or `node dist/cli.js` |
 | `src/cli.ts` | Command-line entry (commander) |
 | `src/compile.ts` | Pipeline: program → graph → emit → gcc |
 | `src/program.ts` | `ts.createProgram` + `TypeChecker` wrapper |
-| `src/resolve.ts` | Module graph walker, topological sort |
-| `src/emit/index.ts` | AST → C emitter (statements, expressions, classes, modules, HOFs) |
+| `src/resolve.ts` | Module graph walker, topological sort, CommonJS edge collection |
+| `src/emit/index.ts` | AST → C emitter (~19,000 LOC; statements, expressions, classes, modules, HOFs, dynamic value bridging) |
 | `src/emit/types.ts` | TS type → C type mapping |
 | `src/emit/cbuf.ts` | Indented C source writer with escape helpers |
 | `src/emit/mangle.ts` | Identifier mangling (avoids C keywords) |
 | `src/link/cc.ts` | Spawns gcc with our flags |
 | `src/diagnostics.ts` | User-facing error reporting |
-| `runtime/tsc_runtime.{c,h}` | Full runtime: strings, arrays, maps/sets, console, fs, path, Math, os, Date, Number, JSON, exceptions |
-| `stdlib/lib.core.d.ts` | Type shim (replaces `@types/node`) |
-| `tests/e2e/cases/` | One dir per test: `in.ts` + optional support files + `expected.stdout` or `expected.exitcode` |
+| `runtime/tsc_runtime.{c,h}` | Full runtime (~10,150 LOC): strings, arrays, maps/sets/weak collections, regex, BigInt, exceptions, JSON, console, process, fs + fs.promises, path, Math, os, Date, Number, Buffer, URL, EventEmitter, Error hierarchy, Promise (immediate), generators (eager), dns, net, child_process |
+| `stdlib/lib.core.d.ts` | Type shim (~1,330 LOC; replaces `@types/node`) |
+| `examples/` | 7 runnable demo programs |
+| `tests/e2e/cases/` | 545 test dirs — `in.ts` + optional support files + `expected.stdout` or `expected.exitcode` |
 | `tests/e2e/run.ts` | E2E harness: compile, execute, diff |
+| `manual-tests/` | Manual smoke + benchmark sources |
+| `docs/` | Browsable documentation set |
+| `.claude/skills/` | Repo-local agent skills (procedural feature-add guide) |
 
 ## What's next
 
-The plan file at `~/.claude/plans/make-a-typescript-to-floating-comet.md` sequences the remaining phases. Highest leverage:
+The plan file at `~/.claude/plans/make-a-typescript-to-floating-comet.md` sequences the remaining phases. With Phase 6 (immediate subset), Phase 7 (eager generators), Phases 11–13 (immediate stdlib subsets), and Phase 14 (TypeScript + basic JS + CommonJS package sources) landed, the highest-leverage remaining work is:
 
-1. **Phase 3 (NaN-boxing)** — unlocks untyped code paths, `any`/`unknown`, `JSON.parse` into objects, and the ability to compile most pure-JS npm packages.
-2. **Phase 6 remainder (async/await + libuv)** — needed for real Node programs that do I/O concurrently; the current Promise support is settled/immediate only.
-3. **Phase 14 (npm integration)** — walks `node_modules`, respects `package.json` `exports`, detects native addons. Depends on 3 + 6.
+1. **Phase 3 polish** — hidden classes / shape trees + inline caches. Lifts perf for arbitrary-shape objects toward `v8`-class speed.
+2. **Phase 6 suspend/resume** — real async state-machine lowering on top of the existing immediate subset, microtask scheduling, libuv timers and async I/O.
+3. **Phase 7 lazy generators** — suspend/resume `yield`, bidirectional `.next(value)`, `async function*`.
+4. **Phase 9 `Proxy`** — all 13 traps over `tsc_value_t`. Unlocks libraries that rely on metaprogramming.
+5. **Phase 14 polish** — true lazy `require(...)` timing, broader CommonJS wrapper semantics, dual CJS/ESM interop, broader untyped JS package patterns.
+6. **Phase 11–13 polish** — libuv-backed async fs scheduling, full `stream`, `http`/`https` (OpenSSL), `net` sockets, async `child_process` lifecycle, `worker_threads`.
 
-Phases 3 and 6 are each multi-week undertakings. Phase 14 is about a month on top of those.
+Each phase remainder is roughly weeks of work. [`docs/todo.md`](docs/todo.md) breaks every item down with effort estimates and dependency ordering.
