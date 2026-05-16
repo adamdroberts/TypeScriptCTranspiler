@@ -72,6 +72,13 @@ interface AsyncFunctionContext {
 type GenericCallableDeclaration = ts.FunctionDeclaration | ts.MethodDeclaration;
 type ClosureLikeDeclaration = ts.ArrowFunction | ts.FunctionExpression | ts.MethodDeclaration;
 type CommonJsExportAccess = ts.PropertyAccessExpression | ts.ElementAccessExpression;
+type CommonJsObjectAssignExportEntry = ts.PropertyAssignment | ts.ShorthandPropertyAssignment | ts.MethodDeclaration;
+
+interface CommonJsObjectAssignExport {
+    call: ts.CallExpression;
+    name: string;
+    entry: ts.Node;
+}
 
 interface CaptureCell {
     type: CType;
@@ -406,6 +413,31 @@ class Emitter {
                     continue;
                 }
                 if (this.commonJsEsModuleMarker(inner)) continue;
+                const commonJsObjectAssignExports = this.commonJsObjectAssignExports(inner);
+                if (commonJsObjectAssignExports) {
+                    for (const commonJsAssignExport of commonJsObjectAssignExports) {
+                        this.emitCommonJsObjectAssignExport(initBuf, commonJsAssignExport);
+                    }
+                    continue;
+                }
+                const commonJsDefinePropertiesExports = this.commonJsDefinePropertiesExports(inner);
+                if (commonJsDefinePropertiesExports) {
+                    for (const commonJsDefineExport of commonJsDefinePropertiesExports) {
+                        this.emitCommonJsDefinePropertiesExport(initBuf, commonJsDefineExport);
+                    }
+                    continue;
+                }
+                const commonJsDefineExport = this.commonJsDefinePropertyExport(inner);
+                if (commonJsDefineExport) {
+                    this.emitCommonJsDefinePropertyExport(initBuf, commonJsDefineExport);
+                    continue;
+                }
+                if (this.commonJsExportPlaceholderAssignment(inner)) continue;
+                const commonJsExportChain = this.commonJsExportAssignmentChain(inner);
+                if (commonJsExportChain && commonJsExportChain.lefts.length > 1) {
+                    this.emitCommonJsExportAssignmentChain(initBuf, commonJsExportChain);
+                    continue;
+                }
                 const commonJsExport = this.commonJsExportAssignment(inner);
                 if (commonJsExport) {
                     this.emitCommonJsExportAssignment(initBuf, commonJsExport);
@@ -560,14 +592,49 @@ class Emitter {
         return sf.statements.find(ts.isExportAssignment) ?? null;
     }
 
-    private commonJsDefaultImportDeclaration(id: ts.Identifier): ts.BinaryExpression | null {
+    private commonJsDefaultImportDeclaration(id: ts.Identifier): ts.Node | null {
         const target = this.importAliasTargetDeclaration(id);
-        return target &&
+        if (
+            target &&
             ts.isBinaryExpression(target) &&
             ts.isPropertyAccessExpression(target.left) &&
             this.isModuleExportsAccess(target.left)
-                ? target
-                : null;
+        ) {
+            return target;
+        }
+        if (target && ts.isCallExpression(target)) {
+            const defineExport = this.commonJsDefinePropertyExportCall(target);
+            if (defineExport?.name === "default") return target;
+        }
+
+        const raw = this.checker.getSymbolAtLocation(id);
+        const importClause = (raw?.declarations ?? []).find((decl): decl is ts.ImportClause =>
+            ts.isImportClause(decl) && decl.name?.text === id.text,
+        );
+        if (!importClause || !ts.isImportDeclaration(importClause.parent)) return null;
+        const specifier = importClause.parent.moduleSpecifier;
+        if (!ts.isStringLiteralLike(specifier)) return null;
+        const info = this.resolvedModuleInfoForSpecifier(specifier.text, id.getSourceFile().fileName);
+        const sf = info?.sf;
+        if (!sf || !this.isJavaScriptSourceFile(sf)) return null;
+        return this.commonJsExportedMemberDeclaration(sf, "default");
+    }
+
+    private commonJsNamedImportDeclaration(id: ts.Identifier): ts.Node | null {
+        const raw = this.checker.getSymbolAtLocation(id);
+        const importSpec = (raw?.declarations ?? []).find((decl): decl is ts.ImportSpecifier =>
+            ts.isImportSpecifier(decl) && decl.name.text === id.text,
+        );
+        if (!importSpec) return null;
+        const importDecl = importSpec.parent.parent.parent;
+        if (!ts.isImportDeclaration(importDecl)) return null;
+        const specifier = importDecl.moduleSpecifier;
+        if (!ts.isStringLiteralLike(specifier)) return null;
+        const info = this.resolvedModuleInfoForSpecifier(specifier.text, id.getSourceFile().fileName);
+        const sf = info?.sf;
+        if (!sf || !this.isJavaScriptSourceFile(sf)) return null;
+        const exportName = importSpec.propertyName?.text ?? importSpec.name.text;
+        return this.commonJsExportedMemberDeclaration(sf, exportName);
     }
 
     private declarationName(decl: ts.Node): ts.Identifier | null {
@@ -610,6 +677,16 @@ class Emitter {
         if (ts.isMethodDeclaration(decl)) {
             return this.commonJsObjectPropertyExportCName(decl);
         }
+        if (ts.isCallExpression(decl)) {
+            const defineExport = this.commonJsDefinePropertyExportCall(decl);
+            if (defineExport) return this.commonJsDefinePropertyExportCName(decl, defineExport.name);
+        }
+        if (ts.isPropertyAssignment(decl)) {
+            const definePropertiesExport = this.commonJsDefinePropertiesExportEntry(decl);
+            if (definePropertiesExport) {
+                return this.commonJsDefinePropertyExportCName(definePropertiesExport.call, definePropertiesExport.name);
+            }
+        }
         if (ts.isShorthandPropertyAssignment(decl)) {
             const valueDecl = this.commonJsObjectExportValueDeclaration(decl);
             return valueDecl ? this.declarationCName(valueDecl) : this.declaredName(decl.name);
@@ -648,22 +725,55 @@ class Emitter {
     private commonJsExportAssignment(
         stmt: ts.Statement,
     ): { left: CommonJsExportAccess; right: ts.Expression } | null {
+        const chain = this.commonJsExportAssignmentChain(stmt);
+        if (!chain || chain.lefts.length !== 1) return null;
+        return { left: chain.lefts[0]!, right: chain.right };
+    }
+
+    private commonJsExportAssignmentChain(
+        stmt: ts.Statement,
+    ): { lefts: CommonJsExportAccess[]; right: ts.Expression } | null {
         if (!ts.isExpressionStatement(stmt)) return null;
-        const expr = stmt.expression;
-        if (
-            !ts.isBinaryExpression(expr) ||
-            expr.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
-            !this.isCommonJsExportAccess(expr.left)
+        let expr: ts.Expression = stmt.expression;
+        const lefts: CommonJsExportAccess[] = [];
+        while (
+            ts.isBinaryExpression(expr) &&
+            expr.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            this.isCommonJsExportAccess(expr.left)
         ) {
-            return null;
+            if (!this.commonJsExportName(expr.left)) return null;
+            lefts.push(expr.left);
+            expr = expr.right;
         }
-        return this.commonJsExportName(expr.left)
-            ? { left: expr.left, right: expr.right }
-            : null;
+        return lefts.length > 0 ? { lefts, right: expr } : null;
+    }
+
+    private commonJsExportPlaceholderAssignment(stmt: ts.Statement): boolean {
+        const chain = this.commonJsExportAssignmentChain(stmt);
+        return !!chain && this.isVoidPlaceholderExpression(chain.right);
+    }
+
+    private isVoidPlaceholderExpression(expr: ts.Expression): boolean {
+        let value = expr;
+        while (ts.isParenthesizedExpression(value)) value = value.expression;
+        return ts.isVoidExpression(value);
+    }
+
+    private isBooleanTrueExpression(expr: ts.Expression): boolean {
+        let value = expr;
+        while (ts.isParenthesizedExpression(value)) value = value.expression;
+        return value.kind === ts.SyntaxKind.TrueKeyword;
     }
 
     private commonJsEsModuleMarker(stmt: ts.Statement): boolean {
         if (!this.isJavaScriptSourceFile(stmt.getSourceFile())) return false;
+        if (ts.isExpressionStatement(stmt) && ts.isBinaryExpression(stmt.expression)) {
+            const expr = stmt.expression;
+            return expr.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                this.isCommonJsExportAccess(expr.left) &&
+                this.commonJsExportName(expr.left) === "__esModule" &&
+                this.isBooleanTrueExpression(expr.right);
+        }
         if (!ts.isExpressionStatement(stmt) || !ts.isCallExpression(stmt.expression)) return false;
         const call = stmt.expression;
         if (
@@ -683,33 +793,277 @@ class Emitter {
         );
     }
 
-    private commonJsModuleExportsValueAssignment(
+    private commonJsDefinePropertyExport(
         stmt: ts.Statement,
-    ): { left: ts.PropertyAccessExpression; right: ts.Expression } | null {
-        if (!ts.isExpressionStatement(stmt)) return null;
-        const expr = stmt.expression;
+    ): { call: ts.CallExpression; name: string; right: ts.Expression } | null {
+        if (!this.isJavaScriptSourceFile(stmt.getSourceFile())) return null;
+        if (!ts.isExpressionStatement(stmt) || !ts.isCallExpression(stmt.expression)) return null;
+        return this.commonJsDefinePropertyExportCall(stmt.expression);
+    }
+
+    private commonJsDefinePropertiesExports(
+        stmt: ts.Statement,
+    ): Array<{ call: ts.CallExpression; name: string; right: ts.Expression; entry: ts.PropertyAssignment }> | null {
+        if (!this.isJavaScriptSourceFile(stmt.getSourceFile())) return null;
+        if (!ts.isExpressionStatement(stmt) || !ts.isCallExpression(stmt.expression)) return null;
+        return this.commonJsDefinePropertiesExportCall(stmt.expression);
+    }
+
+    private commonJsObjectAssignExports(stmt: ts.Statement): CommonJsObjectAssignExport[] | null {
+        if (!this.isJavaScriptSourceFile(stmt.getSourceFile())) return null;
+        if (!ts.isExpressionStatement(stmt) || !ts.isCallExpression(stmt.expression)) return null;
+        return this.commonJsObjectAssignExportCall(stmt.expression);
+    }
+
+    private commonJsObjectAssignExportCall(call: ts.CallExpression): CommonJsObjectAssignExport[] | null {
         if (
-            !ts.isBinaryExpression(expr) ||
-            expr.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
-            !ts.isPropertyAccessExpression(expr.left) ||
-            !this.isModuleExportsAccess(expr.left)
+            !ts.isPropertyAccessExpression(call.expression) ||
+            call.expression.name.text !== "assign" ||
+            !ts.isIdentifier(call.expression.expression) ||
+            call.expression.expression.text !== "Object" ||
+            call.arguments.length < 2
         ) {
             return null;
         }
-        if (ts.isObjectLiteralExpression(expr.right)) return null;
+        const target = call.arguments[0]!;
         if (
-            !ts.isFunctionExpression(expr.right) &&
-            !ts.isArrowFunction(expr.right) &&
-            !ts.isIdentifier(expr.right) &&
-            !ts.isArrayLiteralExpression(expr.right) &&
-            !this.requireCallModuleExportsDeclaration(expr.right) &&
-            !(ts.isPropertyAccessExpression(expr.right) && this.requireModuleMemberDeclaration(expr.right)) &&
-            !this.isCommonJsRuntimeComputedModuleExportsValue(expr.right) &&
-            !this.isCommonJsObjectLiteralExportValue(expr.right)
+            !(
+                (ts.isIdentifier(target) && target.text === "exports") ||
+                (ts.isPropertyAccessExpression(target) && this.isModuleExportsAccess(target))
+            )
         ) {
-            unsupported(expr.right, "CommonJS module.exports value assignment currently supports functions, arrays, declared identifiers, literal require re-exports, literal require member re-exports, runtime-computed dynamic objects, and primitive literals only");
+            return null;
         }
-        return { left: expr.left, right: expr.right };
+
+        const exports: CommonJsObjectAssignExport[] = [];
+        for (const source of call.arguments.slice(1)) {
+            const requireSpec = this.requireCallSpecifier(source);
+            if (requireSpec) {
+                const info = this.resolvedModuleInfoForSpecifier(requireSpec, call.getSourceFile().fileName);
+                if (!info) {
+                    unsupported(source, `unresolved require("${requireSpec}")`);
+                }
+                for (const exported of this.commonJsExportedMemberDeclarations(info.sf)) {
+                    if (exported.name === "__esModule") continue;
+                    exports.push({ call, name: exported.name, entry: exported.decl });
+                }
+                continue;
+            }
+            if (!ts.isObjectLiteralExpression(source)) {
+                unsupported(source, "CommonJS Object.assign exports require static object-literal or static require(...) sources");
+            }
+            for (const entry of source.properties) {
+                if (ts.isSpreadAssignment(entry)) {
+                    unsupported(entry, "CommonJS Object.assign exports do not support spread sources yet");
+                }
+                if (!ts.isPropertyAssignment(entry) && !ts.isShorthandPropertyAssignment(entry) && !ts.isMethodDeclaration(entry)) {
+                    unsupported(entry, "CommonJS Object.assign exports require static data or method properties");
+                }
+                const name = this.commonJsObjectAssignExportName(entry);
+                if (!name || name === "__esModule") continue;
+                this.validateCommonJsObjectAssignExportEntry(entry);
+                exports.push({ call, name, entry });
+            }
+        }
+        return exports;
+    }
+
+    private commonJsObjectAssignExportName(entry: CommonJsObjectAssignExportEntry): string | null {
+        if (ts.isShorthandPropertyAssignment(entry)) return entry.name.text;
+        return this.staticPropertyName(entry.name);
+    }
+
+    private validateCommonJsObjectAssignExportEntry(entry: CommonJsObjectAssignExportEntry): void {
+        if (ts.isShorthandPropertyAssignment(entry) || ts.isMethodDeclaration(entry)) return;
+        if (
+            ts.isIdentifier(entry.initializer) ||
+            ts.isFunctionExpression(entry.initializer) ||
+            ts.isArrowFunction(entry.initializer) ||
+            this.isCommonJsModuleExportsDefaultValue(entry.initializer)
+        ) {
+            return;
+        }
+        unsupported(entry.initializer, "CommonJS Object.assign exports currently support declared identifiers, functions, methods, and static literal values only");
+    }
+
+    private commonJsObjectAssignExportEntry(entry: ts.Node): CommonJsObjectAssignExport | null {
+        if (!ts.isPropertyAssignment(entry) && !ts.isShorthandPropertyAssignment(entry) && !ts.isMethodDeclaration(entry)) {
+            return null;
+        }
+        const source = entry.parent;
+        if (!source || !ts.isObjectLiteralExpression(source)) return null;
+        const call = source.parent;
+        if (!call || !ts.isCallExpression(call)) return null;
+        const exports = this.commonJsObjectAssignExportCall(call);
+        return exports?.find((candidate) => candidate.entry === entry) ?? null;
+    }
+
+    private commonJsDefinePropertiesExportCall(
+        call: ts.CallExpression,
+    ): Array<{ call: ts.CallExpression; name: string; right: ts.Expression; entry: ts.PropertyAssignment }> | null {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            call.expression.name.text !== "defineProperties" ||
+            !ts.isIdentifier(call.expression.expression) ||
+            call.expression.expression.text !== "Object" ||
+            call.arguments.length < 2
+        ) {
+            return null;
+        }
+        const target = call.arguments[0]!;
+        const descriptors = call.arguments[1]!;
+        if (
+            !(
+                (ts.isIdentifier(target) && target.text === "exports") ||
+                (ts.isPropertyAccessExpression(target) && this.isModuleExportsAccess(target))
+            )
+        ) {
+            return null;
+        }
+        if (!ts.isObjectLiteralExpression(descriptors)) return null;
+
+        const exports: Array<{ call: ts.CallExpression; name: string; right: ts.Expression; entry: ts.PropertyAssignment }> = [];
+        for (const entry of descriptors.properties) {
+            if (!ts.isPropertyAssignment(entry)) {
+                unsupported(entry, "CommonJS Object.defineProperties exports require static descriptor properties");
+            }
+            const name = this.staticPropertyName(entry.name);
+            if (!name || name === "__esModule") continue;
+            if (!ts.isObjectLiteralExpression(entry.initializer)) {
+                unsupported(entry.initializer, "CommonJS Object.defineProperties export descriptor must be an object literal");
+            }
+            const right = this.commonJsDefinePropertyExportDescriptorValue(entry.initializer);
+            if (!right) {
+                unsupported(entry.initializer, "CommonJS Object.defineProperties export descriptor requires a value or simple getter");
+            }
+            exports.push({ call, name, right, entry });
+        }
+        return exports;
+    }
+
+    private commonJsDefinePropertiesExportEntry(
+        entry: ts.PropertyAssignment,
+    ): { call: ts.CallExpression; name: string; right: ts.Expression; entry: ts.PropertyAssignment } | null {
+        const descriptors = entry.parent;
+        if (!descriptors || !ts.isObjectLiteralExpression(descriptors)) return null;
+        const call = descriptors.parent;
+        if (!call || !ts.isCallExpression(call)) return null;
+        const exports = this.commonJsDefinePropertiesExportCall(call);
+        return exports?.find((candidate) => candidate.entry === entry) ?? null;
+    }
+
+    private commonJsDefinePropertyExportCall(
+        call: ts.CallExpression,
+    ): { call: ts.CallExpression; name: string; right: ts.Expression } | null {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            call.expression.name.text !== "defineProperty" ||
+            !ts.isIdentifier(call.expression.expression) ||
+            call.expression.expression.text !== "Object" ||
+            call.arguments.length < 3
+        ) {
+            return null;
+        }
+        const target = call.arguments[0]!;
+        const key = call.arguments[1]!;
+        const descriptor = call.arguments[2]!;
+        if (
+            !(
+                (ts.isIdentifier(target) && target.text === "exports") ||
+                (ts.isPropertyAccessExpression(target) && this.isModuleExportsAccess(target))
+            )
+        ) {
+            return null;
+        }
+        const name = this.staticComputedPropertyExpression(key);
+        if (!name || name === "__esModule") return null;
+        if (!ts.isObjectLiteralExpression(descriptor)) return null;
+        const right = this.commonJsDefinePropertyExportDescriptorValue(descriptor);
+        if (!right) return null;
+        return { call, name, right };
+    }
+
+    private commonJsDefinePropertyExportDescriptorValue(descriptor: ts.ObjectLiteralExpression): ts.Expression | null {
+        for (const prop of descriptor.properties) {
+            if (!ts.isPropertyAssignment(prop) && !ts.isMethodDeclaration(prop)) continue;
+            const propName = this.staticPropertyName(prop.name);
+            if (propName === "value" && ts.isPropertyAssignment(prop)) {
+                return prop.initializer;
+            }
+            if (propName === "get") {
+                const getterExpr = this.commonJsDefinePropertyGetterReturnExpression(prop);
+                if (!getterExpr) {
+                    unsupported(prop, "CommonJS Object.defineProperty export getter requires a zero-arg function or arrow with a single return value");
+                }
+                return getterExpr;
+            }
+        }
+        return null;
+    }
+
+    private commonJsDefinePropertyGetterReturnExpression(
+        prop: ts.PropertyAssignment | ts.MethodDeclaration,
+    ): ts.Expression | null {
+        const fn = ts.isPropertyAssignment(prop) ? prop.initializer : prop;
+        if (!ts.isFunctionExpression(fn) && !ts.isArrowFunction(fn) && !ts.isMethodDeclaration(fn)) return null;
+        if (fn.parameters.length !== 0) return null;
+        if (ts.isArrowFunction(fn)) {
+            if (!ts.isBlock(fn.body)) return fn.body;
+            const body = fn.body;
+            if (body.statements.length !== 1) return null;
+            const stmt = body.statements[0]!;
+            return ts.isReturnStatement(stmt) && stmt.expression ? stmt.expression : null;
+        }
+        const body = fn.body;
+        if (!body || body.statements.length !== 1) return null;
+        const stmt = body.statements[0]!;
+        return ts.isReturnStatement(stmt) && stmt.expression ? stmt.expression : null;
+    }
+
+    private commonJsModuleExportsValueAssignment(
+        stmt: ts.Statement,
+    ): { left: ts.PropertyAccessExpression; right: ts.Expression } | null {
+        const assignment = this.commonJsModuleExportsValueAssignmentChain(stmt);
+        if (!assignment) return null;
+        if (ts.isObjectLiteralExpression(assignment.right)) return null;
+        this.validateCommonJsModuleExportsValueAssignment(assignment.right);
+        return assignment;
+    }
+
+    private commonJsModuleExportsValueAssignmentChain(
+        stmt: ts.Statement,
+    ): { left: ts.PropertyAccessExpression; right: ts.Expression; assignment: ts.BinaryExpression } | null {
+        if (!ts.isExpressionStatement(stmt)) return null;
+        let expr: ts.Expression = stmt.expression;
+        let moduleExportsLeft: ts.PropertyAccessExpression | null = null;
+        let moduleExportsAssignment: ts.BinaryExpression | null = null;
+        while (ts.isBinaryExpression(expr) && expr.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+            if (ts.isPropertyAccessExpression(expr.left) && this.isModuleExportsAccess(expr.left)) {
+                moduleExportsLeft ??= expr.left;
+                moduleExportsAssignment ??= expr;
+            } else if (!(ts.isIdentifier(expr.left) && expr.left.text === "exports")) {
+                return null;
+            }
+            expr = expr.right;
+        }
+        return moduleExportsLeft && moduleExportsAssignment
+            ? { left: moduleExportsLeft, right: expr, assignment: moduleExportsAssignment }
+            : null;
+    }
+
+    private validateCommonJsModuleExportsValueAssignment(expr: ts.Expression): void {
+        if (
+            !ts.isFunctionExpression(expr) &&
+            !ts.isArrowFunction(expr) &&
+            !ts.isIdentifier(expr) &&
+            !ts.isArrayLiteralExpression(expr) &&
+            !this.requireCallModuleExportsDeclaration(expr) &&
+            !(ts.isPropertyAccessExpression(expr) && this.requireModuleMemberDeclaration(expr)) &&
+            !this.isCommonJsRuntimeComputedModuleExportsValue(expr) &&
+            !this.isCommonJsObjectLiteralExportValue(expr)
+        ) {
+            unsupported(expr, "CommonJS module.exports value assignment currently supports functions, arrays, declared identifiers, literal require re-exports, literal require member re-exports, runtime-computed dynamic objects, and primitive literals only");
+        }
     }
 
     private isCommonJsObjectLiteralDefaultValue(expr: ts.ObjectLiteralExpression): boolean {
@@ -831,14 +1185,41 @@ class Emitter {
             ts.isBinaryExpression(node.parent) &&
             node.parent.left === node
         ) {
-            return node.parent.right;
+            let value: ts.Expression = node.parent.right;
+            while (
+                ts.isBinaryExpression(value) &&
+                value.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                this.isCommonJsExportAccess(value.left)
+            ) {
+                value = value.right;
+            }
+            return value;
         }
-        if (ts.isPropertyAssignment(node)) return node.initializer;
+        if (ts.isPropertyAssignment(node)) {
+            const definePropertiesExport = this.commonJsDefinePropertiesExportEntry(node);
+            if (definePropertiesExport) return definePropertiesExport.right;
+            return node.initializer;
+        }
         if (ts.isShorthandPropertyAssignment(node)) {
             return this.commonJsObjectExportValueDeclaration(node) ?? node;
         }
         if (ts.isBinaryExpression(node) && ts.isPropertyAccessExpression(node.left) && this.isModuleExportsAccess(node.left)) {
-            return node.right;
+            let value: ts.Expression = node.right;
+            while (
+                ts.isBinaryExpression(value) &&
+                value.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                (
+                    (ts.isPropertyAccessExpression(value.left) && this.isModuleExportsAccess(value.left)) ||
+                    (ts.isIdentifier(value.left) && value.left.text === "exports")
+                )
+            ) {
+                value = value.right;
+            }
+            return value;
+        }
+        if (ts.isCallExpression(node)) {
+            const defineExport = this.commonJsDefinePropertyExportCall(node);
+            if (defineExport) return defineExport.right;
         }
         return node;
     }
@@ -878,6 +1259,25 @@ class Emitter {
         }
         const value = this.emitExpr(assignment.right);
         buf.line(`${cName} = ${this.coerce(value, ty, assignment.right)};`);
+    }
+
+    private emitCommonJsExportAssignmentChain(
+        buf: CBuf,
+        assignment: { lefts: CommonJsExportAccess[]; right: ts.Expression },
+    ): void {
+        const ty = this.commonJsExportedCType(assignment.lefts[0]!);
+        const value = this.emitExpr(assignment.right);
+        const tmp = this.freshTemp("_cjsexp");
+        buf.line(`${ty.c} ${tmp} = ${this.coerce(value, ty, assignment.right)};`);
+        for (const left of assignment.lefts) {
+            const cName = this.commonJsExportCName(left);
+            if (!cName) unsupported(left, "unsupported CommonJS export assignment");
+            if (!this.commonJsExportGlobals.has(cName)) {
+                this.commonJsExportGlobals.add(cName);
+                this.globalDecls.line(`static ${ty.c} ${cName};`);
+            }
+            buf.line(`${cName} = ${tmp};`);
+        }
     }
 
     private emitCommonJsModuleExportsValueAssignment(
@@ -925,6 +1325,64 @@ class Emitter {
                 : this.emitExpr(prop.initializer);
             buf.line(`${cName} = ${this.coerce(value, ty, valueNode)};`);
         }
+    }
+
+    private emitCommonJsDefinePropertyExport(
+        buf: CBuf,
+        assignment: { call: ts.CallExpression; name: string; right: ts.Expression },
+    ): void {
+        const cName = this.commonJsDefinePropertyExportCName(assignment.call, assignment.name);
+        const ty = this.commonJsExportedCType(assignment.call);
+        if (!this.commonJsExportGlobals.has(cName)) {
+            this.commonJsExportGlobals.add(cName);
+            this.globalDecls.line(`static ${ty.c} ${cName};`);
+        }
+        const value = this.emitExpr(assignment.right);
+        buf.line(`${cName} = ${this.coerce(value, ty, assignment.right)};`);
+    }
+
+    private emitCommonJsDefinePropertiesExport(
+        buf: CBuf,
+        assignment: { call: ts.CallExpression; name: string; right: ts.Expression; entry: ts.PropertyAssignment },
+    ): void {
+        const cName = this.commonJsDefinePropertyExportCName(assignment.call, assignment.name);
+        const ty = this.commonJsExportedCType(assignment.entry);
+        if (!this.commonJsExportGlobals.has(cName)) {
+            this.commonJsExportGlobals.add(cName);
+            this.globalDecls.line(`static ${ty.c} ${cName};`);
+        }
+        const value = this.emitExpr(assignment.right);
+        buf.line(`${cName} = ${this.coerce(value, ty, assignment.right)};`);
+    }
+
+    private emitCommonJsObjectAssignExport(
+        buf: CBuf,
+        assignment: CommonJsObjectAssignExport,
+    ): void {
+        if (assignment.entry.getSourceFile() !== assignment.call.getSourceFile()) return;
+        if (
+            !ts.isPropertyAssignment(assignment.entry) &&
+            !ts.isShorthandPropertyAssignment(assignment.entry) &&
+            !ts.isMethodDeclaration(assignment.entry)
+        ) {
+            return;
+        }
+        if (ts.isShorthandPropertyAssignment(assignment.entry)) return;
+        if (ts.isPropertyAssignment(assignment.entry) && ts.isIdentifier(assignment.entry.initializer)) return;
+
+        const cName = this.commonJsDefinePropertyExportCName(assignment.call, assignment.name);
+        const ty = this.commonJsExportedCType(assignment.entry);
+        if (!this.commonJsExportGlobals.has(cName)) {
+            this.commonJsExportGlobals.add(cName);
+            this.globalDecls.line(`static ${ty.c} ${cName};`);
+        }
+        const valueNode = ts.isMethodDeclaration(assignment.entry) ? assignment.entry : assignment.entry.initializer;
+        const value = ts.isMethodDeclaration(assignment.entry)
+            ? this.emitClosureExpression(assignment.entry)
+            : this.isCommonJsModuleExportsDefaultValue(assignment.entry.initializer)
+                ? this.emitCommonJsModuleExportsDefaultValue(assignment.entry.initializer)
+                : this.emitExpr(assignment.entry.initializer);
+        buf.line(`${cName} = ${this.coerce(value, ty, valueNode)};`);
     }
 
     private defaultExportAssignmentCType(stmt: ts.ExportAssignment): CType {
@@ -1002,6 +1460,11 @@ class Emitter {
         const name = this.staticPropertyName(prop.name);
         if (!name) unsupported(prop.name, "CommonJS module.exports object requires static property names");
         const modId = this.graph.fileToModuleId.get(prop.getSourceFile().fileName) ?? this.currentModuleId ?? "module";
+        return `${modId}_${mangleIdent(name)}`;
+    }
+
+    private commonJsDefinePropertyExportCName(node: ts.Node, name: string): string {
+        const modId = this.graph.fileToModuleId.get(node.getSourceFile().fileName) ?? this.currentModuleId ?? "module";
         return `${modId}_${mangleIdent(name)}`;
     }
 
@@ -1153,11 +1616,37 @@ class Emitter {
         return depId ? this.graph.modules.get(depId) ?? null : null;
     }
 
-    private commonJsExportedMemberDeclaration(sf: ts.SourceFile, name: string): ts.Node | null {
+    private commonJsExportedMemberDeclarations(sf: ts.SourceFile): Array<{ name: string; decl: ts.Node }> {
+        const out: Array<{ name: string; decl: ts.Node }> = [];
         for (const stmt of sf.statements) {
-            const assignment = this.commonJsExportAssignment(stmt);
-            if (assignment && this.commonJsExportName(assignment.left) === name) {
-                return assignment.left;
+            if (this.commonJsEsModuleMarker(stmt)) continue;
+            const objectAssignExports = this.commonJsObjectAssignExports(stmt);
+            if (objectAssignExports) {
+                for (const exported of objectAssignExports) {
+                    out.push({ name: exported.name, decl: exported.entry });
+                }
+                continue;
+            }
+            const definePropertiesExports = this.commonJsDefinePropertiesExports(stmt);
+            if (definePropertiesExports) {
+                for (const exported of definePropertiesExports) {
+                    out.push({ name: exported.name, decl: exported.entry });
+                }
+                continue;
+            }
+            const defineExport = this.commonJsDefinePropertyExport(stmt);
+            if (defineExport) {
+                out.push({ name: defineExport.name, decl: defineExport.call });
+                continue;
+            }
+            if (this.commonJsExportPlaceholderAssignment(stmt)) continue;
+            const assignmentChain = this.commonJsExportAssignmentChain(stmt);
+            if (assignmentChain) {
+                for (const left of assignmentChain.lefts) {
+                    const assignmentName = this.commonJsExportName(left);
+                    if (assignmentName) out.push({ name: assignmentName, decl: left });
+                }
+                continue;
             }
             if (!ts.isExpressionStatement(stmt) || !ts.isBinaryExpression(stmt.expression)) continue;
             const expr = stmt.expression;
@@ -1170,32 +1659,40 @@ class Emitter {
                 continue;
             }
             for (const prop of expr.right.properties) {
-                if (ts.isShorthandPropertyAssignment(prop) && prop.name.text === name) {
-                    return prop;
+                if (ts.isShorthandPropertyAssignment(prop)) {
+                    out.push({ name: prop.name.text, decl: prop });
+                    continue;
                 }
-                if (ts.isPropertyAssignment(prop) && this.staticPropertyName(prop.name) === name) {
-                    return prop;
+                if (ts.isPropertyAssignment(prop)) {
+                    const propName = this.staticPropertyName(prop.name);
+                    if (propName) out.push({ name: propName, decl: prop });
+                    continue;
                 }
-                if (ts.isMethodDeclaration(prop) && this.staticPropertyName(prop.name) === name) {
-                    return prop;
+                if (ts.isMethodDeclaration(prop)) {
+                    const propName = this.staticPropertyName(prop.name);
+                    if (propName) out.push({ name: propName, decl: prop });
                 }
             }
+        }
+        return out;
+    }
+
+    private commonJsExportedMemberDeclaration(sf: ts.SourceFile, name: string): ts.Node | null {
+        for (const exported of this.commonJsExportedMemberDeclarations(sf)) {
+            if (exported.name === name) return exported.decl;
         }
         return null;
     }
 
     private commonJsModuleExportsValueDeclaration(sf: ts.SourceFile): ts.BinaryExpression | null {
         for (const stmt of sf.statements) {
-            if (!ts.isExpressionStatement(stmt) || !ts.isBinaryExpression(stmt.expression)) continue;
-            const expr = stmt.expression;
+            const chain = this.commonJsModuleExportsValueAssignmentChain(stmt);
             if (
-                expr.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-                ts.isPropertyAccessExpression(expr.left) &&
-                this.isModuleExportsAccess(expr.left) &&
-                (!ts.isObjectLiteralExpression(expr.right) ||
-                    this.isCommonJsObjectLiteralDefaultValue(expr.right))
+                chain &&
+                (!ts.isObjectLiteralExpression(chain.right) ||
+                    this.isCommonJsObjectLiteralDefaultValue(chain.right))
             ) {
-                return expr;
+                return chain.assignment;
             }
         }
         return null;
@@ -1373,17 +1870,20 @@ class Emitter {
         const spec = this.moduleNamespaceImportSpecifier(pa.expression);
         if (!spec || this.isNodeBuiltinModuleSpecifier(spec)) return null;
         const sym = this.checker.getSymbolAtLocation(pa.name);
-        if (!sym) return null;
-        let target = sym;
-        if (sym.flags & ts.SymbolFlags.Alias) {
-            try {
-                target = this.checker.getAliasedSymbol(sym);
-            } catch {
-                target = sym;
+        if (sym) {
+            let target = sym;
+            if (sym.flags & ts.SymbolFlags.Alias) {
+                try {
+                    target = this.checker.getAliasedSymbol(sym);
+                } catch {
+                    target = sym;
+                }
             }
+            const decl = target.valueDeclaration ?? target.declarations?.[0];
+            if (decl) return decl;
         }
-        const decl = target.valueDeclaration ?? target.declarations?.[0];
-        return decl ?? null;
+        const info = this.resolvedModuleInfoForSpecifier(spec, pa.getSourceFile().fileName);
+        return info ? this.commonJsExportedMemberDeclaration(info.sf, pa.name.text) : null;
     }
 
     private moduleNamespaceMemberCName(pa: ts.PropertyAccessExpression): string | null {
@@ -1404,6 +1904,15 @@ class Emitter {
                 (ts.isPropertyAccessExpression(decl) || ts.isElementAccessExpression(decl)) &&
                 this.commonJsExportName(decl)
             ) {
+                return this.commonJsExportedCType(decl);
+            }
+            if (ts.isCallExpression(decl) && this.commonJsDefinePropertyExportCall(decl)) {
+                return this.commonJsExportedCType(decl);
+            }
+            if (ts.isPropertyAssignment(decl) && this.commonJsDefinePropertiesExportEntry(decl)) {
+                return this.commonJsExportedCType(decl);
+            }
+            if (this.commonJsObjectAssignExportEntry(decl)) {
                 return this.commonJsExportedCType(decl);
             }
         }
@@ -4411,6 +4920,12 @@ class Emitter {
                 if (!cName) unsupported(expr, "unsupported CommonJS default import");
                 return { c: cName, ty: this.commonJsExportedCType(commonJsDefaultImport) };
             }
+            const commonJsNamedImport = this.commonJsNamedImportDeclaration(expr);
+            if (commonJsNamedImport) {
+                const cName = this.declarationCName(commonJsNamedImport);
+                if (!cName) unsupported(expr, "unsupported CommonJS named import");
+                return { c: cName, ty: this.commonJsExportedCType(commonJsNamedImport) };
+            }
             const jsDefaultExport = this.jsDefaultExportAssignmentForImport(expr);
             if (jsDefaultExport) {
                 return {
@@ -7101,7 +7616,10 @@ class Emitter {
                 (
                     ((ts.isPropertyAccessExpression(decl) || ts.isElementAccessExpression(decl)) && this.commonJsExportName(decl)) ||
                     (ts.isPropertyAssignment(decl) && (ts.isFunctionExpression(decl.initializer) || ts.isArrowFunction(decl.initializer))) ||
-                    ts.isMethodDeclaration(decl)
+                    ts.isMethodDeclaration(decl) ||
+                    (ts.isCallExpression(decl) && !!this.commonJsDefinePropertyExportCall(decl)) ||
+                    (ts.isPropertyAssignment(decl) && !!this.commonJsDefinePropertiesExportEntry(decl)) ||
+                    !!this.commonJsObjectAssignExportEntry(decl)
                 )
             ) {
                 return this.emitClosureCall(call, { c: requireMember, ty: memberTy });
@@ -7138,9 +7656,13 @@ class Emitter {
             const memberTy = this.moduleNamespaceMemberType(pa);
             if (
                 decl &&
-                ts.isPropertyAccessExpression(decl) &&
-                this.commonJsExportName(decl) &&
-                memberTy.kind === "function"
+                memberTy.kind === "function" &&
+                (
+                    (ts.isPropertyAccessExpression(decl) && this.commonJsExportName(decl)) ||
+                    (ts.isCallExpression(decl) && !!this.commonJsDefinePropertyExportCall(decl)) ||
+                    (ts.isPropertyAssignment(decl) && !!this.commonJsDefinePropertiesExportEntry(decl)) ||
+                    !!this.commonJsObjectAssignExportEntry(decl)
+                )
             ) {
                 return this.emitClosureCall(call, { c: moduleNsMember, ty: memberTy });
             }
