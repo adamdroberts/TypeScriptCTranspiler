@@ -749,7 +749,7 @@ interface Date {
     toISOString(...ignored: any[]): string;
     toUTCString(...ignored: any[]): string;
     toGMTString(...ignored: any[]): string;
-    toJSON(key?: any): any;
+    toJSON(key?: any, ...ignored: any[]): any;
 }
 interface DateConstructor {
     (...args: any[]): string;
