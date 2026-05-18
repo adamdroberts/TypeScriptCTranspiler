@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- `Date.parse(text?)` now supports JavaScript optional-argument behavior, returning `NaN` with no argument and evaluating then ignoring extra arguments. Test: `date_parse`.
 - Zero-argument Date statics/methods now evaluate and ignore extra call arguments where JavaScript does, including `Date.now()`, getters, string formatters, `valueOf()`, and `toJSON(...)`. Test: `date_ignored_arguments`.
 - `Date.UTC()` now supports JavaScript optional-argument defaults, returning `NaN` with no year and defaulting one-argument calls to January 1 of that year. Test: `date_utc`.
 - `Date.prototype.toJSON(key?)` now accepts and evaluates the optional key argument before ignoring it, while preserving invalid-date `null` and valid-date UTC ISO results. Test: `date_to_json_invalid`.

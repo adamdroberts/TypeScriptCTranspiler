@@ -10241,11 +10241,16 @@ class Emitter {
             }
             if (memberName === "parse") {
                 const arg = call.arguments[0];
-                if (!arg || call.arguments.length !== 1) unsupported(call, "Date.parse expects one string argument");
-                const value = this.emitExpr(arg);
-                return this.emitSequencedCall("tsc_date_parse", T_NUMBER, [
-                    { value, target: T_STRING, node: arg },
-                ]);
+                if (!arg) return { c: "NAN", ty: T_NUMBER };
+                return this.emitSequencedExpr(
+                    T_NUMBER,
+                    Array.from(call.arguments, (current, index) => ({
+                        value: this.emitExpr(current),
+                        target: index === 0 ? T_STRING : undefined,
+                        node: current,
+                    })),
+                    ([text]) => `tsc_date_parse(${text})`,
+                );
             }
             if (memberName === "UTC") return this.emitDateStaticUtc(call);
         }
