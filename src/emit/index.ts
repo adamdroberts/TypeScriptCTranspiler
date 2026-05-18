@@ -16835,7 +16835,7 @@ class Emitter {
         }
         for (const prop of options.properties) {
             if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, `${label} options only support encoding, flag, and mode property assignments`);
+                unsupported(prop, `${label} options only support encoding, flag, mode, and flush property assignments`);
             }
             const key = this.staticPropertyName(prop.name);
             if (key === "encoding") {
@@ -16846,6 +16846,10 @@ class Emitter {
                 const value = this.emitExpr(prop.initializer);
                 if (value.ty.kind !== "number") unsupported(prop.initializer, `${label}.mode must be numeric in this subset`);
                 mode = { value, target: T_NUMBER, node: prop.initializer };
+            } else if (key === "flush") {
+                if (prop.initializer.kind !== ts.SyntaxKind.TrueKeyword && prop.initializer.kind !== ts.SyntaxKind.FalseKeyword) {
+                    unsupported(prop.initializer, `${label}.flush must be a boolean literal in this subset`);
+                }
             } else {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
@@ -16878,7 +16882,7 @@ class Emitter {
         }
         for (const prop of options.properties) {
             if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, `${label} options only support encoding, flag, and mode property assignments`);
+                unsupported(prop, `${label} options only support encoding, flag, mode, and flush property assignments`);
             }
             const key = this.staticPropertyName(prop.name);
             if (key === "encoding") {
@@ -16889,6 +16893,10 @@ class Emitter {
                 const value = this.emitExpr(prop.initializer);
                 if (value.ty.kind !== "number") unsupported(prop.initializer, `${label}.mode must be numeric in this subset`);
                 mode = { value, target: T_NUMBER, node: prop.initializer };
+            } else if (key === "flush") {
+                if (prop.initializer.kind !== ts.SyntaxKind.TrueKeyword && prop.initializer.kind !== ts.SyntaxKind.FalseKeyword) {
+                    unsupported(prop.initializer, `${label}.flush must be a boolean literal in this subset`);
+                }
             } else {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }

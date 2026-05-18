@@ -851,11 +851,13 @@ type FSWriteFileFlag = "w" | "wx" | "w+" | "wx+" | "a" | "ax" | "a+" | "ax+" | "
 interface FSWriteFileOptions extends FSEncodingOptions {
     flag?: FSWriteFileFlag;
     mode?: number;
+    flush?: boolean;
 }
 type FSAppendFileFlag = "a" | "ax" | "a+" | "ax+" | "as" | "as+";
 interface FSAppendFileOptions extends FSEncodingOptions {
     flag?: FSAppendFileFlag;
     mode?: number;
+    flush?: boolean;
 }
 interface FSReaddirOptions extends FSEncodingOptions {
     recursive?: boolean;
