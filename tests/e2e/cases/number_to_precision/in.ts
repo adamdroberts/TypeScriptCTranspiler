@@ -12,5 +12,5 @@ function mark(label: string): string {
     return label;
 }
 console.log("dynamic:", dynamicNumber.toPrecision(2, mark("p")));
-console.log("dynamic omitted:", dynamicNumber.toPrecision(undefined, mark("o")));
+console.log("dynamic omitted:", dynamicNumber.toPrecision());
 console.log("ignored:", ignored);

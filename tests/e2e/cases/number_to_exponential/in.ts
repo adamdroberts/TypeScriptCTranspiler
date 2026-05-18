@@ -10,5 +10,5 @@ function mark(label: string): string {
     return label;
 }
 console.log("dynamic:", dynamicNumber.toExponential(1, mark("e")));
-console.log("dynamic omitted:", dynamicNumber.toExponential(undefined, mark("o")));
+console.log("dynamic omitted:", dynamicNumber.toExponential());
 console.log("ignored:", ignored);
