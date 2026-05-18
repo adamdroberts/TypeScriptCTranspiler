@@ -12,6 +12,7 @@ function mark(): string {
 }
 
 const missing = Date.parse();
+// @ts-ignore JavaScript evaluates and ignores extra Date.parse arguments.
 const ignored = Date.parse("2020-02-03T04:05:06.007Z", mark());
 
 console.log("parse:", parsed, fromString.getTime(), fromString.toISOString());
