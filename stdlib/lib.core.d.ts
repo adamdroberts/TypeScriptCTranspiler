@@ -809,6 +809,9 @@ interface FSStats {
     isCharacterDevice(...ignored: any[]): boolean;
     isFIFO(...ignored: any[]): boolean;
     isSocket(...ignored: any[]): boolean;
+    toLocaleString(...ignored: any[]): string;
+    toString(...ignored: any[]): string;
+    valueOf(...ignored: any[]): FSStats;
 }
 interface FSDirent {
     readonly name: string;
@@ -819,6 +822,9 @@ interface FSDirent {
     isCharacterDevice(...ignored: any[]): boolean;
     isFIFO(...ignored: any[]): boolean;
     isSocket(...ignored: any[]): boolean;
+    toLocaleString(...ignored: any[]): string;
+    toString(...ignored: any[]): string;
+    valueOf(...ignored: any[]): FSDirent;
 }
 interface FSStatsOptions {
     bigint?: false;
