@@ -788,9 +788,11 @@ void tsc_process_next_tick(tsc_next_tick_fn_t fn, void* env);
 void tsc_process_drain_next_ticks(void);
 void tsc_queue_microtask(tsc_microtask_fn_t fn, void* env);
 void tsc_drain_microtasks(void);
-void tsc_set_immediate(tsc_immediate_fn_t fn, void* env);
+double tsc_set_immediate(tsc_immediate_fn_t fn, void* env);
+void tsc_clear_immediate(double id);
 void tsc_drain_immediates(void);
-void tsc_set_timeout(tsc_timeout_fn_t fn, void* env);
+double tsc_set_timeout(tsc_timeout_fn_t fn, void* env);
+void tsc_clear_timeout(double id);
 void tsc_drain_timeouts(void);
 
 /* ------------- fs (sync subset) ------------- */

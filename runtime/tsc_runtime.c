@@ -86,6 +86,8 @@ static size_t g_microtask_cap = 0;
 typedef struct {
     tsc_immediate_fn_t fn;
     void* env;
+    double id;
+    bool canceled;
 } tsc_immediate_entry_t;
 static tsc_immediate_entry_t* g_immediate_queue = NULL;
 static size_t g_immediate_len = 0;
@@ -93,10 +95,13 @@ static size_t g_immediate_cap = 0;
 typedef struct {
     tsc_timeout_fn_t fn;
     void* env;
+    double id;
+    bool canceled;
 } tsc_timeout_entry_t;
 static tsc_timeout_entry_t* g_timeout_queue = NULL;
 static size_t g_timeout_len = 0;
 static size_t g_timeout_cap = 0;
+static double g_next_timer_id = 1.0;
 
 /* Forward decls for helpers used across sections. */
 static tsc_str_t* str_alloc(size_t len);
@@ -493,8 +498,8 @@ void tsc_drain_microtasks(void) {
     g_microtask_len = 0;
 }
 
-void tsc_set_immediate(tsc_immediate_fn_t fn, void* env) {
-    if (!fn) return;
+double tsc_set_immediate(tsc_immediate_fn_t fn, void* env) {
+    if (!fn) return 0.0;
     if (g_immediate_len == g_immediate_cap) {
         size_t next = g_immediate_cap ? g_immediate_cap * 2 : 8;
         tsc_immediate_entry_t* entries = (tsc_immediate_entry_t*)TSC_GC_REALLOC(g_immediate_queue, next * sizeof(tsc_immediate_entry_t));
@@ -502,22 +507,34 @@ void tsc_set_immediate(tsc_immediate_fn_t fn, void* env) {
         g_immediate_queue = entries;
         g_immediate_cap = next;
     }
-    g_immediate_queue[g_immediate_len++] = (tsc_immediate_entry_t){ fn, env };
+    double id = g_next_timer_id++;
+    g_immediate_queue[g_immediate_len++] = (tsc_immediate_entry_t){ fn, env, id, false };
+    return id;
+}
+
+void tsc_clear_immediate(double id) {
+    if (id <= 0.0) return;
+    for (size_t i = 0; i < g_immediate_len; i++) {
+        if (g_immediate_queue[i].id == id) {
+            g_immediate_queue[i].canceled = true;
+            return;
+        }
+    }
 }
 
 void tsc_drain_immediates(void) {
     size_t idx = 0;
     while (idx < g_immediate_len) {
         tsc_immediate_entry_t entry = g_immediate_queue[idx++];
-        if (entry.fn) entry.fn(entry.env);
+        if (!entry.canceled && entry.fn) entry.fn(entry.env);
         tsc_process_drain_next_ticks();
         tsc_drain_microtasks();
     }
     g_immediate_len = 0;
 }
 
-void tsc_set_timeout(tsc_timeout_fn_t fn, void* env) {
-    if (!fn) return;
+double tsc_set_timeout(tsc_timeout_fn_t fn, void* env) {
+    if (!fn) return 0.0;
     if (g_timeout_len == g_timeout_cap) {
         size_t next = g_timeout_cap ? g_timeout_cap * 2 : 8;
         tsc_timeout_entry_t* entries = (tsc_timeout_entry_t*)TSC_GC_REALLOC(g_timeout_queue, next * sizeof(tsc_timeout_entry_t));
@@ -525,14 +542,26 @@ void tsc_set_timeout(tsc_timeout_fn_t fn, void* env) {
         g_timeout_queue = entries;
         g_timeout_cap = next;
     }
-    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env };
+    double id = g_next_timer_id++;
+    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false };
+    return id;
+}
+
+void tsc_clear_timeout(double id) {
+    if (id <= 0.0) return;
+    for (size_t i = 0; i < g_timeout_len; i++) {
+        if (g_timeout_queue[i].id == id) {
+            g_timeout_queue[i].canceled = true;
+            return;
+        }
+    }
 }
 
 void tsc_drain_timeouts(void) {
     size_t idx = 0;
     while (idx < g_timeout_len) {
         tsc_timeout_entry_t entry = g_timeout_queue[idx++];
-        if (entry.fn) entry.fn(entry.env);
+        if (!entry.canceled && entry.fn) entry.fn(entry.env);
         tsc_process_drain_next_ticks();
         tsc_drain_microtasks();
     }

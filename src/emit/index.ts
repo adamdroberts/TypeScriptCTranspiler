@@ -8804,7 +8804,7 @@ class Emitter {
             const adapter = this.ensureImmediateAdapter(callbackNode, callback.ty, argValues.map((arg) => arg.ty));
             const prepared = this.prepareType(callback.ty);
             const params = prepared.kind === "function" ? prepared.params ?? [] : [];
-            return this.emitSequencedExpr(T_VOID, [
+            return this.emitSequencedExpr(T_NUMBER, [
                 { value: callback, target: callback.ty, node: callbackNode },
                 ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
             ], ([fn, ...args]) => {
@@ -8818,6 +8818,9 @@ class Emitter {
                 pieces.push(`tsc_set_immediate(${adapter}, ${env})`);
                 return `({ ${pieces.join("; ")}; })`;
             });
+        }
+        if (name === "clearImmediate") {
+            return this.emitClearTimerCall(call, "tsc_clear_immediate");
         }
         if (name === "setTimeout") {
             if (call.arguments.length < 1 || call.arguments.length > 5) unsupported(call, "setTimeout expects a callback, optional literal 0 delay, and up to 3 arguments in this subset");
@@ -8833,7 +8836,7 @@ class Emitter {
             const adapter = this.ensureTimeoutAdapter(callbackNode, callback.ty, argValues.map((arg) => arg.ty));
             const prepared = this.prepareType(callback.ty);
             const params = prepared.kind === "function" ? prepared.params ?? [] : [];
-            return this.emitSequencedExpr(T_VOID, [
+            return this.emitSequencedExpr(T_NUMBER, [
                 { value: callback, target: callback.ty, node: callbackNode },
                 ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
             ], ([fn, ...args]) => {
@@ -8847,6 +8850,9 @@ class Emitter {
                 pieces.push(`tsc_set_timeout(${adapter}, ${env})`);
                 return `({ ${pieces.join("; ")}; })`;
             });
+        }
+        if (name === "clearTimeout") {
+            return this.emitClearTimerCall(call, "tsc_clear_timeout");
         }
         if (
             this.isNamedImportFrom(calleeId, ["events", "node:events"], "listenerCount") ||
@@ -13946,6 +13952,21 @@ class Emitter {
         buf.close();
         this.closureDefs.write(buf.toString());
         return name;
+    }
+
+    private emitClearTimerCall(call: ts.CallExpression, runtime: string): EmitResult {
+        const specs: SequencedCallArg[] = [];
+        for (let i = 0; i < call.arguments.length; i++) {
+            const arg = call.arguments[i]!;
+            specs.push({
+                value: this.emitExpr(arg),
+                target: i === 0 ? T_NUMBER : undefined,
+                node: arg,
+            });
+        }
+        return this.emitSequencedExpr(T_VOID, specs, (args) =>
+            `${runtime}(${args[0] ?? "0.0"})`,
+        );
     }
 
     private ensureImmediateAdapter(expr: ts.Expression, type: CType, argTypes: readonly CType[]): string {

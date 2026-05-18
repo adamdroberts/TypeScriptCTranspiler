@@ -384,8 +384,8 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 | `tsc_process_cwd()` | `tsc_str_t*` | `process.cwd()` |
 | `tsc_process_next_tick(fn, env)` / `tsc_process_drain_next_ticks()` | `void` | Bounded before-exit `process.nextTick(callback, ...args)` queue |
 | `tsc_queue_microtask(fn, env)` / `tsc_drain_microtasks()` | `void` | Bounded before-exit `queueMicrotask(callback)` queue drained after next ticks |
-| `tsc_set_timeout(fn, env)` / `tsc_drain_timeouts()` | `void` | Bounded before-exit zero-delay `setTimeout(callback, 0, ...args)` queue drained after next ticks and microtasks |
-| `tsc_set_immediate(fn, env)` / `tsc_drain_immediates()` | `void` | Bounded before-exit `setImmediate(callback, ...args)` queue drained after next ticks, microtasks, and zero-delay timeouts |
+| `tsc_set_timeout(fn, env)` / `tsc_clear_timeout(id)` / `tsc_drain_timeouts()` | `double` / `void` | Bounded before-exit zero-delay `setTimeout(callback, 0, ...args)` queue drained after next ticks and microtasks, with numeric handles cancellable before drain |
+| `tsc_set_immediate(fn, env)` / `tsc_clear_immediate(id)` / `tsc_drain_immediates()` | `double` / `void` | Bounded before-exit `setImmediate(callback, ...args)` queue drained after next ticks, microtasks, and zero-delay timeouts, with numeric handles cancellable before drain |
 
 ## fs (sync subset)
 
