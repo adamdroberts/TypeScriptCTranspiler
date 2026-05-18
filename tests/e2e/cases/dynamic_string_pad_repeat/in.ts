@@ -1,4 +1,10 @@
 const text: any = "go";
+let seen = "";
+function mark(label: string): string {
+  seen += label;
+  return label;
+}
 
-console.log("repeat:", text.repeat(3), text.repeat(0).length);
-console.log("pad:", text.padStart(5, "."), text.padEnd(5, 1), text.padStart(4));
+console.log("repeat:", text.repeat(3, mark("r")), text.repeat(0, mark("z")).length);
+console.log("pad:", text.padStart(5, ".", mark("s")), text.padEnd(5, 1, mark("e")), text.padStart(4, undefined, mark("u")));
+console.log("ignored:", seen);

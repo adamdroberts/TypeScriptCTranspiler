@@ -6,5 +6,11 @@ console.log("rounded:", (12.5).toPrecision(2));
 console.log("zero:", (0).toPrecision(3));
 
 const dynamicNumber: any = 9.99;
-console.log("dynamic:", dynamicNumber.toPrecision(2));
-console.log("dynamic omitted:", dynamicNumber.toPrecision());
+let ignored = "";
+function mark(label: string): string {
+    ignored += label;
+    return label;
+}
+console.log("dynamic:", dynamicNumber.toPrecision(2, mark("p")));
+console.log("dynamic omitted:", dynamicNumber.toPrecision(undefined, mark("o")));
+console.log("ignored:", ignored);

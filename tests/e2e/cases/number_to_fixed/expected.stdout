@@ -3,3 +3,4 @@ fixed2: 12.34
 small: 0.500
 negative: -2.5
 dynamic: 7.5
+ignored: f

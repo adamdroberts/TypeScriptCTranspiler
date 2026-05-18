@@ -4,5 +4,11 @@ console.log("omitted:", (1234).toExponential());
 console.log("rounded:", (12.5).toExponential(1));
 
 const dynamicNumber: any = 12.5;
-console.log("dynamic:", dynamicNumber.toExponential(1));
-console.log("dynamic omitted:", dynamicNumber.toExponential());
+let ignored = "";
+function mark(label: string): string {
+    ignored += label;
+    return label;
+}
+console.log("dynamic:", dynamicNumber.toExponential(1, mark("e")));
+console.log("dynamic omitted:", dynamicNumber.toExponential(undefined, mark("o")));
+console.log("ignored:", ignored);

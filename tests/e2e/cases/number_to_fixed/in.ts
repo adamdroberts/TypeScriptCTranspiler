@@ -4,4 +4,10 @@ console.log("small:", (0.5).toFixed(3));
 console.log("negative:", (-2.5).toFixed(1));
 
 const dynamicNumber: any = 7.5;
-console.log("dynamic:", dynamicNumber.toFixed(1));
+let ignored = "";
+function mark(label: string): string {
+    ignored += label;
+    return label;
+}
+console.log("dynamic:", dynamicNumber.toFixed(1, mark("f")));
+console.log("ignored:", ignored);

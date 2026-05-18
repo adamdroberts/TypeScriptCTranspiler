@@ -10546,21 +10546,30 @@ class Emitter {
         const args = call.arguments;
         const missing: EmitResult = { c: "tsc_value_undefined()", ty: T_VALUE };
         const oneArg = (callee: string, fallback: EmitResult = missing): EmitResult => {
-            if (args.length > 1) unsupported(call, `${method} expects 0 or 1 arg`);
             const arg = args[0] ? this.emitExpr(args[0]) : fallback;
-            return this.emitSequencedCall(callee, T_VALUE, [
-                { value: recv, target: T_VALUE, node: call.expression },
-                { value: arg, target: T_VALUE, node: args[0] ?? call.expression },
-            ]);
+            return this.emitSequencedExpr(
+                T_VALUE,
+                [
+                    { value: recv, target: T_VALUE, node: call.expression },
+                    { value: arg, target: T_VALUE, node: args[0] ?? call.expression },
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ],
+                ([target, first]) => `${callee}(${target}, ${first})`,
+            );
         };
         const oneRequiredOneOptional = (callee: string, fallback: EmitResult): EmitResult => {
-            if (args.length < 1 || args.length > 2) unsupported(call, `${method} expects 1 or 2 args`);
+            if (args.length < 1) unsupported(call, `${method} expects at least 1 arg`);
             const second = args[1] ? this.emitExpr(args[1]) : fallback;
-            return this.emitSequencedCall(callee, T_VALUE, [
-                { value: recv, target: T_VALUE, node: call.expression },
-                { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
-                { value: second, target: T_VALUE, node: args[1] ?? call.expression },
-            ]);
+            return this.emitSequencedExpr(
+                T_VALUE,
+                [
+                    { value: recv, target: T_VALUE, node: call.expression },
+                    { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
+                    { value: second, target: T_VALUE, node: args[1] ?? call.expression },
+                    ...this.ignoredArgumentSpecs(args, 2),
+                ],
+                ([target, first, secondArg]) => `${callee}(${target}, ${first}, ${secondArg})`,
+            );
         };
         switch (method) {
             case "charAt":
@@ -11009,11 +11018,15 @@ class Emitter {
                     ([target]) => `tsc_value_method_to_upper(${target})`,
                 );
             case "normalize":
-                if (args.length > 1) unsupported(call, "normalize expects 0 or 1 arg");
-                return this.emitSequencedCall("tsc_value_method_normalize", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: args[0] ? this.emitExpr(args[0]) : missing, target: T_VALUE, node: args[0] ?? call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: args[0] ? this.emitExpr(args[0]) : missing, target: T_VALUE, node: args[0] ?? call.expression },
+                        ...this.ignoredArgumentSpecs(args, 1),
+                    ],
+                    ([target, form]) => `tsc_value_method_normalize(${target}, ${form})`,
+                );
             case "trim":
                 return this.emitSequencedExpr(
                     T_VALUE,
@@ -11044,44 +11057,54 @@ class Emitter {
                     ([target]) => `tsc_value_method_trim_end(${target})`,
                 );
             case "repeat":
-                if (args.length !== 1) unsupported(call, "repeat expects 1 arg");
-                return this.emitSequencedCall("tsc_value_method_repeat", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
-                ]);
+                if (args.length < 1) unsupported(call, "repeat expects at least 1 arg");
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
+                        ...this.ignoredArgumentSpecs(args, 1),
+                    ],
+                    ([target, count]) => `tsc_value_method_repeat(${target}, ${count})`,
+                );
             case "padStart":
             case "padEnd": {
-                if (args.length < 1 || args.length > 2) unsupported(call, `${method} expects 1-2 args`);
+                if (args.length < 1) unsupported(call, `${method} expects at least 1 arg`);
                 const fn = method === "padStart" ? "tsc_value_method_pad_start" : "tsc_value_method_pad_end";
-                return this.emitSequencedCall(fn, T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
-                    { value: args[1] ? this.emitExpr(args[1]) : missing, target: T_VALUE, node: args[1] ?? call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
+                        { value: args[1] ? this.emitExpr(args[1]) : missing, target: T_VALUE, node: args[1] ?? call.expression },
+                        ...this.ignoredArgumentSpecs(args, 2),
+                    ],
+                    ([target, length, fill]) => `${fn}(${target}, ${length}, ${fill})`,
+                );
             }
             case "toString":
-                if (args.length > 1) unsupported(call, "toString expects 0 or 1 args");
                 return this.emitSequencedExpr(T_STRING, [
                     { value: recv, target: T_VALUE, node: call.expression },
                     { value: args[0] ? this.emitExpr(args[0]) : missing, target: T_VALUE, node: args[0] ?? call.expression },
+                    ...this.ignoredArgumentSpecs(args, 1),
                 ], ([v, radix]) => `tsc_value_method_to_string(${v}, ${radix})`);
             case "toFixed":
-                if (args.length > 1) unsupported(call, "toFixed expects 0 or 1 args");
                 return this.emitSequencedExpr(T_STRING, [
                     { value: recv, target: T_VALUE, node: call.expression },
                     { value: args[0] ? this.emitExpr(args[0]) : missing, target: T_VALUE, node: args[0] ?? call.expression },
+                    ...this.ignoredArgumentSpecs(args, 1),
                 ], ([v, digits]) => `tsc_value_method_to_fixed(${v}, ${digits})`);
             case "toExponential":
-                if (args.length > 1) unsupported(call, "toExponential expects 0 or 1 args");
                 return this.emitSequencedExpr(T_STRING, [
                     { value: recv, target: T_VALUE, node: call.expression },
                     { value: args[0] ? this.emitExpr(args[0]) : missing, target: T_VALUE, node: args[0] ?? call.expression },
+                    ...this.ignoredArgumentSpecs(args, 1),
                 ], ([v, digits]) => `tsc_value_method_to_exponential(${v}, ${digits})`);
             case "toPrecision":
-                if (args.length > 1) unsupported(call, "toPrecision expects 0 or 1 args");
                 return this.emitSequencedExpr(T_STRING, [
                     { value: recv, target: T_VALUE, node: call.expression },
                     { value: args[0] ? this.emitExpr(args[0]) : missing, target: T_VALUE, node: args[0] ?? call.expression },
+                    ...this.ignoredArgumentSpecs(args, 1),
                 ], ([v, digits]) => `tsc_value_method_to_precision(${v}, ${digits})`);
             case "toLocaleString":
                 if (args.length !== 0) unsupported(call, "toLocaleString expects no args");
@@ -11089,8 +11112,14 @@ class Emitter {
                     { value: recv, target: T_VALUE, node: call.expression },
                 ], ([v]) => `tsc_value_to_string(${v})`);
             case "valueOf":
-                if (args.length !== 0) unsupported(call, "valueOf expects no args");
-                return recv;
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        ...this.ignoredArgumentSpecs(args, 0),
+                    ],
+                    ([target]) => target!,
+                );
         }
         unsupported(call, `dynamic method .${method}`);
     }

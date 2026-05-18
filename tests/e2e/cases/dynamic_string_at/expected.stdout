@@ -2,3 +2,4 @@ first: a
 middle: c
 last: f
 missing: undefined
+ignored: a

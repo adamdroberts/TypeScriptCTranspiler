@@ -7,4 +7,5 @@ after push: 1,2,3,4,5
 merged: 1|2|3|4|5|6|7|end
 original: 1|2|3|4|5
 empty concat: 1|2|3|4|5
-ignored mutators: 5 1 2|3|4 ps
+ignored join: 1j2j3j4j5 jk
+ignored mutators: 5 1 2|3|4 jkps

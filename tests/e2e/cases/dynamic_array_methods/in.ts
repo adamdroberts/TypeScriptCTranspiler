@@ -16,4 +16,5 @@ const merged: any = values.concat([6, 7], "end");
 console.log("merged:", merged.join("|"));
 console.log("original:", values.join("|"));
 console.log("empty concat:", values.concat().join("|"));
+console.log("ignored join:", values.join(mark("j"), mark("k")), seen);
 console.log("ignored mutators:", values.pop(mark("p")), values.shift(mark("s")), values.join("|"), seen);
