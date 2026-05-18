@@ -37,9 +37,9 @@ interface Generator<T = unknown, TReturn = any, TNext = unknown> extends Iterato
 }
 
 interface Promise<T> {
-    then<TResult = T>(onfulfilled?: (value: T) => TResult): Promise<TResult>;
-    then<TResult = T, TRejectResult = never>(onfulfilled: ((value: T) => TResult) | undefined, onrejected: (reason: any) => TRejectResult): Promise<TResult | TRejectResult>;
-    catch<TResult = never>(onrejected?: ((reason: any) => TResult) | undefined): Promise<T | TResult>;
+    then<TResult = T>(onfulfilled?: (value: T) => TResult | Promise<TResult>): Promise<TResult>;
+    then<TResult = T, TRejectResult = never>(onfulfilled: ((value: T) => TResult | Promise<TResult>) | undefined, onrejected: (reason: any) => TRejectResult | Promise<TRejectResult>): Promise<TResult | TRejectResult>;
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | Promise<TResult>) | undefined): Promise<T | TResult>;
     finally(onfinally?: (() => void) | undefined): Promise<T>;
 }
 interface PromiseConstructor {
@@ -52,6 +52,7 @@ interface PromiseConstructor {
     allSettled<T>(values: Promise<T>[]): Promise<any[]>;
     race<T>(values: Promise<T>[]): Promise<T>;
     any<T>(values: Promise<T>[]): Promise<T>;
+    try<T>(callback: () => T | Promise<T>): Promise<T>;
 }
 declare var Promise: PromiseConstructor;
 
@@ -116,6 +117,7 @@ interface StringConstructor {
     (value?: any): string;
     fromCharCode(...codes: number[]): string;
     fromCodePoint(...codes: number[]): string;
+    raw(strings: TemplateStringsArray, ...substitutions: any[]): string;
 }
 declare var String: StringConstructor;
 
@@ -432,6 +434,7 @@ interface RegExp {
 interface RegExpConstructor {
     new(pattern: string, flags?: string): RegExp;
     (pattern: string, flags?: string): RegExp;
+    escape(text: string): string;
 }
 declare var RegExp: RegExpConstructor;
 
@@ -540,6 +543,9 @@ interface Process {
     uptime(): number;
     hrtime: ProcessHrtime;
     nextTick(callback: () => void): void;
+    nextTick<A>(callback: (arg: A) => void, arg: A): void;
+    nextTick<A, B>(callback: (arg1: A, arg2: B) => void, arg1: A, arg2: B): void;
+    nextTick<A, B, C>(callback: (arg1: A, arg2: B, arg3: C) => void, arg1: A, arg2: B, arg3: C): void;
     getuid(): number;
     getgid(): number;
     geteuid(): number;
@@ -559,6 +565,15 @@ declare function isNaN(value: any): boolean;
 declare function isFinite(value: any): boolean;
 declare function btoa(value: string): string;
 declare function atob(value: string): string;
+declare function queueMicrotask(callback: () => void): void;
+declare function setTimeout(callback: () => void, delay?: number): void;
+declare function setTimeout<A>(callback: (arg: A) => void, delay: number, arg: A): void;
+declare function setTimeout<A, B>(callback: (arg1: A, arg2: B) => void, delay: number, arg1: A, arg2: B): void;
+declare function setTimeout<A, B, C>(callback: (arg1: A, arg2: B, arg3: C) => void, delay: number, arg1: A, arg2: B, arg3: C): void;
+declare function setImmediate(callback: () => void): void;
+declare function setImmediate<A>(callback: (arg: A) => void, arg: A): void;
+declare function setImmediate<A, B>(callback: (arg1: A, arg2: B) => void, arg1: A, arg2: B): void;
+declare function setImmediate<A, B, C>(callback: (arg1: A, arg2: B, arg3: C) => void, arg1: A, arg2: B, arg3: C): void;
 declare const NaN: number;
 declare const Infinity: number;
 declare const undefined: undefined;
@@ -683,6 +698,15 @@ declare module "node:os" {
 
 interface Date {
     getTime(): number;
+    getFullYear(): number;
+    getMonth(): number;
+    getDate(): number;
+    getDay(): number;
+    getHours(): number;
+    getMinutes(): number;
+    getSeconds(): number;
+    getMilliseconds(): number;
+    getTimezoneOffset(): number;
     getUTCFullYear(): number;
     getUTCMonth(): number;
     getUTCDate(): number;
@@ -692,6 +716,13 @@ interface Date {
     getUTCSeconds(): number;
     getUTCMilliseconds(): number;
     setTime(time: number): number;
+    setFullYear(year: number, month?: number, date?: number): number;
+    setMonth(month: number, date?: number): number;
+    setDate(date: number): number;
+    setHours(hours: number, minutes?: number, seconds?: number, ms?: number): number;
+    setMinutes(minutes: number, seconds?: number, ms?: number): number;
+    setSeconds(seconds: number, ms?: number): number;
+    setMilliseconds(ms: number): number;
     setUTCFullYear(year: number, month?: number, date?: number): number;
     setUTCMonth(month: number, date?: number): number;
     setUTCDate(date: number): number;
@@ -709,6 +740,7 @@ interface Date {
 }
 interface DateConstructor {
     new(value?: number | string | Date): Date;
+    new(year: number, month: number, date?: number, hours?: number, minutes?: number, seconds?: number, ms?: number): Date;
     now(): number;
     parse(text: string): number;
     UTC(year: number, month: number, date?: number, hours?: number, minutes?: number, seconds?: number, ms?: number): number;
@@ -793,14 +825,36 @@ interface FSCpOptions {
     verbatimSymlinks?: boolean;
 }
 type FSEncoding = "utf8" | "utf-8";
+type FSBufferEncoding = "buffer";
 interface FSEncodingOptions {
     encoding?: FSEncoding;
 }
+interface FSBufferEncodingOptions {
+    encoding: FSBufferEncoding | null;
+}
+type FSReadFileFlag = "r" | "rs";
+interface FSReadFileOptions extends FSEncodingOptions {
+    flag?: FSReadFileFlag;
+}
+interface FSReadFileBufferObjectOptions extends FSBufferEncodingOptions {
+    flag?: FSReadFileFlag;
+}
+type FSReadFileBufferOptions = FSBufferEncoding | null | FSReadFileBufferObjectOptions;
 type FSWriteFileFlag = "w" | "wx" | "a" | "ax";
 interface FSWriteFileOptions extends FSEncodingOptions {
     flag?: FSWriteFileFlag;
+    mode?: number;
+}
+type FSAppendFileFlag = "a" | "ax";
+interface FSAppendFileOptions extends FSEncodingOptions {
+    flag?: FSAppendFileFlag;
+    mode?: number;
 }
 interface FSReaddirOptions extends FSEncodingOptions {
+    recursive?: boolean;
+    withFileTypes?: false;
+}
+interface FSReaddirBufferOptions extends FSBufferEncodingOptions {
     recursive?: boolean;
     withFileTypes?: false;
 }
@@ -808,6 +862,8 @@ interface FSReaddirDirentOptions extends FSEncodingOptions {
     withFileTypes: true;
 }
 type FSFileEncodingOptions = FSEncoding | FSEncodingOptions;
+type FSFileBufferEncodingOptions = FSBufferEncoding | FSBufferEncodingOptions;
+type FSPathLike = string | Buffer | URL;
 type FSFileTime = number | Date;
 type FSSymlinkType = "file" | "dir" | "junction";
 interface FSConstants {
@@ -821,125 +877,145 @@ interface FSConstants {
 }
 interface FS {
     readonly constants: FSConstants;
-    readFileSync(path: string, options?: FSFileEncodingOptions): string;
-    writeFileSync(path: string, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions): void;
-    appendFileSync(path: string, data: string | Buffer, options?: FSFileEncodingOptions): void;
-    existsSync(path: string): boolean;
-    accessSync(path: string, mode?: number): void;
-    readdirSync(path: string, options: FSReaddirDirentOptions): FSDirent[];
-    readdirSync(path: string, options?: FSFileEncodingOptions | FSReaddirOptions): string[];
-    statSync(path: string, options?: FSStatsOptions): FSStats;
-    lstatSync(path: string, options?: FSStatsOptions): FSStats;
-    realpathSync(path: string, options?: FSFileEncodingOptions): string;
-    readlinkSync(path: string, options?: FSFileEncodingOptions): string;
-    symlinkSync(target: string, path: string, type?: FSSymlinkType): void;
-    linkSync(existingPath: string, newPath: string): void;
-    mkdtempSync(prefix: string, options?: FSFileEncodingOptions): string;
-    truncateSync(path: string, len?: number): void;
-    utimesSync(path: string, atime: FSFileTime, mtime: FSFileTime): void;
-    lutimesSync(path: string, atime: FSFileTime, mtime: FSFileTime): void;
-    chownSync(path: string, uid: number, gid: number): void;
-    lchownSync(path: string, uid: number, gid: number): void;
-    chmodSync(path: string, mode: number): void;
-    mkdirSync(path: string, options?: number | FSMkdirOptions): void;
-    unlinkSync(path: string): void;
-    rmSync(path: string, options?: FSRmOptions): void;
-    rmdirSync(path: string): void;
-    cpSync(src: string, dest: string, options?: FSCpOptions): void;
-    copyFileSync(src: string, dest: string, mode?: number): void;
-    renameSync(oldPath: string, newPath: string): void;
+    readFileSync(path: FSPathLike, options: FSReadFileBufferOptions): Buffer;
+    readFileSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReadFileOptions): string;
+    writeFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions): void;
+    appendFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSAppendFileOptions): void;
+    existsSync(path: FSPathLike): boolean;
+    accessSync(path: FSPathLike, mode?: number): void;
+    readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions): Buffer[];
+    readdirSync(path: FSPathLike, options: FSReaddirDirentOptions): FSDirent[];
+    readdirSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReaddirOptions): string[];
+    statSync(path: FSPathLike, options?: FSStatsOptions): FSStats;
+    lstatSync(path: FSPathLike, options?: FSStatsOptions): FSStats;
+    realpathSync(path: FSPathLike, options: FSFileBufferEncodingOptions): Buffer;
+    realpathSync(path: FSPathLike, options?: FSFileEncodingOptions): string;
+    readlinkSync(path: FSPathLike, options: FSFileBufferEncodingOptions): Buffer;
+    readlinkSync(path: FSPathLike, options?: FSFileEncodingOptions): string;
+    symlinkSync(target: FSPathLike, path: FSPathLike, type?: FSSymlinkType): void;
+    linkSync(existingPath: FSPathLike, newPath: FSPathLike): void;
+    mkdtempSync(prefix: FSPathLike, options: FSFileBufferEncodingOptions): Buffer;
+    mkdtempSync(prefix: FSPathLike, options?: FSFileEncodingOptions): string;
+    truncateSync(path: FSPathLike, len?: number): void;
+    utimesSync(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime): void;
+    lutimesSync(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime): void;
+    chownSync(path: FSPathLike, uid: number, gid: number): void;
+    lchownSync(path: FSPathLike, uid: number, gid: number): void;
+    chmodSync(path: FSPathLike, mode: number): void;
+    mkdirSync(path: FSPathLike, options?: number | FSMkdirOptions): void;
+    unlinkSync(path: FSPathLike): void;
+    rmSync(path: FSPathLike, options?: FSRmOptions): void;
+    rmdirSync(path: FSPathLike): void;
+    cpSync(src: FSPathLike, dest: FSPathLike, options?: FSCpOptions): void;
+    copyFileSync(src: FSPathLike, dest: FSPathLike, mode?: number): void;
+    renameSync(oldPath: FSPathLike, newPath: FSPathLike): void;
     promises: FSPromises;
 }
 interface FSPromises {
-    readFile(path: string, options?: FSFileEncodingOptions): Promise<string>;
-    writeFile(path: string, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions): Promise<void>;
-    appendFile(path: string, data: string | Buffer, options?: FSFileEncodingOptions): Promise<void>;
-    readdir(path: string, options: FSReaddirDirentOptions): Promise<FSDirent[]>;
-    readdir(path: string, options?: FSFileEncodingOptions | FSReaddirOptions): Promise<string[]>;
-    stat(path: string, options?: FSStatsOptions): Promise<FSStats>;
-    lstat(path: string, options?: FSStatsOptions): Promise<FSStats>;
-    realpath(path: string, options?: FSFileEncodingOptions): Promise<string>;
-    readlink(path: string, options?: FSFileEncodingOptions): Promise<string>;
-    symlink(target: string, path: string, type?: FSSymlinkType): Promise<void>;
-    link(existingPath: string, newPath: string): Promise<void>;
-    mkdtemp(prefix: string, options?: FSFileEncodingOptions): Promise<string>;
-    truncate(path: string, len?: number): Promise<void>;
-    utimes(path: string, atime: FSFileTime, mtime: FSFileTime): Promise<void>;
-    lutimes(path: string, atime: FSFileTime, mtime: FSFileTime): Promise<void>;
-    chown(path: string, uid: number, gid: number): Promise<void>;
-    lchown(path: string, uid: number, gid: number): Promise<void>;
-    chmod(path: string, mode: number): Promise<void>;
-    access(path: string, mode?: number): Promise<void>;
-    mkdir(path: string, options?: number | FSMkdirOptions): Promise<void>;
-    unlink(path: string): Promise<void>;
-    rm(path: string, options?: FSRmOptions): Promise<void>;
-    rmdir(path: string): Promise<void>;
-    cp(src: string, dest: string, options?: FSCpOptions): Promise<void>;
-    copyFile(src: string, dest: string, mode?: number): Promise<void>;
-    rename(oldPath: string, newPath: string): Promise<void>;
+    readFile(path: FSPathLike, options: FSReadFileBufferOptions): Promise<Buffer>;
+    readFile(path: FSPathLike, options?: FSFileEncodingOptions | FSReadFileOptions): Promise<string>;
+    writeFile(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions): Promise<void>;
+    appendFile(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSAppendFileOptions): Promise<void>;
+    readdir(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions): Promise<Buffer[]>;
+    readdir(path: FSPathLike, options: FSReaddirDirentOptions): Promise<FSDirent[]>;
+    readdir(path: FSPathLike, options?: FSFileEncodingOptions | FSReaddirOptions): Promise<string[]>;
+    stat(path: FSPathLike, options?: FSStatsOptions): Promise<FSStats>;
+    lstat(path: FSPathLike, options?: FSStatsOptions): Promise<FSStats>;
+    realpath(path: FSPathLike, options: FSFileBufferEncodingOptions): Promise<Buffer>;
+    realpath(path: FSPathLike, options?: FSFileEncodingOptions): Promise<string>;
+    readlink(path: FSPathLike, options: FSFileBufferEncodingOptions): Promise<Buffer>;
+    readlink(path: FSPathLike, options?: FSFileEncodingOptions): Promise<string>;
+    symlink(target: FSPathLike, path: FSPathLike, type?: FSSymlinkType): Promise<void>;
+    link(existingPath: FSPathLike, newPath: FSPathLike): Promise<void>;
+    mkdtemp(prefix: FSPathLike, options: FSFileBufferEncodingOptions): Promise<Buffer>;
+    mkdtemp(prefix: FSPathLike, options?: FSFileEncodingOptions): Promise<string>;
+    truncate(path: FSPathLike, len?: number): Promise<void>;
+    utimes(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime): Promise<void>;
+    lutimes(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime): Promise<void>;
+    chown(path: FSPathLike, uid: number, gid: number): Promise<void>;
+    lchown(path: FSPathLike, uid: number, gid: number): Promise<void>;
+    chmod(path: FSPathLike, mode: number): Promise<void>;
+    access(path: FSPathLike, mode?: number): Promise<void>;
+    mkdir(path: FSPathLike, options?: number | FSMkdirOptions): Promise<void>;
+    unlink(path: FSPathLike): Promise<void>;
+    rm(path: FSPathLike, options?: FSRmOptions): Promise<void>;
+    rmdir(path: FSPathLike): Promise<void>;
+    cp(src: FSPathLike, dest: FSPathLike, options?: FSCpOptions): Promise<void>;
+    copyFile(src: FSPathLike, dest: FSPathLike, mode?: number): Promise<void>;
+    rename(oldPath: FSPathLike, newPath: FSPathLike): Promise<void>;
 }
 declare const fs: FS;
 declare module "fs" {
     export const constants: FSConstants;
     export const promises: FSPromises;
-    export function readFileSync(path: string, options?: FSFileEncodingOptions): string;
-    export function writeFileSync(path: string, data: string | Buffer, options?: FSFileEncodingOptions): void;
-    export function appendFileSync(path: string, data: string | Buffer, options?: FSFileEncodingOptions): void;
-    export function existsSync(path: string): boolean;
-    export function accessSync(path: string, mode?: number): void;
-    export function readdirSync(path: string, options: FSReaddirDirentOptions): FSDirent[];
-    export function readdirSync(path: string, options?: FSFileEncodingOptions | FSReaddirOptions): string[];
-    export function statSync(path: string, options?: FSStatsOptions): FSStats;
-    export function lstatSync(path: string, options?: FSStatsOptions): FSStats;
-    export function realpathSync(path: string, options?: FSFileEncodingOptions): string;
-    export function readlinkSync(path: string, options?: FSFileEncodingOptions): string;
-    export function symlinkSync(target: string, path: string, type?: FSSymlinkType): void;
-    export function linkSync(existingPath: string, newPath: string): void;
-    export function mkdtempSync(prefix: string, options?: FSFileEncodingOptions): string;
-    export function truncateSync(path: string, len?: number): void;
-    export function utimesSync(path: string, atime: FSFileTime, mtime: FSFileTime): void;
-    export function lutimesSync(path: string, atime: FSFileTime, mtime: FSFileTime): void;
-    export function chownSync(path: string, uid: number, gid: number): void;
-    export function lchownSync(path: string, uid: number, gid: number): void;
-    export function chmodSync(path: string, mode: number): void;
-    export function mkdirSync(path: string, options?: number | FSMkdirOptions): void;
-    export function unlinkSync(path: string): void;
-    export function rmSync(path: string, options?: FSRmOptions): void;
-    export function rmdirSync(path: string): void;
-    export function cpSync(src: string, dest: string, options?: FSCpOptions): void;
-    export function copyFileSync(src: string, dest: string, mode?: number): void;
-    export function renameSync(oldPath: string, newPath: string): void;
+    export function readFileSync(path: FSPathLike, options: FSReadFileBufferOptions): Buffer;
+    export function readFileSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReadFileOptions): string;
+    export function writeFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions): void;
+    export function appendFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSAppendFileOptions): void;
+    export function existsSync(path: FSPathLike): boolean;
+    export function accessSync(path: FSPathLike, mode?: number): void;
+    export function readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions): Buffer[];
+    export function readdirSync(path: FSPathLike, options: FSReaddirDirentOptions): FSDirent[];
+    export function readdirSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReaddirOptions): string[];
+    export function statSync(path: FSPathLike, options?: FSStatsOptions): FSStats;
+    export function lstatSync(path: FSPathLike, options?: FSStatsOptions): FSStats;
+    export function realpathSync(path: FSPathLike, options: FSFileBufferEncodingOptions): Buffer;
+    export function realpathSync(path: FSPathLike, options?: FSFileEncodingOptions): string;
+    export function readlinkSync(path: FSPathLike, options: FSFileBufferEncodingOptions): Buffer;
+    export function readlinkSync(path: FSPathLike, options?: FSFileEncodingOptions): string;
+    export function symlinkSync(target: FSPathLike, path: FSPathLike, type?: FSSymlinkType): void;
+    export function linkSync(existingPath: FSPathLike, newPath: FSPathLike): void;
+    export function mkdtempSync(prefix: FSPathLike, options: FSFileBufferEncodingOptions): Buffer;
+    export function mkdtempSync(prefix: FSPathLike, options?: FSFileEncodingOptions): string;
+    export function truncateSync(path: FSPathLike, len?: number): void;
+    export function utimesSync(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime): void;
+    export function lutimesSync(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime): void;
+    export function chownSync(path: FSPathLike, uid: number, gid: number): void;
+    export function lchownSync(path: FSPathLike, uid: number, gid: number): void;
+    export function chmodSync(path: FSPathLike, mode: number): void;
+    export function mkdirSync(path: FSPathLike, options?: number | FSMkdirOptions): void;
+    export function unlinkSync(path: FSPathLike): void;
+    export function rmSync(path: FSPathLike, options?: FSRmOptions): void;
+    export function rmdirSync(path: FSPathLike): void;
+    export function cpSync(src: FSPathLike, dest: FSPathLike, options?: FSCpOptions): void;
+    export function copyFileSync(src: FSPathLike, dest: FSPathLike, mode?: number): void;
+    export function renameSync(oldPath: FSPathLike, newPath: FSPathLike): void;
 }
 declare module "node:fs" {
     export const constants: FSConstants;
     export const promises: FSPromises;
-    export function readFileSync(path: string, options?: FSFileEncodingOptions): string;
-    export function writeFileSync(path: string, data: string | Buffer, options?: FSFileEncodingOptions): void;
-    export function appendFileSync(path: string, data: string | Buffer, options?: FSFileEncodingOptions): void;
-    export function existsSync(path: string): boolean;
-    export function accessSync(path: string, mode?: number): void;
-    export function readdirSync(path: string, options: FSReaddirDirentOptions): FSDirent[];
-    export function readdirSync(path: string, options?: FSFileEncodingOptions | FSReaddirOptions): string[];
-    export function statSync(path: string, options?: FSStatsOptions): FSStats;
-    export function lstatSync(path: string, options?: FSStatsOptions): FSStats;
-    export function realpathSync(path: string, options?: FSFileEncodingOptions): string;
-    export function readlinkSync(path: string, options?: FSFileEncodingOptions): string;
-    export function symlinkSync(target: string, path: string, type?: FSSymlinkType): void;
-    export function linkSync(existingPath: string, newPath: string): void;
-    export function mkdtempSync(prefix: string, options?: FSFileEncodingOptions): string;
-    export function truncateSync(path: string, len?: number): void;
-    export function utimesSync(path: string, atime: FSFileTime, mtime: FSFileTime): void;
-    export function lutimesSync(path: string, atime: FSFileTime, mtime: FSFileTime): void;
-    export function chownSync(path: string, uid: number, gid: number): void;
-    export function lchownSync(path: string, uid: number, gid: number): void;
-    export function chmodSync(path: string, mode: number): void;
-    export function mkdirSync(path: string, options?: number | FSMkdirOptions): void;
-    export function unlinkSync(path: string): void;
-    export function rmSync(path: string, options?: FSRmOptions): void;
-    export function rmdirSync(path: string): void;
-    export function cpSync(src: string, dest: string, options?: FSCpOptions): void;
-    export function copyFileSync(src: string, dest: string, mode?: number): void;
-    export function renameSync(oldPath: string, newPath: string): void;
+    export function readFileSync(path: FSPathLike, options: FSReadFileBufferOptions): Buffer;
+    export function readFileSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReadFileOptions): string;
+    export function writeFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions): void;
+    export function appendFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSAppendFileOptions): void;
+    export function existsSync(path: FSPathLike): boolean;
+    export function accessSync(path: FSPathLike, mode?: number): void;
+    export function readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions): Buffer[];
+    export function readdirSync(path: FSPathLike, options: FSReaddirDirentOptions): FSDirent[];
+    export function readdirSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReaddirOptions): string[];
+    export function statSync(path: FSPathLike, options?: FSStatsOptions): FSStats;
+    export function lstatSync(path: FSPathLike, options?: FSStatsOptions): FSStats;
+    export function realpathSync(path: FSPathLike, options: FSFileBufferEncodingOptions): Buffer;
+    export function realpathSync(path: FSPathLike, options?: FSFileEncodingOptions): string;
+    export function readlinkSync(path: FSPathLike, options: FSFileBufferEncodingOptions): Buffer;
+    export function readlinkSync(path: FSPathLike, options?: FSFileEncodingOptions): string;
+    export function symlinkSync(target: FSPathLike, path: FSPathLike, type?: FSSymlinkType): void;
+    export function linkSync(existingPath: FSPathLike, newPath: FSPathLike): void;
+    export function mkdtempSync(prefix: FSPathLike, options: FSFileBufferEncodingOptions): Buffer;
+    export function mkdtempSync(prefix: FSPathLike, options?: FSFileEncodingOptions): string;
+    export function truncateSync(path: FSPathLike, len?: number): void;
+    export function utimesSync(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime): void;
+    export function lutimesSync(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime): void;
+    export function chownSync(path: FSPathLike, uid: number, gid: number): void;
+    export function lchownSync(path: FSPathLike, uid: number, gid: number): void;
+    export function chmodSync(path: FSPathLike, mode: number): void;
+    export function mkdirSync(path: FSPathLike, options?: number | FSMkdirOptions): void;
+    export function unlinkSync(path: FSPathLike): void;
+    export function rmSync(path: FSPathLike, options?: FSRmOptions): void;
+    export function rmdirSync(path: FSPathLike): void;
+    export function cpSync(src: FSPathLike, dest: FSPathLike, options?: FSCpOptions): void;
+    export function copyFileSync(src: FSPathLike, dest: FSPathLike, mode?: number): void;
+    export function renameSync(oldPath: FSPathLike, newPath: FSPathLike): void;
 }
 
 interface Path {
@@ -1078,6 +1154,40 @@ interface BufferConstructor {
     compare(a: Buffer, b: Buffer): number;
 }
 declare var Buffer: BufferConstructor;
+
+interface Event {
+    readonly type: string;
+    readonly target: EventTarget;
+    readonly currentTarget: EventTarget;
+    readonly defaultPrevented: boolean;
+    readonly cancelable: boolean;
+    preventDefault(): void;
+}
+interface EventInit {
+    cancelable?: boolean;
+}
+interface EventConstructor {
+    new(type: string, eventInitDict?: EventInit): Event;
+}
+declare var Event: EventConstructor;
+
+interface EventTarget {
+    addEventListener(type: string, listener: (event: Event) => void, options?: boolean | AddEventListenerOptions): void;
+    removeEventListener(type: string, listener: (event: Event) => void, options?: boolean | EventListenerOptions): void;
+    dispatchEvent(event: Event): boolean;
+}
+interface EventTargetConstructor {
+    new(): EventTarget;
+}
+declare var EventTarget: EventTargetConstructor;
+
+interface EventListenerOptions {
+    capture?: boolean;
+}
+interface AddEventListenerOptions extends EventListenerOptions {
+    once?: boolean;
+    passive?: boolean;
+}
 
 interface EventEmitter {
     on(eventName: string, listener: (...args: any[]) => void): this;
@@ -1320,7 +1430,7 @@ interface URL {
     valueOf(): URL;
 }
 interface URLConstructor {
-    new (input: string): URL;
-    canParse(input: string): boolean;
+    new (input: string, base?: string): URL;
+    canParse(input: string, base?: string): boolean;
 }
 declare var URL: URLConstructor;

@@ -1,0 +1,4 @@
+names: alpha.txt,sub
+object: alpha.txt,sub
+recursive: alpha.txt,sub,sub/beta.txt
+promise: alpha.txt,sub

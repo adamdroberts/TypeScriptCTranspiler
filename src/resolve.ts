@@ -72,6 +72,7 @@ export function buildModuleGraph(
     // Resolve imports per module using TS's resolver.
     const options = program.getCompilerOptions();
     for (const [id, info] of modules) {
+        const requireAliases = commonJsRequireAliases(info.sf);
         for (const stmt of info.sf.statements) {
             const specs: string[] = [];
             if (ts.isImportDeclaration(stmt) || ts.isExportDeclaration(stmt)) {
@@ -79,7 +80,7 @@ export function buildModuleGraph(
                 const m = stmt.moduleSpecifier;
                 if (m && ts.isStringLiteral(m)) specs.push(m.text);
             }
-            specs.push(...staticRequireSpecifiers(stmt));
+            specs.push(...staticRequireSpecifiers(stmt, requireAliases));
             for (const spec of specs) {
                 const resolved = ts.resolveModuleName(
                     spec,
@@ -129,10 +130,10 @@ function isTypeOnlyModuleEdge(stmt: ts.ImportDeclaration | ts.ExportDeclaration)
     return stmt.isTypeOnly === true;
 }
 
-function staticRequireSpecifiers(stmt: ts.Statement): string[] {
+function staticRequireSpecifiers(stmt: ts.Statement, requireAliases: Set<string>): string[] {
     const specs: string[] = [];
     const visit = (node: ts.Node): void => {
-        const spec = ts.isExpression(node) ? requireCallSpecifier(node) : null;
+        const spec = ts.isExpression(node) ? requireCallSpecifier(node, requireAliases) : null;
         if (spec) specs.push(spec);
         ts.forEachChild(node, visit);
     };
@@ -140,10 +141,10 @@ function staticRequireSpecifiers(stmt: ts.Statement): string[] {
     return specs;
 }
 
-function requireCallSpecifier(expr: ts.Expression): string | null {
+function requireCallSpecifier(expr: ts.Expression, requireAliases: Set<string>): string | null {
     if (
         ts.isCallExpression(expr) &&
-        isCommonJsRequireCallee(expr.expression) &&
+        isCommonJsRequireCallee(expr.expression, requireAliases) &&
         expr.arguments.length === 1 &&
         ts.isStringLiteralLike(expr.arguments[0])
     ) {
@@ -152,7 +153,31 @@ function requireCallSpecifier(expr: ts.Expression): string | null {
     return null;
 }
 
-function isCommonJsRequireCallee(expr: ts.Expression): boolean {
+function isCommonJsRequireCallee(expr: ts.Expression, requireAliases: Set<string>): boolean {
+    return (ts.isIdentifier(expr) && (expr.text === "require" || requireAliases.has(expr.text))) ||
+        (
+            ts.isPropertyAccessExpression(expr) &&
+            expr.name.text === "require" &&
+            ts.isIdentifier(expr.expression) &&
+            expr.expression.text === "module"
+        );
+}
+
+function commonJsRequireAliases(sf: ts.SourceFile): Set<string> {
+    const aliases = new Set<string>();
+    const visit = (node: ts.Node): void => {
+        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+            let init = node.initializer;
+            while (ts.isParenthesizedExpression(init)) init = init.expression;
+            if (isCommonJsRequireAliasInitializer(init)) aliases.add(node.name.text);
+        }
+        ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    return aliases;
+}
+
+function isCommonJsRequireAliasInitializer(expr: ts.Expression): boolean {
     return (ts.isIdentifier(expr) && expr.text === "require") ||
         (
             ts.isPropertyAccessExpression(expr) &&

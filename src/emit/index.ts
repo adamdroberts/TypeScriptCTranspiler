@@ -19,7 +19,9 @@ import {
     T_BUFFER,
     T_DATE,
     T_ERROR,
+    T_EVENT,
     T_EVENT_EMITTER,
+    T_EVENT_TARGET,
     T_FS_DIRENT,
     T_FS_STATS,
     T_HASH,
@@ -72,12 +74,37 @@ interface AsyncFunctionContext {
 type GenericCallableDeclaration = ts.FunctionDeclaration | ts.MethodDeclaration;
 type ClosureLikeDeclaration = ts.ArrowFunction | ts.FunctionExpression | ts.MethodDeclaration;
 type CommonJsExportAccess = ts.PropertyAccessExpression | ts.ElementAccessExpression;
-type CommonJsObjectAssignExportEntry = ts.PropertyAssignment | ts.ShorthandPropertyAssignment | ts.MethodDeclaration;
+type CommonJsObjectAssignExportEntry =
+    | ts.PropertyAssignment
+    | ts.ShorthandPropertyAssignment
+    | ts.MethodDeclaration
+    | ts.GetAccessorDeclaration;
 
 interface CommonJsObjectAssignExport {
     call: ts.CallExpression;
     name: string;
     entry: ts.Node;
+    right?: ts.Expression;
+}
+
+interface CommonJsDefinePropertiesExport {
+    call: ts.CallExpression;
+    name: string;
+    right?: ts.Expression;
+    entry: CommonJsObjectAssignExportEntry;
+}
+
+interface CommonJsDefinePropertyExport {
+    call: ts.CallExpression;
+    name: string;
+    right: ts.Expression;
+}
+
+interface CommonJsFromEntriesExport {
+    call: ts.CallExpression;
+    name: string;
+    right: ts.Expression;
+    entry: ts.ArrayLiteralExpression | ts.PropertyAssignment;
 }
 
 interface CaptureCell {
@@ -175,7 +202,11 @@ class Emitter {
     private commonJsExportGlobals = new Set<string>();
     private requireDestructureTypes = new Map<ts.Symbol, CType>();
     private nextTickAdapters = new Map<string, string>();
+    private microtaskAdapters = new Map<string, string>();
+    private immediateAdapters = new Map<string, string>();
+    private timeoutAdapters = new Map<string, string>();
     private eventListenerAdapters = new Map<string, string>();
+    private eventTargetListenerAdapters = new Map<string, string>();
     private eventListenerIdentities = new Map<string, string>();
     private capturedCellsCache = new WeakMap<ts.FunctionLikeDeclaration, Map<ts.Symbol, CaptureCell>>();
     private cellScopes: Map<ts.Symbol, CaptureCell>[] = [];
@@ -324,6 +355,9 @@ class Emitter {
             out.line(`    mod_init_${modId}();`);
         }
         out.line("    tsc_process_drain_next_ticks();");
+        out.line("    tsc_drain_microtasks();");
+        out.line("    tsc_drain_timeouts();");
+        out.line("    tsc_drain_immediates();");
         out.line("    return 0;");
         out.line("}");
         return { mainC: out.toString(), diagnostics: this.diagnostics };
@@ -417,6 +451,119 @@ class Emitter {
                 if (commonJsObjectAssignExports) {
                     for (const commonJsAssignExport of commonJsObjectAssignExports) {
                         this.emitCommonJsObjectAssignExport(initBuf, commonJsAssignExport);
+                    }
+                    continue;
+                }
+                const commonJsModuleObjectAssignExports = this.commonJsModuleExportsObjectAssignValueExports(inner);
+                if (commonJsModuleObjectAssignExports) {
+                    for (const commonJsAssignExport of commonJsModuleObjectAssignExports) {
+                        this.emitCommonJsObjectAssignExport(initBuf, commonJsAssignExport);
+                    }
+                    const commonJsModuleExport = this.commonJsModuleExportsValueAssignment(inner);
+                    if (
+                        commonJsModuleExport &&
+                        this.canEmitCommonJsModuleExportsObjectAssignWholeValue(commonJsModuleExport.right)
+                    ) {
+                        this.emitCommonJsModuleExportsValueAssignment(initBuf, commonJsModuleExport);
+                    }
+                    continue;
+                }
+                const commonJsModuleDefinePropertiesExports = this.commonJsModuleExportsDefinePropertiesValueExports(inner);
+                if (commonJsModuleDefinePropertiesExports) {
+                    for (const commonJsDefineExport of commonJsModuleDefinePropertiesExports) {
+                        this.emitCommonJsDefinePropertiesExport(initBuf, commonJsDefineExport);
+                    }
+                    const commonJsModuleExport = this.commonJsModuleExportsValueAssignment(inner);
+                    if (
+                        commonJsModuleExport &&
+                        this.canEmitCommonJsModuleExportsDefinePropertiesWholeValue(commonJsModuleExport.right)
+                    ) {
+                        this.emitCommonJsModuleExportsValueAssignment(initBuf, commonJsModuleExport);
+                    }
+                    continue;
+                }
+                const commonJsModuleObjectCreateExports = this.commonJsModuleExportsObjectCreateValueExports(inner);
+                if (commonJsModuleObjectCreateExports) {
+                    for (const commonJsDefineExport of commonJsModuleObjectCreateExports) {
+                        this.emitCommonJsDefinePropertiesExport(initBuf, commonJsDefineExport);
+                    }
+                    const commonJsModuleExport = this.commonJsModuleExportsValueAssignment(inner);
+                    if (
+                        commonJsModuleExport &&
+                        this.canEmitCommonJsModuleExportsObjectCreateWholeValue(commonJsModuleExport.right)
+                    ) {
+                        this.emitCommonJsModuleExportsValueAssignment(initBuf, commonJsModuleExport);
+                    }
+                    continue;
+                }
+                const commonJsModuleObjectWrapperDescriptorExports = this.commonJsModuleExportsObjectWrapperDescriptorValueExports(inner);
+                if (commonJsModuleObjectWrapperDescriptorExports) {
+                    for (const commonJsDefineExport of commonJsModuleObjectWrapperDescriptorExports) {
+                        this.emitCommonJsDefinePropertiesExport(initBuf, commonJsDefineExport);
+                    }
+                    const commonJsModuleExport = this.commonJsModuleExportsValueAssignment(inner);
+                    if (
+                        commonJsModuleExport &&
+                        this.canEmitCommonJsModuleExportsObjectWrapperWholeValue(commonJsModuleExport.right)
+                    ) {
+                        this.emitCommonJsModuleExportsValueAssignment(initBuf, commonJsModuleExport);
+                    }
+                    continue;
+                }
+                const commonJsModuleDefinePropertyExports = this.commonJsModuleExportsDefinePropertyValueExports(inner);
+                if (commonJsModuleDefinePropertyExports) {
+                    for (const commonJsDefineExport of commonJsModuleDefinePropertyExports) {
+                        this.emitCommonJsObjectAssignExport(initBuf, commonJsDefineExport);
+                    }
+                    const commonJsModuleExport = this.commonJsModuleExportsValueAssignment(inner);
+                    if (
+                        commonJsModuleExport &&
+                        this.canEmitCommonJsModuleExportsDefinePropertyWholeValue(commonJsModuleExport.right)
+                    ) {
+                        this.emitCommonJsModuleExportsValueAssignment(initBuf, commonJsModuleExport);
+                    }
+                    continue;
+                }
+                const commonJsModuleObjectWrapperExports = this.commonJsModuleExportsObjectWrapperValueExports(inner);
+                if (commonJsModuleObjectWrapperExports) {
+                    for (const commonJsObjectExport of commonJsModuleObjectWrapperExports) {
+                        this.emitCommonJsObjectAssignExport(initBuf, commonJsObjectExport);
+                    }
+                    const commonJsModuleExport = this.commonJsModuleExportsValueAssignment(inner);
+                    if (
+                        commonJsModuleExport &&
+                        this.canEmitCommonJsModuleExportsObjectWrapperWholeValue(commonJsModuleExport.right)
+                    ) {
+                        this.emitCommonJsModuleExportsValueAssignment(initBuf, commonJsModuleExport);
+                    }
+                    continue;
+                }
+                const commonJsModuleObjectWrapperFromEntriesExports =
+                    this.commonJsModuleExportsObjectWrapperFromEntriesValueExports(inner);
+                if (commonJsModuleObjectWrapperFromEntriesExports) {
+                    for (const commonJsFromEntriesExport of commonJsModuleObjectWrapperFromEntriesExports) {
+                        this.emitCommonJsFromEntriesExport(initBuf, commonJsFromEntriesExport);
+                    }
+                    const commonJsModuleExport = this.commonJsModuleExportsValueAssignment(inner);
+                    if (
+                        commonJsModuleExport &&
+                        this.canEmitCommonJsModuleExportsObjectWrapperWholeValue(commonJsModuleExport.right)
+                    ) {
+                        this.emitCommonJsModuleExportsValueAssignment(initBuf, commonJsModuleExport);
+                    }
+                    continue;
+                }
+                const commonJsModuleFromEntriesExports = this.commonJsModuleExportsObjectFromEntriesValueExports(inner);
+                if (commonJsModuleFromEntriesExports) {
+                    for (const commonJsFromEntriesExport of commonJsModuleFromEntriesExports) {
+                        this.emitCommonJsFromEntriesExport(initBuf, commonJsFromEntriesExport);
+                    }
+                    const commonJsModuleExport = this.commonJsModuleExportsValueAssignment(inner);
+                    if (
+                        commonJsModuleExport &&
+                        this.canEmitCommonJsModuleExportsObjectFromEntriesWholeValue(commonJsModuleExport.right)
+                    ) {
+                        this.emitCommonJsModuleExportsValueAssignment(initBuf, commonJsModuleExport);
                     }
                     continue;
                 }
@@ -600,10 +747,12 @@ class Emitter {
             ts.isPropertyAccessExpression(target.left) &&
             this.isModuleExportsAccess(target.left)
         ) {
+            const defaultMember = this.commonJsExportedMemberDeclaration(target.getSourceFile(), "default");
+            if (defaultMember) return defaultMember;
             return target;
         }
         if (target && ts.isCallExpression(target)) {
-            const defineExport = this.commonJsDefinePropertyExportCall(target);
+            const defineExport = this.commonJsDefinePropertyExportForCallDeclaration(target);
             if (defineExport?.name === "default") return target;
         }
 
@@ -663,29 +812,60 @@ class Emitter {
             return this.commonJsModuleExportsCName(decl);
         }
         if (ts.isPropertyAssignment(decl)) {
+            const definePropertiesExport = this.commonJsDefinePropertiesExportEntry(decl);
+            if (definePropertiesExport) {
+                return this.commonJsDefinePropertyExportCName(definePropertiesExport.call, definePropertiesExport.name);
+            }
+            const objectAssignExport = this.commonJsObjectAssignExportEntry(decl);
+            if (objectAssignExport) {
+                return this.commonJsDefinePropertyExportCName(objectAssignExport.call, objectAssignExport.name);
+            }
+            const fromEntriesExport = this.commonJsObjectFromEntriesExportEntry(decl);
+            if (fromEntriesExport) {
+                return this.commonJsDefinePropertyExportCName(fromEntriesExport.call, fromEntriesExport.name);
+            }
             if (ts.isFunctionExpression(decl.initializer) || ts.isArrowFunction(decl.initializer)) {
                 return this.commonJsObjectPropertyExportCName(decl);
             }
             if (ts.isIdentifier(decl.initializer)) {
+                if (this.requireBindingModuleExportsDeclaration(decl.initializer)) {
+                    return this.commonJsObjectPropertyExportCName(decl);
+                }
                 const valueDecl = this.commonJsObjectExportValueDeclaration(decl);
                 return valueDecl ? this.declarationCName(valueDecl) : this.identifierName(decl.initializer);
+            }
+            if (
+                (ts.isPropertyAccessExpression(decl.initializer) && this.requireModuleMemberDeclaration(decl.initializer)) ||
+                this.requireCallModuleExportsDeclaration(decl.initializer)
+            ) {
+                return this.commonJsObjectPropertyExportCName(decl);
             }
             if (this.isCommonJsModuleExportsDefaultValue(decl.initializer)) {
                 return this.commonJsObjectPropertyExportCName(decl);
             }
         }
+        if (ts.isArrayLiteralExpression(decl)) {
+            const fromEntriesExport = this.commonJsObjectFromEntriesExportEntry(decl);
+            if (fromEntriesExport) {
+                return this.commonJsDefinePropertyExportCName(fromEntriesExport.call, fromEntriesExport.name);
+            }
+        }
         if (ts.isMethodDeclaration(decl)) {
             return this.commonJsObjectPropertyExportCName(decl);
         }
-        if (ts.isCallExpression(decl)) {
-            const defineExport = this.commonJsDefinePropertyExportCall(decl);
-            if (defineExport) return this.commonJsDefinePropertyExportCName(decl, defineExport.name);
+        if (
+            ts.isGetAccessorDeclaration(decl) &&
+            (
+                this.commonJsDefinePropertiesExportEntry(decl) ||
+                this.commonJsObjectAssignExportEntry(decl) ||
+                this.isCommonJsModuleExportsObjectExportEntry(decl)
+            )
+        ) {
+            return this.commonJsObjectPropertyExportCName(decl);
         }
-        if (ts.isPropertyAssignment(decl)) {
-            const definePropertiesExport = this.commonJsDefinePropertiesExportEntry(decl);
-            if (definePropertiesExport) {
-                return this.commonJsDefinePropertyExportCName(definePropertiesExport.call, definePropertiesExport.name);
-            }
+        if (ts.isCallExpression(decl)) {
+            const defineExport = this.commonJsDefinePropertyExportForCallDeclaration(decl);
+            if (defineExport) return this.commonJsDefinePropertyExportCName(defineExport.call, defineExport.name);
         }
         if (ts.isShorthandPropertyAssignment(decl)) {
             const valueDecl = this.commonJsObjectExportValueDeclaration(decl);
@@ -787,15 +967,12 @@ class Emitter {
         const target = call.arguments[0];
         const key = call.arguments[1];
         if (!target || !key || !ts.isStringLiteralLike(key) || key.text !== "__esModule") return false;
-        return (
-            (ts.isIdentifier(target) && target.text === "exports") ||
-            (ts.isPropertyAccessExpression(target) && this.isModuleExportsAccess(target))
-        );
+        return this.isCommonJsExportsTargetExpression(target);
     }
 
     private commonJsDefinePropertyExport(
         stmt: ts.Statement,
-    ): { call: ts.CallExpression; name: string; right: ts.Expression } | null {
+    ): CommonJsDefinePropertyExport | null {
         if (!this.isJavaScriptSourceFile(stmt.getSourceFile())) return null;
         if (!ts.isExpressionStatement(stmt) || !ts.isCallExpression(stmt.expression)) return null;
         return this.commonJsDefinePropertyExportCall(stmt.expression);
@@ -803,7 +980,7 @@ class Emitter {
 
     private commonJsDefinePropertiesExports(
         stmt: ts.Statement,
-    ): Array<{ call: ts.CallExpression; name: string; right: ts.Expression; entry: ts.PropertyAssignment }> | null {
+    ): CommonJsDefinePropertiesExport[] | null {
         if (!this.isJavaScriptSourceFile(stmt.getSourceFile())) return null;
         if (!ts.isExpressionStatement(stmt) || !ts.isCallExpression(stmt.expression)) return null;
         return this.commonJsDefinePropertiesExportCall(stmt.expression);
@@ -827,16 +1004,39 @@ class Emitter {
         }
         const target = call.arguments[0]!;
         if (
-            !(
-                (ts.isIdentifier(target) && target.text === "exports") ||
-                (ts.isPropertyAccessExpression(target) && this.isModuleExportsAccess(target))
-            )
+            !this.isCommonJsExportsTargetExpression(target)
         ) {
             return null;
         }
+        return this.commonJsObjectAssignExportsFromSources(call, call.arguments.slice(1));
+    }
 
+    private commonJsObjectAssignExportsFromSources(
+        call: ts.CallExpression,
+        sources: readonly ts.Expression[],
+    ): CommonJsObjectAssignExport[] {
         const exports: CommonJsObjectAssignExport[] = [];
-        for (const source of call.arguments.slice(1)) {
+        for (const source of sources) {
+            const wrapperObjectExports = this.commonJsObjectAssignWrapperObjectExports(call, source);
+            if (wrapperObjectExports) {
+                exports.push(...wrapperObjectExports);
+                continue;
+            }
+            const definePropertyObjectExports = this.commonJsObjectAssignDefinePropertyObjectExports(call, source);
+            if (definePropertyObjectExports) {
+                exports.push(...definePropertyObjectExports);
+                continue;
+            }
+            const descriptorObjectExports = this.commonJsObjectAssignDescriptorObjectExports(call, source);
+            if (descriptorObjectExports) {
+                exports.push(...descriptorObjectExports);
+                continue;
+            }
+            const fromEntriesObjectExports = this.commonJsObjectAssignFromEntriesObjectExports(call, source);
+            if (fromEntriesObjectExports) {
+                exports.push(...fromEntriesObjectExports);
+                continue;
+            }
             const requireSpec = this.requireCallSpecifier(source);
             if (requireSpec) {
                 const info = this.resolvedModuleInfoForSpecifier(requireSpec, call.getSourceFile().fileName);
@@ -849,15 +1049,18 @@ class Emitter {
                 }
                 continue;
             }
-            if (!ts.isObjectLiteralExpression(source)) {
-                unsupported(source, "CommonJS Object.assign exports require static object-literal or static require(...) sources");
+            const sourceEntries = this.commonJsObjectAssignExportSourceEntries(source);
+            if (!sourceEntries) {
+                unsupported(source, "CommonJS Object.assign exports require static object-literal, declared object-literal, or static require(...) sources");
             }
-            for (const entry of source.properties) {
-                if (ts.isSpreadAssignment(entry)) {
-                    unsupported(entry, "CommonJS Object.assign exports do not support spread sources yet");
-                }
-                if (!ts.isPropertyAssignment(entry) && !ts.isShorthandPropertyAssignment(entry) && !ts.isMethodDeclaration(entry)) {
-                    unsupported(entry, "CommonJS Object.assign exports require static data or method properties");
+            for (const entry of sourceEntries) {
+                if (
+                    !ts.isPropertyAssignment(entry) &&
+                    !ts.isShorthandPropertyAssignment(entry) &&
+                    !ts.isMethodDeclaration(entry) &&
+                    !ts.isGetAccessorDeclaration(entry)
+                ) {
+                    unsupported(entry, "CommonJS Object.assign exports require static data, method, or getter properties");
                 }
                 const name = this.commonJsObjectAssignExportName(entry);
                 if (!name || name === "__esModule") continue;
@@ -868,6 +1071,808 @@ class Emitter {
         return exports;
     }
 
+    private commonJsObjectAssignWrapperObjectExports(
+        call: ts.CallExpression,
+        source: ts.Expression,
+    ): CommonJsObjectAssignExport[] | null {
+        let cur = source;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isCallExpression(cur)) return null;
+        const callName = this.objectStaticCallName(cur);
+        if (
+            callName !== "freeze" &&
+            callName !== "seal" &&
+            callName !== "preventExtensions" &&
+            callName !== "setPrototypeOf"
+        ) {
+            return null;
+        }
+        if (cur.arguments.length < 1) return null;
+        const wrapped = cur.arguments[0]!;
+        if (this.isCommonJsObjectAssignNonExportingTarget(wrapped)) return [];
+        return this.commonJsObjectAssignExportsFromSources(call, [wrapped]);
+    }
+
+    private commonJsObjectAssignDefinePropertyObjectExports(
+        call: ts.CallExpression,
+        source: ts.Expression,
+    ): CommonJsObjectAssignExport[] | null {
+        let cur = source;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isCallExpression(cur) || !this.isObjectDefinePropertyCall(cur)) return null;
+        const exports: CommonJsObjectAssignExport[] = [];
+        const targetExports = this.commonJsObjectAssignDescriptorObjectExports(call, cur.arguments[0]!);
+        if (targetExports) {
+            exports.push(...targetExports);
+        } else {
+            const wrapperExports = this.commonJsObjectAssignWrapperObjectExports(call, cur.arguments[0]!);
+            const targetObjectEntries = wrapperExports ? null : this.commonJsObjectAssignExportSourceEntries(cur.arguments[0]!);
+            if (wrapperExports) {
+                exports.push(...wrapperExports);
+            } else if (targetObjectEntries) {
+                for (const entry of targetObjectEntries) {
+                    const name = this.commonJsObjectAssignExportName(entry);
+                    if (!name || name === "__esModule") continue;
+                    this.validateCommonJsObjectAssignExportEntry(entry);
+                    exports.push({ call, name, entry });
+                }
+            } else if (!this.isCommonJsObjectAssignNonExportingDescriptorTarget(cur.arguments[0]!)) {
+                return null;
+            }
+        }
+        const exported = this.commonJsDefinePropertyExportFromKeyAndDescriptor(cur, cur.arguments[1]!, cur.arguments[2]!);
+        if (exported) exports.push({ call, name: exported.name, entry: cur, right: exported.right });
+        return exports;
+    }
+
+    private commonJsObjectAssignDescriptorObjectExports(
+        call: ts.CallExpression,
+        source: ts.Expression,
+    ): CommonJsObjectAssignExport[] | null {
+        let cur = source;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isCallExpression(cur)) return null;
+        const descriptors = this.commonJsObjectAssignDescriptorObjectDescriptors(cur);
+        if (!descriptors) return null;
+        const descriptorExports = this.commonJsDefinePropertiesExportsFromDescriptors(cur, descriptors);
+        if (!descriptorExports) return null;
+        return descriptorExports.map((exported) => ({
+            call,
+            name: exported.name,
+            entry: exported.entry,
+            right: exported.right,
+        }));
+    }
+
+    private commonJsObjectAssignFromEntriesObjectExports(
+        call: ts.CallExpression,
+        source: ts.Expression,
+    ): CommonJsObjectAssignExport[] | null {
+        let cur = source;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isCallExpression(cur) || this.objectStaticCallName(cur) !== "fromEntries" || cur.arguments.length !== 1) {
+            return null;
+        }
+        const exports = this.commonJsObjectFromEntriesExportsFromSource(call, cur.arguments[0]!);
+        return exports?.map((exported) => ({
+            call,
+            name: exported.name,
+            entry: exported.entry,
+            right: exported.right,
+        })) ?? null;
+    }
+
+    private commonJsObjectAssignDescriptorObjectDescriptors(call: ts.CallExpression): ts.Expression | null {
+        if (this.isObjectCreateCall(call) && call.arguments.length >= 2) return call.arguments[1]!;
+        if (
+            this.isObjectDefinePropertiesCall(call) &&
+            this.isCommonJsObjectAssignNonExportingDescriptorTarget(call.arguments[0]!)
+        ) {
+            return call.arguments[1]!;
+        }
+        return null;
+    }
+
+    private isCommonJsObjectAssignNonExportingDescriptorTarget(expr: ts.Expression): boolean {
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isObjectLiteralExpression(cur)) return cur.properties.length === 0;
+        return ts.isCallExpression(cur) && this.isCommonJsObjectAssignNonExportingTarget(cur);
+    }
+
+    private commonJsModuleExportsObjectAssignValueExports(stmt: ts.Statement): CommonJsObjectAssignExport[] | null {
+        if (!this.isJavaScriptSourceFile(stmt.getSourceFile())) return null;
+        if (!ts.isExpressionStatement(stmt) || !ts.isBinaryExpression(stmt.expression)) return null;
+        const expr = stmt.expression;
+        if (
+            expr.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+            !ts.isPropertyAccessExpression(expr.left) ||
+            !this.isModuleExportsAccess(expr.left)
+        ) {
+            return null;
+        }
+        let right: ts.Expression = expr.right;
+        while (ts.isParenthesizedExpression(right)) right = right.expression;
+        return ts.isCallExpression(right)
+            ? this.commonJsModuleExportsObjectAssignValueExportCall(right)
+            : null;
+    }
+
+    private commonJsModuleExportsObjectAssignValueExportCall(call: ts.CallExpression): CommonJsObjectAssignExport[] | null {
+        if (!this.isCommonJsModuleExportsObjectAssignValueCall(call)) return null;
+        return this.commonJsObjectAssignExportsFromSources(
+            call,
+            this.commonJsModuleExportsObjectAssignExportSources(call),
+        );
+    }
+
+    private isCommonJsModuleExportsObjectAssignValueCall(call: ts.CallExpression): boolean {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            call.expression.name.text !== "assign" ||
+            !ts.isIdentifier(call.expression.expression) ||
+            call.expression.expression.text !== "Object" ||
+            call.arguments.length < 1
+        ) {
+            return false;
+        }
+        let parent: ts.Node = call.parent;
+        while (ts.isParenthesizedExpression(parent)) parent = parent.parent;
+        return ts.isBinaryExpression(parent) &&
+            parent.right === call &&
+            parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            ts.isPropertyAccessExpression(parent.left) &&
+            this.isModuleExportsAccess(parent.left) &&
+            ts.isExpressionStatement(parent.parent);
+    }
+
+    private commonJsModuleExportsObjectAssignExportSources(call: ts.CallExpression): readonly ts.Expression[] {
+        const sources: ts.Expression[] = [];
+        for (let i = 0; i < call.arguments.length; i++) {
+            const source = call.arguments[i]!;
+            if (
+                i === 0 &&
+                (this.isCommonJsObjectAssignNonExportingTarget(source) ||
+                    this.isCommonJsExportsTargetExpression(source))
+            ) {
+                continue;
+            }
+            sources.push(source);
+        }
+        return sources;
+    }
+
+    private isCommonJsObjectAssignNonExportingTarget(expr: ts.Expression): boolean {
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isCallExpression(cur) || !this.isObjectCreateCall(cur)) return false;
+        if (cur.arguments.length === 1) return true;
+        const descriptorEntries = this.commonJsDefinePropertiesExportDescriptorEntries(cur.arguments[1]!);
+        return descriptorEntries !== null && descriptorEntries.length === 0;
+    }
+
+    private canEmitCommonJsModuleExportsObjectAssignWholeValue(expr: ts.Expression): boolean {
+        let cur: ts.Expression = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (
+            !ts.isCallExpression(cur) ||
+            !ts.isPropertyAccessExpression(cur.expression) ||
+            cur.expression.name.text !== "assign" ||
+            !ts.isIdentifier(cur.expression.expression) ||
+            cur.expression.expression.text !== "Object"
+        ) {
+            return true;
+        }
+        for (let i = 0; i < cur.arguments.length; i++) {
+            const source = cur.arguments[i]!;
+            if (i === 0 && this.isCommonJsObjectAssignNonExportingTarget(source)) continue;
+            if (this.requireCallSpecifier(source)) return false;
+            if (this.canEmitCommonJsObjectAssignInlineSourceWholeValue(source)) continue;
+            const entries = this.commonJsObjectAssignExportSourceEntries(source);
+            if (!entries) return false;
+            for (const entry of entries) {
+                if (!ts.isPropertyAssignment(entry)) return false;
+                if (!this.isCommonJsModuleExportsDefaultValue(entry.initializer)) return false;
+            }
+        }
+        return true;
+    }
+
+    private canEmitCommonJsObjectAssignInlineSourceWholeValue(expr: ts.Expression): boolean {
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isObjectLiteralExpression(cur)) return false;
+        for (const prop of cur.properties) {
+            if (!ts.isPropertyAssignment(prop)) return false;
+            if (this.staticPropertyName(prop.name) == null) return false;
+            if (this.requireCallSpecifier(prop.initializer)) return false;
+        }
+        return true;
+    }
+
+    private commonJsModuleExportsObjectFromEntriesValueExports(stmt: ts.Statement): CommonJsFromEntriesExport[] | null {
+        if (!this.isJavaScriptSourceFile(stmt.getSourceFile())) return null;
+        if (!ts.isExpressionStatement(stmt) || !ts.isBinaryExpression(stmt.expression)) return null;
+        const expr = stmt.expression;
+        if (
+            expr.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+            !ts.isPropertyAccessExpression(expr.left) ||
+            !this.isModuleExportsAccess(expr.left)
+        ) {
+            return null;
+        }
+        let right: ts.Expression = expr.right;
+        while (ts.isParenthesizedExpression(right)) right = right.expression;
+        return ts.isCallExpression(right)
+            ? this.commonJsModuleExportsObjectFromEntriesValueExportCall(right)
+            : null;
+    }
+
+    private commonJsModuleExportsObjectFromEntriesValueExportCall(call: ts.CallExpression): CommonJsFromEntriesExport[] | null {
+        if (!this.isCommonJsModuleExportsObjectFromEntriesValueCall(call)) return null;
+        return this.commonJsObjectFromEntriesExportsFromSource(call, call.arguments[0]!);
+    }
+
+    private commonJsObjectFromEntriesExportsFromSource(
+        call: ts.CallExpression,
+        source: ts.Expression,
+    ): CommonJsFromEntriesExport[] | null {
+        const entries = this.commonJsObjectFromEntriesExportEntries(source);
+        if (!entries) return null;
+        const exports: CommonJsFromEntriesExport[] = [];
+        for (const entry of entries) {
+            const exported = this.commonJsObjectFromEntriesExportFromEntry(call, entry);
+            if (!exported || exported.name === "__esModule") continue;
+            exports.push(exported);
+        }
+        return exports;
+    }
+
+    private isCommonJsModuleExportsObjectFromEntriesValueCall(call: ts.CallExpression): boolean {
+        if (this.objectStaticCallName(call) !== "fromEntries" || call.arguments.length !== 1) return false;
+        let parent: ts.Node = call.parent;
+        while (ts.isParenthesizedExpression(parent)) parent = parent.parent;
+        return ts.isBinaryExpression(parent) &&
+            parent.right === call &&
+            parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            ts.isPropertyAccessExpression(parent.left) &&
+            this.isModuleExportsAccess(parent.left) &&
+            ts.isExpressionStatement(parent.parent);
+    }
+
+    private commonJsObjectFromEntriesExportEntries(source: ts.Expression): Array<ts.ArrayLiteralExpression | ts.PropertyAssignment> | null {
+        let cur = source;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isIdentifier(cur)) {
+            const initializer = this.commonJsObjectFromEntriesSourceIdentifierInitializer(cur);
+            if (!initializer) return null;
+            cur = initializer;
+        }
+        const objectEntries = this.commonJsObjectFromEntriesExportObjectEntries(cur);
+        if (objectEntries) return objectEntries;
+        if (!ts.isArrayLiteralExpression(cur)) return null;
+        const entries: ts.ArrayLiteralExpression[] = [];
+        for (const element of cur.elements) {
+            if (ts.isSpreadElement(element) || !ts.isArrayLiteralExpression(element)) {
+                unsupported(element, "CommonJS Object.fromEntries exports require static [key, value] entry arrays");
+            }
+            entries.push(element);
+        }
+        return entries;
+    }
+
+    private commonJsObjectFromEntriesSourceIdentifierInitializer(id: ts.Identifier): ts.Expression | null {
+        const sym = this.symbolForIdentifier(id);
+        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        if (!decl || !ts.isVariableDeclaration(decl) || !decl.initializer) return null;
+        const initializer = decl.initializer;
+        if (ts.isArrayLiteralExpression(initializer) && this.isUntypedJsArrayLiteral(initializer)) return initializer;
+        if (ts.isCallExpression(initializer) && this.objectStaticCallName(initializer) === "entries") return initializer;
+        return null;
+    }
+
+    private commonJsObjectFromEntriesExportObjectEntries(source: ts.Expression): ts.PropertyAssignment[] | null {
+        let cur = source;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isCallExpression(cur) || this.objectStaticCallName(cur) !== "entries" || cur.arguments.length !== 1) {
+            return null;
+        }
+        let objectSource = cur.arguments[0]!;
+        while (ts.isParenthesizedExpression(objectSource)) objectSource = objectSource.expression;
+        if (ts.isIdentifier(objectSource)) {
+            const decl = this.untypedJsObjectLiteralVariableDeclaration(objectSource);
+            if (!decl?.initializer || !ts.isObjectLiteralExpression(decl.initializer)) return null;
+            objectSource = decl.initializer;
+        }
+        if (!ts.isObjectLiteralExpression(objectSource)) return null;
+        const entries: ts.PropertyAssignment[] = [];
+        for (const prop of objectSource.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, "CommonJS Object.fromEntries(Object.entries(...)) exports require static data properties");
+            }
+            entries.push(prop);
+        }
+        return entries;
+    }
+
+    private commonJsObjectFromEntriesExportFromEntry(
+        call: ts.CallExpression,
+        entry: ts.ArrayLiteralExpression | ts.PropertyAssignment,
+    ): CommonJsFromEntriesExport | null {
+        if (ts.isPropertyAssignment(entry)) {
+            const name = this.staticPropertyName(entry.name);
+            if (name == null) {
+                unsupported(entry.name, "CommonJS Object.fromEntries(Object.entries(...)) exports require static string keys");
+            }
+            if (!this.isCommonJsObjectFromEntriesExportValue(entry.initializer)) {
+                unsupported(entry.initializer, "CommonJS Object.fromEntries(Object.entries(...)) exports require static literal, function, or require-backed values");
+            }
+            return { call, name, right: entry.initializer, entry };
+        }
+        if (entry.elements.length < 2) {
+            unsupported(entry, "CommonJS Object.fromEntries exports require [key, value] entry arrays");
+        }
+        const key = entry.elements[0]!;
+        const value = entry.elements[1]!;
+        if (ts.isSpreadElement(key) || ts.isSpreadElement(value)) {
+            unsupported(entry, "CommonJS Object.fromEntries exports require static [key, value] entry arrays");
+        }
+        const name = this.staticComputedPropertyExpression(key);
+        if (name == null) {
+            unsupported(key, "CommonJS Object.fromEntries exports require static string keys");
+        }
+        if (!this.isCommonJsObjectFromEntriesExportValue(value)) {
+            unsupported(value, "CommonJS Object.fromEntries exports require static literal, function, or require-backed values");
+        }
+        return { call, name, right: value, entry };
+    }
+
+    private isCommonJsObjectFromEntriesExportValue(expr: ts.Expression): boolean {
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isFunctionExpression(cur) || ts.isArrowFunction(cur)) return true;
+        if (this.isCommonJsModuleExportsDefaultValue(cur)) return true;
+        if (ts.isIdentifier(cur)) return !!this.requireBindingModuleExportsDeclaration(cur);
+        if (ts.isPropertyAccessExpression(cur)) return !!this.requireModuleMemberDeclaration(cur);
+        if (ts.isCallExpression(cur)) return !!this.requireCallModuleExportsDeclaration(cur);
+        return false;
+    }
+
+    private commonJsObjectFromEntriesExportEntry(entry: ts.ArrayLiteralExpression | ts.PropertyAssignment): CommonJsFromEntriesExport | null {
+        const source = entry.parent;
+        if (!source || (!ts.isArrayLiteralExpression(source) && !ts.isObjectLiteralExpression(source))) return null;
+        const directSource = ts.isObjectLiteralExpression(source) && ts.isCallExpression(source.parent) && this.objectStaticCallName(source.parent) === "entries"
+            ? source.parent
+            : source;
+        const directCall = directSource.parent;
+        if (directCall && ts.isCallExpression(directCall)) {
+            const exports = this.commonJsModuleExportsObjectFromEntriesValueExportCall(directCall);
+            let found = exports?.find((candidate) => candidate.entry === entry) ?? null;
+            if (found) return found;
+            const moduleWrapperCall = this.commonJsModuleExportsObjectWrapperCallForSourceNode(directCall);
+            if (moduleWrapperCall) {
+                const moduleWrapperExports =
+                    this.commonJsModuleExportsObjectWrapperFromEntriesValueExportCall(moduleWrapperCall);
+                found = moduleWrapperExports?.find((candidate) => candidate.entry === entry) ?? null;
+                if (found) return found;
+            }
+            const objectAssignExports = this.commonJsObjectAssignFromEntriesExportCallForSourceNode(directCall);
+            const objectAssignFound = objectAssignExports?.find((candidate) => candidate.entry === entry) ?? null;
+            if (objectAssignFound?.right) {
+                return { call: objectAssignFound.call, name: objectAssignFound.name, right: objectAssignFound.right, entry };
+            }
+            return null;
+        }
+        const decl = source.parent;
+        if (!decl || !ts.isVariableDeclaration(decl) || !ts.isIdentifier(decl.name)) return null;
+        for (const stmt of entry.getSourceFile().statements) {
+            const call = this.commonJsObjectAssignCallInStatement(stmt);
+            if (!call || !this.commonJsObjectFromEntriesExportCallUsesSourceIdentifier(call, decl.name.text)) continue;
+            const exports =
+                this.commonJsModuleExportsObjectFromEntriesValueExportCall(call) ??
+                this.commonJsModuleExportsObjectWrapperFromEntriesValueExportCall(call);
+            const found = exports?.find((candidate) => candidate.entry === entry) ?? null;
+            if (found) return found;
+            const objectAssignExports = this.commonJsObjectAssignExportCall(call);
+            const objectAssignFound = objectAssignExports?.find((candidate) => candidate.entry === entry) ?? null;
+            return objectAssignFound?.right
+                ? { call: objectAssignFound.call, name: objectAssignFound.name, right: objectAssignFound.right, entry }
+                : null;
+        }
+        return null;
+    }
+
+    private commonJsObjectFromEntriesExportCallUsesSourceIdentifier(call: ts.CallExpression, sourceName: string): boolean {
+        const sourceCall = this.isCommonJsModuleExportsObjectFromEntriesValueCall(call)
+            ? call
+            : this.commonJsModuleExportsObjectWrapperFromEntriesSourceCall(call);
+        if (!sourceCall) return this.commonJsObjectAssignFromEntriesExportCallUsesSourceIdentifier(call, sourceName);
+        return this.commonJsObjectFromEntriesSourceUsesIdentifier(sourceCall.arguments[0]!, sourceName);
+    }
+
+    private commonJsObjectAssignFromEntriesExportCallUsesSourceIdentifier(
+        call: ts.CallExpression,
+        sourceName: string,
+    ): boolean {
+        if (!this.isCommonJsObjectAssignExportCallExpression(call)) return false;
+        for (const source of call.arguments.slice(1)) {
+            let cur = source;
+            while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+            if (ts.isCallExpression(cur) && this.isCommonJsModuleExportsObjectWrapperCallLike(cur)) {
+                cur = cur.arguments[0]!;
+                while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+            }
+            if (
+                ts.isCallExpression(cur) &&
+                this.objectStaticCallName(cur) === "fromEntries" &&
+                cur.arguments.length === 1 &&
+                this.commonJsObjectFromEntriesSourceUsesIdentifier(cur.arguments[0]!, sourceName)
+            ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private commonJsObjectAssignFromEntriesExportCallForSourceNode(node: ts.Node): CommonJsObjectAssignExport[] | null {
+        let source: ts.Node = node;
+        let parent: ts.Node = source.parent;
+        while (ts.isParenthesizedExpression(parent)) {
+            source = parent;
+            parent = parent.parent;
+        }
+        if (
+            ts.isCallExpression(parent) &&
+            this.isCommonJsModuleExportsObjectWrapperCallLike(parent) &&
+            parent.arguments[0] === source
+        ) {
+            source = parent;
+            parent = parent.parent;
+            while (ts.isParenthesizedExpression(parent)) {
+                source = parent;
+                parent = parent.parent;
+            }
+        }
+        if (
+            !ts.isCallExpression(parent) ||
+            !this.isCommonJsObjectAssignExportCallExpression(parent) ||
+            !parent.arguments.slice(1).some((arg) => arg === source)
+        ) {
+            return null;
+        }
+        return this.commonJsObjectAssignExportCall(parent);
+    }
+
+    private isCommonJsObjectAssignExportCallExpression(call: ts.CallExpression): boolean {
+        return this.objectStaticCallName(call) === "assign" &&
+            call.arguments.length >= 2 &&
+            this.isCommonJsExportsTargetExpression(call.arguments[0]!);
+    }
+
+    private commonJsObjectFromEntriesSourceUsesIdentifier(source: ts.Expression, sourceName: string): boolean {
+        let cur = source;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isIdentifier(cur)) {
+            if (cur.text === sourceName) return true;
+            const initializer = this.commonJsObjectFromEntriesSourceIdentifierInitializer(cur);
+            return initializer ? this.commonJsObjectFromEntriesSourceUsesIdentifier(initializer, sourceName) : false;
+        }
+        if (ts.isCallExpression(cur) && this.objectStaticCallName(cur) === "entries" && cur.arguments.length === 1) {
+            let objectSource = cur.arguments[0]!;
+            while (ts.isParenthesizedExpression(objectSource)) objectSource = objectSource.expression;
+            return ts.isIdentifier(objectSource) && objectSource.text === sourceName;
+        }
+        return false;
+    }
+
+    private canEmitCommonJsModuleExportsObjectFromEntriesWholeValue(expr: ts.Expression): boolean {
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isCallExpression(cur) || !this.isCommonJsModuleExportsObjectFromEntriesValueCall(cur)) return true;
+        let source = cur.arguments[0]!;
+        while (ts.isParenthesizedExpression(source)) source = source.expression;
+        if (!ts.isIdentifier(source)) return true;
+        const initializer = this.commonJsObjectFromEntriesSourceIdentifierInitializer(source);
+        return !initializer || !ts.isCallExpression(initializer) || this.objectStaticCallName(initializer) !== "entries";
+    }
+
+    private commonJsModuleExportsObjectWrapperFromEntriesValueExports(
+        stmt: ts.Statement,
+    ): CommonJsFromEntriesExport[] | null {
+        if (!this.isJavaScriptSourceFile(stmt.getSourceFile())) return null;
+        if (!ts.isExpressionStatement(stmt) || !ts.isBinaryExpression(stmt.expression)) return null;
+        const expr = stmt.expression;
+        if (
+            expr.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+            !ts.isPropertyAccessExpression(expr.left) ||
+            !this.isModuleExportsAccess(expr.left)
+        ) {
+            return null;
+        }
+        let right: ts.Expression = expr.right;
+        while (ts.isParenthesizedExpression(right)) right = right.expression;
+        return ts.isCallExpression(right)
+            ? this.commonJsModuleExportsObjectWrapperFromEntriesValueExportCall(right)
+            : null;
+    }
+
+    private commonJsModuleExportsObjectWrapperFromEntriesValueExportCall(
+        call: ts.CallExpression,
+    ): CommonJsFromEntriesExport[] | null {
+        const source = this.commonJsModuleExportsObjectWrapperFromEntriesSourceCall(call);
+        return source ? this.commonJsObjectFromEntriesExportsFromSource(call, source.arguments[0]!) : null;
+    }
+
+    private commonJsModuleExportsObjectWrapperFromEntriesSourceCall(
+        call: ts.CallExpression,
+    ): ts.CallExpression | null {
+        if (!this.isCommonJsModuleExportsObjectWrapperCall(call)) return null;
+        let source = call.arguments[0]!;
+        while (ts.isParenthesizedExpression(source)) source = source.expression;
+        return ts.isCallExpression(source) && this.objectStaticCallName(source) === "fromEntries"
+            ? source
+            : null;
+    }
+
+    private isCommonJsModuleExportsObjectWrapperCall(call: ts.CallExpression): boolean {
+        let parent: ts.Node = call.parent;
+        while (ts.isParenthesizedExpression(parent)) parent = parent.parent;
+        if (
+            !ts.isBinaryExpression(parent) ||
+            parent.right !== call ||
+            parent.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+            !ts.isPropertyAccessExpression(parent.left) ||
+            !this.isModuleExportsAccess(parent.left) ||
+            !ts.isExpressionStatement(parent.parent)
+        ) {
+            return false;
+        }
+        const callName = this.objectStaticCallName(call);
+        return (
+            callName === "freeze" ||
+            callName === "seal" ||
+            callName === "preventExtensions" ||
+            callName === "setPrototypeOf"
+        ) &&
+            call.arguments.length >= 1;
+    }
+
+    private isCommonJsModuleExportsObjectWrapperCallLike(call: ts.CallExpression): boolean {
+        const callName = this.objectStaticCallName(call);
+        return (
+            callName === "freeze" ||
+            callName === "seal" ||
+            callName === "preventExtensions" ||
+            callName === "setPrototypeOf"
+        ) &&
+            call.arguments.length >= 1;
+    }
+
+    private commonJsModuleExportsObjectWrapperValueExports(stmt: ts.Statement): CommonJsObjectAssignExport[] | null {
+        if (!this.isJavaScriptSourceFile(stmt.getSourceFile())) return null;
+        if (!ts.isExpressionStatement(stmt) || !ts.isBinaryExpression(stmt.expression)) return null;
+        const expr = stmt.expression;
+        if (
+            expr.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+            !ts.isPropertyAccessExpression(expr.left) ||
+            !this.isModuleExportsAccess(expr.left)
+        ) {
+            return null;
+        }
+        let right: ts.Expression = expr.right;
+        while (ts.isParenthesizedExpression(right)) right = right.expression;
+        return ts.isCallExpression(right)
+            ? this.commonJsModuleExportsObjectWrapperValueExportCall(right)
+            : null;
+    }
+
+    private commonJsModuleExportsObjectWrapperValueExportCall(call: ts.CallExpression): CommonJsObjectAssignExport[] | null {
+        if (!this.isCommonJsModuleExportsObjectWrapperCall(call)) return null;
+        let source = call.arguments[0]!;
+        while (ts.isParenthesizedExpression(source)) source = source.expression;
+        if (ts.isCallExpression(source)) {
+            if (this.objectStaticCallName(source) === "assign") {
+                return this.canEmitCommonJsModuleExportsObjectAssignWholeValue(source)
+                    ? null
+                    : this.commonJsObjectAssignExportsFromSources(
+                        call,
+                        this.commonJsModuleExportsObjectAssignExportSources(source),
+                    );
+            }
+            const definePropertyObjectExports = this.commonJsObjectAssignDefinePropertyObjectExports(call, source);
+            if (definePropertyObjectExports) {
+                return this.canEmitCommonJsModuleExportsObjectWrapperWholeValue(call)
+                    ? null
+                    : definePropertyObjectExports;
+            }
+        }
+        const entries = this.commonJsObjectAssignExportSourceEntries(call.arguments[0]!);
+        if (!entries || this.canEmitCommonJsModuleExportsObjectWrapperWholeValue(call)) return null;
+        const exports: CommonJsObjectAssignExport[] = [];
+        for (const entry of entries) {
+            if (
+                !ts.isPropertyAssignment(entry) &&
+                !ts.isShorthandPropertyAssignment(entry) &&
+                !ts.isMethodDeclaration(entry) &&
+                !ts.isGetAccessorDeclaration(entry)
+            ) {
+                unsupported(entry, "CommonJS module.exports object wrapper exports require static data, method, or getter properties");
+            }
+            const name = this.commonJsObjectAssignExportName(entry);
+            if (!name || name === "__esModule") continue;
+            this.validateCommonJsObjectAssignExportEntry(entry);
+            exports.push({ call, name, entry });
+        }
+        return exports;
+    }
+
+    private commonJsModuleExportsObjectWrapperDescriptorValueExports(
+        stmt: ts.Statement,
+    ): CommonJsDefinePropertiesExport[] | null {
+        if (!this.isJavaScriptSourceFile(stmt.getSourceFile())) return null;
+        if (!ts.isExpressionStatement(stmt) || !ts.isBinaryExpression(stmt.expression)) return null;
+        const expr = stmt.expression;
+        if (
+            expr.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+            !ts.isPropertyAccessExpression(expr.left) ||
+            !this.isModuleExportsAccess(expr.left)
+        ) {
+            return null;
+        }
+        let right: ts.Expression = expr.right;
+        while (ts.isParenthesizedExpression(right)) right = right.expression;
+        return ts.isCallExpression(right)
+            ? this.commonJsModuleExportsObjectWrapperDescriptorValueExportCall(right)
+            : null;
+    }
+
+    private commonJsModuleExportsObjectWrapperDescriptorValueExportCall(
+        call: ts.CallExpression,
+    ): CommonJsDefinePropertiesExport[] | null {
+        if (!this.isCommonJsModuleExportsObjectWrapperCall(call)) return null;
+        if (this.canEmitCommonJsModuleExportsObjectWrapperWholeValue(call)) return null;
+        let source = call.arguments[0]!;
+        while (ts.isParenthesizedExpression(source)) source = source.expression;
+        if (!ts.isCallExpression(source)) return null;
+        const descriptors = this.commonJsObjectAssignDescriptorObjectDescriptors(source);
+        return descriptors ? this.commonJsDefinePropertiesExportsFromDescriptors(call, descriptors) : null;
+    }
+
+    private commonJsModuleExportsObjectWrapperDescriptorValueExportCallUsesSourceIdentifier(
+        call: ts.CallExpression,
+        sourceName: string,
+    ): boolean {
+        if (!this.isCommonJsModuleExportsObjectWrapperCall(call)) return false;
+        let source = call.arguments[0]!;
+        while (ts.isParenthesizedExpression(source)) source = source.expression;
+        if (!ts.isCallExpression(source)) return false;
+        let descriptors = this.commonJsObjectAssignDescriptorObjectDescriptors(source);
+        if (!descriptors) return false;
+        while (ts.isParenthesizedExpression(descriptors)) descriptors = descriptors.expression;
+        return ts.isIdentifier(descriptors) && descriptors.text === sourceName;
+    }
+
+    private commonJsModuleExportsObjectWrapperDefinePropertyValueExportCallUsesDescriptorIdentifier(
+        call: ts.CallExpression,
+        sourceName: string,
+    ): boolean {
+        if (this.canEmitCommonJsModuleExportsObjectWrapperWholeValue(call)) return false;
+        const source = this.commonJsModuleExportsObjectWrapperDefinePropertySourceCall(call);
+        if (!source) return false;
+        let descriptor = source.arguments[2]!;
+        while (ts.isParenthesizedExpression(descriptor)) descriptor = descriptor.expression;
+        return ts.isIdentifier(descriptor) && descriptor.text === sourceName;
+    }
+
+    private commonJsModuleExportsObjectWrapperDefinePropertySourceCall(
+        call: ts.CallExpression,
+    ): ts.CallExpression | null {
+        if (!this.isCommonJsModuleExportsObjectWrapperCall(call)) return null;
+        let source = call.arguments[0]!;
+        while (ts.isParenthesizedExpression(source)) source = source.expression;
+        return ts.isCallExpression(source) && this.isObjectDefinePropertyCall(source)
+            ? source
+            : null;
+    }
+
+    private commonJsModuleExportsObjectWrapperCallForSourceNode(node: ts.Node): ts.CallExpression | null {
+        let source: ts.Node = node;
+        let parent: ts.Node = source.parent;
+        while (ts.isParenthesizedExpression(parent)) {
+            source = parent;
+            parent = parent.parent;
+        }
+        return ts.isCallExpression(parent) &&
+            parent.arguments[0] === source &&
+            this.isCommonJsModuleExportsObjectWrapperCall(parent)
+            ? parent
+            : null;
+    }
+
+    private canEmitCommonJsModuleExportsObjectWrapperWholeValue(expr: ts.Expression): boolean {
+        let cur: ts.Expression = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isCallExpression(cur) || !this.isCommonJsModuleExportsObjectWrapperCall(cur)) return true;
+        const source = this.commonJsModuleExportsObjectWrapperDefinePropertySourceCall(cur);
+        if (source) {
+            const exports = this.commonJsObjectAssignDefinePropertyObjectExports(cur, source);
+            if (!exports) return false;
+            for (const exported of exports) {
+                if (exported.right) {
+                    if (!this.isCommonJsModuleExportsDefaultValue(exported.right)) return false;
+                    continue;
+                }
+                if (!ts.isPropertyAssignment(exported.entry)) return false;
+                if (!this.isCommonJsModuleExportsDefaultValue(exported.entry.initializer)) return false;
+            }
+            return true;
+        }
+        const entries = this.commonJsObjectAssignExportSourceEntries(cur.arguments[0]!);
+        if (!entries) {
+            const descriptorEntries = this.commonJsObjectAssignDescriptorObjectDescriptorsForWholeValue(cur.arguments[0]!);
+            if (!descriptorEntries) return false;
+            for (const entry of descriptorEntries) {
+                if (!ts.isPropertyAssignment(entry)) return false;
+                const descriptorObject = this.commonJsDefinePropertyExportDescriptor(entry.initializer);
+                if (!descriptorObject) return false;
+                const right = this.commonJsDefinePropertyExportDescriptorValue(descriptorObject);
+                if (!right || !this.isCommonJsModuleExportsDefaultValue(right)) return false;
+            }
+            return true;
+        }
+        for (const entry of entries) {
+            if (!ts.isPropertyAssignment(entry)) return false;
+            if (!this.isCommonJsModuleExportsDefaultValue(entry.initializer)) return false;
+        }
+        return true;
+    }
+
+    private commonJsObjectAssignDescriptorObjectDescriptorsForWholeValue(
+        source: ts.Expression,
+    ): ts.NodeArray<ts.ObjectLiteralElementLike> | null {
+        let cur = source;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isCallExpression(cur)) return null;
+        const descriptors = this.commonJsObjectAssignDescriptorObjectDescriptors(cur);
+        return descriptors ? this.commonJsDefinePropertiesExportDescriptorEntries(descriptors) : null;
+    }
+
+    private commonJsObjectAssignExportSourceEntries(source: ts.Expression): CommonJsObjectAssignExportEntry[] | null {
+        let cur = source;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isObjectLiteralExpression(cur)) return this.commonJsObjectAssignExportObjectEntries(cur);
+        if (ts.isIdentifier(cur)) {
+            const decl = this.untypedJsObjectLiteralVariableDeclaration(cur);
+            const init = decl?.initializer;
+            if (init && ts.isObjectLiteralExpression(init)) return this.commonJsObjectAssignExportObjectEntries(init);
+        }
+        return null;
+    }
+
+    private commonJsObjectAssignExportObjectEntries(source: ts.ObjectLiteralExpression): CommonJsObjectAssignExportEntry[] {
+        const entries: CommonJsObjectAssignExportEntry[] = [];
+        for (const entry of source.properties) {
+            if (ts.isSpreadAssignment(entry)) {
+                const spreadEntries = this.commonJsObjectAssignExportSourceEntries(entry.expression);
+                if (!spreadEntries) {
+                    unsupported(entry.expression, "CommonJS Object.assign spread exports require static object-literal sources");
+                }
+                entries.push(...spreadEntries);
+                continue;
+            }
+            if (
+                !ts.isPropertyAssignment(entry) &&
+                !ts.isShorthandPropertyAssignment(entry) &&
+                !ts.isMethodDeclaration(entry) &&
+                !ts.isGetAccessorDeclaration(entry)
+            ) {
+                unsupported(entry, "CommonJS Object.assign exports require static data, method, or getter properties");
+            }
+            entries.push(entry);
+        }
+        return entries;
+    }
+
     private commonJsObjectAssignExportName(entry: CommonJsObjectAssignExportEntry): string | null {
         if (ts.isShorthandPropertyAssignment(entry)) return entry.name.text;
         return this.staticPropertyName(entry.name);
@@ -875,112 +1880,926 @@ class Emitter {
 
     private validateCommonJsObjectAssignExportEntry(entry: CommonJsObjectAssignExportEntry): void {
         if (ts.isShorthandPropertyAssignment(entry) || ts.isMethodDeclaration(entry)) return;
+        if (ts.isGetAccessorDeclaration(entry)) {
+            if (!this.commonJsObjectAssignGetterReturnExpression(entry)) {
+                unsupported(entry, "CommonJS Object.assign getter exports require a single return value");
+            }
+            return;
+        }
         if (
             ts.isIdentifier(entry.initializer) ||
             ts.isFunctionExpression(entry.initializer) ||
             ts.isArrowFunction(entry.initializer) ||
+            (ts.isPropertyAccessExpression(entry.initializer) && !!this.requireModuleMemberDeclaration(entry.initializer)) ||
+            !!this.requireCallModuleExportsDeclaration(entry.initializer) ||
             this.isCommonJsModuleExportsDefaultValue(entry.initializer)
         ) {
             return;
         }
-        unsupported(entry.initializer, "CommonJS Object.assign exports currently support declared identifiers, functions, methods, and static literal values only");
+        unsupported(entry.initializer, "CommonJS Object.assign exports currently support declared identifiers, functions, methods, static require values, and static literal values only");
     }
 
     private commonJsObjectAssignExportEntry(entry: ts.Node): CommonJsObjectAssignExport | null {
-        if (!ts.isPropertyAssignment(entry) && !ts.isShorthandPropertyAssignment(entry) && !ts.isMethodDeclaration(entry)) {
+        if (
+            !ts.isPropertyAssignment(entry) &&
+            !ts.isShorthandPropertyAssignment(entry) &&
+            !ts.isMethodDeclaration(entry) &&
+            !ts.isGetAccessorDeclaration(entry)
+        ) {
             return null;
         }
         const source = entry.parent;
         if (!source || !ts.isObjectLiteralExpression(source)) return null;
-        const call = source.parent;
-        if (!call || !ts.isCallExpression(call)) return null;
-        const exports = this.commonJsObjectAssignExportCall(call);
-        return exports?.find((candidate) => candidate.entry === entry) ?? null;
+        const directCall = source.parent;
+        if (directCall && ts.isCallExpression(directCall)) {
+            const exports = this.commonJsObjectAssignExportCall(directCall);
+            let found = exports?.find((candidate) => candidate.entry === entry) ?? null;
+            if (found) return found;
+            const moduleExports = this.commonJsModuleExportsObjectAssignValueExportCall(directCall);
+            found = moduleExports?.find((candidate) => candidate.entry === entry) ?? null;
+            if (found) return found;
+            const moduleWrapperCall = this.commonJsModuleExportsObjectWrapperCallForSourceNode(directCall);
+            if (moduleWrapperCall) {
+                const moduleWrapperExports = this.commonJsModuleExportsObjectWrapperValueExportCall(moduleWrapperCall);
+                found = moduleWrapperExports?.find((candidate) => candidate.entry === entry) ?? null;
+                if (found) return found;
+            }
+            const moduleDefinePropertyExports = this.commonJsModuleExportsDefinePropertyValueExportCallEntries(directCall);
+            found = moduleDefinePropertyExports?.find((candidate) => candidate.entry === entry) ?? null;
+            if (found) return found;
+            const wrappedObjectAssignExports = this.commonJsObjectAssignWrapperObjectExportCall(directCall);
+            found = wrappedObjectAssignExports?.find((candidate) => candidate.entry === entry) ?? null;
+            if (found) return found;
+            const wrapperExports = this.commonJsModuleExportsObjectWrapperValueExportCall(directCall);
+            return wrapperExports?.find((candidate) => candidate.entry === entry) ?? null;
+        }
+
+        const decl = source.parent;
+        if (!decl || !ts.isVariableDeclaration(decl) || !ts.isIdentifier(decl.name)) return null;
+        return this.commonJsObjectAssignExportVariableEntry(decl.name.text, entry);
+    }
+
+    private commonJsObjectAssignExportVariableEntry(
+        sourceName: string,
+        entry: CommonJsObjectAssignExportEntry,
+    ): CommonJsObjectAssignExport | null {
+        for (const stmt of entry.getSourceFile().statements) {
+            const call = this.commonJsObjectAssignCallInStatement(stmt);
+            if (!call) continue;
+            const usesObjectAssignSource = this.commonJsObjectAssignExportCallUsesSourceIdentifier(call, sourceName);
+            const usesModuleDefinePropertyTarget =
+                this.isCommonJsModuleExportsDefinePropertyValueCall(call) &&
+                this.commonJsObjectAssignSourceUsesSourceIdentifier(call.arguments[0]!, sourceName);
+            if (!usesObjectAssignSource && !usesModuleDefinePropertyTarget) continue;
+            const exports = this.commonJsObjectAssignExportCall(call);
+            let found = exports?.find((candidate) => candidate.entry === entry) ?? null;
+            if (found) return found;
+            const moduleExports = this.commonJsModuleExportsObjectAssignValueExportCall(call);
+            found = moduleExports?.find((candidate) => candidate.entry === entry) ?? null;
+            if (found) return found;
+            const wrapperExports = this.commonJsModuleExportsObjectWrapperValueExportCall(call);
+            found = wrapperExports?.find((candidate) => candidate.entry === entry) ?? null;
+            if (found) return found;
+            if (
+                this.isCommonJsModuleExportsDefinePropertyValueCall(call) &&
+                this.commonJsObjectAssignSourceUsesSourceIdentifier(call.arguments[0]!, sourceName)
+            ) {
+                const definePropertyExports = this.commonJsModuleExportsDefinePropertyValueExportCallEntries(call);
+                found = definePropertyExports?.find((candidate) => candidate.entry === entry) ?? null;
+                if (found) return found;
+            }
+        }
+        return null;
+    }
+
+    private commonJsObjectAssignWrapperObjectExportCall(call: ts.CallExpression): CommonJsObjectAssignExport[] | null {
+        const contextCall = this.commonJsObjectAssignExportContextCallForSourceNode(call);
+        return contextCall ? this.commonJsObjectAssignWrapperObjectExports(contextCall, call) : null;
+    }
+
+    private commonJsObjectAssignCallInStatement(stmt: ts.Statement): ts.CallExpression | null {
+        if (!ts.isExpressionStatement(stmt)) return null;
+        let expr: ts.Expression = stmt.expression;
+        while (ts.isParenthesizedExpression(expr)) expr = expr.expression;
+        if (ts.isCallExpression(expr)) return expr;
+        if (ts.isBinaryExpression(expr)) {
+            let right: ts.Expression = expr.right;
+            while (ts.isParenthesizedExpression(right)) right = right.expression;
+            return ts.isCallExpression(right) ? right : null;
+        }
+        return null;
+    }
+
+    private commonJsObjectAssignExportCallUsesSourceIdentifier(call: ts.CallExpression, sourceName: string): boolean {
+        let sources: readonly ts.Expression[];
+        if (this.commonJsModuleExportsObjectWrapperValueExportCall(call)) {
+            sources = [call.arguments[0]!];
+        } else {
+            if (
+                !ts.isPropertyAccessExpression(call.expression) ||
+                call.expression.name.text !== "assign" ||
+                !ts.isIdentifier(call.expression.expression) ||
+                call.expression.expression.text !== "Object" ||
+                call.arguments.length < 1
+            ) {
+                return false;
+            }
+            const target = call.arguments[0]!;
+            if (this.isCommonJsExportsTargetExpression(target)) {
+                sources = call.arguments.slice(1);
+            } else if (this.commonJsModuleExportsObjectAssignValueExportCall(call)) {
+                sources = call.arguments;
+            } else {
+                return false;
+            }
+        }
+        for (const source of sources) {
+            if (this.commonJsObjectAssignSourceUsesSourceIdentifier(source, sourceName)) return true;
+        }
+        return false;
+    }
+
+    private commonJsObjectAssignSourceUsesSourceIdentifier(
+        source: ts.Expression,
+        sourceName: string,
+    ): boolean {
+        let cur = source;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isIdentifier(cur)) return cur.text === sourceName;
+        if (ts.isObjectLiteralExpression(cur)) {
+            return this.commonJsObjectAssignSourceObjectUsesSourceIdentifier(cur, sourceName);
+        }
+        if (ts.isCallExpression(cur)) {
+            const callName = this.objectStaticCallName(cur);
+            if (callName === "assign") {
+                for (let i = 0; i < cur.arguments.length; i++) {
+                    const arg = cur.arguments[i]!;
+                    if (i === 0 && this.isCommonJsObjectAssignNonExportingTarget(arg)) continue;
+                    if (this.commonJsObjectAssignSourceUsesSourceIdentifier(arg, sourceName)) return true;
+                }
+                return false;
+            }
+            if (
+                (callName === "freeze" ||
+                    callName === "seal" ||
+                    callName === "preventExtensions" ||
+                    callName === "setPrototypeOf") &&
+                cur.arguments.length >= 1
+            ) {
+                return this.commonJsObjectAssignSourceUsesSourceIdentifier(cur.arguments[0]!, sourceName);
+            }
+            if (this.isObjectDefinePropertyCall(cur)) {
+                return this.commonJsObjectAssignSourceUsesSourceIdentifier(cur.arguments[0]!, sourceName);
+            }
+        }
+        return false;
+    }
+
+    private commonJsObjectAssignSourceObjectUsesSourceIdentifier(
+        source: ts.ObjectLiteralExpression,
+        sourceName: string,
+    ): boolean {
+        for (const prop of source.properties) {
+            if (!ts.isSpreadAssignment(prop)) continue;
+            let expr = prop.expression;
+            while (ts.isParenthesizedExpression(expr)) expr = expr.expression;
+            if (ts.isIdentifier(expr) && expr.text === sourceName) return true;
+            if (
+                ts.isObjectLiteralExpression(expr) &&
+                this.commonJsObjectAssignSourceObjectUsesSourceIdentifier(expr, sourceName)
+            ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private isCommonJsObjectAssignExportSourceDeclaration(decl: ts.VariableDeclaration): boolean {
+        if (!this.isJavaScriptSourceFile(decl.getSourceFile())) return false;
+        if (!ts.isIdentifier(decl.name)) return false;
+        const init = decl.initializer;
+        if (!init || !ts.isObjectLiteralExpression(init)) return false;
+        for (const stmt of decl.getSourceFile().statements) {
+            const call = this.commonJsObjectAssignCallInStatement(stmt);
+            if (!call) continue;
+            if (this.commonJsObjectAssignExportCallUsesSourceIdentifier(call, decl.name.text)) {
+                return true;
+            }
+            if (
+                this.isCommonJsModuleExportsDefinePropertyValueCall(call) &&
+                this.commonJsObjectAssignSourceUsesSourceIdentifier(call.arguments[0]!, decl.name.text)
+            ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private commonJsObjectAssignGetterReturnExpression(getter: ts.GetAccessorDeclaration): ts.Expression | null {
+        const body = getter.body;
+        if (!body || body.statements.length !== 1) return null;
+        const stmt = body.statements[0]!;
+        return ts.isReturnStatement(stmt) && stmt.expression ? stmt.expression : null;
+    }
+
+    private isObjectDefinePropertiesCall(call: ts.CallExpression): boolean {
+        return ts.isPropertyAccessExpression(call.expression) &&
+            call.expression.name.text === "defineProperties" &&
+            ts.isIdentifier(call.expression.expression) &&
+            call.expression.expression.text === "Object" &&
+            call.arguments.length >= 2;
+    }
+
+    private isObjectDefinePropertyCall(call: ts.CallExpression): boolean {
+        return ts.isPropertyAccessExpression(call.expression) &&
+            call.expression.name.text === "defineProperty" &&
+            ts.isIdentifier(call.expression.expression) &&
+            call.expression.expression.text === "Object" &&
+            call.arguments.length >= 3;
+    }
+
+    private isObjectCreateCall(call: ts.CallExpression): boolean {
+        return ts.isPropertyAccessExpression(call.expression) &&
+            call.expression.name.text === "create" &&
+            ts.isIdentifier(call.expression.expression) &&
+            call.expression.expression.text === "Object" &&
+            call.arguments.length >= 1;
+    }
+
+    private isCommonJsModuleExportsDefinePropertiesValueCall(call: ts.CallExpression): boolean {
+        if (!this.isObjectDefinePropertiesCall(call)) return false;
+        let parent: ts.Node = call.parent;
+        while (ts.isParenthesizedExpression(parent)) parent = parent.parent;
+        return ts.isBinaryExpression(parent) &&
+            parent.right === call &&
+            parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            ts.isPropertyAccessExpression(parent.left) &&
+            this.isModuleExportsAccess(parent.left) &&
+            ts.isExpressionStatement(parent.parent);
+    }
+
+    private commonJsModuleExportsDefinePropertiesValueExports(stmt: ts.Statement): CommonJsDefinePropertiesExport[] | null {
+        if (!this.isJavaScriptSourceFile(stmt.getSourceFile())) return null;
+        if (!ts.isExpressionStatement(stmt) || !ts.isBinaryExpression(stmt.expression)) return null;
+        const expr = stmt.expression;
+        if (
+            expr.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+            !ts.isPropertyAccessExpression(expr.left) ||
+            !this.isModuleExportsAccess(expr.left)
+        ) {
+            return null;
+        }
+        let right: ts.Expression = expr.right;
+        while (ts.isParenthesizedExpression(right)) right = right.expression;
+        return ts.isCallExpression(right)
+            ? this.commonJsModuleExportsDefinePropertiesValueExportCall(right)
+            : null;
+    }
+
+    private commonJsModuleExportsDefinePropertiesValueExportCall(
+        call: ts.CallExpression,
+    ): CommonJsDefinePropertiesExport[] | null {
+        if (!this.isCommonJsModuleExportsDefinePropertiesValueCall(call)) return null;
+        const exports: CommonJsDefinePropertiesExport[] = [];
+        const targetExports = this.commonJsDefinePropertiesTargetObjectExports(call, call.arguments[0]!);
+        if (targetExports) exports.push(...targetExports);
+        const descriptorExports = this.commonJsDefinePropertiesExportsFromDescriptors(call, call.arguments[1]!);
+        if (descriptorExports) exports.push(...descriptorExports);
+        return exports;
+    }
+
+    private commonJsDefinePropertiesTargetObjectExports(
+        call: ts.CallExpression,
+        target: ts.Expression,
+    ): CommonJsDefinePropertiesExport[] | null {
+        let cur = target;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isCallExpression(cur)) {
+            const descriptorExports = this.commonJsObjectAssignDescriptorObjectExports(call, cur);
+            if (descriptorExports) {
+                return descriptorExports.map((exported) => {
+                    if (!ts.isPropertyAssignment(exported.entry)) {
+                        unsupported(exported.entry, "CommonJS Object.defineProperties target metadata requires static data descriptor entries");
+                    }
+                    return { call, name: exported.name, right: exported.right!, entry: exported.entry };
+                });
+            }
+            const callName = this.objectStaticCallName(cur);
+            if (
+                (callName === "freeze" ||
+                    callName === "seal" ||
+                    callName === "preventExtensions" ||
+                    callName === "setPrototypeOf") &&
+                cur.arguments.length >= 1
+            ) {
+                return this.commonJsDefinePropertiesTargetObjectExports(call, cur.arguments[0]!);
+            }
+            if (this.isCommonJsObjectAssignNonExportingDescriptorTarget(cur)) return [];
+        }
+        const targetEntries = this.commonJsObjectAssignExportSourceEntries(cur);
+        if (!targetEntries) {
+            return this.isCommonJsObjectAssignNonExportingDescriptorTarget(cur) ? [] : null;
+        }
+        const exports: CommonJsDefinePropertiesExport[] = [];
+        for (const entry of targetEntries) {
+            if (!ts.isPropertyAssignment(entry)) {
+                unsupported(entry, "CommonJS Object.defineProperties target metadata requires static data properties");
+            }
+            const name = this.commonJsObjectAssignExportName(entry);
+            if (!name || name === "__esModule") continue;
+            this.validateCommonJsObjectAssignExportEntry(entry);
+            exports.push({ call, name, right: entry.initializer, entry });
+        }
+        return exports;
+    }
+
+    private canEmitCommonJsModuleExportsDefinePropertiesWholeValue(expr: ts.Expression): boolean {
+        let cur: ts.Expression = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isCallExpression(cur) || !this.isObjectDefinePropertiesCall(cur)) return true;
+        const descriptorEntries = this.commonJsDefinePropertiesExportDescriptorEntries(cur.arguments[1]!);
+        if (!descriptorEntries) return false;
+        for (const entry of descriptorEntries) {
+            if (!ts.isPropertyAssignment(entry)) return false;
+            const descriptorObject = this.commonJsDefinePropertyExportDescriptor(entry.initializer);
+            if (!descriptorObject) return false;
+            const right = this.commonJsDefinePropertyExportDescriptorValue(descriptorObject);
+            if (!right || !this.isCommonJsModuleExportsDefaultValue(right)) return false;
+        }
+        return true;
+    }
+
+    private isCommonJsModuleExportsObjectCreateValueCall(call: ts.CallExpression): boolean {
+        if (!this.isObjectCreateCall(call) || call.arguments.length < 2) return false;
+        let parent: ts.Node = call.parent;
+        while (ts.isParenthesizedExpression(parent)) parent = parent.parent;
+        return ts.isBinaryExpression(parent) &&
+            parent.right === call &&
+            parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            ts.isPropertyAccessExpression(parent.left) &&
+            this.isModuleExportsAccess(parent.left) &&
+            ts.isExpressionStatement(parent.parent);
+    }
+
+    private commonJsModuleExportsObjectCreateValueExports(stmt: ts.Statement): CommonJsDefinePropertiesExport[] | null {
+        if (!this.isJavaScriptSourceFile(stmt.getSourceFile())) return null;
+        if (!ts.isExpressionStatement(stmt) || !ts.isBinaryExpression(stmt.expression)) return null;
+        const expr = stmt.expression;
+        if (
+            expr.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+            !ts.isPropertyAccessExpression(expr.left) ||
+            !this.isModuleExportsAccess(expr.left)
+        ) {
+            return null;
+        }
+        let right: ts.Expression = expr.right;
+        while (ts.isParenthesizedExpression(right)) right = right.expression;
+        return ts.isCallExpression(right)
+            ? this.commonJsModuleExportsObjectCreateValueExportCall(right)
+            : null;
+    }
+
+    private commonJsModuleExportsObjectCreateValueExportCall(
+        call: ts.CallExpression,
+    ): CommonJsDefinePropertiesExport[] | null {
+        if (!this.isCommonJsModuleExportsObjectCreateValueCall(call)) return null;
+        return this.commonJsDefinePropertiesExportsFromDescriptors(call, call.arguments[1]!);
+    }
+
+    private canEmitCommonJsModuleExportsObjectCreateWholeValue(expr: ts.Expression): boolean {
+        let cur: ts.Expression = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isCallExpression(cur) || !this.isObjectCreateCall(cur) || cur.arguments.length < 2) return true;
+        const descriptorEntries = this.commonJsDefinePropertiesExportDescriptorEntries(cur.arguments[1]!);
+        if (!descriptorEntries) return false;
+        for (const entry of descriptorEntries) {
+            if (!ts.isPropertyAssignment(entry)) return false;
+            const descriptorObject = this.commonJsDefinePropertyExportDescriptor(entry.initializer);
+            if (!descriptorObject) return false;
+            const right = this.commonJsDefinePropertyExportDescriptorValue(descriptorObject);
+            if (!right || !this.isCommonJsModuleExportsDefaultValue(right)) return false;
+        }
+        return true;
     }
 
     private commonJsDefinePropertiesExportCall(
         call: ts.CallExpression,
-    ): Array<{ call: ts.CallExpression; name: string; right: ts.Expression; entry: ts.PropertyAssignment }> | null {
-        if (
-            !ts.isPropertyAccessExpression(call.expression) ||
-            call.expression.name.text !== "defineProperties" ||
-            !ts.isIdentifier(call.expression.expression) ||
-            call.expression.expression.text !== "Object" ||
-            call.arguments.length < 2
-        ) {
-            return null;
-        }
+    ): CommonJsDefinePropertiesExport[] | null {
+        if (!this.isObjectDefinePropertiesCall(call)) return null;
         const target = call.arguments[0]!;
         const descriptors = call.arguments[1]!;
         if (
-            !(
-                (ts.isIdentifier(target) && target.text === "exports") ||
-                (ts.isPropertyAccessExpression(target) && this.isModuleExportsAccess(target))
-            )
+            !this.isCommonJsExportsTargetExpression(target)
         ) {
             return null;
         }
-        if (!ts.isObjectLiteralExpression(descriptors)) return null;
+        return this.commonJsDefinePropertiesExportsFromDescriptors(call, descriptors);
+    }
 
-        const exports: Array<{ call: ts.CallExpression; name: string; right: ts.Expression; entry: ts.PropertyAssignment }> = [];
-        for (const entry of descriptors.properties) {
+    private commonJsDefinePropertiesExportsFromDescriptors(
+        call: ts.CallExpression,
+        descriptors: ts.Expression,
+    ): CommonJsDefinePropertiesExport[] | null {
+        const ownDescriptorExports = this.commonJsDefinePropertiesExportsFromOwnPropertyDescriptors(call, descriptors);
+        if (ownDescriptorExports) return ownDescriptorExports;
+
+        const descriptorEntries = this.commonJsDefinePropertiesExportDescriptorEntries(descriptors);
+        if (!descriptorEntries) return null;
+
+        const exports: CommonJsDefinePropertiesExport[] = [];
+        for (const entry of descriptorEntries) {
             if (!ts.isPropertyAssignment(entry)) {
                 unsupported(entry, "CommonJS Object.defineProperties exports require static descriptor properties");
             }
             const name = this.staticPropertyName(entry.name);
             if (!name || name === "__esModule") continue;
-            if (!ts.isObjectLiteralExpression(entry.initializer)) {
+            const descriptorObject = this.commonJsDefinePropertyExportDescriptor(entry.initializer);
+            if (!descriptorObject) {
                 unsupported(entry.initializer, "CommonJS Object.defineProperties export descriptor must be an object literal");
             }
-            const right = this.commonJsDefinePropertyExportDescriptorValue(entry.initializer);
+            const right = this.commonJsDefinePropertyExportDescriptorValue(descriptorObject);
             if (!right) {
-                unsupported(entry.initializer, "CommonJS Object.defineProperties export descriptor requires a value or simple getter");
+                unsupported(descriptorObject, "CommonJS Object.defineProperties export descriptor requires a value or simple getter");
             }
             exports.push({ call, name, right, entry });
         }
         return exports;
     }
 
+    private commonJsDefinePropertiesExportsFromOwnPropertyDescriptors(
+        call: ts.CallExpression,
+        descriptors: ts.Expression,
+    ): CommonJsDefinePropertiesExport[] | null {
+        const source = this.commonJsOwnPropertyDescriptorsStaticSource(descriptors);
+        if (!source) return null;
+        const sourceEntries = this.commonJsObjectAssignExportSourceEntries(source);
+        if (!sourceEntries) return null;
+
+        const exports: CommonJsDefinePropertiesExport[] = [];
+        for (const entry of sourceEntries) {
+            const name = this.commonJsObjectAssignExportName(entry);
+            if (!name || name === "__esModule") continue;
+            this.validateCommonJsObjectAssignExportEntry(entry);
+            const getterReturn = ts.isGetAccessorDeclaration(entry)
+                ? this.commonJsObjectAssignGetterReturnExpression(entry)
+                : null;
+            exports.push({
+                call,
+                name,
+                right: ts.isPropertyAssignment(entry) ? entry.initializer : getterReturn ?? undefined,
+                entry,
+            });
+        }
+        return exports;
+    }
+
+    private commonJsOwnPropertyDescriptorsStaticSource(descriptors: ts.Expression): ts.Expression | null {
+        let cur = descriptors;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isCallExpression(cur)) return null;
+        if (this.objectStaticCallName(cur) !== "getOwnPropertyDescriptors" || cur.arguments.length !== 1) {
+            return null;
+        }
+        return cur.arguments[0]!;
+    }
+
+    private commonJsDefinePropertiesExportDescriptorEntries(source: ts.Expression): ts.NodeArray<ts.ObjectLiteralElementLike> | null {
+        let cur = source;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isObjectLiteralExpression(cur)) return cur.properties;
+        if (ts.isIdentifier(cur)) {
+            const decl = this.untypedJsObjectLiteralVariableDeclaration(cur);
+            const init = decl?.initializer;
+            if (init && ts.isObjectLiteralExpression(init)) return init.properties;
+        }
+        return null;
+    }
+
     private commonJsDefinePropertiesExportEntry(
-        entry: ts.PropertyAssignment,
-    ): { call: ts.CallExpression; name: string; right: ts.Expression; entry: ts.PropertyAssignment } | null {
+        entry: CommonJsObjectAssignExportEntry,
+    ): CommonJsDefinePropertiesExport | null {
+        const entryName = this.commonJsObjectAssignExportName(entry);
         const descriptors = entry.parent;
         if (!descriptors || !ts.isObjectLiteralExpression(descriptors)) return null;
-        const call = descriptors.parent;
-        if (!call || !ts.isCallExpression(call)) return null;
-        const exports = this.commonJsDefinePropertiesExportCall(call);
-        return exports?.find((candidate) => candidate.entry === entry) ?? null;
+        const directCall = descriptors.parent;
+        if (directCall && ts.isCallExpression(directCall)) {
+            const exports = this.commonJsDefinePropertiesExportCall(directCall);
+            const found = exports?.find((candidate) => candidate.entry === entry || candidate.name === entryName) ?? null;
+            if (found) return found;
+            const moduleExports = this.commonJsModuleExportsDefinePropertiesValueExportCall(directCall);
+            let moduleFound = moduleExports?.find((candidate) => candidate.entry === entry || candidate.name === entryName) ?? null;
+            if (moduleFound) return moduleFound;
+            const objectCreateExports = this.commonJsModuleExportsObjectCreateValueExportCall(directCall);
+            moduleFound = objectCreateExports?.find((candidate) => candidate.entry === entry || candidate.name === entryName) ?? null;
+            if (moduleFound) return moduleFound;
+            const objectAssignDescriptorExports = this.commonJsDescriptorObjectExportsForObjectAssignSource(directCall);
+            moduleFound = objectAssignDescriptorExports?.find((candidate) => candidate.entry === entry || candidate.name === entryName) ?? null;
+            return moduleFound;
+        }
+
+        const decl = descriptors.parent;
+        if (!decl || !ts.isVariableDeclaration(decl) || !ts.isIdentifier(decl.name)) return null;
+        return this.commonJsDefinePropertiesExportVariableEntry(decl.name.text, entry);
+    }
+
+    private commonJsDefinePropertiesExportVariableEntry(
+        sourceName: string,
+        entry: CommonJsObjectAssignExportEntry,
+    ): CommonJsDefinePropertiesExport | null {
+        const entryName = this.commonJsObjectAssignExportName(entry);
+        for (const stmt of entry.getSourceFile().statements) {
+            const call = this.commonJsDefinePropertiesCallInStatement(stmt);
+            if (call && this.commonJsDefinePropertiesExportCallUsesSourceIdentifier(call, sourceName)) {
+                const exports = this.commonJsDefinePropertiesExportCall(call);
+                let found = exports?.find((candidate) => candidate.entry === entry || candidate.name === entryName) ?? null;
+                if (found) return found;
+                const moduleExports = this.commonJsModuleExportsDefinePropertiesValueExportCall(call);
+                found = moduleExports?.find((candidate) => candidate.entry === entry || candidate.name === entryName) ?? null;
+                if (found) return found;
+                const objectCreateExports = this.commonJsModuleExportsObjectCreateValueExportCall(call);
+                found = objectCreateExports?.find((candidate) => candidate.entry === entry || candidate.name === entryName) ?? null;
+                if (found) return found;
+                const objectWrapperDescriptorExports = this.commonJsModuleExportsObjectWrapperDescriptorValueExportCall(call);
+                found = objectWrapperDescriptorExports?.find((candidate) => candidate.entry === entry || candidate.name === entryName) ?? null;
+                if (found) return found;
+            }
+            if (
+                call &&
+                this.isCommonJsModuleExportsDefinePropertiesValueCall(call) &&
+                this.commonJsObjectAssignSourceUsesSourceIdentifier(call.arguments[0]!, sourceName)
+            ) {
+                const moduleExports = this.commonJsModuleExportsDefinePropertiesValueExportCall(call);
+                const found = moduleExports?.find((candidate) => candidate.entry === entry || candidate.name === entryName) ?? null;
+                if (found) return found;
+            }
+            if (
+                call &&
+                this.commonJsModuleExportsObjectWrapperDescriptorValueExportCallUsesSourceIdentifier(call, sourceName)
+            ) {
+                const objectWrapperDescriptorExports = this.commonJsModuleExportsObjectWrapperDescriptorValueExportCall(call);
+                const found = objectWrapperDescriptorExports
+                    ?.find((candidate) => candidate.entry === entry || candidate.name === entryName) ?? null;
+                if (found) return found;
+            }
+            const objectAssignDescriptorCall = this.commonJsObjectAssignDescriptorObjectCallUsingSourceIdentifier(stmt, sourceName);
+            if (objectAssignDescriptorCall) {
+                const descriptors = this.commonJsObjectAssignDescriptorObjectDescriptors(objectAssignDescriptorCall);
+                if (!descriptors) continue;
+                const objectAssignDescriptorExports = this.commonJsDefinePropertiesExportsFromDescriptors(
+                    objectAssignDescriptorCall,
+                    descriptors,
+                );
+                const found = objectAssignDescriptorExports
+                    ?.find((candidate) => candidate.entry === entry || candidate.name === entryName) ?? null;
+                if (found) return found;
+            }
+        }
+        return null;
+    }
+
+    private commonJsObjectAssignDescriptorObjectCallUsingSourceIdentifier(
+        stmt: ts.Statement,
+        sourceName: string,
+    ): ts.CallExpression | null {
+        let found: ts.CallExpression | null = null;
+        const visit = (node: ts.Node): void => {
+            if (found) return;
+            if (ts.isCallExpression(node)) {
+                let descriptors = this.commonJsObjectAssignDescriptorObjectDescriptors(node);
+                if (!descriptors) {
+                    ts.forEachChild(node, visit);
+                    return;
+                }
+                while (ts.isParenthesizedExpression(descriptors)) descriptors = descriptors.expression;
+                if (ts.isIdentifier(descriptors) && descriptors.text === sourceName) {
+                    if (this.commonJsObjectAssignExportContextCallForSourceNode(node)) {
+                        found = node;
+                        return;
+                    }
+                }
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(stmt);
+        return found;
+    }
+
+    private commonJsDescriptorObjectExportsForObjectAssignSource(
+        call: ts.CallExpression,
+    ): CommonJsDefinePropertiesExport[] | null {
+        const descriptors = this.commonJsObjectAssignDescriptorObjectDescriptors(call);
+        if (!descriptors) return null;
+        const contextCall = this.commonJsObjectAssignExportContextCallForSourceNode(call);
+        if (!contextCall) return null;
+        return this.commonJsDefinePropertiesExportsFromDescriptors(contextCall, descriptors);
+    }
+
+    private commonJsObjectAssignExportContextCallForSourceNode(node: ts.Node): ts.CallExpression | null {
+        let source: ts.Node = node;
+        let parent: ts.Node = source.parent;
+        while (ts.isParenthesizedExpression(parent)) {
+            source = parent;
+            parent = parent.parent;
+        }
+        if (
+            ts.isCallExpression(parent) &&
+            this.isObjectDefinePropertyCall(parent) &&
+            parent.arguments[0] === source
+        ) {
+            source = parent;
+            parent = source.parent;
+            while (ts.isParenthesizedExpression(parent)) {
+                source = parent;
+                parent = parent.parent;
+            }
+        }
+        return ts.isCallExpression(parent) && this.isCommonJsObjectAssignExportContextCall(parent)
+            ? parent
+            : null;
+    }
+
+    private commonJsDefinePropertiesCallInStatement(stmt: ts.Statement): ts.CallExpression | null {
+        if (!ts.isExpressionStatement(stmt)) return null;
+        let expr: ts.Expression = stmt.expression;
+        while (ts.isParenthesizedExpression(expr)) expr = expr.expression;
+        if (ts.isCallExpression(expr)) return expr;
+        if (ts.isBinaryExpression(expr)) {
+            let right: ts.Expression = expr.right;
+            while (ts.isParenthesizedExpression(right)) right = right.expression;
+            return ts.isCallExpression(right) ? right : null;
+        }
+        return null;
+    }
+
+    private commonJsDefinePropertiesExportCallUsesSourceIdentifier(call: ts.CallExpression, sourceName: string): boolean {
+        if (this.isObjectDefinePropertiesCall(call)) {
+            const target = call.arguments[0]!;
+            if (
+                !this.isCommonJsExportsTargetExpression(target) &&
+                !this.isCommonJsModuleExportsDefinePropertiesValueCall(call)
+            ) {
+                return false;
+            }
+        } else if (!this.isCommonJsModuleExportsObjectCreateValueCall(call)) {
+            return false;
+        }
+        let source = call.arguments[1]!;
+        while (ts.isParenthesizedExpression(source)) source = source.expression;
+        const ownDescriptorsSource = this.commonJsOwnPropertyDescriptorsStaticSource(source);
+        if (ownDescriptorsSource) {
+            let cur = ownDescriptorsSource;
+            while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+            return ts.isIdentifier(cur) && cur.text === sourceName;
+        }
+        return ts.isIdentifier(source) && source.text === sourceName;
+    }
+
+    private isCommonJsDefinePropertiesExportSourceDeclaration(decl: ts.VariableDeclaration): boolean {
+        if (!this.isJavaScriptSourceFile(decl.getSourceFile())) return false;
+        if (!ts.isIdentifier(decl.name)) return false;
+        const init = decl.initializer;
+        if (!init || !ts.isObjectLiteralExpression(init)) return false;
+        for (const stmt of decl.getSourceFile().statements) {
+            const call = this.commonJsDefinePropertiesCallInStatement(stmt);
+            if (call && this.commonJsDefinePropertiesExportCallUsesSourceIdentifier(call, decl.name.text)) {
+                return true;
+            }
+            if (
+                call &&
+                this.isCommonJsModuleExportsDefinePropertiesValueCall(call) &&
+                this.commonJsObjectAssignSourceUsesSourceIdentifier(call.arguments[0]!, decl.name.text)
+            ) {
+                return true;
+            }
+            if (
+                call &&
+                this.commonJsModuleExportsObjectWrapperDescriptorValueExportCallUsesSourceIdentifier(call, decl.name.text)
+            ) {
+                return true;
+            }
+            if (this.commonJsObjectAssignDescriptorObjectCallUsingSourceIdentifier(stmt, decl.name.text)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private isCommonJsDefinePropertiesExportDescriptorDeclaration(decl: ts.VariableDeclaration): boolean {
+        if (!this.isJavaScriptSourceFile(decl.getSourceFile())) return false;
+        if (!ts.isIdentifier(decl.name)) return false;
+        const init = decl.initializer;
+        if (!init || !ts.isObjectLiteralExpression(init)) return false;
+        for (const stmt of decl.getSourceFile().statements) {
+            const call = this.commonJsDefinePropertiesCallInStatement(stmt);
+            if (!call) continue;
+            if (this.isObjectDefinePropertiesCall(call)) {
+                const target = call.arguments[0]!;
+                if (
+                    !this.isCommonJsExportsTargetExpression(target) &&
+                    !this.isCommonJsModuleExportsDefinePropertiesValueCall(call)
+                ) {
+                    continue;
+                }
+            } else if (!this.isCommonJsModuleExportsObjectCreateValueCall(call)) {
+                continue;
+            }
+            const descriptors = this.commonJsDefinePropertiesExportDescriptorEntries(call.arguments[1]!);
+            if (!descriptors) continue;
+            for (const entry of descriptors) {
+                if (!ts.isPropertyAssignment(entry)) continue;
+                let descriptor = entry.initializer;
+                while (ts.isParenthesizedExpression(descriptor)) descriptor = descriptor.expression;
+                if (ts.isIdentifier(descriptor) && descriptor.text === decl.name.text) return true;
+            }
+        }
+        return false;
     }
 
     private commonJsDefinePropertyExportCall(
         call: ts.CallExpression,
-    ): { call: ts.CallExpression; name: string; right: ts.Expression } | null {
-        if (
-            !ts.isPropertyAccessExpression(call.expression) ||
-            call.expression.name.text !== "defineProperty" ||
-            !ts.isIdentifier(call.expression.expression) ||
-            call.expression.expression.text !== "Object" ||
-            call.arguments.length < 3
-        ) {
-            return null;
-        }
+    ): CommonJsDefinePropertyExport | null {
+        if (!this.isObjectDefinePropertyCall(call)) return null;
         const target = call.arguments[0]!;
         const key = call.arguments[1]!;
         const descriptor = call.arguments[2]!;
         if (
-            !(
-                (ts.isIdentifier(target) && target.text === "exports") ||
-                (ts.isPropertyAccessExpression(target) && this.isModuleExportsAccess(target))
-            )
+            !this.isCommonJsExportsTargetExpression(target)
         ) {
             return null;
         }
+        return this.commonJsDefinePropertyExportFromKeyAndDescriptor(call, key, descriptor);
+    }
+
+    private commonJsDefinePropertyExportFromKeyAndDescriptor(
+        call: ts.CallExpression,
+        key: ts.Expression,
+        descriptor: ts.Expression,
+    ): CommonJsDefinePropertyExport | null {
         const name = this.staticComputedPropertyExpression(key);
         if (!name || name === "__esModule") return null;
-        if (!ts.isObjectLiteralExpression(descriptor)) return null;
-        const right = this.commonJsDefinePropertyExportDescriptorValue(descriptor);
+        const descriptorObject = this.commonJsDefinePropertyExportDescriptor(descriptor);
+        if (!descriptorObject) return null;
+        const right = this.commonJsDefinePropertyExportDescriptorValue(descriptorObject);
         if (!right) return null;
         return { call, name, right };
+    }
+
+    private isCommonJsModuleExportsDefinePropertyValueCall(call: ts.CallExpression): boolean {
+        if (!this.isObjectDefinePropertyCall(call)) return false;
+        let parent: ts.Node = call.parent;
+        while (ts.isParenthesizedExpression(parent)) parent = parent.parent;
+        return ts.isBinaryExpression(parent) &&
+            parent.right === call &&
+            parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            ts.isPropertyAccessExpression(parent.left) &&
+            this.isModuleExportsAccess(parent.left) &&
+            ts.isExpressionStatement(parent.parent);
+    }
+
+    private commonJsModuleExportsDefinePropertyValueExport(stmt: ts.Statement): CommonJsDefinePropertyExport | null {
+        if (!this.isJavaScriptSourceFile(stmt.getSourceFile())) return null;
+        if (!ts.isExpressionStatement(stmt) || !ts.isBinaryExpression(stmt.expression)) return null;
+        const expr = stmt.expression;
+        if (
+            expr.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+            !ts.isPropertyAccessExpression(expr.left) ||
+            !this.isModuleExportsAccess(expr.left)
+        ) {
+            return null;
+        }
+        let right: ts.Expression = expr.right;
+        while (ts.isParenthesizedExpression(right)) right = right.expression;
+        return ts.isCallExpression(right)
+            ? this.commonJsModuleExportsDefinePropertyValueExportCall(right)
+            : null;
+    }
+
+    private commonJsModuleExportsDefinePropertyValueExportCall(call: ts.CallExpression): CommonJsDefinePropertyExport | null {
+        if (!this.isCommonJsModuleExportsDefinePropertyValueCall(call)) return null;
+        return this.commonJsDefinePropertyExportFromKeyAndDescriptor(call, call.arguments[1]!, call.arguments[2]!);
+    }
+
+    private commonJsModuleExportsDefinePropertyValueExports(stmt: ts.Statement): CommonJsObjectAssignExport[] | null {
+        if (!this.isJavaScriptSourceFile(stmt.getSourceFile())) return null;
+        if (!ts.isExpressionStatement(stmt) || !ts.isBinaryExpression(stmt.expression)) return null;
+        const expr = stmt.expression;
+        if (
+            expr.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+            !ts.isPropertyAccessExpression(expr.left) ||
+            !this.isModuleExportsAccess(expr.left)
+        ) {
+            return null;
+        }
+        let right: ts.Expression = expr.right;
+        while (ts.isParenthesizedExpression(right)) right = right.expression;
+        return ts.isCallExpression(right)
+            ? this.commonJsModuleExportsDefinePropertyValueExportCallEntries(right)
+            : null;
+    }
+
+    private commonJsModuleExportsDefinePropertyValueExportCallEntries(call: ts.CallExpression): CommonJsObjectAssignExport[] | null {
+        if (!this.isCommonJsModuleExportsDefinePropertyValueCall(call)) return null;
+        return this.commonJsObjectAssignDefinePropertyObjectExports(call, call);
+    }
+
+    private commonJsDefinePropertyExportForCallDeclaration(call: ts.CallExpression): CommonJsDefinePropertyExport | null {
+        return this.commonJsDefinePropertyExportCall(call) ??
+            this.commonJsModuleExportsDefinePropertyValueExportCall(call) ??
+            this.commonJsDefinePropertyExportForObjectWrapperSource(call) ??
+            this.commonJsDefinePropertyExportForObjectAssignSource(call);
+    }
+
+    private commonJsDefinePropertyExportForObjectWrapperSource(call: ts.CallExpression): CommonJsDefinePropertyExport | null {
+        if (!this.isObjectDefinePropertyCall(call)) return null;
+        const wrapperCall = this.commonJsModuleExportsObjectWrapperCallForSourceNode(call);
+        if (!wrapperCall || this.canEmitCommonJsModuleExportsObjectWrapperWholeValue(wrapperCall)) return null;
+        const exported = this.commonJsDefinePropertyExportFromKeyAndDescriptor(call, call.arguments[1]!, call.arguments[2]!);
+        return exported ? { ...exported, call: wrapperCall } : null;
+    }
+
+    private commonJsDefinePropertyExportForObjectAssignSource(call: ts.CallExpression): CommonJsDefinePropertyExport | null {
+        if (!this.isObjectDefinePropertyCall(call)) return null;
+        let parent: ts.Node = call.parent;
+        while (ts.isParenthesizedExpression(parent)) parent = parent.parent;
+        if (!ts.isCallExpression(parent) || !this.isCommonJsObjectAssignExportContextCall(parent)) return null;
+        if (
+            !this.commonJsObjectAssignDescriptorObjectExports(parent, call.arguments[0]!) &&
+            !this.commonJsObjectAssignExportSourceEntries(call.arguments[0]!) &&
+            !this.isCommonJsObjectAssignNonExportingDescriptorTarget(call.arguments[0]!)
+        ) {
+            return null;
+        }
+        const exported = this.commonJsDefinePropertyExportFromKeyAndDescriptor(call, call.arguments[1]!, call.arguments[2]!);
+        return exported ? { ...exported, call: parent } : null;
+    }
+
+    private isCommonJsObjectAssignExportContextCall(call: ts.CallExpression): boolean {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            call.expression.name.text !== "assign" ||
+            !ts.isIdentifier(call.expression.expression) ||
+            call.expression.expression.text !== "Object" ||
+            call.arguments.length < 1
+        ) {
+            return false;
+        }
+        const target = call.arguments[0]!;
+        return this.isCommonJsExportsTargetExpression(target) ||
+            this.isCommonJsModuleExportsObjectAssignValueCall(call);
+    }
+
+    private canEmitCommonJsModuleExportsDefinePropertyWholeValue(expr: ts.Expression): boolean {
+        let cur: ts.Expression = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isCallExpression(cur) || !this.isObjectDefinePropertyCall(cur)) return true;
+        const exportInfo = this.commonJsDefinePropertyExportFromKeyAndDescriptor(cur, cur.arguments[1]!, cur.arguments[2]!);
+        return !!exportInfo?.right && this.isCommonJsModuleExportsDefaultValue(exportInfo.right);
+    }
+
+    private commonJsDefinePropertyExportDescriptor(descriptor: ts.Expression): ts.ObjectLiteralExpression | null {
+        let cur = descriptor;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isObjectLiteralExpression(cur)) return cur;
+        if (ts.isIdentifier(cur)) {
+            const decl = this.untypedJsObjectLiteralVariableDeclaration(cur);
+            const init = decl?.initializer;
+            if (init && ts.isObjectLiteralExpression(init)) return init;
+        }
+        return null;
+    }
+
+    private commonJsDefinePropertyExportCallUsesDescriptorIdentifier(call: ts.CallExpression, sourceName: string): boolean {
+        if (!this.isObjectDefinePropertyCall(call)) return false;
+        const target = call.arguments[0]!;
+        if (
+            !this.isCommonJsExportsTargetExpression(target) &&
+            !this.isCommonJsModuleExportsDefinePropertyValueCall(call)
+        ) {
+            return false;
+        }
+        let descriptor = call.arguments[2]!;
+        while (ts.isParenthesizedExpression(descriptor)) descriptor = descriptor.expression;
+        return ts.isIdentifier(descriptor) && descriptor.text === sourceName;
+    }
+
+    private isCommonJsDefinePropertyExportSourceDeclaration(decl: ts.VariableDeclaration): boolean {
+        if (!this.isJavaScriptSourceFile(decl.getSourceFile())) return false;
+        if (!ts.isIdentifier(decl.name)) return false;
+        const init = decl.initializer;
+        if (!init || !ts.isObjectLiteralExpression(init)) return false;
+        for (const stmt of decl.getSourceFile().statements) {
+            const call = this.commonJsDefinePropertiesCallInStatement(stmt);
+            if (call && this.commonJsDefinePropertyExportCallUsesDescriptorIdentifier(call, decl.name.text)) {
+                return true;
+            }
+            if (
+                call &&
+                this.commonJsModuleExportsObjectWrapperDefinePropertyValueExportCallUsesDescriptorIdentifier(call, decl.name.text)
+            ) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private commonJsDefinePropertyExportDescriptorValue(descriptor: ts.ObjectLiteralExpression): ts.Expression | null {
@@ -1041,7 +2860,10 @@ class Emitter {
             if (ts.isPropertyAccessExpression(expr.left) && this.isModuleExportsAccess(expr.left)) {
                 moduleExportsLeft ??= expr.left;
                 moduleExportsAssignment ??= expr;
-            } else if (!(ts.isIdentifier(expr.left) && expr.left.text === "exports")) {
+            } else if (
+                !this.isCommonJsExportAccess(expr.left) &&
+                !(ts.isIdentifier(expr.left) && expr.left.text === "exports")
+            ) {
                 return null;
             }
             expr = expr.right;
@@ -1158,13 +2980,76 @@ class Emitter {
             if (ts.isSpreadAssignment(prop) && this.isCommonJsModuleExportsSpreadValue(prop.expression)) continue;
             if (ts.isShorthandPropertyAssignment(prop)) continue;
             if (ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.initializer)) continue;
+            if (
+                ts.isPropertyAssignment(prop) &&
+                ts.isPropertyAccessExpression(prop.initializer) &&
+                this.requireModuleMemberDeclaration(prop.initializer)
+            ) {
+                continue;
+            }
+            if (
+                ts.isPropertyAssignment(prop) &&
+                ts.isCallExpression(prop.initializer) &&
+                this.requireCallModuleExportsDeclaration(prop.initializer)
+            ) {
+                continue;
+            }
             if (ts.isPropertyAssignment(prop) && ts.isFunctionExpression(prop.initializer)) continue;
             if (ts.isPropertyAssignment(prop) && ts.isArrowFunction(prop.initializer)) continue;
             if (ts.isPropertyAssignment(prop) && this.isCommonJsModuleExportsDefaultValue(prop.initializer)) continue;
             if (ts.isMethodDeclaration(prop)) continue;
-            unsupported(prop, "CommonJS module.exports object currently supports declared identifier, function-valued, arrow-function-valued, and static literal-value exports only");
+            if (ts.isGetAccessorDeclaration(prop) && this.commonJsObjectAssignGetterReturnExpression(prop)) continue;
+            unsupported(prop, "CommonJS module.exports object currently supports declared identifier, function-valued, arrow-function-valued, static require values, and static literal-value exports only");
         }
         return { left: expr.left, right: expr.right };
+    }
+
+    private commonJsModuleExportsObjectAssignmentEntries(
+        object: ts.ObjectLiteralExpression,
+    ): CommonJsObjectAssignExportEntry[] {
+        const entries: CommonJsObjectAssignExportEntry[] = [];
+        for (const prop of object.properties) {
+            if (ts.isSpreadAssignment(prop)) {
+                const spreadEntries = this.commonJsObjectAssignExportSourceEntries(prop.expression);
+                if (!spreadEntries) {
+                    unsupported(prop.expression, "CommonJS module.exports object spread requires static object-literal sources");
+                }
+                for (const entry of spreadEntries) {
+                    if (this.commonJsObjectAssignExportName(entry) === "__esModule") continue;
+                    this.validateCommonJsObjectAssignExportEntry(entry);
+                    entries.push(entry);
+                }
+                continue;
+            }
+            if (
+                ts.isPropertyAssignment(prop) ||
+                ts.isShorthandPropertyAssignment(prop) ||
+                ts.isMethodDeclaration(prop) ||
+                ts.isGetAccessorDeclaration(prop)
+            ) {
+                entries.push(prop);
+            }
+        }
+        return entries;
+    }
+
+    private isCommonJsModuleExportsObjectExportEntry(node: ts.Node): boolean {
+        if (
+            !ts.isPropertyAssignment(node) &&
+            !ts.isShorthandPropertyAssignment(node) &&
+            !ts.isMethodDeclaration(node) &&
+            !ts.isGetAccessorDeclaration(node)
+        ) {
+            return false;
+        }
+        const object = node.parent;
+        if (!object || !ts.isObjectLiteralExpression(object)) return false;
+        const expr = object.parent;
+        return ts.isBinaryExpression(expr) &&
+            expr.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            expr.right === object &&
+            ts.isPropertyAccessExpression(expr.left) &&
+            this.isModuleExportsAccess(expr.left);
     }
 
     private commonJsObjectExportValueDeclaration(node: ts.Node): ts.Declaration | null {
@@ -1177,6 +3062,22 @@ class Emitter {
             return valueSymbol?.valueDeclaration ?? valueSymbol?.declarations?.[0] ?? null;
         }
         return null;
+    }
+
+    private isCommonJsStaticRequireBackedExportProperty(decl: ts.Node): boolean {
+        if (!ts.isPropertyAssignment(decl)) return false;
+        let initializer = decl.initializer;
+        while (ts.isParenthesizedExpression(initializer)) initializer = initializer.expression;
+        if (ts.isIdentifier(initializer)) {
+            return !!this.requireBindingModuleExportsDeclaration(initializer);
+        }
+        if (ts.isPropertyAccessExpression(initializer)) {
+            return !!this.requireModuleMemberDeclaration(initializer);
+        }
+        if (ts.isCallExpression(initializer)) {
+            return !!this.requireCallModuleExportsDeclaration(initializer);
+        }
+        return false;
     }
 
     private commonJsExportValueNode(node: ts.Node): ts.Node {
@@ -1197,8 +3098,11 @@ class Emitter {
         }
         if (ts.isPropertyAssignment(node)) {
             const definePropertiesExport = this.commonJsDefinePropertiesExportEntry(node);
-            if (definePropertiesExport) return definePropertiesExport.right;
+            if (definePropertiesExport) return definePropertiesExport.right ?? node.initializer;
             return node.initializer;
+        }
+        if (ts.isGetAccessorDeclaration(node)) {
+            return this.commonJsObjectAssignGetterReturnExpression(node) ?? node;
         }
         if (ts.isShorthandPropertyAssignment(node)) {
             return this.commonJsObjectExportValueDeclaration(node) ?? node;
@@ -1210,6 +3114,7 @@ class Emitter {
                 value.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
                 (
                     (ts.isPropertyAccessExpression(value.left) && this.isModuleExportsAccess(value.left)) ||
+                    this.isCommonJsExportAccess(value.left) ||
                     (ts.isIdentifier(value.left) && value.left.text === "exports")
                 )
             ) {
@@ -1218,8 +3123,12 @@ class Emitter {
             return value;
         }
         if (ts.isCallExpression(node)) {
-            const defineExport = this.commonJsDefinePropertyExportCall(node);
+            const defineExport = this.commonJsDefinePropertyExportForCallDeclaration(node);
             if (defineExport) return defineExport.right;
+        }
+        if (ts.isArrayLiteralExpression(node)) {
+            const fromEntriesExport = this.commonJsObjectFromEntriesExportEntry(node);
+            if (fromEntriesExport) return fromEntriesExport.right;
         }
         return node;
     }
@@ -1307,22 +3216,40 @@ class Emitter {
             const value = this.emitCommonJsObjectLiteralDefaultValue(assignment.right);
             buf.line(`${cName} = ${value.c};`);
         }
-        for (const prop of assignment.right.properties) {
+        for (const prop of this.commonJsModuleExportsObjectAssignmentEntries(assignment.right)) {
             if (ts.isShorthandPropertyAssignment(prop)) continue;
-            if (!ts.isPropertyAssignment(prop) && !ts.isMethodDeclaration(prop)) continue;
-            if (ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.initializer)) continue;
+            if (!ts.isPropertyAssignment(prop) && !ts.isMethodDeclaration(prop) && !ts.isGetAccessorDeclaration(prop)) continue;
+            if (
+                ts.isPropertyAssignment(prop) &&
+                ts.isIdentifier(prop.initializer) &&
+                !this.requireBindingModuleExportsDeclaration(prop.initializer)
+            ) {
+                continue;
+            }
             const cName = this.commonJsObjectPropertyExportCName(prop);
             const ty = this.commonJsExportedCType(prop);
             if (!this.commonJsExportGlobals.has(cName)) {
                 this.commonJsExportGlobals.add(cName);
                 this.globalDecls.line(`static ${ty.c} ${cName};`);
             }
-            const valueNode = ts.isMethodDeclaration(prop) ? prop : prop.initializer;
+            const getterReturn = ts.isGetAccessorDeclaration(prop)
+                ? this.commonJsObjectAssignGetterReturnExpression(prop)
+                : null;
+            if (ts.isGetAccessorDeclaration(prop) && !getterReturn) {
+                unsupported(prop, "CommonJS module.exports getter exports require a single return value");
+            }
+            const valueNode = ts.isMethodDeclaration(prop)
+                ? prop
+                : getterReturn ?? (ts.isPropertyAssignment(prop) ? prop.initializer : prop);
             const value = ts.isMethodDeclaration(prop)
                 ? this.emitClosureExpression(prop)
+                : getterReturn
+                    ? this.emitExpr(getterReturn)
                 : ts.isPropertyAssignment(prop) && this.isCommonJsModuleExportsDefaultValue(prop.initializer)
                     ? this.emitCommonJsModuleExportsDefaultValue(prop.initializer)
-                : this.emitExpr(prop.initializer);
+                : ts.isPropertyAssignment(prop)
+                    ? this.emitExpr(prop.initializer)
+                : unsupported(prop, "CommonJS module.exports object export requires a value");
             buf.line(`${cName} = ${this.coerce(value, ty, valueNode)};`);
         }
     }
@@ -1343,16 +3270,39 @@ class Emitter {
 
     private emitCommonJsDefinePropertiesExport(
         buf: CBuf,
-        assignment: { call: ts.CallExpression; name: string; right: ts.Expression; entry: ts.PropertyAssignment },
+        assignment: CommonJsDefinePropertiesExport,
     ): void {
         const cName = this.commonJsDefinePropertyExportCName(assignment.call, assignment.name);
-        const ty = this.commonJsExportedCType(assignment.entry);
+        const getterReturn = ts.isGetAccessorDeclaration(assignment.entry)
+            ? this.commonJsObjectAssignGetterReturnExpression(assignment.entry)
+            : null;
+        if (ts.isGetAccessorDeclaration(assignment.entry) && !getterReturn) {
+            unsupported(assignment.entry, "CommonJS Object.defineProperties getter exports require a single return value");
+        }
+        const valueNode = ts.isMethodDeclaration(assignment.entry)
+            ? assignment.entry
+            : assignment.right ?? getterReturn ?? (
+                ts.isPropertyAssignment(assignment.entry)
+                    ? assignment.entry.initializer
+                    : assignment.entry
+            );
+        const value = assignment.right
+            ? ts.isFunctionExpression(assignment.right) || ts.isArrowFunction(assignment.right)
+                ? this.emitClosureExpression(assignment.right)
+                : this.emitExpr(assignment.right)
+            : ts.isMethodDeclaration(assignment.entry)
+                ? this.emitClosureExpression(assignment.entry)
+            : getterReturn
+                ? this.emitExpr(getterReturn)
+            : ts.isPropertyAssignment(assignment.entry)
+                ? this.emitExpr(assignment.entry.initializer)
+            : unsupported(assignment.entry, "CommonJS Object.defineProperties export requires a value");
+        const ty = value.ty;
         if (!this.commonJsExportGlobals.has(cName)) {
             this.commonJsExportGlobals.add(cName);
             this.globalDecls.line(`static ${ty.c} ${cName};`);
         }
-        const value = this.emitExpr(assignment.right);
-        buf.line(`${cName} = ${this.coerce(value, ty, assignment.right)};`);
+        buf.line(`${cName} = ${this.coerce(value, ty, valueNode)};`);
     }
 
     private emitCommonJsObjectAssignExport(
@@ -1363,26 +3313,63 @@ class Emitter {
         if (
             !ts.isPropertyAssignment(assignment.entry) &&
             !ts.isShorthandPropertyAssignment(assignment.entry) &&
-            !ts.isMethodDeclaration(assignment.entry)
+            !ts.isMethodDeclaration(assignment.entry) &&
+            !ts.isGetAccessorDeclaration(assignment.entry) &&
+            !(assignment.right && (ts.isCallExpression(assignment.entry) || ts.isArrayLiteralExpression(assignment.entry)))
         ) {
             return;
         }
         if (ts.isShorthandPropertyAssignment(assignment.entry)) return;
-        if (ts.isPropertyAssignment(assignment.entry) && ts.isIdentifier(assignment.entry.initializer)) return;
+        if (
+            !assignment.right &&
+            ts.isPropertyAssignment(assignment.entry) &&
+            ts.isIdentifier(assignment.entry.initializer) &&
+            !this.requireBindingModuleExportsDeclaration(assignment.entry.initializer)
+        ) {
+            return;
+        }
 
+        const cName = this.commonJsDefinePropertyExportCName(assignment.call, assignment.name);
+        const ty = this.commonJsExportedCType(assignment.right ?? assignment.entry);
+        if (!this.commonJsExportGlobals.has(cName)) {
+            this.commonJsExportGlobals.add(cName);
+            this.globalDecls.line(`static ${ty.c} ${cName};`);
+        }
+        const getterReturn = ts.isGetAccessorDeclaration(assignment.entry)
+            ? this.commonJsObjectAssignGetterReturnExpression(assignment.entry)
+            : null;
+        if (ts.isGetAccessorDeclaration(assignment.entry) && !getterReturn) {
+            unsupported(assignment.entry, "CommonJS Object.assign getter exports require a single return value");
+        }
+        const valueNode = ts.isMethodDeclaration(assignment.entry)
+            ? assignment.entry
+            : assignment.right ?? getterReturn ?? (ts.isPropertyAssignment(assignment.entry) ? assignment.entry.initializer : assignment.entry);
+        const value = assignment.right
+            ? this.emitExpr(assignment.right)
+            : ts.isMethodDeclaration(assignment.entry)
+            ? this.emitClosureExpression(assignment.entry)
+            : getterReturn
+                ? this.emitExpr(getterReturn)
+            : ts.isPropertyAssignment(assignment.entry) && this.isCommonJsModuleExportsDefaultValue(assignment.entry.initializer)
+                ? this.emitCommonJsModuleExportsDefaultValue(assignment.entry.initializer)
+            : ts.isPropertyAssignment(assignment.entry)
+                ? this.emitExpr(assignment.entry.initializer)
+                : unsupported(assignment.entry, "CommonJS Object.assign export requires a value");
+        buf.line(`${cName} = ${this.coerce(value, ty, valueNode)};`);
+    }
+
+    private emitCommonJsFromEntriesExport(
+        buf: CBuf,
+        assignment: CommonJsFromEntriesExport,
+    ): void {
         const cName = this.commonJsDefinePropertyExportCName(assignment.call, assignment.name);
         const ty = this.commonJsExportedCType(assignment.entry);
         if (!this.commonJsExportGlobals.has(cName)) {
             this.commonJsExportGlobals.add(cName);
             this.globalDecls.line(`static ${ty.c} ${cName};`);
         }
-        const valueNode = ts.isMethodDeclaration(assignment.entry) ? assignment.entry : assignment.entry.initializer;
-        const value = ts.isMethodDeclaration(assignment.entry)
-            ? this.emitClosureExpression(assignment.entry)
-            : this.isCommonJsModuleExportsDefaultValue(assignment.entry.initializer)
-                ? this.emitCommonJsModuleExportsDefaultValue(assignment.entry.initializer)
-                : this.emitExpr(assignment.entry.initializer);
-        buf.line(`${cName} = ${this.coerce(value, ty, valueNode)};`);
+        const value = this.emitExpr(assignment.right);
+        buf.line(`${cName} = ${this.coerce(value, ty, assignment.right)};`);
     }
 
     private defaultExportAssignmentCType(stmt: ts.ExportAssignment): CType {
@@ -1413,7 +3400,11 @@ class Emitter {
     }
 
     private commonJsExportName(expr: CommonJsExportAccess): string | null {
-        if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.expression) && expr.expression.text === "exports") {
+        if (
+            ts.isPropertyAccessExpression(expr) &&
+            ts.isIdentifier(expr.expression) &&
+            (expr.expression.text === "exports" || this.isCommonJsExportsAliasIdentifier(expr.expression))
+        ) {
             return expr.name.text;
         }
         if (
@@ -1428,7 +3419,10 @@ class Emitter {
         if (ts.isElementAccessExpression(expr)) {
             const name = this.staticComputedPropertyExpression(expr.argumentExpression);
             if (name == null) return null;
-            if (ts.isIdentifier(expr.expression) && expr.expression.text === "exports") {
+            if (
+                ts.isIdentifier(expr.expression) &&
+                (expr.expression.text === "exports" || this.isCommonJsExportsAliasIdentifier(expr.expression))
+            ) {
                 return name;
             }
             if (ts.isPropertyAccessExpression(expr.expression) && this.isModuleExportsAccess(expr.expression)) {
@@ -1444,6 +3438,32 @@ class Emitter {
             expr.expression.text === "module";
     }
 
+    private isCommonJsExportsTargetExpression(expr: ts.Expression): boolean {
+        let target = expr;
+        while (ts.isParenthesizedExpression(target)) target = target.expression;
+        if (ts.isIdentifier(target)) {
+            return target.text === "exports" || this.isCommonJsExportsAliasIdentifier(target);
+        }
+        return ts.isPropertyAccessExpression(target) && this.isModuleExportsAccess(target);
+    }
+
+    private isCommonJsExportsAliasIdentifier(id: ts.Identifier): boolean {
+        const sym = this.symbolForIdentifier(id);
+        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        return !!decl && ts.isVariableDeclaration(decl) && this.isCommonJsExportsAliasDeclaration(decl);
+    }
+
+    private isCommonJsExportsAliasDeclaration(decl: ts.VariableDeclaration): boolean {
+        if (!this.isJavaScriptSourceFile(decl.getSourceFile())) return false;
+        if (!ts.isIdentifier(decl.name) || !decl.initializer) return false;
+        const stmt = decl.parent.parent;
+        if (!ts.isVariableStatement(stmt) || stmt.parent !== decl.getSourceFile()) return false;
+        let init = decl.initializer;
+        while (ts.isParenthesizedExpression(init)) init = init.expression;
+        return (ts.isIdentifier(init) && init.text === "exports") ||
+            (ts.isPropertyAccessExpression(init) && this.isModuleExportsAccess(init));
+    }
+
     private commonJsExportCName(expr: CommonJsExportAccess): string | null {
         const name = this.commonJsExportName(expr);
         if (!name) return null;
@@ -1456,7 +3476,7 @@ class Emitter {
         return `${modId}_module_exports`;
     }
 
-    private commonJsObjectPropertyExportCName(prop: ts.PropertyAssignment | ts.MethodDeclaration): string {
+    private commonJsObjectPropertyExportCName(prop: ts.PropertyAssignment | ts.MethodDeclaration | ts.GetAccessorDeclaration): string {
         const name = this.staticPropertyName(prop.name);
         if (!name) unsupported(prop.name, "CommonJS module.exports object requires static property names");
         const modId = this.graph.fileToModuleId.get(prop.getSourceFile().fileName) ?? this.currentModuleId ?? "module";
@@ -1483,8 +3503,37 @@ class Emitter {
     }
 
     private isCommonJsRequireCallee(expr: ts.Expression): boolean {
-        return (ts.isIdentifier(expr) && expr.text === "require") ||
+        return (ts.isIdentifier(expr) && (expr.text === "require" || this.isCommonJsRequireAliasIdentifier(expr))) ||
             this.isModuleRequireAccess(expr);
+    }
+
+    private isCommonJsRequireAliasIdentifier(id: ts.Identifier): boolean {
+        const sym = this.symbolForIdentifier(id);
+        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        if (decl && ts.isVariableDeclaration(decl) && this.isCommonJsRequireAliasDeclaration(decl)) {
+            return true;
+        }
+        for (const stmt of id.getSourceFile().statements) {
+            if (!ts.isVariableStatement(stmt)) continue;
+            for (const fallbackDecl of stmt.declarationList.declarations) {
+                if (
+                    ts.isIdentifier(fallbackDecl.name) &&
+                    fallbackDecl.name.text === id.text &&
+                    this.isCommonJsRequireAliasDeclaration(fallbackDecl)
+                ) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private isCommonJsRequireAliasDeclaration(decl: ts.VariableDeclaration): boolean {
+        if (!ts.isIdentifier(decl.name) || !decl.initializer) return false;
+        let init = decl.initializer;
+        while (ts.isParenthesizedExpression(init)) init = init.expression;
+        return (ts.isIdentifier(init) && init.text === "require") ||
+            (ts.isPropertyAccessExpression(init) && this.isModuleRequireAccess(init));
     }
 
     private requireCallSpecifier(expr: ts.Expression): string | null {
@@ -1627,6 +3676,68 @@ class Emitter {
                 }
                 continue;
             }
+            const moduleObjectAssignExports = this.commonJsModuleExportsObjectAssignValueExports(stmt);
+            if (moduleObjectAssignExports) {
+                for (const exported of moduleObjectAssignExports) {
+                    out.push({ name: exported.name, decl: exported.entry });
+                }
+                continue;
+            }
+            const moduleDefinePropertiesExports = this.commonJsModuleExportsDefinePropertiesValueExports(stmt);
+            if (moduleDefinePropertiesExports) {
+                for (const exported of moduleDefinePropertiesExports) {
+                    out.push({ name: exported.name, decl: exported.entry });
+                }
+                continue;
+            }
+                const moduleObjectCreateExports = this.commonJsModuleExportsObjectCreateValueExports(stmt);
+                if (moduleObjectCreateExports) {
+                    for (const exported of moduleObjectCreateExports) {
+                        out.push({ name: exported.name, decl: exported.entry });
+                    }
+                    continue;
+                }
+                const moduleObjectWrapperDescriptorExports = this.commonJsModuleExportsObjectWrapperDescriptorValueExports(stmt);
+                if (moduleObjectWrapperDescriptorExports) {
+                    for (const exported of moduleObjectWrapperDescriptorExports) {
+                        out.push({ name: exported.name, decl: exported.entry });
+                    }
+                    continue;
+                }
+                const moduleDefinePropertyExport = this.commonJsModuleExportsDefinePropertyValueExport(stmt);
+                if (moduleDefinePropertyExport) {
+                    const moduleDefinePropertyExports = this.commonJsModuleExportsDefinePropertyValueExports(stmt);
+                if (moduleDefinePropertyExports) {
+                    for (const exported of moduleDefinePropertyExports) {
+                        out.push({ name: exported.name, decl: exported.entry });
+                    }
+                } else {
+                    out.push({ name: moduleDefinePropertyExport.name, decl: moduleDefinePropertyExport.call });
+                }
+                continue;
+            }
+            const moduleObjectWrapperExports = this.commonJsModuleExportsObjectWrapperValueExports(stmt);
+            if (moduleObjectWrapperExports) {
+                for (const exported of moduleObjectWrapperExports) {
+                    out.push({ name: exported.name, decl: exported.entry });
+                }
+                continue;
+            }
+            const moduleObjectWrapperFromEntriesExports =
+                this.commonJsModuleExportsObjectWrapperFromEntriesValueExports(stmt);
+            if (moduleObjectWrapperFromEntriesExports) {
+                for (const exported of moduleObjectWrapperFromEntriesExports) {
+                    out.push({ name: exported.name, decl: exported.entry });
+                }
+                continue;
+            }
+            const moduleFromEntriesExports = this.commonJsModuleExportsObjectFromEntriesValueExports(stmt);
+            if (moduleFromEntriesExports) {
+                for (const exported of moduleFromEntriesExports) {
+                    out.push({ name: exported.name, decl: exported.entry });
+                }
+                continue;
+            }
             const definePropertiesExports = this.commonJsDefinePropertiesExports(stmt);
             if (definePropertiesExports) {
                 for (const exported of definePropertiesExports) {
@@ -1658,7 +3769,7 @@ class Emitter {
             ) {
                 continue;
             }
-            for (const prop of expr.right.properties) {
+            for (const prop of this.commonJsModuleExportsObjectAssignmentEntries(expr.right)) {
                 if (ts.isShorthandPropertyAssignment(prop)) {
                     out.push({ name: prop.name.text, decl: prop });
                     continue;
@@ -1668,7 +3779,7 @@ class Emitter {
                     if (propName) out.push({ name: propName, decl: prop });
                     continue;
                 }
-                if (ts.isMethodDeclaration(prop)) {
+                if (ts.isMethodDeclaration(prop) || ts.isGetAccessorDeclaration(prop)) {
                     const propName = this.staticPropertyName(prop.name);
                     if (propName) out.push({ name: propName, decl: prop });
                 }
@@ -1692,6 +3803,22 @@ class Emitter {
                 (!ts.isObjectLiteralExpression(chain.right) ||
                     this.isCommonJsObjectLiteralDefaultValue(chain.right))
             ) {
+                let right: ts.Expression = chain.right;
+                while (ts.isParenthesizedExpression(right)) right = right.expression;
+                if (
+                    ts.isCallExpression(right) &&
+                    (
+                        this.commonJsModuleExportsObjectWrapperValueExportCall(right) ||
+                        (
+                            this.commonJsModuleExportsObjectFromEntriesValueExportCall(right) &&
+                            !this.canEmitCommonJsModuleExportsObjectFromEntriesWholeValue(right)
+                        ) ||
+                        this.commonJsModuleExportsObjectWrapperFromEntriesValueExportCall(right) ||
+                        this.commonJsModuleExportsObjectWrapperDescriptorValueExportCall(right)
+                    )
+                ) {
+                    continue;
+                }
                 return chain.assignment;
             }
         }
@@ -1906,13 +4033,25 @@ class Emitter {
             ) {
                 return this.commonJsExportedCType(decl);
             }
-            if (ts.isCallExpression(decl) && this.commonJsDefinePropertyExportCall(decl)) {
+            if (ts.isCallExpression(decl) && this.commonJsDefinePropertyExportForCallDeclaration(decl)) {
                 return this.commonJsExportedCType(decl);
             }
             if (ts.isPropertyAssignment(decl) && this.commonJsDefinePropertiesExportEntry(decl)) {
                 return this.commonJsExportedCType(decl);
             }
+            if (ts.isPropertyAssignment(decl) && this.commonJsObjectFromEntriesExportEntry(decl)) {
+                return this.commonJsExportedCType(decl);
+            }
+            if (this.isCommonJsModuleExportsObjectExportEntry(decl)) {
+                return this.commonJsExportedCType(decl);
+            }
+            if (ts.isGetAccessorDeclaration(decl) && this.commonJsDefinePropertiesExportEntry(decl)) {
+                return this.commonJsExportedCType(decl);
+            }
             if (this.commonJsObjectAssignExportEntry(decl)) {
+                return this.commonJsExportedCType(decl);
+            }
+            if (ts.isArrayLiteralExpression(decl) && this.commonJsObjectFromEntriesExportEntry(decl)) {
                 return this.commonJsExportedCType(decl);
             }
         }
@@ -2550,7 +4689,7 @@ class Emitter {
             return null;
         }
         const cls = this.identifierName(init.expression);
-        if (["Map", "Set", "WeakMap", "WeakSet", "WeakRef", "FinalizationRegistry", "Promise", "EventEmitter", "Date", "AggregateError", "RegExp", "URL"].includes(cls) ||
+        if (["Map", "Set", "WeakMap", "WeakSet", "WeakRef", "FinalizationRegistry", "Promise", "EventEmitter", "Event", "EventTarget", "Date", "AggregateError", "RegExp", "URL"].includes(cls) ||
             this.isErrorConstructorName(cls)) {
             return null;
         }
@@ -3140,6 +5279,16 @@ class Emitter {
                 }
                 unsupported(d, "destructuring at module scope");
             }
+            if (
+                this.isCommonJsObjectAssignExportSourceDeclaration(d) ||
+                this.isCommonJsDefinePropertiesExportSourceDeclaration(d) ||
+                this.isCommonJsDefinePropertiesExportDescriptorDeclaration(d) ||
+                this.isCommonJsDefinePropertyExportSourceDeclaration(d) ||
+                this.isCommonJsExportsAliasDeclaration(d) ||
+                this.isCommonJsRequireAliasDeclaration(d)
+            ) {
+                continue;
+            }
             const name = this.declaredName(d.name);
             const baseCt = d.initializer && this.requireCallSpecifier(d.initializer)
                 ? T_VALUE
@@ -3719,6 +5868,16 @@ class Emitter {
                 unsupported(d, "destructuring declarations");
             }
             const name = mangleIdent(d.name.text);
+            if (
+                this.isCommonJsObjectAssignExportSourceDeclaration(d) ||
+                this.isCommonJsDefinePropertiesExportSourceDeclaration(d) ||
+                this.isCommonJsDefinePropertiesExportDescriptorDeclaration(d) ||
+                this.isCommonJsDefinePropertyExportSourceDeclaration(d) ||
+                this.isCommonJsExportsAliasDeclaration(d) ||
+                this.isCommonJsRequireAliasDeclaration(d)
+            ) {
+                continue;
+            }
             const sym = this.symbolForIdentifier(d.name);
             const stackNew = this.nonEscapingLocalNewClass(d);
             if (stackNew) {
@@ -5003,11 +7162,16 @@ class Emitter {
             { value: source, target: promise, node: expr.expression },
         ], ([promiseC]) => {
             const p = this.freshTemp("_await");
-            const fulfilled = awaited.kind === "fsstats"
-                ? `tsc_promise_fs_stats_value(${p})`
-                : (awaited.kind === "void" || awaited.kind === "never")
-                    ? `(void)tsc_promise_value(${p})`
-                    : this.coerce({ c: `tsc_promise_value(${p})`, ty: T_VALUE }, awaited, expr);
+            let fulfilled: string;
+            if (awaited.kind === "fsstats") {
+                fulfilled = `tsc_promise_fs_stats_value(${p})`;
+            } else if (awaited.kind === "buffer") {
+                fulfilled = `tsc_promise_buffer_value(${p})`;
+            } else if (awaited.kind === "void" || awaited.kind === "never") {
+                fulfilled = `(void)tsc_promise_value(${p})`;
+            } else {
+                fulfilled = this.coerce({ c: `tsc_promise_value(${p})`, ty: T_VALUE }, awaited, expr);
+            }
             const rejected = this.tryDepth > 0
                 ? `tsc_throw_str(tsc_value_to_string(tsc_promise_reason(${p})))`
                 : `return tsc_promise_reject(tsc_promise_reason(${p}))`;
@@ -5221,6 +7385,9 @@ class Emitter {
     }
 
     private emitTaggedTemplate(tt: ts.TaggedTemplateExpression): EmitResult {
+        if (this.isStringRawTag(tt.tag)) {
+            return this.emitStringRawTaggedTemplate(tt);
+        }
         if (!ts.isIdentifier(tt.tag)) {
             unsupported(tt.tag, "tagged template tag must be a function identifier");
         }
@@ -5261,6 +7428,31 @@ class Emitter {
         );
     }
 
+    private isStringRawTag(expr: ts.Expression): boolean {
+        return ts.isPropertyAccessExpression(expr) &&
+            expr.name.text === "raw" &&
+            ts.isIdentifier(expr.expression) &&
+            expr.expression.text === "String";
+    }
+
+    private emitStringRawTaggedTemplate(tt: ts.TaggedTemplateExpression): EmitResult {
+        const parts = this.templateRawStringParts(tt.template);
+        const expressions = ts.isTemplateExpression(tt.template)
+            ? tt.template.templateSpans.map((span) => span.expression)
+            : [];
+        let expr = `tsc_str_from_lit("${escapeCString(parts[0] ?? "")}", ${utf8ByteLen(parts[0] ?? "")})`;
+        for (let i = 0; i < expressions.length; i++) {
+            const inner = this.emitExpr(expressions[i]!);
+            const asStr = this.coerceToString(inner, expressions[i]!);
+            expr = `tsc_str_concat(${expr}, ${asStr})`;
+            const lit = parts[i + 1] ?? "";
+            if (lit.length > 0) {
+                expr = `tsc_str_concat(${expr}, tsc_str_from_lit("${escapeCString(lit)}", ${utf8ByteLen(lit)}))`;
+            }
+        }
+        return { c: expr, ty: T_STRING };
+    }
+
     private templateStringParts(
         template: ts.TemplateLiteral | ts.NoSubstitutionTemplateLiteral,
     ): string[] {
@@ -5269,6 +7461,21 @@ class Emitter {
             template.head.text,
             ...template.templateSpans.map((span) => span.literal.text),
         ];
+    }
+
+    private templateRawStringParts(
+        template: ts.TemplateLiteral | ts.NoSubstitutionTemplateLiteral,
+    ): string[] {
+        if (ts.isNoSubstitutionTemplateLiteral(template)) return [this.templateRawText(template)];
+        return [
+            this.templateRawText(template.head),
+            ...template.templateSpans.map((span) => this.templateRawText(span.literal)),
+        ];
+    }
+
+    private templateRawText(node: ts.TemplateLiteralLikeNode): string {
+        const rawText = (node as ts.TemplateLiteralLikeNode & { rawText?: string }).rawText;
+        return rawText ?? node.text;
     }
 
     private stringArrayLiteral(parts: readonly string[]): string {
@@ -6571,6 +8778,72 @@ class Emitter {
                 { value, target: T_STRING, node: call.arguments[0]! },
             ]);
         }
+        if (name === "queueMicrotask") {
+            if (call.arguments.length !== 1) unsupported(call, "queueMicrotask expects a callback");
+            const callbackNode = call.arguments[0]!;
+            const callback = this.emitExpr(callbackNode);
+            const adapter = this.ensureMicrotaskAdapter(callbackNode, callback.ty);
+            return this.emitSequencedExpr(T_VOID, [
+                { value: callback, target: callback.ty, node: callbackNode },
+            ], ([fn]) => {
+                const envType = `${adapter}_env_t`;
+                const env = this.freshTemp("_microtask_env");
+                return `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->fn = ${fn}; tsc_queue_microtask(${adapter}, ${env}); })`;
+            });
+        }
+        if (name === "setImmediate") {
+            if (call.arguments.length < 1 || call.arguments.length > 4) unsupported(call, "setImmediate expects a callback and up to 3 arguments in this subset");
+            const callbackNode = call.arguments[0]!;
+            const callback = this.emitExpr(callbackNode);
+            const argNodes = Array.from(call.arguments.slice(1));
+            const argValues = argNodes.map((arg) => this.emitExpr(arg));
+            const adapter = this.ensureImmediateAdapter(callbackNode, callback.ty, argValues.map((arg) => arg.ty));
+            const prepared = this.prepareType(callback.ty);
+            const params = prepared.kind === "function" ? prepared.params ?? [] : [];
+            return this.emitSequencedExpr(T_VOID, [
+                { value: callback, target: callback.ty, node: callbackNode },
+                ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
+            ], ([fn, ...args]) => {
+                const envType = `${adapter}_env_t`;
+                const env = this.freshTemp("_immediate_env");
+                const pieces = [
+                    `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
+                    `${env}->fn = ${fn}`,
+                ];
+                args.forEach((arg, i) => pieces.push(`${env}->arg${i} = ${arg}`));
+                pieces.push(`tsc_set_immediate(${adapter}, ${env})`);
+                return `({ ${pieces.join("; ")}; })`;
+            });
+        }
+        if (name === "setTimeout") {
+            if (call.arguments.length < 1 || call.arguments.length > 5) unsupported(call, "setTimeout expects a callback, optional literal 0 delay, and up to 3 arguments in this subset");
+            const callbackNode = call.arguments[0]!;
+            const callback = this.emitExpr(callbackNode);
+            if (call.arguments.length >= 2 && !this.isZeroDelayLiteral(call.arguments[1]!)) {
+                unsupported(call.arguments[1]!, "setTimeout in this subset requires an omitted delay or literal 0 delay");
+            }
+            const argNodes = call.arguments.length >= 2
+                ? Array.from(call.arguments.slice(2))
+                : [];
+            const argValues = argNodes.map((arg) => this.emitExpr(arg));
+            const adapter = this.ensureTimeoutAdapter(callbackNode, callback.ty, argValues.map((arg) => arg.ty));
+            const prepared = this.prepareType(callback.ty);
+            const params = prepared.kind === "function" ? prepared.params ?? [] : [];
+            return this.emitSequencedExpr(T_VOID, [
+                { value: callback, target: callback.ty, node: callbackNode },
+                ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
+            ], ([fn, ...args]) => {
+                const envType = `${adapter}_env_t`;
+                const env = this.freshTemp("_timeout_env");
+                const pieces = [
+                    `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
+                    `${env}->fn = ${fn}`,
+                ];
+                args.forEach((arg, i) => pieces.push(`${env}->arg${i} = ${arg}`));
+                pieces.push(`tsc_set_timeout(${adapter}, ${env})`);
+                return `({ ${pieces.join("; ")}; })`;
+            });
+        }
         if (
             this.isNamedImportFrom(calleeId, ["events", "node:events"], "listenerCount") ||
             this.isNamedImportFrom(calleeId, ["events", "node:events"], "getEventListeners") ||
@@ -6777,9 +9050,11 @@ class Emitter {
         const sigParams = sig.getParameters();
         const specs: SequencedCallArg[] = [
             { value: callee, target: callee.ty, node: call.expression },
-            ...(sigParams.length > 0 || params.length === 0
+            ...(sigParams.length > 0
                 ? this.callSpecsFromSignature(call, call.arguments, sigParams)
-                : this.callSpecsFromFunctionType(call, call.arguments, params)),
+                : params.length > 0
+                    ? this.callSpecsFromFunctionType(call, call.arguments, params)
+                    : this.callSpecsFromSignature(call, call.arguments, sigParams)),
         ];
         const ret = this.prepareType(callee.ty.ret);
         return this.emitSequencedExpr(ret, specs, (vals) => {
@@ -7616,9 +9891,12 @@ class Emitter {
                 (
                     ((ts.isPropertyAccessExpression(decl) || ts.isElementAccessExpression(decl)) && this.commonJsExportName(decl)) ||
                     (ts.isPropertyAssignment(decl) && (ts.isFunctionExpression(decl.initializer) || ts.isArrowFunction(decl.initializer))) ||
+                    this.isCommonJsStaticRequireBackedExportProperty(decl) ||
                     ts.isMethodDeclaration(decl) ||
-                    (ts.isCallExpression(decl) && !!this.commonJsDefinePropertyExportCall(decl)) ||
+                    (ts.isCallExpression(decl) && !!this.commonJsDefinePropertyExportForCallDeclaration(decl)) ||
                     (ts.isPropertyAssignment(decl) && !!this.commonJsDefinePropertiesExportEntry(decl)) ||
+                    (ts.isGetAccessorDeclaration(decl) && this.isCommonJsModuleExportsObjectExportEntry(decl)) ||
+                    (ts.isArrayLiteralExpression(decl) && !!this.commonJsObjectFromEntriesExportEntry(decl)) ||
                     !!this.commonJsObjectAssignExportEntry(decl)
                 )
             ) {
@@ -7659,8 +9937,11 @@ class Emitter {
                 memberTy.kind === "function" &&
                 (
                     (ts.isPropertyAccessExpression(decl) && this.commonJsExportName(decl)) ||
-                    (ts.isCallExpression(decl) && !!this.commonJsDefinePropertyExportCall(decl)) ||
+                    this.isCommonJsStaticRequireBackedExportProperty(decl) ||
+                    (ts.isCallExpression(decl) && !!this.commonJsDefinePropertyExportForCallDeclaration(decl)) ||
                     (ts.isPropertyAssignment(decl) && !!this.commonJsDefinePropertiesExportEntry(decl)) ||
+                    this.isCommonJsModuleExportsObjectExportEntry(decl) ||
+                    (ts.isArrayLiteralExpression(decl) && !!this.commonJsObjectFromEntriesExportEntry(decl)) ||
                     !!this.commonJsObjectAssignExportEntry(decl)
                 )
             ) {
@@ -7839,13 +10120,28 @@ class Emitter {
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "process") {
             switch (memberName) {
                 case "nextTick": {
-                    if (call.arguments.length !== 1) unsupported(call, "process.nextTick expects a zero-argument callback in this subset");
+                    if (call.arguments.length < 1 || call.arguments.length > 4) unsupported(call, "process.nextTick expects a callback and up to 3 arguments in this subset");
                     const callbackNode = call.arguments[0]!;
                     const callback = this.emitExpr(callbackNode);
-                    const adapter = this.ensureNextTickAdapter(callbackNode, callback.ty);
+                    const argNodes = Array.from(call.arguments.slice(1));
+                    const argValues = argNodes.map((arg) => this.emitExpr(arg));
+                    const adapter = this.ensureNextTickAdapter(callbackNode, callback.ty, argValues.map((arg) => arg.ty));
+                    const prepared = this.prepareType(callback.ty);
+                    const params = prepared.kind === "function" ? prepared.params ?? [] : [];
                     return this.emitSequencedExpr(T_VOID, [
                         { value: callback, target: callback.ty, node: callbackNode },
-                    ], ([fn]) => `tsc_process_next_tick(${adapter}, ${fn})`);
+                        ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
+                    ], ([fn, ...args]) => {
+                        const envType = `${adapter}_env_t`;
+                        const env = this.freshTemp("_next_tick_env");
+                        const pieces = [
+                            `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
+                            `${env}->fn = ${fn}`,
+                        ];
+                        args.forEach((arg, i) => pieces.push(`${env}->arg${i} = ${arg}`));
+                        pieces.push(`tsc_process_next_tick(${adapter}, ${env})`);
+                        return `({ ${pieces.join("; ")}; })`;
+                    });
                 }
                 case "getuid":
                     if (call.arguments.length !== 0) unsupported(call, "process.getuid expects no args");
@@ -7913,8 +10209,15 @@ class Emitter {
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "URL") {
             if (memberName === "canParse") {
-                if (call.arguments.length !== 1) unsupported(call, "URL.canParse expects input");
+                if (call.arguments.length < 1 || call.arguments.length > 2) unsupported(call, "URL.canParse expects input and optional base");
                 const input = this.emitExpr(call.arguments[0]!);
+                if (call.arguments.length === 2) {
+                    const base = this.emitExpr(call.arguments[1]!);
+                    return this.emitSequencedCall("tsc_url_can_parse_base", T_BOOLEAN, [
+                        { value: input, target: T_STRING, node: call.arguments[0]! },
+                        { value: base, target: T_STRING, node: call.arguments[1]! },
+                    ]);
+                }
                 return this.emitSequencedCall("tsc_url_can_parse", T_BOOLEAN, [
                     { value: input, target: T_STRING, node: call.arguments[0]! },
                 ]);
@@ -7935,6 +10238,17 @@ class Emitter {
                 ]);
             }
             if (memberName === "UTC") return this.emitDateStaticUtc(call);
+        }
+        if (ts.isIdentifier(recvExpr) && recvExpr.text === "RegExp") {
+            if (memberName === "escape") {
+                const arg = call.arguments[0];
+                if (!arg || call.arguments.length !== 1) unsupported(call, "RegExp.escape expects one string argument");
+                const value = this.emitExpr(arg);
+                return this.emitSequencedCall("tsc_regexp_escape", T_STRING, [
+                    { value, target: T_STRING, node: arg },
+                ]);
+            }
+            unsupported(call, `RegExp.${memberName}`);
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Number") {
             return this.emitNumberStatic(call, memberName);
@@ -8059,6 +10373,10 @@ class Emitter {
             return this.emitPromiseMethod(call, recv, memberName);
         if (recv.ty.kind === "eventemitter")
             return this.emitEventEmitterMethod(call, recv, memberName);
+        if (recv.ty.kind === "eventtarget")
+            return this.emitEventTargetMethod(call, recv, memberName);
+        if (recv.ty.kind === "event")
+            return this.emitEventMethod(call, recv, memberName);
         if (recv.ty.kind === "regexp")
             return this.emitRegexpMethod(call, recv, memberName);
         if (recv.ty.kind === "hash")
@@ -10103,6 +12421,15 @@ class Emitter {
                     );
                 });
             }
+            case "try": {
+                if (call.arguments.length !== 1) unsupported(call, "Promise.try expects 1 callback");
+                const callbackNode = call.arguments[0]!;
+                const callback = this.emitExpr(callbackNode);
+                this.validatePromiseCallback(callbackNode, callback, 0, "Promise.try callback");
+                return this.emitSequencedExpr(mapped, [
+                    { value: callback, target: callback.ty, node: callbackNode },
+                ], ([fn]) => this.promiseCallbackResolve(call, callback.ty, fn, { c: "tsc_value_undefined()", ty: T_VALUE }, callbackNode));
+            }
         }
         unsupported(call, `Promise.${method}`);
     }
@@ -10255,6 +12582,12 @@ class Emitter {
                     if (cb && fn) {
                         const eh = this.freshTemp("_promise_finally_eh");
                         const callStmt = this.promiseCallbackCall(call, cb.ty, fn, [], handler!);
+                        const cbType = this.prepareType(cb.ty);
+                        const cbRet = cbType.kind === "function" && cbType.ret ? this.prepareType(cbType.ret) : null;
+                        if (cbRet?.kind === "promise") {
+                            const finalPromise = this.freshTemp("_promise_finally_return");
+                            return `({ tsc_promise_t* const _p = ${promise}; tsc_promise_t* ${result}; if (tsc_promise_is_pending(_p)) { ${result} = tsc_promise_pending(); } else { tsc_try_frame_t ${eh}; tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { tsc_promise_t* const ${finalPromise} = ${callStmt}; tsc_try_pop(); if (tsc_promise_is_rejected(${finalPromise})) { ${result} = tsc_promise_reject(tsc_promise_reason(${finalPromise})); } else if (tsc_promise_is_pending(${finalPromise})) { ${result} = tsc_promise_pending(); } else { ${result} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recv.ty.elem, "_p")}; } } else { ${result} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } } ${result}; })`;
+                        }
                         return `({ tsc_promise_t* const _p = ${promise}; tsc_promise_t* ${result}; if (tsc_promise_is_pending(_p)) { ${result} = tsc_promise_pending(); } else { tsc_try_frame_t ${eh}; tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { ${callStmt}; tsc_try_pop(); ${result} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recv.ty.elem, "_p")}; } else { ${result} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } } ${result}; })`;
                     }
                     return `({ tsc_promise_t* const _p = ${promise}; tsc_promise_t* ${result}; if (tsc_promise_is_pending(_p)) { ${result} = tsc_promise_pending(); } else { ${result} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recv.ty.elem, "_p")}; } ${result}; })`;
@@ -10317,6 +12650,9 @@ class Emitter {
         if (stored.kind === "fsstats") {
             return { c: `tsc_promise_fs_stats_value(${promise})`, ty: T_FS_STATS };
         }
+        if (stored.kind === "buffer") {
+            return { c: `tsc_promise_buffer_value(${promise})`, ty: T_BUFFER };
+        }
         return { c: `tsc_promise_value(${promise})`, ty: T_VALUE };
     }
 
@@ -10325,13 +12661,22 @@ class Emitter {
         if (stored.kind === "fsstats") {
             return `tsc_promise_resolve_fs_stats(tsc_promise_fs_stats_value(${promise}))`;
         }
+        if (stored.kind === "buffer") {
+            return `tsc_promise_resolve_buffer(tsc_promise_buffer_value(${promise}))`;
+        }
         return `tsc_promise_resolve(tsc_promise_value(${promise}))`;
     }
 
     private promiseResolveResult(result: EmitResult, node: ts.Node): string {
         const stored = this.prepareType(result.ty);
+        if (stored.kind === "promise") {
+            return `tsc_promise_adopt(${result.c})`;
+        }
         if (stored.kind === "fsstats") {
             return `tsc_promise_resolve_fs_stats(${result.c})`;
+        }
+        if (stored.kind === "buffer") {
+            return `tsc_promise_resolve_buffer(${result.c})`;
         }
         return `tsc_promise_resolve(${this.coerce(result, T_VALUE, node)})`;
     }
@@ -10472,6 +12817,119 @@ class Emitter {
                 return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "EventEmitter");
         }
         unsupported(call, `EventEmitter method .${method}`);
+    }
+
+    private emitEventTargetMethod(
+        call: ts.CallExpression,
+        recv: EmitResult,
+        method: string,
+    ): EmitResult {
+        const args = call.arguments;
+        switch (method) {
+            case "addEventListener": {
+                if (args.length < 2 || args.length > 3) unsupported(call, "EventTarget.addEventListener expects type, listener, and optional options");
+                const options = this.eventTargetListenerOptions(args[2], "EventTarget.addEventListener");
+                const type = this.emitExpr(args[0]!);
+                const listener = this.emitEventListenerExpression(args[1]!);
+                const adapter = this.ensureEventTargetListenerAdapter(args[1]!, listener.ty);
+                return this.emitSequencedExpr(T_VOID, [
+                    { value: recv },
+                    { value: type, target: T_STRING, node: args[0]! },
+                    { value: listener, target: listener.ty, node: args[1]! },
+                ], ([target, eventType, fn]) =>
+                    `tsc_event_target_add(${target}, ${eventType}, ${adapter}, (void*)${fn}, ${this.eventListenerIdentity(args[1]!, fn)}, ${options.once ? "true" : "false"})`,
+                );
+            }
+            case "removeEventListener": {
+                if (args.length < 2 || args.length > 3) unsupported(call, "EventTarget.removeEventListener expects type, listener, and optional options");
+                this.eventTargetListenerOptions(args[2], "EventTarget.removeEventListener");
+                const type = this.emitExpr(args[0]!);
+                const listener = this.emitEventListenerExpression(args[1]!);
+                const adapter = this.ensureEventTargetListenerAdapter(args[1]!, listener.ty);
+                return this.emitSequencedExpr(T_VOID, [
+                    { value: recv },
+                    { value: type, target: T_STRING, node: args[0]! },
+                    { value: listener, target: listener.ty, node: args[1]! },
+                ], ([target, eventType, fn]) =>
+                    `tsc_event_target_remove(${target}, ${eventType}, ${adapter}, ${this.eventListenerIdentity(args[1]!, fn)})`,
+                );
+            }
+            case "dispatchEvent": {
+                if (args.length !== 1) unsupported(call, "EventTarget.dispatchEvent expects event");
+                const event = this.emitExpr(args[0]!);
+                return this.emitSequencedCall("tsc_event_target_dispatch", T_BOOLEAN, [
+                    { value: recv },
+                    { value: event, target: T_EVENT, node: args[0]! },
+                ]);
+            }
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "EventTarget");
+        }
+        unsupported(call, `EventTarget method .${method}`);
+    }
+
+    private eventTargetListenerOptions(options: ts.Expression | undefined, label: string): { once: boolean } {
+        const out = { once: false };
+        if (!options || this.isUndefinedExpression(options)) return out;
+        while (
+            ts.isParenthesizedExpression(options) ||
+            ts.isAsExpression(options) ||
+            ts.isTypeAssertionExpression(options) ||
+            ts.isNonNullExpression(options) ||
+            ts.isSatisfiesExpression(options)
+        ) {
+            options = options.expression;
+        }
+        if (options.kind === ts.SyntaxKind.TrueKeyword || options.kind === ts.SyntaxKind.FalseKeyword) {
+            return out;
+        }
+        if (!ts.isObjectLiteralExpression(options)) {
+            unsupported(options, `${label} options must be a boolean literal or object literal in this subset`);
+        }
+        for (const prop of options.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, `${label} options only support property assignments`);
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (key !== "once" && key !== "capture" && key !== "passive") {
+                unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+            }
+            if (
+                prop.initializer.kind !== ts.SyntaxKind.TrueKeyword &&
+                prop.initializer.kind !== ts.SyntaxKind.FalseKeyword
+            ) {
+                unsupported(prop.initializer, `${label}.${key} must be a boolean literal in this subset`);
+            }
+            if (key === "once") {
+                out.once = prop.initializer.kind === ts.SyntaxKind.TrueKeyword;
+            }
+        }
+        return out;
+    }
+
+    private emitEventMethod(
+        call: ts.CallExpression,
+        recv: EmitResult,
+        method: string,
+    ): EmitResult {
+        switch (method) {
+            case "preventDefault":
+                if (call.arguments.length !== 0) unsupported(call, "Event.preventDefault expects no args");
+                return this.emitSequencedCall("tsc_event_prevent_default", T_VOID, [
+                    { value: recv },
+                ]);
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Event");
+        }
+        unsupported(call, `Event method .${method}`);
     }
 
     private emitEventsStaticCall(call: ts.CallExpression, method: string): EmitResult {
@@ -11322,6 +13780,40 @@ class Emitter {
         return { cwd: null, input: null, env: null, shell: null, argv0: null, uid: null, gid: null, maxBuffer: null, timeout: null, killSignal: "15.0" };
     }
 
+    private eventInitCancelable(options: ts.Expression | undefined): string {
+        if (!options) return "false";
+        let cur = options;
+        while (
+            ts.isParenthesizedExpression(cur) ||
+            ts.isAsExpression(cur) ||
+            ts.isTypeAssertionExpression(cur) ||
+            ts.isNonNullExpression(cur) ||
+            ts.isSatisfiesExpression(cur)
+        ) {
+            cur = cur.expression;
+        }
+        if (!ts.isObjectLiteralExpression(cur)) {
+            unsupported(options, "Event options must be an object literal in this subset");
+        }
+        let cancelable = "false";
+        for (const prop of cur.properties) {
+            if (!ts.isPropertyAssignment(prop) || !ts.isIdentifier(prop.name)) {
+                unsupported(prop, "Event options only support cancelable");
+            }
+            if (prop.name.text !== "cancelable") {
+                unsupported(prop.name, "Event options only support cancelable");
+            }
+            if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
+                cancelable = "true";
+            } else if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) {
+                cancelable = "false";
+            } else {
+                unsupported(prop.initializer, "Event cancelable option must be a boolean literal");
+            }
+        }
+        return cancelable;
+    }
+
     private ensureEventListenerAdapter(expr: ts.Expression, type: CType): string {
         const prepared = this.prepareType(type);
         if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
@@ -11354,26 +13846,173 @@ class Emitter {
         return name;
     }
 
-    private ensureNextTickAdapter(expr: ts.Expression, type: CType): string {
+    private ensureEventTargetListenerAdapter(expr: ts.Expression, type: CType): string {
+        const prepared = this.prepareType(type);
+        if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
+            unsupported(expr, "EventTarget listener must be a function");
+        }
+        if (prepared.thisParam) unsupported(expr, "EventTarget listener this parameters are not supported yet");
+        const params = prepared.params ?? [];
+        if (params.length > 1) unsupported(expr, "EventTarget listener expects at most one Event parameter");
+        const key = `eventtarget:${this.typeKey(prepared)}`;
+        const existing = this.eventTargetListenerAdapters.get(key);
+        if (existing) return existing;
+        const name = `tsc_event_target_listener_${this.eventTargetListenerAdapters.size}`;
+        this.eventTargetListenerAdapters.set(key, name);
+        this.protos.line(`void ${name}(void* env, tsc_event_t* event);`);
+        const buf = new CBuf();
+        buf.open(`void ${name}(void* env, tsc_event_t* event)`);
+        buf.line(`${prepared.c} fn = (${prepared.c})env;`);
+        const callArgs: string[] = ["fn->env"];
+        if (params.length === 1) {
+            callArgs.push(this.coerce({ c: "event", ty: T_EVENT }, params[0]!, expr));
+        }
+        buf.line(`fn->fn(${callArgs.join(", ")});`);
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
+    private ensureNextTickAdapter(expr: ts.Expression, type: CType, argTypes: readonly CType[]): string {
         const prepared = this.prepareType(type);
         if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
             unsupported(expr, "process.nextTick callback must be a function");
         }
         if (prepared.thisParam) unsupported(expr, "process.nextTick callback this parameters are not supported");
-        if ((prepared.params ?? []).length !== 0) unsupported(expr, "process.nextTick callback must take no parameters in this subset");
-        const key = `nextTick:${this.typeKey(prepared)}`;
+        const params = prepared.params ?? [];
+        if (params.length !== argTypes.length) unsupported(expr, "process.nextTick callback parameter count must match queued arguments in this subset");
+        const args = argTypes.map((arg) => this.prepareType(arg));
+        const key = `nextTick:${this.typeKey(prepared)}:${args.map((arg) => this.typeKey(arg)).join(",")}`;
         const existing = this.nextTickAdapters.get(key);
         if (existing) return existing;
         const name = `tsc_next_tick_callback_${this.nextTickAdapters.size}`;
+        const envType = `${name}_env_t`;
         this.nextTickAdapters.set(key, name);
+        this.structDecls.open(`typedef struct ${envType}`);
+        this.structDecls.line(`${prepared.c} fn;`);
+        args.forEach((arg, i) => this.structDecls.line(`${arg.c} arg${i};`));
+        this.structDecls.close(` ${envType};`);
         this.protos.line(`void ${name}(void* env);`);
         const buf = new CBuf();
         buf.open(`void ${name}(void* env)`);
-        buf.line(`${prepared.c} fn = (${prepared.c})env;`);
+        buf.line(`${envType}* state = (${envType}*)env;`);
+        buf.line(`${prepared.c} fn = state->fn;`);
+        const callArgs = ["fn->env", ...params.map((_, i) => `state->arg${i}`)];
+        buf.line(`(void)fn->fn(${callArgs.join(", ")});`);
+        buf.close();
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
+    private ensureMicrotaskAdapter(expr: ts.Expression, type: CType): string {
+        const prepared = this.prepareType(type);
+        if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
+            unsupported(expr, "queueMicrotask callback must be a function");
+        }
+        if (prepared.thisParam) unsupported(expr, "queueMicrotask callback this parameters are not supported");
+        const params = prepared.params ?? [];
+        if (params.length !== 0) unsupported(expr, "queueMicrotask callback must not require parameters in this subset");
+        const key = `microtask:${this.typeKey(prepared)}`;
+        const existing = this.microtaskAdapters.get(key);
+        if (existing) return existing;
+        const name = `tsc_microtask_callback_${this.microtaskAdapters.size}`;
+        const envType = `${name}_env_t`;
+        this.microtaskAdapters.set(key, name);
+        this.structDecls.open(`typedef struct ${envType}`);
+        this.structDecls.line(`${prepared.c} fn;`);
+        this.structDecls.close(` ${envType};`);
+        this.protos.line(`void ${name}(void* env);`);
+        const buf = new CBuf();
+        buf.open(`void ${name}(void* env)`);
+        buf.line(`${envType}* state = (${envType}*)env;`);
+        buf.line(`${prepared.c} fn = state->fn;`);
         buf.line("(void)fn->fn(fn->env);");
         buf.close();
         this.closureDefs.write(buf.toString());
         return name;
+    }
+
+    private ensureImmediateAdapter(expr: ts.Expression, type: CType, argTypes: readonly CType[]): string {
+        const prepared = this.prepareType(type);
+        if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
+            unsupported(expr, "setImmediate callback must be a function");
+        }
+        if (prepared.thisParam) unsupported(expr, "setImmediate callback this parameters are not supported");
+        const params = prepared.params ?? [];
+        if (params.length !== argTypes.length) unsupported(expr, "setImmediate callback parameter count must match queued arguments in this subset");
+        const args = argTypes.map((arg) => this.prepareType(arg));
+        const key = `immediate:${this.typeKey(prepared)}:${args.map((arg) => this.typeKey(arg)).join(",")}`;
+        const existing = this.immediateAdapters.get(key);
+        if (existing) return existing;
+        const name = `tsc_immediate_callback_${this.immediateAdapters.size}`;
+        const envType = `${name}_env_t`;
+        this.immediateAdapters.set(key, name);
+        this.structDecls.open(`typedef struct ${envType}`);
+        this.structDecls.line(`${prepared.c} fn;`);
+        args.forEach((arg, i) => this.structDecls.line(`${arg.c} arg${i};`));
+        this.structDecls.close(` ${envType};`);
+        this.protos.line(`void ${name}(void* env);`);
+        const buf = new CBuf();
+        buf.open(`void ${name}(void* env)`);
+        buf.line(`${envType}* state = (${envType}*)env;`);
+        buf.line(`${prepared.c} fn = state->fn;`);
+        const callArgs = ["fn->env", ...params.map((_, i) => `state->arg${i}`)];
+        buf.line(`(void)fn->fn(${callArgs.join(", ")});`);
+        buf.close();
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
+    private ensureTimeoutAdapter(expr: ts.Expression, type: CType, argTypes: readonly CType[]): string {
+        const prepared = this.prepareType(type);
+        if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
+            unsupported(expr, "setTimeout callback must be a function");
+        }
+        if (prepared.thisParam) unsupported(expr, "setTimeout callback this parameters are not supported");
+        const params = prepared.params ?? [];
+        if (params.length !== argTypes.length) unsupported(expr, "setTimeout callback parameter count must match queued arguments in this subset");
+        const args = argTypes.map((arg) => this.prepareType(arg));
+        const key = `timeout:${this.typeKey(prepared)}:${args.map((arg) => this.typeKey(arg)).join(",")}`;
+        const existing = this.timeoutAdapters.get(key);
+        if (existing) return existing;
+        const name = `tsc_timeout_callback_${this.timeoutAdapters.size}`;
+        const envType = `${name}_env_t`;
+        this.timeoutAdapters.set(key, name);
+        this.structDecls.open(`typedef struct ${envType}`);
+        this.structDecls.line(`${prepared.c} fn;`);
+        args.forEach((arg, i) => this.structDecls.line(`${arg.c} arg${i};`));
+        this.structDecls.close(` ${envType};`);
+        this.protos.line(`void ${name}(void* env);`);
+        const buf = new CBuf();
+        buf.open(`void ${name}(void* env)`);
+        buf.line(`${envType}* state = (${envType}*)env;`);
+        buf.line(`${prepared.c} fn = state->fn;`);
+        const callArgs = ["fn->env", ...params.map((_, i) => `state->arg${i}`)];
+        buf.line(`(void)fn->fn(${callArgs.join(", ")});`);
+        buf.close();
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
+    private isZeroDelayLiteral(expr: ts.Expression): boolean {
+        let cur = expr;
+        while (
+            ts.isParenthesizedExpression(cur) ||
+            ts.isAsExpression(cur) ||
+            ts.isTypeAssertionExpression(cur) ||
+            ts.isNonNullExpression(cur) ||
+            ts.isSatisfiesExpression(cur)
+        ) {
+            cur = cur.expression;
+        }
+        if (ts.isNumericLiteral(cur)) return Number(cur.text) === 0;
+        return (
+            ts.isPrefixUnaryExpression(cur) &&
+            cur.operator === ts.SyntaxKind.PlusToken &&
+            ts.isNumericLiteral(cur.operand) &&
+            Number(cur.operand.text) === 0
+        );
     }
 
     private emitEventListenerExpression(expr: ts.Expression): EmitResult {
@@ -11510,6 +14149,37 @@ class Emitter {
                     return `tsc_date_set_utc_part(${date}, ${part}, ${args.join(", ")}, ${call.arguments.length})`;
                 });
             }
+            case "setFullYear":
+            case "setMonth":
+            case "setDate":
+            case "setHours":
+            case "setMinutes":
+            case "setSeconds":
+            case "setMilliseconds": {
+                const localSetters: Record<string, { part: number; min: number; max: number }> = {
+                    setFullYear: { part: 0, min: 1, max: 3 },
+                    setMonth: { part: 1, min: 1, max: 2 },
+                    setDate: { part: 2, min: 1, max: 1 },
+                    setHours: { part: 3, min: 1, max: 4 },
+                    setMinutes: { part: 4, min: 1, max: 3 },
+                    setSeconds: { part: 5, min: 1, max: 2 },
+                    setMilliseconds: { part: 6, min: 1, max: 1 },
+                };
+                const config = localSetters[method]!;
+                if (call.arguments.length < config.min || call.arguments.length > config.max) {
+                    unsupported(call, `Date.${method} expects ${config.min === config.max ? config.min : `${config.min} to ${config.max}`} numeric args`);
+                }
+                const specs: { value: EmitResult; target?: CType; node?: ts.Expression }[] = [{ value: recv }];
+                for (const arg of call.arguments) {
+                    const value = this.emitExpr(arg);
+                    specs.push({ value, target: T_NUMBER, node: arg });
+                }
+                return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
+                    const date = vals[0]!;
+                    const args = [vals[1]!, vals[2] ?? "0", vals[3] ?? "0", vals[4] ?? "0"];
+                    return `tsc_date_set_local_part(${date}, ${config.part}, ${args.join(", ")}, ${call.arguments.length})`;
+                });
+            }
             case "getUTCFullYear":
             case "getUTCMonth":
             case "getUTCDate":
@@ -11531,6 +14201,30 @@ class Emitter {
                 }[method]!;
                 return this.emitSequencedExpr(T_NUMBER, [{ value: recv }], ([date]) => `tsc_date_get_utc_part(${date}, ${part})`);
             }
+            case "getFullYear":
+            case "getMonth":
+            case "getDate":
+            case "getDay":
+            case "getHours":
+            case "getMinutes":
+            case "getSeconds":
+            case "getMilliseconds": {
+                if (call.arguments.length !== 0) unsupported(call, `Date.${method} expects no args`);
+                const part = {
+                    getFullYear: 0,
+                    getMonth: 1,
+                    getDate: 2,
+                    getDay: 3,
+                    getHours: 4,
+                    getMinutes: 5,
+                    getSeconds: 6,
+                    getMilliseconds: 7,
+                }[method]!;
+                return this.emitSequencedExpr(T_NUMBER, [{ value: recv }], ([date]) => `tsc_date_get_local_part(${date}, ${part})`);
+            }
+            case "getTimezoneOffset":
+                if (call.arguments.length !== 0) unsupported(call, "Date.getTimezoneOffset expects no args");
+                return this.emitSequencedCall("tsc_date_get_timezone_offset", T_NUMBER, [{ value: recv }]);
             case "toLocaleString":
             case "toString":
                 if (call.arguments.length !== 0) unsupported(call, `Date.${method} expects no args`);
@@ -13658,10 +16352,12 @@ class Emitter {
         const args = call.arguments;
         switch (name) {
             case "readFileSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.readFileSync needs path and optional UTF-8 encoding options");
-                this.validateFsEncodingOptions(args[1], "fs.readFileSync");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.readFileSync needs path and optional UTF-8/buffer encoding/flag options");
+                const result = this.validateFsReadFileOptions(args[1], "fs.readFileSync");
                 const p = this.emitExpr(args[0]!);
-                return { c: `tsc_fs_read_file_sync(${p.c})`, ty: T_STRING };
+                return this.emitSequencedExpr(result === "buffer" ? T_BUFFER : T_STRING, [
+                    this.fsPathSpec(p, args[0]!, "fs.readFileSync path"),
+                ], ([path]) => `${result === "buffer" ? "tsc_fs_read_file_buffer_sync" : "tsc_fs_read_file_sync"}(${path!})`);
             }
             case "writeFileSync": {
                 if (args.length < 2 || args.length > 3)
@@ -13671,37 +16367,47 @@ class Emitter {
                 const d = this.emitExpr(args[1]!);
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.writeFileSync data must be string or Buffer");
                 return this.emitSequencedCall(
-                    d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync_opts" : "tsc_fs_write_file_sync_opts",
+                    d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync_opts_mode" : "tsc_fs_write_file_sync_opts_mode",
                     T_VOID,
                     [
-                        { value: p, target: T_STRING, node: args[0]! },
+                        this.fsPathSpec(p, args[0]!, "fs.writeFileSync path"),
                         { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
                         { value: { c: options.append ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
                         { value: { c: options.exclusive ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
+                        options.mode,
                     ],
                 );
             }
             case "appendFileSync": {
-                if (args.length < 2 || args.length > 3) unsupported(call, "fs.appendFileSync needs path, data, and optional UTF-8 encoding options");
-                this.validateFsEncodingOptions(args[2], "fs.appendFileSync");
+                if (args.length < 2 || args.length > 3) unsupported(call, "fs.appendFileSync needs path, data, and optional UTF-8 encoding/flag options");
+                const options = this.validateFsAppendFileOptions(args[2], "fs.appendFileSync");
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.appendFileSync data must be string or Buffer");
-                return this.emitSequencedCall(d.ty.kind === "buffer" ? "tsc_fs_append_file_buffer_sync" : "tsc_fs_append_file_sync", T_VOID, [
-                    { value: p, target: T_STRING, node: args[0]! },
-                    { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
-                ]);
+                return this.emitSequencedCall(
+                    d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync_opts_mode" : "tsc_fs_write_file_sync_opts_mode",
+                    T_VOID,
+                    [
+                        this.fsPathSpec(p, args[0]!, "fs.appendFileSync path"),
+                        { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
+                        { value: { c: "true", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
+                        { value: { c: options.exclusive ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
+                        options.mode,
+                    ],
+                );
             }
             case "existsSync": {
                 if (args.length !== 1) unsupported(call, "fs.existsSync needs path");
                 const p = this.emitExpr(args[0]!);
-                return { c: `tsc_fs_exists_sync(${p.c})`, ty: T_BOOLEAN };
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    this.fsPathSpec(p, args[0]!, "fs.existsSync path"),
+                ], ([path]) => `tsc_fs_exists_sync(${path!})`);
             }
             case "accessSync": {
                 if (args.length < 1 || args.length > 2) unsupported(call, "fs.accessSync needs path and optional mode");
                 const p = this.emitExpr(args[0]!);
                 const specs: SequencedCallArg[] = [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, "fs.accessSync path"),
                 ];
                 if (args[1]) {
                     specs.push({ value: this.emitExpr(args[1]), target: T_NUMBER, node: args[1] });
@@ -13710,26 +16416,29 @@ class Emitter {
                 return this.emitSequencedCall("tsc_fs_access_sync", T_VOID, specs);
             }
             case "readdirSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.readdirSync needs path and optional UTF-8 encoding or withFileTypes options");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.readdirSync needs path and optional UTF-8/buffer encoding or withFileTypes options");
                 const options = this.validateFsReaddirOptions(args[1], "fs.readdirSync");
                 const p = this.emitExpr(args[0]!);
                 if (options.withFileTypes) {
-                    return {
-                        c: `tsc_fs_readdir_dirents_sync(${p.c})`,
-                        ty: arrayType(T_FS_DIRENT),
-                    };
+                    return this.emitSequencedExpr(arrayType(T_FS_DIRENT), [
+                        this.fsPathSpec(p, args[0]!, "fs.readdirSync path"),
+                    ], ([path]) => `tsc_fs_readdir_dirents_sync(${path!})`);
                 }
-                return {
-                    c: `${options.recursive ? "tsc_fs_readdir_recursive_sync" : "tsc_fs_readdir_sync"}(${p.c})`,
-                    ty: arrayType(T_STRING),
-                };
+                if (options.encoding === "buffer") {
+                    return this.emitSequencedExpr(arrayType(T_BUFFER), [
+                        this.fsPathSpec(p, args[0]!, "fs.readdirSync path"),
+                    ], ([path]) => `${options.recursive ? "tsc_fs_readdir_recursive_buffer_sync" : "tsc_fs_readdir_buffer_sync"}(${path!})`);
+                }
+                return this.emitSequencedExpr(arrayType(T_STRING), [
+                    this.fsPathSpec(p, args[0]!, "fs.readdirSync path"),
+                ], ([path]) => `${options.recursive ? "tsc_fs_readdir_recursive_sync" : "tsc_fs_readdir_sync"}(${path!})`);
             }
             case "statSync": {
                 if (args.length < 1 || args.length > 2) unsupported(call, "fs.statSync needs path and optional { bigint: false } options");
                 this.validateFsStatsOptions(args[1], "fs.statSync");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedCall("tsc_fs_stat_sync", T_FS_STATS, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, "fs.statSync path"),
                 ]);
             }
             case "lstatSync": {
@@ -13737,24 +16446,30 @@ class Emitter {
                 this.validateFsStatsOptions(args[1], "fs.lstatSync");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedCall("tsc_fs_lstat_sync", T_FS_STATS, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, "fs.lstatSync path"),
                 ]);
             }
             case "realpathSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.realpathSync needs path and optional UTF-8 encoding options");
-                this.validateFsEncodingOptions(args[1], "fs.realpathSync");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.realpathSync needs path and optional UTF-8/buffer encoding options");
+                const result = this.validateFsEncodingOptions(args[1], "fs.realpathSync");
                 const p = this.emitExpr(args[0]!);
-                return this.emitSequencedCall("tsc_fs_realpath_sync", T_STRING, [
-                    { value: p, target: T_STRING, node: args[0]! },
-                ]);
+                return this.emitSequencedExpr(result === "buffer" ? T_BUFFER : T_STRING, [
+                    this.fsPathSpec(p, args[0]!, "fs.realpathSync path"),
+                ], ([path]) => {
+                    const value = `tsc_fs_realpath_sync(${path!})`;
+                    return result === "buffer" ? `tsc_buffer_from_str(${value}, NULL)` : value;
+                });
             }
             case "readlinkSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.readlinkSync needs path and optional UTF-8 encoding options");
-                this.validateFsEncodingOptions(args[1], "fs.readlinkSync");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.readlinkSync needs path and optional UTF-8/buffer encoding options");
+                const result = this.validateFsEncodingOptions(args[1], "fs.readlinkSync");
                 const p = this.emitExpr(args[0]!);
-                return this.emitSequencedCall("tsc_fs_readlink_sync", T_STRING, [
-                    { value: p, target: T_STRING, node: args[0]! },
-                ]);
+                return this.emitSequencedExpr(result === "buffer" ? T_BUFFER : T_STRING, [
+                    this.fsPathSpec(p, args[0]!, "fs.readlinkSync path"),
+                ], ([path]) => {
+                    const value = `tsc_fs_readlink_sync(${path!})`;
+                    return result === "buffer" ? `tsc_buffer_from_str(${value}, NULL)` : value;
+                });
             }
             case "symlinkSync": {
                 if (args.length < 2 || args.length > 3) unsupported(call, "fs.symlinkSync needs target, path, and optional type");
@@ -13762,8 +16477,8 @@ class Emitter {
                 const target = this.emitExpr(args[0]!);
                 const p = this.emitExpr(args[1]!);
                 return this.emitSequencedCall("tsc_fs_symlink_sync", T_VOID, [
-                    { value: target, target: T_STRING, node: args[0]! },
-                    { value: p, target: T_STRING, node: args[1]! },
+                    this.fsPathSpec(target, args[0]!, "fs.symlinkSync target"),
+                    this.fsPathSpec(p, args[1]!, "fs.symlinkSync path"),
                 ]);
             }
             case "linkSync": {
@@ -13771,24 +16486,27 @@ class Emitter {
                 const existingPath = this.emitExpr(args[0]!);
                 const newPath = this.emitExpr(args[1]!);
                 return this.emitSequencedCall("tsc_fs_link_sync", T_VOID, [
-                    { value: existingPath, target: T_STRING, node: args[0]! },
-                    { value: newPath, target: T_STRING, node: args[1]! },
+                    this.fsPathSpec(existingPath, args[0]!, "fs.linkSync existingPath"),
+                    this.fsPathSpec(newPath, args[1]!, "fs.linkSync newPath"),
                 ]);
             }
             case "mkdtempSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.mkdtempSync needs prefix and optional UTF-8 encoding options");
-                this.validateFsEncodingOptions(args[1], "fs.mkdtempSync");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.mkdtempSync needs prefix and optional UTF-8/buffer encoding options");
+                const result = this.validateFsEncodingOptions(args[1], "fs.mkdtempSync");
                 const prefix = this.emitExpr(args[0]!);
-                return this.emitSequencedCall("tsc_fs_mkdtemp_sync", T_STRING, [
-                    { value: prefix, target: T_STRING, node: args[0]! },
-                ]);
+                return this.emitSequencedExpr(result === "buffer" ? T_BUFFER : T_STRING, [
+                    this.fsPathSpec(prefix, args[0]!, "fs.mkdtempSync prefix"),
+                ], ([value]) => {
+                    const dir = `tsc_fs_mkdtemp_sync(${value!})`;
+                    return result === "buffer" ? `tsc_buffer_from_str(${dir}, NULL)` : dir;
+                });
             }
             case "truncateSync": {
                 if (args.length < 1 || args.length > 2) unsupported(call, "fs.truncateSync needs path and optional length");
                 const p = this.emitExpr(args[0]!);
                 const len = args[1] ? this.emitExpr(args[1]) : undefined;
                 const specs: SequencedCallArg[] = [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, "fs.truncateSync path"),
                 ];
                 if (len) specs.push({ value: len, target: T_NUMBER, node: args[1]! });
                 return this.emitSequencedExpr(T_VOID, specs, ([path, length]) =>
@@ -13803,7 +16521,7 @@ class Emitter {
                 const mtime = this.emitFsTimeArg(args[2]!, `fs.${name} mtime`);
                 const fn = name === "lutimesSync" ? "tsc_fs_lutimes_sync" : "tsc_fs_utimes_sync";
                 return this.emitSequencedExpr(T_VOID, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, `fs.${name} path`),
                     atime,
                     mtime,
                 ], ([path, atimeValue, mtimeValue]) =>
@@ -13816,7 +16534,7 @@ class Emitter {
                 const uid = this.emitExpr(args[1]!);
                 const gid = this.emitExpr(args[2]!);
                 return this.emitSequencedCall("tsc_fs_chown_sync", T_VOID, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, "fs.chownSync path"),
                     { value: uid, target: T_NUMBER, node: args[1]! },
                     { value: gid, target: T_NUMBER, node: args[2]! },
                 ]);
@@ -13827,7 +16545,7 @@ class Emitter {
                 const uid = this.emitExpr(args[1]!);
                 const gid = this.emitExpr(args[2]!);
                 return this.emitSequencedCall("tsc_fs_lchown_sync", T_VOID, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, "fs.lchownSync path"),
                     { value: uid, target: T_NUMBER, node: args[1]! },
                     { value: gid, target: T_NUMBER, node: args[2]! },
                 ]);
@@ -13837,7 +16555,7 @@ class Emitter {
                 const p = this.emitExpr(args[0]!);
                 const mode = this.emitExpr(args[1]!);
                 return this.emitSequencedCall("tsc_fs_chmod_sync", T_VOID, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, "fs.chmodSync path"),
                     { value: mode, target: T_NUMBER, node: args[1]! },
                 ]);
             }
@@ -13846,7 +16564,7 @@ class Emitter {
                 const p = this.emitExpr(args[0]!);
                 const options = this.emitFsMkdirOptions(args[1], `fs.${name}`);
                 return this.emitSequencedExpr(T_VOID, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, `fs.${name} path`),
                     options.mode,
                 ], ([path, mode]) => `tsc_fs_mkdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"}, ${mode!})`);
             }
@@ -13855,7 +16573,7 @@ class Emitter {
                 const p = this.emitExpr(args[0]!);
                 const options = this.emitFsBooleanOptions(args[1], ["recursive", "force"], `fs.${name}`);
                 return this.emitSequencedExpr(T_VOID, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, `fs.${name} path`),
                 ], ([path]) => `tsc_fs_rm_sync_opts(${path!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"})`);
             }
             case "unlinkSync":
@@ -13864,7 +16582,7 @@ class Emitter {
                 const p = this.emitExpr(args[0]!);
                 const fn = name === "unlinkSync" ? "tsc_fs_unlink_sync" : "tsc_fs_rmdir_sync";
                 return this.emitSequencedCall(fn, T_VOID, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, `fs.${name} path`),
                 ]);
             }
             case "cpSync": {
@@ -13873,8 +16591,8 @@ class Emitter {
                 const src = this.emitExpr(args[0]!);
                 const dest = this.emitExpr(args[1]!);
                 return this.emitSequencedExpr(T_VOID, [
-                    { value: src, target: T_STRING, node: args[0]! },
-                    { value: dest, target: T_STRING, node: args[1]! },
+                    this.fsPathSpec(src, args[0]!, "fs.cpSync source"),
+                    this.fsPathSpec(dest, args[1]!, "fs.cpSync destination"),
                 ], ([srcPath, destPath]) =>
                     `tsc_fs_cp_sync_opts(${srcPath!}, ${destPath!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"})`,
                 );
@@ -13888,8 +16606,8 @@ class Emitter {
                 const a = this.emitExpr(args[0]!);
                 const b = this.emitExpr(args[1]!);
                 const specs: SequencedCallArg[] = [
-                    { value: a, target: T_STRING, node: args[0]! },
-                    { value: b, target: T_STRING, node: args[1]! },
+                    this.fsPathSpec(a, args[0]!, `fs.${name} source`),
+                    this.fsPathSpec(b, args[1]!, `fs.${name} destination`),
                 ];
                 if (isCopy) {
                     specs.push({
@@ -14004,20 +16722,22 @@ class Emitter {
         return out;
     }
 
-    private validateFsEncodingOptions(options: ts.Expression | undefined, label: string): void {
-        if (!options) return;
-        const checkEncoding = (node: ts.Expression): void => {
-            if (!ts.isStringLiteralLike(node) || (node.text !== "utf8" && node.text !== "utf-8")) {
-                unsupported(node, `${label} only supports UTF-8 encoding options in this subset`);
+    private validateFsEncodingOptions(options: ts.Expression | undefined, label: string): "string" | "buffer" {
+        if (!options || this.isUndefinedExpression(options)) return "string";
+        const checkEncoding = (node: ts.Expression): "string" | "buffer" => {
+            if (ts.isStringLiteralLike(node)) {
+                if (node.text === "utf8" || node.text === "utf-8") return "string";
+                if (node.text === "buffer") return "buffer";
             }
+            unsupported(node, `${label} only supports UTF-8 or buffer encoding options in this subset`);
         };
         if (ts.isStringLiteralLike(options)) {
-            checkEncoding(options);
-            return;
+            return checkEncoding(options);
         }
         if (!ts.isObjectLiteralExpression(options)) {
-            unsupported(options, `${label} options must be a UTF-8 string literal or object literal in this subset`);
+            unsupported(options, `${label} options must be a UTF-8/buffer string literal or object literal in this subset`);
         }
+        let result: "string" | "buffer" = "string";
         for (const prop of options.properties) {
             if (!ts.isPropertyAssignment(prop)) {
                 unsupported(prop, `${label} options only support encoding property assignments`);
@@ -14026,13 +16746,58 @@ class Emitter {
             if (key !== "encoding") {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
-            checkEncoding(prop.initializer);
+            result = checkEncoding(prop.initializer);
         }
+        return result;
     }
 
-    private validateFsWriteFileOptions(options: ts.Expression | undefined, label: string): { append: boolean; exclusive: boolean } {
+    private validateFsReadFileOptions(options: ts.Expression | undefined, label: string): "string" | "buffer" {
+        if (!options || this.isUndefinedExpression(options)) return "string";
+        const checkEncoding = (node: ts.Expression): "string" | "buffer" => {
+            if (ts.isStringLiteralLike(node)) {
+                if (node.text === "utf8" || node.text === "utf-8") return "string";
+                if (node.text === "buffer") return "buffer";
+            }
+            if (node.kind === ts.SyntaxKind.NullKeyword) return "buffer";
+            unsupported(node, `${label} only supports UTF-8, buffer, or null encoding options in this subset`);
+        };
+        const checkFlag = (node: ts.Expression): void => {
+            if (!ts.isStringLiteralLike(node) || (node.text !== "r" && node.text !== "rs")) {
+                unsupported(node, `${label} only supports literal "r" or "rs" flags in this subset`);
+            }
+        };
+        if (ts.isStringLiteralLike(options)) {
+            return checkEncoding(options);
+        }
+        if (options.kind === ts.SyntaxKind.NullKeyword) {
+            return "buffer";
+        }
+        if (!ts.isObjectLiteralExpression(options)) {
+            unsupported(options, `${label} options must be a UTF-8/buffer string literal, null, or object literal in this subset`);
+        }
+        let result: "string" | "buffer" = "string";
+        for (const prop of options.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, `${label} options only support encoding and flag property assignments`);
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (key === "encoding") {
+                result = checkEncoding(prop.initializer);
+                continue;
+            }
+            if (key === "flag") {
+                checkFlag(prop.initializer);
+                continue;
+            }
+            unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+        }
+        return result;
+    }
+
+    private validateFsWriteFileOptions(options: ts.Expression | undefined, label: string): { append: boolean; exclusive: boolean; mode: SequencedCallArg } {
         const out = { append: false, exclusive: false };
-        if (!options || this.isUndefinedExpression(options)) return out;
+        let mode: SequencedCallArg = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
+        if (!options || this.isUndefinedExpression(options)) return { ...out, mode };
         const checkEncoding = (node: ts.Expression): void => {
             if (!ts.isStringLiteralLike(node) || (node.text !== "utf8" && node.text !== "utf-8")) {
                 unsupported(node, `${label} only supports UTF-8 encoding options in this subset`);
@@ -14047,53 +16812,101 @@ class Emitter {
         };
         if (ts.isStringLiteralLike(options)) {
             checkEncoding(options);
-            return out;
+            return { ...out, mode };
         }
         if (!ts.isObjectLiteralExpression(options)) {
             unsupported(options, `${label} options must be a UTF-8 string literal or object literal in this subset`);
         }
         for (const prop of options.properties) {
             if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, `${label} options only support encoding and flag property assignments`);
+                unsupported(prop, `${label} options only support encoding, flag, and mode property assignments`);
             }
             const key = this.staticPropertyName(prop.name);
             if (key === "encoding") {
                 checkEncoding(prop.initializer);
             } else if (key === "flag") {
                 checkFlag(prop.initializer);
+            } else if (key === "mode") {
+                const value = this.emitExpr(prop.initializer);
+                if (value.ty.kind !== "number") unsupported(prop.initializer, `${label}.mode must be numeric in this subset`);
+                mode = { value, target: T_NUMBER, node: prop.initializer };
             } else {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
         }
-        return out;
+        return { ...out, mode };
     }
 
-    private validateFsReaddirOptions(
-        options: ts.Expression | undefined,
-        label: string,
-    ): { withFileTypes: boolean; recursive: boolean } {
-        if (!options || this.isUndefinedExpression(options)) return { withFileTypes: false, recursive: false };
+    private validateFsAppendFileOptions(options: ts.Expression | undefined, label: string): { exclusive: boolean; mode: SequencedCallArg } {
+        const out = { exclusive: false };
+        let mode: SequencedCallArg = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
+        if (!options || this.isUndefinedExpression(options)) return { ...out, mode };
         const checkEncoding = (node: ts.Expression): void => {
             if (!ts.isStringLiteralLike(node) || (node.text !== "utf8" && node.text !== "utf-8")) {
                 unsupported(node, `${label} only supports UTF-8 encoding options in this subset`);
             }
         };
+        const checkFlag = (node: ts.Expression): void => {
+            if (!ts.isStringLiteralLike(node) || (node.text !== "a" && node.text !== "ax")) {
+                unsupported(node, `${label} only supports literal "a" or "ax" flags in this subset`);
+            }
+            out.exclusive = node.text === "ax";
+        };
         if (ts.isStringLiteralLike(options)) {
             checkEncoding(options);
-            return { withFileTypes: false, recursive: false };
+            return { ...out, mode };
         }
         if (!ts.isObjectLiteralExpression(options)) {
             unsupported(options, `${label} options must be a UTF-8 string literal or object literal in this subset`);
         }
+        for (const prop of options.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, `${label} options only support encoding, flag, and mode property assignments`);
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (key === "encoding") {
+                checkEncoding(prop.initializer);
+            } else if (key === "flag") {
+                checkFlag(prop.initializer);
+            } else if (key === "mode") {
+                const value = this.emitExpr(prop.initializer);
+                if (value.ty.kind !== "number") unsupported(prop.initializer, `${label}.mode must be numeric in this subset`);
+                mode = { value, target: T_NUMBER, node: prop.initializer };
+            } else {
+                unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+            }
+        }
+        return { ...out, mode };
+    }
+
+    private validateFsReaddirOptions(
+        options: ts.Expression | undefined,
+        label: string,
+    ): { withFileTypes: boolean; recursive: boolean; encoding: "string" | "buffer" } {
+        if (!options || this.isUndefinedExpression(options)) return { withFileTypes: false, recursive: false, encoding: "string" };
+        const checkEncoding = (node: ts.Expression): "string" | "buffer" => {
+            if (ts.isStringLiteralLike(node)) {
+                if (node.text === "utf8" || node.text === "utf-8") return "string";
+                if (node.text === "buffer") return "buffer";
+            }
+            unsupported(node, `${label} only supports UTF-8 or buffer encoding options in this subset`);
+        };
+        if (ts.isStringLiteralLike(options)) {
+            return { withFileTypes: false, recursive: false, encoding: checkEncoding(options) };
+        }
+        if (!ts.isObjectLiteralExpression(options)) {
+            unsupported(options, `${label} options must be a UTF-8/buffer string literal or object literal in this subset`);
+        }
         let withFileTypes = false;
         let recursive = false;
+        let encoding: "string" | "buffer" = "string";
         for (const prop of options.properties) {
             if (!ts.isPropertyAssignment(prop)) {
                 unsupported(prop, `${label} options only support encoding, withFileTypes, and recursive property assignments`);
             }
             const key = this.staticPropertyName(prop.name);
             if (key === "encoding") {
-                checkEncoding(prop.initializer);
+                encoding = checkEncoding(prop.initializer);
                 continue;
             }
             if (key === "withFileTypes") {
@@ -14119,7 +16932,8 @@ class Emitter {
             unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
         }
         if (withFileTypes && recursive) unsupported(options, `${label} does not support combining withFileTypes and recursive yet`);
-        return { withFileTypes, recursive };
+        if (withFileTypes && encoding === "buffer") unsupported(options, `${label} does not support combining withFileTypes and buffer encoding yet`);
+        return { withFileTypes, recursive, encoding };
     }
 
     private validateFsStatsOptions(options: ts.Expression | undefined, label: string): void {
@@ -14164,6 +16978,16 @@ class Emitter {
         return originalType.kind === "date" ? `(tsc_date_get_time(${value}) / 1000.0)` : value;
     }
 
+    private fsPathSpec(value: EmitResult, node: ts.Expression, label: string): SequencedCallArg {
+        if (value.ty.kind === "url") {
+            return { value, target: T_URL, node, pass: (tmp) => `tsc_url_file_path(${tmp})` };
+        }
+        if (value.ty.kind !== "string" && value.ty.kind !== "buffer") {
+            unsupported(node, `${label} must be string, Buffer, or file URL`);
+        }
+        return { value, target: T_STRING, node };
+    }
+
     private emitFsPromisesCall(call: ts.CallExpression, name: string): EmitResult {
         const args = call.arguments;
         const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
@@ -14171,12 +16995,17 @@ class Emitter {
         const settle = (successExpr: string) => this.emitImmediatePromiseTry(successExpr);
         switch (name) {
             case "readFile": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.readFile needs path and optional UTF-8 encoding options");
-                this.validateFsEncodingOptions(args[1], "fs.promises.readFile");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.readFile needs path and optional UTF-8/buffer/null encoding/flag options");
+                const result = this.validateFsReadFileOptions(args[1], "fs.promises.readFile");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
-                    { value: p, target: T_STRING, node: args[0]! },
-                ], ([path]) => settle(`tsc_promise_resolve(tsc_value_string(tsc_fs_read_file_sync(${path!})))`));
+                    this.fsPathSpec(p, args[0]!, "fs.promises.readFile path"),
+                ], ([path]) => {
+                    const read = result === "buffer"
+                        ? `tsc_promise_resolve_buffer(tsc_fs_read_file_buffer_sync(${path!}))`
+                        : `tsc_promise_resolve(tsc_value_string(tsc_fs_read_file_sync(${path!})))`;
+                    return settle(read);
+                });
             }
             case "writeFile": {
                 if (args.length < 2 || args.length > 3) unsupported(call, "fs.promises.writeFile needs path, data, and optional UTF-8 encoding/flag options");
@@ -14184,40 +17013,46 @@ class Emitter {
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.promises.writeFile data must be string or Buffer");
-                const fn = d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync_opts" : "tsc_fs_write_file_sync_opts";
+                const fn = d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync_opts_mode" : "tsc_fs_write_file_sync_opts_mode";
                 return this.emitSequencedExpr(mapped, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, "fs.promises.writeFile path"),
                     { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
-                ], ([path, data]) =>
-                    settle(`({ ${fn}(${path!}, ${data!}, ${options.append ? "true" : "false"}, ${options.exclusive ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`),
+                    options.mode,
+                ], ([path, data, mode]) =>
+                    settle(`({ ${fn}(${path!}, ${data!}, ${options.append ? "true" : "false"}, ${options.exclusive ? "true" : "false"}, ${mode!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "appendFile": {
-                if (args.length < 2 || args.length > 3) unsupported(call, "fs.promises.appendFile needs path, data, and optional UTF-8 encoding options");
-                this.validateFsEncodingOptions(args[2], "fs.promises.appendFile");
+                if (args.length < 2 || args.length > 3) unsupported(call, "fs.promises.appendFile needs path, data, and optional UTF-8 encoding/flag options");
+                const options = this.validateFsAppendFileOptions(args[2], "fs.promises.appendFile");
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.promises.appendFile data must be string or Buffer");
-                const fn = d.ty.kind === "buffer" ? "tsc_fs_append_file_buffer_sync" : "tsc_fs_append_file_sync";
+                const fn = d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync_opts_mode" : "tsc_fs_write_file_sync_opts_mode";
                 return this.emitSequencedExpr(mapped, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, "fs.promises.appendFile path"),
                     { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
-                ], ([path, data]) =>
-                    settle(`({ ${fn}(${path!}, ${data!}); tsc_promise_resolve(tsc_value_undefined()); })`),
+                    options.mode,
+                ], ([path, data, mode]) =>
+                    settle(`({ ${fn}(${path!}, ${data!}, true, ${options.exclusive ? "true" : "false"}, ${mode!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "readdir": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.readdir needs path and optional UTF-8 encoding or withFileTypes options");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.readdir needs path and optional UTF-8/buffer encoding or withFileTypes options");
                 const options = this.validateFsReaddirOptions(args[1], "fs.promises.readdir");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, "fs.promises.readdir path"),
                 ], ([path]) => {
                     const fn = options.withFileTypes
                         ? "tsc_fs_readdir_dirents_sync"
-                        : options.recursive
-                            ? "tsc_fs_readdir_recursive_sync"
-                            : "tsc_fs_readdir_sync";
+                        : options.encoding === "buffer"
+                            ? options.recursive
+                                ? "tsc_fs_readdir_recursive_buffer_sync"
+                                : "tsc_fs_readdir_buffer_sync"
+                            : options.recursive
+                                ? "tsc_fs_readdir_recursive_sync"
+                                : "tsc_fs_readdir_sync";
                     return settle(`tsc_promise_resolve(tsc_value_array(${fn}(${path!})))`);
                 });
             }
@@ -14227,7 +17062,7 @@ class Emitter {
                 if (mapped.elem?.kind !== "fsstats") unsupported(call, "fs.promises.stat result must be Promise<FSStats>");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, "fs.promises.stat path"),
                 ], ([path]) => settle(`tsc_promise_resolve_fs_stats(tsc_fs_stat_sync(${path!}))`));
             }
             case "lstat": {
@@ -14236,24 +17071,36 @@ class Emitter {
                 if (mapped.elem?.kind !== "fsstats") unsupported(call, "fs.promises.lstat result must be Promise<FSStats>");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, "fs.promises.lstat path"),
                 ], ([path]) => settle(`tsc_promise_resolve_fs_stats(tsc_fs_lstat_sync(${path!}))`));
             }
             case "realpath": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.realpath needs a path and optional UTF-8 encoding options");
-                this.validateFsEncodingOptions(args[1], "fs.promises.realpath");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.realpath needs a path and optional UTF-8/buffer encoding options");
+                const result = this.validateFsEncodingOptions(args[1], "fs.promises.realpath");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
-                    { value: p, target: T_STRING, node: args[0]! },
-                ], ([path]) => settle(`tsc_promise_resolve(tsc_value_string(tsc_fs_realpath_sync(${path!})))`));
+                    this.fsPathSpec(p, args[0]!, "fs.promises.realpath path"),
+                ], ([path]) => {
+                    const value = `tsc_fs_realpath_sync(${path!})`;
+                    const resolve = result === "buffer"
+                        ? `tsc_promise_resolve_buffer(tsc_buffer_from_str(${value}, NULL))`
+                        : `tsc_promise_resolve(tsc_value_string(${value}))`;
+                    return settle(resolve);
+                });
             }
             case "readlink": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.readlink needs a path and optional UTF-8 encoding options");
-                this.validateFsEncodingOptions(args[1], "fs.promises.readlink");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.readlink needs a path and optional UTF-8/buffer encoding options");
+                const result = this.validateFsEncodingOptions(args[1], "fs.promises.readlink");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
-                    { value: p, target: T_STRING, node: args[0]! },
-                ], ([path]) => settle(`tsc_promise_resolve(tsc_value_string(tsc_fs_readlink_sync(${path!})))`));
+                    this.fsPathSpec(p, args[0]!, "fs.promises.readlink path"),
+                ], ([path]) => {
+                    const value = `tsc_fs_readlink_sync(${path!})`;
+                    const resolve = result === "buffer"
+                        ? `tsc_promise_resolve_buffer(tsc_buffer_from_str(${value}, NULL))`
+                        : `tsc_promise_resolve(tsc_value_string(${value}))`;
+                    return settle(resolve);
+                });
             }
             case "symlink": {
                 if (args.length < 2 || args.length > 3) unsupported(call, "fs.promises.symlink needs target, path, and optional type");
@@ -14261,8 +17108,8 @@ class Emitter {
                 const target = this.emitExpr(args[0]!);
                 const p = this.emitExpr(args[1]!);
                 return this.emitSequencedExpr(mapped, [
-                    { value: target, target: T_STRING, node: args[0]! },
-                    { value: p, target: T_STRING, node: args[1]! },
+                    this.fsPathSpec(target, args[0]!, "fs.promises.symlink target"),
+                    this.fsPathSpec(p, args[1]!, "fs.promises.symlink path"),
                 ], ([targetPath, linkPath]) =>
                     settle(`({ tsc_fs_symlink_sync(${targetPath!}, ${linkPath!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
@@ -14272,26 +17119,32 @@ class Emitter {
                 const existingPath = this.emitExpr(args[0]!);
                 const newPath = this.emitExpr(args[1]!);
                 return this.emitSequencedExpr(mapped, [
-                    { value: existingPath, target: T_STRING, node: args[0]! },
-                    { value: newPath, target: T_STRING, node: args[1]! },
+                    this.fsPathSpec(existingPath, args[0]!, "fs.promises.link existingPath"),
+                    this.fsPathSpec(newPath, args[1]!, "fs.promises.link newPath"),
                 ], ([oldPath, newPathValue]) =>
                     settle(`({ tsc_fs_link_sync(${oldPath!}, ${newPathValue!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "mkdtemp": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.mkdtemp needs prefix and optional UTF-8 encoding options");
-                this.validateFsEncodingOptions(args[1], "fs.promises.mkdtemp");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.mkdtemp needs prefix and optional UTF-8/buffer encoding options");
+                const result = this.validateFsEncodingOptions(args[1], "fs.promises.mkdtemp");
                 const prefix = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
-                    { value: prefix, target: T_STRING, node: args[0]! },
-                ], ([path]) => settle(`tsc_promise_resolve(tsc_value_string(tsc_fs_mkdtemp_sync(${path!})))`));
+                    this.fsPathSpec(prefix, args[0]!, "fs.promises.mkdtemp prefix"),
+                ], ([path]) => {
+                    const value = `tsc_fs_mkdtemp_sync(${path!})`;
+                    const resolve = result === "buffer"
+                        ? `tsc_promise_resolve_buffer(tsc_buffer_from_str(${value}, NULL))`
+                        : `tsc_promise_resolve(tsc_value_string(${value}))`;
+                    return settle(resolve);
+                });
             }
             case "truncate": {
                 if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.truncate needs path and optional length");
                 const p = this.emitExpr(args[0]!);
                 const len = args[1] ? this.emitExpr(args[1]) : undefined;
                 const specs: SequencedCallArg[] = [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, "fs.promises.truncate path"),
                 ];
                 if (len) specs.push({ value: len, target: T_NUMBER, node: args[1]! });
                 return this.emitSequencedExpr(mapped, specs, ([path, length]) =>
@@ -14306,7 +17159,7 @@ class Emitter {
                 const mtime = this.emitFsTimeArg(args[2]!, `fs.promises.${name} mtime`);
                 const fn = name === "lutimes" ? "tsc_fs_lutimes_sync" : "tsc_fs_utimes_sync";
                 return this.emitSequencedExpr(mapped, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
                     atime,
                     mtime,
                 ], ([path, atimeValue, mtimeValue]) =>
@@ -14319,7 +17172,7 @@ class Emitter {
                 const uid = this.emitExpr(args[1]!);
                 const gid = this.emitExpr(args[2]!);
                 return this.emitSequencedExpr(mapped, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, "fs.promises.chown path"),
                     { value: uid, target: T_NUMBER, node: args[1]! },
                     { value: gid, target: T_NUMBER, node: args[2]! },
                 ], ([path, uidValue, gidValue]) =>
@@ -14332,7 +17185,7 @@ class Emitter {
                 const uid = this.emitExpr(args[1]!);
                 const gid = this.emitExpr(args[2]!);
                 return this.emitSequencedExpr(mapped, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, "fs.promises.lchown path"),
                     { value: uid, target: T_NUMBER, node: args[1]! },
                     { value: gid, target: T_NUMBER, node: args[2]! },
                 ], ([path, uidValue, gidValue]) =>
@@ -14344,7 +17197,7 @@ class Emitter {
                 const p = this.emitExpr(args[0]!);
                 const mode = this.emitExpr(args[1]!);
                 return this.emitSequencedExpr(mapped, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, "fs.promises.chmod path"),
                     { value: mode, target: T_NUMBER, node: args[1]! },
                 ], ([path, modeValue]) =>
                     settle(`({ tsc_fs_chmod_sync(${path!}, ${modeValue!}); tsc_promise_resolve(tsc_value_undefined()); })`),
@@ -14354,7 +17207,7 @@ class Emitter {
                 if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.access needs path and optional mode");
                 const p = this.emitExpr(args[0]!);
                 const specs: SequencedCallArg[] = [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, "fs.promises.access path"),
                 ];
                 if (args[1]) {
                     specs.push({ value: this.emitExpr(args[1]), target: T_NUMBER, node: args[1] });
@@ -14368,7 +17221,7 @@ class Emitter {
                 const p = this.emitExpr(args[0]!);
                 const options = this.emitFsMkdirOptions(args[1], `fs.promises.${name}`);
                 return this.emitSequencedExpr(mapped, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
                     options.mode,
                 ], ([path, mode]) =>
                     settle(`({ tsc_fs_mkdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"}, ${mode!}); tsc_promise_resolve(tsc_value_undefined()); })`),
@@ -14379,7 +17232,7 @@ class Emitter {
                 const p = this.emitExpr(args[0]!);
                 const options = this.emitFsBooleanOptions(args[1], ["recursive", "force"], `fs.promises.${name}`);
                 return this.emitSequencedExpr(mapped, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
                 ], ([path]) =>
                     settle(`({ tsc_fs_rm_sync_opts(${path!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
@@ -14390,7 +17243,7 @@ class Emitter {
                 const p = this.emitExpr(args[0]!);
                 const fn = name === "unlink" ? "tsc_fs_unlink_sync" : "tsc_fs_rmdir_sync";
                 return this.emitSequencedExpr(mapped, [
-                    { value: p, target: T_STRING, node: args[0]! },
+                    this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
                 ], ([path]) =>
                     settle(`({ ${fn}(${path!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
@@ -14401,8 +17254,8 @@ class Emitter {
                 const src = this.emitExpr(args[0]!);
                 const dest = this.emitExpr(args[1]!);
                 return this.emitSequencedExpr(mapped, [
-                    { value: src, target: T_STRING, node: args[0]! },
-                    { value: dest, target: T_STRING, node: args[1]! },
+                    this.fsPathSpec(src, args[0]!, "fs.promises.cp source"),
+                    this.fsPathSpec(dest, args[1]!, "fs.promises.cp destination"),
                 ], ([srcPath, destPath]) =>
                     settle(`({ tsc_fs_cp_sync_opts(${srcPath!}, ${destPath!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
@@ -14416,8 +17269,8 @@ class Emitter {
                 const a = this.emitExpr(args[0]!);
                 const b = this.emitExpr(args[1]!);
                 const specs: SequencedCallArg[] = [
-                    { value: a, target: T_STRING, node: args[0]! },
-                    { value: b, target: T_STRING, node: args[1]! },
+                    this.fsPathSpec(a, args[0]!, `fs.promises.${name} source`),
+                    this.fsPathSpec(b, args[1]!, `fs.promises.${name} destination`),
                 ];
                 if (isCopy) {
                     specs.push({
@@ -15619,6 +18472,8 @@ class Emitter {
         if (ts.isStringLiteralLike(cur) || ts.isNumericLiteral(cur)) {
             return cur.text;
         }
+        const staticString = this.staticComputedStringExpression(cur);
+        if (staticString !== null) return staticString;
         if (ts.isIdentifier(cur)) {
             const sym = this.symbolForIdentifier(cur);
             const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
@@ -15630,6 +18485,38 @@ class Emitter {
         if (ty.isStringLiteral()) return ty.value;
         if (ty.isNumberLiteral()) return String(ty.value);
         return null;
+    }
+
+    private staticComputedStringExpression(expr: ts.Expression): string | null {
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isStringLiteralLike(cur)) return cur.text;
+        if (
+            ts.isBinaryExpression(cur) &&
+            cur.operatorToken.kind === ts.SyntaxKind.PlusToken
+        ) {
+            const left = this.staticComputedStringExpression(cur.left);
+            const right = this.staticComputedStringExpression(cur.right);
+            return left !== null && right !== null ? left + right : null;
+        }
+        if (ts.isTemplateExpression(cur)) {
+            let out = cur.head.text;
+            for (const span of cur.templateSpans) {
+                const value = this.staticComputedStringExpression(span.expression);
+                if (value === null) return null;
+                out += value + span.literal.text;
+            }
+            return out;
+        }
+        if (ts.isIdentifier(cur)) {
+            const sym = this.symbolForIdentifier(cur);
+            const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+            if (decl && ts.isVariableDeclaration(decl) && decl.initializer) {
+                return this.staticComputedStringExpression(decl.initializer);
+            }
+        }
+        const ty = this.checker.getTypeAtLocation(cur);
+        return ty.isStringLiteral() ? ty.value : null;
     }
 
     private classMethodCName(name: ts.PropertyName): string | null {
@@ -16044,7 +18931,11 @@ class Emitter {
                 this.identifierDeclaredType(arg)?.kind === "value" ||
                 this.identifierHasDynamicAnnotation(arg)
             );
-            if (entries.ty.kind === "value" || declaredDynamic) {
+            if (
+                entries.ty.kind === "value" ||
+                declaredDynamic ||
+                (entries.ty.kind === "array" && entries.ty.elem?.kind === "value")
+            ) {
                 const dynamicEntries: EmitResult = declaredDynamic ? { c: entries.c, ty: T_VALUE } : entries;
                 return this.emitSequencedCall("tsc_value_object_from_entries", T_VALUE, [
                     { value: dynamicEntries, target: T_VALUE, node: arg },
@@ -18536,10 +21427,43 @@ class Emitter {
             if ((n.arguments ?? []).length !== 0) unsupported(n, "new EventEmitter() expects no args");
             return { c: "tsc_event_emitter_new()", ty: T_EVENT_EMITTER };
         }
+        if (cls === "EventTarget") {
+            if ((n.arguments ?? []).length !== 0) unsupported(n, "new EventTarget() expects no args");
+            return { c: "tsc_event_target_new()", ty: T_EVENT_TARGET };
+        }
+        if (cls === "Event") {
+            const args = n.arguments ?? [];
+            if (args.length < 1 || args.length > 2) unsupported(n, "new Event() expects type and optional options");
+            const type = this.emitExpr(args[0]!);
+            const cancelable = this.eventInitCancelable(args[1]);
+            return this.emitSequencedCall("tsc_event_new", T_EVENT, [
+                { value: type, target: T_STRING, node: args[0]! },
+                { value: { c: cancelable, ty: T_BOOLEAN } },
+            ]);
+        }
         if (cls === "Date") {
             const args = n.arguments ?? [];
-            if (args.length > 1) unsupported(n, "new Date() expects zero args, a millisecond timestamp, or an ISO string");
             if (args.length === 0) return { c: "tsc_date_new_now()", ty: T_DATE };
+            if (args.length >= 2) {
+                if (args.length > 7) unsupported(n, "new Date(year, month, ...) expects 2 to 7 numeric args");
+                const emitted = args.map((arg) => this.emitExpr(arg));
+                return this.emitSequencedExpr(
+                    T_DATE,
+                    emitted.map((value, i) => ({ value, target: T_NUMBER, node: args[i] })),
+                    (vals) => {
+                        const all = [
+                            vals[0]!,
+                            vals[1]!,
+                            vals[2] ?? "1",
+                            vals[3] ?? "0",
+                            vals[4] ?? "0",
+                            vals[5] ?? "0",
+                            vals[6] ?? "0",
+                        ];
+                        return `tsc_date_from_ms(tsc_date_local(${all.join(", ")}))`;
+                    },
+                );
+            }
             const value = this.emitExpr(args[0]!);
             if (value.ty.kind === "date") {
                 return this.emitSequencedExpr(T_DATE, [{ value }], ([date]) => `tsc_date_from_ms(tsc_date_get_time(${date}))`);
@@ -18563,7 +21487,20 @@ class Emitter {
         if (cls === "URL") {
             const input = n.arguments?.[0];
             if (!input) unsupported(n, "new URL() expects input");
+            if ((n.arguments?.length ?? 0) > 2) unsupported(n, "new URL() expects input and optional base");
             const r = this.emitExpr(input);
+            const base = n.arguments?.[1];
+            if (base) {
+                const b = this.emitExpr(base);
+                return this.emitSequencedCall(
+                    "tsc_url_new_base",
+                    T_URL,
+                    [
+                        { value: r, target: T_STRING, node: input },
+                        { value: b, target: T_STRING, node: base },
+                    ],
+                );
+            }
             return this.emitSequencedCall(
                 "tsc_url_new",
                 T_URL,
@@ -18766,6 +21703,27 @@ class Emitter {
                     if (pa.name.text === "loaded") {
                         return { c: "true", ty: T_BOOLEAN };
                     }
+                    if (pa.name.text === "parent") {
+                        return { c: "NULL", ty: T_VOID };
+                    }
+                    if (pa.name.text === "children") {
+                        return { c: "tsc_array_new(sizeof(tsc_value_t), 1)", ty: arrayType(T_VALUE) };
+                    }
+                    if (pa.name.text === "isPreloading") {
+                        return { c: "false", ty: T_BOOLEAN };
+                    }
+                    if (pa.name.text === "paths") {
+                        const paths = this.freshTemp("_module_paths");
+                        const pathValue = this.freshTemp("_module_path");
+                        const modulePath = path.join(path.dirname(pa.getSourceFile().fileName), "node_modules");
+                        return {
+                            c:
+                                `({ tsc_array_t* ${paths} = tsc_array_new(sizeof(tsc_str_t*), 1); ` +
+                                `tsc_str_t* ${pathValue} = ${this.stringLit(modulePath)}; ` +
+                                `tsc_array_push_raw(${paths}, &${pathValue}); ${paths}; })`,
+                            ty: arrayType(T_STRING),
+                        };
+                    }
                 }
             }
             if (pa.expression.text === "Symbol" && pa.name.text === "iterator") {
@@ -18879,6 +21837,20 @@ class Emitter {
                     return { c: `${recv.c}->unicode`, ty: T_BOOLEAN };
             }
         }
+        if (recv.ty.kind === "event") {
+            switch (pa.name.text) {
+                case "type":
+                    return { c: `tsc_event_type(${recv.c})`, ty: T_STRING };
+                case "target":
+                    return { c: `tsc_event_target(${recv.c})`, ty: T_EVENT_TARGET };
+                case "currentTarget":
+                    return { c: `tsc_event_current_target(${recv.c})`, ty: T_EVENT_TARGET };
+                case "defaultPrevented":
+                    return { c: `tsc_event_default_prevented(${recv.c})`, ty: T_BOOLEAN };
+                case "cancelable":
+                    return { c: `tsc_event_cancelable(${recv.c})`, ty: T_BOOLEAN };
+            }
+        }
         if (recv.ty.kind === "buffer" && pa.name.text === "length") {
             return { c: `tsc_buffer_length(${recv.c})`, ty: T_NUMBER };
         }
@@ -18922,10 +21894,20 @@ class Emitter {
                 return { c: `tsc_value_length(${recv.c})`, ty: T_NUMBER };
             }
             const key = pa.name.text;
-            return {
+            const value: EmitResult = {
                 c: `tsc_value_get_prop(${recv.c}, tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}))`,
                 ty: T_VALUE,
             };
+            const narrowed = this.prepareType(mapType(pa, this.checker));
+            if (
+                narrowed.kind === "number" ||
+                narrowed.kind === "boolean" ||
+                narrowed.kind === "string" ||
+                narrowed.kind === "array"
+            ) {
+                return { c: this.coerce(value, narrowed, pa), ty: narrowed };
+            }
+            return value;
         }
         if (recv.ty.kind === "entry" && pa.name.text === "length") {
             const tv = this.freshTemp("_entry");
@@ -18970,6 +21952,24 @@ class Emitter {
         }
         if (recv.ty.kind === "class") {
             const ty = mapType(pa, this.checker);
+            const storageTy = this.expressionStorageType(pa.expression);
+            if (storageTy?.kind === "value") {
+                const key = pa.name.text;
+                const value: EmitResult = {
+                    c: `tsc_value_get_prop(${recv.c}, tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}))`,
+                    ty: T_VALUE,
+                };
+                const narrowed = this.prepareType(ty);
+                if (
+                    narrowed.kind === "number" ||
+                    narrowed.kind === "boolean" ||
+                    narrowed.kind === "string" ||
+                    narrowed.kind === "array"
+                ) {
+                    return { c: this.coerce(value, narrowed, pa), ty: narrowed };
+                }
+                return value;
+            }
             if (isOpt) {
                 const tv = this.freshTemp("_oc");
                 const zero = ty.kind === "number" ? "0.0" : ty.kind === "boolean" ? "false" : `(${ty.c})0`;
@@ -18981,6 +21981,30 @@ class Emitter {
             return { c: `${recv.c}->${mangleIdent(pa.name.text)}`, ty };
         }
         unsupported(pa, `property .${pa.name.text} on ${recv.ty.c}`);
+    }
+
+    private expressionStorageType(expr: ts.Expression): CType | null {
+        if (ts.isIdentifier(expr)) {
+            const sym = this.checker.getSymbolAtLocation(expr);
+            const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+            if (!sym || !decl) return null;
+            try {
+                return this.prepareType(mapTsType(expr, this.checker.getTypeOfSymbolAtLocation(sym, decl), this.checker));
+            } catch {
+                return null;
+            }
+        }
+        if (ts.isPropertyAccessExpression(expr)) {
+            const sym = this.checker.getSymbolAtLocation(expr.name);
+            const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+            if (!sym || !decl) return null;
+            try {
+                return this.prepareType(mapTsType(expr, this.checker.getTypeOfSymbolAtLocation(sym, decl), this.checker));
+            } catch {
+                return null;
+            }
+        }
+        return null;
     }
 
     private enumConstantValue(pa: ts.PropertyAccessExpression): number | undefined {
@@ -19322,6 +22346,8 @@ class Emitter {
         if (r.ty.kind === "finregistry") return `tsc_str_from_lit("[object FinalizationRegistry]", 29)`;
         if (r.ty.kind === "promise") return `tsc_str_from_lit("[object Promise]", 16)`;
         if (r.ty.kind === "eventemitter") return `tsc_str_from_lit("[object EventEmitter]", 21)`;
+        if (r.ty.kind === "event") return `tsc_str_from_lit("[object Event]", 14)`;
+        if (r.ty.kind === "eventtarget") return `tsc_str_from_lit("[object EventTarget]", 20)`;
         if (r.ty.kind === "regexp") return `tsc_regexp_to_string(${r.c})`;
         if (r.ty.kind === "url") return `${r.c}->href`;
         if (r.ty.kind === "date") return `tsc_date_to_string(${r.c})`;
@@ -19365,7 +22391,7 @@ class Emitter {
         // null (void) → any pointer type: emit typed NULL. Check before the
         // string-coerce branch since string is a pointer type too.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "date", "error", "buffer", "fsstats", "fsdirent", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "url", "date", "error", "buffer", "fsstats", "fsdirent", "function",
         ];
         if (r.ty.kind === "void" && pointerKinds.includes(target.kind)) {
             return `((${target.c})NULL)`;
@@ -19430,6 +22456,8 @@ function isWeakObjectKey(t: CType): boolean {
         "finregistry",
         "promise",
         "eventemitter",
+        "event",
+        "eventtarget",
         "regexp",
         "hash",
         "url",
@@ -19443,7 +22471,7 @@ function isWeakObjectKey(t: CType): boolean {
 
 function isPointerKind(t: CType): boolean {
     const pointerKinds: readonly CType["kind"][] = [
-        "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "date", "error", "buffer", "fsstats", "fsdirent", "function",
+        "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "url", "date", "error", "buffer", "fsstats", "fsdirent", "function",
     ];
     return pointerKinds.includes(t.kind);
 }

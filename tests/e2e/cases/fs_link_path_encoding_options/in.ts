@@ -14,12 +14,24 @@ const syncRealpath = fs.realpathSync(path.join(nested, ".."), "utf8");
 const syncReadlink = nodefs.readlinkSync(link, { encoding: "utf-8" });
 console.log("sync:", syncRealpath === root, syncReadlink === target);
 
+const syncRealpathBuffer = fs.realpathSync(path.join(nested, ".."), "buffer");
+const syncReadlinkBuffer = nodefs.readlinkSync(link, { encoding: "buffer" });
+console.log("sync buffer:", Buffer.isBuffer(syncRealpathBuffer), syncRealpathBuffer.toString() === root, syncReadlinkBuffer.toString() === target);
+
 fs.promises.realpath(path.join(nested, ".."), { encoding: "utf8" }).then((promiseRealpath) => {
     console.log("promise realpath:", promiseRealpath === root);
 });
 
 nodefs.promises.readlink(link, "utf-8").then((promiseReadlink) => {
     console.log("promise readlink:", promiseReadlink === target);
+});
+
+fs.promises.realpath(path.join(nested, ".."), { encoding: "buffer" }).then((promiseRealpath: Buffer): void => {
+    console.log("promise realpath buffer:", Buffer.isBuffer(promiseRealpath), promiseRealpath.toString() === root);
+});
+
+nodefs.promises.readlink(link, "buffer").then((promiseReadlink: Buffer): void => {
+    console.log("promise readlink buffer:", Buffer.isBuffer(promiseReadlink), promiseReadlink.toString() === target);
 });
 
 fs.rmSync(root, { recursive: true, force: true });

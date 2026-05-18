@@ -1,0 +1,6 @@
+syntax: \x61\+b\*c\?
+match: true false
+chars: \x66ile\[1\]\.ts\/path
+space-hyphen: \x61\x2db\x20c
+punct: \x78\x2cy\x23z
+line: \x6cine\nnext

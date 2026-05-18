@@ -1,0 +1,3 @@
+{
+  "description": "Promise.try immediate callback fulfillment and throw-to-rejection conversion"
+}

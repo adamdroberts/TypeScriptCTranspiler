@@ -2,6 +2,8 @@
 
 `tsc2c` uses a single end-to-end test harness: **compile each TS case, execute the resulting binary, diff stdout against an expected file**. Expected compile-failure cases use `expected.exitcode` instead. No separate unit test layer yet — by design. Every feature has at least one black-box test proving it produces correct output or the intended diagnostic.
 
+The harness recreates its tiny `node_modules` package fixtures before case discovery, so running `bun install` does not remove the package-source cases needed by the Phase 14 tests.
+
 ## Running the suite
 
 ```bash
@@ -32,7 +34,9 @@ e2e: custom_iterator_inherited_next … OK
 e2e: custom_iterator_object … OK
 e2e: custom_iterator_self … OK
 e2e: custom_predicates … OK
+e2e: discriminated_union_nested … OK
 e2e: discriminated_unions … OK
+e2e: discriminated_union_switch … OK
 e2e: array_concat_values … OK
 e2e: array_copy_within … OK
 e2e: array_fill … OK
@@ -152,12 +156,15 @@ e2e: runtime_eval … OK
 e2e: runtime_function_constructor … OK
 e2e: set_constructor_from_set … OK
 e2e: set_keys … OK
+e2e: set_immediate … OK
+e2e: set_timeout_zero … OK
 e2e: string_at … OK
 e2e: string_char_code_at … OK
 e2e: string_concat … OK
 e2e: string_for_of … OK
 e2e: string_last_index_of … OK
 e2e: string_locale_compare … OK
+e2e: string_raw … OK
 e2e: switch_exhaustive … OK
 e2e: switch_exhaustive_missing … OK
 e2e: symbols … OK
@@ -220,10 +227,14 @@ e2e: dynamic_number_to_string … OK
 e2e: symbol_bigint_object_methods … OK
 e2e: collection_object_methods … OK
 e2e: comma_operator … OK
+e2e: promise_callback_adopt … OK
+e2e: promise_finally_adopt … OK
+e2e: promise_try … OK
 e2e: reflect_apply … OK
 e2e: reflect_construct … OK
 e2e: reflect_dynamic … OK
 e2e: reflect_get_own_property_descriptor … OK
+e2e: regexp_escape … OK
 e2e: regexp_exec … OK
 e2e: regexp_extra_flags … OK
 e2e: regexp_object_methods … OK
@@ -239,12 +250,14 @@ e2e: typed_reflect_set … OK
 e2e: string_well_formed … OK
 e2e: typeof_boolean_union … OK
 e2e: typeof_guards … OK
+e2e: url_base … OK
+e2e: url_can_parse … OK
 e2e: url_object_methods … OK
 e2e: url_parse … OK
 e2e: void_operator … OK
 e2e: wordcount … OK
 
-281 passed, 0 failed
+651 passed, 0 failed
 ```
 
 Non-zero exit if any case fails.

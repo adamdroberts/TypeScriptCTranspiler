@@ -1,0 +1,3 @@
+{
+  "description": "Promise.finally adopts returned native Promise records in the immediate subset"
+}

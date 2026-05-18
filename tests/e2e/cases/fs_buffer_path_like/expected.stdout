@@ -1,0 +1,4 @@
+sync: true alpha true
+named: alpha source.txt
+promise read: alpha
+after unlink: false

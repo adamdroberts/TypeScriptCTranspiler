@@ -76,6 +76,27 @@ typedef struct {
 static tsc_next_tick_entry_t* g_next_tick_queue = NULL;
 static size_t g_next_tick_len = 0;
 static size_t g_next_tick_cap = 0;
+typedef struct {
+    tsc_microtask_fn_t fn;
+    void* env;
+} tsc_microtask_entry_t;
+static tsc_microtask_entry_t* g_microtask_queue = NULL;
+static size_t g_microtask_len = 0;
+static size_t g_microtask_cap = 0;
+typedef struct {
+    tsc_immediate_fn_t fn;
+    void* env;
+} tsc_immediate_entry_t;
+static tsc_immediate_entry_t* g_immediate_queue = NULL;
+static size_t g_immediate_len = 0;
+static size_t g_immediate_cap = 0;
+typedef struct {
+    tsc_timeout_fn_t fn;
+    void* env;
+} tsc_timeout_entry_t;
+static tsc_timeout_entry_t* g_timeout_queue = NULL;
+static size_t g_timeout_len = 0;
+static size_t g_timeout_cap = 0;
 
 /* Forward decls for helpers used across sections. */
 static tsc_str_t* str_alloc(size_t len);
@@ -179,22 +200,28 @@ void tsc_process_env_set(const tsc_str_t* name, const tsc_str_t* value) {
     char* key = cstr_dup(name);
     if (!value) {
         int r = unsetenv(key);
+        bool is_tz = strcmp(key, "TZ") == 0;
         free(key);
         if (r != 0) tsc_throw_str(tsc_str_from_cstr("process.env: could not unset variable"));
+        if (is_tz) tzset();
         return;
     }
     char* val = cstr_dup(value);
     int r = setenv(key, val, 1);
+    bool is_tz = strcmp(key, "TZ") == 0;
     free(key);
     free(val);
     if (r != 0) tsc_throw_str(tsc_str_from_cstr("process.env: could not set variable"));
+    if (is_tz) tzset();
 }
 
 bool tsc_process_env_unset(const tsc_str_t* name) {
     char* key = cstr_dup(name);
     int r = unsetenv(key);
+    bool is_tz = strcmp(key, "TZ") == 0;
     free(key);
     if (r != 0) tsc_throw_str(tsc_str_from_cstr("process.env: could not unset variable"));
+    if (is_tz) tzset();
     return true;
 }
 
@@ -443,6 +470,73 @@ void tsc_process_drain_next_ticks(void) {
         if (entry.fn) entry.fn(entry.env);
     }
     g_next_tick_len = 0;
+}
+
+void tsc_queue_microtask(tsc_microtask_fn_t fn, void* env) {
+    if (!fn) return;
+    if (g_microtask_len == g_microtask_cap) {
+        size_t next = g_microtask_cap ? g_microtask_cap * 2 : 8;
+        tsc_microtask_entry_t* entries = (tsc_microtask_entry_t*)TSC_GC_REALLOC(g_microtask_queue, next * sizeof(tsc_microtask_entry_t));
+        if (!entries) tsc_panic("queueMicrotask: out of memory");
+        g_microtask_queue = entries;
+        g_microtask_cap = next;
+    }
+    g_microtask_queue[g_microtask_len++] = (tsc_microtask_entry_t){ fn, env };
+}
+
+void tsc_drain_microtasks(void) {
+    size_t idx = 0;
+    while (idx < g_microtask_len) {
+        tsc_microtask_entry_t entry = g_microtask_queue[idx++];
+        if (entry.fn) entry.fn(entry.env);
+    }
+    g_microtask_len = 0;
+}
+
+void tsc_set_immediate(tsc_immediate_fn_t fn, void* env) {
+    if (!fn) return;
+    if (g_immediate_len == g_immediate_cap) {
+        size_t next = g_immediate_cap ? g_immediate_cap * 2 : 8;
+        tsc_immediate_entry_t* entries = (tsc_immediate_entry_t*)TSC_GC_REALLOC(g_immediate_queue, next * sizeof(tsc_immediate_entry_t));
+        if (!entries) tsc_panic("setImmediate: out of memory");
+        g_immediate_queue = entries;
+        g_immediate_cap = next;
+    }
+    g_immediate_queue[g_immediate_len++] = (tsc_immediate_entry_t){ fn, env };
+}
+
+void tsc_drain_immediates(void) {
+    size_t idx = 0;
+    while (idx < g_immediate_len) {
+        tsc_immediate_entry_t entry = g_immediate_queue[idx++];
+        if (entry.fn) entry.fn(entry.env);
+        tsc_process_drain_next_ticks();
+        tsc_drain_microtasks();
+    }
+    g_immediate_len = 0;
+}
+
+void tsc_set_timeout(tsc_timeout_fn_t fn, void* env) {
+    if (!fn) return;
+    if (g_timeout_len == g_timeout_cap) {
+        size_t next = g_timeout_cap ? g_timeout_cap * 2 : 8;
+        tsc_timeout_entry_t* entries = (tsc_timeout_entry_t*)TSC_GC_REALLOC(g_timeout_queue, next * sizeof(tsc_timeout_entry_t));
+        if (!entries) tsc_panic("setTimeout: out of memory");
+        g_timeout_queue = entries;
+        g_timeout_cap = next;
+    }
+    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env };
+}
+
+void tsc_drain_timeouts(void) {
+    size_t idx = 0;
+    while (idx < g_timeout_len) {
+        tsc_timeout_entry_t entry = g_timeout_queue[idx++];
+        if (entry.fn) entry.fn(entry.env);
+        tsc_process_drain_next_ticks();
+        tsc_drain_microtasks();
+    }
+    g_timeout_len = 0;
 }
 
 /* ---------------- strings ---------------- */
@@ -1861,6 +1955,99 @@ tsc_regexp_t* tsc_regexp_new(const tsc_str_t* pattern, const tsc_str_t* flags) {
     return r;
 }
 
+tsc_str_t* tsc_regexp_escape(const tsc_str_t* input) {
+    static const char* hex = "0123456789abcdef";
+    tsc_str_t* out = str_alloc(input->len * 4);
+    char* dst = (char*)out->data;
+    size_t pos = 0;
+    for (size_t i = 0; i < input->len; i++) {
+        unsigned char c = (unsigned char)input->data[i];
+        bool leading_alnum = i == 0 && ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'));
+        if (leading_alnum) {
+            dst[pos++] = '\\';
+            dst[pos++] = 'x';
+            dst[pos++] = hex[c >> 4];
+            dst[pos++] = hex[c & 0x0f];
+            continue;
+        }
+        switch (c) {
+            case '^':
+            case '$':
+            case '\\':
+            case '.':
+            case '*':
+            case '+':
+            case '?':
+            case '(':
+            case ')':
+            case '[':
+            case ']':
+            case '{':
+            case '}':
+            case '|':
+            case '/':
+                dst[pos++] = '\\';
+                dst[pos++] = (char)c;
+                break;
+            case '\n':
+                dst[pos++] = '\\';
+                dst[pos++] = 'n';
+                break;
+            case '\r':
+                dst[pos++] = '\\';
+                dst[pos++] = 'r';
+                break;
+            case '\t':
+                dst[pos++] = '\\';
+                dst[pos++] = 't';
+                break;
+            case '\f':
+                dst[pos++] = '\\';
+                dst[pos++] = 'f';
+                break;
+            case '\v':
+                dst[pos++] = '\\';
+                dst[pos++] = 'v';
+                break;
+            case '-':
+            case ' ':
+            case ',':
+            case '=':
+            case '<':
+            case '>':
+            case '#':
+            case '&':
+            case '!':
+            case '%':
+            case ':':
+            case ';':
+            case '@':
+            case '~':
+            case '\'':
+            case '`':
+            case '"':
+                dst[pos++] = '\\';
+                dst[pos++] = 'x';
+                dst[pos++] = hex[c >> 4];
+                dst[pos++] = hex[c & 0x0f];
+                break;
+            default:
+                if (c < 0x20 || c == 0x7f) {
+                    dst[pos++] = '\\';
+                    dst[pos++] = 'x';
+                    dst[pos++] = hex[c >> 4];
+                    dst[pos++] = hex[c & 0x0f];
+                } else {
+                    dst[pos++] = (char)c;
+                }
+                break;
+        }
+    }
+    dst[pos] = '\0';
+    out->len = pos;
+    return out;
+}
+
 /* Helper: get or lazily allocate the regex's cached match_data buffer. */
 static pcre2_match_data* re_md(const tsc_regexp_t* re) {
     if (!re->cached_md) {
@@ -2968,6 +3155,39 @@ bool tsc_url_can_parse(const tsc_str_t* input) {
         d[scheme_colon + 2] == '/';
 }
 
+static tsc_str_t* tsc_url_resolve_base(const tsc_str_t* input, const tsc_str_t* base) {
+    if (tsc_url_can_parse(input)) return (tsc_str_t*)input;
+    if (!base || !tsc_url_can_parse(base)) return NULL;
+
+    tsc_url_t* b = tsc_url_new(base);
+    if (input->len >= 2 && input->data[0] == '/' && input->data[1] == '/') {
+        return tsc_str_concat(b->protocol, input);
+    }
+    if (input->len > 0 && input->data[0] == '/') {
+        return tsc_str_concat(b->origin, input);
+    }
+    if (input->len > 0 && input->data[0] == '?') {
+        return tsc_str_concat(tsc_str_concat(b->origin, b->pathname), input);
+    }
+    if (input->len > 0 && input->data[0] == '#') {
+        return tsc_str_concat(tsc_str_concat(tsc_str_concat(b->origin, b->pathname), b->search), input);
+    }
+
+    size_t slash = b->pathname->len;
+    while (slash > 0 && b->pathname->data[slash - 1] != '/') slash--;
+    tsc_str_t* dir = str_from_range(b->pathname->data, 0, slash);
+    tsc_str_t* path = tsc_str_concat(dir, input);
+    if (path->len == 0 || path->data[0] != '/') {
+        path = tsc_str_concat(tsc_str_from_lit("/", 1), path);
+    }
+    return tsc_str_concat(b->origin, path);
+}
+
+bool tsc_url_can_parse_base(const tsc_str_t* input, const tsc_str_t* base) {
+    tsc_str_t* resolved = tsc_url_resolve_base(input, base);
+    return resolved && tsc_url_can_parse(resolved);
+}
+
 tsc_url_t* tsc_url_new(const tsc_str_t* input) {
     const char* d = input->data;
     size_t n = input->len;
@@ -3018,6 +3238,24 @@ tsc_url_t* tsc_url_new(const tsc_str_t* input) {
     tsc_str_t* slash = tsc_str_from_lit("//", 2);
     u->origin = tsc_str_concat(tsc_str_concat(u->protocol, slash), u->host);
     return u;
+}
+
+tsc_url_t* tsc_url_new_base(const tsc_str_t* input, const tsc_str_t* base) {
+    tsc_str_t* resolved = tsc_url_resolve_base(input, base);
+    if (!resolved) {
+        tsc_panic("URL: base URL must be absolute when resolving relative input");
+    }
+    return tsc_url_new(resolved);
+}
+
+tsc_str_t* tsc_url_file_path(const tsc_url_t* url) {
+    if (!url || !tsc_str_eq(url->protocol, tsc_str_from_lit("file:", 5))) {
+        tsc_panic("URL: filesystem paths only support file: URLs");
+    }
+    if (url->host->len != 0 && !tsc_str_eq(url->host, tsc_str_from_lit("localhost", 9))) {
+        tsc_panic("URL: filesystem file: URLs must not have a remote host");
+    }
+    return url->pathname;
 }
 
 /* ---------------- JSON helpers ---------------- */
@@ -4209,6 +4447,28 @@ struct tsc_event_emitter {
     tsc_event_listener_t* listeners;
 };
 
+typedef struct {
+    tsc_str_t* type;
+    tsc_event_target_listener_fn_t fn;
+    void* env;
+    void* identity;
+    bool once;
+} tsc_dom_event_listener_t;
+
+struct tsc_event_target {
+    size_t len;
+    size_t cap;
+    tsc_dom_event_listener_t* listeners;
+};
+
+struct tsc_event {
+    tsc_str_t* type;
+    tsc_event_target_t* target;
+    tsc_event_target_t* current_target;
+    bool default_prevented;
+    bool cancelable;
+};
+
 static double g_event_emitter_default_max_listeners = 10.0;
 
 typedef struct tsc_event_once_promise_env {
@@ -4313,6 +4573,14 @@ tsc_promise_t* tsc_promise_resolve_fs_stats(tsc_fs_stats_t* value) {
     return p;
 }
 
+tsc_promise_t* tsc_promise_resolve_buffer(tsc_buffer_t* value) {
+    tsc_promise_t* p = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(tsc_promise_t));
+    p->state = TSC_PROMISE_FULFILLED;
+    p->result = tsc_value_undefined();
+    p->ptr_result = value;
+    return p;
+}
+
 tsc_promise_t* tsc_promise_reject(tsc_value_t reason) {
     tsc_promise_t* p = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(tsc_promise_t));
     p->state = TSC_PROMISE_REJECTED;
@@ -4365,6 +4633,10 @@ tsc_value_t tsc_promise_value(const tsc_promise_t* p) {
 
 tsc_fs_stats_t* tsc_promise_fs_stats_value(const tsc_promise_t* p) {
     return p ? (tsc_fs_stats_t*)p->ptr_result : NULL;
+}
+
+tsc_buffer_t* tsc_promise_buffer_value(const tsc_promise_t* p) {
+    return p ? (tsc_buffer_t*)p->ptr_result : NULL;
 }
 
 tsc_value_t tsc_promise_reason(const tsc_promise_t* p) {
@@ -4757,6 +5029,117 @@ void tsc_event_emitter_set_max_listeners(tsc_event_emitter_t* ee, double n) {
 
 double tsc_event_emitter_get_max_listeners(const tsc_event_emitter_t* ee) {
     return ee ? (ee->has_own_max_listeners ? ee->max_listeners : g_event_emitter_default_max_listeners) : 0.0;
+}
+
+tsc_event_t* tsc_event_new(tsc_str_t* type, bool cancelable) {
+    tsc_event_t* event = (tsc_event_t*)TSC_GC_MALLOC(sizeof(tsc_event_t));
+    event->type = type ? type : tsc_str_from_lit("", 0);
+    event->target = NULL;
+    event->current_target = NULL;
+    event->default_prevented = false;
+    event->cancelable = cancelable;
+    return event;
+}
+
+tsc_str_t* tsc_event_type(const tsc_event_t* event) {
+    return event && event->type ? event->type : tsc_str_from_lit("", 0);
+}
+
+tsc_event_target_t* tsc_event_target(const tsc_event_t* event) {
+    return event ? event->target : NULL;
+}
+
+tsc_event_target_t* tsc_event_current_target(const tsc_event_t* event) {
+    return event ? event->current_target : NULL;
+}
+
+bool tsc_event_default_prevented(const tsc_event_t* event) {
+    return event ? event->default_prevented : false;
+}
+
+bool tsc_event_cancelable(const tsc_event_t* event) {
+    return event ? event->cancelable : false;
+}
+
+void tsc_event_prevent_default(tsc_event_t* event) {
+    if (event && event->cancelable) event->default_prevented = true;
+}
+
+tsc_event_target_t* tsc_event_target_new(void) {
+    tsc_event_target_t* target = (tsc_event_target_t*)TSC_GC_MALLOC(sizeof(tsc_event_target_t));
+    target->len = 0;
+    target->cap = 0;
+    target->listeners = NULL;
+    return target;
+}
+
+static void event_target_reserve(tsc_event_target_t* target, size_t cap) {
+    if (!target || target->cap >= cap) return;
+    size_t next = target->cap ? target->cap * 2 : 4;
+    if (next < cap) next = cap;
+    tsc_dom_event_listener_t* items = (tsc_dom_event_listener_t*)TSC_GC_MALLOC(sizeof(tsc_dom_event_listener_t) * next);
+    if (target->listeners && target->len > 0) {
+        memcpy(items, target->listeners, sizeof(tsc_dom_event_listener_t) * target->len);
+    }
+    target->listeners = items;
+    target->cap = next;
+}
+
+void tsc_event_target_add(tsc_event_target_t* target, tsc_str_t* type, tsc_event_target_listener_fn_t fn, void* env, void* identity, bool once) {
+    if (!target || !type || !fn) return;
+    void* actual_identity = identity ? identity : env;
+    for (size_t i = 0; i < target->len; i++) {
+        if (tsc_str_eq(target->listeners[i].type, type) && target->listeners[i].fn == fn && target->listeners[i].identity == actual_identity) {
+            return;
+        }
+    }
+    event_target_reserve(target, target->len + 1);
+    target->listeners[target->len++] = (tsc_dom_event_listener_t){ type, fn, env, actual_identity, once };
+}
+
+void tsc_event_target_remove(tsc_event_target_t* target, const tsc_str_t* type, tsc_event_target_listener_fn_t fn, void* identity) {
+    if (!target || !type || !fn) return;
+    for (size_t i = 0; i < target->len; i++) {
+        if (!tsc_str_eq(target->listeners[i].type, type)) continue;
+        if (target->listeners[i].fn != fn || target->listeners[i].identity != identity) continue;
+        for (size_t j = i + 1; j < target->len; j++) target->listeners[j - 1] = target->listeners[j];
+        target->len--;
+        return;
+    }
+}
+
+bool tsc_event_target_dispatch(tsc_event_target_t* target, tsc_event_t* event) {
+    if (!target || !event) return true;
+    if (!event->target) event->target = target;
+    event->current_target = target;
+    size_t snapshot_len = target->len;
+    tsc_dom_event_listener_t* snapshot = NULL;
+    if (snapshot_len > 0) {
+        snapshot = (tsc_dom_event_listener_t*)TSC_GC_MALLOC(sizeof(tsc_dom_event_listener_t) * snapshot_len);
+        memcpy(snapshot, target->listeners, sizeof(tsc_dom_event_listener_t) * snapshot_len);
+    }
+    for (size_t i = 0; i < snapshot_len; i++) {
+        if (!tsc_str_eq(snapshot[i].type, event->type)) continue;
+        bool still_registered = false;
+        for (size_t j = 0; j < target->len; j++) {
+            if (
+                tsc_str_eq(target->listeners[j].type, snapshot[i].type) &&
+                target->listeners[j].fn == snapshot[i].fn &&
+                target->listeners[j].identity == snapshot[i].identity
+            ) {
+                still_registered = true;
+                break;
+            }
+        }
+        if (still_registered) {
+            if (snapshot[i].once) {
+                tsc_event_target_remove(target, snapshot[i].type, snapshot[i].fn, snapshot[i].identity);
+            }
+            snapshot[i].fn(snapshot[i].env, event);
+        }
+    }
+    event->current_target = NULL;
+    return !(event->cancelable && event->default_prevented);
 }
 
 static tsc_value_t value_accessor_getter_identity(tsc_accessor_getter_t getter, void* env) {
@@ -7710,19 +8093,35 @@ tsc_str_t* tsc_fs_read_file_sync(const tsc_str_t* path) {
     return s;
 }
 
-static void fs_write_bytes_opts(const tsc_str_t* path, const uint8_t* data, size_t len, bool append, bool exclusive, const char* label) {
+tsc_buffer_t* tsc_fs_read_file_buffer_sync(const tsc_str_t* path) {
+    return tsc_buffer_from_str(tsc_fs_read_file_sync(path), NULL);
+}
+
+static void fs_write_bytes_opts_mode(const tsc_str_t* path, const uint8_t* data, size_t len, bool append, bool exclusive, double file_mode, const char* label) {
     char* p = cstr_dup(path);
-    if (exclusive && access(p, F_OK) == 0) {
+    bool existed = access(p, F_OK) == 0;
+    if (exclusive && existed) {
         free(p);
         tsc_throw_str(tsc_str_from_cstr("fs.writeFileSync: file already exists"));
         return;
     }
-    const char* mode = append ? "ab" : "wb";
-    FILE* f = fopen(p, mode);
-    free(p);
-    if (!f) { tsc_throw_str(tsc_str_from_cstr(label)); return; }
+    const char* open_mode = append ? "ab" : "wb";
+    FILE* f = fopen(p, open_mode);
+    if (!f) { free(p); tsc_throw_str(tsc_str_from_cstr(label)); return; }
     fwrite(data, 1, len, f);
     fclose(f);
+    if (file_mode >= 0.0 && !existed) {
+        if (chmod(p, (mode_t)file_mode) != 0) {
+            free(p);
+            tsc_throw_str(tsc_str_from_cstr("fs.writeFileSync: could not set mode"));
+            return;
+        }
+    }
+    free(p);
+}
+
+static void fs_write_bytes_opts(const tsc_str_t* path, const uint8_t* data, size_t len, bool append, bool exclusive, const char* label) {
+    fs_write_bytes_opts_mode(path, data, len, append, exclusive, -1.0, label);
 }
 
 static void fs_write_bytes(const tsc_str_t* path, const uint8_t* data, size_t len, const char* mode, const char* label) {
@@ -7743,6 +8142,14 @@ void tsc_fs_write_file_sync_opts(const tsc_str_t* path, const tsc_str_t* data, b
 
 void tsc_fs_write_file_buffer_sync_opts(const tsc_str_t* path, const tsc_buffer_t* data, bool append, bool exclusive) {
     fs_write_bytes_opts(path, data->data, data->len, append, exclusive, "fs.writeFileSync: could not open");
+}
+
+void tsc_fs_write_file_sync_opts_mode(const tsc_str_t* path, const tsc_str_t* data, bool append, bool exclusive, double mode) {
+    fs_write_bytes_opts_mode(path, (const uint8_t*)data->data, data->len, append, exclusive, mode, "fs.writeFileSync: could not open");
+}
+
+void tsc_fs_write_file_buffer_sync_opts_mode(const tsc_str_t* path, const tsc_buffer_t* data, bool append, bool exclusive, double mode) {
+    fs_write_bytes_opts_mode(path, data->data, data->len, append, exclusive, mode, "fs.writeFileSync: could not open");
 }
 
 void tsc_fs_append_file_sync(const tsc_str_t* path, const tsc_str_t* data) {
@@ -8414,6 +8821,26 @@ tsc_array_t* tsc_fs_readdir_sync(const tsc_str_t* path) {
     return a;
 }
 
+tsc_array_t* tsc_fs_readdir_buffer_sync(const tsc_str_t* path) {
+    char* p = cstr_dup(path);
+    DIR* d = opendir(p);
+    free(p);
+    if (!d) {
+        tsc_throw_str(tsc_str_from_cstr("fs.readdirSync: could not open dir"));
+        return NULL;
+    }
+    tsc_array_t* a = tsc_array_new(sizeof(tsc_buffer_t*), 16);
+    struct dirent* ent;
+    while ((ent = readdir(d))) {
+        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
+        tsc_str_t* s = tsc_str_from_cstr(ent->d_name);
+        tsc_buffer_t* b = tsc_buffer_from_str(s, NULL);
+        tsc_array_push_raw(a, &b);
+    }
+    closedir(d);
+    return a;
+}
+
 static void fs_readdir_recursive_into(const char* root, const char* rel, tsc_array_t* out) {
     char* dir_path = rel[0] == '\0' ? strdup(root) : fs_join_path(root, rel);
     DIR* d = opendir(dir_path);
@@ -8440,6 +8867,33 @@ static void fs_readdir_recursive_into(const char* root, const char* rel, tsc_arr
     free(dir_path);
 }
 
+static void fs_readdir_recursive_buffer_into(const char* root, const char* rel, tsc_array_t* out) {
+    char* dir_path = rel[0] == '\0' ? strdup(root) : fs_join_path(root, rel);
+    DIR* d = opendir(dir_path);
+    if (!d) {
+        free(dir_path);
+        tsc_throw_str(tsc_str_from_cstr("fs.readdirSync: could not open dir"));
+        return;
+    }
+    struct dirent* ent;
+    while ((ent = readdir(d))) {
+        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
+        char* child_rel = rel[0] == '\0' ? strdup(ent->d_name) : fs_join_path(rel, ent->d_name);
+        tsc_str_t* child_name = tsc_str_from_cstr(child_rel);
+        tsc_buffer_t* child_buf = tsc_buffer_from_str(child_name, NULL);
+        tsc_array_push_raw(out, &child_buf);
+
+        char* child_path = fs_join_path(root, child_rel);
+        struct stat st;
+        bool descend = lstat(child_path, &st) == 0 && S_ISDIR(st.st_mode);
+        free(child_path);
+        if (descend) fs_readdir_recursive_buffer_into(root, child_rel, out);
+        free(child_rel);
+    }
+    closedir(d);
+    free(dir_path);
+}
+
 tsc_array_t* tsc_fs_readdir_recursive_sync(const tsc_str_t* path) {
     char* p = cstr_dup(path);
     DIR* d = opendir(p);
@@ -8451,6 +8905,21 @@ tsc_array_t* tsc_fs_readdir_recursive_sync(const tsc_str_t* path) {
     closedir(d);
     tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), 16);
     fs_readdir_recursive_into(p, "", a);
+    free(p);
+    return a;
+}
+
+tsc_array_t* tsc_fs_readdir_recursive_buffer_sync(const tsc_str_t* path) {
+    char* p = cstr_dup(path);
+    DIR* d = opendir(p);
+    if (!d) {
+        free(p);
+        tsc_throw_str(tsc_str_from_cstr("fs.readdirSync: could not open dir"));
+        return NULL;
+    }
+    closedir(d);
+    tsc_array_t* a = tsc_array_new(sizeof(tsc_buffer_t*), 16);
+    fs_readdir_recursive_buffer_into(p, "", a);
     free(p);
     return a;
 }
@@ -8954,6 +9423,71 @@ double tsc_date_set_utc_part(tsc_date_t* d, int part, double a, double b, double
     return d->ms;
 }
 
+double tsc_date_set_local_part(tsc_date_t* d, int part, double a, double b, double c, double e, int arg_count) {
+    if (!d || isnan(d->ms)) return NAN;
+    double provided[] = { a, b, c, e };
+    for (int i = 0; i < arg_count && i < 4; i++) {
+        if (isnan(provided[i])) {
+            d->ms = NAN;
+            return NAN;
+        }
+    }
+    double seconds_double = floor(d->ms / 1000.0);
+    time_t seconds = (time_t)seconds_double;
+    struct tm tm;
+    if (!localtime_r(&seconds, &tm)) {
+        d->ms = NAN;
+        return NAN;
+    }
+    double rem = fmod(d->ms, 1000.0);
+    if (rem < 0) rem += 1000.0;
+    int millis = (int)floor(rem);
+
+    switch (part) {
+        case 0:
+            tm.tm_year = (int)a - 1900;
+            if (arg_count > 1) tm.tm_mon = (int)b;
+            if (arg_count > 2) tm.tm_mday = (int)c;
+            break;
+        case 1:
+            tm.tm_mon = (int)a;
+            if (arg_count > 1) tm.tm_mday = (int)b;
+            break;
+        case 2:
+            tm.tm_mday = (int)a;
+            break;
+        case 3:
+            tm.tm_hour = (int)a;
+            if (arg_count > 1) tm.tm_min = (int)b;
+            if (arg_count > 2) tm.tm_sec = (int)c;
+            if (arg_count > 3) millis = (int)e;
+            break;
+        case 4:
+            tm.tm_min = (int)a;
+            if (arg_count > 1) tm.tm_sec = (int)b;
+            if (arg_count > 2) millis = (int)c;
+            break;
+        case 5:
+            tm.tm_sec = (int)a;
+            if (arg_count > 1) millis = (int)b;
+            break;
+        case 6:
+            millis = (int)a;
+            break;
+        default:
+            return NAN;
+    }
+
+    tm.tm_isdst = -1;
+    time_t t = mktime(&tm);
+    if (t == (time_t)-1) {
+        d->ms = NAN;
+        return NAN;
+    }
+    d->ms = ((double)t) * 1000.0 + (double)millis;
+    return d->ms;
+}
+
 static bool date_parse_fixed_int(const tsc_str_t* text, size_t* pos, size_t digits, int* out) {
     if (!text || !pos || !out || *pos + digits > text->len) return false;
     int value = 0;
@@ -9079,6 +9613,26 @@ double tsc_date_utc(double year, double month, double day, double hours, double 
     return ((double)t) * 1000.0 + ms;
 }
 
+double tsc_date_local(double year, double month, double day, double hours, double minutes, double seconds, double ms) {
+    if (isnan(year) || isnan(month) || isnan(day) || isnan(hours) || isnan(minutes) || isnan(seconds) || isnan(ms)) {
+        return NAN;
+    }
+    int y = (int)year;
+    if (y >= 0 && y <= 99) y += 1900;
+    struct tm tm;
+    memset(&tm, 0, sizeof(tm));
+    tm.tm_year = y - 1900;
+    tm.tm_mon = (int)month;
+    tm.tm_mday = (int)day;
+    tm.tm_hour = (int)hours;
+    tm.tm_min = (int)minutes;
+    tm.tm_sec = (int)seconds;
+    tm.tm_isdst = -1;
+    time_t t = mktime(&tm);
+    if (t == (time_t)-1) return NAN;
+    return ((double)t) * 1000.0 + ms;
+}
+
 double tsc_date_get_utc_part(const tsc_date_t* d, int part) {
     if (!d || isnan(d->ms)) return NAN;
     double seconds_double = floor(d->ms / 1000.0);
@@ -9100,6 +9654,43 @@ double tsc_date_get_utc_part(const tsc_date_t* d, int part) {
         }
     }
     return NAN;
+}
+
+static double date_millis_part(const tsc_date_t* d) {
+    double rem = fmod(d->ms, 1000.0);
+    if (rem < 0) rem += 1000.0;
+    return floor(rem);
+}
+
+double tsc_date_get_local_part(const tsc_date_t* d, int part) {
+    if (!d || isnan(d->ms)) return NAN;
+    double seconds_double = floor(d->ms / 1000.0);
+    time_t seconds = (time_t)seconds_double;
+    struct tm tm;
+    if (!localtime_r(&seconds, &tm)) return NAN;
+    switch (part) {
+        case 0: return (double)(tm.tm_year + 1900);
+        case 1: return (double)tm.tm_mon;
+        case 2: return (double)tm.tm_mday;
+        case 3: return (double)tm.tm_wday;
+        case 4: return (double)tm.tm_hour;
+        case 5: return (double)tm.tm_min;
+        case 6: return (double)tm.tm_sec;
+        case 7: return date_millis_part(d);
+    }
+    return NAN;
+}
+
+double tsc_date_get_timezone_offset(const tsc_date_t* d) {
+    if (!d || isnan(d->ms)) return NAN;
+    double seconds_double = floor(d->ms / 1000.0);
+    time_t seconds = (time_t)seconds_double;
+    struct tm local_tm;
+    struct tm utc_tm;
+    if (!localtime_r(&seconds, &local_tm) || !gmtime_r(&seconds, &utc_tm)) return NAN;
+    time_t local_as_utc = timegm(&local_tm);
+    time_t utc_as_utc = timegm(&utc_tm);
+    return difftime(utc_as_utc, local_as_utc) / 60.0;
 }
 
 tsc_str_t* tsc_date_to_iso_string(const tsc_date_t* d) {

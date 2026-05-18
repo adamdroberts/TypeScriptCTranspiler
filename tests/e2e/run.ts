@@ -7,6 +7,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { spawn } from "node:child_process";
 import { compile } from "../../src/compile";
+import { ensureE2eNodeModuleFixtures } from "./fixtures";
 
 const casesDir = path.resolve(import.meta.dir, "cases");
 
@@ -77,6 +78,7 @@ function runBinary(bin: string): Promise<{ code: number; stdout: string; stderr:
 }
 
 async function main(): Promise<void> {
+    await ensureE2eNodeModuleFixtures();
     const cases = await discoverCases();
     if (cases.length === 0) {
         console.error("no e2e cases found");

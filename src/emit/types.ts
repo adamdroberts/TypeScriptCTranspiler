@@ -20,6 +20,8 @@ export type CTypeKind =
     | "finregistry"
     | "promise"
     | "eventemitter"
+    | "event"
+    | "eventtarget"
     | "regexp"
     | "hash"
     | "url"
@@ -114,6 +116,8 @@ export function promiseType(elem: CType): CType {
 }
 
 export const T_EVENT_EMITTER: CType = { kind: "eventemitter", c: "tsc_event_emitter_t*" };
+export const T_EVENT: CType = { kind: "event", c: "tsc_event_t*" };
+export const T_EVENT_TARGET: CType = { kind: "eventtarget", c: "tsc_event_target_t*" };
 export const T_REGEXP: CType = { kind: "regexp", c: "tsc_regexp_t*" };
 export const T_HASH: CType = { kind: "hash", c: "tsc_hash_t*" };
 export const T_URL: CType = { kind: "url", c: "tsc_url_t*" };
@@ -393,6 +397,8 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
             return promiseType(T_VALUE);
         }
         if (sym?.getName() === "EventEmitter") return T_EVENT_EMITTER;
+        if (sym?.getName() === "Event") return T_EVENT;
+        if (sym?.getName() === "EventTarget") return T_EVENT_TARGET;
         if (sym?.getName() === "IterableIterator" || sym?.getName() === "Iterator" || sym?.getName() === "Generator") {
             const tr = t as ts.TypeReference;
             const ta = tr.typeArguments;

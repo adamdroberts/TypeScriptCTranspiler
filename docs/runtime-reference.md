@@ -167,9 +167,11 @@ NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JS
 | `tsc_value_apply_function(fn, this_arg, args)` | `tsc_value_t` | Dynamic `Reflect.apply` dispatch for boxed accessor function identities returned from descriptor `get`/`set` fields |
 | `tsc_promise_resolve/reject(result)` | `tsc_promise_t*` | Allocates an immediately fulfilled/rejected Promise record used by the settled Promise subset |
 | `tsc_promise_resolve_fs_stats(result)` | `tsc_promise_t*` | Allocates an immediately fulfilled typed `Promise<FSStats>` side-channel record |
+| `tsc_promise_resolve_buffer(result)` | `tsc_promise_t*` | Allocates an immediately fulfilled typed `Promise<Buffer>` side-channel record |
 | `tsc_promise_is_fulfilled/is_rejected(p)` | `bool` | State checks used by synchronous `then`/`catch`/`finally` lowering |
 | `tsc_promise_value/reason(p)` | `tsc_value_t` | Reads the stored fulfilled value or rejection reason |
 | `tsc_promise_fs_stats_value(p)` | `tsc_fs_stats_t*` | Reads the typed `FSStats` fulfilled value side-channel |
+| `tsc_promise_buffer_value(p)` | `tsc_buffer_t*` | Reads the typed `Buffer` fulfilled value side-channel |
 | `tsc_value_get_prop(v, key)` | `tsc_value_t` | Dynamic object property read through the prototype chain plus array/string own-property reads, returning `undefined` when absent |
 | `tsc_value_get_prop_receiver(v, key, receiver)` | `tsc_value_t` | Dynamic `Reflect.get` read with an explicit receiver argument for accessor dispatch |
 | `tsc_value_get_index(v, index)` | `tsc_value_t` | Dynamic array or string index read, returning `undefined` when absent |
@@ -380,25 +382,32 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 | `tsc_process_argv()` | `tsc_array_t*` | `process.argv` — returns new array each call |
 | `tsc_process_env_get(name)` | `tsc_str_t*` | `process.env[name]` — NULL if unset |
 | `tsc_process_cwd()` | `tsc_str_t*` | `process.cwd()` |
+| `tsc_process_next_tick(fn, env)` / `tsc_process_drain_next_ticks()` | `void` | Bounded before-exit `process.nextTick(callback, ...args)` queue |
+| `tsc_queue_microtask(fn, env)` / `tsc_drain_microtasks()` | `void` | Bounded before-exit `queueMicrotask(callback)` queue drained after next ticks |
+| `tsc_set_timeout(fn, env)` / `tsc_drain_timeouts()` | `void` | Bounded before-exit zero-delay `setTimeout(callback, 0, ...args)` queue drained after next ticks and microtasks |
+| `tsc_set_immediate(fn, env)` / `tsc_drain_immediates()` | `void` | Bounded before-exit `setImmediate(callback, ...args)` queue drained after next ticks, microtasks, and zero-delay timeouts |
 
 ## fs (sync subset)
 
 | Symbol | Signature | JS equivalent |
 |--------|-----------|---------------|
-| `tsc_fs_read_file_sync(path)` | `tsc_str_t*` | `fs.readFileSync(path[, utf8Options])` and immediate-settled `fs.promises.readFile(path[, utf8Options])` — throws via `tsc_throw_str` on error |
-| `tsc_fs_write_file_sync(path, data)` / `tsc_fs_write_file_sync_opts(path, data, append, exclusive)` | `void` | `fs.writeFileSync(path, data[, utf8OrFlagOptions])` and immediate-settled `fs.promises.writeFile(path, data[, utf8OrFlagOptions])` |
-| `tsc_fs_append_file_sync(path, data)` | `void` | `fs.appendFileSync(path, data[, utf8Options])` and immediate-settled `fs.promises.appendFile(path, data[, utf8Options])` |
+| `tsc_fs_read_file_sync(path)` | `tsc_str_t*` | `fs.readFileSync(path[, utf8OrFlagOptions])` and immediate-settled `fs.promises.readFile(path[, utf8OrFlagOptions])` — throws via `tsc_throw_str` on error |
+| `tsc_fs_read_file_buffer_sync(path)` | `tsc_buffer_t*` | `fs.readFileSync(path, "buffer" | null | { encoding: "buffer" \| null[, flag] })` |
+| `tsc_fs_write_file_sync(path, data)` / `tsc_fs_write_file_sync_opts(_mode)(path, data, append, exclusive[, mode])` | `void` | `fs.writeFileSync(path, data[, utf8OrFlagOrModeOptions])` and immediate-settled `fs.promises.writeFile(path, data[, utf8OrFlagOrModeOptions])` |
+| `tsc_fs_append_file_sync(path, data)` / `tsc_fs_write_file_sync_opts(_mode)(path, data, true, exclusive[, mode])` | `void` | `fs.appendFileSync(path, data[, utf8OrAppendFlagOrModeOptions])` and immediate-settled `fs.promises.appendFile(path, data[, utf8OrAppendFlagOrModeOptions])` |
 | `tsc_fs_exists_sync(path)` | `bool` | `fs.existsSync(path)` |
 | `tsc_fs_readdir_sync(path)` | `tsc_array_t*` | `fs.readdirSync(path)` — array of filenames |
+| `tsc_fs_readdir_buffer_sync(path)` | `tsc_array_t*` | `fs.readdirSync(path, "buffer" \| { encoding: "buffer" })` — array of Buffer filenames |
 | `tsc_fs_readdir_recursive_sync(path)` | `tsc_array_t*` | `fs.readdirSync(path, { recursive: true })` and immediate-settled `fs.promises.readdir(path, { recursive: true })` — recursive relative filename strings |
+| `tsc_fs_readdir_recursive_buffer_sync(path)` | `tsc_array_t*` | `fs.readdirSync(path, { recursive: true, encoding: "buffer" })` and immediate-settled promise equivalent — recursive relative Buffer filenames |
 | `tsc_fs_readdir_dirents_sync(path)` | `tsc_array_t*` | `fs.readdirSync(path, { withFileTypes: true })` and immediate-settled `fs.promises.readdir(path, { withFileTypes: true })` — array of bounded `Dirent` records |
 | `tsc_fs_stat_sync(path)` | `tsc_fs_stats_t*` | `fs.statSync(path)` and immediate-settled `fs.promises.stat(path)` — small `Stats` subset |
 | `tsc_fs_lstat_sync(path)` | `tsc_fs_stats_t*` | `fs.lstatSync(path)` and immediate-settled `fs.promises.lstat(path)` — small `Stats` subset without following symlinks |
-| `tsc_fs_realpath_sync(path)` | `tsc_str_t*` | `fs.realpathSync(path)` and immediate-settled `fs.promises.realpath(path)` |
-| `tsc_fs_readlink_sync(path)` | `tsc_str_t*` | `fs.readlinkSync(path)` and immediate-settled `fs.promises.readlink(path)` |
+| `tsc_fs_realpath_sync(path)` | `tsc_str_t*` | `fs.realpathSync(path[, "utf8" \| "buffer" \| { encoding }])` and immediate-settled `fs.promises.realpath(path[, options])`; explicit Buffer encodings wrap the string result with `tsc_buffer_from_str` |
+| `tsc_fs_readlink_sync(path)` | `tsc_str_t*` | `fs.readlinkSync(path[, "utf8" \| "buffer" \| { encoding }])` and immediate-settled `fs.promises.readlink(path[, options])`; explicit Buffer encodings wrap the string result with `tsc_buffer_from_str` |
 | `tsc_fs_symlink_sync(target, path)` | `void` | `fs.symlinkSync(target, path)` and immediate-settled `fs.promises.symlink(target, path)` |
 | `tsc_fs_link_sync(existingPath, newPath)` | `void` | `fs.linkSync(existingPath, newPath)` and immediate-settled `fs.promises.link(existingPath, newPath)` |
-| `tsc_fs_mkdtemp_sync(prefix)` | `tsc_str_t*` | `fs.mkdtempSync(prefix)` and immediate-settled `fs.promises.mkdtemp(prefix)` |
+| `tsc_fs_mkdtemp_sync(prefix)` | `tsc_str_t*` | `fs.mkdtempSync(prefix[, "utf8" \| "buffer" \| { encoding }])` and immediate-settled `fs.promises.mkdtemp(prefix[, options])`; explicit Buffer encodings wrap the string result with `tsc_buffer_from_str` |
 | `tsc_fs_truncate_sync(path, len)` | `void` | `fs.truncateSync(path, len?)` and immediate-settled `fs.promises.truncate(path, len?)` |
 | `tsc_fs_utimes_sync(path, atime, mtime)` | `void` | `fs.utimesSync(path, atime, mtime)` and immediate-settled `fs.promises.utimes(path, atime, mtime)` |
 | `tsc_fs_lutimes_sync(path, atime, mtime)` | `void` | `fs.lutimesSync(path, atime, mtime)` and immediate-settled `fs.promises.lutimes(path, atime, mtime)` |
@@ -426,7 +435,9 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 | `tsc_fs_copy_file_sync(src, dest)` | `void` | `fs.copyFileSync(src, dest)` and immediate-settled `fs.promises.copyFile(src, dest)` |
 | `tsc_fs_rename_sync(oldPath, newPath)` | `void` | `fs.renameSync(oldPath, newPath)` and immediate-settled `fs.promises.rename(oldPath, newPath)` |
 
-`fs.promises.readFile`, `writeFile`, `appendFile`, `readdir`, `realpath`, `readlink`, `symlink`, `link`, `mkdtemp`, `truncate`, `utimes`, `lutimes`, `chown`, `lchown`, `chmod`, `access`, `mkdir`, `unlink`, `rm`, `rmdir`, `cp`, `copyFile`, and `rename` are emitter-level wrappers over these sync runtime calls plus `tsc_promise_resolve(...)`. `fs.promises.stat` and `lstat` use the typed Stats promise side-channel. They are not libuv-backed yet.
+`fs.promises.readFile`, `writeFile`, `appendFile`, `readdir`, `realpath`, `readlink`, `symlink`, `link`, `mkdtemp`, `truncate`, `utimes`, `lutimes`, `chown`, `lchown`, `chmod`, `access`, `mkdir`, `unlink`, `rm`, `rmdir`, `cp`, `copyFile`, and `rename` are emitter-level wrappers over these sync runtime calls plus immediate Promise records. `fs.promises.stat` / `lstat` and Buffer-returning `fs.promises.readFile` / `realpath` / `readlink` / `mkdtemp` use typed promise side-channel records. They are not libuv-backed yet.
+
+Supported fs path arguments use a bounded `PathLike` subset: strings pass through directly, Buffer paths are coerced to UTF-8 strings, and `file:` URL objects are resolved to their filesystem pathname before calling the same runtime helpers. Non-file URLs are rejected at runtime.
 
 ## path
 
@@ -452,6 +463,11 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 | `tsc_os_homedir()` | `tsc_str_t*` — `$HOME` or `/` |
 | `tsc_os_cpu_count()` | `double` — from `sysconf(_SC_NPROCESSORS_ONLN)` |
 | `tsc_date_now()` | `double` — ms since epoch via `clock_gettime(CLOCK_REALTIME)` |
+| `tsc_date_local(year, month, day, hours, minutes, seconds, ms)` | `double` — local-time `new Date(year, month, ...)` epoch milliseconds |
+| `tsc_date_set_local_part(date, part, a, b, c, e, arg_count)` | `double` — local-time Date setter helper with normalized overflow |
+| `tsc_date_get_utc_part(date, part)` | `double` — UTC year/month/date/day/hour/minute/second/ms component |
+| `tsc_date_get_local_part(date, part)` | `double` — local year/month/date/day/hour/minute/second/ms component |
+| `tsc_date_get_timezone_offset(date)` | `double` — JavaScript `Date#getTimezoneOffset()` minutes |
 
 ## crypto
 
@@ -475,6 +491,22 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 | `tsc_event_emitter_event_names(ee)` | `tsc_array_t*` | `eventNames()` as a string array |
 | `tsc_event_emitter_set_max_listeners(ee, n)` | `void` | `setMaxListeners(n)`; stores the configured count but does not emit warnings yet |
 | `tsc_event_emitter_get_max_listeners(ee)` | `double` | `getMaxListeners()` |
+
+## Event / EventTarget
+
+| Symbol | Signature | JS equivalent |
+|--------|-----------|---------------|
+| `tsc_event_new(type, cancelable)` | `tsc_event_t*` | `new Event(type, { cancelable })` |
+| `tsc_event_type(event)` | `tsc_str_t*` | `event.type` |
+| `tsc_event_target(event)` | `tsc_event_target_t*` | `event.target` |
+| `tsc_event_current_target(event)` | `tsc_event_target_t*` | `event.currentTarget` |
+| `tsc_event_default_prevented(event)` | `bool` | `event.defaultPrevented` |
+| `tsc_event_cancelable(event)` | `bool` | `event.cancelable` |
+| `tsc_event_prevent_default(event)` | `void` | `event.preventDefault()` |
+| `tsc_event_target_new()` | `tsc_event_target_t*` | `new EventTarget()` |
+| `tsc_event_target_add(target, type, fn, env, identity, once)` | `void` | `addEventListener(type, listener[, options])` with generated typed-listener adapters, identity-based duplicate suppression, and bounded `{ once: true }` support |
+| `tsc_event_target_remove(target, type, fn, identity)` | `void` | `removeEventListener(type, listener)` |
+| `tsc_event_target_dispatch(target, event)` | `bool` | `dispatchEvent(event)` synchronous same-target dispatch; returns false for cancelable default-prevented events |
 
 ## URL
 

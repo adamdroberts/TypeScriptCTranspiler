@@ -1,0 +1,4 @@
+fulfilled: ok
+rejected: bad
+finally reject: final bad
+finally reject2: final fail

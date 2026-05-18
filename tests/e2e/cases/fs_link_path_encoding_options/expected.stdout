@@ -1,3 +1,6 @@
 sync: true true
+sync buffer: true true true
 promise realpath: true
 promise readlink: true
+promise realpath buffer: true true
+promise readlink buffer: true true

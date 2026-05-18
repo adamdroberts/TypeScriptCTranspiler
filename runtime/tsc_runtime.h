@@ -245,6 +245,7 @@ typedef struct tsc_regexp {
 } tsc_regexp_t;
 
 tsc_regexp_t* tsc_regexp_new(const tsc_str_t* pattern, const tsc_str_t* flags);
+tsc_str_t* tsc_regexp_escape(const tsc_str_t* input);
 struct tsc_array* tsc_regexp_exec(const tsc_regexp_t* re, const tsc_str_t* s);
 /* Inline test: skips a function call + lazy-init function call per match.
  * Hot in tight regex loops (e.g. validators applied per line). */
@@ -293,7 +294,10 @@ typedef struct tsc_url {
     tsc_str_t* origin;
 } tsc_url_t;
 bool tsc_url_can_parse(const tsc_str_t* input);
+bool tsc_url_can_parse_base(const tsc_str_t* input, const tsc_str_t* base);
 tsc_url_t* tsc_url_new(const tsc_str_t* input);
+tsc_url_t* tsc_url_new_base(const tsc_str_t* input, const tsc_str_t* base);
+tsc_str_t* tsc_url_file_path(const tsc_url_t* url);
 
 /* ------------- Date ------------- */
 typedef struct tsc_date {
@@ -304,9 +308,13 @@ tsc_date_t* tsc_date_from_ms(double ms);
 double tsc_date_get_time(const tsc_date_t* d);
 double tsc_date_set_time(tsc_date_t* d, double ms);
 double tsc_date_set_utc_part(tsc_date_t* d, int part, double a, double b, double c, double e, int arg_count);
+double tsc_date_set_local_part(tsc_date_t* d, int part, double a, double b, double c, double e, int arg_count);
 double tsc_date_parse(const tsc_str_t* text);
 double tsc_date_utc(double year, double month, double day, double hours, double minutes, double seconds, double ms);
+double tsc_date_local(double year, double month, double day, double hours, double minutes, double seconds, double ms);
 double tsc_date_get_utc_part(const tsc_date_t* d, int part);
+double tsc_date_get_local_part(const tsc_date_t* d, int part);
+double tsc_date_get_timezone_offset(const tsc_date_t* d);
 tsc_str_t* tsc_date_to_iso_string(const tsc_date_t* d);
 tsc_str_t* tsc_date_to_utc_string(const tsc_date_t* d);
 tsc_str_t* tsc_date_to_string(const tsc_date_t* d);
@@ -428,6 +436,8 @@ void tsc_array_oob(const tsc_array_t* a, double i);
 typedef struct tsc_object tsc_object_t;
 typedef struct tsc_promise tsc_promise_t;
 typedef struct tsc_event_emitter tsc_event_emitter_t;
+typedef struct tsc_event tsc_event_t;
+typedef struct tsc_event_target tsc_event_target_t;
 typedef struct tsc_fs_stats tsc_fs_stats_t;
 typedef struct tsc_fs_dirent tsc_fs_dirent_t;
 typedef struct tsc_dns_lookup_result tsc_dns_lookup_result_t;
@@ -435,6 +445,7 @@ typedef struct tsc_dns_lookup_all_result tsc_dns_lookup_all_result_t;
 typedef tsc_value_t (*tsc_accessor_getter_t)(void* env, tsc_value_t receiver);
 typedef bool (*tsc_accessor_setter_t)(void* env, tsc_value_t receiver, tsc_value_t value);
 typedef void (*tsc_event_listener_fn_t)(void* env, tsc_array_t* args);
+typedef void (*tsc_event_target_listener_fn_t)(void* env, tsc_event_t* event);
 
 tsc_value_t tsc_value_undefined(void);
 tsc_value_t tsc_value_null(void);
@@ -496,6 +507,7 @@ tsc_value_t tsc_value_object_from_entries(tsc_value_t entries);
 
 tsc_promise_t* tsc_promise_resolve(tsc_value_t value);
 tsc_promise_t* tsc_promise_resolve_fs_stats(tsc_fs_stats_t* value);
+tsc_promise_t* tsc_promise_resolve_buffer(tsc_buffer_t* value);
 tsc_promise_t* tsc_promise_reject(tsc_value_t reason);
 tsc_promise_t* tsc_promise_pending(void);
 tsc_promise_t* tsc_promise_adopt(tsc_promise_t* promise);
@@ -506,6 +518,7 @@ bool tsc_promise_is_rejected(const tsc_promise_t* p);
 bool tsc_promise_is_pending(const tsc_promise_t* p);
 tsc_value_t tsc_promise_value(const tsc_promise_t* p);
 tsc_fs_stats_t* tsc_promise_fs_stats_value(const tsc_promise_t* p);
+tsc_buffer_t* tsc_promise_buffer_value(const tsc_promise_t* p);
 tsc_value_t tsc_promise_reason(const tsc_promise_t* p);
 
 tsc_event_emitter_t* tsc_event_emitter_new(void);
@@ -523,6 +536,18 @@ double tsc_event_emitter_get_default_max_listeners(void);
 void tsc_event_emitter_set_default_max_listeners(double n);
 void tsc_event_emitter_set_max_listeners(tsc_event_emitter_t* ee, double n);
 double tsc_event_emitter_get_max_listeners(const tsc_event_emitter_t* ee);
+
+tsc_event_t* tsc_event_new(tsc_str_t* type, bool cancelable);
+tsc_str_t* tsc_event_type(const tsc_event_t* event);
+tsc_event_target_t* tsc_event_target(const tsc_event_t* event);
+tsc_event_target_t* tsc_event_current_target(const tsc_event_t* event);
+bool tsc_event_default_prevented(const tsc_event_t* event);
+bool tsc_event_cancelable(const tsc_event_t* event);
+void tsc_event_prevent_default(tsc_event_t* event);
+tsc_event_target_t* tsc_event_target_new(void);
+void tsc_event_target_add(tsc_event_target_t* target, tsc_str_t* type, tsc_event_target_listener_fn_t fn, void* env, void* identity, bool once);
+void tsc_event_target_remove(tsc_event_target_t* target, const tsc_str_t* type, tsc_event_target_listener_fn_t fn, void* identity);
+bool tsc_event_target_dispatch(tsc_event_target_t* target, tsc_event_t* event);
 
 struct tsc_dns_lookup_result {
     tsc_str_t* error;
@@ -711,6 +736,9 @@ bool tsc_instanceof(const char* type_chain, const char* class_name);
 
 /* ------------- process ------------- */
 typedef void (*tsc_next_tick_fn_t)(void* env);
+typedef void (*tsc_microtask_fn_t)(void* env);
+typedef void (*tsc_immediate_fn_t)(void* env);
+typedef void (*tsc_timeout_fn_t)(void* env);
 void tsc_process_exit(double code);
 extern int tsc_argc;
 extern char** tsc_argv;
@@ -748,18 +776,29 @@ bool tsc_process_stdout_write_buffer(const tsc_buffer_t* data);
 bool tsc_process_stderr_write_buffer(const tsc_buffer_t* data);
 void tsc_process_next_tick(tsc_next_tick_fn_t fn, void* env);
 void tsc_process_drain_next_ticks(void);
+void tsc_queue_microtask(tsc_microtask_fn_t fn, void* env);
+void tsc_drain_microtasks(void);
+void tsc_set_immediate(tsc_immediate_fn_t fn, void* env);
+void tsc_drain_immediates(void);
+void tsc_set_timeout(tsc_timeout_fn_t fn, void* env);
+void tsc_drain_timeouts(void);
 
 /* ------------- fs (sync subset) ------------- */
 tsc_str_t* tsc_fs_read_file_sync(const tsc_str_t* path);
+tsc_buffer_t* tsc_fs_read_file_buffer_sync(const tsc_str_t* path);
 void tsc_fs_write_file_sync(const tsc_str_t* path, const tsc_str_t* data);
 void tsc_fs_write_file_buffer_sync(const tsc_str_t* path, const tsc_buffer_t* data);
 void tsc_fs_write_file_sync_opts(const tsc_str_t* path, const tsc_str_t* data, bool append, bool exclusive);
 void tsc_fs_write_file_buffer_sync_opts(const tsc_str_t* path, const tsc_buffer_t* data, bool append, bool exclusive);
+void tsc_fs_write_file_sync_opts_mode(const tsc_str_t* path, const tsc_str_t* data, bool append, bool exclusive, double mode);
+void tsc_fs_write_file_buffer_sync_opts_mode(const tsc_str_t* path, const tsc_buffer_t* data, bool append, bool exclusive, double mode);
 void tsc_fs_append_file_sync(const tsc_str_t* path, const tsc_str_t* data);
 void tsc_fs_append_file_buffer_sync(const tsc_str_t* path, const tsc_buffer_t* data);
 bool tsc_fs_exists_sync(const tsc_str_t* path);
 tsc_array_t* tsc_fs_readdir_sync(const tsc_str_t* path);
+tsc_array_t* tsc_fs_readdir_buffer_sync(const tsc_str_t* path);
 tsc_array_t* tsc_fs_readdir_recursive_sync(const tsc_str_t* path);
+tsc_array_t* tsc_fs_readdir_recursive_buffer_sync(const tsc_str_t* path);
 tsc_array_t* tsc_fs_readdir_dirents_sync(const tsc_str_t* path);
 tsc_fs_stats_t* tsc_fs_stat_sync(const tsc_str_t* path);
 tsc_fs_stats_t* tsc_fs_lstat_sync(const tsc_str_t* path);

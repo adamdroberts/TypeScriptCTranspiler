@@ -1,0 +1,5 @@
+sync: sync
+tick: sync,tick
+micro1: sync,tick,micro1
+micro2: sync,tick,micro1,micro2
+nested: sync,tick,micro1,micro2,nested

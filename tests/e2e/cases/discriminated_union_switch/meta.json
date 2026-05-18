@@ -1,0 +1,3 @@
+{
+  "description": "switch-based discriminated union narrowing over interface-shaped dynamic objects"
+}

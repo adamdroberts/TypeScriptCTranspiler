@@ -79,8 +79,9 @@ function collectStaticRequireRoots(
             true,
             scriptKindForFile(fileName),
         );
+        const requireAliases = commonJsRequireAliases(sf);
         for (const stmt of sf.statements) {
-            for (const spec of staticRequireSpecifiers(stmt)) {
+            for (const spec of staticRequireSpecifiers(stmt, requireAliases)) {
                 const resolved = ts.resolveModuleName(spec, fileName, compilerOptions, ts.sys);
                 const resolvedFile = resolved.resolvedModule?.resolvedFileName;
                 if (!resolvedFile || seen.has(resolvedFile)) continue;
@@ -100,10 +101,10 @@ function scriptKindForFile(fileName: string): ts.ScriptKind {
     return ts.ScriptKind.TS;
 }
 
-function staticRequireSpecifiers(stmt: ts.Statement): string[] {
+function staticRequireSpecifiers(stmt: ts.Statement, requireAliases: Set<string>): string[] {
     const specs: string[] = [];
     const visit = (node: ts.Node): void => {
-        const spec = ts.isExpression(node) ? requireCallSpecifier(node) : null;
+        const spec = ts.isExpression(node) ? requireCallSpecifier(node, requireAliases) : null;
         if (spec) specs.push(spec);
         ts.forEachChild(node, visit);
     };
@@ -111,10 +112,10 @@ function staticRequireSpecifiers(stmt: ts.Statement): string[] {
     return specs;
 }
 
-function requireCallSpecifier(expr: ts.Expression): string | null {
+function requireCallSpecifier(expr: ts.Expression, requireAliases: Set<string>): string | null {
     if (
         ts.isCallExpression(expr) &&
-        isCommonJsRequireCallee(expr.expression) &&
+        isCommonJsRequireCallee(expr.expression, requireAliases) &&
         expr.arguments.length === 1 &&
         ts.isStringLiteralLike(expr.arguments[0])
     ) {
@@ -123,7 +124,31 @@ function requireCallSpecifier(expr: ts.Expression): string | null {
     return null;
 }
 
-function isCommonJsRequireCallee(expr: ts.Expression): boolean {
+function isCommonJsRequireCallee(expr: ts.Expression, requireAliases: Set<string>): boolean {
+    return (ts.isIdentifier(expr) && (expr.text === "require" || requireAliases.has(expr.text))) ||
+        (
+            ts.isPropertyAccessExpression(expr) &&
+            expr.name.text === "require" &&
+            ts.isIdentifier(expr.expression) &&
+            expr.expression.text === "module"
+        );
+}
+
+function commonJsRequireAliases(sf: ts.SourceFile): Set<string> {
+    const aliases = new Set<string>();
+    const visit = (node: ts.Node): void => {
+        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+            let init = node.initializer;
+            while (ts.isParenthesizedExpression(init)) init = init.expression;
+            if (isCommonJsRequireAliasInitializer(init)) aliases.add(node.name.text);
+        }
+        ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    return aliases;
+}
+
+function isCommonJsRequireAliasInitializer(expr: ts.Expression): boolean {
     return (ts.isIdentifier(expr) && expr.text === "require") ||
         (
             ts.isPropertyAccessExpression(expr) &&

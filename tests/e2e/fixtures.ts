@@ -1,0 +1,648 @@
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+
+type FileMap = Record<string, string>;
+
+interface PackageFixture {
+    packageJson?: Record<string, unknown>;
+    files: FileMap;
+}
+
+const rootDir = path.resolve(import.meta.dir, "../..");
+
+function cjsPackage(name: string, files: FileMap): PackageFixture {
+    return {
+        packageJson: { name, version: "1.0.0", main: "index.js" },
+        files,
+    };
+}
+
+function esmPackage(
+    name: string,
+    files: FileMap,
+    packageJson: Record<string, unknown> = {},
+): PackageFixture {
+    return {
+        packageJson: {
+            name,
+            version: "1.0.0",
+            type: "module",
+            main: "index.js",
+            ...packageJson,
+        },
+        files,
+    };
+}
+
+const packages: Record<string, PackageFixture> = {
+    "native-pkg": cjsPackage("native-pkg", {
+        "index.js": "module.exports = 3;\n",
+        "build/Release/native.node": "",
+    }),
+    "native-exports-pkg": {
+        packageJson: {
+            name: "native-exports-pkg",
+            version: "1.0.0",
+            main: "index.js",
+            exports: "./build/Release/native.node",
+        },
+        files: {
+            "index.js": "module.exports = 3;\n",
+            "build/Release/native.node": "",
+        },
+    },
+    "outer-native-user": cjsPackage("outer-native-user", {
+        "index.js": 'const native = require("inner-native-pkg");\nexports.value = native.value;\n',
+    }),
+    "inner-native-pkg": cjsPackage("inner-native-pkg", {
+        "index.js": "exports.value = 3;\n",
+        "build/Release/native.node": "",
+    }),
+    "tsc2c-pure-ts-package": {
+        packageJson: {
+            name: "tsc2c-pure-ts-package",
+            version: "1.0.0",
+            type: "module",
+            exports: {
+                ".": "./src/index.ts",
+                "./math": "./src/math.ts",
+            },
+        },
+        files: {
+            "src/index.ts": 'import { add } from "./math";\nexport const banner = "pure-ts-package";\nexport function describeTwice(label: string, value: number): string {\n    return label + ":" + add(value, value);\n}\n',
+            "src/math.ts": "export function add(left: number, right: number): number {\n    return left + right;\n}\n",
+        },
+    },
+    "tsc2c-imports-package": {
+        packageJson: {
+            name: "tsc2c-imports-package",
+            version: "1.0.0",
+            type: "module",
+            exports: "./src/index.ts",
+            imports: { "#math": "./src/math.ts" },
+        },
+        files: {
+            "src/index.ts": 'import { triple } from "#math";\nexport function summarize(label: string, value: number): string {\n    return label + ":" + triple(value);\n}\n',
+            "src/math.ts": "export function triple(value: number): number {\n    return value * 3;\n}\n",
+        },
+    },
+    "tsc2c-main-package": esmPackage("tsc2c-main-package", {
+        "index.js": 'export const label = "main-pkg";\nexport function square(value) { return value * value; }\n',
+    }),
+    "tsc2c-namespace-package": {
+        packageJson: {
+            name: "tsc2c-namespace-package",
+            version: "1.0.0",
+            type: "module",
+            exports: "./src/index.ts",
+        },
+        files: {
+            "src/index.ts": 'export const label = "pkg-ns";\nexport const base = 7;\nexport function multiply(left: number, right: number): number {\n    return left * right;\n}\n',
+        },
+    },
+    "tsc2c-side-effect-package": esmPackage("tsc2c-side-effect-package", {
+        "index.js": 'console.log("package setup");\n',
+    }),
+    "tsc2c-js-package": esmPackage("tsc2c-js-package", {
+        "index.js": 'export const label = "js-pkg";\nexport function add(left, right) { return left + right; }\nexport const metadata = { label, values: [1, 2, 3] };\nexport const entries = [["answer", 42]];\nexport default { label, values: [4, 5] };\n',
+    }),
+    "tsc2c-js-relative-package": esmPackage("tsc2c-js-relative-package", {
+        "index.js": 'import { offset } from "./helper.js";\nexport const label = "relative-js";\nexport function compute(value) { return value + offset; }\n',
+        "helper.js": "export const offset = 10;\n",
+    }),
+    "tsc2c-cjs-named-package": cjsPackage("tsc2c-cjs-named-package", {
+        "index.js": 'exports.label = "cjs";\nexports.add = function add(left, right) { return left + right; };\n',
+    }),
+    "tsc2c-cjs-bracket-exports-package": cjsPackage("tsc2c-cjs-bracket-exports-package", {
+        "index.js": 'exports["label"] = "bracket-cjs";\nexports["add"] = function add(left, right) { return left + right; };\n',
+    }),
+    "tsc2c-cjs-computed-exports-package": cjsPackage("tsc2c-cjs-computed-exports-package", {
+        "index.js": 'const answerKey = "answer";\nconst labelKey = "label";\nexports[answerKey] = 42;\nmodule.exports[labelKey] = "computed-cjs";\n',
+    }),
+    "tsc2c-cjs-computed-string-exports-package": cjsPackage("tsc2c-cjs-computed-string-exports-package", {
+        "index.js": 'exports.__esModule = true;\nconst answerPrefix = "ans";\nconst labelPrefix = "la";\nconst labelSuffix = "bel";\nconst comboMiddle = "bo";\nexports[answerPrefix + "wer"] = 53;\nmodule.exports[`${labelPrefix}${labelSuffix}`] = "computed-static";\nexports[`com${comboMiddle}`] = true;\n',
+    }),
+    "tsc2c-cjs-define-properties-exports": cjsPackage("tsc2c-cjs-define-properties-exports", {
+        "index.js": 'exports.__esModule = true;\nObject.defineProperties(exports, {\n  default: { value: function greet(name) { return "hello " + name; }, enumerable: true },\n  label: { value: "define-properties", enumerable: true },\n  count: { value: 45, enumerable: true }\n});\n',
+    }),
+    "tsc2c-cjs-define-properties-identifier-exports": cjsPackage("tsc2c-cjs-define-properties-identifier-exports", {
+        "index.js": 'exports.__esModule = true;\nconst descriptors = {\n  default: { value: function greet(name) { return "hello " + name; }, enumerable: true },\n  label: { value: "define-properties-identifier", enumerable: true },\n  count: { value: 49, enumerable: true }\n};\nObject.defineProperties(exports, descriptors);\n',
+    }),
+    "tsc2c-cjs-define-properties-descriptor-identifier-exports": cjsPackage("tsc2c-cjs-define-properties-descriptor-identifier-exports", {
+        "index.js": 'exports.__esModule = true;\nconst labelDescriptor = { get: function() { return "descriptor-identifier"; }, enumerable: true };\nconst countDescriptor = { get: () => 52, enumerable: true };\nconst doubleDescriptor = { get() { return function double(value) { return value * 2; }; }, enumerable: true };\nObject.defineProperties(exports, {\n  label: labelDescriptor,\n  count: countDescriptor,\n  double: doubleDescriptor\n});\n',
+    }),
+    "tsc2c-cjs-define-property-require-member-exports": cjsPackage("tsc2c-cjs-define-property-require-member-exports", {
+        "index.js": 'exports.__esModule = true;\nObject.defineProperty(exports, "default", { value: require("./default.js"), enumerable: true });\nObject.defineProperty(exports, "label", { value: require("./local.js").label, enumerable: true });\nObject.defineProperties(exports, {\n  count: { value: require("./local.js").count, enumerable: true },\n  double: { value: require("./local.js").double, enumerable: true }\n});\n',
+        "default.js": 'module.exports = function greet(name) { return "hello " + name; };\n',
+        "local.js": 'exports.label = "define-require-member";\nexports.count = 56;\nexports.double = function double(value) { return value * 2; };\n',
+    }),
+    "tsc2c-cjs-define-property-require-binding-exports": cjsPackage("tsc2c-cjs-define-property-require-binding-exports", {
+        "index.js": 'exports.__esModule = true;\nconst defaultValue = require("./default.js");\nconst local = require("./local.js");\nconst labelDescriptor = { value: local.label, enumerable: true };\nObject.defineProperty(exports, "default", { value: defaultValue, enumerable: true });\nObject.defineProperty(exports, "label", labelDescriptor);\nObject.defineProperties(exports, {\n  count: { value: local.count, enumerable: true },\n  double: { value: local.double, enumerable: true }\n});\n',
+        "default.js": 'module.exports = function greet(name) { return "hello " + name; };\n',
+        "local.js": 'exports.label = "define-require-binding";\nexports.count = 57;\nexports.double = function double(value) { return value * 2; };\n',
+    }),
+    "tsc2c-cjs-define-properties-require-binding-descriptors": cjsPackage("tsc2c-cjs-define-properties-require-binding-descriptors", {
+        "index.js": 'exports.__esModule = true;\nconst defaultValue = require("./default.js");\nconst local = require("./local.js");\nconst defaultDescriptor = { value: defaultValue, enumerable: true };\nconst labelDescriptor = { value: local.label, enumerable: true };\nconst descriptors = {\n  default: defaultDescriptor,\n  label: labelDescriptor,\n  count: { value: local.count, enumerable: true },\n  double: { value: local.double, enumerable: true }\n};\nObject.defineProperties(exports, descriptors);\n',
+        "default.js": 'module.exports = function greet(name) { return "hello " + name; };\n',
+        "local.js": 'exports.label = "define-properties-require-binding";\nexports.count = 61;\nexports.double = function double(value) { return value * 2; };\n',
+    }),
+    "tsc2c-cjs-define-properties-own-descriptors": cjsPackage("tsc2c-cjs-define-properties-own-descriptors", {
+        "index.js": 'const api = {\n  default: function greet(name) { return "own-descriptors " + name; },\n  label: "own-descriptors",\n  count: 131,\n  double: function double(value) { return value * 31; }\n};\nObject.defineProperties(exports, Object.getOwnPropertyDescriptors(api));\n',
+    }),
+    "tsc2c-cjs-define-properties-own-descriptors-accessors": cjsPackage("tsc2c-cjs-define-properties-own-descriptors-accessors", {
+        "index.js": 'const local = require("./local.js");\nconst api = {\n  default: function greet(name) { return "own-descriptors-accessors " + name; },\n  get label() { return local.label; },\n  get count() { return 133; },\n  double(value) { return value * 33; }\n};\nObject.defineProperties(exports, Object.getOwnPropertyDescriptors(api));\n',
+        "local.js": 'exports.label = "own-descriptors-accessors";\n',
+    }),
+    "tsc2c-cjs-define-property-default-export": cjsPackage("tsc2c-cjs-define-property-default-export", {
+        "index.js": 'Object.defineProperty(exports, "default", { value: function greet(name) { return "hi " + name; }, enumerable: true });\nObject.defineProperty(exports, "label", { value: "define-default", enumerable: true });\n',
+    }),
+    "tsc2c-cjs-define-property-identifier-exports": cjsPackage("tsc2c-cjs-define-property-identifier-exports", {
+        "index.js": 'const defaultDescriptor = { value: function greet(name) { return "hello " + name; }, enumerable: true };\nconst labelDescriptor = { value: "define-property-identifier", enumerable: true };\nObject.defineProperty(exports, "default", defaultDescriptor);\nObject.defineProperty(exports, "label", labelDescriptor);\nObject.defineProperty(exports, "count", { value: 50, enumerable: true });\n',
+    }),
+    "tsc2c-cjs-define-property-computed-exports": cjsPackage("tsc2c-cjs-define-property-computed-exports", {
+        "index.js": 'exports.__esModule = true;\nconst defaultKey = "def" + "ault";\nconst labelPrefix = "la";\nconst countKey = `count`;\nconst doubleKey = "dou" + "ble";\nObject.defineProperty(exports, defaultKey, { value: function greet(name) { return "hello " + name; }, enumerable: true });\nObject.defineProperties(module.exports, {\n  [`${labelPrefix}bel`]: { value: "define-computed", enumerable: true },\n  [countKey]: { value: 65, enumerable: true },\n  [doubleKey]: { value: function double(value) { return value * 2; }, enumerable: true }\n});\n',
+    }),
+    "tsc2c-cjs-module-exports-static-metadata": cjsPackage("tsc2c-cjs-module-exports-static-metadata", {
+        "index.js": 'module.exports.__esModule = true;\nconst defaultDescriptor = { value: function greet(name) { return "hello " + name; }, enumerable: true };\nconst descriptors = {\n  label: { value: "module-static-metadata", enumerable: true }\n};\nconst api = { count: 51 };\nObject.defineProperty(module.exports, "default", defaultDescriptor);\nObject.defineProperties(module.exports, descriptors);\nObject.assign(module.exports, api);\n',
+    }),
+    "tsc2c-cjs-define-property-exports": cjsPackage("tsc2c-cjs-define-property-exports", {
+        "index.js": 'Object.defineProperty(exports, "label", { value: "defined", enumerable: true });\nObject.defineProperty(exports, "count", { value: 42, enumerable: true });\nObject.defineProperty(exports, "double", { value: function double(value) { return value * 2; }, enumerable: true });\n',
+    }),
+    "tsc2c-cjs-define-property-getter-exports": cjsPackage("tsc2c-cjs-define-property-getter-exports", {
+        "index.js": 'Object.defineProperty(exports, "label", { get: function() { return "getter"; }, enumerable: true });\nObject.defineProperty(exports, "count", { get: function() { return 43; }, enumerable: true });\nObject.defineProperty(exports, "double", { get: function() { return function double(value) { return value * 2; }; }, enumerable: true });\n',
+    }),
+    "tsc2c-cjs-assignment-esmodule-marker": cjsPackage("tsc2c-cjs-assignment-esmodule-marker", {
+        "index.js": 'exports.__esModule = true;\nexports.default = function greet(name) { return "hello " + name; };\nexports.label = "assignment marker";\n',
+    }),
+    "tsc2c-cjs-exports-alias": cjsPackage("tsc2c-cjs-exports-alias", {
+        "index.js": 'const out = exports;\nconst mod = module.exports;\nout.__esModule = true;\nout.default = function greet(name) { return "hello " + name; };\nout.label = "exports-alias";\nmod.count = 62;\nObject.defineProperty(out, "double", { value: function double(value) { return value * 2; }, enumerable: true });\nObject.assign(mod, { extra: "alias-extra" });\n',
+    }),
+    "tsc2c-cjs-export-assignment-chains": cjsPackage("tsc2c-cjs-export-assignment-chains", {
+        "index.js": 'exports.default = module.exports.default = function greet(name) { return "hello " + name; };\nexports.label = module.exports.label = "chain";\nmodule.exports.count = exports.count = 42;\nmodule.exports.alias = exports.alias = function alias(name) { return "alias " + name; };\n',
+    }),
+    "tsc2c-cjs-export-placeholders": cjsPackage("tsc2c-cjs-export-placeholders", {
+        "index.js": 'exports.default = void 0;\nexports.label = void 0;\nexports.count = void 0;\nexports.alias = void 0;\nexports.default = function greet(name) { return "hello " + name; };\nexports.label = "placeholder";\nexports.count = 64;\nexports.alias = function alias(name) { return "alias " + name; };\n',
+    }),
+    "tsc2c-cjs-exports-default-interop": cjsPackage("tsc2c-cjs-exports-default-interop", {
+        "index.js": 'Object.defineProperty(exports, "__esModule", { value: true });\nexports.default = function greet(name) { return "hello " + name; };\nexports.label = "interop";\n',
+    }),
+    "tsc2c-cjs-object-assign-exports": cjsPackage("tsc2c-cjs-object-assign-exports", {
+        "index.js": 'exports.__esModule = true;\nObject.assign(exports, {\n  default: function greet(name) { return "hello " + name; },\n  label: "assign-exports",\n  count: 46\n});\n',
+    }),
+    "tsc2c-cjs-object-assign-identifier-exports": cjsPackage("tsc2c-cjs-object-assign-identifier-exports", {
+        "index.js": 'exports.__esModule = true;\nconst api = {\n  default: function greet(name) { return "hello " + name; },\n  label: "assign-identifier",\n  count: 48\n};\nObject.assign(exports, api);\n',
+    }),
+    "tsc2c-cjs-object-assign-spread-exports": cjsPackage("tsc2c-cjs-object-assign-spread-exports", {
+        "index.js": 'exports.__esModule = true;\nconst api = {\n  default: function greet(name) { return "hello " + name; },\n  label: "assign-spread",\n  count: 63\n};\nObject.assign(exports, { ...api, double: function double(value) { return value * 2; } });\n',
+    }),
+    "tsc2c-cjs-object-assign-computed-exports": cjsPackage("tsc2c-cjs-object-assign-computed-exports", {
+        "index.js": 'exports.__esModule = true;\nconst defaultKey = "def" + "ault";\nconst labelPrefix = "la";\nconst countKey = `count`;\nconst doubleKey = "dou" + "ble";\nconst api = {\n  [defaultKey]: function greet(name) { return "hello " + name; },\n  [`${labelPrefix}bel`]: "assign-computed",\n  [countKey]: 66\n};\nObject.assign(exports, { ...api, [doubleKey]: function double(value) { return value * 2; } });\n',
+    }),
+    "tsc2c-cjs-object-assign-computed-module-exports": cjsPackage("tsc2c-cjs-object-assign-computed-module-exports", {
+        "index.js": 'module.exports.__esModule = true;\nconst defaultKey = "def" + "ault";\nconst labelKey = `label`;\nconst countKey = "co" + "unt";\nconst doubleKey = "dou" + "ble";\nObject.assign(module.exports, {\n  [defaultKey]: function greet(name) { return "hello " + name; },\n  [labelKey]: "assign-computed-module",\n  [countKey]: 68,\n  [doubleKey]: function double(value) { return value * 2; }\n});\n',
+    }),
+    "tsc2c-cjs-object-assign-getter-exports": cjsPackage("tsc2c-cjs-object-assign-getter-exports", {
+        "index.js": 'exports.__esModule = true;\nObject.assign(exports, {\n  get label() { return "assign-getter"; },\n  get count() { return 54; },\n  get double() { return function double(value) { return value * 2; }; }\n});\n',
+    }),
+    "tsc2c-cjs-object-assign-require-member-exports": cjsPackage("tsc2c-cjs-object-assign-require-member-exports", {
+        "index.js": 'exports.__esModule = true;\nObject.assign(exports, {\n  default: require("./default.js"),\n  label: require("./local.js").label,\n  count: require("./local.js").count,\n  double: require("./local.js").double\n});\n',
+        "default.js": 'module.exports = function greet(name) { return "hello " + name; };\n',
+        "local.js": 'exports.label = "assign-require-member";\nexports.count = 55;\nexports.double = function double(value) { return value * 2; };\n',
+    }),
+    "tsc2c-cjs-object-assign-require-binding-exports": cjsPackage("tsc2c-cjs-object-assign-require-binding-exports", {
+        "index.js": 'exports.__esModule = true;\nconst defaultValue = require("./default.js");\nconst local = require("./local.js");\nconst api = {\n  default: defaultValue,\n  label: local.label,\n  count: local.count,\n  double: local.double\n};\nObject.assign(exports, api);\n',
+        "default.js": 'module.exports = function greet(name) { return "hello " + name; };\n',
+        "local.js": 'exports.label = "assign-require-binding";\nexports.count = 58;\nexports.double = function double(value) { return value * 2; };\n',
+    }),
+    "tsc2c-cjs-object-assign-require-exports": cjsPackage("tsc2c-cjs-object-assign-require-exports", {
+        "index.js": 'Object.assign(exports, require("./local.js"));\n',
+        "local.js": 'exports.default = function greet(name) { return "hello " + name; };\nexports.label = "assign-require";\nexports.count = 47;\n',
+    }),
+    "tsc2c-cjs-object-assign-from-entries": cjsPackage("tsc2c-cjs-object-assign-from-entries", {
+        "index.js": 'const local = require("./local.js");\nObject.assign(exports, Object.fromEntries([\n  ["default", function greet(name) { return "assign-from-entries " + name; }],\n  ["label", "assign-from-entries"],\n  ["count", local.count],\n  ["double", local.double]\n]));\n',
+        "local.js": 'exports.count = 127;\nexports.double = function double(value) { return value * 23; };\n',
+    }),
+    "tsc2c-cjs-object-assign-from-entries-object-id": cjsPackage("tsc2c-cjs-object-assign-from-entries-object-id", {
+        "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "assign-from-entries-object-id-default",\n  label: local.label,\n  count: 128,\n  enabled: true\n};\nconst entries = Object.entries(api);\nObject.assign(module.exports, Object.freeze(Object.fromEntries(entries)));\n',
+        "local.js": 'exports.label = "assign-from-entries-object-id";\n',
+    }),
+    "tsc2c-cjs-module-object-assign-exports-target": cjsPackage("tsc2c-cjs-module-object-assign-exports-target", {
+        "index.js": 'exports.seed = "assign-exports-target-seed";\nmodule.exports = Object.assign(exports, {\n  default: function greet(name) { return "assign-exports-target " + name; },\n  label: "assign-exports-target",\n  count: 129,\n  double: function double(value) { return value * 29; }\n});\n',
+    }),
+    "tsc2c-cjs-module-object-assign-module-target-from-entries": cjsPackage("tsc2c-cjs-module-object-assign-module-target-from-entries", {
+        "index.js": 'module.exports.base = "assign-module-target-base";\nconst api = {\n  default: "assign-module-target-default",\n  label: "assign-module-target",\n  count: 130,\n  enabled: true\n};\nconst entries = Object.entries(api);\nmodule.exports = Object.assign(module.exports, Object.freeze(Object.fromEntries(entries)));\n',
+    }),
+    "tsc2c-cjs-function-scope-named": cjsPackage("tsc2c-cjs-function-scope-named", {
+        "index.js": "exports.add = function add(left, right) { return left + right; };\n",
+    }),
+    "tsc2c-cjs-function-scope-default": cjsPackage("tsc2c-cjs-function-scope-default", {
+        "index.js": "module.exports = function multiply(left, right) { return left * right; };\n",
+    }),
+    "tsc2c-cjs-require-alias": cjsPackage("tsc2c-cjs-require-alias", {
+        "index.js": 'const req = require;\nconst moduleReq = module.require;\nconst local = req("./local.js");\nexports.default = function greet(name) { return "hello " + name; };\nexports.label = local.label;\nexports.count = moduleReq("./local.js").count;\nexports.double = function double(value) { return value * 2; };\n',
+        "local.js": 'exports.label = "require-alias";\nexports.count = 64;\n',
+    }),
+    "tsc2c-cjs-module-array": cjsPackage("tsc2c-cjs-module-array", {
+        "index.js": "module.exports = [2, 4, 8];\n",
+    }),
+    "tsc2c-cjs-module-arrow": cjsPackage("tsc2c-cjs-module-arrow", {
+        "index.js": "module.exports = (value) => value * 2;\n",
+    }),
+    "tsc2c-cjs-function-package": cjsPackage("tsc2c-cjs-function-package", {
+        "index.js": "module.exports = function add(left, right) { return left + right; };\n",
+    }),
+    "tsc2c-cjs-identifier-package": cjsPackage("tsc2c-cjs-identifier-package", {
+        "index.js": "function add(left, right) { return left + right; }\nmodule.exports = add;\n",
+    }),
+    "tsc2c-cjs-nested-object-default-package": cjsPackage("tsc2c-cjs-nested-object-default-package", {
+        "index.js": 'module.exports = {\n  meta: { label: "nested-cjs", flags: [true, false] },\n  values: [2, 4, 8]\n};\n',
+    }),
+    "tsc2c-cjs-object-package": cjsPackage("tsc2c-cjs-object-package", {
+        "index.js": 'function add(left, right) { return left + right; }\nconst label = "cjs-object";\nmodule.exports = { add, label };\n',
+    }),
+    "tsc2c-cjs-object-arrow-package": cjsPackage("tsc2c-cjs-object-arrow-package", {
+        "index.js": "module.exports = { add: (left, right) => left + right };\n",
+    }),
+    "tsc2c-cjs-object-function-package": cjsPackage("tsc2c-cjs-object-function-package", {
+        "index.js": "module.exports = {\n  add: function add(left, right) { return left + right; },\n  double: function double(value) { return value * 2; }\n};\n",
+    }),
+    "tsc2c-cjs-object-method-package": cjsPackage("tsc2c-cjs-object-method-package", {
+        "index.js": 'module.exports = {\n  label: "method-cjs",\n  add(left, right) { return left + right; }\n};\n',
+    }),
+    "tsc2c-cjs-object-literals-package": cjsPackage("tsc2c-cjs-object-literals-package", {
+        "index.js": 'function add(left, right) { return left + right; }\nmodule.exports = { label: "literal-cjs", count: 42, enabled: true, add };\n',
+    }),
+    "tsc2c-cjs-object-default-package": cjsPackage("tsc2c-cjs-object-default-package", {
+        "index.js": 'module.exports = { label: "object-default", count: 7 };\n',
+    }),
+    "tsc2c-cjs-module-object-require-binding": cjsPackage("tsc2c-cjs-module-object-require-binding", {
+        "index.js": 'const defaultValue = require("./default.js");\nconst local = require("./local.js");\nmodule.exports = {\n  greet: defaultValue,\n  label: local.label,\n  count: local.count,\n  double: local.double\n};\n',
+        "default.js": 'module.exports = function greet(name) { return "hello " + name; };\n',
+        "local.js": 'exports.label = "object-require-binding";\nexports.count = 59;\nexports.double = function double(value) { return value * 2; };\n',
+    }),
+    "tsc2c-cjs-module-object-require-member": cjsPackage("tsc2c-cjs-module-object-require-member", {
+        "index.js": 'module.exports = {\n  greet: require("./default.js"),\n  label: require("./local.js").label,\n  count: require("./local.js").count,\n  double: require("./local.js").double\n};\n',
+        "default.js": 'module.exports = function greet(name) { return "hello " + name; };\n',
+        "local.js": 'exports.label = "object-require-member";\nexports.count = 60;\nexports.double = function double(value) { return value * 2; };\n',
+    }),
+    "tsc2c-cjs-module-object-computed": cjsPackage("tsc2c-cjs-module-object-computed", {
+        "index.js": 'const greetKey = "gr" + "eet";\nconst labelKey = `label`;\nconst countKey = "co" + "unt";\nconst doubleKey = "dou" + "ble";\nmodule.exports = {\n  [greetKey]: function greet(name) { return "hello " + name; },\n  [labelKey]: "module-object-computed",\n  [countKey]: 67,\n  [doubleKey]: function double(value) { return value * 2; }\n};\n',
+    }),
+    "tsc2c-cjs-module-object-spread-named": cjsPackage("tsc2c-cjs-module-object-spread-named", {
+        "index.js": 'const local = require("./local.js");\nconst api = {\n  label: local.label,\n  count: 96,\n  enabled: true\n};\nfunction double(value) { return value * 2; }\nmodule.exports = { ...api, double, extra: "object-spread-extra" };\n',
+        "local.js": 'exports.label = "object-spread-named";\n',
+    }),
+    "tsc2c-cjs-module-object-getter-named": cjsPackage("tsc2c-cjs-module-object-getter-named", {
+        "index.js": 'const local = require("./local.js");\nmodule.exports = {\n  get label() { return local.label; },\n  get count() { return 97; },\n  get double() { return local.double; },\n  extra: "object-getter-extra"\n};\n',
+        "local.js": 'exports.label = "object-getter-named";\nexports.double = function double(value) { return value * 2; };\n',
+    }),
+    "tsc2c-cjs-object-assign-default-package": cjsPackage("tsc2c-cjs-object-assign-default-package", {
+        "index.js": 'module.exports = Object.assign({}, { label: "assign-default" }, { count: 42, extra: true });\n',
+    }),
+    "tsc2c-cjs-module-object-assign-named": cjsPackage("tsc2c-cjs-module-object-assign-named", {
+        "index.js": 'const api = {\n  extra: true,\n  double: function double(value) { return value * 2; }\n};\nmodule.exports = Object.assign(\n  { default: function greet(name) { return "hello " + name; }, label: "module-assign-named" },\n  require("./local.js"),\n  api\n);\n',
+        "local.js": 'exports.count = 69;\nexports.triple = function triple(value) { return value * 3; };\n',
+    }),
+    "tsc2c-cjs-module-object-assign-create-target-named": cjsPackage("tsc2c-cjs-module-object-assign-create-target-named", {
+        "index.js": 'const base = { inherited: "assign-create-base" };\nconst local = require("./local.js");\nmodule.exports = Object.assign(Object.create(base), {\n  default: "assign-create-default",\n  label: "assign-create-target",\n  count: local.count,\n  extra: true\n});\n',
+        "local.js": 'exports.count = 76;\n',
+    }),
+    "tsc2c-cjs-module-object-assign-create-descriptors-target-named": cjsPackage("tsc2c-cjs-module-object-assign-create-descriptors-target-named", {
+        "index.js": 'const base = { inherited: "assign-create-descriptor-base" };\nconst local = require("./local.js");\nconst defaultDescriptor = { value: "assign-create-descriptor-default", enumerable: true };\nmodule.exports = Object.assign(\n  Object.create(base, {\n    default: defaultDescriptor,\n    label: { get() { return "assign-create-descriptor-target"; }, enumerable: true },\n    count: { value: local.count, enumerable: true }\n  }),\n  { extra: true }\n);\n',
+        "local.js": 'exports.count = 77;\n',
+    }),
+    "tsc2c-cjs-module-object-assign-create-descriptors-identifier-target-named": cjsPackage("tsc2c-cjs-module-object-assign-create-descriptors-identifier-target-named", {
+        "index.js": 'const base = { inherited: "assign-create-descriptor-identifier-base" };\nconst local = require("./local.js");\nconst defaultDescriptor = { value: "assign-create-descriptor-identifier-default", enumerable: true };\nconst descriptors = {\n  default: defaultDescriptor,\n  label: { get() { return "assign-create-descriptor-identifier-target"; }, enumerable: true },\n  count: { value: local.count, enumerable: true }\n};\nmodule.exports = Object.assign(Object.create(base, descriptors), { extra: true });\n',
+        "local.js": 'exports.count = 78;\n',
+    }),
+    "tsc2c-cjs-module-define-properties-named": cjsPackage("tsc2c-cjs-module-define-properties-named", {
+        "index.js": 'const local = require("./local.js");\nconst defaultDescriptor = { value: function greet(name) { return "hello " + name; }, enumerable: true };\nconst labelDescriptor = { get: function() { return "module-define-properties-named"; }, enumerable: true };\nconst descriptors = {\n  default: defaultDescriptor,\n  label: labelDescriptor,\n  count: { value: local.count, enumerable: true },\n  triple: { value: local.triple, enumerable: true },\n  double: { get() { return local.double; }, enumerable: true },\n  extra: { value: true, enumerable: true }\n};\nmodule.exports = Object.defineProperties({}, descriptors);\n',
+        "local.js": 'exports.count = 70;\nexports.triple = function triple(value) { return value * 3; };\nexports.double = function double(value) { return value * 2; };\n',
+    }),
+    "tsc2c-cjs-module-define-properties-target-named": cjsPackage("tsc2c-cjs-module-define-properties-target-named", {
+        "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "define-properties-target-default",\n  label: "define-properties-target",\n  count: local.count,\n  double: local.double\n};\nconst descriptors = {\n  bonus: { value: local.bonus, enumerable: true },\n  extra: { get() { return "define-properties-target-extra"; }, enumerable: true }\n};\nmodule.exports = Object.defineProperties(api, descriptors);\n',
+        "local.js": 'exports.count = 100;\nexports.bonus = "define-properties-target-bonus";\nexports.double = function double(value) { return value * 4; };\n',
+    }),
+    "tsc2c-cjs-module-define-properties-wrapper-target-named": cjsPackage("tsc2c-cjs-module-define-properties-wrapper-target-named", {
+        "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "define-properties-wrapper-default",\n  label: "define-properties-wrapper-target",\n  count: local.count,\n  double: local.double\n};\nconst descriptors = {\n  bonus: { value: local.bonus, enumerable: true },\n  extra: { get() { return "define-properties-wrapper-extra"; }, enumerable: true }\n};\nmodule.exports = Object.defineProperties(Object.freeze(api), descriptors);\n',
+        "local.js": 'exports.count = 101;\nexports.bonus = "define-properties-wrapper-bonus";\nexports.double = function double(value) { return value * 5; };\n',
+    }),
+    "tsc2c-cjs-module-define-properties-own-descriptors": cjsPackage("tsc2c-cjs-module-define-properties-own-descriptors", {
+        "index.js": 'const api = {\n  default: "module-own-descriptors-default",\n  label: "module-own-descriptors",\n  count: 132,\n  enabled: true\n};\nmodule.exports = Object.defineProperties({}, Object.getOwnPropertyDescriptors(api));\n',
+    }),
+    "tsc2c-cjs-module-define-properties-own-descriptors-accessors": cjsPackage("tsc2c-cjs-module-define-properties-own-descriptors-accessors", {
+        "index.js": 'const api = {\n  default: "module-own-accessors-default",\n  get label() { return "module-own-accessors"; },\n  count: 134,\n  flip(value) { return !value; }\n};\nmodule.exports = Object.defineProperties({}, Object.getOwnPropertyDescriptors(api));\n',
+    }),
+    "tsc2c-cjs-object-wrapper-define-properties-named": cjsPackage("tsc2c-cjs-object-wrapper-define-properties-named", {
+        "index.js": 'const local = require("./local.js");\nconst descriptors = {\n  default: { value: function greet(name) { return "defined " + name; }, enumerable: true },\n  label: { get() { return "wrapper-define-properties"; }, enumerable: true },\n  count: { value: local.count, enumerable: true },\n  double: { value: local.double, enumerable: true },\n  extra: { value: true, enumerable: true }\n};\nmodule.exports = Object.freeze(Object.defineProperties({}, descriptors));\n',
+        "local.js": 'exports.count = 103;\nexports.double = function double(value) { return value * 7; };\n',
+    }),
+    "tsc2c-cjs-object-wrapper-seal-define-properties-named": cjsPackage("tsc2c-cjs-object-wrapper-seal-define-properties-named", {
+        "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "sealed-defined " + name; }, enumerable: true },\n  label: { value: "seal-define-properties", enumerable: true },\n  count: { value: 107, enumerable: true }\n};\nmodule.exports = Object.seal(Object.defineProperties({}, descriptors));\n',
+    }),
+    "tsc2c-cjs-object-wrapper-prevent-define-properties-named": cjsPackage("tsc2c-cjs-object-wrapper-prevent-define-properties-named", {
+        "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "prevented-defined " + name; }, enumerable: true },\n  label: { value: "prevent-define-properties", enumerable: true },\n  count: { value: 108, enumerable: true }\n};\nmodule.exports = Object.preventExtensions(Object.defineProperties({}, descriptors));\n',
+    }),
+    "tsc2c-cjs-object-wrapper-set-prototype-define-properties-named": cjsPackage("tsc2c-cjs-object-wrapper-set-prototype-define-properties-named", {
+        "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "reproto-defined " + name; }, enumerable: true },\n  label: { value: "set-prototype-define-properties", enumerable: true },\n  count: { value: 109, enumerable: true }\n};\nmodule.exports = Object.setPrototypeOf(Object.defineProperties({}, descriptors), { inherited: true });\n',
+    }),
+    "tsc2c-cjs-object-wrapper-define-property-named": cjsPackage("tsc2c-cjs-object-wrapper-define-property-named", {
+        "index.js": 'const local = require("./local.js");\nconst defaultDescriptor = { value: function greet(name) { return "defined-property " + name; }, enumerable: true };\nmodule.exports = Object.freeze(Object.defineProperty({\n  label: "wrapper-define-property",\n  count: local.count,\n  double: local.double\n}, "default", defaultDescriptor));\n',
+        "local.js": 'exports.count = 110;\nexports.double = function double(value) { return value * 8; };\n',
+    }),
+    "tsc2c-cjs-object-wrapper-seal-define-property-named": cjsPackage("tsc2c-cjs-object-wrapper-seal-define-property-named", {
+        "index.js": 'const defaultDescriptor = { value: function greet(name) { return "sealed-property " + name; }, enumerable: true };\nmodule.exports = Object.seal(Object.defineProperty({\n  label: "seal-define-property",\n  count: 111\n}, "default", defaultDescriptor));\n',
+    }),
+    "tsc2c-cjs-object-wrapper-prevent-define-property-named": cjsPackage("tsc2c-cjs-object-wrapper-prevent-define-property-named", {
+        "index.js": 'const defaultDescriptor = { value: function greet(name) { return "prevented-property " + name; }, enumerable: true };\nmodule.exports = Object.preventExtensions(Object.defineProperty({\n  label: "prevent-define-property",\n  count: 112\n}, "default", defaultDescriptor));\n',
+    }),
+    "tsc2c-cjs-object-wrapper-set-prototype-define-property-named": cjsPackage("tsc2c-cjs-object-wrapper-set-prototype-define-property-named", {
+        "index.js": 'const defaultDescriptor = { value: function greet(name) { return "reproto-property " + name; }, enumerable: true };\nmodule.exports = Object.setPrototypeOf(Object.defineProperty({\n  label: "set-prototype-define-property",\n  count: 113\n}, "default", defaultDescriptor), { inherited: true });\n',
+    }),
+    "tsc2c-cjs-object-wrapper-assign-named": cjsPackage("tsc2c-cjs-object-wrapper-assign-named", {
+        "index.js": 'const local = require("./local.js");\nconst api = {\n  label: "wrapper-assign",\n  count: local.count\n};\nmodule.exports = Object.freeze(Object.assign({}, {\n  default: function greet(name) { return "assign " + name; },\n  double: local.double\n}, api));\n',
+        "local.js": 'exports.count = 114;\nexports.double = function double(value) { return value * 9; };\n',
+    }),
+    "tsc2c-cjs-object-wrapper-seal-assign-named": cjsPackage("tsc2c-cjs-object-wrapper-seal-assign-named", {
+        "index.js": 'const local = require("./local.js");\nconst api = { label: "seal-assign", count: local.count };\nmodule.exports = Object.seal(Object.assign({}, {\n  default: function greet(name) { return "sealed-assign " + name; },\n  double: local.double\n}, api));\n',
+        "local.js": 'exports.count = 115;\nexports.double = function double(value) { return value * 10; };\n',
+    }),
+    "tsc2c-cjs-object-wrapper-prevent-assign-named": cjsPackage("tsc2c-cjs-object-wrapper-prevent-assign-named", {
+        "index.js": 'const local = require("./local.js");\nconst api = { label: "prevent-assign", count: local.count };\nmodule.exports = Object.preventExtensions(Object.assign({}, {\n  default: function greet(name) { return "prevented-assign " + name; },\n  double: local.double\n}, api));\n',
+        "local.js": 'exports.count = 116;\nexports.double = function double(value) { return value * 11; };\n',
+    }),
+    "tsc2c-cjs-object-wrapper-set-prototype-assign-named": cjsPackage("tsc2c-cjs-object-wrapper-set-prototype-assign-named", {
+        "index.js": 'const local = require("./local.js");\nconst api = { label: "set-prototype-assign", count: local.count };\nmodule.exports = Object.setPrototypeOf(Object.assign({}, {\n  default: function greet(name) { return "reproto-assign " + name; },\n  double: local.double\n}, api), { inherited: true });\n',
+        "local.js": 'exports.count = 117;\nexports.double = function double(value) { return value * 12; };\n',
+    }),
+    "tsc2c-cjs-module-object-assign-define-properties-target-named": cjsPackage("tsc2c-cjs-module-object-assign-define-properties-target-named", {
+        "index.js": 'const local = require("./local.js");\nconst defaultDescriptor = { value: "assign-define-properties-default", enumerable: true };\nconst descriptors = {\n  default: defaultDescriptor,\n  label: { get() { return "assign-define-properties-target"; }, enumerable: true },\n  count: { value: local.count, enumerable: true }\n};\nmodule.exports = Object.assign(Object.defineProperties({}, descriptors), { extra: true });\n',
+        "local.js": 'exports.count = 79;\n',
+    }),
+    "tsc2c-cjs-module-object-assign-define-properties-create-target-named": cjsPackage("tsc2c-cjs-module-object-assign-define-properties-create-target-named", {
+        "index.js": 'const base = { inherited: "assign-define-properties-create-base" };\nconst local = require("./local.js");\nconst descriptors = {\n  default: { value: "assign-define-properties-create-default", enumerable: true },\n  label: { get() { return "assign-define-properties-create-target"; }, enumerable: true },\n  count: { value: local.count, enumerable: true }\n};\nmodule.exports = Object.assign(Object.defineProperties(Object.create(base), descriptors), { extra: true });\n',
+        "local.js": 'exports.count = 83;\n',
+    }),
+    "tsc2c-cjs-module-object-assign-freeze-target-named": cjsPackage("tsc2c-cjs-module-object-assign-freeze-target-named", {
+        "index.js": 'const local = require("./local.js");\nmodule.exports = Object.assign(Object.freeze({\n  default: "assign-freeze-default",\n  label: "assign-freeze-target",\n  count: local.count\n}), { extra: true });\n',
+        "local.js": 'exports.count = 84;\n',
+    }),
+    "tsc2c-cjs-module-object-assign-set-prototype-target-named": cjsPackage("tsc2c-cjs-module-object-assign-set-prototype-target-named", {
+        "index.js": 'const local = require("./local.js");\nconst proto = { inherited: "assign-set-prototype-base" };\nmodule.exports = Object.assign(Object.setPrototypeOf({\n  default: "assign-set-prototype-default",\n  label: "assign-set-prototype-target",\n  count: local.count\n}, proto), { extra: true });\n',
+        "local.js": 'exports.count = 85;\n',
+    }),
+    "tsc2c-cjs-module-object-assign-seal-target-named": cjsPackage("tsc2c-cjs-module-object-assign-seal-target-named", {
+        "index.js": 'const local = require("./local.js");\nmodule.exports = Object.assign(Object.seal({\n  default: "assign-seal-default",\n  label: "assign-seal-target",\n  count: local.count\n}), { extra: true });\n',
+        "local.js": 'exports.count = 86;\n',
+    }),
+    "tsc2c-cjs-module-object-assign-prevent-extensions-target-named": cjsPackage("tsc2c-cjs-module-object-assign-prevent-extensions-target-named", {
+        "index.js": 'const local = require("./local.js");\nmodule.exports = Object.assign(Object.preventExtensions({\n  default: "assign-prevent-default",\n  label: "assign-prevent-target",\n  count: local.count\n}), { extra: true });\n',
+        "local.js": 'exports.count = 87;\n',
+    }),
+    "tsc2c-cjs-module-object-assign-freeze-create-target-named": cjsPackage("tsc2c-cjs-module-object-assign-freeze-create-target-named", {
+        "index.js": 'const local = require("./local.js");\nconst proto = { inherited: "assign-freeze-create-base" };\nmodule.exports = Object.assign(Object.freeze(Object.create(proto)), {\n  default: "assign-freeze-create-default",\n  label: "assign-freeze-create-target",\n  count: local.count,\n  extra: true\n});\n',
+        "local.js": 'exports.count = 88;\n',
+    }),
+    "tsc2c-cjs-module-object-assign-freeze-identifier-target-named": cjsPackage("tsc2c-cjs-module-object-assign-freeze-identifier-target-named", {
+        "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "assign-freeze-identifier-default",\n  label: "assign-freeze-identifier-target",\n  count: local.count\n};\nmodule.exports = Object.assign(Object.freeze(api), { extra: true });\n',
+        "local.js": 'exports.count = 89;\n',
+    }),
+    "tsc2c-cjs-module-object-assign-define-property-target-named": cjsPackage("tsc2c-cjs-module-object-assign-define-property-target-named", {
+        "index.js": 'const local = require("./local.js");\nmodule.exports = Object.assign(\n  Object.defineProperty({}, "default", { value: "assign-define-property-default", enumerable: true }),\n  { label: "assign-define-property-target", count: local.count, extra: true }\n);\n',
+        "local.js": 'exports.count = 80;\n',
+    }),
+    "tsc2c-cjs-module-object-assign-define-property-identifier-target-named": cjsPackage("tsc2c-cjs-module-object-assign-define-property-identifier-target-named", {
+        "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "assign-define-property-identifier-default",\n  label: "assign-define-property-identifier-target",\n  count: local.count\n};\nmodule.exports = Object.assign(\n  Object.defineProperty(api, "bonus", { value: local.bonus, enumerable: true }),\n  { extra: true }\n);\n',
+        "local.js": 'exports.count = 90;\nexports.bonus = "assign-define-property-identifier-bonus";\n',
+    }),
+    "tsc2c-cjs-module-object-assign-define-property-create-descriptors-target-named": cjsPackage("tsc2c-cjs-module-object-assign-define-property-create-descriptors-target-named", {
+        "index.js": 'const base = { inherited: "assign-define-property-create-base" };\nconst local = require("./local.js");\nconst descriptors = {\n  default: { value: "assign-define-property-create-default", enumerable: true },\n  label: { get() { return "assign-define-property-create-target"; }, enumerable: true },\n  count: { value: local.count, enumerable: true }\n};\nmodule.exports = Object.assign(\n  Object.defineProperty(Object.create(base, descriptors), "bonus", { value: local.bonus, enumerable: true }),\n  { extra: true }\n);\n',
+        "local.js": 'exports.count = 81;\nexports.bonus = "assign-define-property-create-bonus";\n',
+    }),
+    "tsc2c-cjs-module-object-assign-define-property-define-properties-target-named": cjsPackage("tsc2c-cjs-module-object-assign-define-property-define-properties-target-named", {
+        "index.js": 'const local = require("./local.js");\nconst descriptors = {\n  default: { value: "assign-define-property-properties-default", enumerable: true },\n  label: { get() { return "assign-define-property-properties-target"; }, enumerable: true },\n  count: { value: local.count, enumerable: true }\n};\nmodule.exports = Object.assign(\n  Object.defineProperty(Object.defineProperties({}, descriptors), "bonus", { value: local.bonus, enumerable: true }),\n  { extra: true }\n);\n',
+        "local.js": 'exports.count = 82;\nexports.bonus = "assign-define-property-properties-bonus";\n',
+    }),
+    "tsc2c-cjs-module-define-property-default": cjsPackage("tsc2c-cjs-module-define-property-default", {
+        "index.js": 'const defaultDescriptor = { value: function greet(name) { return "hello " + name; }, enumerable: true };\nmodule.exports = Object.defineProperty({}, "default", defaultDescriptor);\n',
+    }),
+    "tsc2c-cjs-module-define-property-named": cjsPackage("tsc2c-cjs-module-define-property-named", {
+        "index.js": 'module.exports = Object.defineProperty({}, "label", { get: function() { return "module-define-property-named"; }, enumerable: true });\n',
+    }),
+    "tsc2c-cjs-module-define-property-target-named": cjsPackage("tsc2c-cjs-module-define-property-target-named", {
+        "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "define-property-target-default",\n  label: "define-property-target",\n  count: local.count,\n  double: local.double\n};\nmodule.exports = Object.defineProperty(api, "bonus", { get() { return local.bonus; }, enumerable: true });\n',
+        "local.js": 'exports.count = 98;\nexports.bonus = "define-property-target-bonus";\nexports.double = function double(value) { return value * 2; };\n',
+    }),
+    "tsc2c-cjs-module-define-property-wrapper-target-named": cjsPackage("tsc2c-cjs-module-define-property-wrapper-target-named", {
+        "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "define-property-wrapper-default",\n  label: "define-property-wrapper-target",\n  count: local.count,\n  double: local.double\n};\nmodule.exports = Object.defineProperty(Object.freeze(api), "bonus", { value: local.bonus, enumerable: true });\n',
+        "local.js": 'exports.count = 99;\nexports.bonus = "define-property-wrapper-bonus";\nexports.double = function double(value) { return value * 3; };\n',
+    }),
+    "tsc2c-cjs-object-create-default-package": cjsPackage("tsc2c-cjs-object-create-default-package", {
+        "index.js": 'module.exports = Object.freeze(Object.create(null, {\n  visible: { value: "descriptor-hidden", enumerable: true },\n  hidden: { value: "not-enumerated", enumerable: false }\n}));\n',
+    }),
+    "tsc2c-cjs-object-define-property-default-package": cjsPackage("tsc2c-cjs-object-define-property-default-package", {
+        "index.js": 'module.exports = Object.defineProperty({ visible: "yes" }, "hidden", { value: "secret", enumerable: false });\n',
+    }),
+    "tsc2c-cjs-object-from-entries-default-package": cjsPackage("tsc2c-cjs-object-from-entries-default-package", {
+        "index.js": 'module.exports = Object.fromEntries([["label", "from-entries"], ["count", 42], ["enabled", true]]);\n',
+    }),
+    "tsc2c-cjs-object-from-entries-named-package": cjsPackage("tsc2c-cjs-object-from-entries-named-package", {
+        "index.js": 'module.exports = Object.fromEntries([\n  ["default", "from-entries-default"],\n  ["label", "from-entries-named"],\n  ["count", 91],\n  ["enabled", true]\n]);\n',
+    }),
+    "tsc2c-cjs-object-from-entries-identifier-named-package": cjsPackage("tsc2c-cjs-object-from-entries-identifier-named-package", {
+        "index.js": 'const entries = [\n  ["default", "from-entries-identifier-default"],\n  ["label", "from-entries-identifier-named"],\n  ["count", 92],\n  ["enabled", true]\n];\nmodule.exports = Object.fromEntries(entries);\n',
+    }),
+    "tsc2c-cjs-object-from-entries-require-values-package": cjsPackage("tsc2c-cjs-object-from-entries-require-values-package", {
+        "index.js": 'const local = require("./local.js");\nconst defaultValue = require("./default.js");\nmodule.exports = Object.fromEntries([\n  ["default", defaultValue],\n  ["label", local.label],\n  ["count", local.count],\n  ["enabled", true]\n]);\n',
+        "default.js": 'module.exports = "from-entries-require-default";\n',
+        "local.js": 'exports.label = "from-entries-require-values";\nexports.count = 93;\n',
+    }),
+    "tsc2c-cjs-object-from-entries-computed-named-package": cjsPackage("tsc2c-cjs-object-from-entries-computed-named-package", {
+        "index.js": 'const defaultKey = "def" + "ault";\nconst labelKey = `label`;\nconst countPrefix = "co";\nmodule.exports = Object.fromEntries([\n  [defaultKey, "from-entries-computed-default"],\n  [labelKey, "from-entries-computed-named"],\n  [countPrefix + "unt", 94],\n  [`enabled`, true]\n]);\n',
+    }),
+    "tsc2c-cjs-object-from-entries-object-entries-named-package": cjsPackage("tsc2c-cjs-object-from-entries-object-entries-named-package", {
+        "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "from-entries-object-default",\n  label: local.label,\n  count: 95,\n  enabled: true\n};\nmodule.exports = Object.fromEntries(Object.entries(api));\n',
+        "local.js": 'exports.label = "from-entries-object-named";\n',
+    }),
+    "tsc2c-cjs-object-from-entries-object-entries-identifier-named-package": cjsPackage("tsc2c-cjs-object-from-entries-object-entries-identifier-named-package", {
+        "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "entries-id-default",\n  label: local.label,\n  count: 122,\n  enabled: true\n};\nconst entries = Object.entries(api);\nmodule.exports = Object.fromEntries(entries);\n',
+        "local.js": 'exports.label = "from-entries-object-entries-id";\n',
+    }),
+    "tsc2c-cjs-object-wrapper-from-entries-named": cjsPackage("tsc2c-cjs-object-wrapper-from-entries-named", {
+        "index.js": 'const local = require("./local.js");\nmodule.exports = Object.freeze(Object.fromEntries([\n  ["default", function greet(name) { return "wrapped-entries " + name; }],\n  ["label", "wrapper-from-entries"],\n  ["count", local.count],\n  ["double", local.double]\n]));\n',
+        "local.js": 'exports.count = 118;\nexports.double = function double(value) { return value * 13; };\n',
+    }),
+    "tsc2c-cjs-object-wrapper-from-entries-object-entries-identifier-named": cjsPackage("tsc2c-cjs-object-wrapper-from-entries-object-entries-identifier-named", {
+        "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "wrapped-entries-id-default",\n  label: local.label,\n  count: 123,\n  enabled: false\n};\nconst entries = Object.entries(api);\nmodule.exports = Object.freeze(Object.fromEntries(entries));\n',
+        "local.js": 'exports.label = "wrapper-from-entries-object-entries-id";\n',
+    }),
+    "tsc2c-cjs-object-wrapper-seal-from-entries-object-entries-identifier-named": cjsPackage("tsc2c-cjs-object-wrapper-seal-from-entries-object-entries-identifier-named", {
+        "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "sealed-entries-id-default",\n  label: local.label,\n  count: 124,\n  enabled: true\n};\nconst entries = Object.entries(api);\nmodule.exports = Object.seal(Object.fromEntries(entries));\n',
+        "local.js": 'exports.label = "seal-from-entries-object-entries-id";\n',
+    }),
+    "tsc2c-cjs-object-wrapper-prevent-from-entries-object-entries-identifier-named": cjsPackage("tsc2c-cjs-object-wrapper-prevent-from-entries-object-entries-identifier-named", {
+        "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "prevented-entries-id-default",\n  label: local.label,\n  count: 125,\n  enabled: false\n};\nconst entries = Object.entries(api);\nmodule.exports = Object.preventExtensions(Object.fromEntries(entries));\n',
+        "local.js": 'exports.label = "prevent-from-entries-object-entries-id";\n',
+    }),
+    "tsc2c-cjs-object-wrapper-set-prototype-from-entries-object-entries-identifier-named": cjsPackage("tsc2c-cjs-object-wrapper-set-prototype-from-entries-object-entries-identifier-named", {
+        "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "reproto-entries-id-default",\n  label: local.label,\n  count: 126,\n  enabled: true\n};\nconst entries = Object.entries(api);\nmodule.exports = Object.setPrototypeOf(Object.fromEntries(entries), { inherited: true });\n',
+        "local.js": 'exports.label = "set-prototype-from-entries-object-entries-id";\n',
+    }),
+    "tsc2c-cjs-object-wrapper-seal-from-entries-named": cjsPackage("tsc2c-cjs-object-wrapper-seal-from-entries-named", {
+        "index.js": 'const local = require("./local.js");\nmodule.exports = Object.seal(Object.fromEntries([\n  ["default", function greet(name) { return "sealed-entries " + name; }],\n  ["label", "seal-from-entries"],\n  ["count", local.count],\n  ["double", local.double]\n]));\n',
+        "local.js": 'exports.count = 119;\nexports.double = function double(value) { return value * 14; };\n',
+    }),
+    "tsc2c-cjs-object-wrapper-prevent-from-entries-named": cjsPackage("tsc2c-cjs-object-wrapper-prevent-from-entries-named", {
+        "index.js": 'const local = require("./local.js");\nmodule.exports = Object.preventExtensions(Object.fromEntries([\n  ["default", function greet(name) { return "prevented-entries " + name; }],\n  ["label", "prevent-from-entries"],\n  ["count", local.count],\n  ["double", local.double]\n]));\n',
+        "local.js": 'exports.count = 120;\nexports.double = function double(value) { return value * 15; };\n',
+    }),
+    "tsc2c-cjs-object-wrapper-set-prototype-from-entries-named": cjsPackage("tsc2c-cjs-object-wrapper-set-prototype-from-entries-named", {
+        "index.js": 'const local = require("./local.js");\nmodule.exports = Object.setPrototypeOf(Object.fromEntries([\n  ["default", function greet(name) { return "reproto-entries " + name; }],\n  ["label", "set-prototype-from-entries"],\n  ["count", local.count],\n  ["double", local.double]\n]), { inherited: true });\n',
+        "local.js": 'exports.count = 121;\nexports.double = function double(value) { return value * 16; };\n',
+    }),
+    "tsc2c-cjs-object-runtime-define-properties-default-package": cjsPackage("tsc2c-cjs-object-runtime-define-properties-default-package", {
+        "index.js": 'module.exports = Object.defineProperties({}, {\n  visible: { value: "yes", enumerable: true, writable: true, configurable: true },\n  total: { value: 12, enumerable: true, writable: true, configurable: true },\n  hidden: { value: "secret", enumerable: false, writable: true, configurable: true }\n});\n',
+    }),
+    "tsc2c-cjs-object-runtime-set-prototype-default-package": cjsPackage("tsc2c-cjs-object-runtime-set-prototype-default-package", {
+        "index.js": 'module.exports = Object.setPrototypeOf({ own: "own" }, { inherited: "base" });\n',
+    }),
+    "tsc2c-cjs-object-runtime-prevent-extensions-default-package": cjsPackage("tsc2c-cjs-object-runtime-prevent-extensions-default-package", {
+        "index.js": 'module.exports = Object.preventExtensions({ locked: "locked" });\n',
+    }),
+    "tsc2c-cjs-object-runtime-seal-default-package": cjsPackage("tsc2c-cjs-object-runtime-seal-default-package", {
+        "index.js": "module.exports = Object.seal({ fixed: 1 });\n",
+    }),
+    "tsc2c-cjs-object-runtime-freeze-default-package": cjsPackage("tsc2c-cjs-object-runtime-freeze-default-package", {
+        "index.js": "module.exports = Object.freeze({ frozen: 1 });\n",
+    }),
+    "tsc2c-cjs-object-wrapper-freeze-named": cjsPackage("tsc2c-cjs-object-wrapper-freeze-named", {
+        "index.js": 'const api = {\n  count: 71,\n  extra: true\n};\nmodule.exports = Object.freeze({\n  default: function greet(name) { return "hello " + name; },\n  label: "freeze-named",\n  double(value) { return value * 2; },\n  ...api\n});\n',
+    }),
+    "tsc2c-cjs-object-wrapper-seal-named": cjsPackage("tsc2c-cjs-object-wrapper-seal-named", {
+        "index.js": 'module.exports = Object.seal({ default: function greet(name) { return "sealed " + name; }, label: "seal-named", count: 72 });\n',
+    }),
+    "tsc2c-cjs-object-wrapper-prevent-named": cjsPackage("tsc2c-cjs-object-wrapper-prevent-named", {
+        "index.js": 'module.exports = Object.preventExtensions({ default: function greet(name) { return "locked " + name; }, label: "prevent-named", count: 73 });\n',
+    }),
+    "tsc2c-cjs-object-wrapper-create-descriptors-named": cjsPackage("tsc2c-cjs-object-wrapper-create-descriptors-named", {
+        "local.js": 'exports.count = 102;\nexports.double = function double(value) { return value * 6; };\n',
+        "index.js": 'const local = require("./local.js");\nconst base = { inherited: "wrapper-create-base" };\nconst descriptors = {\n  default: { value: function greet(name) { return "wrapped " + name; }, enumerable: true },\n  label: { value: "wrapper-create-named", enumerable: true },\n  count: { value: local.count, enumerable: true },\n  double: { get() { return local.double; }, enumerable: true },\n  extra: { value: true, enumerable: true }\n};\nmodule.exports = Object.freeze(Object.create(base, descriptors));\n',
+    }),
+    "tsc2c-cjs-object-wrapper-seal-create-descriptors-named": cjsPackage("tsc2c-cjs-object-wrapper-seal-create-descriptors-named", {
+        "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "sealed " + name; }, enumerable: true },\n  label: { value: "seal-create-descriptors", enumerable: true },\n  count: { value: 104, enumerable: true }\n};\nmodule.exports = Object.seal(Object.create({ inherited: true }, descriptors));\n',
+    }),
+    "tsc2c-cjs-object-wrapper-prevent-create-descriptors-named": cjsPackage("tsc2c-cjs-object-wrapper-prevent-create-descriptors-named", {
+        "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "prevented " + name; }, enumerable: true },\n  label: { value: "prevent-create-descriptors", enumerable: true },\n  count: { value: 105, enumerable: true }\n};\nmodule.exports = Object.preventExtensions(Object.create({ inherited: true }, descriptors));\n',
+    }),
+    "tsc2c-cjs-object-wrapper-set-prototype-create-descriptors-named": cjsPackage("tsc2c-cjs-object-wrapper-set-prototype-create-descriptors-named", {
+        "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "reproto " + name; }, enumerable: true },\n  label: { value: "set-prototype-create-descriptors", enumerable: true },\n  count: { value: 106, enumerable: true }\n};\nmodule.exports = Object.setPrototypeOf(Object.create(null, descriptors), { inherited: true });\n',
+    }),
+    "tsc2c-cjs-object-set-prototype-named": cjsPackage("tsc2c-cjs-object-set-prototype-named", {
+        "index.js": 'module.exports = Object.setPrototypeOf({\n  default: function greet(name) { return "hello " + name; },\n  label: "set-prototype-named",\n  count: 74,\n  double(value) { return value * 2; }\n}, { inherited: "base" });\n',
+    }),
+    "tsc2c-cjs-object-create-descriptors-named": cjsPackage("tsc2c-cjs-object-create-descriptors-named", {
+        "local.js": 'exports.count = 75;\nexports.double = function double(value) { return value * 2; };\n',
+        "index.js": 'const local = require("./local.js");\nconst defaultDescriptor = { value: function greet(name) { return "hello " + name; }, enumerable: true };\nconst labelDescriptor = { get() { return "object-create-descriptors"; }, enumerable: true };\nconst descriptors = {\n  default: defaultDescriptor,\n  label: labelDescriptor,\n  count: { value: local.count, enumerable: true },\n  double: { value: local.double, enumerable: true }\n};\nmodule.exports = Object.create({ inherited: "base" }, descriptors);\n',
+    }),
+    "tsc2c-cjs-object-spread-default-package": cjsPackage("tsc2c-cjs-object-spread-default-package", {
+        "index.js": 'const base = { label: "spread-default", nested: { ready: true } };\nmodule.exports = { ...base, count: 42, extra: true };\n',
+    }),
+    "tsc2c-cjs-module-string": cjsPackage("tsc2c-cjs-module-string", {
+        "index.js": 'module.exports = "whole-cjs";\n',
+    }),
+    "tsc2c-cjs-module-number": cjsPackage("tsc2c-cjs-module-number", {
+        "index.js": "module.exports = 42;\n",
+    }),
+    "tsc2c-cjs-module-boolean": cjsPackage("tsc2c-cjs-module-boolean", {
+        "index.js": "module.exports = true;\n",
+    }),
+    "tsc2c-cjs-module-exports-value-chains": cjsPackage("tsc2c-cjs-module-exports-value-chains", {
+        "index.js": 'module.exports = exports.default = function() { return "first chain"; };\n',
+        "second.js": 'module.exports = exports.default = function() { return "second chain"; };\n',
+    }),
+    "tsc2c-cjs-module-metadata-package": cjsPackage("tsc2c-cjs-module-metadata-package", {
+        "index.js": 'exports.filenameMatches = module.filename.endsWith("index.js");\nexports.pathMatches = module.path.endsWith("tsc2c-cjs-module-metadata-package");\nexports.idMatches = module.id.endsWith("index.js");\nexports.loaded = module.loaded;\n',
+    }),
+    "tsc2c-cjs-module-metadata-more-package": cjsPackage("tsc2c-cjs-module-metadata-more-package", {
+        "index.js": 'exports.parentIsNull = module.parent === null;\nexports.childrenLength = module.children.length;\nexports.isPreloading = module.isPreloading;\n',
+    }),
+    "tsc2c-cjs-module-paths-package": cjsPackage("tsc2c-cjs-module-paths-package", {
+        "index.js": 'exports.pathsLength = module.paths.length;\nexports.firstPathMatches = module.paths[0].endsWith("tsc2c-cjs-module-paths-package/node_modules");\n',
+    }),
+    "tsc2c-cjs-module-require-package": cjsPackage("tsc2c-cjs-module-require-package", {
+        "index.js": 'exports.label = "module-require";\nexports.count = 7;\nexports.add = function add(left, right) { return left + right; };\n',
+    }),
+    "tsc2c-cjs-relative-require": cjsPackage("tsc2c-cjs-relative-require", {
+        "index.js": 'const local = require("./local.js");\nexports.sum = local.sum;\n',
+        "local.js": "exports.sum = function sum(left, right) { return left + right; };\n",
+    }),
+    "tsc2c-cjs-relative-require-default": cjsPackage("tsc2c-cjs-relative-require-default", {
+        "index.js": 'module.exports = require("./local.js");\n',
+        "local.js": "module.exports = function double(value) { return value * 2; };\n",
+    }),
+    "tsc2c-cjs-relative-require-direct-default": cjsPackage("tsc2c-cjs-relative-require-direct-default", {
+        "index.js": 'module.exports = module.require("./local.js");\n',
+        "local.js": "module.exports = function triple(value) { return value * 3; };\n",
+    }),
+    "tsc2c-cjs-relative-require-member-default": cjsPackage("tsc2c-cjs-relative-require-member-default", {
+        "index.js": 'module.exports = require("./local.js").quadruple;\n',
+        "local.js": "exports.quadruple = function quadruple(value) { return value * 4; };\n",
+    }),
+    "tsc2c-cjs-destructure-package": cjsPackage("tsc2c-cjs-destructure-package", {
+        "index.js": 'exports.label = "destructure-cjs";\nexports["item-count"] = 6;\nexports.enabled = true;\nexports.add = function add(left, right) { return left + right; };\n',
+    }),
+    "tsc2c-cjs-direct-function-package": cjsPackage("tsc2c-cjs-direct-function-package", {
+        "index.js": "module.exports = function add(left, right) { return left + right; };\n",
+    }),
+    "tsc2c-cjs-direct-member-package": cjsPackage("tsc2c-cjs-direct-member-package", {
+        "index.js": 'exports.label = "direct-cjs";\nexports.count = 7;\nexports.add = function add(left, right) { return left + right; };\n',
+    }),
+    "tsc2c-cjs-direct-value-package": cjsPackage("tsc2c-cjs-direct-value-package", {
+        "index.js": 'module.exports = "direct default value";\n',
+    }),
+    "tsc2c-cjs-require-function-package": cjsPackage("tsc2c-cjs-require-function-package", {
+        "index.js": "module.exports = function add(left, right) { return left + right; };\n",
+    }),
+    "tsc2c-cjs-require-package": cjsPackage("tsc2c-cjs-require-package", {
+        "index.js": 'exports.label = "require-cjs";\nexports.add = function add(left, right) { return left + right; };\n',
+    }),
+    "tsc2c-cjs-require-side-effect": cjsPackage("tsc2c-cjs-require-side-effect", {
+        "index.js": 'console.log("require setup");\n',
+    }),
+    "tsc2c-cjs-wrapper-globals": cjsPackage("tsc2c-cjs-wrapper-globals", {
+        "index.js": 'exports.fileOk = __filename.endsWith("index.js");\nexports.dirOk = __dirname.endsWith("tsc2c-cjs-wrapper-globals");\n',
+    }),
+};
+
+export async function ensureE2eNodeModuleFixtures(): Promise<void> {
+    const nodeModules = path.join(rootDir, "node_modules");
+    await fs.mkdir(nodeModules, { recursive: true });
+
+    await Promise.all(
+        Object.entries(packages).map(async ([name, fixture]) => {
+            const packageRoot = path.join(nodeModules, name);
+            await fs.mkdir(packageRoot, { recursive: true });
+            if (fixture.packageJson) {
+                await writeFileIfChanged(
+                    path.join(packageRoot, "package.json"),
+                    JSON.stringify(fixture.packageJson, null, 2) + "\n",
+                );
+            }
+            await Promise.all(
+                Object.entries(fixture.files).map(([relative, content]) =>
+                    writeFileIfChanged(path.join(packageRoot, relative), content),
+                ),
+            );
+        }),
+    );
+}
+
+async function writeFileIfChanged(fileName: string, content: string): Promise<void> {
+    await fs.mkdir(path.dirname(fileName), { recursive: true });
+    try {
+        if ((await fs.readFile(fileName, "utf8")) === content) return;
+    } catch {
+        // Missing files are written below.
+    }
+    await fs.writeFile(fileName, content, "utf8");
+}

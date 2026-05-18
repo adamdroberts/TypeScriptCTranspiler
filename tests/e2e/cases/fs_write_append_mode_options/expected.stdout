@@ -1,0 +1,4 @@
+sync write: 416 alpha
+sync append: 384 one-two
+promise write: 420 promise
+promise append: 400 append-again

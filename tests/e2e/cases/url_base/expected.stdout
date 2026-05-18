@@ -1,0 +1,6 @@
+rel: https://example.com/dir/next?q=1#frag /dir/next ?q=1 #frag https://example.com
+root: https://example.com/root /root https://example.com
+query: https://example.com/dir/page.html?fresh=1 /dir/page.html ?fresh=1
+hash: https://example.com/dir/page.html?old=1#part /dir/page.html ?old=1 #part
+scheme: https://cdn.test/lib.js https: cdn.test /lib.js
+can: true true false true

@@ -1,0 +1,8 @@
+read flag: alpha
+read encoding flag: alpha
+append flag: alpha-beta
+sync append exclusive: fs.writeFileSync: file already exists
+sync append exclusive content: first
+promise read flag: one
+promise append exclusive: fs.writeFileSync: file already exists
+promise append flag: one-two

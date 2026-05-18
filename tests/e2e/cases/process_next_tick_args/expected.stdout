@@ -1,0 +1,5 @@
+sync: sync
+record: first 1 sync|first:1
+inline: second 2 sync|first:1|second:2
+outer: sync|first:1|second:2|outer
+record: nested 3 sync|first:1|second:2|outer|nested:3
