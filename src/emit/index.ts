@@ -10104,7 +10104,11 @@ class Emitter {
             recvExpr.text === "process" &&
             memberName === "cwd"
         ) {
-            return { c: `tsc_process_cwd()`, ty: T_STRING };
+            return this.emitSequencedExpr(
+                T_STRING,
+                this.ignoredArgumentSpecs(call.arguments, 0),
+                () => `tsc_process_cwd()`,
+            );
         }
         if (
             ts.isIdentifier(recvExpr) &&
@@ -10122,8 +10126,11 @@ class Emitter {
             recvExpr.text === "process" &&
             memberName === "uptime"
         ) {
-            if (call.arguments.length !== 0) unsupported(call, "process.uptime expects no args");
-            return { c: `tsc_process_uptime()`, ty: T_NUMBER };
+            return this.emitSequencedExpr(
+                T_NUMBER,
+                this.ignoredArgumentSpecs(call.arguments, 0),
+                () => `tsc_process_uptime()`,
+            );
         }
         if (
             ts.isPropertyAccessExpression(recvExpr) &&
@@ -10132,8 +10139,11 @@ class Emitter {
             recvExpr.name.text === "hrtime" &&
             memberName === "bigint"
         ) {
-            if (call.arguments.length !== 0) unsupported(call, "process.hrtime.bigint expects no args");
-            return { c: `tsc_process_hrtime_bigint()`, ty: T_BIGINT };
+            return this.emitSequencedExpr(
+                T_BIGINT,
+                this.ignoredArgumentSpecs(call.arguments, 0),
+                () => `tsc_process_hrtime_bigint()`,
+            );
         }
         if (
             ts.isPropertyAccessExpression(recvExpr) &&
@@ -10181,35 +10191,56 @@ class Emitter {
                     });
                 }
                 case "getuid":
-                    if (call.arguments.length !== 0) unsupported(call, "process.getuid expects no args");
-                    return { c: `tsc_process_getuid()`, ty: T_NUMBER };
+                    return this.emitSequencedExpr(
+                        T_NUMBER,
+                        this.ignoredArgumentSpecs(call.arguments, 0),
+                        () => `tsc_process_getuid()`,
+                    );
                 case "getgid":
-                    if (call.arguments.length !== 0) unsupported(call, "process.getgid expects no args");
-                    return { c: `tsc_process_getgid()`, ty: T_NUMBER };
+                    return this.emitSequencedExpr(
+                        T_NUMBER,
+                        this.ignoredArgumentSpecs(call.arguments, 0),
+                        () => `tsc_process_getgid()`,
+                    );
                 case "geteuid":
-                    if (call.arguments.length !== 0) unsupported(call, "process.geteuid expects no args");
-                    return { c: `tsc_process_geteuid()`, ty: T_NUMBER };
+                    return this.emitSequencedExpr(
+                        T_NUMBER,
+                        this.ignoredArgumentSpecs(call.arguments, 0),
+                        () => `tsc_process_geteuid()`,
+                    );
                 case "getegid":
-                    if (call.arguments.length !== 0) unsupported(call, "process.getegid expects no args");
-                    return { c: `tsc_process_getegid()`, ty: T_NUMBER };
+                    return this.emitSequencedExpr(
+                        T_NUMBER,
+                        this.ignoredArgumentSpecs(call.arguments, 0),
+                        () => `tsc_process_getegid()`,
+                    );
                 case "getgroups":
-                    if (call.arguments.length !== 0) unsupported(call, "process.getgroups expects no args");
-                    return { c: `tsc_process_getgroups()`, ty: arrayType(T_NUMBER) };
+                    return this.emitSequencedExpr(
+                        arrayType(T_NUMBER),
+                        this.ignoredArgumentSpecs(call.arguments, 0),
+                        () => `tsc_process_getgroups()`,
+                    );
                 case "umask":
-                    if (call.arguments.length > 1) unsupported(call, "process.umask expects optional mask");
                     if (call.arguments.length === 0) return { c: `tsc_process_umask_get()`, ty: T_NUMBER };
                     return this.emitSequencedCall("tsc_process_umask_set", T_NUMBER, [
                         { value: this.emitExpr(call.arguments[0]!), target: T_NUMBER, node: call.arguments[0]! },
+                        ...this.ignoredArgumentSpecs(call.arguments, 1),
                     ]);
                 case "memoryUsage":
-                    if (call.arguments.length !== 0) unsupported(call, "process.memoryUsage expects no args");
-                    return { c: `tsc_process_memory_usage()`, ty: T_VALUE };
+                    return this.emitSequencedExpr(
+                        T_VALUE,
+                        this.ignoredArgumentSpecs(call.arguments, 0),
+                        () => `tsc_process_memory_usage()`,
+                    );
                 case "cpuUsage":
                     if (call.arguments.length !== 0) unsupported(call, "process.cpuUsage expects no args in this subset");
                     return { c: `tsc_process_cpu_usage()`, ty: T_VALUE };
                 case "resourceUsage":
-                    if (call.arguments.length !== 0) unsupported(call, "process.resourceUsage expects no args");
-                    return { c: `tsc_process_resource_usage()`, ty: T_VALUE };
+                    return this.emitSequencedExpr(
+                        T_VALUE,
+                        this.ignoredArgumentSpecs(call.arguments, 0),
+                        () => `tsc_process_resource_usage()`,
+                    );
                 case "kill": {
                     if (call.arguments.length < 1 || call.arguments.length > 2) unsupported(call, "process.kill expects pid and optional signal");
                     const signal = this.processSignalArgument(call.arguments[1]);
@@ -10228,12 +10259,15 @@ class Emitter {
             if (call.arguments.length === 0) {
                 return { c: `tsc_process_hrtime(NULL)`, ty: arrayType(T_NUMBER) };
             }
-            if (call.arguments.length !== 1) unsupported(call, "process.hrtime expects 0 or 1 args");
             const previous = this.emitExpr(call.arguments[0]!);
             if (previous.ty.kind !== "array" || previous.ty.elem?.kind !== "number") {
                 unsupported(call.arguments[0]!, "process.hrtime previous value must be number[]");
             }
-            return { c: `tsc_process_hrtime(${previous.c})`, ty: arrayType(T_NUMBER) };
+            return this.emitSequencedExpr(
+                arrayType(T_NUMBER),
+                [{ value: previous }, ...this.ignoredArgumentSpecs(call.arguments, 1)],
+                ([time]) => `tsc_process_hrtime(${time})`,
+            );
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Math") {
             return this.emitMathCall(call, memberName);

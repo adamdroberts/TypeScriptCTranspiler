@@ -1,3 +1,4 @@
 types: bigint bigint
 ordered: true true
 pair: 2 number number
+ignored: bigint true b

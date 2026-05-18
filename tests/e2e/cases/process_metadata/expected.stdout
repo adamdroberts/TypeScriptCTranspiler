@@ -1,3 +1,4 @@
 identity: true true true
 cwd: true
 uptime: true
+ignored: true true cu

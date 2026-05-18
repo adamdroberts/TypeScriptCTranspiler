@@ -3,3 +3,4 @@ memory: number number number number
 faults: true true true
 io: true true true true
 signals: true true true
+ignored: number true r

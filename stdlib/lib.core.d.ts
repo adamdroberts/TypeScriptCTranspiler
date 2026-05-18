@@ -518,8 +518,8 @@ interface ProcessMemoryUsage {
     arrayBuffers: number;
 }
 interface ProcessHrtime {
-    (time?: number[]): number[];
-    bigint(): bigint;
+    (time?: number[], ...ignored: any[]): number[];
+    bigint(...ignored: any[]): bigint;
 }
 interface ProcessWritableStream {
     write(chunk: string | Buffer): boolean;
@@ -542,23 +542,23 @@ interface Process {
     readonly stdout: ProcessWritableStream;
     readonly stderr: ProcessWritableStream;
     exit(code?: number): never;
-    cwd(): string;
+    cwd(...ignored: any[]): string;
     chdir(directory: string): void;
-    uptime(): number;
+    uptime(...ignored: any[]): number;
     hrtime: ProcessHrtime;
     nextTick(callback: () => void): void;
     nextTick<A>(callback: (arg: A) => void, arg: A): void;
     nextTick<A, B>(callback: (arg1: A, arg2: B) => void, arg1: A, arg2: B): void;
     nextTick<A, B, C>(callback: (arg1: A, arg2: B, arg3: C) => void, arg1: A, arg2: B, arg3: C): void;
-    getuid(): number;
-    getgid(): number;
-    geteuid(): number;
-    getegid(): number;
-    getgroups(): number[];
-    umask(mask?: number): number;
-    memoryUsage(): any;
+    getuid(...ignored: any[]): number;
+    getgid(...ignored: any[]): number;
+    geteuid(...ignored: any[]): number;
+    getegid(...ignored: any[]): number;
+    getgroups(...ignored: any[]): number[];
+    umask(mask?: number, ...ignored: any[]): number;
+    memoryUsage(...ignored: any[]): any;
     cpuUsage(): any;
-    resourceUsage(): any;
+    resourceUsage(...ignored: any[]): any;
     kill(pid: number, signal?: 0 | 9 | 15 | "SIGTERM" | "SIGKILL"): boolean;
 }
 declare const process: Process;

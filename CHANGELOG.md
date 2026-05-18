@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Process metadata methods now evaluate and ignore extra arguments where JavaScript ignores them, covering `cwd`, `uptime`, `hrtime`, `hrtime.bigint`, POSIX id/group reads, `umask(mask)`, `memoryUsage`, and `resourceUsage`. Tests: `process_metadata`, `process_hrtime`, `process_hrtime_bigint`, `process_posix_ids`, `process_getgroups`, `process_umask`, `process_memory_usage`, `process_resource_usage`.
 - `FSStats` and `FSDirent` predicate/string/value methods now evaluate and ignore extra arguments where JavaScript ignores them. Tests: `fs_stat`, `fs_readdir_dirents`.
 - Buffer string/JSON/value methods now evaluate and ignore extra arguments where JavaScript ignores them. Test: `buffer_object_methods`.
 - URL string/value methods now evaluate and ignore extra arguments where JavaScript ignores them. Test: `url_object_methods`.
