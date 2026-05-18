@@ -10222,10 +10222,10 @@ class Emitter {
                     );
                 case "umask":
                     if (call.arguments.length === 0) return { c: `tsc_process_umask_get()`, ty: T_NUMBER };
-                    return this.emitSequencedCall("tsc_process_umask_set", T_NUMBER, [
+                    return this.emitSequencedExpr(T_NUMBER, [
                         { value: this.emitExpr(call.arguments[0]!), target: T_NUMBER, node: call.arguments[0]! },
                         ...this.ignoredArgumentSpecs(call.arguments, 1),
-                    ]);
+                    ], ([mask]) => `tsc_process_umask_set(${mask})`);
                 case "memoryUsage":
                     return this.emitSequencedExpr(
                         T_VALUE,
