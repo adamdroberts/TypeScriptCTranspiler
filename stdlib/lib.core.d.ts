@@ -754,7 +754,7 @@ interface DateConstructor {
     new(year: number, month: number, date?: number, hours?: number, minutes?: number, seconds?: number, ms?: number): Date;
     now(): number;
     parse(text: string): number;
-    UTC(year: number, month: number, date?: number, hours?: number, minutes?: number, seconds?: number, ms?: number): number;
+    UTC(year?: number, month?: number, date?: number, hours?: number, minutes?: number, seconds?: number, ms?: number): number;
 }
 declare var Date: DateConstructor;
 

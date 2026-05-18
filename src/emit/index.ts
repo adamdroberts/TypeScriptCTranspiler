@@ -14284,8 +14284,8 @@ class Emitter {
 
     private emitDateStaticUtc(call: ts.CallExpression): EmitResult {
         const args = call.arguments;
-        if (args.length < 2 || args.length > 7) unsupported(call, "Date.UTC expects 2 to 7 numeric args");
-        const defaults = ["1.0", "0.0", "0.0", "0.0", "0.0"];
+        if (args.length > 7) unsupported(call, "Date.UTC expects 0 to 7 numeric args");
+        const defaults = ["NAN", "0.0", "1.0", "0.0", "0.0", "0.0", "0.0"];
         const specs: SequencedCallArg[] = [];
         for (let i = 0; i < args.length; i++) {
             const arg = args[i]!;
@@ -14295,7 +14295,7 @@ class Emitter {
         return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
             const all = [...vals];
             while (all.length < 7) {
-                all.push(defaults[all.length - 2]!);
+                all.push(defaults[all.length]!);
             }
             return `tsc_date_utc(${all.join(", ")})`;
         });
