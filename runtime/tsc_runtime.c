@@ -9516,6 +9516,36 @@ double tsc_date_set_local_part(tsc_date_t* d, int part, double a, double b, doub
     return d->ms;
 }
 
+double tsc_date_set_legacy_year(tsc_date_t* d, double year) {
+    if (!d) return NAN;
+    if (isnan(year)) {
+        d->ms = NAN;
+        return NAN;
+    }
+    int y = (int)year;
+    if (y >= 0 && y <= 99) y += 1900;
+
+    double base_ms = isnan(d->ms) ? 0.0 : d->ms;
+    double seconds_double = floor(base_ms / 1000.0);
+    time_t seconds = (time_t)seconds_double;
+    struct tm tm;
+    if (!localtime_r(&seconds, &tm)) {
+        d->ms = NAN;
+        return NAN;
+    }
+    double rem = fmod(base_ms, 1000.0);
+    if (rem < 0) rem += 1000.0;
+    tm.tm_year = y - 1900;
+    tm.tm_isdst = -1;
+    time_t t = mktime(&tm);
+    if (t == (time_t)-1) {
+        d->ms = NAN;
+        return NAN;
+    }
+    d->ms = ((double)t) * 1000.0 + floor(rem);
+    return d->ms;
+}
+
 static bool date_parse_fixed_int(const tsc_str_t* text, size_t* pos, size_t digits, int* out) {
     if (!text || !pos || !out || *pos + digits > text->len) return false;
     int value = 0;

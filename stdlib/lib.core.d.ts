@@ -699,6 +699,7 @@ declare module "node:os" {
 interface Date {
     getTime(): number;
     getFullYear(): number;
+    getYear(): number;
     getMonth(): number;
     getDate(): number;
     getDay(): number;
@@ -717,6 +718,7 @@ interface Date {
     getUTCMilliseconds(): number;
     setTime(time: number): number;
     setFullYear(year: number, month?: number, date?: number): number;
+    setYear(year: number): number;
     setMonth(month: number, date?: number): number;
     setDate(date: number): number;
     setHours(hours: number, minutes?: number, seconds?: number, ms?: number): number;

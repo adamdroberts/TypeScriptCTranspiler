@@ -309,6 +309,7 @@ double tsc_date_get_time(const tsc_date_t* d);
 double tsc_date_set_time(tsc_date_t* d, double ms);
 double tsc_date_set_utc_part(tsc_date_t* d, int part, double a, double b, double c, double e, int arg_count);
 double tsc_date_set_local_part(tsc_date_t* d, int part, double a, double b, double c, double e, int arg_count);
+double tsc_date_set_legacy_year(tsc_date_t* d, double year);
 double tsc_date_parse(const tsc_str_t* text);
 double tsc_date_utc(double year, double month, double day, double hours, double minutes, double seconds, double ms);
 double tsc_date_local(double year, double month, double day, double hours, double minutes, double seconds, double ms);

@@ -1,0 +1,6 @@
+get: 2020 120
+set 99: 1999 99
+set 2024: 2024 124
+invalid before: true
+invalid set: 1901 1
+nan year: true true

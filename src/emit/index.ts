@@ -14202,6 +14202,7 @@ class Emitter {
                 return this.emitSequencedExpr(T_NUMBER, [{ value: recv }], ([date]) => `tsc_date_get_utc_part(${date}, ${part})`);
             }
             case "getFullYear":
+            case "getYear":
             case "getMonth":
             case "getDate":
             case "getDay":
@@ -14212,6 +14213,7 @@ class Emitter {
                 if (call.arguments.length !== 0) unsupported(call, `Date.${method} expects no args`);
                 const part = {
                     getFullYear: 0,
+                    getYear: 0,
                     getMonth: 1,
                     getDate: 2,
                     getDay: 3,
@@ -14220,7 +14222,19 @@ class Emitter {
                     getSeconds: 6,
                     getMilliseconds: 7,
                 }[method]!;
-                return this.emitSequencedExpr(T_NUMBER, [{ value: recv }], ([date]) => `tsc_date_get_local_part(${date}, ${part})`);
+                return this.emitSequencedExpr(T_NUMBER, [{ value: recv }], ([date]) => {
+                    const value = `tsc_date_get_local_part(${date}, ${part})`;
+                    return method === "getYear" ? `(${value} - 1900.0)` : value;
+                });
+            }
+            case "setYear": {
+                const arg = call.arguments[0];
+                if (!arg || call.arguments.length !== 1) unsupported(call, "Date.setYear expects one numeric year");
+                const value = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_NUMBER, [
+                    { value: recv },
+                    { value, target: T_NUMBER, node: arg },
+                ], ([date, year]) => `tsc_date_set_legacy_year(${date}, ${year!})`);
             }
             case "getTimezoneOffset":
                 if (call.arguments.length !== 0) unsupported(call, "Date.getTimezoneOffset expects no args");
