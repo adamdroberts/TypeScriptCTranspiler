@@ -235,12 +235,12 @@ interface ReadonlyArray<T> extends Iterable<T> {
 }
 
 interface Object {
-    hasOwnProperty(p: string): boolean;
-    isPrototypeOf(v: any): boolean;
-    propertyIsEnumerable(p: string): boolean;
-    toLocaleString(): string;
-    toString(): string;
-    valueOf(): any;
+    hasOwnProperty(p: string, ...ignored: any[]): boolean;
+    isPrototypeOf(v: any, ...ignored: any[]): boolean;
+    propertyIsEnumerable(p: string, ...ignored: any[]): boolean;
+    toLocaleString(...ignored: any[]): string;
+    toString(...ignored: any[]): string;
+    valueOf(...ignored: any[]): any;
 }
 type ObjectEntry<T> = [string, T];
 interface ObjectConstructor {

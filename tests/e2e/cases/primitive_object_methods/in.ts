@@ -18,3 +18,4 @@ console.log("bool:", yes.toString(), no.toLocaleString(), yes.valueOf() ? "yes" 
 console.log("own:", n.hasOwnProperty("toString"), yes.propertyIsEnumerable("valueOf"));
 console.log("ignored num:", n.toString(16, mark("a")), n.toFixed(1, mark("b")), n.toExponential(1, mark("c")), n.toPrecision(3, mark("d")), n.toLocaleString(mark("e")), n.valueOf(mark("f")));
 console.log("ignored bool:", yes.toString(mark("g")), no.toLocaleString(mark("h")), yes.valueOf(mark("i")), seen);
+console.log("ignored own:", n.hasOwnProperty("toString", mark("j")), yes.propertyIsEnumerable("valueOf", mark("k")), seen);

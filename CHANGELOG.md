@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Object-prototype `hasOwnProperty` / `propertyIsEnumerable` and typed-object fallback `toString` / `toLocaleString` / `valueOf` now evaluate and ignore extra arguments after the JavaScript-consumed inputs. Tests: `string_object_methods`, `primitive_object_methods`, `symbol_bigint_object_methods`.
 - BigInt constructor calls and typed Number/Boolean/BigInt string/value methods now evaluate and ignore extra arguments after the JavaScript-consumed inputs. Tests: `primitive_object_methods`, `symbol_bigint_object_methods`.
 - `Symbol(description?, ...ignored)`, `Symbol.for(key, ...ignored)`, `Symbol.keyFor(sym, ...ignored)`, and Symbol string/value methods now evaluate and ignore extra arguments where JavaScript ignores them. Test: `symbols`.
 - Callable `Number(value?, ...ignored)`, `String(value?, ...ignored)`, and `Boolean(value?, ...ignored)` now evaluate and ignore extra arguments after the converted value. Tests: `number_constructor`, `string_boolean_constructors`.

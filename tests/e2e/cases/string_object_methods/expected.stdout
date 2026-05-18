@@ -3,3 +3,4 @@ locale: Ada
 value: Ada!
 own: true true false
 enum: true false
+ignored own: true false ab

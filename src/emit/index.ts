@@ -10451,23 +10451,28 @@ class Emitter {
         switch (method) {
             case "hasOwnProperty":
             case "propertyIsEnumerable":
-                if (call.arguments.length !== 1) unsupported(call, `${method} expects 1 arg`);
+                if (call.arguments.length < 1) unsupported(call, `${method} expects at least 1 arg`);
                 return this.emitTypedObjectHasOwn(
                     recvExpr,
                     recv,
                     call.arguments[0]!,
                     this.checker.getTypeAtLocation(recvExpr),
                     method,
+                    this.ignoredArgumentSpecs(call.arguments, 1),
                 );
             case "toLocaleString":
             case "toString":
-                if (call.arguments.length !== 0) unsupported(call, `${method} expects no args`);
-                return this.emitSequencedExpr(T_STRING, [
-                    { value: recv, node: recvExpr },
-                ], ([obj]) => `({ (void)${obj}; tsc_str_from_lit("[object Object]", 15); })`);
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [{ value: recv, node: recvExpr }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
+                    ([obj]) => `({ (void)${obj}; tsc_str_from_lit("[object Object]", 15); })`,
+                );
             case "valueOf":
-                if (call.arguments.length !== 0) unsupported(call, "valueOf expects no args");
-                return recv;
+                return this.emitSequencedExpr(
+                    recv.ty,
+                    [{ value: recv, node: recvExpr }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
+                    ([obj]) => obj,
+                );
         }
         unsupported(call, `Object.prototype.${method}`);
     }
@@ -10513,23 +10518,38 @@ class Emitter {
                 if (args.length !== 1) unsupported(call, "at expects 1 arg");
                 return oneArg("tsc_value_method_at");
             case "hasOwnProperty":
-                if (args.length !== 1) unsupported(call, "hasOwnProperty expects 1 arg");
-                return this.emitSequencedCall("tsc_value_has_own_prop", T_BOOLEAN, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
-                ]);
+                if (args.length < 1) unsupported(call, "hasOwnProperty expects at least 1 arg");
+                return this.emitSequencedExpr(
+                    T_BOOLEAN,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
+                        ...this.ignoredArgumentSpecs(args, 1),
+                    ],
+                    ([value, key]) => `tsc_value_has_own_prop(${value}, ${key})`,
+                );
             case "isPrototypeOf":
-                if (args.length !== 1) unsupported(call, "isPrototypeOf expects 1 arg");
-                return this.emitSequencedCall("tsc_value_is_prototype_of", T_BOOLEAN, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
-                ]);
+                if (args.length < 1) unsupported(call, "isPrototypeOf expects at least 1 arg");
+                return this.emitSequencedExpr(
+                    T_BOOLEAN,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
+                        ...this.ignoredArgumentSpecs(args, 1),
+                    ],
+                    ([value, proto]) => `tsc_value_is_prototype_of(${value}, ${proto})`,
+                );
             case "propertyIsEnumerable":
-                if (args.length !== 1) unsupported(call, "propertyIsEnumerable expects 1 arg");
-                return this.emitSequencedCall("tsc_value_property_is_enumerable", T_BOOLEAN, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
-                ]);
+                if (args.length < 1) unsupported(call, "propertyIsEnumerable expects at least 1 arg");
+                return this.emitSequencedExpr(
+                    T_BOOLEAN,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
+                        ...this.ignoredArgumentSpecs(args, 1),
+                    ],
+                    ([value, key]) => `tsc_value_property_is_enumerable(${value}, ${key})`,
+                );
             case "localeCompare":
                 if (args.length !== 1) unsupported(call, "localeCompare expects 1 arg");
                 return oneArg("tsc_value_method_locale_compare");
@@ -14111,24 +14131,29 @@ class Emitter {
         switch (method) {
             case "hasOwnProperty":
             case "propertyIsEnumerable": {
-                if (call.arguments.length !== 1) unsupported(call, `${tag}.${method} expects 1 arg`);
+                if (call.arguments.length < 1) unsupported(call, `${tag}.${method} expects at least 1 arg`);
                 const key = this.emitExpr(call.arguments[0]!);
                 return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: recv, node: call.expression },
                     { value: key, target: T_STRING, node: call.arguments[0]! },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
                 ], ([obj, prop]) => `({ (void)${obj}; (void)${prop}; false; })`);
             }
             case "toLocaleString":
             case "toString": {
-                if (call.arguments.length !== 0) unsupported(call, `${tag}.${method} expects no args`);
                 const text = `[object ${tag}]`;
-                return this.emitSequencedExpr(T_STRING, [{ value: recv }], ([obj]) =>
-                    `({ (void)${obj}; tsc_str_from_lit("${escapeCString(text)}", ${utf8ByteLen(text)}); })`,
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
+                    ([obj]) => `({ (void)${obj}; tsc_str_from_lit("${escapeCString(text)}", ${utf8ByteLen(text)}); })`,
                 );
             }
             case "valueOf":
-                if (call.arguments.length !== 0) unsupported(call, `${tag}.valueOf expects no args`);
-                return recv;
+                return this.emitSequencedExpr(
+                    recv.ty,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
+                    ([obj]) => obj,
+                );
         }
         unsupported(call, `${tag}.${method}`);
     }
@@ -16027,20 +16052,27 @@ class Emitter {
         method: string,
         tag: string,
     ): EmitResult {
-        if (call.arguments.length !== 1) unsupported(call, `${tag}.${method} expects 1 arg`);
+        if (call.arguments.length < 1) unsupported(call, `${tag}.${method} expects at least 1 arg`);
         const key = this.emitExpr(call.arguments[0]!);
+        const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
         if (recv.ty.kind === "string") {
             const fn = method === "hasOwnProperty"
                 ? "tsc_value_has_own_prop"
                 : "tsc_value_property_is_enumerable";
-            return this.emitSequencedCall(fn, T_BOOLEAN, [
-                { value: recv, target: T_VALUE, node: call.expression },
-                { value: key, target: T_STRING, node: call.arguments[0]! },
-            ]);
+            return this.emitSequencedExpr(
+                T_BOOLEAN,
+                [
+                    { value: recv, target: T_VALUE, node: call.expression },
+                    { value: key, target: T_STRING, node: call.arguments[0]! },
+                    ...ignored,
+                ],
+                ([value, prop]) => `${fn}(${value}, ${prop})`,
+            );
         }
         return this.emitSequencedExpr(T_BOOLEAN, [
             { value: recv, node: call.expression },
             { value: key, target: T_STRING, node: call.arguments[0]! },
+            ...ignored,
         ], ([value, prop]) => `({ (void)${value}; (void)${prop}; false; })`);
     }
 
@@ -19989,6 +20021,7 @@ class Emitter {
         keyExpr: ts.Expression,
         tsType: ts.Type,
         label: string,
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         if (obj.ty.kind !== "class") unsupported(objExpr, `${label} on non-object`);
         const key = this.emitExpr(keyExpr);
@@ -19996,6 +20029,7 @@ class Emitter {
         return this.emitSequencedExpr(T_BOOLEAN, [
             { value: obj, node: objExpr },
             { value: key, target: T_STRING, node: keyExpr },
+            ...ignored,
         ], ([objC, keyC]) => {
             const checks = props.map((name) =>
                 `tsc_str_eq(${keyC}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))`,
