@@ -745,6 +745,7 @@ interface Date {
     toJSON(): string;
 }
 interface DateConstructor {
+    (): string;
     new(value?: number | string | Date): Date;
     new(year: number, month: number, date?: number, hours?: number, minutes?: number, seconds?: number, ms?: number): Date;
     now(): number;

@@ -8757,6 +8757,10 @@ class Emitter {
         if (name === "RegExp") {
             return this.emitRegExpConstructor(call);
         }
+        if (name === "Date") {
+            if (call.arguments.length !== 0) unsupported(call, "Date() expects no args in this subset");
+            return { c: "tsc_date_to_string(tsc_date_new_now())", ty: T_STRING };
+        }
         if (name === "AggregateError") {
             return this.emitAggregateErrorConstructor(call);
         }
