@@ -124,10 +124,10 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` -> 661 passed.
 - Literal construction with optional `...spread`. Test: `advanced`
 - Index access `arr[i]` (get and set) via `TSC_ARR(T, arr, i)` macro
 - `.length` → `tsc_array_length`
-- `.push(...)` / `.pop()` — `tsc_array_push_raw`, `tsc_array_pop_raw`
-- `.shift()` / `.unshift(...)` — `tsc_array_shift_raw`, `tsc_array_unshift_raw`
-- `.reverse()` — in-place via `tsc_array_reverse`
-- `.toReversed()` — copy via `tsc_array_to_reversed`; original array remains unchanged. Test: `array_to_reversed`
+- `.push(...)` / `.pop(...ignored)` — `tsc_array_push_raw`, `tsc_array_pop_raw`; ignored `pop` arguments are evaluated before being discarded. Test: `arrays`
+- `.shift(...ignored)` / `.unshift(...)` — `tsc_array_shift_raw`, `tsc_array_unshift_raw`; ignored `shift` arguments are evaluated before being discarded. Test: `arrays`
+- `.reverse(...ignored)` — in-place via `tsc_array_reverse` after evaluating ignored extra arguments. Test: `arrays`
+- `.toReversed(...ignored)` — copy via `tsc_array_to_reversed`; original array remains unchanged and ignored extra arguments are evaluated. Test: `array_to_reversed`
 - `.fill(value, start?, end?)` — in-place via `tsc_array_fill`. Test: `array_fill`
 - `.copyWithin(target, start, end?)` — in-place via `tsc_array_copy_within`. Test: `array_copy_within`
 - `.at(index)` — positive and negative index lookup. Test: `array_at`
@@ -136,9 +136,9 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` -> 661 passed.
 - `.slice(start?, end?)` — `tsc_array_slice`
 - `.concat(...items)` — copy plus `tsc_array_append`/`tsc_array_push_raw`; accepts array arguments, single element arguments, and spread elements inside array-literal arguments. Test: `array_concat_values`
 - `.join(sep?)` — with type-driven element stringification
-- `.toString()` / `.toLocaleString()` — typed arrays reuse comma-join stringification. Test: `array_to_string`
-- `.valueOf()` — returns the typed array receiver unchanged. Test: `array_value_of`
-- `.keys()` / `.values()` / `.entries()` — returns a number-index array, a shallow value copy, or `[string, value]` entry arrays. Tests: `array_keys_values`, `array_entries`
+- `.toString(...ignored)` / `.toLocaleString(...ignored)` — typed arrays reuse comma-join stringification after evaluating ignored extra arguments. Test: `array_to_string`
+- `.valueOf(...ignored)` — returns the typed array receiver unchanged after evaluating ignored extra arguments. Test: `array_value_of`
+- `.keys(...ignored)` / `.values(...ignored)` / `.entries(...ignored)` — returns a number-index array, a shallow value copy, or `[string, value]` entry arrays after evaluating ignored extra arguments. Tests: `array_keys_values`, `array_entries`
 - `.hasOwnProperty(key)` / `.propertyIsEnumerable(key)` plus `Object.hasOwn(array, key)`, `Reflect.has(array, key)`, and the `in` operator check typed array indexes and the non-enumerable `length` own property. Test: `array_own_properties`
 - `Object.getOwnPropertyDescriptor(array, key)`, `Object.getOwnPropertyDescriptors(array)`, and `Reflect.getOwnPropertyDescriptor(array, key)` return typed array index and `length` data descriptors. Test: `array_property_descriptors`
 - `Array.from(string)` — returns an array of one-code-point strings via `tsc_str_chars`. Test: `array_from_string`

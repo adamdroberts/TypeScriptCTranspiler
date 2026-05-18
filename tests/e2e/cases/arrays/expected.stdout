@@ -2,6 +2,7 @@ len 5
 sum 15
 after push 8 6 7 8
 popped 8 len 7
+ignored mutators 3 1 2 2 psr
 hello, alice
 hello, bob
 hello, carol

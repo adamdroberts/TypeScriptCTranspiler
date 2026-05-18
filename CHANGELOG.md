@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Typed Array zero-argument mutators, iterators, and string/value methods now evaluate and ignore extra arguments where JavaScript ignores them. Tests: `arrays`, `array_to_reversed`, `array_keys_values`, `array_to_string`, `array_value_of`.
 - RegExp `exec` / `test` and string/value methods now evaluate and ignore extra arguments after the JavaScript-consumed inputs. Test: `regexp_object_methods`.
 - Object-prototype `hasOwnProperty` / `propertyIsEnumerable` and typed-object fallback `toString` / `toLocaleString` / `valueOf` now evaluate and ignore extra arguments after the JavaScript-consumed inputs. Tests: `string_object_methods`, `primitive_object_methods`, `symbol_bigint_object_methods`.
 - BigInt constructor calls and typed Number/Boolean/BigInt string/value methods now evaluate and ignore extra arguments after the JavaScript-consumed inputs. Tests: `primitive_object_methods`, `symbol_bigint_object_methods`.

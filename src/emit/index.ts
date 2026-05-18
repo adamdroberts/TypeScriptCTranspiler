@@ -14551,7 +14551,7 @@ class Emitter {
     ): EmitResult {
         const et = recv.ty.elem!;
         const args = call.arguments;
-        const emitJoinString = (sep: string): EmitResult => {
+        const emitJoinStringExpr = (arr: string, sep: string): string => {
             const av = this.freshTemp("_arr");
             const iv = this.freshTemp("_i");
             const stringify = (exprC: string): string => {
@@ -14561,11 +14561,15 @@ class Emitter {
                 if (et.kind === "value") return `tsc_value_to_string(${exprC})`;
                 return `tsc_str_from_lit("[obj]", 5)`;
             };
+            return (
+                `({ tsc_array_t* const ${av} = ${arr}; tsc_str_t* _r = tsc_str_from_lit("", 0); ` +
+                `tsc_str_t* _s = ${sep}; for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
+                `{ if (${iv} > 0) _r = tsc_str_concat(_r, _s); _r = tsc_str_concat(_r, ${stringify(`TSC_ARR(${et.c}, ${av}, ${iv})`)}); } _r; })`
+            );
+        };
+        const emitJoinString = (sep: string): EmitResult => {
             return {
-                c:
-                    `({ tsc_array_t* const ${av} = ${recv.c}; tsc_str_t* _r = tsc_str_from_lit("", 0); ` +
-                    `tsc_str_t* _s = ${sep}; for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                    `{ if (${iv} > 0) _r = tsc_str_concat(_r, _s); _r = tsc_str_concat(_r, ${stringify(`TSC_ARR(${et.c}, ${av}, ${iv})`)}); } _r; })`,
+                c: emitJoinStringExpr(recv.c, sep),
                 ty: T_STRING,
             };
         };
@@ -14636,24 +14640,26 @@ class Emitter {
             case "pop": {
                 const av = this.freshTemp("_arr");
                 const rv = this.freshTemp("_pv");
-                return {
-                    c:
-                        `({ tsc_array_t* const ${av} = ${recv.c}; ${et.c} ${rv} = ` +
+                return this.emitSequencedExpr(
+                    et,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([arr]) =>
+                        `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${rv} = ` +
                         `(${av}->len > 0 ? TSC_ARR(${et.c}, ${av}, ${av}->len - 1) : (${et.c})0); ` +
                         `if (!${av}->sealed && !${av}->frozen) tsc_array_pop_raw(${av}); ${rv}; })`,
-                    ty: et,
-                };
+                );
             }
             case "shift": {
                 const av = this.freshTemp("_arr");
                 const rv = this.freshTemp("_pv");
-                return {
-                    c:
-                        `({ tsc_array_t* const ${av} = ${recv.c}; ${et.c} ${rv} = ` +
+                return this.emitSequencedExpr(
+                    et,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([arr]) =>
+                        `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${rv} = ` +
                         `(${av}->len > 0 ? TSC_ARR(${et.c}, ${av}, 0) : (${et.c})0); ` +
                         `if (!${av}->sealed && !${av}->frozen) tsc_array_shift_raw(${av}); ${rv}; })`,
-                    ty: et,
-                };
+                );
             }
             case "unshift": {
                 const av = this.freshTemp("_arr");
@@ -14774,14 +14780,17 @@ class Emitter {
             }
             case "reverse": {
                 const av = this.freshTemp("_arr");
-                return { c: `({ tsc_array_t* const ${av} = ${recv.c}; if (!${av}->frozen) tsc_array_reverse(${av}); ${av}; })`, ty: recv.ty };
+                return this.emitSequencedExpr(
+                    recv.ty,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([arr]) => `({ tsc_array_t* const ${av} = ${arr}; if (!${av}->frozen) tsc_array_reverse(${av}); ${av}; })`,
+                );
             }
             case "toReversed": {
-                if (args.length !== 0) unsupported(call, "toReversed expects no args");
-                return this.emitSequencedCall(
-                    "tsc_array_to_reversed",
+                return this.emitSequencedExpr(
                     recv.ty,
-                    [{ value: recv }],
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([arr]) => `tsc_array_to_reversed(${arr})`,
                 );
             }
             case "slice": {
@@ -14830,45 +14839,45 @@ class Emitter {
                 return emitJoinString(sep);
             }
             case "keys": {
-                if (args.length !== 0) unsupported(call, "keys expects no args");
                 const av = this.freshTemp("_arr");
                 const out = this.freshTemp("_keys");
                 const iv = this.freshTemp("_i");
                 const kv = this.freshTemp("_key");
-                return {
-                    c:
-                        `({ tsc_array_t* const ${av} = ${recv.c}; ` +
+                return this.emitSequencedExpr(
+                    arrayType(T_NUMBER),
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([arr]) =>
+                        `({ tsc_array_t* const ${av} = ${arr}; ` +
                         `tsc_array_t* ${out} = tsc_array_new(sizeof(double), ${av}->len); ` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) { ` +
                         `double ${kv} = (double)${iv}; tsc_array_push_raw(${out}, &${kv}); } ${out}; })`,
-                    ty: arrayType(T_NUMBER),
-                };
+                );
             }
             case "values": {
-                if (args.length !== 0) unsupported(call, "values expects no args");
                 const av = this.freshTemp("_arr");
-                return {
-                    c: `({ tsc_array_t* const ${av} = ${recv.c}; tsc_array_slice(${av}, 0, (double)${av}->len); })`,
-                    ty: recv.ty,
-                };
+                return this.emitSequencedExpr(
+                    recv.ty,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([arr]) => `({ tsc_array_t* const ${av} = ${arr}; tsc_array_slice(${av}, 0, (double)${av}->len); })`,
+                );
             }
             case "entries": {
-                if (args.length !== 0) unsupported(call, "entries expects no args");
                 const elemType = entryType(et);
                 const av = this.freshTemp("_arr");
                 const out = this.freshTemp("_entries");
                 const iv = this.freshTemp("_i");
                 const entry = this.freshTemp("_entry");
-                return {
-                    c:
-                        `({ tsc_array_t* const ${av} = ${recv.c}; ` +
+                return this.emitSequencedExpr(
+                    arrayType(elemType),
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([arr]) =>
+                        `({ tsc_array_t* const ${av} = ${arr}; ` +
                         `tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${av}->len ? ${av}->len : 1); ` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) { ` +
                         `${elemType.c} ${entry}; ${entry}.key = tsc_str_from_int((int64_t)${iv}); ` +
                         `${this.objectEntrySet(entry, et, `TSC_ARR(${et.c}, ${av}, ${iv})`)}; ` +
                         `tsc_array_push_raw(${out}, &${entry}); } ${out}; })`,
-                    ty: arrayType(elemType),
-                };
+                );
             }
             case "next": {
                 if (args.length > 1) unsupported(call, "next expects 0 or 1 args");
@@ -14930,11 +14939,17 @@ class Emitter {
             }
             case "toLocaleString":
             case "toString":
-                if (args.length !== 0) unsupported(call, `${method} expects no args`);
-                return emitJoinString(`tsc_str_from_lit(",", 1)`);
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([arr]) => emitJoinStringExpr(arr!, `tsc_str_from_lit(",", 1)`),
+                );
             case "valueOf":
-                if (args.length !== 0) unsupported(call, "valueOf expects no args");
-                return recv;
+                return this.emitSequencedExpr(
+                    recv.ty,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([arr]) => arr!,
+                );
             case "sort":
                 return this.emitArraySort(call, recv);
             case "toSorted": {
