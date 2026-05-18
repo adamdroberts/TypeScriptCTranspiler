@@ -831,6 +831,7 @@ interface FSCpOptions {
     errorOnExist?: boolean;
     dereference?: boolean;
     verbatimSymlinks?: boolean;
+    mode?: number;
 }
 type FSEncoding = "utf8" | "utf-8";
 type FSBufferEncoding = "buffer";

@@ -8628,8 +8628,12 @@ static char* fs_join_path_cstr(const char* base, const char* name) {
     return out;
 }
 
-static int fs_copy_file_bytes_cstr(const char* src, const char* dest, bool force, bool error_on_exist) {
+static int fs_copy_file_bytes_cstr(const char* src, const char* dest, bool force, bool error_on_exist, int copy_flags) {
     if (access(dest, F_OK) == 0) {
+        if (copy_flags & 1) {
+            errno = EEXIST;
+            return -1;
+        }
         if (!force && error_on_exist) {
             errno = EEXIST;
             return -1;
@@ -8717,7 +8721,7 @@ static int fs_copy_symlink_cstr(const char* src, const char* dest, bool force, b
     return r;
 }
 
-static int fs_cp_recursive_cstr(const char* src, const char* dest, bool recursive, bool force, bool error_on_exist, bool dereference, bool verbatim_symlinks) {
+static int fs_cp_recursive_cstr(const char* src, const char* dest, bool recursive, bool force, bool error_on_exist, bool dereference, bool verbatim_symlinks, int copy_flags) {
     struct stat st;
     if ((dereference ? stat(src, &st) : lstat(src, &st)) != 0) return -1;
     if (!dereference && S_ISLNK(st.st_mode)) {
@@ -8753,7 +8757,7 @@ static int fs_cp_recursive_cstr(const char* src, const char* dest, bool recursiv
                 errno = ENOMEM;
                 return -1;
             }
-            if (fs_cp_recursive_cstr(child_src, child_dest, recursive, force, error_on_exist, dereference, verbatim_symlinks) != 0) {
+            if (fs_cp_recursive_cstr(child_src, child_dest, recursive, force, error_on_exist, dereference, verbatim_symlinks, copy_flags) != 0) {
                 int saved = errno;
                 free(child_src);
                 free(child_dest);
@@ -8768,16 +8772,17 @@ static int fs_cp_recursive_cstr(const char* src, const char* dest, bool recursiv
         return 0;
     }
     if (S_ISREG(st.st_mode)) {
-        return fs_copy_file_bytes_cstr(src, dest, force, error_on_exist);
+        return fs_copy_file_bytes_cstr(src, dest, force, error_on_exist, copy_flags);
     }
     errno = EINVAL;
     return -1;
 }
 
-void tsc_fs_cp_sync_opts(const tsc_str_t* src, const tsc_str_t* dest, bool recursive, bool force, bool error_on_exist, bool dereference, bool verbatim_symlinks) {
+void tsc_fs_cp_sync_opts(const tsc_str_t* src, const tsc_str_t* dest, bool recursive, bool force, bool error_on_exist, bool dereference, bool verbatim_symlinks, double mode) {
     char* s = cstr_dup(src);
     char* d = cstr_dup(dest);
-    int r = fs_cp_recursive_cstr(s, d, recursive, force, error_on_exist, dereference, verbatim_symlinks);
+    int flags = (isnan(mode) || isinf(mode)) ? 0 : (int)mode;
+    int r = fs_cp_recursive_cstr(s, d, recursive, force, error_on_exist, dereference, verbatim_symlinks, flags);
     free(s);
     free(d);
     if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.cpSync: could not copy path"));

@@ -24,6 +24,13 @@ try {
 fs.cpSync(src, dest, { force: true, errorOnExist: true });
 console.log("sync force true:", fs.readFileSync(dest));
 
+try {
+    fs.cpSync(src, dest, { force: true, mode: fs.constants.COPYFILE_EXCL });
+    console.log("sync mode excl: copied");
+} catch (err: any) {
+    console.log("sync mode excl:", err);
+}
+
 nodefs.promises.cp(src, promiseDest, { force: false }).then((value: any): string => {
     console.log("promise force false:", fs.readFileSync(promiseDest));
     return "done";
@@ -31,6 +38,11 @@ nodefs.promises.cp(src, promiseDest, { force: false }).then((value: any): string
 
 nodefs.promises.cp(src, promiseDest, { force: false, errorOnExist: true }).catch((reason: string): any => {
     console.log("promise errorOnExist:", reason);
+    return "done";
+});
+
+nodefs.promises.cp(src, promiseDest, { force: true, mode: fs.constants.COPYFILE_EXCL }).catch((reason: string): any => {
+    console.log("promise mode excl:", reason);
     return "done";
 });
 
