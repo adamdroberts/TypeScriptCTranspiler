@@ -24,6 +24,8 @@ const keptImmediate = setImmediate((label: string) => {
 
 clearTimeout(timeout, mark("x"));
 clearImmediate(immediate, mark("y"));
+clearTimeout(undefined, mark("u"));
+clearImmediate(void mark("v"));
 clearTimeout(999);
 clearImmediate();
 

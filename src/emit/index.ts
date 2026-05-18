@@ -13958,8 +13958,17 @@ class Emitter {
         const specs: SequencedCallArg[] = [];
         for (let i = 0; i < call.arguments.length; i++) {
             const arg = call.arguments[i]!;
+            const value = this.emitExpr(arg);
+            if (i === 0 && this.isUndefinedLikeExpression(arg)) {
+                specs.push({
+                    value: { c: `((void)(${value.c}), 0.0)`, ty: T_NUMBER },
+                    target: T_NUMBER,
+                    node: arg,
+                });
+                continue;
+            }
             specs.push({
-                value: this.emitExpr(arg),
+                value,
                 target: i === 0 ? T_NUMBER : undefined,
                 node: arg,
             });
@@ -14031,7 +14040,7 @@ class Emitter {
         return name;
     }
 
-    private isZeroDelayLiteral(expr: ts.Expression): boolean {
+    private unwrapTransparentExpression(expr: ts.Expression): ts.Expression {
         let cur = expr;
         while (
             ts.isParenthesizedExpression(cur) ||
@@ -14042,8 +14051,17 @@ class Emitter {
         ) {
             cur = cur.expression;
         }
-        if (ts.isIdentifier(cur) && cur.text === "undefined") return true;
-        if (ts.isVoidExpression(cur)) return true;
+        return cur;
+    }
+
+    private isUndefinedLikeExpression(expr: ts.Expression): boolean {
+        const cur = this.unwrapTransparentExpression(expr);
+        return (ts.isIdentifier(cur) && cur.text === "undefined") || ts.isVoidExpression(cur);
+    }
+
+    private isZeroDelayLiteral(expr: ts.Expression): boolean {
+        const cur = this.unwrapTransparentExpression(expr);
+        if (this.isUndefinedLikeExpression(cur)) return true;
         if (ts.isNumericLiteral(cur)) return Number(cur.text) === 0;
         return (
             ts.isPrefixUnaryExpression(cur) &&
