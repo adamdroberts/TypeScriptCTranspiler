@@ -442,60 +442,60 @@ interface Error {
     name: string;
     message: string;
     cause: any;
-    toString(): string;
-    toLocaleString(): string;
-    valueOf(): Error;
+    toString(...ignored: any[]): string;
+    toLocaleString(...ignored: any[]): string;
+    valueOf(...ignored: any[]): Error;
 }
 interface ErrorOptions {
     cause?: any;
 }
 interface ErrorConstructor {
-    new (message?: string, options?: ErrorOptions): Error;
-    (message?: string, options?: ErrorOptions): Error;
+    new (message?: string, options?: ErrorOptions, ...ignored: any[]): Error;
+    (message?: string, options?: ErrorOptions, ...ignored: any[]): Error;
 }
 declare var Error: ErrorConstructor;
 interface TypeError extends Error {}
 interface TypeErrorConstructor {
-    new (message?: string, options?: ErrorOptions): TypeError;
-    (message?: string, options?: ErrorOptions): TypeError;
+    new (message?: string, options?: ErrorOptions, ...ignored: any[]): TypeError;
+    (message?: string, options?: ErrorOptions, ...ignored: any[]): TypeError;
 }
 declare var TypeError: TypeErrorConstructor;
 interface RangeError extends Error {}
 interface RangeErrorConstructor {
-    new (message?: string, options?: ErrorOptions): RangeError;
-    (message?: string, options?: ErrorOptions): RangeError;
+    new (message?: string, options?: ErrorOptions, ...ignored: any[]): RangeError;
+    (message?: string, options?: ErrorOptions, ...ignored: any[]): RangeError;
 }
 declare var RangeError: RangeErrorConstructor;
 interface SyntaxError extends Error {}
 interface SyntaxErrorConstructor {
-    new (message?: string, options?: ErrorOptions): SyntaxError;
-    (message?: string, options?: ErrorOptions): SyntaxError;
+    new (message?: string, options?: ErrorOptions, ...ignored: any[]): SyntaxError;
+    (message?: string, options?: ErrorOptions, ...ignored: any[]): SyntaxError;
 }
 declare var SyntaxError: SyntaxErrorConstructor;
 interface ReferenceError extends Error {}
 interface ReferenceErrorConstructor {
-    new (message?: string, options?: ErrorOptions): ReferenceError;
-    (message?: string, options?: ErrorOptions): ReferenceError;
+    new (message?: string, options?: ErrorOptions, ...ignored: any[]): ReferenceError;
+    (message?: string, options?: ErrorOptions, ...ignored: any[]): ReferenceError;
 }
 declare var ReferenceError: ReferenceErrorConstructor;
 interface EvalError extends Error {}
 interface EvalErrorConstructor {
-    new (message?: string, options?: ErrorOptions): EvalError;
-    (message?: string, options?: ErrorOptions): EvalError;
+    new (message?: string, options?: ErrorOptions, ...ignored: any[]): EvalError;
+    (message?: string, options?: ErrorOptions, ...ignored: any[]): EvalError;
 }
 declare var EvalError: EvalErrorConstructor;
 interface URIError extends Error {}
 interface URIErrorConstructor {
-    new (message?: string, options?: ErrorOptions): URIError;
-    (message?: string, options?: ErrorOptions): URIError;
+    new (message?: string, options?: ErrorOptions, ...ignored: any[]): URIError;
+    (message?: string, options?: ErrorOptions, ...ignored: any[]): URIError;
 }
 declare var URIError: URIErrorConstructor;
 interface AggregateError extends Error {
     errors: any[];
 }
 interface AggregateErrorConstructor {
-    new(errors: any[], message?: string, options?: ErrorOptions): AggregateError;
-    (errors: any[], message?: string, options?: ErrorOptions): AggregateError;
+    new(errors: any[], message?: string, options?: ErrorOptions, ...ignored: any[]): AggregateError;
+    (errors: any[], message?: string, options?: ErrorOptions, ...ignored: any[]): AggregateError;
 }
 declare var AggregateError: AggregateErrorConstructor;
 

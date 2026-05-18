@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Error-family and `AggregateError` constructors and Error string/value methods now evaluate and ignore extra call arguments where JavaScript ignores them. Tests: `error_instances`, `error_constructors`, `aggregate_error_constructor`.
 - Date mutator methods now evaluate and ignore extra call arguments beyond the JavaScript-used fields for `.setTime()`, `.setYear()`, local setters, and UTC setters. Tests: `date_set_time`, `date_legacy_year`, `date_local_setters`, `date_utc_setters`.
 - `Date.UTC(...)` and `new Date(year, month, ...)` now evaluate and ignore arguments beyond the seventh JavaScript date component instead of rejecting them. Tests: `date_utc`, `date_local_constructor`.
 - `Date.parse(text?)` now supports JavaScript optional-argument behavior, returning `NaN` with no argument and evaluating then ignoring extra arguments. Test: `date_parse`.

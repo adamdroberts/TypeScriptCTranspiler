@@ -14365,16 +14365,29 @@ class Emitter {
         switch (method) {
             case "toLocaleString":
             case "toString":
-                if (call.arguments.length !== 0) unsupported(call, `Error.${method} expects no args`);
-                return this.emitSequencedCall("tsc_error_to_string", T_STRING, [{ value: recv }]);
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    this.errorIgnoredArgSpecs(recv, call.arguments),
+                    ([error]) => `tsc_error_to_string(${error})`,
+                );
             case "valueOf":
-                if (call.arguments.length !== 0) unsupported(call, "Error.valueOf expects no args");
-                return recv;
+                return this.emitSequencedExpr(
+                    recv.ty,
+                    this.errorIgnoredArgSpecs(recv, call.arguments),
+                    ([error]) => error,
+                );
             case "hasOwnProperty":
             case "propertyIsEnumerable":
                 return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Error");
         }
         unsupported(call, `Error method .${method}`);
+    }
+
+    private errorIgnoredArgSpecs(recv: EmitResult, args: readonly ts.Expression[]): SequencedCallArg[] {
+        return [
+            { value: recv },
+            ...Array.from(args, (arg) => ({ value: this.emitExpr(arg), node: arg })),
+        ];
     }
 
     private isErrorConstructorName(name: string): boolean {
@@ -14391,7 +14404,6 @@ class Emitter {
 
     private emitErrorConstructor(call: ts.CallExpression | ts.NewExpression, name: string): EmitResult {
         const args = call.arguments ?? [];
-        if (args.length > 2) unsupported(call, "Error expects optional message and options");
         const nameLit = `tsc_str_from_lit("${name}", ${name.length})`;
         const specs: SequencedCallArg[] = [
             { value: { c: nameLit, ty: T_STRING } },
@@ -14403,14 +14415,20 @@ class Emitter {
         }
         if (args[1]) {
             specs.push({ value: this.emitErrorCauseOption(args[1]), target: T_VALUE, node: args[1] });
-            return this.emitSequencedCall("tsc_error_new_named_cause", T_ERROR, specs);
         }
-        return this.emitSequencedCall("tsc_error_new_named", T_ERROR, specs);
+        for (const arg of args.slice(2)) {
+            specs.push({ value: this.emitExpr(arg), node: arg });
+        }
+        return this.emitSequencedExpr(T_ERROR, specs, ([nameC, messageC, causeC]) =>
+            args[1]
+                ? `tsc_error_new_named_cause(${nameC}, ${messageC}, ${causeC})`
+                : `tsc_error_new_named(${nameC}, ${messageC})`,
+        );
     }
 
     private emitAggregateErrorConstructor(call: ts.CallExpression | ts.NewExpression): EmitResult {
         const args = call.arguments ?? [];
-        if (args.length < 1 || args.length > 3) unsupported(call, "AggregateError expects errors, optional message, and options");
+        if (args.length < 1) unsupported(call, "AggregateError expects errors, optional message, and options");
         const errors = this.emitExpr(args[0]!);
         const specs: SequencedCallArg[] = [
             { value: errors, target: arrayType(T_VALUE), node: args[0]! },
@@ -14421,6 +14439,9 @@ class Emitter {
         }
         if (args[2]) {
             specs.push({ value: this.emitErrorCauseOption(args[2]), target: T_VALUE, node: args[2] });
+        }
+        for (const arg of args.slice(3)) {
+            specs.push({ value: this.emitExpr(arg), node: arg });
         }
         return this.emitSequencedExpr(T_ERROR, specs, ([errorsC, messageC, causeC]) =>
             causeC

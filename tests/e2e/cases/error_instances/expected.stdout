@@ -1,4 +1,6 @@
 with: Error boom Error: boom Error: boom
 empty: Error  Error
 called: Error called Error: called true
+extra: Error extra called-extra nc
+methods: Error: boom Error: called true ncslv
 caught: Error: boom

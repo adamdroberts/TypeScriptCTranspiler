@@ -280,7 +280,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 
 - `throw expr` — stringifies `expr` and `longjmp`s to the nearest enclosing `try`. Test: `exceptions`
 - `try { } catch (e) { } finally { }` — catch binding is `tsc_str_t* e = tsc_current_error()`
-- `new Error(message?, options?)`, callable `Error(message?, options?)`, and the same constructor/callable forms for `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError`, `URIError`, and `AggregateError` create a narrow Error object subset exposing `.name`, `.message`, `.cause`, `.toString()`, `.toLocaleString()`, and `.valueOf()`. Literal `{ cause }` options are stored as dynamic values, `AggregateError` stores `.errors`, and throwing one of these errors still stringifies into the existing exception string channel. Tests: `error_instances`, `error_constructors`, `error_more_constructors`, `aggregate_error_constructor`, `error_cause`
+- `new Error(message?, options?, ...ignored)`, callable `Error(message?, options?, ...ignored)`, and the same constructor/callable forms for `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError`, `URIError`, and `AggregateError` create a narrow Error object subset exposing `.name`, `.message`, `.cause`, `.toString(...ignored)`, `.toLocaleString(...ignored)`, and `.valueOf(...ignored)`. Extra constructor and string/value method arguments are evaluated then ignored where JavaScript ignores them, literal `{ cause }` options are stored as dynamic values, `AggregateError` stores `.errors`, and throwing one of these errors still stringifies into the existing exception string channel. Tests: `error_instances`, `error_constructors`, `error_more_constructors`, `aggregate_error_constructor`, `error_cause`
 - Nested try/catch with re-throw. Test: `exceptions`
 - Uncaught exceptions print `Uncaught: <msg>` and exit 1
 - Runtime: `tsc_try_push`, `tsc_try_pop`, `tsc_throw_str`, `tsc_rethrow`, `tsc_current_error` + `setjmp`/`longjmp`
@@ -550,7 +550,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_to_string` | Array.toString/toLocaleString typed comma-join conversion |
 | `array_value_of` | Array.valueOf typed receiver identity |
 | `array_with` | Array.with non-mutating replacement |
-| `aggregate_error_constructor` | AggregateError constructor/callable form with stored errors and Error stringification |
+| `aggregate_error_constructor` | AggregateError constructor/callable form with stored errors, ignored extra args, and Error stringification |
 | `base64_globals` | global btoa/atob byte-string base64 helpers |
 | `bigint` | GMP-backed BigInt literals, arithmetic, comparison, and toString |
 | `bitwise_assign` | typed numeric bitwise compound assignments |
@@ -646,9 +646,9 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dns_lookup_options` | immediate dns.lookup family option support |
 | `dns_promises_lookup` | immediate dns.promises.lookup fulfilled result objects |
 | `enums` | numeric enum constants |
-| `error_constructors` | TypeError, RangeError, and SyntaxError constructors share Error object behavior |
+| `error_constructors` | TypeError, RangeError, and SyntaxError constructors share Error object behavior and ignored extra args |
 | `error_cause` | Error-family and AggregateError literal cause options exposed through .cause |
-| `error_instances` | Error object subset with name/message/stringification/valueOf and throw stringification |
+| `error_instances` | Error object subset with name/message/stringification/valueOf, ignored extra args, and throw stringification |
 | `error_more_constructors` | ReferenceError, EvalError, and URIError constructors share Error object behavior |
 | `event_emitter` | synchronous EventEmitter listener registration, emit, once, removal, and listener counts |
 | `event_emitter_default_max_listeners` | EventEmitter.defaultMaxListeners and events.defaultMaxListeners configure default max listeners |
