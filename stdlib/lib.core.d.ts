@@ -122,29 +122,29 @@ interface StringConstructor {
 declare var String: StringConstructor;
 
 interface Boolean {
-    toLocaleString(): string;
-    toString(): string;
-    valueOf(): boolean;
+    toLocaleString(...ignored: any[]): string;
+    toString(...ignored: any[]): string;
+    valueOf(...ignored: any[]): boolean;
 }
 interface BooleanConstructor {
     (value?: any, ...ignored: any[]): boolean;
 }
 declare var Boolean: BooleanConstructor;
 interface Number {
-    toLocaleString(): string;
-    toString(radix?: number): string;
-    toFixed(fractionDigits?: number): string;
-    toExponential(fractionDigits?: number): string;
-    toPrecision(precision?: number): string;
-    valueOf(): number;
+    toLocaleString(...ignored: any[]): string;
+    toString(radix?: number, ...ignored: any[]): string;
+    toFixed(fractionDigits?: number, ...ignored: any[]): string;
+    toExponential(fractionDigits?: number, ...ignored: any[]): string;
+    toPrecision(precision?: number, ...ignored: any[]): string;
+    valueOf(...ignored: any[]): number;
 }
 interface BigInt {
-    toLocaleString(): string;
-    toString(radix?: number): string;
-    valueOf(): bigint;
+    toLocaleString(...ignored: any[]): string;
+    toString(radix?: number, ...ignored: any[]): string;
+    valueOf(...ignored: any[]): bigint;
 }
 interface BigIntConstructor {
-    (value: string | number | boolean): bigint;
+    (value: string | number | boolean, ...ignored: any[]): bigint;
 }
 declare var BigInt: BigIntConstructor;
 interface IArguments {}

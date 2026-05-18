@@ -4,3 +4,5 @@ bin: -1010
 frac: 1010.1
 bool: true false yes
 own: false false
+ignored num: ff 255.0 2.6e+2 255 255 255
+ignored bool: true false true abcdefghi

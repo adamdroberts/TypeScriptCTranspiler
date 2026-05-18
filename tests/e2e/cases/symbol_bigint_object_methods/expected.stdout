@@ -3,3 +3,4 @@ sym-value: true id
 big-locale: 255
 big-value: 256
 own: false false
+ignored big: ff 255 true bslv

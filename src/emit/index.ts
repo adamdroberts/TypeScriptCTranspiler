@@ -16084,39 +16084,39 @@ class Emitter {
         const args = call.arguments;
         switch (method) {
             case "toString": {
-                if (args.length > 1) unsupported(call, "Number.toString expects 0 or 1 args");
                 const specs: SequencedCallArg[] = [{ value: recv }];
                 if (args[0]) {
                     const radix = this.emitExpr(args[0]);
                     requireNumber(args[0], radix.ty);
                     specs.push({ value: radix, target: T_NUMBER, node: args[0] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 1));
                 return this.emitSequencedExpr(T_STRING, specs, (vals) => {
                     const radix = vals[1] ?? "10.0";
                     return `tsc_str_from_num_radix(${vals[0]}, ${radix})`;
                 });
             }
             case "toFixed": {
-                if (args.length > 1) unsupported(call, "Number.toFixed expects 0 or 1 args");
                 const specs: SequencedCallArg[] = [{ value: recv }];
                 if (args[0]) {
                     const digits = this.emitExpr(args[0]);
                     requireNumber(args[0], digits.ty);
                     specs.push({ value: digits, target: T_NUMBER, node: args[0] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 1));
                 return this.emitSequencedExpr(T_STRING, specs, (vals) => {
                     const digits = vals[1] ?? "0.0";
                     return `tsc_str_from_num_fixed(${vals[0]}, ${digits})`;
                 });
             }
             case "toExponential": {
-                if (args.length > 1) unsupported(call, "Number.toExponential expects 0 or 1 args");
                 const specs: SequencedCallArg[] = [{ value: recv }];
                 if (args[0]) {
                     const digits = this.emitExpr(args[0]);
                     requireNumber(args[0], digits.ty);
                     specs.push({ value: digits, target: T_NUMBER, node: args[0] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 1));
                 return this.emitSequencedExpr(T_STRING, specs, (vals) => {
                     const digits = vals[1] ?? "0.0";
                     const hasDigits = vals[1] ? "true" : "false";
@@ -16124,13 +16124,13 @@ class Emitter {
                 });
             }
             case "toPrecision": {
-                if (args.length > 1) unsupported(call, "Number.toPrecision expects 0 or 1 args");
                 const specs: SequencedCallArg[] = [{ value: recv }];
                 if (args[0]) {
                     const precision = this.emitExpr(args[0]);
                     requireNumber(args[0], precision.ty);
                     specs.push({ value: precision, target: T_NUMBER, node: args[0] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 1));
                 return this.emitSequencedExpr(T_STRING, specs, (vals) => {
                     const precision = vals[1] ?? "0.0";
                     const hasPrecision = vals[1] ? "true" : "false";
@@ -16138,13 +16138,20 @@ class Emitter {
                 });
             }
             case "toLocaleString":
-                if (args.length !== 0) unsupported(call, "Number.toLocaleString expects no args");
-                return this.emitSequencedCall("tsc_str_from_num", T_STRING, [
-                    { value: recv, target: T_NUMBER, node: call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [
+                        { value: recv, target: T_NUMBER, node: call.expression },
+                        ...this.ignoredArgumentSpecs(args, 0),
+                    ],
+                    ([value]) => `tsc_str_from_num(${value})`,
+                );
             case "valueOf":
-                if (args.length !== 0) unsupported(call, "Number.valueOf expects no args");
-                return recv;
+                return this.emitSequencedExpr(
+                    T_NUMBER,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([value]) => value,
+                );
             case "hasOwnProperty":
             case "propertyIsEnumerable":
                 return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "Number");
@@ -16204,13 +16211,20 @@ class Emitter {
         switch (method) {
             case "toLocaleString":
             case "toString":
-                if (args.length !== 0) unsupported(call, `Boolean.${method} expects no args`);
-                return this.emitSequencedCall("tsc_str_from_bool", T_STRING, [
-                    { value: recv, target: T_BOOLEAN, node: call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [
+                        { value: recv, target: T_BOOLEAN, node: call.expression },
+                        ...this.ignoredArgumentSpecs(args, 0),
+                    ],
+                    ([value]) => `tsc_str_from_bool(${value})`,
+                );
             case "valueOf":
-                if (args.length !== 0) unsupported(call, "Boolean.valueOf expects no args");
-                return recv;
+                return this.emitSequencedExpr(
+                    T_BOOLEAN,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([value]) => value,
+                );
             case "hasOwnProperty":
             case "propertyIsEnumerable":
                 return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "Boolean");
@@ -16317,24 +16331,31 @@ class Emitter {
     }
 
     private emitBigIntConstructor(call: ts.CallExpression): EmitResult {
-        if (call.arguments.length !== 1) unsupported(call, "BigInt expects 1 arg");
+        if (call.arguments.length < 1) unsupported(call, "BigInt expects at least 1 arg");
         const arg = call.arguments[0]!;
         const r = this.emitExpr(arg);
+        const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
         switch (r.ty.kind) {
             case "bigint":
-                return r;
+                return this.emitSequencedExpr(T_BIGINT, [{ value: r }, ...ignored], ([value]) => value);
             case "string":
-                return this.emitSequencedCall("tsc_bigint_from_str", T_BIGINT, [
-                    { value: r, target: T_STRING, node: arg },
-                ]);
+                return this.emitSequencedExpr(
+                    T_BIGINT,
+                    [{ value: r, target: T_STRING, node: arg }, ...ignored],
+                    ([value]) => `tsc_bigint_from_str(${value})`,
+                );
             case "number":
-                return this.emitSequencedCall("tsc_bigint_from_num", T_BIGINT, [
-                    { value: r, target: T_NUMBER, node: arg },
-                ]);
+                return this.emitSequencedExpr(
+                    T_BIGINT,
+                    [{ value: r, target: T_NUMBER, node: arg }, ...ignored],
+                    ([value]) => `tsc_bigint_from_num(${value})`,
+                );
             case "boolean":
-                return this.emitSequencedCall("tsc_bigint_from_bool", T_BIGINT, [
-                    { value: r, target: T_BOOLEAN, node: arg },
-                ]);
+                return this.emitSequencedExpr(
+                    T_BIGINT,
+                    [{ value: r, target: T_BOOLEAN, node: arg }, ...ignored],
+                    ([value]) => `tsc_bigint_from_bool(${value})`,
+                );
             default:
                 unsupported(arg, `BigInt cannot convert ${r.ty.c}`);
         }
@@ -16348,26 +16369,30 @@ class Emitter {
         const args = call.arguments;
         switch (method) {
             case "toLocaleString":
-                if (args.length !== 0) unsupported(call, "BigInt.toLocaleString expects no args");
-                return this.emitSequencedExpr(T_STRING, [{ value: recv }], ([value]) =>
-                    `tsc_bigint_to_string(${value}, 10.0)`,
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([value]) => `tsc_bigint_to_string(${value}, 10.0)`,
                 );
             case "toString": {
-                if (args.length > 1) unsupported(call, "BigInt.toString expects 0 or 1 args");
                 const specs: SequencedCallArg[] = [{ value: recv }];
                 if (args[0]) {
                     const radix = this.emitExpr(args[0]);
                     requireNumber(args[0], radix.ty);
                     specs.push({ value: radix, target: T_NUMBER, node: args[0] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 1));
                 return this.emitSequencedExpr(T_STRING, specs, (vals) => {
                     const radix = vals[1] ?? "10.0";
                     return `tsc_bigint_to_string(${vals[0]}, ${radix})`;
                 });
             }
             case "valueOf":
-                if (args.length !== 0) unsupported(call, "BigInt.valueOf expects no args");
-                return recv;
+                return this.emitSequencedExpr(
+                    T_BIGINT,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([value]) => value,
+                );
             case "hasOwnProperty":
             case "propertyIsEnumerable":
                 return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "BigInt");
