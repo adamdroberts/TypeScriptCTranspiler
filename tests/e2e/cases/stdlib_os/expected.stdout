@@ -3,6 +3,7 @@ platform nonempty: true
 arch nonempty: true
 hostname nonempty: true
 tmpdir: /tmp
+ignored basics: true true true true true true pahdoc
 time monotonic-ish: true
 isInteger 5: true
 isInteger 5.5: false

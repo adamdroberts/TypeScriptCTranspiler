@@ -1,3 +1,4 @@
 global: true true true
 namespace: true true true
 named: true true true
+ignored: true true true amv

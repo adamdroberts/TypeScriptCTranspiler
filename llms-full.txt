@@ -2130,7 +2130,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Test: `fs_roundtrip`
 
 ### `os`
-- `os.platform()` / `type()` / `release()` / `version()` / `endianness()` / `machine()` / `arch()` / `hostname()` / `tmpdir()` / `homedir()` / `cpus()` / `availableParallelism()` / `totalmem()` / `freemem()` / `uptime()` / `loadavg()` / `userInfo()`, `os.EOL`, and `os.devNull`, with namespace and named imports from `"os"` / `"node:os"` for the supported subset.
+- `os.platform(...ignored)` / `type(...ignored)` / `release(...ignored)` / `version(...ignored)` / `endianness(...ignored)` / `machine(...ignored)` / `arch(...ignored)` / `hostname(...ignored)` / `tmpdir(...ignored)` / `homedir(...ignored)` / `cpus(...ignored)` / `availableParallelism(...ignored)` / `totalmem(...ignored)` / `freemem(...ignored)` / `uptime(...ignored)` / `loadavg(...ignored)` / `userInfo()`, `os.EOL`, and `os.devNull`, with namespace and named imports from `"os"` / `"node:os"` for the supported subset.
 - Runtime: `tsc_os_*`. Tests: `stdlib_os`, `os_more`, `os_dev_null`, `os_host_more`, `os_system_stats`, `os_user_info`
 
 ### `crypto`

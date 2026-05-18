@@ -18862,31 +18862,35 @@ class Emitter {
     }
 
     private emitOsCall(call: ts.CallExpression, name: string): EmitResult {
-        if (call.arguments.length !== 0) unsupported(call, `os.${name} expects no args`);
+        const ignored = this.ignoredArgumentSpecs(call.arguments, 0);
+        const ret = (ty: CType, c: string): EmitResult =>
+            this.emitSequencedExpr(ty, ignored, () => c);
         switch (name) {
-            case "platform": return { c: `tsc_os_platform()`, ty: T_STRING };
-            case "type": return { c: `tsc_os_type()`, ty: T_STRING };
-            case "release": return { c: `tsc_os_release()`, ty: T_STRING };
-            case "version": return { c: `tsc_os_version()`, ty: T_STRING };
-            case "endianness": return { c: `tsc_os_endianness()`, ty: T_STRING };
-            case "machine": return { c: `tsc_os_machine()`, ty: T_STRING };
-            case "arch": return { c: `tsc_os_arch()`, ty: T_STRING };
-            case "hostname": return { c: `tsc_os_hostname()`, ty: T_STRING };
-            case "tmpdir": return { c: `tsc_os_tmpdir()`, ty: T_STRING };
-            case "homedir": return { c: `tsc_os_homedir()`, ty: T_STRING };
-            case "availableParallelism": return { c: `tsc_os_available_parallelism()`, ty: T_NUMBER };
-            case "totalmem": return { c: `tsc_os_totalmem()`, ty: T_NUMBER };
-            case "freemem": return { c: `tsc_os_freemem()`, ty: T_NUMBER };
-            case "uptime": return { c: `tsc_os_uptime()`, ty: T_NUMBER };
-            case "loadavg": return { c: `tsc_os_loadavg()`, ty: arrayType(T_NUMBER) };
-            case "userInfo": return { c: `tsc_os_user_info()`, ty: T_VALUE };
+            case "platform": return ret(T_STRING, `tsc_os_platform()`);
+            case "type": return ret(T_STRING, `tsc_os_type()`);
+            case "release": return ret(T_STRING, `tsc_os_release()`);
+            case "version": return ret(T_STRING, `tsc_os_version()`);
+            case "endianness": return ret(T_STRING, `tsc_os_endianness()`);
+            case "machine": return ret(T_STRING, `tsc_os_machine()`);
+            case "arch": return ret(T_STRING, `tsc_os_arch()`);
+            case "hostname": return ret(T_STRING, `tsc_os_hostname()`);
+            case "tmpdir": return ret(T_STRING, `tsc_os_tmpdir()`);
+            case "homedir": return ret(T_STRING, `tsc_os_homedir()`);
+            case "availableParallelism": return ret(T_NUMBER, `tsc_os_available_parallelism()`);
+            case "totalmem": return ret(T_NUMBER, `tsc_os_totalmem()`);
+            case "freemem": return ret(T_NUMBER, `tsc_os_freemem()`);
+            case "uptime": return ret(T_NUMBER, `tsc_os_uptime()`);
+            case "loadavg": return ret(arrayType(T_NUMBER), `tsc_os_loadavg()`);
+            case "userInfo":
+                if (call.arguments.length !== 0) unsupported(call, "os.userInfo options are not supported yet");
+                return { c: `tsc_os_user_info()`, ty: T_VALUE };
             case "cpus": {
                 // Minimal: return an array-of-empty-objects of length cpu_count.
                 // Most user code just wants os.cpus().length, so this is fine.
-                return {
-                    c: `({ double _n = tsc_os_cpu_count(); tsc_array_t* _a = tsc_array_new(sizeof(double), (size_t)_n); _a->len = (size_t)_n; _a; })`,
-                    ty: arrayType(T_NUMBER),
-                };
+                return ret(
+                    arrayType(T_NUMBER),
+                    `({ double _n = tsc_os_cpu_count(); tsc_array_t* _a = tsc_array_new(sizeof(double), (size_t)_n); _a->len = (size_t)_n; _a; })`,
+                );
             }
         }
         unsupported(call, `os.${name}`);
