@@ -735,6 +735,7 @@ interface Date {
     valueOf(): number;
     toString(): string;
     toLocaleString(): string;
+    toDateString(): string;
     toISOString(): string;
     toUTCString(): string;
     toGMTString(): string;

@@ -14250,6 +14250,9 @@ class Emitter {
             case "toUTCString":
                 if (call.arguments.length !== 0) unsupported(call, `Date.${method} expects no args`);
                 return this.emitSequencedCall("tsc_date_to_utc_string", T_STRING, [{ value: recv }]);
+            case "toDateString":
+                if (call.arguments.length !== 0) unsupported(call, "Date.toDateString expects no args");
+                return this.emitSequencedCall("tsc_date_to_date_string", T_STRING, [{ value: recv }]);
             case "toJSON":
                 if (call.arguments.length !== 0) unsupported(call, "Date.toJSON expects no args");
                 return this.emitSequencedCall("tsc_date_to_iso_string", T_STRING, [{ value: recv }]);

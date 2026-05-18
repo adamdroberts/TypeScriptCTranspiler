@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Date instances now support `.toDateString()` local date formatting. Test: `date_to_date_string`.
 - Date instances now support legacy `getYear()` / `setYear(year)` local-year behavior. Test: `date_legacy_year`.
 - `fs.cpSync` and immediate `fs.promises.cp` now accept literal `{ preserveTimestamps }` options for regular-file copies in the bounded cp subset. Test: `fs_cp_options`.
 - `fs.cpSync` and immediate `fs.promises.cp` now accept numeric `{ mode }` copy flags, including `COPYFILE_EXCL` destination-exists checks for regular files copied through `cp`. Test: `fs_cp_options`.

@@ -9799,6 +9799,27 @@ tsc_str_t* tsc_date_to_utc_string(const tsc_date_t* d) {
     return tsc_str_from_cstr(buf);
 }
 
+tsc_str_t* tsc_date_to_date_string(const tsc_date_t* d) {
+    if (!d || isnan(d->ms)) return tsc_str_from_lit("Invalid Date", 12);
+    double seconds_double = floor(d->ms / 1000.0);
+    time_t seconds = (time_t)seconds_double;
+    struct tm tm;
+    if (!localtime_r(&seconds, &tm)) return tsc_str_from_lit("Invalid Date", 12);
+    static const char* weekdays[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+    static const char* months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+    char buf[24];
+    snprintf(
+        buf,
+        sizeof(buf),
+        "%s %s %02d %04d",
+        weekdays[tm.tm_wday],
+        months[tm.tm_mon],
+        tm.tm_mday,
+        tm.tm_year + 1900
+    );
+    return tsc_str_from_cstr(buf);
+}
+
 tsc_str_t* tsc_date_to_string(const tsc_date_t* d) {
     return d ? tsc_str_from_num(d->ms) : tsc_str_from_lit("Invalid Date", 12);
 }

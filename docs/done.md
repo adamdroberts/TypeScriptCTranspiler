@@ -2,7 +2,7 @@
 
 Everything in this file compiles end-to-end to a native binary via `./bin/tsc2c file.ts -o out`. Each bullet points at the test case under `tests/e2e/cases/` that exercises it and, where useful, at the runtime symbol or emitter method that implements it.
 
-Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` -> 653 passed.
+Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` -> 654 passed.
 
 ---
 
@@ -477,7 +477,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Runtime: `tsc_console_log_n`, `tsc_console_error_n`
 
 ### `Date`, `Number`, `Array`, `Object`
-- `Date.now()` → `tsc_date_now` (ms since epoch), `Date.UTC(year, month, ...)` returns normalized UTC epoch milliseconds, `Date.parse(text)` accepts a bounded deterministic ISO subset, and `new Date()` / `new Date(ms)` / `new Date(text)` / `new Date(existingDate)` / `new Date(year, month, ...)` produce a narrow Date instance subset with `.getTime()`, UTC component getters, local-time component getters, `.getYear()`, `.getTimezoneOffset()`, `.setTime(ms)`, legacy `.setYear(year)`, local-time mutators (`setFullYear`, `setMonth`, `setDate`, `setHours`, `setMinutes`, `setSeconds`, `setMilliseconds`), UTC mutators (`setUTCFullYear`, `setUTCMonth`, `setUTCDate`, `setUTCHours`, `setUTCMinutes`, `setUTCSeconds`, `setUTCMilliseconds`), `.valueOf()`, `.toString()`, `.toLocaleString()`, `.toISOString()`, `.toUTCString()` / `.toGMTString()`, and `.toJSON()` backed by stored millisecond timestamps. Tests: `date_now`, `date_instances`, `date_local_constructor`, `date_legacy_year`, `date_local_setters`, `date_utc`, `date_parse`, `date_set_time`, `date_utc_getters`, `date_local_getters`, `date_utc_setters`, `date_to_iso_string`, `date_to_utc_string`, `date_to_json`
+- `Date.now()` → `tsc_date_now` (ms since epoch), `Date.UTC(year, month, ...)` returns normalized UTC epoch milliseconds, `Date.parse(text)` accepts a bounded deterministic ISO subset, and `new Date()` / `new Date(ms)` / `new Date(text)` / `new Date(existingDate)` / `new Date(year, month, ...)` produce a narrow Date instance subset with `.getTime()`, UTC component getters, local-time component getters, `.getYear()`, `.getTimezoneOffset()`, `.setTime(ms)`, legacy `.setYear(year)`, local-time mutators (`setFullYear`, `setMonth`, `setDate`, `setHours`, `setMinutes`, `setSeconds`, `setMilliseconds`), UTC mutators (`setUTCFullYear`, `setUTCMonth`, `setUTCDate`, `setUTCHours`, `setUTCMinutes`, `setUTCSeconds`, `setUTCMilliseconds`), `.valueOf()`, `.toString()`, `.toLocaleString()`, `.toDateString()`, `.toISOString()`, `.toUTCString()` / `.toGMTString()`, and `.toJSON()` backed by stored millisecond timestamps. Tests: `date_now`, `date_instances`, `date_local_constructor`, `date_legacy_year`, `date_local_setters`, `date_utc`, `date_parse`, `date_set_time`, `date_utc_getters`, `date_local_getters`, `date_utc_setters`, `date_to_date_string`, `date_to_iso_string`, `date_to_utc_string`, `date_to_json`
 - `Math.*` covers the common libm/int32/fround surface: `floor`, `ceil`, `round` with negative-zero preservation, `abs`, `trunc`, `sign` with signed-zero preservation, `imul`, `clz32`, `fround`, `cbrt`, `sqrt`, `pow`, variadic `hypot(...)`, `min`/`max` with JS `NaN` propagation, `log`, `log1p`, `log2`, `log10`, `exp`, `expm1`, trigonometric/inverse-trigonometric and hyperbolic/inverse-hyperbolic functions, `atan2`, `random`, and constants. Tests: `math`, `math_more`, `math_constants_more`, `math_int32_float`
 - `Number.EPSILON`, `MAX_SAFE_INTEGER`, `MAX_VALUE`, `MIN_SAFE_INTEGER`, `MIN_VALUE`, `NaN`, `NEGATIVE_INFINITY`, `POSITIVE_INFINITY`, plus `Number.isInteger(value)`, `Number.isFinite(value)`, `Number.isNaN(value)`, `Number.isSafeInteger(value)`, `Number.parseFloat(value)`, `Number.parseInt(value, radix?)` with JS-style omitted/zero radix inference and invalid-radix `NaN`. Tests: `stdlib_os`, `number_static_more`, `number_constants`
 - `Array.isArray(x)`, `Array.from(arr)`, `Array.of(...items)`
@@ -1090,6 +1090,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `date_parse` | Date.parse and string Date constructor over deterministic ISO strings |
 | `date_set_time` | Date.setTime mutation and copy construction from Date instances |
 | `date_to_iso_string` | Date.toISOString UTC formatting |
+| `date_to_date_string` | Date.toDateString local date formatting |
 | `date_to_json` | Date.toJSON delegates to UTC ISO formatting |
 | `date_to_utc_string` | Date.toUTCString/toGMTString UTC text formatting |
 | `date_utc` | Date.UTC numeric argument normalization |
