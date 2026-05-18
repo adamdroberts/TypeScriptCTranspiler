@@ -840,7 +840,7 @@ interface FSReadFileBufferObjectOptions extends FSBufferEncodingOptions {
     flag?: FSReadFileFlag;
 }
 type FSReadFileBufferOptions = FSBufferEncoding | null | FSReadFileBufferObjectOptions;
-type FSWriteFileFlag = "w" | "wx" | "a" | "ax" | "r+" | "rs+";
+type FSWriteFileFlag = "w" | "wx" | "w+" | "wx+" | "a" | "ax" | "a+" | "ax+" | "as" | "as+" | "r+" | "rs+";
 interface FSWriteFileOptions extends FSEncodingOptions {
     flag?: FSWriteFileFlag;
     mode?: number;

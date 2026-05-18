@@ -2,5 +2,6 @@ sync append: one-two
 sync exclusive: fs.writeFileSync: file already exists
 sync exclusive content: first
 sync update: XYcdef
+sync plus flags: rst-uv
 promise exclusive: fs.writeFileSync: file already exists
-promise append: Zlpha-beta
+promise append: Zlpha-beta-tail

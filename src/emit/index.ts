@@ -16806,11 +16806,12 @@ class Emitter {
             }
         };
         const checkFlag = (node: ts.Expression): void => {
-            if (!ts.isStringLiteralLike(node) || !["w", "wx", "a", "ax", "r+", "rs+"].includes(node.text)) {
-                unsupported(node, `${label} only supports literal "w", "wx", "a", "ax", "r+", or "rs+" flags in this subset`);
+            const supportedFlags = ["w", "wx", "w+", "wx+", "a", "ax", "a+", "ax+", "as", "as+", "r+", "rs+"];
+            if (!ts.isStringLiteralLike(node) || !supportedFlags.includes(node.text)) {
+                unsupported(node, `${label} only supports literal "w", "wx", "w+", "wx+", "a", "ax", "a+", "ax+", "as", "as+", "r+", or "rs+" flags in this subset`);
             }
-            out.append = node.text === "a" || node.text === "ax";
-            out.exclusive = node.text === "wx" || node.text === "ax";
+            out.append = node.text === "a" || node.text === "ax" || node.text === "a+" || node.text === "ax+" || node.text === "as" || node.text === "as+";
+            out.exclusive = node.text === "wx" || node.text === "wx+" || node.text === "ax" || node.text === "ax+";
             out.update = node.text === "r+" || node.text === "rs+";
         };
         if (ts.isStringLiteralLike(options)) {
