@@ -6,3 +6,10 @@ const dynamicNan: any = "NaN";
 const dynamicOne: any = "1";
 const dynamicBool: any = true;
 console.log("dynamic:", isNaN(dynamicNan), isFinite(dynamicOne), isFinite(dynamicBool));
+
+let seen = "";
+function mark(label: string): string {
+    seen += label;
+    return label;
+}
+console.log("ignored:", isNaN("NaN", mark("n")), isFinite("2", mark("f")), seen);

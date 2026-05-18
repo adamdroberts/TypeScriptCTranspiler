@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- `Number.isInteger` / `Number.isFinite` / `Number.isNaN` / `Number.isSafeInteger` and global `isNaN` / `isFinite` now evaluate and ignore extra arguments after the tested value. Tests: `number_static_more`, `global_number_predicates`.
 - `parseInt` / `Number.parseInt` and `parseFloat` / `Number.parseFloat` now evaluate and ignore extra arguments after the JavaScript-consumed parsing inputs. Test: `number_static_more`.
 - `Date.parse(text?, ...ignored)` now accepts evaluated ignored arguments through the ambient type shim instead of requiring local `@ts-ignore` comments. Test: `date_parse`.
 - Date zero-argument getters/formatters and `Date.now(...)` now accept evaluated ignored arguments through the ambient type shim instead of requiring local `@ts-ignore` comments. Test: `date_ignored_arguments`.

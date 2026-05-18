@@ -565,8 +565,8 @@ declare const process: Process;
 
 declare function parseInt(value: any, radix?: number, ...ignored: any[]): number;
 declare function parseFloat(value: any, ...ignored: any[]): number;
-declare function isNaN(value: any): boolean;
-declare function isFinite(value: any): boolean;
+declare function isNaN(value: any, ...ignored: any[]): boolean;
+declare function isFinite(value: any, ...ignored: any[]): boolean;
 declare function btoa(value: string): string;
 declare function atob(value: string): string;
 declare function queueMicrotask(callback: () => void): void;
@@ -771,10 +771,10 @@ interface NumberConstructor {
     readonly NaN: number;
     readonly NEGATIVE_INFINITY: number;
     readonly POSITIVE_INFINITY: number;
-    isInteger(value: any): boolean;
-    isFinite(value: any): boolean;
-    isNaN(value: any): boolean;
-    isSafeInteger(value: any): boolean;
+    isInteger(value: any, ...ignored: any[]): boolean;
+    isFinite(value: any, ...ignored: any[]): boolean;
+    isNaN(value: any, ...ignored: any[]): boolean;
+    isSafeInteger(value: any, ...ignored: any[]): boolean;
     parseFloat(value: any, ...ignored: any[]): number;
     parseInt(value: any, radix?: number, ...ignored: any[]): number;
 }

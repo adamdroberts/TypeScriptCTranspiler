@@ -8768,11 +8768,11 @@ class Emitter {
             return this.emitErrorConstructor(call, name);
         }
         if (name === "isNaN") {
-            if (call.arguments.length !== 1) unsupported(call, "isNaN expects 1 arg");
+            if (call.arguments.length < 1) unsupported(call, "isNaN expects at least 1 arg");
             return this.emitGlobalNumberPredicate(call, "isNaN");
         }
         if (name === "isFinite") {
-            if (call.arguments.length !== 1) unsupported(call, "isFinite expects 1 arg");
+            if (call.arguments.length < 1) unsupported(call, "isFinite expects at least 1 arg");
             return this.emitGlobalNumberPredicate(call, "isFinite");
         }
         if (name === "btoa" || name === "atob") {
@@ -16171,20 +16171,22 @@ class Emitter {
     private emitGlobalNumberPredicate(call: ts.CallExpression, name: "isNaN" | "isFinite"): EmitResult {
         const arg = call.arguments[0]!;
         const value = this.emitExpr(arg);
+        const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
         const fn = name === "isNaN" ? "isnan" : "isfinite";
         if (value.ty.kind === "number") {
-            return { c: `(${fn}(${value.c}))`, ty: T_BOOLEAN };
+            return this.emitSequencedExpr(T_BOOLEAN, [{ value }, ...ignored], ([v]) => `(${fn}(${v}))`);
         }
         if (value.ty.kind === "void" || value.ty.kind === "never") {
-            return this.emitSequencedExpr(T_BOOLEAN, [{ value }], () => name === "isNaN" ? "true" : "false");
+            return this.emitSequencedExpr(T_BOOLEAN, [{ value }, ...ignored], () => name === "isNaN" ? "true" : "false");
         }
         const boxable: CType["kind"][] = ["value", "string", "boolean", "array"];
         if (boxable.includes(value.ty.kind)) {
             return this.emitSequencedExpr(T_BOOLEAN, [
                 { value, target: T_VALUE, node: arg },
+                ...ignored,
             ], ([v]) => `(${fn}(tsc_value_as_num(${v})))`);
         }
-        return this.emitSequencedExpr(T_BOOLEAN, [{ value }], () => name === "isNaN" ? "true" : "false");
+        return this.emitSequencedExpr(T_BOOLEAN, [{ value }, ...ignored], () => name === "isNaN" ? "true" : "false");
     }
 
     private emitBooleanMethod(
@@ -21321,61 +21323,71 @@ class Emitter {
             if (args.length < 1) unsupported(call, "Number.parseInt expects at least 1 arg");
             return this.emitParseNumber(call, "parseInt");
         }
-        if (args.length !== 1) unsupported(call, `Number.${name} expects 1 arg`);
+        if (args.length < 1) unsupported(call, `Number.${name} expects at least 1 arg`);
         const r = this.emitExpr(args[0]!);
+        const ignored = this.ignoredArgumentSpecs(args, 1);
         switch (name) {
             case "isInteger": {
                 if (r.ty.kind === "value") {
-                    return this.emitSequencedCall("tsc_value_number_is_integer", T_BOOLEAN, [
+                    return this.emitSequencedExpr(T_BOOLEAN, [
                         { value: r, target: T_VALUE, node: args[0]! },
-                    ]);
+                        ...ignored,
+                    ], ([value]) => `tsc_value_number_is_integer(${value})`);
                 }
                 if (r.ty.kind !== "number") {
-                    return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }], () => "false");
+                    return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], () => "false");
                 }
-                return {
-                    c: `(!isnan(${r.c}) && !isinf(${r.c}) && (${r.c}) == floor(${r.c}))`,
-                    ty: T_BOOLEAN,
-                };
+                return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], ([value]) =>
+                    `(!isnan(${value}) && !isinf(${value}) && (${value}) == floor(${value}))`,
+                );
             }
             case "isFinite": {
                 if (r.ty.kind === "value") {
-                    return this.emitSequencedCall("tsc_value_number_is_finite", T_BOOLEAN, [
+                    return this.emitSequencedExpr(T_BOOLEAN, [
                         { value: r, target: T_VALUE, node: args[0]! },
-                    ]);
+                        ...ignored,
+                    ], ([value]) => `tsc_value_number_is_finite(${value})`);
                 }
                 if (r.ty.kind !== "number") {
-                    return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }], () => "false");
+                    return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], () => "false");
                 }
-                return { c: `(isfinite(${r.c}))`, ty: T_BOOLEAN };
+                return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], ([value]) => `(isfinite(${value}))`);
             }
             case "isNaN": {
                 if (r.ty.kind === "value") {
-                    return this.emitSequencedCall("tsc_value_number_is_nan", T_BOOLEAN, [
+                    return this.emitSequencedExpr(T_BOOLEAN, [
                         { value: r, target: T_VALUE, node: args[0]! },
-                    ]);
+                        ...ignored,
+                    ], ([value]) => `tsc_value_number_is_nan(${value})`);
                 }
                 if (r.ty.kind !== "number") {
-                    return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }], () => "false");
+                    return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], () => "false");
                 }
-                return { c: `(isnan(${r.c}))`, ty: T_BOOLEAN };
+                return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], ([value]) => `(isnan(${value}))`);
             }
             case "isSafeInteger": {
                 if (r.ty.kind === "value") {
-                    return this.emitSequencedCall("tsc_value_number_is_safe_integer", T_BOOLEAN, [
+                    return this.emitSequencedExpr(T_BOOLEAN, [
                         { value: r, target: T_VALUE, node: args[0]! },
-                    ]);
+                        ...ignored,
+                    ], ([value]) => `tsc_value_number_is_safe_integer(${value})`);
                 }
                 if (r.ty.kind !== "number") {
-                    return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }], () => "false");
+                    return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], () => "false");
                 }
-                return {
-                    c: `(!isnan(${r.c}) && !isinf(${r.c}) && (${r.c}) == floor(${r.c}) && fabs(${r.c}) <= 9007199254740991.0)`,
-                    ty: T_BOOLEAN,
-                };
+                return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], ([value]) =>
+                    `(!isnan(${value}) && !isinf(${value}) && (${value}) == floor(${value}) && fabs(${value}) <= 9007199254740991.0)`,
+                );
             }
         }
         unsupported(call, `Number.${name}`);
+    }
+
+    private ignoredArgumentSpecs(
+        args: readonly ts.Expression[],
+        start: number,
+    ): SequencedCallArg[] {
+        return args.slice(start).map((arg) => ({ value: this.emitExpr(arg), node: arg }));
     }
 
     private emitParseNumber(
@@ -21389,9 +21401,7 @@ class Emitter {
         const specs: SequencedCallArg[] = [
             { value: r, target: T_STRING, node: call.arguments[0]! },
         ];
-        for (const ignored of call.arguments.slice(which === "parseInt" ? 2 : 1)) {
-            specs.push({ value: this.emitExpr(ignored), node: ignored });
-        }
+        specs.push(...this.ignoredArgumentSpecs(call.arguments, which === "parseInt" ? 2 : 1));
         if (which === "parseFloat") {
             return this.emitSequencedExpr(T_NUMBER, specs, (args) => `${fn}(${args[0]})`);
         }

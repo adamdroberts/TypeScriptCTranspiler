@@ -19,3 +19,4 @@ function mark(label: string): string {
     return label;
 }
 console.log("parse ignored:", parseInt("10", 10, mark("i")), Number.parseInt("11", 10, mark("j")), parseFloat("4.5px", mark("f")), Number.parseFloat(dynamicString, mark("n")), seen);
+console.log("number predicates ignored:", Number.isFinite(1, mark("a")), Number.isNaN(NaN, mark("b")), Number.isInteger(2, mark("c")), Number.isSafeInteger(3, mark("d")), seen);
