@@ -17986,7 +17986,7 @@ class Emitter {
         method: string,
     ): EmitResult {
         const args = call.arguments;
-        const predicate = {
+        const predicates: Record<string, string> = {
             isFile: "tsc_fs_stats_is_file",
             isDirectory: "tsc_fs_stats_is_directory",
             isSymbolicLink: "tsc_fs_stats_is_symbolic_link",
@@ -17994,7 +17994,10 @@ class Emitter {
             isCharacterDevice: "tsc_fs_stats_is_character_device",
             isFIFO: "tsc_fs_stats_is_fifo",
             isSocket: "tsc_fs_stats_is_socket",
-        }[method];
+        };
+        const predicate = Object.prototype.hasOwnProperty.call(predicates, method)
+            ? predicates[method]
+            : undefined;
         if (predicate) {
             return this.emitSequencedExpr(
                 T_BOOLEAN,
@@ -18026,7 +18029,7 @@ class Emitter {
         method: string,
     ): EmitResult {
         const args = call.arguments;
-        const predicate = {
+        const predicates: Record<string, string> = {
             isFile: "tsc_fs_dirent_is_file",
             isDirectory: "tsc_fs_dirent_is_directory",
             isSymbolicLink: "tsc_fs_dirent_is_symbolic_link",
@@ -18034,7 +18037,10 @@ class Emitter {
             isCharacterDevice: "tsc_fs_dirent_is_character_device",
             isFIFO: "tsc_fs_dirent_is_fifo",
             isSocket: "tsc_fs_dirent_is_socket",
-        }[method];
+        };
+        const predicate = Object.prototype.hasOwnProperty.call(predicates, method)
+            ? predicates[method]
+            : undefined;
         if (predicate) {
             return this.emitSequencedExpr(
                 T_BOOLEAN,
