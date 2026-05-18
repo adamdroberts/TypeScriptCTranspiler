@@ -318,13 +318,13 @@ interface Map<K, V> extends Iterable<[K, V]> {
     has(key: K): boolean;
     delete(key: K): boolean;
     clear(): void;
-    keys(): K[];
-    values(): V[];
-    entries(): ObjectEntry<V>[];
+    keys(...ignored: any[]): K[];
+    values(...ignored: any[]): V[];
+    entries(...ignored: any[]): ObjectEntry<V>[];
     forEach(cb: (value: V, key: K, map: Map<K, V>) => void): void;
-    toLocaleString(): string;
-    toString(): string;
-    valueOf(): Map<K, V>;
+    toLocaleString(...ignored: any[]): string;
+    toString(...ignored: any[]): string;
+    valueOf(...ignored: any[]): Map<K, V>;
     [Symbol.iterator](): IterableIterator<[K, V]>;
 }
 interface MapConstructor {
@@ -341,8 +341,8 @@ interface Set<T> extends Iterable<T> {
     has(value: T): boolean;
     delete(value: T): boolean;
     clear(): void;
-    keys(): T[];
-    values(): T[];
+    keys(...ignored: any[]): T[];
+    values(...ignored: any[]): T[];
     forEach(cb: (value: T, value2: T, set: Set<T>) => void): void;
     union(other: Set<T>): Set<T>;
     intersection(other: Set<T>): Set<T>;
@@ -351,9 +351,9 @@ interface Set<T> extends Iterable<T> {
     isSubsetOf(other: Set<T>): boolean;
     isSupersetOf(other: Set<T>): boolean;
     isDisjointFrom(other: Set<T>): boolean;
-    toLocaleString(): string;
-    toString(): string;
-    valueOf(): Set<T>;
+    toLocaleString(...ignored: any[]): string;
+    toString(...ignored: any[]): string;
+    valueOf(...ignored: any[]): Set<T>;
     [Symbol.iterator](): IterableIterator<T>;
 }
 interface SetConstructor {
@@ -368,9 +368,9 @@ interface WeakMap<K extends object, V> {
     set(key: K, value: V): this;
     has(key: K): boolean;
     delete(key: K): boolean;
-    toLocaleString(): string;
-    toString(): string;
-    valueOf(): WeakMap<K, V>;
+    toLocaleString(...ignored: any[]): string;
+    toString(...ignored: any[]): string;
+    valueOf(...ignored: any[]): WeakMap<K, V>;
 }
 interface WeakMapConstructor {
     new <K extends object, V>(): WeakMap<K, V>;
@@ -381,9 +381,9 @@ interface WeakSet<T extends object> {
     add(value: T): this;
     has(value: T): boolean;
     delete(value: T): boolean;
-    toLocaleString(): string;
-    toString(): string;
-    valueOf(): WeakSet<T>;
+    toLocaleString(...ignored: any[]): string;
+    toString(...ignored: any[]): string;
+    valueOf(...ignored: any[]): WeakSet<T>;
 }
 interface WeakSetConstructor {
     new <T extends object>(): WeakSet<T>;
@@ -391,10 +391,10 @@ interface WeakSetConstructor {
 declare var WeakSet: WeakSetConstructor;
 
 interface WeakRef<T extends object> {
-    deref(): T | undefined;
-    toLocaleString(): string;
-    toString(): string;
-    valueOf(): WeakRef<T>;
+    deref(...ignored: any[]): T | undefined;
+    toLocaleString(...ignored: any[]): string;
+    toString(...ignored: any[]): string;
+    valueOf(...ignored: any[]): WeakRef<T>;
 }
 interface WeakRefConstructor {
     new <T extends object>(target: T): WeakRef<T>;
@@ -402,11 +402,11 @@ interface WeakRefConstructor {
 declare var WeakRef: WeakRefConstructor;
 
 interface FinalizationRegistry<T> {
-    register(target: object, heldValue: T, unregisterToken?: object): void;
-    unregister(unregisterToken: object): boolean;
-    toLocaleString(): string;
-    toString(): string;
-    valueOf(): FinalizationRegistry<T>;
+    register(target: object, heldValue: T, unregisterToken?: object, ...ignored: any[]): void;
+    unregister(unregisterToken: object, ...ignored: any[]): boolean;
+    toLocaleString(...ignored: any[]): string;
+    toString(...ignored: any[]): string;
+    valueOf(...ignored: any[]): FinalizationRegistry<T>;
 }
 interface FinalizationRegistryConstructor {
     new <T>(cleanupCallback: (heldValue: T) => void): FinalizationRegistry<T>;

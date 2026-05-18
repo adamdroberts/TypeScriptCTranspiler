@@ -1,3 +1,4 @@
 keys: red|blue
 values: red|blue
 same: true
+ignored: red|blue red|blue kv

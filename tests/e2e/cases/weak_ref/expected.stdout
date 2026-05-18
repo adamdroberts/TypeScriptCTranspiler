@@ -3,3 +3,4 @@ box: 42
 same: true
 text: [object WeakRef]
 ref key: true
+ignored: 42 true dv

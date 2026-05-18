@@ -9,3 +9,4 @@ c: 3
 doc.a: 1
 doc.b: 2
 doc.c: 3
+ignored: a|b|c 1|2|3 a:1 kve

@@ -160,36 +160,36 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` -> 661 passed.
 ### `Map<K, V>`
 - `new Map<K, V>()`, `new Map(Object.entries(obj))` for string-key `ObjectEntry<V>[]` sources, and `new Map(existingMap)` for typed Map sources — `tsc_map_new(sizeof(K), sizeof(V), keyKind, initialCap)`. Tests: `map_set_constructors`, `map_constructor_from_map`
 - `.set(k, v)`, `.get(k)`, `.has(k)`, `.delete(k)`, `.clear()`; numeric keys use SameValueZero semantics so `NaN` matches `NaN` and `-0` matches `0`. Tests: `map_set`, `map_set_same_value_zero`
-- `.keys()`, `.values()` — returns typed array; `.entries()` returns a typed `ObjectEntry<V>[]` for `Map<string, V>`. Test: `map_entries`
+- `.keys(...ignored)`, `.values(...ignored)` — returns typed array; `.entries(...ignored)` returns a typed `ObjectEntry<V>[]` for `Map<string, V>`. Ignored extra arguments are evaluated before being discarded. Test: `map_entries`
 - `.forEach((value, key, map) => expr)` — inline expression-body or single-return block-body callbacks and named callback references over insertion order. Tests: `map_set_for_each`, `map_set_for_each_refs`
 - Direct `for...of` with `[key, value]` destructuring. Test: `map_set_for_of`
 - `.size` property. Test: `map_set`, `wordcount`
-- `.toString()`, `.toLocaleString()`, and `.valueOf()`. Test: `collection_object_methods`
+- `.toString(...ignored)`, `.toLocaleString(...ignored)`, and `.valueOf(...ignored)`. Test: `collection_object_methods`
 - Key equality is polymorphic by tag: SameValueZero numbers, string content, booleans, and pointers. Runtime: `key_eq`
 - ES2024 static `Map.groupBy(items: T[], keyFn: (value: T, index: number) => K): Map<K, T[]>` groups a typed array into a typed `Map<K, T[]>` by the callback's return value. The callback may be an inline arrow/function expression with an expression body or single-return block body, or a function reference (including generic functions). Test: `map_group_by`
 
 ### `Set<T>`
 - `new Set<T>()`, `new Set(valuesArray)`, and `new Set(existingSet)` — `tsc_set_new(sizeof(T), keyKind, initialCap)` plus per-value insertion. Tests: `map_set_constructors`, `set_constructor_from_set`
-- `.add(v)`, `.has(v)`, `.delete(v)`, `.clear()`, `.keys()`, `.values()`, `.forEach((value, value2, set) => expr)`, `.size`; numeric values use SameValueZero semantics, and `forEach` accepts inline expression-body or single-return block-body callbacks and named callback references. Tests: `map_set`, `map_set_same_value_zero`, `set_keys`, `map_set_for_each`, `map_set_for_each_refs`
+- `.add(v)`, `.has(v)`, `.delete(v)`, `.clear()`, `.keys(...ignored)`, `.values(...ignored)`, `.forEach((value, value2, set) => expr)`, `.size`; numeric values use SameValueZero semantics, ignored key/value iterator arguments are evaluated before being discarded, and `forEach` accepts inline expression-body or single-return block-body callbacks and named callback references. Tests: `map_set`, `map_set_same_value_zero`, `set_keys`, `map_set_for_each`, `map_set_for_each_refs`
 - Direct `for...of` over values. Test: `map_set_for_of`
-- `.toString()`, `.toLocaleString()`, and `.valueOf()`. Test: `collection_object_methods`
+- `.toString(...ignored)`, `.toLocaleString(...ignored)`, and `.valueOf(...ignored)`. Test: `collection_object_methods`
 - ES2025 set composition: `.union(other)`, `.intersection(other)`, `.difference(other)`, `.symmetricDifference(other)`, `.isSubsetOf(other)`, `.isSupersetOf(other)`, `.isDisjointFrom(other)`. The argument must be a `Set<T>` of the same element type; runtime helpers `tsc_set_union`/`tsc_set_intersection`/`tsc_set_difference`/`tsc_set_symmetric_difference`/`tsc_set_is_subset_of`/`tsc_set_is_superset_of`/`tsc_set_is_disjoint_from` honor SameValueZero element matching and insertion order. Test: `set_composition`
 
 ### `WeakMap<K, V>` / `WeakSet<T>`
 - Typed object-key `WeakMap` supports `.set(k, v)`, `.get(k)`, `.has(k)`, and `.delete(k)`. Test: `weak_collections`
 - Typed object-key `WeakSet` supports `.add(v)`, `.has(v)`, and `.delete(v)`. Test: `weak_collections`
-- `.toString()`, `.toLocaleString()`, and `.valueOf()` on both weak collections. Test: `collection_object_methods`
+- `.toString(...ignored)`, `.toLocaleString(...ignored)`, and `.valueOf(...ignored)` on both weak collections. Test: `collection_object_methods`
 - Runtime storage reuses pointer-key map/set tables; there is no iteration API exposed.
 
 ### `WeakRef<T>`
-- `new WeakRef(target)` creates a typed weak-reference wrapper, and `.deref()` returns `T | undefined`. Test: `weak_ref`
-- `.toString()`, `.toLocaleString()`, and `.valueOf()`. Test: `collection_object_methods`
+- `new WeakRef(target)` creates a typed weak-reference wrapper, and `.deref(...ignored)` returns `T | undefined` after evaluating ignored extra arguments. Test: `weak_ref`
+- `.toString(...ignored)`, `.toLocaleString(...ignored)`, and `.valueOf(...ignored)`. Tests: `collection_object_methods`, `weak_ref`
 - Runtime storage is a small pointer wrapper.
 
 ### `FinalizationRegistry<T>`
 - `new FinalizationRegistry<T>(cleanupCallback)` is constructible against any cleanup-callback signature; the callback value is evaluated for side effects and discarded. Test: `finalization_registry`
-- `.register(target, heldValue, unregisterToken?)` records an entry and `.unregister(unregisterToken)` removes any matching entries, returning whether anything was removed. Test: `finalization_registry`
-- `.toString()` and `.toLocaleString()` return `"[object FinalizationRegistry]"`, and `.valueOf()` returns the receiver. Test: `finalization_registry`
+- `.register(target, heldValue, unregisterToken?, ...ignored)` evaluates target, held value, token, and ignored extras, records the optional token entry, and `.unregister(unregisterToken, ...ignored)` removes any matching entries after evaluating ignored extras, returning whether anything was removed. Test: `finalization_registry`
+- `.toString(...ignored)` and `.toLocaleString(...ignored)` return `"[object FinalizationRegistry]"`, and `.valueOf(...ignored)` returns the receiver. Test: `finalization_registry`
 - This AOT runtime has no GC-finalizer plumbing, so the cleanup callback is never invoked. The behavior matches WeakRef in spirit: type-correct API surface without observable garbage-collection callbacks.
 
 ---

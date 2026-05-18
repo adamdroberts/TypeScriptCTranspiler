@@ -11998,12 +11998,24 @@ class Emitter {
             case "clear":
                 return { c: `(tsc_map_clear(${recv.c}), (void)0)`, ty: T_VOID };
             case "keys":
-                return { c: `tsc_map_keys(${recv.c})`, ty: arrayType(k) };
+                return this.emitSequencedExpr(
+                    arrayType(k),
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([map]) => `tsc_map_keys(${map!})`,
+                );
             case "values":
-                return { c: `tsc_map_values(${recv.c})`, ty: arrayType(v) };
-            case "entries":
-                if (args.length !== 0) unsupported(call, "Map.entries expects no args");
-                return this.emitMapEntriesArray(call, recv, "Map.entries");
+                return this.emitSequencedExpr(
+                    arrayType(v),
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([map]) => `tsc_map_values(${map!})`,
+                );
+            case "entries": {
+                return this.emitSequencedExpr(
+                    arrayType(entryType(v)),
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([map]) => this.mapEntriesArrayExpr(call, map!, recv.ty, "Map.entries").c,
+                );
+            }
             case "forEach":
                 return this.emitMapForEach(call, recv);
             case "size":
@@ -12161,7 +12173,11 @@ class Emitter {
                 return { c: `(tsc_set_clear(${recv.c}), (void)0)`, ty: T_VOID };
             case "keys":
             case "values":
-                return { c: `tsc_set_values(${recv.c})`, ty: arrayType(e) };
+                return this.emitSequencedExpr(
+                    arrayType(e),
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([set]) => `tsc_set_values(${set!})`,
+                );
             case "forEach":
                 return this.emitSetForEach(call, recv);
             case "size":
@@ -12259,9 +12275,11 @@ class Emitter {
     ): EmitResult {
         switch (method) {
             case "deref": {
-                if (call.arguments.length !== 0) unsupported(call, "WeakRef.deref expects no args");
                 const target = recv.ty.elem!;
-                return this.emitSequencedExpr(target, [{ value: recv }], ([ref]) =>
+                return this.emitSequencedExpr(
+                    target,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
+                    ([ref]) =>
                     `((${target.c})tsc_weakref_deref(${ref!}))`,
                 );
             }
@@ -12283,9 +12301,13 @@ class Emitter {
         switch (method) {
             case "register": {
                 const args = call.arguments;
-                if (args.length < 2 || args.length > 3)
+                if (args.length < 2)
                     unsupported(call, "FinalizationRegistry.register expects (target, heldValue, unregisterToken?)");
-                // target and heldValue are accepted but ignored — cleanup callback never fires.
+                const targetArg = args[0]!;
+                const targetRes = this.emitExpr(targetArg);
+                requireWeakObjectKey(targetArg, targetRes.ty, "FinalizationRegistry target");
+                const heldValue = this.emitExpr(args[1]!);
+                // target and heldValue are accepted but ignored after evaluation — cleanup callback never fires.
                 // Only unregisterToken is tracked so that unregister(token) returns the right boolean.
                 if (args.length === 3) {
                     const tokenArg = args[2]!;
@@ -12293,25 +12315,46 @@ class Emitter {
                     requireWeakObjectKey(tokenArg, tokenRes.ty, "FinalizationRegistry unregisterToken");
                     return this.emitSequencedExpr(
                         T_VOID,
-                        [{ value: recv }, { value: tokenRes }],
-                        ([r, tok]) => `(tsc_finregistry_register(${r!}, (void*)${tok!}), (void)0)`,
+                        [
+                            { value: recv },
+                            { value: targetRes },
+                            { value: heldValue },
+                            { value: tokenRes },
+                        ],
+                        ([r, , , tok]) => `(tsc_finregistry_register(${r!}, (void*)${tok!}), (void)0)`,
+                    );
+                }
+                if (args.length > 3) {
+                    const tokenArg = args[2]!;
+                    const tokenRes = this.emitExpr(tokenArg);
+                    requireWeakObjectKey(tokenArg, tokenRes.ty, "FinalizationRegistry unregisterToken");
+                    return this.emitSequencedExpr(
+                        T_VOID,
+                        [
+                            { value: recv },
+                            { value: targetRes },
+                            { value: heldValue },
+                            { value: tokenRes },
+                            ...this.ignoredArgumentSpecs(args, 3),
+                        ],
+                        ([r, , , tok]) => `(tsc_finregistry_register(${r!}, (void*)${tok!}), (void)0)`,
                     );
                 }
                 return this.emitSequencedExpr(
                     T_VOID,
-                    [{ value: recv }],
+                    [{ value: recv }, { value: targetRes }, { value: heldValue }],
                     ([r]) => `(tsc_finregistry_register(${r!}, NULL), (void)0)`,
                 );
             }
             case "unregister": {
-                if (call.arguments.length !== 1)
+                if (call.arguments.length < 1)
                     unsupported(call, "FinalizationRegistry.unregister expects (unregisterToken)");
                 const tokenArg = call.arguments[0]!;
                 const tokenRes = this.emitExpr(tokenArg);
                 requireWeakObjectKey(tokenArg, tokenRes.ty, "FinalizationRegistry unregisterToken");
                 return this.emitSequencedExpr(
                     T_BOOLEAN,
-                    [{ value: recv }, { value: tokenRes }],
+                    [{ value: recv }, { value: tokenRes }, ...this.ignoredArgumentSpecs(call.arguments, 1)],
                     ([r, tok]) => `tsc_finregistry_unregister(${r!}, (void*)${tok!})`,
                 );
             }

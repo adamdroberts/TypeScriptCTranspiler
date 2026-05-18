@@ -26,3 +26,15 @@ const doc: Doc = Object.fromEntries<Doc>(m.entries());
 console.log("doc.a:", doc.a);
 console.log("doc.b:", doc.b);
 console.log("doc.c:", doc.c);
+
+let seen = "";
+function mark(label: string): string {
+    seen += label;
+    return label;
+}
+
+const ignoredKeys = m.keys(mark("k"));
+const ignoredValues = m.values(mark("v"));
+const ignoredEntries = m.entries(mark("e"));
+const firstIgnored = ignoredEntries[0];
+console.log("ignored:", ignoredKeys.join("|"), ignoredValues.join("|"), firstIgnored[0] + ":" + firstIgnored[1], seen);

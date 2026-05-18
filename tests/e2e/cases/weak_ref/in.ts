@@ -23,3 +23,11 @@ console.log("text:", "" + boxRef);
 const seen = new WeakSet<WeakRef<Box>>();
 seen.add(boxRef);
 console.log("ref key:", seen.has(boxRef));
+
+let trace = "";
+function mark(label: string): string {
+    trace += label;
+    return label;
+}
+
+console.log("ignored:", boxRef.deref(mark("d"))?.value ?? -1, boxRef.valueOf(mark("v")) === boxRef, trace);
