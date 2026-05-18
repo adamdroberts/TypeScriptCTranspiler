@@ -9820,6 +9820,36 @@ tsc_str_t* tsc_date_to_date_string(const tsc_date_t* d) {
     return tsc_str_from_cstr(buf);
 }
 
+tsc_str_t* tsc_date_to_time_string(const tsc_date_t* d) {
+    if (!d || isnan(d->ms)) return tsc_str_from_lit("Invalid Date", 12);
+    double seconds_double = floor(d->ms / 1000.0);
+    time_t seconds = (time_t)seconds_double;
+    struct tm tm;
+    if (!localtime_r(&seconds, &tm)) return tsc_str_from_lit("Invalid Date", 12);
+
+    int offset_minutes = (int)-tsc_date_get_timezone_offset(d);
+    char sign = offset_minutes < 0 ? '-' : '+';
+    if (offset_minutes < 0) offset_minutes = -offset_minutes;
+    int offset_hours = offset_minutes / 60;
+    int offset_remainder = offset_minutes % 60;
+    const char* zone_name = offset_minutes == 0 ? "Coordinated Universal Time" : "Local Time";
+
+    char buf[72];
+    snprintf(
+        buf,
+        sizeof(buf),
+        "%02d:%02d:%02d GMT%c%02d%02d (%s)",
+        tm.tm_hour,
+        tm.tm_min,
+        tm.tm_sec,
+        sign,
+        offset_hours,
+        offset_remainder,
+        zone_name
+    );
+    return tsc_str_from_cstr(buf);
+}
+
 tsc_str_t* tsc_date_to_string(const tsc_date_t* d) {
     return d ? tsc_str_from_num(d->ms) : tsc_str_from_lit("Invalid Date", 12);
 }
