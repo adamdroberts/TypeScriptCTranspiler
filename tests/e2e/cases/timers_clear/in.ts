@@ -21,11 +21,16 @@ const keptImmediate = setImmediate((label: string) => {
     seen += label;
     console.log("immediate:", label, seen);
 }, "I");
+const intervalAlias = setTimeout(() => {
+    seen += "cancelled-interval-alias";
+}, 0);
 
 clearTimeout(timeout, mark("x"));
 clearImmediate(immediate, mark("y"));
 clearTimeout(undefined, mark("u"));
 clearImmediate(void mark("v"));
+clearInterval(intervalAlias, mark("z"));
+clearInterval(undefined, mark("w"));
 clearTimeout(999);
 clearImmediate();
 

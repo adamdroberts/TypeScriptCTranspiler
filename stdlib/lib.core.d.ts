@@ -575,6 +575,7 @@ declare function setTimeout<A>(callback: (arg: A) => void, delay: number, arg: A
 declare function setTimeout<A, B>(callback: (arg1: A, arg2: B) => void, delay: number, arg1: A, arg2: B): number;
 declare function setTimeout<A, B, C>(callback: (arg1: A, arg2: B, arg3: C) => void, delay: number, arg1: A, arg2: B, arg3: C): number;
 declare function clearTimeout(handle?: number, ...ignored: any[]): void;
+declare function clearInterval(handle?: number, ...ignored: any[]): void;
 declare function setImmediate(callback: () => void): number;
 declare function setImmediate<A>(callback: (arg: A) => void, arg: A): number;
 declare function setImmediate<A, B>(callback: (arg1: A, arg2: B) => void, arg1: A, arg2: B): number;

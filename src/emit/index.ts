@@ -8851,7 +8851,7 @@ class Emitter {
                 return `({ ${pieces.join("; ")}; })`;
             });
         }
-        if (name === "clearTimeout") {
+        if (name === "clearTimeout" || name === "clearInterval") {
             return this.emitClearTimerCall(call, "tsc_clear_timeout");
         }
         if (
