@@ -3,7 +3,9 @@ import * as nodefs from "node:fs";
 const root = "/tmp/tsc2c-fs-cp-options";
 const src = path.join(root, "src.txt");
 const dest = path.join(root, "dest.txt");
+const preservedDest = path.join(root, "preserved.txt");
 const promiseDest = path.join(root, "promise-dest.txt");
+const promisePreservedDest = path.join(root, "promise-preserved.txt");
 
 fs.rmSync(root, { recursive: true, force: true });
 fs.mkdirSync(root, { recursive: true });
@@ -24,6 +26,10 @@ try {
 fs.cpSync(src, dest, { force: true, errorOnExist: true });
 console.log("sync force true:", fs.readFileSync(dest));
 
+fs.utimesSync(src, 11, 12);
+fs.cpSync(src, preservedDest, { preserveTimestamps: true });
+console.log("sync preserve:", Math.round(fs.statSync(preservedDest).mtimeMs));
+
 try {
     fs.cpSync(src, dest, { force: true, mode: fs.constants.COPYFILE_EXCL });
     console.log("sync mode excl: copied");
@@ -38,6 +44,11 @@ nodefs.promises.cp(src, promiseDest, { force: false }).then((value: any): string
 
 nodefs.promises.cp(src, promiseDest, { force: false, errorOnExist: true }).catch((reason: string): any => {
     console.log("promise errorOnExist:", reason);
+    return "done";
+});
+
+nodefs.promises.cp(src, promisePreservedDest, { preserveTimestamps: true }).then((value: any): string => {
+    console.log("promise preserve:", Math.round(fs.statSync(promisePreservedDest).mtimeMs));
     return "done";
 });
 

@@ -851,7 +851,7 @@ void tsc_fs_rm_sync(const tsc_str_t* path);
 void tsc_fs_rm_sync_opts(const tsc_str_t* path, bool recursive, bool force);
 void tsc_fs_rmdir_sync(const tsc_str_t* path);
 void tsc_fs_rmdir_sync_opts(const tsc_str_t* path, bool recursive);
-void tsc_fs_cp_sync_opts(const tsc_str_t* src, const tsc_str_t* dest, bool recursive, bool force, bool error_on_exist, bool dereference, bool verbatim_symlinks, double mode);
+void tsc_fs_cp_sync_opts(const tsc_str_t* src, const tsc_str_t* dest, bool recursive, bool force, bool error_on_exist, bool dereference, bool verbatim_symlinks, double mode, bool preserve_timestamps);
 void tsc_fs_copy_file_sync(const tsc_str_t* src, const tsc_str_t* dest);
 void tsc_fs_copy_file_sync_mode(const tsc_str_t* src, const tsc_str_t* dest, double mode);
 void tsc_fs_rename_sync(const tsc_str_t* old_path, const tsc_str_t* new_path);

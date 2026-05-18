@@ -832,6 +832,7 @@ interface FSCpOptions {
     dereference?: boolean;
     verbatimSymlinks?: boolean;
     mode?: number;
+    preserveTimestamps?: boolean;
 }
 type FSEncoding = "utf8" | "utf-8";
 type FSBufferEncoding = "buffer";

@@ -8628,7 +8628,9 @@ static char* fs_join_path_cstr(const char* base, const char* name) {
     return out;
 }
 
-static int fs_copy_file_bytes_cstr(const char* src, const char* dest, bool force, bool error_on_exist, int copy_flags) {
+static int fs_copy_file_bytes_cstr(const char* src, const char* dest, bool force, bool error_on_exist, int copy_flags, bool preserve_timestamps) {
+    struct stat src_st;
+    bool have_src_stat = preserve_timestamps && stat(src, &src_st) == 0;
     if (access(dest, F_OK) == 0) {
         if (copy_flags & 1) {
             errno = EEXIST;
@@ -8668,6 +8670,20 @@ static int fs_copy_file_bytes_cstr(const char* src, const char* dest, bool force
         saved = errno;
     }
     fclose(in);
+    if (result == 0 && have_src_stat) {
+        struct timespec times[2];
+#if defined(__APPLE__)
+        times[0] = src_st.st_atimespec;
+        times[1] = src_st.st_mtimespec;
+#else
+        times[0] = src_st.st_atim;
+        times[1] = src_st.st_mtim;
+#endif
+        if (utimensat(AT_FDCWD, dest, times, 0) != 0) {
+            result = -1;
+            saved = errno;
+        }
+    }
     if (result != 0) errno = saved;
     return result;
 }
@@ -8721,7 +8737,7 @@ static int fs_copy_symlink_cstr(const char* src, const char* dest, bool force, b
     return r;
 }
 
-static int fs_cp_recursive_cstr(const char* src, const char* dest, bool recursive, bool force, bool error_on_exist, bool dereference, bool verbatim_symlinks, int copy_flags) {
+static int fs_cp_recursive_cstr(const char* src, const char* dest, bool recursive, bool force, bool error_on_exist, bool dereference, bool verbatim_symlinks, int copy_flags, bool preserve_timestamps) {
     struct stat st;
     if ((dereference ? stat(src, &st) : lstat(src, &st)) != 0) return -1;
     if (!dereference && S_ISLNK(st.st_mode)) {
@@ -8757,7 +8773,7 @@ static int fs_cp_recursive_cstr(const char* src, const char* dest, bool recursiv
                 errno = ENOMEM;
                 return -1;
             }
-            if (fs_cp_recursive_cstr(child_src, child_dest, recursive, force, error_on_exist, dereference, verbatim_symlinks, copy_flags) != 0) {
+            if (fs_cp_recursive_cstr(child_src, child_dest, recursive, force, error_on_exist, dereference, verbatim_symlinks, copy_flags, preserve_timestamps) != 0) {
                 int saved = errno;
                 free(child_src);
                 free(child_dest);
@@ -8772,17 +8788,17 @@ static int fs_cp_recursive_cstr(const char* src, const char* dest, bool recursiv
         return 0;
     }
     if (S_ISREG(st.st_mode)) {
-        return fs_copy_file_bytes_cstr(src, dest, force, error_on_exist, copy_flags);
+        return fs_copy_file_bytes_cstr(src, dest, force, error_on_exist, copy_flags, preserve_timestamps);
     }
     errno = EINVAL;
     return -1;
 }
 
-void tsc_fs_cp_sync_opts(const tsc_str_t* src, const tsc_str_t* dest, bool recursive, bool force, bool error_on_exist, bool dereference, bool verbatim_symlinks, double mode) {
+void tsc_fs_cp_sync_opts(const tsc_str_t* src, const tsc_str_t* dest, bool recursive, bool force, bool error_on_exist, bool dereference, bool verbatim_symlinks, double mode, bool preserve_timestamps) {
     char* s = cstr_dup(src);
     char* d = cstr_dup(dest);
     int flags = (isnan(mode) || isinf(mode)) ? 0 : (int)mode;
-    int r = fs_cp_recursive_cstr(s, d, recursive, force, error_on_exist, dereference, verbatim_symlinks, flags);
+    int r = fs_cp_recursive_cstr(s, d, recursive, force, error_on_exist, dereference, verbatim_symlinks, flags, preserve_timestamps);
     free(s);
     free(d);
     if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.cpSync: could not copy path"));

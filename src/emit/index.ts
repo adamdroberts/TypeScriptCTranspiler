@@ -16602,7 +16602,7 @@ class Emitter {
                     this.fsPathSpec(dest, args[1]!, "fs.cpSync destination"),
                     options.mode,
                 ], ([srcPath, destPath, mode]) =>
-                    `tsc_fs_cp_sync_opts(${srcPath!}, ${destPath!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}, ${mode!})`,
+                    `tsc_fs_cp_sync_opts(${srcPath!}, ${destPath!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}, ${mode!}, ${options.preserveTimestamps ? "true" : "false"})`,
                 );
             }
             case "copyFileSync":
@@ -16669,8 +16669,8 @@ class Emitter {
         return { recursive, mode: modeArg };
     }
 
-    private emitFsCpOptions(options: ts.Expression | undefined, label: string): { recursive: boolean; force: boolean; errorOnExist: boolean; dereference: boolean; verbatimSymlinks: boolean; mode: SequencedCallArg } {
-        const out = { recursive: false, force: true, errorOnExist: false, dereference: false, verbatimSymlinks: false };
+    private emitFsCpOptions(options: ts.Expression | undefined, label: string): { recursive: boolean; force: boolean; errorOnExist: boolean; dereference: boolean; verbatimSymlinks: boolean; preserveTimestamps: boolean; mode: SequencedCallArg } {
+        const out = { recursive: false, force: true, errorOnExist: false, dereference: false, verbatimSymlinks: false, preserveTimestamps: false };
         let mode: SequencedCallArg = { value: { c: "0.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
         if (!options || this.isUndefinedExpression(options)) return { ...out, mode };
         if (!ts.isObjectLiteralExpression(options)) {
@@ -16687,7 +16687,7 @@ class Emitter {
                 mode = { value, target: T_NUMBER, node: prop.initializer };
                 continue;
             }
-            if (key !== "recursive" && key !== "force" && key !== "errorOnExist" && key !== "dereference" && key !== "verbatimSymlinks") {
+            if (key !== "recursive" && key !== "force" && key !== "errorOnExist" && key !== "dereference" && key !== "verbatimSymlinks" && key !== "preserveTimestamps") {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
             let value: boolean;
@@ -16702,7 +16702,8 @@ class Emitter {
             else if (key === "force") out.force = value;
             else if (key === "errorOnExist") out.errorOnExist = value;
             else if (key === "dereference") out.dereference = value;
-            else out.verbatimSymlinks = value;
+            else if (key === "verbatimSymlinks") out.verbatimSymlinks = value;
+            else out.preserveTimestamps = value;
         }
         return { ...out, mode };
     }
@@ -17306,7 +17307,7 @@ class Emitter {
                     this.fsPathSpec(dest, args[1]!, "fs.promises.cp destination"),
                     options.mode,
                 ], ([srcPath, destPath, mode]) =>
-                    settle(`({ tsc_fs_cp_sync_opts(${srcPath!}, ${destPath!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}, ${mode!}); tsc_promise_resolve(tsc_value_undefined()); })`),
+                    settle(`({ tsc_fs_cp_sync_opts(${srcPath!}, ${destPath!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}, ${mode!}, ${options.preserveTimestamps ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "copyFile":

@@ -432,7 +432,7 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 | `tsc_fs_rm_sync_opts(path, recursive, force)` | `void` | `fs.rmSync(path, { recursive, force })` and immediate-settled `fs.promises.rm(path, { recursive, force })` bounded options subset |
 | `tsc_fs_rmdir_sync(path)` | `void` | `fs.rmdirSync(path)` and immediate-settled `fs.promises.rmdir(path)` for empty directories |
 | `tsc_fs_rmdir_sync_opts(path, recursive)` | `void` | `fs.rmdirSync(path, { recursive })` and immediate-settled `fs.promises.rmdir(path, { recursive })` bounded options subset |
-| `tsc_fs_cp_sync_opts(src, dest, recursive, force, errorOnExist, dereference, verbatimSymlinks, mode)` | `void` | `fs.cpSync(src, dest, { recursive, force, errorOnExist, dereference, verbatimSymlinks, mode })` and immediate-settled `fs.promises.cp(src, dest, options)` for regular files, recursive directory trees, and symlinks |
+| `tsc_fs_cp_sync_opts(src, dest, recursive, force, errorOnExist, dereference, verbatimSymlinks, mode, preserveTimestamps)` | `void` | `fs.cpSync(src, dest, { recursive, force, errorOnExist, dereference, verbatimSymlinks, mode, preserveTimestamps })` and immediate-settled `fs.promises.cp(src, dest, options)` for regular files, recursive directory trees, and symlinks |
 | `tsc_fs_copy_file_sync(src, dest)` | `void` | `fs.copyFileSync(src, dest)` and immediate-settled `fs.promises.copyFile(src, dest)` |
 | `tsc_fs_rename_sync(oldPath, newPath)` | `void` | `fs.renameSync(oldPath, newPath)` and immediate-settled `fs.promises.rename(oldPath, newPath)` |
 
