@@ -44,7 +44,8 @@ let fileEntry = syncEntries[0];
 for (let i = 0; i < syncEntries.length; i++) {
     if (syncEntries[i].name === "file.txt") fileEntry = syncEntries[i];
 }
-console.log("ignored:", fileEntry.isFile(mark("f")), fileEntry.toString(mark("s")), fileEntry.toLocaleString(mark("l")), fileEntry.valueOf(mark("v")).name, seen);
+fileEntry.valueOf(mark("v"));
+console.log("ignored:", fileEntry.isFile(mark("f")), fileEntry.toString(mark("s")), fileEntry.toLocaleString(mark("l")), seen);
 
 const namedEntries = readdirSync(root, { withFileTypes: true, encoding: "utf8" });
 console.log("named:", summarize(namedEntries));
