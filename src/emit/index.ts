@@ -14042,6 +14042,8 @@ class Emitter {
         ) {
             cur = cur.expression;
         }
+        if (ts.isIdentifier(cur) && cur.text === "undefined") return true;
+        if (ts.isVoidExpression(cur)) return true;
         if (ts.isNumericLiteral(cur)) return Number(cur.text) === 0;
         return (
             ts.isPrefixUnaryExpression(cur) &&

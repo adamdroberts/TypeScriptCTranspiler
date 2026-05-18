@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- `setTimeout(callback, undefined)` and `setTimeout(callback, void 0)` now share the bounded omitted-delay zero-delay path. Test: `set_timeout_zero`.
 - Bounded zero-delay `setTimeout` and before-exit `setImmediate` now return numeric handles, and `clearTimeout` / `clearImmediate` cancel queued callbacks before the drain. Test: `timers_clear`.
 - Error-family and `AggregateError` constructors and Error string/value methods now evaluate and ignore extra call arguments where JavaScript ignores them. Tests: `error_instances`, `error_constructors`, `aggregate_error_constructor`.
 - Date mutator methods now evaluate and ignore extra call arguments beyond the JavaScript-used fields for `.setTime()`, `.setYear()`, local setters, and UTC setters. Tests: `date_set_time`, `date_legacy_year`, `date_local_setters`, `date_utc_setters`.

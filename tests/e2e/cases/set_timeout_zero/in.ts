@@ -17,6 +17,14 @@ setTimeout(() => {
     events.push("last-timeout");
 }, 0);
 
+setTimeout(() => {
+    events.push("undefined-timeout");
+}, undefined);
+
+setTimeout(() => {
+    events.push("void-timeout");
+}, void 0);
+
 setImmediate(() => {
     events.push("immediate");
 });
