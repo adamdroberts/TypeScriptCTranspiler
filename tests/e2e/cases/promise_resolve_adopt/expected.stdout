@@ -3,3 +3,4 @@ rejected: bad
 recovered: handled
 pending: [object Promise]
 callbacks: 0
+ignored: frp

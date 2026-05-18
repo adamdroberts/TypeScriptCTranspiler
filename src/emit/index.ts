@@ -12482,35 +12482,43 @@ class Emitter {
         if (mapped.kind !== "promise") unsupported(call, `Promise.${method} result must be Promise<T>`);
         switch (method) {
             case "resolve": {
-                if (call.arguments.length > 1) unsupported(call, "Promise.resolve expects 0 or 1 args");
                 const arg = call.arguments[0];
                 const value = arg
                     ? this.emitExpr(arg)
                     : { c: "tsc_value_undefined()", ty: T_VALUE };
+                const specs: SequencedCallArg[] = [
+                    { value, target: value.ty.kind === "promise" ? value.ty : T_VALUE, node: arg ?? call.expression },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ];
                 if (arg && value.ty.kind === "promise") {
-                    return this.emitSequencedCall("tsc_promise_adopt", mapped, [
-                        { value, target: value.ty, node: arg },
-                    ]);
+                    return this.emitSequencedExpr(mapped, specs, ([resolved]) => `tsc_promise_adopt(${resolved})`);
                 }
                 if (mapped.elem?.kind === "fsstats") {
                     if (!arg) unsupported(call, "Promise.resolve<FSStats> expects a Stats value");
-                    return this.emitSequencedCall("tsc_promise_resolve_fs_stats", mapped, [
-                        { value, target: T_FS_STATS, node: arg },
-                    ]);
+                    return this.emitSequencedExpr(
+                        mapped,
+                        [
+                            { value, target: T_FS_STATS, node: arg },
+                            ...this.ignoredArgumentSpecs(call.arguments, 1),
+                        ],
+                        ([resolved]) => `tsc_promise_resolve_fs_stats(${resolved})`,
+                    );
                 }
-                return this.emitSequencedCall("tsc_promise_resolve", mapped, [
-                    { value, target: T_VALUE, node: arg },
-                ]);
+                return this.emitSequencedExpr(mapped, specs, ([resolved]) => `tsc_promise_resolve(${resolved})`);
             }
             case "reject": {
-                if (call.arguments.length > 1) unsupported(call, "Promise.reject expects 0 or 1 args");
                 const arg = call.arguments[0];
                 const reason = arg
                     ? this.emitExpr(arg)
                     : { c: "tsc_value_undefined()", ty: T_VALUE };
-                return this.emitSequencedCall("tsc_promise_reject", mapped, [
-                    { value: reason, target: T_VALUE, node: arg },
-                ]);
+                return this.emitSequencedExpr(
+                    mapped,
+                    [
+                        { value: reason, target: T_VALUE, node: arg ?? call.expression },
+                        ...this.ignoredArgumentSpecs(call.arguments, 1),
+                    ],
+                    ([rejected]) => `tsc_promise_reject(${rejected})`,
+                );
             }
             case "all": {
                 if (call.arguments.length !== 1) unsupported(call, "Promise.all expects 1 arg");

@@ -1,5 +1,11 @@
+let ignored = "";
+function mark(label: string): string {
+    ignored += label;
+    return label;
+}
+
 const fulfilled = Promise.resolve("ready");
-const adopted = Promise.resolve(fulfilled);
+const adopted = Promise.resolve(fulfilled, mark("f"));
 
 adopted.then((value: string) => {
     console.log("fulfilled:", value);
@@ -7,7 +13,7 @@ adopted.then((value: string) => {
 });
 
 const rejected = Promise.reject<string>("bad");
-const adoptedRejected = Promise.resolve(rejected);
+const adoptedRejected = Promise.resolve(rejected, mark("r"));
 
 adoptedRejected
     .catch((reason: string) => {
@@ -20,7 +26,7 @@ adoptedRejected
     });
 
 const pendingSource = Promise.race([] as Promise<string>[]);
-const adoptedPending = Promise.resolve(pendingSource);
+const adoptedPending = Promise.resolve(pendingSource, mark("p"));
 let callbacks = 0;
 
 adoptedPending
@@ -35,3 +41,4 @@ adoptedPending
 
 console.log("pending:", adoptedPending.toString());
 console.log("callbacks:", callbacks);
+console.log("ignored:", ignored);

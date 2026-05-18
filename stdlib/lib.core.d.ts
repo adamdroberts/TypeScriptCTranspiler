@@ -44,10 +44,10 @@ interface Promise<T> {
 }
 interface PromiseConstructor {
     new<T>(executor: (resolve: (value: T) => void, reject: (reason: any) => void) => void): Promise<T>;
-    resolve<T>(value: Promise<T>): Promise<T>;
-    resolve<T>(value: T): Promise<T>;
+    resolve<T>(value: Promise<T>, ...ignored: any[]): Promise<T>;
+    resolve<T>(value: T, ...ignored: any[]): Promise<T>;
     resolve(): Promise<void>;
-    reject<T = never>(reason?: any): Promise<T>;
+    reject<T = never>(reason?: any, ...ignored: any[]): Promise<T>;
     all<T>(values: Promise<T>[]): Promise<T[]>;
     allSettled<T>(values: Promise<T>[]): Promise<any[]>;
     race<T>(values: Promise<T>[]): Promise<T>;

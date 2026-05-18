@@ -1,6 +1,11 @@
 const events: string[] = [];
+let ignored = "";
+function mark(label: string): string {
+    ignored += label;
+    return label;
+}
 
-const doubled = Promise.resolve(2)
+const doubled = Promise.resolve(2, mark("a"))
     .then((n: number) => {
         events.push("then:" + n);
         return n + 3;
@@ -15,7 +20,7 @@ doubled.then((n: number) => {
     return n;
 });
 
-Promise.reject<number>("boom")
+Promise.reject<number>("boom", mark("b"))
     .catch((reason: any) => {
         events.push("catch:" + String(reason));
         return 7;
@@ -25,7 +30,7 @@ Promise.reject<number>("boom")
         return n;
     });
 
-Promise.reject<string>("bad")
+Promise.reject<string>("bad", mark("c"))
     .then(
         (value: string) => value,
         (reason: any) => String(reason) + "!"
@@ -35,25 +40,25 @@ Promise.reject<string>("bad")
         return value;
     });
 
-Promise.all([Promise.resolve(3), Promise.resolve(4)])
+Promise.all([Promise.resolve(3, mark("d")), Promise.resolve(4, mark("e"))])
     .then((values: number[]) => {
         console.log("all:", values.join(","));
         return values;
     });
 
-Promise.race([Promise.resolve("first"), Promise.resolve("second")])
+Promise.race([Promise.resolve("first", mark("f")), Promise.resolve("second", mark("g"))])
     .then((value: string) => {
         console.log("race:", value);
         return value;
     });
 
-Promise.any([Promise.reject<string>("skip"), Promise.resolve("kept")])
+Promise.any([Promise.reject<string>("skip", mark("h")), Promise.resolve("kept", mark("i"))])
     .then((value: string) => {
         console.log("any:", value);
         return value;
     });
 
-Promise.allSettled([Promise.resolve(9), Promise.reject<number>("nope")])
+Promise.allSettled([Promise.resolve(9, mark("j")), Promise.reject<number>("nope", mark("k"))])
     .then((items: any[]) => {
         const first: any = items[0];
         const second: any = items[1];
@@ -62,3 +67,4 @@ Promise.allSettled([Promise.resolve(9), Promise.reject<number>("nope")])
     });
 
 console.log("events:", events.join("|"));
+console.log("ignored:", ignored);
