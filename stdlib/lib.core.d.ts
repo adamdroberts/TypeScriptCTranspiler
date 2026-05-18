@@ -1155,14 +1155,14 @@ interface Buffer {
     readDoubleBE(offset?: number): number;
     writeDoubleLE(value: number, offset?: number): number;
     writeDoubleBE(value: number, offset?: number): number;
-    swap16(): Buffer;
-    swap32(): Buffer;
-    swap64(): Buffer;
+    swap16(...ignored: any[]): Buffer;
+    swap32(...ignored: any[]): Buffer;
+    swap64(...ignored: any[]): Buffer;
     copy(target: Buffer, targetStart?: number, sourceStart?: number, sourceEnd?: number): number;
     indexOf(value: number | string | Buffer, byteOffset?: number): number;
     lastIndexOf(value: number | string | Buffer, byteOffset?: number): number;
     includes(value: number | string | Buffer, byteOffset?: number): boolean;
-    equals(other: Buffer): boolean;
+    equals(other: Buffer, ...ignored: any[]): boolean;
     compare(other: Buffer): number;
     [n: number]: number;
 }
@@ -1174,10 +1174,10 @@ interface BufferConstructor {
     allocUnsafe(size: number): Buffer;
     allocUnsafeSlow(size: number): Buffer;
     concat(list: Buffer[], totalLength?: number): Buffer;
-    isBuffer(value: unknown): boolean;
-    byteLength(value: string | Buffer, encoding?: BufferEncoding): number;
-    isEncoding(encoding: string): boolean;
-    compare(a: Buffer, b: Buffer): number;
+    isBuffer(value: unknown, ...ignored: any[]): boolean;
+    byteLength(value: string | Buffer, encoding?: BufferEncoding, ...ignored: any[]): number;
+    isEncoding(encoding: string, ...ignored: any[]): boolean;
+    compare(a: Buffer, b: Buffer, ...ignored: any[]): number;
 }
 declare var Buffer: BufferConstructor;
 

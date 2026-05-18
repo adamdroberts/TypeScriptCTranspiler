@@ -17,6 +17,12 @@ console.log("filled:", filled.toString());
 
 const joined = Buffer.concat([hex.slice(0, 2), Buffer.from("!")]);
 console.log("joined:", joined.toString());
-console.log("equals:", hex.equals(Buffer.from("486900ff", "hex")));
-console.log("is buffer:", Buffer.isBuffer(hex), Buffer.isBuffer("x"));
+let seen = "";
+function mark(label: string): string {
+  seen += label;
+  return label;
+}
+console.log("equals:", hex.equals(Buffer.from("486900ff", "hex"), mark("e")));
+console.log("is buffer:", Buffer.isBuffer(hex, mark("b")), Buffer.isBuffer("x", mark("x")));
 console.log("typeof:", typeof hex);
+console.log("ignored:", seen);

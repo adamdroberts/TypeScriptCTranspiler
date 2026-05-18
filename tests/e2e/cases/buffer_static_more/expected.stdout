@@ -3,3 +3,4 @@ encoding: true true true true
 compare: -1 1 0
 instance compare: -1 1 0
 utf-8: Hi
+ignored: lhbuc

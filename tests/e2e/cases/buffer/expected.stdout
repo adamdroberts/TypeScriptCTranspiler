@@ -10,3 +10,4 @@ joined: Hi!
 equals: true
 is buffer: true false
 typeof: object
+ignored: ebx

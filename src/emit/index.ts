@@ -18068,39 +18068,60 @@ class Emitter {
                 return this.emitSequencedCall("tsc_buffer_concat", T_BUFFER, specs);
             }
             case "isBuffer": {
-                if (args.length !== 1) unsupported(call, "Buffer.isBuffer expects value");
+                if (args.length < 1) unsupported(call, "Buffer.isBuffer expects value");
                 const value = this.emitExpr(args[0]!);
-                return { c: value.ty.kind === "buffer" ? "true" : "false", ty: T_BOOLEAN };
+                return this.emitSequencedExpr(
+                    T_BOOLEAN,
+                    [{ value }, ...this.ignoredArgumentSpecs(args, 1)],
+                    () => value.ty.kind === "buffer" ? "true" : "false",
+                );
             }
             case "byteLength": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "Buffer.byteLength expects value and optional encoding");
+                if (args.length < 1) unsupported(call, "Buffer.byteLength expects value and optional encoding");
                 const value = this.emitExpr(args[0]!);
-                if (value.ty.kind === "buffer") return { c: `tsc_buffer_length(${value.c})`, ty: T_NUMBER };
+                if (value.ty.kind === "buffer") {
+                    return this.emitSequencedExpr(
+                        T_NUMBER,
+                        [{ value }, ...this.ignoredArgumentSpecs(args, 1)],
+                        ([buffer]) => `tsc_buffer_length(${buffer})`,
+                    );
+                }
                 if (value.ty.kind !== "string") unsupported(args[0]!, "Buffer.byteLength supports string or Buffer");
                 const specs: SequencedCallArg[] = [
                     { value, target: T_STRING, node: args[0]! },
                 ];
                 if (args[1]) specs.push({ value: this.emitExpr(args[1]), target: T_STRING, node: args[1] });
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_NUMBER, specs, ([input, encoding]) =>
                     `tsc_buffer_byte_length_str(${input!}, ${encoding ?? `tsc_str_from_lit("utf8", 4)`})`,
                 );
             }
             case "isEncoding": {
-                if (args.length !== 1) unsupported(call, "Buffer.isEncoding expects encoding");
+                if (args.length < 1) unsupported(call, "Buffer.isEncoding expects encoding");
                 const encoding = this.emitExpr(args[0]!);
-                return this.emitSequencedCall("tsc_buffer_is_encoding", T_BOOLEAN, [
-                    { value: encoding, target: T_STRING, node: args[0]! },
-                ]);
+                return this.emitSequencedExpr(
+                    T_BOOLEAN,
+                    [
+                        { value: encoding, target: T_STRING, node: args[0]! },
+                        ...this.ignoredArgumentSpecs(args, 1),
+                    ],
+                    ([input]) => `tsc_buffer_is_encoding(${input})`,
+                );
             }
             case "compare": {
-                if (args.length !== 2) unsupported(call, "Buffer.compare expects two buffers");
+                if (args.length < 2) unsupported(call, "Buffer.compare expects two buffers");
                 const a = this.emitExpr(args[0]!);
                 const b = this.emitExpr(args[1]!);
                 if (a.ty.kind !== "buffer" || b.ty.kind !== "buffer") unsupported(call, "Buffer.compare expects Buffer arguments");
-                return this.emitSequencedCall("tsc_buffer_compare", T_NUMBER, [
-                    { value: a },
-                    { value: b },
-                ]);
+                return this.emitSequencedExpr(
+                    T_NUMBER,
+                    [
+                        { value: a },
+                        { value: b },
+                        ...this.ignoredArgumentSpecs(args, 2),
+                    ],
+                    ([left, right]) => `tsc_buffer_compare(${left}, ${right})`,
+                );
             }
         }
         unsupported(call, `Buffer.${name}`);
@@ -18417,9 +18438,8 @@ class Emitter {
             case "swap16":
             case "swap32":
             case "swap64": {
-                if (args.length !== 0) unsupported(call, `Buffer.${method} expects no args`);
                 const width = method === "swap16" ? 2 : method === "swap32" ? 4 : 8;
-                return this.emitSequencedExpr(T_BUFFER, [{ value: recv }], ([buffer]) =>
+                return this.emitSequencedExpr(T_BUFFER, [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)], ([buffer]) =>
                     `tsc_buffer_swap(${buffer}, ${width})`,
                 );
             }
@@ -18473,13 +18493,13 @@ class Emitter {
                 });
             }
             case "equals": {
-                if (args.length !== 1) unsupported(call, "Buffer.equals expects other");
+                if (args.length < 1) unsupported(call, "Buffer.equals expects other");
                 const other = this.emitExpr(args[0]!);
                 if (other.ty.kind !== "buffer") unsupported(args[0]!, "Buffer.equals expects Buffer");
-                return this.emitSequencedCall(
-                    "tsc_buffer_equals",
+                return this.emitSequencedExpr(
                     T_BOOLEAN,
-                    [{ value: recv }, { value: other }],
+                    [{ value: recv }, { value: other }, ...this.ignoredArgumentSpecs(args, 1)],
+                    ([left, right]) => `tsc_buffer_equals(${left}, ${right})`,
                 );
             }
             case "compare": {
