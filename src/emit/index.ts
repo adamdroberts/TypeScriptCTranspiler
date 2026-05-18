@@ -17959,38 +17959,36 @@ class Emitter {
         method: string,
     ): EmitResult {
         const args = call.arguments;
+        const predicate = {
+            isFile: "tsc_fs_stats_is_file",
+            isDirectory: "tsc_fs_stats_is_directory",
+            isSymbolicLink: "tsc_fs_stats_is_symbolic_link",
+            isBlockDevice: "tsc_fs_stats_is_block_device",
+            isCharacterDevice: "tsc_fs_stats_is_character_device",
+            isFIFO: "tsc_fs_stats_is_fifo",
+            isSocket: "tsc_fs_stats_is_socket",
+        }[method];
+        if (predicate) {
+            return this.emitSequencedExpr(
+                T_BOOLEAN,
+                [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                ([stats]) => `${predicate}(${stats})`,
+            );
+        }
         switch (method) {
-            case "isFile":
-                if (args.length !== 0) unsupported(call, "Stats.isFile expects no args");
-                return this.emitSequencedCall("tsc_fs_stats_is_file", T_BOOLEAN, [{ value: recv }]);
-            case "isDirectory":
-                if (args.length !== 0) unsupported(call, "Stats.isDirectory expects no args");
-                return this.emitSequencedCall("tsc_fs_stats_is_directory", T_BOOLEAN, [{ value: recv }]);
-            case "isSymbolicLink":
-                if (args.length !== 0) unsupported(call, "Stats.isSymbolicLink expects no args");
-                return this.emitSequencedCall("tsc_fs_stats_is_symbolic_link", T_BOOLEAN, [{ value: recv }]);
-            case "isBlockDevice":
-                if (args.length !== 0) unsupported(call, "Stats.isBlockDevice expects no args");
-                return this.emitSequencedCall("tsc_fs_stats_is_block_device", T_BOOLEAN, [{ value: recv }]);
-            case "isCharacterDevice":
-                if (args.length !== 0) unsupported(call, "Stats.isCharacterDevice expects no args");
-                return this.emitSequencedCall("tsc_fs_stats_is_character_device", T_BOOLEAN, [{ value: recv }]);
-            case "isFIFO":
-                if (args.length !== 0) unsupported(call, "Stats.isFIFO expects no args");
-                return this.emitSequencedCall("tsc_fs_stats_is_fifo", T_BOOLEAN, [{ value: recv }]);
-            case "isSocket":
-                if (args.length !== 0) unsupported(call, "Stats.isSocket expects no args");
-                return this.emitSequencedCall("tsc_fs_stats_is_socket", T_BOOLEAN, [{ value: recv }]);
             case "toLocaleString":
             case "toString":
-                if (args.length !== 0) unsupported(call, `Stats.${method} expects no args`);
-                return {
-                    c: `tsc_str_from_lit("[object Stats]", 14)`,
-                    ty: T_STRING,
-                };
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([stats]) => `({ (void)${stats}; tsc_str_from_lit("[object Stats]", 14); })`,
+                );
             case "valueOf":
-                if (args.length !== 0) unsupported(call, "Stats.valueOf expects no args");
-                return recv;
+                return this.emitSequencedExpr(
+                    recv.ty,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([stats]) => stats,
+                );
         }
         unsupported(call, `Stats method .${method}`);
     }
@@ -18001,38 +17999,36 @@ class Emitter {
         method: string,
     ): EmitResult {
         const args = call.arguments;
+        const predicate = {
+            isFile: "tsc_fs_dirent_is_file",
+            isDirectory: "tsc_fs_dirent_is_directory",
+            isSymbolicLink: "tsc_fs_dirent_is_symbolic_link",
+            isBlockDevice: "tsc_fs_dirent_is_block_device",
+            isCharacterDevice: "tsc_fs_dirent_is_character_device",
+            isFIFO: "tsc_fs_dirent_is_fifo",
+            isSocket: "tsc_fs_dirent_is_socket",
+        }[method];
+        if (predicate) {
+            return this.emitSequencedExpr(
+                T_BOOLEAN,
+                [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                ([dirent]) => `${predicate}(${dirent})`,
+            );
+        }
         switch (method) {
-            case "isFile":
-                if (args.length !== 0) unsupported(call, "Dirent.isFile expects no args");
-                return this.emitSequencedCall("tsc_fs_dirent_is_file", T_BOOLEAN, [{ value: recv }]);
-            case "isDirectory":
-                if (args.length !== 0) unsupported(call, "Dirent.isDirectory expects no args");
-                return this.emitSequencedCall("tsc_fs_dirent_is_directory", T_BOOLEAN, [{ value: recv }]);
-            case "isSymbolicLink":
-                if (args.length !== 0) unsupported(call, "Dirent.isSymbolicLink expects no args");
-                return this.emitSequencedCall("tsc_fs_dirent_is_symbolic_link", T_BOOLEAN, [{ value: recv }]);
-            case "isBlockDevice":
-                if (args.length !== 0) unsupported(call, "Dirent.isBlockDevice expects no args");
-                return this.emitSequencedCall("tsc_fs_dirent_is_block_device", T_BOOLEAN, [{ value: recv }]);
-            case "isCharacterDevice":
-                if (args.length !== 0) unsupported(call, "Dirent.isCharacterDevice expects no args");
-                return this.emitSequencedCall("tsc_fs_dirent_is_character_device", T_BOOLEAN, [{ value: recv }]);
-            case "isFIFO":
-                if (args.length !== 0) unsupported(call, "Dirent.isFIFO expects no args");
-                return this.emitSequencedCall("tsc_fs_dirent_is_fifo", T_BOOLEAN, [{ value: recv }]);
-            case "isSocket":
-                if (args.length !== 0) unsupported(call, "Dirent.isSocket expects no args");
-                return this.emitSequencedCall("tsc_fs_dirent_is_socket", T_BOOLEAN, [{ value: recv }]);
             case "toLocaleString":
             case "toString":
-                if (args.length !== 0) unsupported(call, `Dirent.${method} expects no args`);
-                return {
-                    c: `tsc_str_from_lit("[object Dirent]", 15)`,
-                    ty: T_STRING,
-                };
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([dirent]) => `({ (void)${dirent}; tsc_str_from_lit("[object Dirent]", 15); })`,
+                );
             case "valueOf":
-                if (args.length !== 0) unsupported(call, "Dirent.valueOf expects no args");
-                return recv;
+                return this.emitSequencedExpr(
+                    recv.ty,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([dirent]) => dirent,
+                );
         }
         unsupported(call, `Dirent method .${method}`);
     }

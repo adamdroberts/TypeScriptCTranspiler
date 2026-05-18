@@ -802,23 +802,23 @@ interface FSStats {
     readonly mtime: Date;
     readonly ctime: Date;
     readonly birthtime: Date;
-    isFile(): boolean;
-    isDirectory(): boolean;
-    isSymbolicLink(): boolean;
-    isBlockDevice(): boolean;
-    isCharacterDevice(): boolean;
-    isFIFO(): boolean;
-    isSocket(): boolean;
+    isFile(...ignored: any[]): boolean;
+    isDirectory(...ignored: any[]): boolean;
+    isSymbolicLink(...ignored: any[]): boolean;
+    isBlockDevice(...ignored: any[]): boolean;
+    isCharacterDevice(...ignored: any[]): boolean;
+    isFIFO(...ignored: any[]): boolean;
+    isSocket(...ignored: any[]): boolean;
 }
 interface FSDirent {
     readonly name: string;
-    isFile(): boolean;
-    isDirectory(): boolean;
-    isSymbolicLink(): boolean;
-    isBlockDevice(): boolean;
-    isCharacterDevice(): boolean;
-    isFIFO(): boolean;
-    isSocket(): boolean;
+    isFile(...ignored: any[]): boolean;
+    isDirectory(...ignored: any[]): boolean;
+    isSymbolicLink(...ignored: any[]): boolean;
+    isBlockDevice(...ignored: any[]): boolean;
+    isCharacterDevice(...ignored: any[]): boolean;
+    isFIFO(...ignored: any[]): boolean;
+    isSocket(...ignored: any[]): boolean;
 }
 interface FSStatsOptions {
     bigint?: false;

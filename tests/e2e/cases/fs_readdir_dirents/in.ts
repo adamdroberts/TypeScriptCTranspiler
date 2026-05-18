@@ -5,6 +5,12 @@ const root = "/tmp/tsc2c-fs-readdir-dirents";
 const filePath = root + "/file.txt";
 const dirPath = root + "/dir";
 const linkPath = root + "/link.txt";
+let seen = "";
+
+function mark(label: string): string {
+    seen += label;
+    return label;
+}
 
 function summarize(entries: FSDirent[]): string {
     let files = 0;
@@ -34,6 +40,11 @@ fs.symlinkSync(filePath, linkPath, "file");
 
 const syncEntries = fs.readdirSync(root, { withFileTypes: true });
 console.log("sync:", summarize(syncEntries));
+let fileEntry = syncEntries[0];
+for (let i = 0; i < syncEntries.length; i++) {
+    if (syncEntries[i].name === "file.txt") fileEntry = syncEntries[i];
+}
+console.log("ignored:", fileEntry.isFile(mark("f")), fileEntry.toString(mark("s")), fileEntry.toLocaleString(mark("l")), fileEntry.valueOf(mark("v")) === fileEntry, seen);
 
 const namedEntries = readdirSync(root, { withFileTypes: true, encoding: "utf8" });
 console.log("named:", summarize(namedEntries));

@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- `FSStats` and `FSDirent` predicate/string/value methods now evaluate and ignore extra arguments where JavaScript ignores them. Tests: `fs_stat`, `fs_readdir_dirents`.
 - Buffer string/JSON/value methods now evaluate and ignore extra arguments where JavaScript ignores them. Test: `buffer_object_methods`.
 - URL string/value methods now evaluate and ignore extra arguments where JavaScript ignores them. Test: `url_object_methods`.
 - Typed String identity, case-conversion, normalization, trim, and well-formedness methods now evaluate and ignore extra arguments where JavaScript ignores them. Tests: `string_object_methods`, `strings`, `string_normalize`, `string_trim_edges`, `string_trim_aliases`, `string_well_formed`.

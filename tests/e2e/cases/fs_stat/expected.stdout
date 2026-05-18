@@ -1,5 +1,6 @@
 file: true false 5
 dir: false true true
 string: [object Stats]
+ignored: true false [object Stats] [object Stats] true fdslv
 promise: true false 5
 resolve: true 5
