@@ -1,4 +1,5 @@
 keys: 0|1|2
 values: red|blue|green
+entries: 1|blue kve
 copy: red|cyan|green
 source: red|blue|green

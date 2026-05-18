@@ -1,2 +1,3 @@
 start: [hello  ]
 end: [  hello]
+both: [hello] set

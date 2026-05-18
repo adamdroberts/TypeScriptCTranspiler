@@ -1,5 +1,6 @@
 upper: ADA LOVELACE
 lower: ada lovelace
+ignored string: tulr
 char: L
 includes: true
 starts: true
@@ -14,3 +15,4 @@ pop: four
 after: 1,two,3
 slice arr: two/3
 reverse: 3-two-1
+ignored array: tulra

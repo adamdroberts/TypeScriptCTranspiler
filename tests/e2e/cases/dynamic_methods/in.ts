@@ -1,7 +1,13 @@
 const text: any = " Ada Lovelace ";
+let seen = "";
+function mark(label: string): string {
+  seen += label;
+  return label;
+}
 
-console.log("upper:", text.trim().toUpperCase());
-console.log("lower:", text.toLowerCase().trim());
+console.log("upper:", text.trim(mark("t")).toUpperCase(mark("u")));
+console.log("lower:", text.toLowerCase(mark("l")).trim(mark("r")));
+console.log("ignored string:", seen);
 console.log("char:", text.charAt(5));
 console.log("includes:", text.includes("Love"));
 console.log("starts:", text.trim().startsWith("Ada"));
@@ -17,5 +23,6 @@ console.log("push len:", values.push("four"));
 console.log("pop:", values.pop());
 console.log("after:", values.join(","));
 console.log("slice arr:", values.slice(1).join("/"));
-values.reverse();
+values.reverse(mark("a"));
 console.log("reverse:", values.join("-"));
+console.log("ignored array:", seen);

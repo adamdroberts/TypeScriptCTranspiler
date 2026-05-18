@@ -2,3 +2,4 @@ entry0: 0 red
 entry2: 2 green
 copy: cyan
 source: blue
+ignored: e

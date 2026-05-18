@@ -10617,10 +10617,14 @@ class Emitter {
             case "join":
                 return oneArg("tsc_value_method_join");
             case "pop":
-                if (args.length !== 0) unsupported(call, "pop expects no args");
-                return this.emitSequencedCall("tsc_value_method_pop", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        ...this.ignoredArgumentSpecs(args, 0),
+                    ],
+                    ([target]) => `tsc_value_method_pop(${target})`,
+                );
             case "push": {
                 const specs: SequencedCallArg[] = [
                     { value: recv, target: T_VALUE, node: call.expression },
@@ -10634,10 +10638,14 @@ class Emitter {
                 });
             }
             case "shift":
-                if (args.length !== 0) unsupported(call, "shift expects no args");
-                return this.emitSequencedCall("tsc_value_method_shift", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        ...this.ignoredArgumentSpecs(args, 0),
+                    ],
+                    ([target]) => `tsc_value_method_shift(${target})`,
+                );
             case "unshift": {
                 const specs: SequencedCallArg[] = [
                     { value: recv, target: T_VALUE, node: call.expression },
@@ -10803,15 +10811,23 @@ class Emitter {
             case "every":
                 return this.emitDynamicArrayHof(call, recv, "every");
             case "reverse":
-                if (args.length !== 0) unsupported(call, "reverse expects no args");
-                return this.emitSequencedCall("tsc_value_method_reverse", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        ...this.ignoredArgumentSpecs(args, 0),
+                    ],
+                    ([target]) => `tsc_value_method_reverse(${target})`,
+                );
             case "toReversed":
-                if (args.length !== 0) unsupported(call, "toReversed expects no args");
-                return this.emitSequencedCall("tsc_value_method_to_reversed", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        ...this.ignoredArgumentSpecs(args, 0),
+                    ],
+                    ([target]) => `tsc_value_method_to_reversed(${target})`,
+                );
             case "slice": {
                 if (args.length > 2) unsupported(call, "slice expects 0-2 args");
                 const start = args[0] ? this.emitExpr(args[0]) : missing;
@@ -10823,20 +10839,32 @@ class Emitter {
                 ]);
             }
             case "keys":
-                if (args.length !== 0) unsupported(call, "keys expects no args");
-                return this.emitSequencedCall("tsc_value_method_keys", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        ...this.ignoredArgumentSpecs(args, 0),
+                    ],
+                    ([target]) => `tsc_value_method_keys(${target})`,
+                );
             case "values":
-                if (args.length !== 0) unsupported(call, "values expects no args");
-                return this.emitSequencedCall("tsc_value_method_values", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        ...this.ignoredArgumentSpecs(args, 0),
+                    ],
+                    ([target]) => `tsc_value_method_values(${target})`,
+                );
             case "entries":
-                if (args.length !== 0) unsupported(call, "entries expects no args");
-                return this.emitSequencedCall("tsc_value_method_entries", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        ...this.ignoredArgumentSpecs(args, 0),
+                    ],
+                    ([target]) => `tsc_value_method_entries(${target})`,
+                );
             case "substring": {
                 if (args.length > 2) unsupported(call, "substring expects 0-2 args");
                 const start = args[0] ? this.emitExpr(args[0]) : missing;
@@ -10963,15 +10991,23 @@ class Emitter {
             case "endsWith":
                 return oneRequiredOneOptional("tsc_value_method_ends_with", { c: "tsc_value_num(INFINITY)", ty: T_VALUE });
             case "toLowerCase":
-                if (args.length !== 0) unsupported(call, "toLowerCase expects no args");
-                return this.emitSequencedCall("tsc_value_method_to_lower", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        ...this.ignoredArgumentSpecs(args, 0),
+                    ],
+                    ([target]) => `tsc_value_method_to_lower(${target})`,
+                );
             case "toUpperCase":
-                if (args.length !== 0) unsupported(call, "toUpperCase expects no args");
-                return this.emitSequencedCall("tsc_value_method_to_upper", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        ...this.ignoredArgumentSpecs(args, 0),
+                    ],
+                    ([target]) => `tsc_value_method_to_upper(${target})`,
+                );
             case "normalize":
                 if (args.length > 1) unsupported(call, "normalize expects 0 or 1 arg");
                 return this.emitSequencedCall("tsc_value_method_normalize", T_VALUE, [
@@ -10979,22 +11015,34 @@ class Emitter {
                     { value: args[0] ? this.emitExpr(args[0]) : missing, target: T_VALUE, node: args[0] ?? call.expression },
                 ]);
             case "trim":
-                if (args.length !== 0) unsupported(call, "trim expects no args");
-                return this.emitSequencedCall("tsc_value_method_trim", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        ...this.ignoredArgumentSpecs(args, 0),
+                    ],
+                    ([target]) => `tsc_value_method_trim(${target})`,
+                );
             case "trimLeft":
             case "trimStart":
-                if (args.length !== 0) unsupported(call, `${method} expects no args`);
-                return this.emitSequencedCall("tsc_value_method_trim_start", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        ...this.ignoredArgumentSpecs(args, 0),
+                    ],
+                    ([target]) => `tsc_value_method_trim_start(${target})`,
+                );
             case "trimRight":
             case "trimEnd":
-                if (args.length !== 0) unsupported(call, `${method} expects no args`);
-                return this.emitSequencedCall("tsc_value_method_trim_end", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        ...this.ignoredArgumentSpecs(args, 0),
+                    ],
+                    ([target]) => `tsc_value_method_trim_end(${target})`,
+                );
             case "repeat":
                 if (args.length !== 1) unsupported(call, "repeat expects 1 arg");
                 return this.emitSequencedCall("tsc_value_method_repeat", T_VALUE, [
