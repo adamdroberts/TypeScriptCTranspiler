@@ -9847,12 +9847,12 @@ class Emitter {
             memberName === "toString" ||
             memberName === "valueOf"
         ) {
-            const earlyRecvType = this.prepareType(mapType(recvExpr, this.checker));
-            if (earlyRecvType.kind === "fsstats") {
-                return this.emitFsStatsMethod(call, this.emitExpr(recvExpr), memberName);
+            const earlyRecv = this.emitExpr(recvExpr);
+            if (earlyRecv.ty.kind === "fsstats") {
+                return this.emitFsStatsMethod(call, earlyRecv, memberName);
             }
-            if (earlyRecvType.kind === "fsdirent") {
-                return this.emitFsDirentMethod(call, this.emitExpr(recvExpr), memberName);
+            if (earlyRecv.ty.kind === "fsdirent") {
+                return this.emitFsDirentMethod(call, earlyRecv, memberName);
             }
         }
 
