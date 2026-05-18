@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- `fs.rmSync` / `fs.rmdirSync` and their immediate `fs.promises` counterparts now accept numeric literal `maxRetries` / `retryDelay` compatibility options alongside the existing bounded recursive removal options. Test: `fs_recursive_options`.
 - `fs.rmdirSync` and immediate `fs.promises.rmdir` now accept bounded literal `{ recursive: true }` options for recursive directory removal. Test: `fs_recursive_options`.
 - `fs.readFileSync` / immediate `fs.promises.readFile` now accept literal read flags `{ flag: "r+" | "rs+" }` alongside the existing read-only flags. Test: `fs_read_file_plus_flags`.
 - `EventTarget.addEventListener` / `removeEventListener` now accept literal listener options, with `{ once: true }` removing listeners before invocation and literal `capture` / `passive` accepted as inert compatibility flags. Test: `event_target_options`.

@@ -816,9 +816,13 @@ interface FSMkdirOptions {
 interface FSRmOptions {
     recursive?: boolean;
     force?: boolean;
+    maxRetries?: number;
+    retryDelay?: number;
 }
 interface FSRmdirOptions {
     recursive?: boolean;
+    maxRetries?: number;
+    retryDelay?: number;
 }
 interface FSCpOptions {
     recursive?: boolean;

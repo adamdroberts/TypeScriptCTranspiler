@@ -16573,7 +16573,7 @@ class Emitter {
             case "rmSync": {
                 if (args.length < 1 || args.length > 2) unsupported(call, "fs.rmSync needs path and optional options");
                 const p = this.emitExpr(args[0]!);
-                const options = this.emitFsBooleanOptions(args[1], ["recursive", "force"], `fs.${name}`);
+                const options = this.emitFsBooleanOptions(args[1], ["recursive", "force"], `fs.${name}`, ["maxRetries", "retryDelay"]);
                 return this.emitSequencedExpr(T_VOID, [
                     this.fsPathSpec(p, args[0]!, `fs.${name} path`),
                 ], ([path]) => `tsc_fs_rm_sync_opts(${path!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"})`);
@@ -16583,7 +16583,7 @@ class Emitter {
                 if (args.length < 1 || args.length > (name === "rmdirSync" ? 2 : 1)) unsupported(call, `fs.${name} needs path${name === "rmdirSync" ? " and optional options" : ""}`);
                 const p = this.emitExpr(args[0]!);
                 if (name === "rmdirSync") {
-                    const options = this.emitFsBooleanOptions(args[1], ["recursive"], `fs.${name}`);
+                    const options = this.emitFsBooleanOptions(args[1], ["recursive"], `fs.${name}`, ["maxRetries", "retryDelay"]);
                     return this.emitSequencedExpr(T_VOID, [
                         this.fsPathSpec(p, args[0]!, `fs.${name} path`),
                     ], ([path]) => `tsc_fs_rmdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"})`);
@@ -16703,6 +16703,7 @@ class Emitter {
         options: ts.Expression | undefined,
         allowed: readonly string[],
         label: string,
+        ignoredNumberKeys: readonly string[] = [],
     ): Record<string, boolean> {
         const out: Record<string, boolean> = {};
         for (const key of allowed) out[key] = false;
@@ -16712,9 +16713,15 @@ class Emitter {
         }
         for (const prop of options.properties) {
             if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, `${label} options only support boolean property assignments`);
+                unsupported(prop, `${label} options only support boolean property assignments${ignoredNumberKeys.length ? " plus numeric retry options" : ""}`);
             }
             const key = this.staticPropertyName(prop.name);
+            if (key && ignoredNumberKeys.includes(key)) {
+                if (this.tryFoldNumericLiteral(prop.initializer) === null) {
+                    unsupported(prop.initializer, `${label}.${key} must be a numeric literal in this subset`);
+                }
+                continue;
+            }
             if (!key || !allowed.includes(key)) {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
@@ -17240,7 +17247,7 @@ class Emitter {
             case "rm": {
                 if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.rm needs path and optional options");
                 const p = this.emitExpr(args[0]!);
-                const options = this.emitFsBooleanOptions(args[1], ["recursive", "force"], `fs.promises.${name}`);
+                const options = this.emitFsBooleanOptions(args[1], ["recursive", "force"], `fs.promises.${name}`, ["maxRetries", "retryDelay"]);
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
                 ], ([path]) =>
@@ -17252,7 +17259,7 @@ class Emitter {
                 if (args.length < 1 || args.length > (name === "rmdir" ? 2 : 1)) unsupported(call, `fs.promises.${name} needs a path${name === "rmdir" ? " and optional options" : ""}`);
                 const p = this.emitExpr(args[0]!);
                 if (name === "rmdir") {
-                    const options = this.emitFsBooleanOptions(args[1], ["recursive"], `fs.promises.${name}`);
+                    const options = this.emitFsBooleanOptions(args[1], ["recursive"], `fs.promises.${name}`, ["maxRetries", "retryDelay"]);
                     return this.emitSequencedExpr(mapped, [
                         this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
                     ], ([path]) =>
