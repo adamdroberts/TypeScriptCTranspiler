@@ -244,9 +244,9 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Flag support: `d`, `g`, `i`, `m`, `s`, `u`, `y` properties (`hasIndices`, global, ignore-case, multiline, dotAll, Unicode, sticky). Tests: `regexp_object_methods`, `regexp_extra_flags`
 - PCRE2 syntax support for lookahead/lookbehind, named capture syntax, and Unicode property escapes. Test: `regex_pcre2`
 - `RegExp.escape(text)` → `tsc_regexp_escape`, returning a literal-pattern string for leading ASCII alphanumerics, regex syntax characters, broader ASCII punctuators, and whitespace/control bytes. Test: `regexp_escape`
-- `re.exec(s)` → `tsc_regexp_exec`, returning the full match plus captures or `null`. Test: `regexp_exec`
-- `re.test(s)` → `tsc_regexp_test`
-- `re.source`, `re.flags`, `re.global`, `re.hasIndices`, `re.ignoreCase`, `re.multiline`, `re.dotAll`, `re.sticky`, `re.unicode`, `re.toString()`, `re.toLocaleString()`, and `re.valueOf()`. Tests: `regexp_object_methods`, `regexp_extra_flags`
+- `re.exec(s, ...ignored)` → `tsc_regexp_exec`, returning the full match plus captures or `null` after evaluating ignored extra arguments. Tests: `regexp_exec`, `regexp_object_methods`
+- `re.test(s, ...ignored)` → `tsc_regexp_test`, with ignored extra arguments evaluated before being discarded. Test: `regexp_object_methods`
+- `re.source`, `re.flags`, `re.global`, `re.hasIndices`, `re.ignoreCase`, `re.multiline`, `re.dotAll`, `re.sticky`, `re.unicode`, `re.toString(...ignored)`, `re.toLocaleString(...ignored)`, and `re.valueOf(...ignored)`. Tests: `regexp_object_methods`, `regexp_extra_flags`
 - String-side methods with regex argument: `.replace`, `.replaceAll`, `.match`, `.search`, `.split`
 - Capture groups on non-global `.match()` results. Test: `regex_captures`
 - `.matchAll(regex)` full-match and capture arrays. Test: `string_match_all`

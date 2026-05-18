@@ -11464,36 +11464,44 @@ class Emitter {
         const args = call.arguments;
         switch (method) {
             case "exec": {
-                if (args.length !== 1) unsupported(call, "RegExp.exec expects 1 arg");
+                if (args.length < 1) unsupported(call, "RegExp.exec expects at least 1 arg");
                 const s = this.emitExpr(args[0]!);
-                return this.emitSequencedCall(
-                    "tsc_regexp_exec",
+                return this.emitSequencedExpr(
                     arrayType(T_STRING),
                     [
                         { value: recv },
                         { value: s, target: T_STRING, node: args[0]! },
+                        ...this.ignoredArgumentSpecs(args, 1),
                     ],
+                    ([regexp, value]) => `tsc_regexp_exec(${regexp}, ${value})`,
                 );
             }
             case "test": {
-                if (args.length !== 1) unsupported(call, "RegExp.test expects 1 arg");
+                if (args.length < 1) unsupported(call, "RegExp.test expects at least 1 arg");
                 const s = this.emitExpr(args[0]!);
-                return this.emitSequencedCall(
-                    "tsc_regexp_test",
+                return this.emitSequencedExpr(
                     T_BOOLEAN,
                     [
                         { value: recv },
                         { value: s, target: T_STRING, node: args[0]! },
+                        ...this.ignoredArgumentSpecs(args, 1),
                     ],
+                    ([regexp, value]) => `tsc_regexp_test(${regexp}, ${value})`,
                 );
             }
             case "toLocaleString":
             case "toString":
-                if (args.length !== 0) unsupported(call, `RegExp.${method} expects no args`);
-                return this.emitSequencedCall("tsc_regexp_to_string", T_STRING, [{ value: recv }]);
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([regexp]) => `tsc_regexp_to_string(${regexp})`,
+                );
             case "valueOf":
-                if (args.length !== 0) unsupported(call, "RegExp.valueOf expects no args");
-                return recv;
+                return this.emitSequencedExpr(
+                    T_REGEXP,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([regexp]) => regexp,
+                );
         }
         unsupported(call, `RegExp method .${method}`);
     }

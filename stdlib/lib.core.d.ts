@@ -416,11 +416,11 @@ interface Function {}
 interface CallableFunction extends Function {}
 interface NewableFunction extends Function {}
 interface RegExp {
-    exec(s: string): string[] | null;
-    test(s: string): boolean;
-    toLocaleString(): string;
-    toString(): string;
-    valueOf(): RegExp;
+    exec(s: string, ...ignored: any[]): string[] | null;
+    test(s: string, ...ignored: any[]): boolean;
+    toLocaleString(...ignored: any[]): string;
+    toString(...ignored: any[]): string;
+    valueOf(...ignored: any[]): RegExp;
     readonly source: string;
     readonly flags: string;
     readonly global: boolean;

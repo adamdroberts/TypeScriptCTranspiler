@@ -7,3 +7,5 @@ concat: re=/a.b/gimsu
 value test: true
 plain props: false false false false false
 plain string: /cat/
+ignored: true A
+B /a.b/gimsu /a.b/gimsu true teslv
