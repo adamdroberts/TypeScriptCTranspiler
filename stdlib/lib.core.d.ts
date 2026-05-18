@@ -1235,26 +1235,26 @@ interface EventEmitter {
 interface EventEmitterConstructor {
     new(...ignored: any[]): EventEmitter;
     defaultMaxListeners: number;
-    listenerCount(emitter: EventEmitter, eventName: string, listener?: (...args: any[]) => void): number;
+    listenerCount(emitter: EventEmitter, eventName: string, listener?: (...args: any[]) => void, ...ignored: any[]): number;
 }
 declare var EventEmitter: EventEmitterConstructor;
 declare module "events" {
     export const EventEmitter: EventEmitterConstructor;
     export let defaultMaxListeners: number;
-    export function listenerCount(emitter: EventEmitter, eventName: string, listener?: (...args: any[]) => void): number;
-    export function getEventListeners(emitter: EventEmitter, eventName: string): any[];
+    export function listenerCount(emitter: EventEmitter, eventName: string, listener?: (...args: any[]) => void, ...ignored: any[]): number;
+    export function getEventListeners(emitter: EventEmitter, eventName: string, ...ignored: any[]): any[];
     export function once(emitter: EventEmitter, eventName: string): Promise<any[]>;
     export function setMaxListeners(n: number, emitter: EventEmitter): void;
-    export function getMaxListeners(emitter: EventEmitter): number;
+    export function getMaxListeners(emitter: EventEmitter, ...ignored: any[]): number;
 }
 declare module "node:events" {
     export const EventEmitter: EventEmitterConstructor;
     export let defaultMaxListeners: number;
-    export function listenerCount(emitter: EventEmitter, eventName: string, listener?: (...args: any[]) => void): number;
-    export function getEventListeners(emitter: EventEmitter, eventName: string): any[];
+    export function listenerCount(emitter: EventEmitter, eventName: string, listener?: (...args: any[]) => void, ...ignored: any[]): number;
+    export function getEventListeners(emitter: EventEmitter, eventName: string, ...ignored: any[]): any[];
     export function once(emitter: EventEmitter, eventName: string): Promise<any[]>;
     export function setMaxListeners(n: number, emitter: EventEmitter): void;
-    export function getMaxListeners(emitter: EventEmitter): number;
+    export function getMaxListeners(emitter: EventEmitter, ...ignored: any[]): number;
 }
 
 type DnsLookupCallback = (err: any, address: string, family: number) => void;

@@ -13092,7 +13092,7 @@ class Emitter {
         const args = call.arguments;
         switch (method) {
             case "listenerCount": {
-                if (args.length < 2 || args.length > 3) unsupported(call, "events.listenerCount expects emitter, eventName, and optional listener");
+                if (args.length < 2) unsupported(call, "events.listenerCount expects emitter, eventName, and optional listener");
                 const emitter = this.emitExpr(args[0]!);
                 const eventName = this.emitExpr(args[1]!);
                 if (args[2]) {
@@ -13101,23 +13101,26 @@ class Emitter {
                         { value: emitter, target: T_EVENT_EMITTER, node: args[0]! },
                         { value: eventName, target: T_STRING, node: args[1]! },
                         { value: listener, target: listener.ty, node: args[2] },
+                        ...this.ignoredArgumentSpecs(args, 3),
                     ], ([ee, event, fn]) =>
                         `tsc_event_emitter_listener_count_identity(${ee}, ${event}, ${this.eventListenerIdentity(args[2]!, fn!)})`,
                     );
                 }
-                return this.emitSequencedCall("tsc_event_emitter_listener_count", T_NUMBER, [
+                return this.emitSequencedExpr(T_NUMBER, [
                     { value: emitter, target: T_EVENT_EMITTER, node: args[0]! },
                     { value: eventName, target: T_STRING, node: args[1]! },
-                ]);
+                    ...this.ignoredArgumentSpecs(args, 2),
+                ], ([ee, event]) => `tsc_event_emitter_listener_count(${ee}, ${event})`);
             }
             case "getEventListeners": {
-                if (args.length !== 2) unsupported(call, "events.getEventListeners expects emitter and eventName");
+                if (args.length < 2) unsupported(call, "events.getEventListeners expects emitter and eventName");
                 const emitter = this.emitExpr(args[0]!);
                 const eventName = this.emitExpr(args[1]!);
-                return this.emitSequencedCall("tsc_event_emitter_listeners", arrayType(T_VALUE), [
+                return this.emitSequencedExpr(arrayType(T_VALUE), [
                     { value: emitter, target: T_EVENT_EMITTER, node: args[0]! },
                     { value: eventName, target: T_STRING, node: args[1]! },
-                ]);
+                    ...this.ignoredArgumentSpecs(args, 2),
+                ], ([ee, event]) => `tsc_event_emitter_listeners(${ee}, ${event})`);
             }
             case "once": {
                 if (args.length !== 2) unsupported(call, "events.once expects emitter and eventName");
@@ -13140,11 +13143,12 @@ class Emitter {
                 ], ([n, ee]) => `tsc_event_emitter_set_max_listeners(${ee}, ${n})`);
             }
             case "getMaxListeners": {
-                if (args.length !== 1) unsupported(call, "events.getMaxListeners expects emitter");
+                if (args.length < 1) unsupported(call, "events.getMaxListeners expects emitter");
                 const emitter = this.emitExpr(args[0]!);
-                return this.emitSequencedCall("tsc_event_emitter_get_max_listeners", T_NUMBER, [
+                return this.emitSequencedExpr(T_NUMBER, [
                     { value: emitter, target: T_EVENT_EMITTER, node: args[0]! },
-                ]);
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ], ([ee]) => `tsc_event_emitter_get_max_listeners(${ee})`);
             }
         }
         unsupported(call, `events.${method}`);
