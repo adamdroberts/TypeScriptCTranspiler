@@ -740,9 +740,9 @@ interface Date {
     setUTCMilliseconds(ms: number, ...ignored: any[]): number;
     valueOf(): number;
     toString(): string;
-    toLocaleString(): string;
-    toLocaleDateString(): string;
-    toLocaleTimeString(): string;
+    toLocaleString(...ignored: any[]): string;
+    toLocaleDateString(...ignored: any[]): string;
+    toLocaleTimeString(...ignored: any[]): string;
     toDateString(): string;
     toTimeString(): string;
     toISOString(): string;

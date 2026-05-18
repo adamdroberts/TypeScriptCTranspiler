@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Date locale formatting methods now accept evaluated ignored arguments through the ambient type shim, matching the existing bounded en-US runtime formatting subset. Test: `date_locale_parts`.
 - `clearTimeout(undefined)` and undefined-valued `clearImmediate(...)` handles now behave as no-op clears while preserving argument side effects. Test: `timers_clear`.
 - `setTimeout(callback, -0)` now shares the bounded zero-delay path instead of being rejected as a nonzero timer. Test: `set_timeout_zero`.
 - `setTimeout(callback, undefined)` and `setTimeout(callback, void 0)` now share the bounded omitted-delay zero-delay path. Test: `set_timeout_zero`.
