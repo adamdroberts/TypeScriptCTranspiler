@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- `fs.rmdirSync` and immediate `fs.promises.rmdir` now accept bounded literal `{ recursive: true }` options for recursive directory removal. Test: `fs_recursive_options`.
 - `fs.readFileSync` / immediate `fs.promises.readFile` now accept literal read flags `{ flag: "r+" | "rs+" }` alongside the existing read-only flags. Test: `fs_read_file_plus_flags`.
 - `EventTarget.addEventListener` / `removeEventListener` now accept literal listener options, with `{ once: true }` removing listeners before invocation and literal `capture` / `passive` accepted as inert compatibility flags. Test: `event_target_options`.
 - Supported fs calls now accept `file:` URL path arguments in the bounded `PathLike` subset for sync, named-import, and immediate-promise forms by resolving URL objects to their filesystem pathname before runtime dispatch. Test: `fs_file_url_path_like`.

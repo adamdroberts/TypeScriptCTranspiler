@@ -817,6 +817,9 @@ interface FSRmOptions {
     recursive?: boolean;
     force?: boolean;
 }
+interface FSRmdirOptions {
+    recursive?: boolean;
+}
 interface FSCpOptions {
     recursive?: boolean;
     force?: boolean;
@@ -905,7 +908,7 @@ interface FS {
     mkdirSync(path: FSPathLike, options?: number | FSMkdirOptions): void;
     unlinkSync(path: FSPathLike): void;
     rmSync(path: FSPathLike, options?: FSRmOptions): void;
-    rmdirSync(path: FSPathLike): void;
+    rmdirSync(path: FSPathLike, options?: FSRmdirOptions): void;
     cpSync(src: FSPathLike, dest: FSPathLike, options?: FSCpOptions): void;
     copyFileSync(src: FSPathLike, dest: FSPathLike, mode?: number): void;
     renameSync(oldPath: FSPathLike, newPath: FSPathLike): void;
@@ -939,7 +942,7 @@ interface FSPromises {
     mkdir(path: FSPathLike, options?: number | FSMkdirOptions): Promise<void>;
     unlink(path: FSPathLike): Promise<void>;
     rm(path: FSPathLike, options?: FSRmOptions): Promise<void>;
-    rmdir(path: FSPathLike): Promise<void>;
+    rmdir(path: FSPathLike, options?: FSRmdirOptions): Promise<void>;
     cp(src: FSPathLike, dest: FSPathLike, options?: FSCpOptions): Promise<void>;
     copyFile(src: FSPathLike, dest: FSPathLike, mode?: number): Promise<void>;
     rename(oldPath: FSPathLike, newPath: FSPathLike): Promise<void>;
@@ -976,7 +979,7 @@ declare module "fs" {
     export function mkdirSync(path: FSPathLike, options?: number | FSMkdirOptions): void;
     export function unlinkSync(path: FSPathLike): void;
     export function rmSync(path: FSPathLike, options?: FSRmOptions): void;
-    export function rmdirSync(path: FSPathLike): void;
+    export function rmdirSync(path: FSPathLike, options?: FSRmdirOptions): void;
     export function cpSync(src: FSPathLike, dest: FSPathLike, options?: FSCpOptions): void;
     export function copyFileSync(src: FSPathLike, dest: FSPathLike, mode?: number): void;
     export function renameSync(oldPath: FSPathLike, newPath: FSPathLike): void;
@@ -1012,7 +1015,7 @@ declare module "node:fs" {
     export function mkdirSync(path: FSPathLike, options?: number | FSMkdirOptions): void;
     export function unlinkSync(path: FSPathLike): void;
     export function rmSync(path: FSPathLike, options?: FSRmOptions): void;
-    export function rmdirSync(path: FSPathLike): void;
+    export function rmdirSync(path: FSPathLike, options?: FSRmdirOptions): void;
     export function cpSync(src: FSPathLike, dest: FSPathLike, options?: FSCpOptions): void;
     export function copyFileSync(src: FSPathLike, dest: FSPathLike, mode?: number): void;
     export function renameSync(oldPath: FSPathLike, newPath: FSPathLike): void;

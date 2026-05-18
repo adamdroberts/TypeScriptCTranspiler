@@ -16580,10 +16580,15 @@ class Emitter {
             }
             case "unlinkSync":
             case "rmdirSync": {
-                if (args.length !== 1) unsupported(call, `fs.${name} needs path`);
+                if (args.length < 1 || args.length > (name === "rmdirSync" ? 2 : 1)) unsupported(call, `fs.${name} needs path${name === "rmdirSync" ? " and optional options" : ""}`);
                 const p = this.emitExpr(args[0]!);
-                const fn = name === "unlinkSync" ? "tsc_fs_unlink_sync" : "tsc_fs_rmdir_sync";
-                return this.emitSequencedCall(fn, T_VOID, [
+                if (name === "rmdirSync") {
+                    const options = this.emitFsBooleanOptions(args[1], ["recursive"], `fs.${name}`);
+                    return this.emitSequencedExpr(T_VOID, [
+                        this.fsPathSpec(p, args[0]!, `fs.${name} path`),
+                    ], ([path]) => `tsc_fs_rmdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"})`);
+                }
+                return this.emitSequencedCall("tsc_fs_unlink_sync", T_VOID, [
                     this.fsPathSpec(p, args[0]!, `fs.${name} path`),
                 ]);
             }
@@ -17244,9 +17249,17 @@ class Emitter {
             }
             case "unlink":
             case "rmdir": {
-                if (args.length !== 1) unsupported(call, `fs.promises.${name} needs a path`);
+                if (args.length < 1 || args.length > (name === "rmdir" ? 2 : 1)) unsupported(call, `fs.promises.${name} needs a path${name === "rmdir" ? " and optional options" : ""}`);
                 const p = this.emitExpr(args[0]!);
-                const fn = name === "unlink" ? "tsc_fs_unlink_sync" : "tsc_fs_rmdir_sync";
+                if (name === "rmdir") {
+                    const options = this.emitFsBooleanOptions(args[1], ["recursive"], `fs.promises.${name}`);
+                    return this.emitSequencedExpr(mapped, [
+                        this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
+                    ], ([path]) =>
+                        settle(`({ tsc_fs_rmdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`),
+                    );
+                }
+                const fn = "tsc_fs_unlink_sync";
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
                 ], ([path]) =>

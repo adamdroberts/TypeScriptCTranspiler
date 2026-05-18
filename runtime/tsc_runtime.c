@@ -8608,6 +8608,13 @@ void tsc_fs_rmdir_sync(const tsc_str_t* path) {
     if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.rmdirSync: could not remove directory"));
 }
 
+void tsc_fs_rmdir_sync_opts(const tsc_str_t* path, bool recursive) {
+    char* p = cstr_dup(path);
+    int r = recursive ? rm_recursive_cstr(p, false) : rmdir(p);
+    free(p);
+    if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.rmdirSync: could not remove directory"));
+}
+
 static char* fs_join_path_cstr(const char* base, const char* name) {
     size_t base_len = strlen(base);
     size_t name_len = strlen(name);
