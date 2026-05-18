@@ -16,3 +16,6 @@ show("millis", date.setMilliseconds(22), date);
 
 const invalid = new Date(Date.UTC(2020, 0, 1));
 console.log("invalid:", Number.isNaN(invalid.setMonth(NaN)), Number.isNaN(invalid.getTime()));
+
+const invalidYear = new Date(NaN);
+show("invalid-year", invalidYear.setFullYear(2020), invalidYear);

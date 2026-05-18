@@ -9392,7 +9392,7 @@ double tsc_date_set_time(tsc_date_t* d, double ms) {
 }
 
 double tsc_date_set_utc_part(tsc_date_t* d, int part, double a, double b, double c, double e, int arg_count) {
-    if (!d || isnan(d->ms)) return NAN;
+    if (!d) return NAN;
     double provided[] = { a, b, c, e };
     for (int i = 0; i < arg_count && i < 4; i++) {
         if (isnan(provided[i])) {
@@ -9400,14 +9400,16 @@ double tsc_date_set_utc_part(tsc_date_t* d, int part, double a, double b, double
             return NAN;
         }
     }
-    double seconds_double = floor(d->ms / 1000.0);
+    if (isnan(d->ms) && part != 0) return NAN;
+    double base_ms = isnan(d->ms) ? 0.0 : d->ms;
+    double seconds_double = floor(base_ms / 1000.0);
     time_t seconds = (time_t)seconds_double;
     struct tm tm;
     if (!gmtime_r(&seconds, &tm)) {
         d->ms = NAN;
         return NAN;
     }
-    double rem = fmod(d->ms, 1000.0);
+    double rem = fmod(base_ms, 1000.0);
     if (rem < 0) rem += 1000.0;
     int millis = (int)floor(rem);
 
@@ -9452,7 +9454,7 @@ double tsc_date_set_utc_part(tsc_date_t* d, int part, double a, double b, double
 }
 
 double tsc_date_set_local_part(tsc_date_t* d, int part, double a, double b, double c, double e, int arg_count) {
-    if (!d || isnan(d->ms)) return NAN;
+    if (!d) return NAN;
     double provided[] = { a, b, c, e };
     for (int i = 0; i < arg_count && i < 4; i++) {
         if (isnan(provided[i])) {
@@ -9460,14 +9462,16 @@ double tsc_date_set_local_part(tsc_date_t* d, int part, double a, double b, doub
             return NAN;
         }
     }
-    double seconds_double = floor(d->ms / 1000.0);
+    if (isnan(d->ms) && part != 0) return NAN;
+    double base_ms = isnan(d->ms) ? 0.0 : d->ms;
+    double seconds_double = floor(base_ms / 1000.0);
     time_t seconds = (time_t)seconds_double;
     struct tm tm;
     if (!localtime_r(&seconds, &tm)) {
         d->ms = NAN;
         return NAN;
     }
-    double rem = fmod(d->ms, 1000.0);
+    double rem = fmod(base_ms, 1000.0);
     if (rem < 0) rem += 1000.0;
     int millis = (int)floor(rem);
 

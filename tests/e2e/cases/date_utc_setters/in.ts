@@ -8,3 +8,6 @@ console.log("seconds:", date.setUTCSeconds(11, 12), date.toISOString());
 console.log("ms:", date.setUTCMilliseconds(13), date.toISOString());
 console.log("month:", date.setUTCMonth(0, 2), date.toISOString());
 console.log("date:", date.setUTCDate(3), date.toISOString());
+
+const invalidYear = new Date(NaN);
+console.log("invalid-year:", invalidYear.setUTCFullYear(2020), invalidYear.toISOString());
