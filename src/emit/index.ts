@@ -22218,7 +22218,7 @@ class Emitter {
         ) {
             return { c: "tsc_event_emitter_get_default_max_listeners()", ty: T_NUMBER };
         }
-        if (ts.isIdentifier(pa.name) && this.isNamespaceReceiver(pa.expression)) {
+        if (ts.isIdentifier(pa.name)) {
             const nsName = this.namespaceMemberName(pa.name);
             if (nsName) {
                 const ty = mapType(pa, this.checker);
