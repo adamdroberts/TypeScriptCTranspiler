@@ -710,6 +710,12 @@ class Emitter {
         return null;
     }
 
+    private isNamespaceReceiver(expr: ts.Expression): boolean {
+        const sym = this.checker.getSymbolAtLocation(expr);
+        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        return !!decl && ts.isModuleDeclaration(decl);
+    }
+
     private importAliasTargetDeclaration(id: ts.Identifier): ts.Node | null {
         const raw = this.checker.getSymbolAtLocation(id);
         if (!raw || !(raw.flags & ts.SymbolFlags.Alias)) return null;
@@ -9975,7 +9981,7 @@ class Emitter {
             return this.emitSequencedCall(moduleNsMember, retType, specs);
         }
 
-        if (ts.isIdentifier(pa.name)) {
+        if (ts.isIdentifier(pa.name) && this.isNamespaceReceiver(recvExpr)) {
             const nsName = this.namespaceMemberName(pa.name);
             if (nsName) {
                 const sig = this.checker.getResolvedSignature(call);
@@ -22185,7 +22191,7 @@ class Emitter {
         ) {
             return { c: "tsc_event_emitter_get_default_max_listeners()", ty: T_NUMBER };
         }
-        if (ts.isIdentifier(pa.name)) {
+        if (ts.isIdentifier(pa.name) && this.isNamespaceReceiver(pa.expression)) {
             const nsName = this.namespaceMemberName(pa.name);
             if (nsName) {
                 const ty = mapType(pa, this.checker);
