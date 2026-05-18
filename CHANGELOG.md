@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- `fs.statSync` / `fs.lstatSync` and immediate `fs.promises.stat` / `lstat` now accept literal `{ throwIfNoEntry: true }` compatibility options alongside `{ bigint: false }`. Test: `fs_stat_options`.
 - `fs.writeFileSync` / `fs.appendFileSync` and immediate `fs.promises.writeFile` / `appendFile` now accept literal boolean `{ flush }` compatibility options alongside existing encoding, flag, and mode options. Test: `fs_write_append_mode_options`.
 - `fs.rmSync` / `fs.rmdirSync` and their immediate `fs.promises` counterparts now accept numeric literal `maxRetries` / `retryDelay` compatibility options alongside the existing bounded recursive removal options. Test: `fs_recursive_options`.
 - `fs.rmdirSync` and immediate `fs.promises.rmdir` now accept bounded literal `{ recursive: true }` options for recursive directory removal. Test: `fs_recursive_options`.

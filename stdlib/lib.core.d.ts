@@ -808,6 +808,7 @@ interface FSDirent {
 }
 interface FSStatsOptions {
     bigint?: false;
+    throwIfNoEntry?: true;
 }
 interface FSMkdirOptions {
     recursive?: boolean;

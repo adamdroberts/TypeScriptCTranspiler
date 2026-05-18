@@ -16436,7 +16436,7 @@ class Emitter {
                 ], ([path]) => `${options.recursive ? "tsc_fs_readdir_recursive_sync" : "tsc_fs_readdir_sync"}(${path!})`);
             }
             case "statSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.statSync needs path and optional { bigint: false } options");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.statSync needs path and optional { bigint: false, throwIfNoEntry: true } options");
                 this.validateFsStatsOptions(args[1], "fs.statSync");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedCall("tsc_fs_stat_sync", T_FS_STATS, [
@@ -16444,7 +16444,7 @@ class Emitter {
                 ]);
             }
             case "lstatSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.lstatSync needs path and optional { bigint: false } options");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.lstatSync needs path and optional { bigint: false, throwIfNoEntry: true } options");
                 this.validateFsStatsOptions(args[1], "fs.lstatSync");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedCall("tsc_fs_lstat_sync", T_FS_STATS, [
@@ -16968,15 +16968,22 @@ class Emitter {
         }
         for (const prop of options.properties) {
             if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, `${label} options only support bigint property assignments`);
+                unsupported(prop, `${label} options only support bigint and throwIfNoEntry property assignments`);
             }
             const key = this.staticPropertyName(prop.name);
-            if (key !== "bigint") {
-                unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+            if (key === "bigint") {
+                if (prop.initializer.kind !== ts.SyntaxKind.FalseKeyword && !this.isUndefinedExpression(prop.initializer)) {
+                    unsupported(prop.initializer, `${label} only supports bigint: false in this subset`);
+                }
+                continue;
             }
-            if (prop.initializer.kind !== ts.SyntaxKind.FalseKeyword && !this.isUndefinedExpression(prop.initializer)) {
-                unsupported(prop.initializer, `${label} only supports bigint: false in this subset`);
+            if (key === "throwIfNoEntry") {
+                if (prop.initializer.kind !== ts.SyntaxKind.TrueKeyword && !this.isUndefinedExpression(prop.initializer)) {
+                    unsupported(prop.initializer, `${label} only supports throwIfNoEntry: true in this subset`);
+                }
+                continue;
             }
+            unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
         }
     }
 
@@ -17082,7 +17089,7 @@ class Emitter {
                 });
             }
             case "stat": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.stat needs path and optional { bigint: false } options");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.stat needs path and optional { bigint: false, throwIfNoEntry: true } options");
                 this.validateFsStatsOptions(args[1], "fs.promises.stat");
                 if (mapped.elem?.kind !== "fsstats") unsupported(call, "fs.promises.stat result must be Promise<FSStats>");
                 const p = this.emitExpr(args[0]!);
@@ -17091,7 +17098,7 @@ class Emitter {
                 ], ([path]) => settle(`tsc_promise_resolve_fs_stats(tsc_fs_stat_sync(${path!}))`));
             }
             case "lstat": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.lstat needs path and optional { bigint: false } options");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.lstat needs path and optional { bigint: false, throwIfNoEntry: true } options");
                 this.validateFsStatsOptions(args[1], "fs.promises.lstat");
                 if (mapped.elem?.kind !== "fsstats") unsupported(call, "fs.promises.lstat result must be Promise<FSStats>");
                 const p = this.emitExpr(args[0]!);
