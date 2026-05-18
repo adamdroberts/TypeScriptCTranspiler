@@ -8,4 +8,4 @@ const invalid = Date.parse("not a date");
 console.log("parse:", parsed, fromString.getTime(), fromString.toISOString());
 console.log("date-only:", dateOnly.toISOString());
 console.log("offsets:", plusOffset === parsed, minusOffset === parsed);
-console.log("invalid:", Number.isNaN(invalid), new Date(invalid).toISOString());
+console.log("invalid:", Number.isNaN(invalid), String(new Date(invalid)));
