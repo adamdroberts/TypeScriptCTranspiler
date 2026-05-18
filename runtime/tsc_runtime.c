@@ -9756,11 +9756,11 @@ double tsc_date_get_timezone_offset(const tsc_date_t* d) {
 }
 
 tsc_str_t* tsc_date_to_iso_string(const tsc_date_t* d) {
-    if (!d || isnan(d->ms)) return tsc_str_from_lit("Invalid Date", 12);
+    if (!d || isnan(d->ms)) tsc_throw_str(tsc_str_from_lit("RangeError: Invalid time value", 30));
     double seconds_double = floor(d->ms / 1000.0);
     time_t seconds = (time_t)seconds_double;
     struct tm tm;
-    if (!gmtime_r(&seconds, &tm)) return tsc_str_from_lit("Invalid Date", 12);
+    if (!gmtime_r(&seconds, &tm)) tsc_throw_str(tsc_str_from_lit("RangeError: Invalid time value", 30));
     double rem = fmod(d->ms, 1000.0);
     if (rem < 0) rem += 1000.0;
     char buf[32];
