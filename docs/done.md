@@ -437,7 +437,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `new URL(input)` parses absolute URLs with `href`, `protocol`, `host`, `hostname`, `port`, `pathname`, `search`, `hash`, and `origin` fields. Test: `url_parse`
 - `new URL(input, base)` resolves root-relative, scheme-relative, query/hash-only, and simple relative-path inputs against an absolute base URL. Test: `url_base`
 - `URL.canParse(input)` / `URL.canParse(input, base)` checks whether the supported absolute or base-resolved URL subset can be constructed without throwing. Tests: `url_can_parse`, `url_base`
-- URL instances expose `.toString()`, `.toJSON()`, `.toLocaleString()`, `.valueOf()`, and empty own-property results through `Object.keys`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, `Reflect.ownKeys`, and `Reflect.getOwnPropertyDescriptor`. Test: `url_object_methods`
+- URL instances expose `.toString(...ignored)`, `.toJSON(...ignored)`, `.toLocaleString(...ignored)`, `.valueOf(...ignored)`, and empty own-property results through `Object.keys`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, `Reflect.ownKeys`, and `Reflect.getOwnPropertyDescriptor`. Test: `url_object_methods`
 
 ### `Math`
 - `floor`, `ceil`, `round` (JS half-to-+Inf), `abs`, `trunc`, `sign`

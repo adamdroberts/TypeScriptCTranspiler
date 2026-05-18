@@ -3,6 +3,7 @@ locale: https://example.com:8443/a/b?x=1#frag
 json: https://example.com:8443/a/b?x=1#frag
 concat: url=https://example.com:8443/a/b?x=1#frag
 value: /a/b ?x=1
+ignored: https://example.com:8443/a/b?x=1#frag https://example.com:8443/a/b?x=1#frag https://example.com:8443/a/b?x=1#frag true sljv
 own: 0 0 false
 desc: undefined 0
 proto: false false

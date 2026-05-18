@@ -14218,11 +14218,17 @@ class Emitter {
             case "toJSON":
             case "toLocaleString":
             case "toString":
-                if (call.arguments.length !== 0) unsupported(call, `URL.${method} expects no args`);
-                return this.emitSequencedExpr(T_STRING, [{ value: recv }], ([url]) => `${url}->href`);
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
+                    ([url]) => `${url}->href`,
+                );
             case "valueOf":
-                if (call.arguments.length !== 0) unsupported(call, "URL.valueOf expects no args");
-                return recv;
+                return this.emitSequencedExpr(
+                    recv.ty,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
+                    ([url]) => url,
+                );
             case "hasOwnProperty":
             case "propertyIsEnumerable":
                 return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "URL");

@@ -1450,10 +1450,10 @@ interface URL {
     readonly search: string;
     readonly hash: string;
     readonly origin: string;
-    toJSON(): string;
-    toLocaleString(): string;
-    toString(): string;
-    valueOf(): URL;
+    toJSON(...ignored: any[]): string;
+    toLocaleString(...ignored: any[]): string;
+    toString(...ignored: any[]): string;
+    valueOf(...ignored: any[]): URL;
 }
 interface URLConstructor {
     new (input: string, base?: string): URL;
