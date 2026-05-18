@@ -8097,7 +8097,7 @@ tsc_buffer_t* tsc_fs_read_file_buffer_sync(const tsc_str_t* path) {
     return tsc_buffer_from_str(tsc_fs_read_file_sync(path), NULL);
 }
 
-static void fs_write_bytes_opts_mode(const tsc_str_t* path, const uint8_t* data, size_t len, bool append, bool exclusive, double file_mode, const char* label) {
+static void fs_write_bytes_opts_mode(const tsc_str_t* path, const uint8_t* data, size_t len, bool append, bool exclusive, bool update, double file_mode, const char* label) {
     char* p = cstr_dup(path);
     bool existed = access(p, F_OK) == 0;
     if (exclusive && existed) {
@@ -8105,7 +8105,7 @@ static void fs_write_bytes_opts_mode(const tsc_str_t* path, const uint8_t* data,
         tsc_throw_str(tsc_str_from_cstr("fs.writeFileSync: file already exists"));
         return;
     }
-    const char* open_mode = append ? "ab" : "wb";
+    const char* open_mode = update ? "rb+" : (append ? "ab" : "wb");
     FILE* f = fopen(p, open_mode);
     if (!f) { free(p); tsc_throw_str(tsc_str_from_cstr(label)); return; }
     fwrite(data, 1, len, f);
@@ -8121,7 +8121,7 @@ static void fs_write_bytes_opts_mode(const tsc_str_t* path, const uint8_t* data,
 }
 
 static void fs_write_bytes_opts(const tsc_str_t* path, const uint8_t* data, size_t len, bool append, bool exclusive, const char* label) {
-    fs_write_bytes_opts_mode(path, data, len, append, exclusive, -1.0, label);
+    fs_write_bytes_opts_mode(path, data, len, append, exclusive, false, -1.0, label);
 }
 
 static void fs_write_bytes(const tsc_str_t* path, const uint8_t* data, size_t len, const char* mode, const char* label) {
@@ -8144,12 +8144,12 @@ void tsc_fs_write_file_buffer_sync_opts(const tsc_str_t* path, const tsc_buffer_
     fs_write_bytes_opts(path, data->data, data->len, append, exclusive, "fs.writeFileSync: could not open");
 }
 
-void tsc_fs_write_file_sync_opts_mode(const tsc_str_t* path, const tsc_str_t* data, bool append, bool exclusive, double mode) {
-    fs_write_bytes_opts_mode(path, (const uint8_t*)data->data, data->len, append, exclusive, mode, "fs.writeFileSync: could not open");
+void tsc_fs_write_file_sync_opts_mode(const tsc_str_t* path, const tsc_str_t* data, bool append, bool exclusive, bool update, double mode) {
+    fs_write_bytes_opts_mode(path, (const uint8_t*)data->data, data->len, append, exclusive, update, mode, "fs.writeFileSync: could not open");
 }
 
-void tsc_fs_write_file_buffer_sync_opts_mode(const tsc_str_t* path, const tsc_buffer_t* data, bool append, bool exclusive, double mode) {
-    fs_write_bytes_opts_mode(path, data->data, data->len, append, exclusive, mode, "fs.writeFileSync: could not open");
+void tsc_fs_write_file_buffer_sync_opts_mode(const tsc_str_t* path, const tsc_buffer_t* data, bool append, bool exclusive, bool update, double mode) {
+    fs_write_bytes_opts_mode(path, data->data, data->len, append, exclusive, update, mode, "fs.writeFileSync: could not open");
 }
 
 void tsc_fs_append_file_sync(const tsc_str_t* path, const tsc_str_t* data) {

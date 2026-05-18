@@ -1,8 +1,9 @@
 const syncPath = "/tmp/tsc2c-fs-write-file-flags-sync.txt";
 const promisePath = "/tmp/tsc2c-fs-write-file-flags-promise.txt";
 const exclusivePath = "/tmp/tsc2c-fs-write-file-flags-exclusive.txt";
+const updatePath = "/tmp/tsc2c-fs-write-file-flags-update.txt";
 
-for (const file of [syncPath, promisePath, exclusivePath]) {
+for (const file of [syncPath, promisePath, exclusivePath, updatePath]) {
     if (fs.existsSync(file)) fs.rmSync(file);
 }
 
@@ -19,13 +20,18 @@ try {
 }
 console.log("sync exclusive content:", fs.readFileSync(exclusivePath));
 
+fs.writeFileSync(updatePath, "abcdef");
+fs.writeFileSync(updatePath, "XY", { flag: "r+" });
+console.log("sync update:", fs.readFileSync(updatePath));
+
 fs.promises.writeFile(promisePath, "alpha");
 fs.promises.writeFile(promisePath, Buffer.from("-beta"), { flag: "a" });
+fs.promises.writeFile(promisePath, "Z", { flag: "r+" });
 fs.promises.writeFile(promisePath, "again", { flag: "wx" }).catch((reason: string): any => {
     console.log("promise exclusive:", reason);
 });
 console.log("promise append:", fs.readFileSync(promisePath));
 
-for (const file of [syncPath, promisePath, exclusivePath]) {
+for (const file of [syncPath, promisePath, exclusivePath, updatePath]) {
     if (fs.existsSync(file)) fs.rmSync(file);
 }

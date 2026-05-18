@@ -16374,6 +16374,7 @@ class Emitter {
                         { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
                         { value: { c: options.append ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
                         { value: { c: options.exclusive ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
+                        { value: { c: options.update ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
                         options.mode,
                     ],
                 );
@@ -16392,6 +16393,7 @@ class Emitter {
                         { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
                         { value: { c: "true", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
                         { value: { c: options.exclusive ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
+                        { value: { c: "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
                         options.mode,
                     ],
                 );
@@ -16794,8 +16796,8 @@ class Emitter {
         return result;
     }
 
-    private validateFsWriteFileOptions(options: ts.Expression | undefined, label: string): { append: boolean; exclusive: boolean; mode: SequencedCallArg } {
-        const out = { append: false, exclusive: false };
+    private validateFsWriteFileOptions(options: ts.Expression | undefined, label: string): { append: boolean; exclusive: boolean; update: boolean; mode: SequencedCallArg } {
+        const out = { append: false, exclusive: false, update: false };
         let mode: SequencedCallArg = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
         if (!options || this.isUndefinedExpression(options)) return { ...out, mode };
         const checkEncoding = (node: ts.Expression): void => {
@@ -16804,11 +16806,12 @@ class Emitter {
             }
         };
         const checkFlag = (node: ts.Expression): void => {
-            if (!ts.isStringLiteralLike(node) || !["w", "wx", "a", "ax"].includes(node.text)) {
-                unsupported(node, `${label} only supports literal "w", "wx", "a", or "ax" flags in this subset`);
+            if (!ts.isStringLiteralLike(node) || !["w", "wx", "a", "ax", "r+", "rs+"].includes(node.text)) {
+                unsupported(node, `${label} only supports literal "w", "wx", "a", "ax", "r+", or "rs+" flags in this subset`);
             }
             out.append = node.text === "a" || node.text === "ax";
             out.exclusive = node.text === "wx" || node.text === "ax";
+            out.update = node.text === "r+" || node.text === "rs+";
         };
         if (ts.isStringLiteralLike(options)) {
             checkEncoding(options);
@@ -17019,7 +17022,7 @@ class Emitter {
                     { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
                     options.mode,
                 ], ([path, data, mode]) =>
-                    settle(`({ ${fn}(${path!}, ${data!}, ${options.append ? "true" : "false"}, ${options.exclusive ? "true" : "false"}, ${mode!}); tsc_promise_resolve(tsc_value_undefined()); })`),
+                    settle(`({ ${fn}(${path!}, ${data!}, ${options.append ? "true" : "false"}, ${options.exclusive ? "true" : "false"}, ${options.update ? "true" : "false"}, ${mode!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "appendFile": {
@@ -17034,7 +17037,7 @@ class Emitter {
                     { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
                     options.mode,
                 ], ([path, data, mode]) =>
-                    settle(`({ ${fn}(${path!}, ${data!}, true, ${options.exclusive ? "true" : "false"}, ${mode!}); tsc_promise_resolve(tsc_value_undefined()); })`),
+                    settle(`({ ${fn}(${path!}, ${data!}, true, ${options.exclusive ? "true" : "false"}, false, ${mode!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "readdir": {
