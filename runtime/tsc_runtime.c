@@ -9779,6 +9779,11 @@ tsc_str_t* tsc_date_to_iso_string(const tsc_date_t* d) {
     return tsc_str_from_cstr(buf);
 }
 
+tsc_value_t tsc_date_to_json(const tsc_date_t* d) {
+    if (!d || isnan(d->ms)) return tsc_value_null();
+    return tsc_value_string(tsc_date_to_iso_string(d));
+}
+
 tsc_str_t* tsc_date_to_utc_string(const tsc_date_t* d) {
     if (!d || isnan(d->ms)) return tsc_str_from_lit("Invalid Date", 12);
     double seconds_double = floor(d->ms / 1000.0);

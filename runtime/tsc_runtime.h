@@ -317,6 +317,7 @@ double tsc_date_get_utc_part(const tsc_date_t* d, int part);
 double tsc_date_get_local_part(const tsc_date_t* d, int part);
 double tsc_date_get_timezone_offset(const tsc_date_t* d);
 tsc_str_t* tsc_date_to_iso_string(const tsc_date_t* d);
+tsc_value_t tsc_date_to_json(const tsc_date_t* d);
 tsc_str_t* tsc_date_to_utc_string(const tsc_date_t* d);
 tsc_str_t* tsc_date_to_date_string(const tsc_date_t* d);
 tsc_str_t* tsc_date_to_time_string(const tsc_date_t* d);

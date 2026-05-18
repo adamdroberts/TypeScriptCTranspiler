@@ -14270,7 +14270,7 @@ class Emitter {
                 return this.emitSequencedCall("tsc_date_to_time_string", T_STRING, [{ value: recv }]);
             case "toJSON":
                 if (call.arguments.length !== 0) unsupported(call, "Date.toJSON expects no args");
-                return this.emitSequencedCall("tsc_date_to_iso_string", T_STRING, [{ value: recv }]);
+                return this.emitSequencedCall("tsc_date_to_json", T_VALUE, [{ value: recv }]);
             case "hasOwnProperty":
             case "propertyIsEnumerable":
                 return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Date");
