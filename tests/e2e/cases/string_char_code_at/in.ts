@@ -15,7 +15,7 @@ console.log("dyn:", dynamicText.charCodeAt(3));
 console.log(
     "ignored:",
     text.charAt(mark("a", 0), mark("b", 0)),
-    text.at(mark("c", 3), mark("d", 0)),
+    text.at(mark("c", 0), mark("d", 0)),
     text.charCodeAt(mark("e", 0), mark("f", 0)),
     text.codePointAt(mark("g", 0), mark("h", 0)),
     seen,
