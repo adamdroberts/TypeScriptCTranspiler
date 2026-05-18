@@ -15809,61 +15809,65 @@ class Emitter {
         method: string,
     ): EmitResult {
         const args = call.arguments;
+        const defaultNumber = (c: string): EmitResult => ({ c, ty: T_NUMBER });
+        const optionalNumberArg = (index: number, fallback: string): EmitResult => {
+            const arg = args[index];
+            if (!arg) return defaultNumber(fallback);
+            const value = this.emitExpr(arg);
+            requireNumber(arg, value.ty);
+            return value;
+        };
+        const optionalStringSpecs = (consumed: number, specs: SequencedCallArg[]): SequencedCallArg[] => [
+            ...specs,
+            ...this.ignoredArgumentSpecs(args, consumed),
+        ];
         switch (method) {
             case "codePointAt": {
-                if (args.length !== 1) unsupported(call, "codePointAt expects 1 arg");
-                const idx = this.emitExpr(args[0]!);
-                requireNumber(args[0]!, idx.ty);
+                const idx = optionalNumberArg(0, "0.0");
                 return this.emitSequencedCall(
                     "tsc_str_code_point_at",
                     T_NUMBER,
-                    [
+                    optionalStringSpecs(1, [
                         { value: recv },
-                        { value: idx, target: T_NUMBER, node: args[0]! },
-                    ],
+                        { value: idx, target: T_NUMBER, node: args[0] },
+                    ]),
                 );
             }
             case "charAt": {
-                if (args.length !== 1) unsupported(call, "charAt expects 1 arg");
-                const idx = this.emitExpr(args[0]!);
-                requireNumber(args[0]!, idx.ty);
+                const idx = optionalNumberArg(0, "0.0");
                 return this.emitSequencedCall(
                     "tsc_str_char_at",
                     T_STRING,
-                    [
+                    optionalStringSpecs(1, [
                         { value: recv },
-                        { value: idx, target: T_NUMBER, node: args[0]! },
-                    ],
+                        { value: idx, target: T_NUMBER, node: args[0] },
+                    ]),
                 );
             }
             case "charCodeAt": {
-                if (args.length !== 1) unsupported(call, "charCodeAt expects 1 arg");
-                const idx = this.emitExpr(args[0]!);
-                requireNumber(args[0]!, idx.ty);
+                const idx = optionalNumberArg(0, "0.0");
                 return this.emitSequencedCall(
                     "tsc_str_char_code_at",
                     T_NUMBER,
-                    [
+                    optionalStringSpecs(1, [
                         { value: recv },
-                        { value: idx, target: T_NUMBER, node: args[0]! },
-                    ],
+                        { value: idx, target: T_NUMBER, node: args[0] },
+                    ]),
                 );
             }
             case "at": {
-                if (args.length !== 1) unsupported(call, "at expects 1 arg");
-                const idx = this.emitExpr(args[0]!);
-                requireNumber(args[0]!, idx.ty);
+                const idx = optionalNumberArg(0, "0.0");
                 return this.emitSequencedCall(
                     "tsc_str_at",
                     T_STRING,
-                    [
+                    optionalStringSpecs(1, [
                         { value: recv },
-                        { value: idx, target: T_NUMBER, node: args[0]! },
-                    ],
+                        { value: idx, target: T_NUMBER, node: args[0] },
+                    ]),
                 );
             }
             case "includes": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "includes expects 1 or 2 args");
+                if (args.length < 1) unsupported(call, "includes expects at least 1 arg");
                 const needle = this.emitExpr(args[0]!);
                 const specs: SequencedCallArg[] = [
                     { value: recv },
@@ -15874,12 +15878,13 @@ class Emitter {
                     requireNumber(args[1], position.ty);
                     specs.push({ value: position, target: T_NUMBER, node: args[1] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) =>
                     `tsc_str_includes(${vals[0]}, ${vals[1]}, ${vals[2] ?? "0.0"})`,
                 );
             }
             case "indexOf": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "indexOf expects 1 or 2 args");
+                if (args.length < 1) unsupported(call, "indexOf expects at least 1 arg");
                 const needle = this.emitExpr(args[0]!);
                 const specs: SequencedCallArg[] = [
                     { value: recv },
@@ -15890,12 +15895,13 @@ class Emitter {
                     requireNumber(args[1], position.ty);
                     specs.push({ value: position, target: T_NUMBER, node: args[1] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
                     `tsc_str_index_of(${vals[0]}, ${vals[1]}, ${vals[2] ?? "0.0"})`,
                 );
             }
             case "lastIndexOf": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "lastIndexOf expects 1 or 2 args");
+                if (args.length < 1) unsupported(call, "lastIndexOf expects at least 1 arg");
                 const needle = this.emitExpr(args[0]!);
                 const specs: SequencedCallArg[] = [
                     { value: recv },
@@ -15906,24 +15912,25 @@ class Emitter {
                     requireNumber(args[1], position.ty);
                     specs.push({ value: position, target: T_NUMBER, node: args[1] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
                     `tsc_str_last_index_of(${vals[0]}, ${vals[1]}, ${vals[2] ?? "INFINITY"})`,
                 );
             }
             case "localeCompare": {
-                if (args.length !== 1) unsupported(call, "localeCompare expects 1 arg");
+                if (args.length < 1) unsupported(call, "localeCompare expects at least 1 arg");
                 const other = this.emitExpr(args[0]!);
                 return this.emitSequencedCall(
                     "tsc_str_locale_compare",
                     T_NUMBER,
-                    [
+                    optionalStringSpecs(1, [
                         { value: recv },
                         { value: other, target: T_STRING, node: args[0]! },
-                    ],
+                    ]),
                 );
             }
             case "startsWith": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "startsWith expects 1 or 2 args");
+                if (args.length < 1) unsupported(call, "startsWith expects at least 1 arg");
                 const p = this.emitExpr(args[0]!);
                 const specs: SequencedCallArg[] = [
                     { value: recv },
@@ -15934,12 +15941,13 @@ class Emitter {
                     requireNumber(args[1], position.ty);
                     specs.push({ value: position, target: T_NUMBER, node: args[1] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) =>
                     `tsc_str_starts_with(${vals[0]}, ${vals[1]}, ${vals[2] ?? "0.0"})`,
                 );
             }
             case "endsWith": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "endsWith expects 1 or 2 args");
+                if (args.length < 1) unsupported(call, "endsWith expects at least 1 arg");
                 const p = this.emitExpr(args[0]!);
                 const specs: SequencedCallArg[] = [
                     { value: recv },
@@ -15950,6 +15958,7 @@ class Emitter {
                     requireNumber(args[1], endPosition.ty);
                     specs.push({ value: endPosition, target: T_NUMBER, node: args[1] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) =>
                     `tsc_str_ends_with(${vals[0]}, ${vals[1]}, ${vals[2] ?? "INFINITY"})`,
                 );
@@ -15966,6 +15975,7 @@ class Emitter {
                     requireNumber(args[1]!, end.ty);
                     specs.push({ value: end, target: T_NUMBER, node: args[1]! });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_STRING, specs, (vals) => {
                     const s = vals[0]!;
                     const start = vals[1] ?? "0";
@@ -15974,18 +15984,17 @@ class Emitter {
                 });
             }
             case "substring": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "substring expects 1-2 args");
-                const start = this.emitExpr(args[0]!);
-                requireNumber(args[0]!, start.ty);
+                const start = optionalNumberArg(0, "0.0");
                 const specs: SequencedCallArg[] = [
                     { value: recv },
-                    { value: start, target: T_NUMBER, node: args[0]! },
+                    { value: start, target: T_NUMBER, node: args[0] },
                 ];
                 if (args[1]) {
                     const end = this.emitExpr(args[1]);
                     requireNumber(args[1], end.ty);
                     specs.push({ value: end, target: T_NUMBER, node: args[1] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_STRING, specs, (vals) => {
                     const s = vals[0]!;
                     const end = vals[2] ?? `(double)${s}->len`;
@@ -15993,18 +16002,17 @@ class Emitter {
                 });
             }
             case "substr": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "substr expects 1-2 args");
-                const start = this.emitExpr(args[0]!);
-                requireNumber(args[0]!, start.ty);
+                const start = optionalNumberArg(0, "0.0");
                 const specs: SequencedCallArg[] = [
                     { value: recv },
-                    { value: start, target: T_NUMBER, node: args[0]! },
+                    { value: start, target: T_NUMBER, node: args[0] },
                 ];
                 if (args[1]) {
                     const length = this.emitExpr(args[1]);
                     requireNumber(args[1], length.ty);
                     specs.push({ value: length, target: T_NUMBER, node: args[1] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_STRING, specs, (vals) => {
                     const s = vals[0]!;
                     const length = vals[2] ?? "INFINITY";
@@ -16099,16 +16107,16 @@ class Emitter {
                     ([s]) => s!,
                 );
             case "repeat": {
-                if (args.length !== 1) unsupported(call, "repeat expects 1 arg");
+                if (args.length < 1) unsupported(call, "repeat expects at least 1 arg");
                 const n = this.emitExpr(args[0]!);
                 requireNumber(args[0]!, n.ty);
                 return this.emitSequencedCall(
                     "tsc_str_repeat",
                     T_STRING,
-                    [
+                    optionalStringSpecs(1, [
                         { value: recv },
                         { value: n, target: T_NUMBER, node: args[0]! },
-                    ],
+                    ]),
                 );
             }
             case "padStart":
@@ -16127,6 +16135,7 @@ class Emitter {
                         node: args[1],
                     });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
                 const fn = method === "padStart" ? "tsc_str_pad_start" : "tsc_str_pad_end";
                 return this.emitSequencedExpr(T_STRING, specs, (vals) => {
                     const pad = vals[2] ?? `tsc_str_from_lit(" ", 1)`;
@@ -16134,18 +16143,18 @@ class Emitter {
                 });
             }
             case "replace": {
-                if (args.length !== 2) unsupported(call, "replace expects 2 args");
+                if (args.length < 2) unsupported(call, "replace expects at least 2 args");
                 const s = this.emitExpr(args[0]!);
                 const r = this.emitExpr(args[1]!);
                 if (s.ty.kind === "regexp") {
                     return this.emitSequencedCall(
                         "tsc_str_replace_regex",
                         T_STRING,
-                        [
+                        optionalStringSpecs(2, [
                             { value: recv },
                             { value: s },
                             { value: r, target: T_STRING, node: args[1]! },
-                        ],
+                        ]),
                     );
                 }
                 if (s.ty.kind !== "string") {
@@ -16154,15 +16163,15 @@ class Emitter {
                 return this.emitSequencedCall(
                     "tsc_str_replace",
                     T_STRING,
-                    [
+                    optionalStringSpecs(2, [
                         { value: recv },
                         { value: s, target: T_STRING, node: args[0]! },
                         { value: r, target: T_STRING, node: args[1]! },
-                    ],
+                    ]),
                 );
             }
             case "replaceAll": {
-                if (args.length !== 2) unsupported(call, "replaceAll expects 2 args");
+                if (args.length < 2) unsupported(call, "replaceAll expects at least 2 args");
                 const s = this.emitExpr(args[0]!);
                 const r = this.emitExpr(args[1]!);
                 if (s.ty.kind === "regexp") {
@@ -16171,31 +16180,31 @@ class Emitter {
                     return this.emitSequencedCall(
                         "tsc_str_replace_regex",
                         T_STRING,
-                        [
+                        optionalStringSpecs(2, [
                             { value: recv },
                             { value: s },
                             { value: r, target: T_STRING, node: args[1]! },
-                        ],
+                        ]),
                     );
                 }
                 return this.emitSequencedCall(
                     "tsc_str_replace_all",
                     T_STRING,
-                    [
+                    optionalStringSpecs(2, [
                         { value: recv },
                         { value: s, target: T_STRING, node: args[0]! },
                         { value: r, target: T_STRING, node: args[1]! },
-                    ],
+                    ]),
                 );
             }
             case "match": {
-                if (args.length !== 1) unsupported(call, "match expects 1 arg");
+                if (args.length < 1) unsupported(call, "match expects at least 1 arg");
                 const re = this.emitExpr(args[0]!);
                 if (re.ty.kind === "regexp") {
                     return this.emitSequencedCall(
                         "tsc_str_match_regex",
                         arrayType(T_STRING),
-                        [{ value: recv }, { value: re }],
+                        optionalStringSpecs(1, [{ value: recv }, { value: re }]),
                     );
                 }
                 if (re.ty.kind !== "string" && re.ty.kind !== "value")
@@ -16203,7 +16212,7 @@ class Emitter {
                 return this.emitSequencedCall(
                     "tsc_str_match_regex",
                     arrayType(T_STRING),
-                    [
+                    optionalStringSpecs(1, [
                         { value: recv },
                         {
                             value: {
@@ -16211,17 +16220,17 @@ class Emitter {
                                 ty: T_REGEXP,
                             },
                         },
-                    ],
+                    ]),
                 );
             }
             case "matchAll": {
-                if (args.length !== 1) unsupported(call, "matchAll expects 1 arg");
+                if (args.length < 1) unsupported(call, "matchAll expects at least 1 arg");
                 const re = this.emitExpr(args[0]!);
                 if (re.ty.kind === "regexp") {
                     return this.emitSequencedCall(
                         "tsc_str_match_all_regex",
                         arrayType(arrayType(T_STRING)),
-                        [{ value: recv }, { value: re }],
+                        optionalStringSpecs(1, [{ value: recv }, { value: re }]),
                     );
                 }
                 if (re.ty.kind !== "string" && re.ty.kind !== "value")
@@ -16229,7 +16238,7 @@ class Emitter {
                 return this.emitSequencedCall(
                     "tsc_str_match_all_regex",
                     arrayType(arrayType(T_STRING)),
-                    [
+                    optionalStringSpecs(1, [
                         { value: recv },
                         {
                             value: {
@@ -16237,17 +16246,17 @@ class Emitter {
                                 ty: T_REGEXP,
                             },
                         },
-                    ],
+                    ]),
                 );
             }
             case "search": {
-                if (args.length !== 1) unsupported(call, "search expects 1 arg");
+                if (args.length < 1) unsupported(call, "search expects at least 1 arg");
                 const re = this.emitExpr(args[0]!);
                 if (re.ty.kind === "regexp") {
                     return this.emitSequencedCall(
                         "tsc_str_search_regex",
                         T_NUMBER,
-                        [{ value: recv }, { value: re }],
+                        optionalStringSpecs(1, [{ value: recv }, { value: re }]),
                     );
                 }
                 if (re.ty.kind !== "string" && re.ty.kind !== "value")
@@ -16255,7 +16264,7 @@ class Emitter {
                 return this.emitSequencedCall(
                     "tsc_str_search_regex",
                     T_NUMBER,
-                    [
+                    optionalStringSpecs(1, [
                         { value: recv },
                         {
                             value: {
@@ -16263,21 +16272,22 @@ class Emitter {
                                 ty: T_REGEXP,
                             },
                         },
-                    ],
+                    ]),
                 );
             }
             case "split": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "split expects 1-2 args");
+                if (args.length < 1) unsupported(call, "split expects at least 1 arg");
                 const sep = this.emitExpr(args[0]!);
                 const limit = args[1] ? this.emitExpr(args[1]) : null;
                 if (limit) requireNumber(args[1]!, limit.ty);
+                const ignored = this.ignoredArgumentSpecs(args, 2);
                 if (sep.ty.kind === "regexp") {
                     return this.emitSequencedCall(
                         limit ? "tsc_str_split_regex_limit_num" : "tsc_str_split_regex",
                         arrayType(T_STRING),
                         limit
-                            ? [{ value: recv }, { value: sep }, { value: limit, target: T_NUMBER, node: args[1]! }]
-                            : [{ value: recv }, { value: sep }],
+                            ? [{ value: recv }, { value: sep }, { value: limit, target: T_NUMBER, node: args[1]! }, ...ignored]
+                            : [{ value: recv }, { value: sep }, ...ignored],
                     );
                 }
                 return this.emitSequencedCall(
@@ -16288,10 +16298,12 @@ class Emitter {
                             { value: recv },
                             { value: sep, target: T_STRING, node: args[0]! },
                             { value: limit, target: T_NUMBER, node: args[1]! },
+                            ...ignored,
                         ]
                         : [
                             { value: recv },
                             { value: sep, target: T_STRING, node: args[0]! },
+                            ...ignored,
                         ],
                 );
             }

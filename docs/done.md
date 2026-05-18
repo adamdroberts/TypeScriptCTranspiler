@@ -199,35 +199,35 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` -> 661 passed.
 All methods on the `String` interface map to `tsc_str_*` runtime calls:
 
 - `.length` → `tsc_str_length`
-- `.charAt(i)` → `tsc_str_char_at`
-- `.charCodeAt(i)` → `tsc_str_char_code_at`, returning JS UTF-16 code units. Test: `string_char_code_at`
-- `.at(i)` → `tsc_str_at`, including negative-index lookup. Test: `string_at`
-- `.codePointAt(i)` → `tsc_str_code_point_at`. Test: `string_codepoints`
+- `.charAt(i?, ...ignored)` → `tsc_str_char_at` after evaluating ignored extra arguments. Test: `string_char_code_at`
+- `.charCodeAt(i?, ...ignored)` → `tsc_str_char_code_at`, returning JS UTF-16 code units after evaluating ignored extra arguments. Test: `string_char_code_at`
+- `.at(i?, ...ignored)` → `tsc_str_at`, including negative-index lookup after evaluating ignored extra arguments. Tests: `string_at`, `string_char_code_at`
+- `.codePointAt(i?, ...ignored)` → `tsc_str_code_point_at` after evaluating ignored extra arguments. Tests: `string_codepoints`, `string_char_code_at`
 - `String.fromCharCode(...)` → `tsc_str_from_char_code_n`. Test: `string_codepoints`
 - `String.fromCodePoint(...)` → `tsc_str_from_code_point_n`. Test: `string_from_code_point`
 - `String.raw` tagged templates concatenate raw segments with stringified substitutions. Test: `string_raw`
-- `.indexOf(needle, position?)` / `.lastIndexOf(needle, position?)` → `tsc_str_index_of`, `tsc_str_last_index_of`. Tests: `string_last_index_of`, `string_search_positions`
-- `.localeCompare(other)` → `tsc_str_locale_compare` using deterministic runtime string ordering. Test: `string_locale_compare`
-- `.includes(needle, position?)` → `tsc_str_includes`. Test: `string_search_positions`
-- `.startsWith(p, position?)` → `tsc_str_starts_with`. Test: `string_search_positions`
-- `.endsWith(p, endPosition?)` → `tsc_str_ends_with`. Test: `string_search_positions`
-- `.slice(start?, end?)` → `tsc_str_slice`
-- `.substring(start, end?)` → `tsc_str_substring`, including clamp/swap semantics. Test: `string_substring`
-- `.substr(start, length?)` → `tsc_str_substr`, including negative-start and length clamping semantics. Test: `string_substr`
+- `.indexOf(needle, position?, ...ignored)` / `.lastIndexOf(needle, position?, ...ignored)` → `tsc_str_index_of`, `tsc_str_last_index_of` after evaluating ignored extra arguments. Tests: `string_last_index_of`, `string_search_positions`
+- `.localeCompare(other, ...ignored)` → `tsc_str_locale_compare` using deterministic runtime string ordering after evaluating ignored extra arguments. Test: `string_locale_compare`
+- `.includes(needle, position?, ...ignored)` → `tsc_str_includes` after evaluating ignored extra arguments. Test: `string_search_positions`
+- `.startsWith(p, position?, ...ignored)` → `tsc_str_starts_with` after evaluating ignored extra arguments. Test: `string_search_positions`
+- `.endsWith(p, endPosition?, ...ignored)` → `tsc_str_ends_with` after evaluating ignored extra arguments. Test: `string_search_positions`
+- `.slice(start?, end?, ...ignored)` → `tsc_str_slice` after evaluating ignored extra arguments.
+- `.substring(start?, end?, ...ignored)` → `tsc_str_substring`, including clamp/swap semantics after evaluating ignored extra arguments. Test: `string_substring`
+- `.substr(start?, length?, ...ignored)` → `tsc_str_substr`, including negative-start and length clamping semantics after evaluating ignored extra arguments. Test: `string_substr`
 - `.toUpperCase(...ignored)` / `.toLowerCase(...ignored)` → `tsc_str_to_upper`, `tsc_str_to_lower` after evaluating ignored extra arguments. Test: `strings`
 - `.toString(...ignored)` / `.toLocaleString(...ignored)` / `.valueOf(...ignored)` return the typed string receiver unchanged after evaluating ignored extra arguments, and inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)` report string indexes plus non-enumerable `length` ownership. Test: `string_object_methods`
 - `.normalize(form?, ...ignored)` → `tsc_str_normalize` backed by ICU for NFC/NFD/NFKC/NFKD after evaluating ignored extra arguments. Test: `string_normalize`
 - Typed strings participate in `Object.keys`, `Object.values`, `Object.entries`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, `Reflect.get`, `Reflect.has`, `Reflect.ownKeys`, `Reflect.getOwnPropertyDescriptor`, `Reflect.deleteProperty`, and `Reflect.set` with read-only string index descriptors plus non-enumerable `length`. Test: `string_object_enumeration`
 - `.trim(...ignored)` / `.trimStart(...ignored)` / `.trimEnd(...ignored)` plus `.trimLeft(...ignored)` / `.trimRight(...ignored)` aliases → `tsc_str_trim`, `tsc_str_trim_start`, `tsc_str_trim_end` after evaluating ignored extra arguments. Tests: `string_trim_edges`, `string_trim_aliases`
 - `.isWellFormed(...ignored)` / `.toWellFormed(...ignored)` → `true` / receiver identity for the runtime's validated UTF-8 string representation after evaluating ignored extra arguments. Test: `string_well_formed`
-- `.repeat(n)` → `tsc_str_repeat`
-- `.padStart(len, pad?)` / `.padEnd(len, pad?)` → `tsc_str_pad_start`, `tsc_str_pad_end`
-- `.replace(search, repl)` → `tsc_str_replace` or `tsc_str_replace_regex` (if `search` is a RegExp); string and RegExp replacement strings expand dollar, whole-match, prefix, and suffix tokens, and RegExp replacements also expand capture tokens. Tests: `string_replace_string_tokens`, `string_replace_regex_groups`
-- `.replaceAll(search, repl)` → `tsc_str_replace_all` or regex version, sharing the replacement-string expansion path. Test: `string_replace_string_tokens`
-- `.match(regexOrString)` → `tsc_str_match_regex`; string patterns are lowered through `RegExp(pattern)`. Test: `string_match_string`
-- `.matchAll(regexOrString)` → `tsc_str_match_all_regex`, returning `string[][]` groups; string patterns are lowered through global `RegExp(pattern, "g")`. Tests: `string_match_all`, `string_match_string`
-- `.search(regexOrString)` → `tsc_str_search_regex`; string patterns are lowered through `RegExp(pattern)`. Tests: `string_search_regex`, `string_search_string`
-- `.split(sep, limit?)` / `.split(regex, limit?)` → `tsc_str_split` / `tsc_str_split_limit_num` / `tsc_str_split_regex` / `tsc_str_split_regex_limit_num`; RegExp separator captures are included in the output. Test: `string_split_limit`
+- `.repeat(n, ...ignored)` → `tsc_str_repeat` after evaluating ignored extra arguments. Test: `strings`
+- `.padStart(len, pad?, ...ignored)` / `.padEnd(len, pad?, ...ignored)` → `tsc_str_pad_start`, `tsc_str_pad_end` after evaluating ignored extra arguments. Test: `strings`
+- `.replace(search, repl, ...ignored)` → `tsc_str_replace` or `tsc_str_replace_regex` (if `search` is a RegExp); string and RegExp replacement strings expand dollar, whole-match, prefix, and suffix tokens, and RegExp replacements also expand capture tokens after evaluating ignored extra arguments. Tests: `string_replace_string_tokens`, `string_replace_regex_groups`, `strings`
+- `.replaceAll(search, repl, ...ignored)` → `tsc_str_replace_all` or regex version, sharing the replacement-string expansion path after evaluating ignored extra arguments. Tests: `string_replace_string_tokens`, `strings`
+- `.match(regexOrString, ...ignored)` → `tsc_str_match_regex`; string patterns are lowered through `RegExp(pattern)` after evaluating ignored extra arguments. Test: `string_match_string`
+- `.matchAll(regexOrString, ...ignored)` → `tsc_str_match_all_regex`, returning `string[][]` groups; string patterns are lowered through global `RegExp(pattern, "g")` after evaluating ignored extra arguments. Tests: `string_match_all`, `string_match_string`
+- `.search(regexOrString, ...ignored)` → `tsc_str_search_regex`; string patterns are lowered through `RegExp(pattern)` after evaluating ignored extra arguments. Tests: `string_search_regex`, `string_search_string`
+- `.split(sep, limit?, ...ignored)` / `.split(regex, limit?, ...ignored)` → `tsc_str_split` / `tsc_str_split_limit_num` / `tsc_str_split_regex` / `tsc_str_split_regex_limit_num`; RegExp separator captures are included in the output after evaluating ignored extra arguments. Tests: `string_split_limit`, `strings`
 - `.concat(...strings)` → repeated `tsc_str_concat`. Test: `string_concat`
 - `for...of` over strings → `tsc_str_chars`, yielding one string per UTF-8 code point. Test: `string_for_of`
 - String + anything → concat with automatic stringification

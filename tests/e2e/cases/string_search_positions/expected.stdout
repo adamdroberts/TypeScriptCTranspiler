@@ -5,3 +5,9 @@ last negative: 0
 includes from 5: true
 starts from 2: true
 ends at 6: true
+ignored index: 4
+ignored last: 4
+ignored includes: true
+ignored starts: true
+ignored ends: true
+ignored seen: iIlLcCsSeE

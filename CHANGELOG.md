@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Typed String fixed-input methods now evaluate and ignore extra arguments after their JavaScript-consumed inputs, covering character lookup, search-position, repeat/pad, replacement, match/search, and split helpers. Tests: `string_char_code_at`, `string_search_positions`, `strings`.
 - Fixed-input `path` helpers now evaluate and ignore extra arguments after their JavaScript-consumed path inputs, covering `normalize`, `isAbsolute`, `relative`, `toNamespacedPath`, `basename`, `dirname`, `extname`, `parse`, and `format`. Tests: `path_normalize`, `path_relative`, `path_basename_suffix`, `path_parse_format`, `path_to_namespaced`.
 - Fixed-input `Math` methods now evaluate and ignore extra arguments after their JavaScript-consumed numeric inputs, including unary methods, `pow`, `imul`, `atan2`, and `random`. Tests: `math`, `math_more`, `math_int32_float`.
 - Buffer fixed-input helpers now evaluate and ignore extra arguments where Node ignores them, covering `Buffer.isBuffer`, `Buffer.byteLength`, `Buffer.isEncoding`, `Buffer.compare`, instance `swap16`/`swap32`/`swap64`, and `equals`. Tests: `buffer`, `buffer_static_more`, `buffer_swap`.

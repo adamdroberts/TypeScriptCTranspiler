@@ -4,3 +4,4 @@ lo: 56832
 Z: 90
 missing: NaN
 dyn: 90
+ignored: A Z 65 65 abcdefgh
