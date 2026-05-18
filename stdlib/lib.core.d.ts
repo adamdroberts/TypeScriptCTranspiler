@@ -1187,7 +1187,7 @@ interface Event {
     readonly currentTarget: EventTarget;
     readonly defaultPrevented: boolean;
     readonly cancelable: boolean;
-    preventDefault(): void;
+    preventDefault(...ignored: any[]): void;
 }
 interface EventInit {
     cancelable?: boolean;
@@ -1203,7 +1203,7 @@ interface EventTarget {
     dispatchEvent(event: Event): boolean;
 }
 interface EventTargetConstructor {
-    new(): EventTarget;
+    new(...ignored: any[]): EventTarget;
 }
 declare var EventTarget: EventTargetConstructor;
 
@@ -1228,12 +1228,12 @@ interface EventEmitter {
     listenerCount(eventName: string, listener?: (...args: any[]) => void): number;
     listeners(eventName: string): any[];
     rawListeners(eventName: string): any[];
-    eventNames(): string[];
+    eventNames(...ignored: any[]): string[];
     setMaxListeners(n: number): this;
-    getMaxListeners(): number;
+    getMaxListeners(...ignored: any[]): number;
 }
 interface EventEmitterConstructor {
-    new(): EventEmitter;
+    new(...ignored: any[]): EventEmitter;
     defaultMaxListeners: number;
     listenerCount(emitter: EventEmitter, eventName: string, listener?: (...args: any[]) => void): number;
 }

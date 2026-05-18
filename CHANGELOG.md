@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Event no-op argument compatibility now evaluates and ignores extra arguments for `new EventEmitter(...)`, `new EventTarget(...)`, `EventEmitter.eventNames(...)`, `EventEmitter.getMaxListeners(...)`, and `Event.preventDefault(...)`. Tests: `event_emitter_more`, `event_emitter_max_listeners`, `event_target`.
 - No-option `os` metadata methods now evaluate and ignore extra arguments where JavaScript ignores them, covering `platform`, `type`, `release`, `version`, `endianness`, `machine`, `arch`, `hostname`, `tmpdir`, `homedir`, `cpus`, `availableParallelism`, `totalmem`, `freemem`, `uptime`, and `loadavg`. Tests: `stdlib_os`, `os_more`, `os_host_more`, `os_system_stats`.
 - Process metadata methods now evaluate and ignore extra arguments where JavaScript ignores them, covering `cwd`, `uptime`, `hrtime`, `hrtime.bigint`, POSIX id/group reads, `umask(mask)`, `memoryUsage`, and `resourceUsage`. Tests: `process_metadata`, `process_hrtime`, `process_hrtime_bigint`, `process_posix_ids`, `process_getgroups`, `process_umask`, `process_memory_usage`, `process_resource_usage`.
 - `FSStats` and `FSDirent` predicate/string/value methods now evaluate and ignore extra arguments where JavaScript ignores them. Tests: `fs_stat`, `fs_readdir_dirents`.

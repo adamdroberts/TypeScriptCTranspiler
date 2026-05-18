@@ -12943,10 +12943,11 @@ class Emitter {
                 ]);
             }
             case "eventNames": {
-                if (args.length !== 0) unsupported(call, "EventEmitter.eventNames expects no args");
-                return this.emitSequencedCall("tsc_event_emitter_event_names", arrayType(T_STRING), [
-                    { value: recv },
-                ]);
+                return this.emitSequencedExpr(
+                    arrayType(T_STRING),
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([ee]) => `tsc_event_emitter_event_names(${ee})`,
+                );
             }
             case "setMaxListeners": {
                 if (args.length !== 1) unsupported(call, "EventEmitter.setMaxListeners expects count");
@@ -12957,10 +12958,11 @@ class Emitter {
                 ], ([ee, n]) => `({ tsc_event_emitter_set_max_listeners(${ee}, ${n}); ${ee}; })`);
             }
             case "getMaxListeners": {
-                if (args.length !== 0) unsupported(call, "EventEmitter.getMaxListeners expects no args");
-                return this.emitSequencedCall("tsc_event_emitter_get_max_listeners", T_NUMBER, [
-                    { value: recv },
-                ]);
+                return this.emitSequencedExpr(
+                    T_NUMBER,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([ee]) => `tsc_event_emitter_get_max_listeners(${ee})`,
+                );
             }
             case "hasOwnProperty":
             case "propertyIsEnumerable":
@@ -13071,10 +13073,11 @@ class Emitter {
     ): EmitResult {
         switch (method) {
             case "preventDefault":
-                if (call.arguments.length !== 0) unsupported(call, "Event.preventDefault expects no args");
-                return this.emitSequencedCall("tsc_event_prevent_default", T_VOID, [
-                    { value: recv },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VOID,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
+                    ([event]) => `tsc_event_prevent_default(${event})`,
+                );
             case "hasOwnProperty":
             case "propertyIsEnumerable":
             case "toLocaleString":
@@ -21714,8 +21717,11 @@ class Emitter {
             this.isNamespaceImportFrom(n.expression.expression, ["events", "node:events"]) &&
             n.expression.name.text === "EventEmitter"
         ) {
-            if ((n.arguments ?? []).length !== 0) unsupported(n, "new events.EventEmitter() expects no args");
-            return { c: "tsc_event_emitter_new()", ty: T_EVENT_EMITTER };
+            return this.emitSequencedExpr(
+                T_EVENT_EMITTER,
+                this.ignoredArgumentSpecs(n.arguments ?? [], 0),
+                () => "tsc_event_emitter_new()",
+            );
         }
         if (!ts.isIdentifier(n.expression))
             unsupported(n, "new expression must use a class identifier");
@@ -21926,12 +21932,18 @@ class Emitter {
             });
         }
         if (cls === "EventEmitter") {
-            if ((n.arguments ?? []).length !== 0) unsupported(n, "new EventEmitter() expects no args");
-            return { c: "tsc_event_emitter_new()", ty: T_EVENT_EMITTER };
+            return this.emitSequencedExpr(
+                T_EVENT_EMITTER,
+                this.ignoredArgumentSpecs(n.arguments ?? [], 0),
+                () => "tsc_event_emitter_new()",
+            );
         }
         if (cls === "EventTarget") {
-            if ((n.arguments ?? []).length !== 0) unsupported(n, "new EventTarget() expects no args");
-            return { c: "tsc_event_target_new()", ty: T_EVENT_TARGET };
+            return this.emitSequencedExpr(
+                T_EVENT_TARGET,
+                this.ignoredArgumentSpecs(n.arguments ?? [], 0),
+                () => "tsc_event_target_new()",
+            );
         }
         if (cls === "Event") {
             const args = n.arguments ?? [];

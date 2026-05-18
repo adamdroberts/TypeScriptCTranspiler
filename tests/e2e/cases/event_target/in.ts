@@ -1,9 +1,14 @@
-const target = new EventTarget();
+let ignoredSeen = "";
+function mark(label: string): string {
+    ignoredSeen += label;
+    return label;
+}
+const target = new EventTarget(mark("t"));
 const seen: string[] = [];
 
 function first(event: Event): void {
     seen.push("first:" + event.type + ":" + event.cancelable + ":" + event.defaultPrevented);
-    event.preventDefault();
+    event.preventDefault(mark("p"));
     seen.push("first-after:" + event.defaultPrevented);
 }
 
@@ -26,3 +31,4 @@ console.log("dispatch2:", target.dispatchEvent(plain));
 console.log("after2:", plain.defaultPrevented);
 
 console.log(seen.join("|"));
+console.log("ignored:", ignoredSeen);

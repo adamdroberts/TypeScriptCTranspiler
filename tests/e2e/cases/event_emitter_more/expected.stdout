@@ -1,4 +1,5 @@
 names: data|other
+names ignored: data|other e
 static count: 3
 emit1: true
 after once: 2
