@@ -21,7 +21,7 @@ const dirStat = fs.statSync(dirPath);
 console.log("file:", fileStat.isFile(), fileStat.isDirectory(), fileStat.size);
 console.log("dir:", dirStat.isFile(), dirStat.isDirectory(), dirStat.size >= 0);
 console.log("string:", fileStat.toString());
-console.log("ignored:", fileStat.isFile(mark("f")), fileStat.isDirectory(mark("d")), fileStat.toString(mark("s")), fileStat.toLocaleString(mark("l")), fileStat.valueOf(mark("v")) === fileStat, seen);
+console.log("ignored:", fileStat.isFile(mark("f")), fileStat.isDirectory(mark("d")), fileStat.toString(mark("s")), fileStat.toLocaleString(mark("l")), fileStat.valueOf(mark("v")).size, seen);
 
 fs.promises.stat(filePath).then((stat) => {
     console.log("promise:", stat.isFile(), stat.isDirectory(), stat.size);
