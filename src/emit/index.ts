@@ -16764,17 +16764,20 @@ class Emitter {
     private emitMathCall(call: ts.CallExpression, name: string): EmitResult {
         const args = call.arguments;
         const one = (build: (x: string) => string): EmitResult => {
-            if (args.length !== 1) unsupported(call, `Math.${name} expects 1 arg`);
+            if (args.length < 1) unsupported(call, `Math.${name} expects at least 1 arg`);
             const r = this.emitExpr(args[0]!);
             requireNumber(args[0]!, r.ty);
             return this.emitSequencedExpr(
                 T_NUMBER,
-                [{ value: r, target: T_NUMBER, node: args[0]! }],
+                [
+                    { value: r, target: T_NUMBER, node: args[0]! },
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ],
                 ([x]) => build(x!),
             );
         };
         const two = (build: (a: string, b: string) => string): EmitResult => {
-            if (args.length !== 2) unsupported(call, `Math.${name} expects 2 args`);
+            if (args.length < 2) unsupported(call, `Math.${name} expects at least 2 args`);
             const a = this.emitExpr(args[0]!);
             const b = this.emitExpr(args[1]!);
             requireNumber(args[0]!, a.ty);
@@ -16784,6 +16787,7 @@ class Emitter {
                 [
                     { value: a, target: T_NUMBER, node: args[0]! },
                     { value: b, target: T_NUMBER, node: args[1]! },
+                    ...this.ignoredArgumentSpecs(args, 2),
                 ],
                 ([x, y]) => build(x!, y!),
             );
@@ -16860,7 +16864,12 @@ class Emitter {
             case "atan2": return two((a, b) => `atan2(${a}, ${b})`);
             case "exp": return one((x) => `exp(${x})`);
             case "expm1": return one((x) => `expm1(${x})`);
-            case "random": return { c: `tsc_math_random()`, ty: T_NUMBER };
+            case "random":
+                return this.emitSequencedExpr(
+                    T_NUMBER,
+                    this.ignoredArgumentSpecs(args, 0),
+                    () => `tsc_math_random()`,
+                );
             case "trunc": return one((x) => `trunc(${x})`);
             case "sign": return one((x) => `tsc_math_sign(${x})`);
         }

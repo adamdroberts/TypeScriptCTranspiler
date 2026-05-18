@@ -9,3 +9,4 @@ min 1
 max 8
 minmax nan: NaN NaN
 PI*2 rounded: 6.283
+ignored asp

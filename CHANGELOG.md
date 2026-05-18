@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Fixed-input `Math` methods now evaluate and ignore extra arguments after their JavaScript-consumed numeric inputs, including unary methods, `pow`, `imul`, `atan2`, and `random`. Tests: `math`, `math_more`, `math_int32_float`.
 - Buffer fixed-input helpers now evaluate and ignore extra arguments where Node ignores them, covering `Buffer.isBuffer`, `Buffer.byteLength`, `Buffer.isEncoding`, `Buffer.compare`, instance `swap16`/`swap32`/`swap64`, and `equals`. Tests: `buffer`, `buffer_static_more`, `buffer_swap`.
 - More dynamic scalar and search methods now evaluate and ignore extra arguments after their JavaScript-consumed inputs, covering `charAt`, `charCodeAt`, `codePointAt`, `at`, `includes`, `indexOf`, `lastIndexOf`, `startsWith`, `endsWith`, `join`, `normalize`, `repeat`, `padStart`, `padEnd`, number-formatting methods, and dynamic `valueOf`. Tests: `dynamic_string_at`, `dynamic_string_code_point_at`, `dynamic_search_positions`, `dynamic_array_methods`, `dynamic_string_normalize`, `dynamic_string_pad_repeat`, `dynamic_number_to_string`, `number_to_fixed`, `number_to_exponential`, `number_to_precision`.
 - `Promise.resolve(value, ...ignored)` and `Promise.reject(reason, ...ignored)` now evaluate and ignore extra arguments after the JavaScript-consumed value/reason. Tests: `promise_settled`, `promise_resolve_adopt`.
