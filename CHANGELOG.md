@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- `parseInt` / `Number.parseInt` and `parseFloat` / `Number.parseFloat` now evaluate and ignore extra arguments after the JavaScript-consumed parsing inputs. Test: `number_static_more`.
 - `Date.parse(text?, ...ignored)` now accepts evaluated ignored arguments through the ambient type shim instead of requiring local `@ts-ignore` comments. Test: `date_parse`.
 - Date zero-argument getters/formatters and `Date.now(...)` now accept evaluated ignored arguments through the ambient type shim instead of requiring local `@ts-ignore` comments. Test: `date_ignored_arguments`.
 - `clearInterval(handle)` is now accepted as a bounded alias for canceling `setTimeout` numeric handles in the no-real-interval timer subset. Test: `timers_clear`.

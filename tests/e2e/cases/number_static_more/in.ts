@@ -13,3 +13,9 @@ console.log("parse hex:", Number.parseInt("ff", 16));
 console.log("parse inferred:", parseInt("0x10"), parseInt("077"), Number.parseInt("0x20", 0));
 console.log("parse invalid radix:", Number.parseInt("10", 1));
 console.log("parse any:", parseInt(12.9), parseFloat(12.5), Number.parseInt(dynamicNumber), Number.parseFloat(dynamicNumber));
+let seen = "";
+function mark(label: string): string {
+    seen += label;
+    return label;
+}
+console.log("parse ignored:", parseInt("10", 10, mark("i")), Number.parseInt("11", 10, mark("j")), parseFloat("4.5px", mark("f")), Number.parseFloat(dynamicString, mark("n")), seen);

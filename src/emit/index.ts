@@ -21314,11 +21314,11 @@ class Emitter {
     private emitNumberStatic(call: ts.CallExpression, name: string): EmitResult {
         const args = call.arguments;
         if (name === "parseFloat") {
-            if (args.length !== 1) unsupported(call, "Number.parseFloat expects 1 arg");
+            if (args.length < 1) unsupported(call, "Number.parseFloat expects at least 1 arg");
             return this.emitParseNumber(call, "parseFloat");
         }
         if (name === "parseInt") {
-            if (args.length < 1 || args.length > 2) unsupported(call, "Number.parseInt expects 1 or 2 args");
+            if (args.length < 1) unsupported(call, "Number.parseInt expects at least 1 arg");
             return this.emitParseNumber(call, "parseInt");
         }
         if (args.length !== 1) unsupported(call, `Number.${name} expects 1 arg`);
@@ -21389,13 +21389,16 @@ class Emitter {
         const specs: SequencedCallArg[] = [
             { value: r, target: T_STRING, node: call.arguments[0]! },
         ];
+        for (const ignored of call.arguments.slice(which === "parseInt" ? 2 : 1)) {
+            specs.push({ value: this.emitExpr(ignored), node: ignored });
+        }
         if (which === "parseFloat") {
-            return this.emitSequencedCall(fn, T_NUMBER, specs);
+            return this.emitSequencedExpr(T_NUMBER, specs, (args) => `${fn}(${args[0]})`);
         }
         if (call.arguments.length >= 2) {
             const radix = this.emitExpr(call.arguments[1]!);
-            specs.push({ value: radix, target: T_NUMBER, node: call.arguments[1]! });
-            return this.emitSequencedCall(fn, T_NUMBER, specs);
+            specs.splice(1, 0, { value: radix, target: T_NUMBER, node: call.arguments[1]! });
+            return this.emitSequencedExpr(T_NUMBER, specs, (args) => `${fn}(${args[0]}, ${args[1]})`);
         }
         return this.emitSequencedExpr(T_NUMBER, specs, (args) => `${fn}(${args[0]}, 0)`);
     }

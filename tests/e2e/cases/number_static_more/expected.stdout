@@ -11,3 +11,4 @@ parse hex: 255
 parse inferred: 16 77 32
 parse invalid radix: NaN
 parse any: 12 12.5 3 3
+parse ignored: 10 11 4.5 3 ijfn

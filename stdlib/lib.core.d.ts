@@ -563,8 +563,8 @@ interface Process {
 }
 declare const process: Process;
 
-declare function parseInt(value: any, radix?: number): number;
-declare function parseFloat(value: any): number;
+declare function parseInt(value: any, radix?: number, ...ignored: any[]): number;
+declare function parseFloat(value: any, ...ignored: any[]): number;
 declare function isNaN(value: any): boolean;
 declare function isFinite(value: any): boolean;
 declare function btoa(value: string): string;
@@ -775,8 +775,8 @@ interface NumberConstructor {
     isFinite(value: any): boolean;
     isNaN(value: any): boolean;
     isSafeInteger(value: any): boolean;
-    parseFloat(value: any): number;
-    parseInt(value: any, radix?: number): number;
+    parseFloat(value: any, ...ignored: any[]): number;
+    parseInt(value: any, radix?: number, ...ignored: any[]): number;
 }
 declare var Number: NumberConstructor;
 
