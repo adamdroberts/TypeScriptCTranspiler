@@ -214,12 +214,12 @@ All methods on the `String` interface map to `tsc_str_*` runtime calls:
 - `.slice(start?, end?)` → `tsc_str_slice`
 - `.substring(start, end?)` → `tsc_str_substring`, including clamp/swap semantics. Test: `string_substring`
 - `.substr(start, length?)` → `tsc_str_substr`, including negative-start and length clamping semantics. Test: `string_substr`
-- `.toUpperCase()` / `.toLowerCase()` → `tsc_str_to_upper`, `tsc_str_to_lower`
-- `.toString()` / `.toLocaleString()` / `.valueOf()` return the typed string receiver unchanged, and inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)` report string indexes plus non-enumerable `length` ownership. Test: `string_object_methods`
-- `.normalize(form?)` → `tsc_str_normalize` backed by ICU for NFC/NFD/NFKC/NFKD. Test: `string_normalize`
+- `.toUpperCase(...ignored)` / `.toLowerCase(...ignored)` → `tsc_str_to_upper`, `tsc_str_to_lower` after evaluating ignored extra arguments. Test: `strings`
+- `.toString(...ignored)` / `.toLocaleString(...ignored)` / `.valueOf(...ignored)` return the typed string receiver unchanged after evaluating ignored extra arguments, and inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)` report string indexes plus non-enumerable `length` ownership. Test: `string_object_methods`
+- `.normalize(form?, ...ignored)` → `tsc_str_normalize` backed by ICU for NFC/NFD/NFKC/NFKD after evaluating ignored extra arguments. Test: `string_normalize`
 - Typed strings participate in `Object.keys`, `Object.values`, `Object.entries`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, `Reflect.get`, `Reflect.has`, `Reflect.ownKeys`, `Reflect.getOwnPropertyDescriptor`, `Reflect.deleteProperty`, and `Reflect.set` with read-only string index descriptors plus non-enumerable `length`. Test: `string_object_enumeration`
-- `.trim()` / `.trimStart()` / `.trimEnd()` plus `.trimLeft()` / `.trimRight()` aliases → `tsc_str_trim`, `tsc_str_trim_start`, `tsc_str_trim_end`. Tests: `string_trim_edges`, `string_trim_aliases`
-- `.isWellFormed()` / `.toWellFormed()` → `true` / receiver identity for the runtime's validated UTF-8 string representation. Test: `string_well_formed`
+- `.trim(...ignored)` / `.trimStart(...ignored)` / `.trimEnd(...ignored)` plus `.trimLeft(...ignored)` / `.trimRight(...ignored)` aliases → `tsc_str_trim`, `tsc_str_trim_start`, `tsc_str_trim_end` after evaluating ignored extra arguments. Tests: `string_trim_edges`, `string_trim_aliases`
+- `.isWellFormed(...ignored)` / `.toWellFormed(...ignored)` → `true` / receiver identity for the runtime's validated UTF-8 string representation after evaluating ignored extra arguments. Test: `string_well_formed`
 - `.repeat(n)` → `tsc_str_repeat`
 - `.padStart(len, pad?)` / `.padEnd(len, pad?)` → `tsc_str_pad_start`, `tsc_str_pad_end`
 - `.replace(search, repl)` → `tsc_str_replace` or `tsc_str_replace_regex` (if `search` is a RegExp); string and RegExp replacement strings expand dollar, whole-match, prefix, and suffix tokens, and RegExp replacements also expand capture tokens. Tests: `string_replace_string_tokens`, `string_replace_regex_groups`

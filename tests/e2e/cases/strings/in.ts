@@ -12,3 +12,11 @@ console.log("trim:", "  hi  ".trim());
 const parts: string[] = "a,b,c,d".split(",");
 console.log("parts len:", parts.length);
 for (const p of parts) console.log("  ", p);
+
+let seen = "";
+function mark(label: string): string {
+    seen += label;
+    return label;
+}
+
+console.log("ignored case:", s.toUpperCase(mark("u")), s.toLowerCase(mark("l")), "  hi  ".trim(mark("t")), seen);

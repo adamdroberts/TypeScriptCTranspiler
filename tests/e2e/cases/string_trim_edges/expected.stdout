@@ -1,3 +1,4 @@
 start: [hello  ]
 end: [  hello]
 both: [hello]
+ignored: [hello  ] [  hello] [hello] set

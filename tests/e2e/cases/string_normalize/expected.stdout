@@ -3,3 +3,4 @@ default: true
 nfd: true
 nfkc: true
 nfkd: true
+ignored: true n

@@ -13,3 +13,4 @@ parts len: 4
    b
    c
    d
+ignored case: HELLO, WORLD! hello, world! hi ult

@@ -15872,15 +15872,26 @@ class Emitter {
             case "toLocaleString":
             case "toString":
             case "valueOf":
-                if (args.length !== 0) unsupported(call, `${method} expects no args`);
-                return recv;
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([s]) => s!,
+                );
             case "hasOwnProperty":
             case "propertyIsEnumerable":
                 return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "String");
             case "toUpperCase":
-                return { c: `tsc_str_to_upper(${recv.c})`, ty: T_STRING };
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([s]) => `tsc_str_to_upper(${s!})`,
+                );
             case "toLowerCase":
-                return { c: `tsc_str_to_lower(${recv.c})`, ty: T_STRING };
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([s]) => `tsc_str_to_lower(${s!})`,
+                );
             case "normalize": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
                 if (args[0]) {
@@ -15890,27 +15901,44 @@ class Emitter {
                         node: args[0],
                     });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 1));
                 return this.emitSequencedExpr(T_STRING, specs, (vals) => {
                     const form = vals[1] ?? `tsc_str_from_lit("NFC", 3)`;
                     return `tsc_str_normalize(${vals[0]}, ${form})`;
                 });
             }
             case "trim":
-                return { c: `tsc_str_trim(${recv.c})`, ty: T_STRING };
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([s]) => `tsc_str_trim(${s!})`,
+                );
             case "trimLeft":
             case "trimStart":
-                if (args.length !== 0) unsupported(call, `${method} expects no args`);
-                return { c: `tsc_str_trim_start(${recv.c})`, ty: T_STRING };
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([s]) => `tsc_str_trim_start(${s!})`,
+                );
             case "trimRight":
             case "trimEnd":
-                if (args.length !== 0) unsupported(call, `${method} expects no args`);
-                return { c: `tsc_str_trim_end(${recv.c})`, ty: T_STRING };
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([s]) => `tsc_str_trim_end(${s!})`,
+                );
             case "isWellFormed":
-                if (args.length !== 0) unsupported(call, "isWellFormed expects no args");
-                return { c: "true", ty: T_BOOLEAN };
+                return this.emitSequencedExpr(
+                    T_BOOLEAN,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    () => "true",
+                );
             case "toWellFormed":
-                if (args.length !== 0) unsupported(call, "toWellFormed expects no args");
-                return recv;
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([s]) => s!,
+                );
             case "repeat": {
                 if (args.length !== 1) unsupported(call, "repeat expects 1 arg");
                 const n = this.emitExpr(args[0]!);

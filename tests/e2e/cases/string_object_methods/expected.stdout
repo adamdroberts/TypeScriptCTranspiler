@@ -4,3 +4,4 @@ value: Ada!
 own: true true false
 enum: true false
 ignored own: true false ab
+ignored value: Ada Ada Ada abcde

@@ -2,3 +2,4 @@ left: [Ada  ]
 right: [  Ada]
 dyn left: [Ada  ]
 dyn right: [  Ada]
+ignored: [Ada  ] [  Ada] lr
