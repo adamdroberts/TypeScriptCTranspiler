@@ -2,6 +2,7 @@ locale: Hi
 value text: Hi
 value same: true
 concat: buf=Hi
+ignored: Hi Hi {"type":"Buffer","data":[72,105]} true sljv
 own: 0,1 72,105 0,1
 has: true false true true
 desc: 72 true true true 0,1

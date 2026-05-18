@@ -1119,10 +1119,10 @@ declare module "node:crypto" {
 type BufferEncoding = "utf8" | "utf-8" | "hex" | "base64";
 interface Buffer {
     readonly length: number;
-    toLocaleString(): string;
-    toJSON(): any;
-    toString(encoding?: BufferEncoding): string;
-    valueOf(): Buffer;
+    toLocaleString(...ignored: any[]): string;
+    toJSON(...ignored: any[]): any;
+    toString(encoding?: BufferEncoding, ...ignored: any[]): string;
+    valueOf(...ignored: any[]): Buffer;
     slice(start?: number, end?: number): Buffer;
     subarray(start?: number, end?: number): Buffer;
     fill(value: number, start?: number, end?: number): Buffer;

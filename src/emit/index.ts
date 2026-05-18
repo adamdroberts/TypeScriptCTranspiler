@@ -18045,13 +18045,15 @@ class Emitter {
         const args = call.arguments;
         switch (method) {
             case "toLocaleString":
-                if (args.length !== 0) unsupported(call, "Buffer.toLocaleString expects no args");
-                return this.emitSequencedExpr(T_STRING, [{ value: recv }], ([buffer]) =>
+                return this.emitSequencedExpr(T_STRING, [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)], ([buffer]) =>
                     `tsc_buffer_to_string(${buffer}, tsc_str_from_lit("utf8", 4))`,
                 );
             case "toJSON":
-                if (args.length !== 0) unsupported(call, "Buffer.toJSON expects no args");
-                return this.emitSequencedCall("tsc_buffer_to_json", T_VALUE, [{ value: recv }]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([buffer]) => `tsc_buffer_to_json(${buffer})`,
+                );
             case "toString": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
                 if (args[0]) {
@@ -18061,14 +18063,18 @@ class Emitter {
                         node: args[0],
                     });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 1));
                 return this.emitSequencedExpr(T_STRING, specs, (vals) => {
                     const encoding = vals[1] ?? `tsc_str_from_lit("utf8", 4)`;
                     return `tsc_buffer_to_string(${vals[0]}, ${encoding})`;
                 });
             }
             case "valueOf":
-                if (args.length !== 0) unsupported(call, "Buffer.valueOf expects no args");
-                return recv;
+                return this.emitSequencedExpr(
+                    recv.ty,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([buffer]) => buffer,
+                );
             case "slice":
             case "subarray": {
                 const specs: SequencedCallArg[] = [{ value: recv }];

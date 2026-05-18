@@ -1,9 +1,16 @@
 const buf = Buffer.from("Hi");
+let seen = "";
+
+function mark(label: string): string {
+  seen += label;
+  return label;
+}
 
 console.log("locale:", buf.toLocaleString());
 console.log("value text:", buf.valueOf().toString());
 console.log("value same:", buf.valueOf() === buf);
 console.log("concat:", "buf=" + buf);
+console.log("ignored:", buf.toString("utf8", mark("s")), buf.toLocaleString(mark("l")), JSON.stringify(buf.toJSON(mark("j"))), buf.valueOf(mark("v")) === buf, seen);
 console.log("own:", Object.keys(buf).join(","), Object.values(buf).join(","), Object.getOwnPropertyNames(buf).join(","));
 console.log("has:", Object.hasOwn(buf, "0"), Object.hasOwn(buf, "length"), buf.hasOwnProperty("1"), buf.propertyIsEnumerable("1"));
 const desc: any = Object.getOwnPropertyDescriptor(buf, "0");
