@@ -25,6 +25,10 @@ setTimeout(() => {
     events.push("void-timeout");
 }, void 0);
 
+setTimeout(() => {
+    events.push("negative-zero-timeout");
+}, -0);
+
 setImmediate(() => {
     events.push("immediate");
 });

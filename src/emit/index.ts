@@ -14047,7 +14047,7 @@ class Emitter {
         if (ts.isNumericLiteral(cur)) return Number(cur.text) === 0;
         return (
             ts.isPrefixUnaryExpression(cur) &&
-            cur.operator === ts.SyntaxKind.PlusToken &&
+            (cur.operator === ts.SyntaxKind.PlusToken || cur.operator === ts.SyntaxKind.MinusToken) &&
             ts.isNumericLiteral(cur.operand) &&
             Number(cur.operand.text) === 0
         );
