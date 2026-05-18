@@ -704,25 +704,25 @@ declare module "node:os" {
 }
 
 interface Date {
-    getTime(): number;
-    getFullYear(): number;
-    getYear(): number;
-    getMonth(): number;
-    getDate(): number;
-    getDay(): number;
-    getHours(): number;
-    getMinutes(): number;
-    getSeconds(): number;
-    getMilliseconds(): number;
-    getTimezoneOffset(): number;
-    getUTCFullYear(): number;
-    getUTCMonth(): number;
-    getUTCDate(): number;
-    getUTCDay(): number;
-    getUTCHours(): number;
-    getUTCMinutes(): number;
-    getUTCSeconds(): number;
-    getUTCMilliseconds(): number;
+    getTime(...ignored: any[]): number;
+    getFullYear(...ignored: any[]): number;
+    getYear(...ignored: any[]): number;
+    getMonth(...ignored: any[]): number;
+    getDate(...ignored: any[]): number;
+    getDay(...ignored: any[]): number;
+    getHours(...ignored: any[]): number;
+    getMinutes(...ignored: any[]): number;
+    getSeconds(...ignored: any[]): number;
+    getMilliseconds(...ignored: any[]): number;
+    getTimezoneOffset(...ignored: any[]): number;
+    getUTCFullYear(...ignored: any[]): number;
+    getUTCMonth(...ignored: any[]): number;
+    getUTCDate(...ignored: any[]): number;
+    getUTCDay(...ignored: any[]): number;
+    getUTCHours(...ignored: any[]): number;
+    getUTCMinutes(...ignored: any[]): number;
+    getUTCSeconds(...ignored: any[]): number;
+    getUTCMilliseconds(...ignored: any[]): number;
     setTime(time: number, ...ignored: any[]): number;
     setFullYear(year: number, month?: number, date?: number, ...ignored: any[]): number;
     setYear(year: number, ...ignored: any[]): number;
@@ -739,23 +739,23 @@ interface Date {
     setUTCMinutes(minutes: number, seconds?: number, ms?: number, ...ignored: any[]): number;
     setUTCSeconds(seconds: number, ms?: number, ...ignored: any[]): number;
     setUTCMilliseconds(ms: number, ...ignored: any[]): number;
-    valueOf(): number;
-    toString(): string;
+    valueOf(...ignored: any[]): number;
+    toString(...ignored: any[]): string;
     toLocaleString(...ignored: any[]): string;
     toLocaleDateString(...ignored: any[]): string;
     toLocaleTimeString(...ignored: any[]): string;
-    toDateString(): string;
-    toTimeString(): string;
-    toISOString(): string;
-    toUTCString(): string;
-    toGMTString(): string;
+    toDateString(...ignored: any[]): string;
+    toTimeString(...ignored: any[]): string;
+    toISOString(...ignored: any[]): string;
+    toUTCString(...ignored: any[]): string;
+    toGMTString(...ignored: any[]): string;
     toJSON(key?: any): any;
 }
 interface DateConstructor {
     (...args: any[]): string;
     new(value?: number | string | Date): Date;
     new(year: number, month: number, date?: number, hours?: number, minutes?: number, seconds?: number, ms?: number, ...ignored: any[]): Date;
-    now(): number;
+    now(...ignored: any[]): number;
     parse(text?: any): number;
     UTC(year?: number, month?: number, date?: number, hours?: number, minutes?: number, seconds?: number, ms?: number, ...ignored: any[]): number;
 }
