@@ -2,3 +2,4 @@ absolute: ../../impl/bbb
 relative: ../../d/e
 same: 
 named: ../app/main.ts
+ignored: r

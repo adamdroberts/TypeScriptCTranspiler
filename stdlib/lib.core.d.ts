@@ -1050,15 +1050,15 @@ interface Path {
     readonly posix: Path;
     join(...parts: string[]): string;
     resolve(...parts: string[]): string;
-    normalize(p: string): string;
-    isAbsolute(p: string): boolean;
-    relative(from: string, to: string): string;
-    toNamespacedPath(p: string): string;
-    basename(p: string, suffix?: string): string;
-    dirname(p: string): string;
-    extname(p: string): string;
-    parse(p: string): any;
-    format(pathObject: any): string;
+    normalize(p: string, ...ignored: any[]): string;
+    isAbsolute(p: string, ...ignored: any[]): boolean;
+    relative(from: string, to: string, ...ignored: any[]): string;
+    toNamespacedPath(p: string, ...ignored: any[]): string;
+    basename(p: string, suffix?: string, ...ignored: any[]): string;
+    dirname(p: string, ...ignored: any[]): string;
+    extname(p: string, ...ignored: any[]): string;
+    parse(p: string, ...ignored: any[]): any;
+    format(pathObject: any, ...ignored: any[]): string;
 }
 declare const path: Path;
 declare module "path" {
@@ -1067,15 +1067,15 @@ declare module "path" {
     export const posix: Path;
     export function join(...parts: string[]): string;
     export function resolve(...parts: string[]): string;
-    export function normalize(p: string): string;
-    export function isAbsolute(p: string): boolean;
-    export function relative(from: string, to: string): string;
-    export function toNamespacedPath(p: string): string;
-    export function basename(p: string, suffix?: string): string;
-    export function dirname(p: string): string;
-    export function extname(p: string): string;
-    export function parse(p: string): any;
-    export function format(pathObject: any): string;
+    export function normalize(p: string, ...ignored: any[]): string;
+    export function isAbsolute(p: string, ...ignored: any[]): boolean;
+    export function relative(from: string, to: string, ...ignored: any[]): string;
+    export function toNamespacedPath(p: string, ...ignored: any[]): string;
+    export function basename(p: string, suffix?: string, ...ignored: any[]): string;
+    export function dirname(p: string, ...ignored: any[]): string;
+    export function extname(p: string, ...ignored: any[]): string;
+    export function parse(p: string, ...ignored: any[]): any;
+    export function format(pathObject: any, ...ignored: any[]): string;
 }
 declare module "node:path" {
     export const sep: string;
@@ -1083,15 +1083,15 @@ declare module "node:path" {
     export const posix: Path;
     export function join(...parts: string[]): string;
     export function resolve(...parts: string[]): string;
-    export function normalize(p: string): string;
-    export function isAbsolute(p: string): boolean;
-    export function relative(from: string, to: string): string;
-    export function toNamespacedPath(p: string): string;
-    export function basename(p: string, suffix?: string): string;
-    export function dirname(p: string): string;
-    export function extname(p: string): string;
-    export function parse(p: string): any;
-    export function format(pathObject: any): string;
+    export function normalize(p: string, ...ignored: any[]): string;
+    export function isAbsolute(p: string, ...ignored: any[]): boolean;
+    export function relative(from: string, to: string, ...ignored: any[]): string;
+    export function toNamespacedPath(p: string, ...ignored: any[]): string;
+    export function basename(p: string, suffix?: string, ...ignored: any[]): string;
+    export function dirname(p: string, ...ignored: any[]): string;
+    export function extname(p: string, ...ignored: any[]): string;
+    export function parse(p: string, ...ignored: any[]): any;
+    export function format(pathObject: any, ...ignored: any[]): string;
 }
 
 type CryptoHashAlgorithm = "sha1" | "sha256" | "sha512";

@@ -6,3 +6,4 @@ trailing: foo/
 parent root: .
 abs true: true
 abs false: false
+ignored: na

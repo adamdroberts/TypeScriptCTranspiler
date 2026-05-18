@@ -17877,6 +17877,13 @@ class Emitter {
             const r = this.emitExpr(a);
             return { value: r, target: T_STRING, node: a };
         });
+        const fixedStringSpecs = (count: number) => {
+            const consumed = args.slice(0, count).map((a) => {
+                const r = this.emitExpr(a);
+                return { value: r, target: T_STRING, node: a };
+            });
+            return [...consumed, ...this.ignoredArgumentSpecs(args, count)];
+        };
         switch (name) {
             case "join":
             case "resolve": {
@@ -17884,39 +17891,46 @@ class Emitter {
                 return this.emitSequencedCall(fn, T_STRING, stringSpecs(), [args.length.toString()]);
             }
             case "normalize":
-                if (args.length !== 1) unsupported(call, "path.normalize expects 1 arg");
-                return this.emitSequencedCall("tsc_path_normalize", T_STRING, stringSpecs());
+                if (args.length < 1) unsupported(call, "path.normalize expects at least 1 arg");
+                return this.emitSequencedExpr(T_STRING, fixedStringSpecs(1), ([path]) => `tsc_path_normalize(${path})`);
             case "isAbsolute":
-                if (args.length !== 1) unsupported(call, "path.isAbsolute expects 1 arg");
-                return this.emitSequencedCall("tsc_path_is_absolute", T_BOOLEAN, stringSpecs());
+                if (args.length < 1) unsupported(call, "path.isAbsolute expects at least 1 arg");
+                return this.emitSequencedExpr(T_BOOLEAN, fixedStringSpecs(1), ([path]) => `tsc_path_is_absolute(${path})`);
             case "relative":
-                if (args.length !== 2) unsupported(call, "path.relative expects 2 args");
-                return this.emitSequencedCall("tsc_path_relative", T_STRING, stringSpecs());
+                if (args.length < 2) unsupported(call, "path.relative expects at least 2 args");
+                return this.emitSequencedExpr(T_STRING, fixedStringSpecs(2), ([from, to]) => `tsc_path_relative(${from}, ${to})`);
             case "toNamespacedPath":
-                if (args.length !== 1) unsupported(call, "path.toNamespacedPath expects 1 arg");
-                return this.emitSequencedExpr(T_STRING, stringSpecs(), ([path]) => path);
+                if (args.length < 1) unsupported(call, "path.toNamespacedPath expects at least 1 arg");
+                return this.emitSequencedExpr(T_STRING, fixedStringSpecs(1), ([path]) => path);
             case "basename":
-                if (args.length < 1 || args.length > 2) unsupported(call, "path.basename expects 1 or 2 args");
-                return this.emitSequencedCall(
-                    args.length === 1 ? "tsc_path_basename" : "tsc_path_basename_suffix",
+                if (args.length < 1) unsupported(call, "path.basename expects at least 1 arg");
+                return this.emitSequencedExpr(
                     T_STRING,
-                    stringSpecs(),
+                    fixedStringSpecs(args.length >= 2 ? 2 : 1),
+                    ([path, suffix]) => suffix
+                        ? `tsc_path_basename_suffix(${path}, ${suffix})`
+                        : `tsc_path_basename(${path})`,
                 );
             case "dirname":
-                if (args.length !== 1) unsupported(call, "path.dirname expects 1 arg");
-                return this.emitSequencedCall("tsc_path_dirname", T_STRING, stringSpecs());
+                if (args.length < 1) unsupported(call, "path.dirname expects at least 1 arg");
+                return this.emitSequencedExpr(T_STRING, fixedStringSpecs(1), ([path]) => `tsc_path_dirname(${path})`);
             case "extname":
-                if (args.length !== 1) unsupported(call, "path.extname expects 1 arg");
-                return this.emitSequencedCall("tsc_path_extname", T_STRING, stringSpecs());
+                if (args.length < 1) unsupported(call, "path.extname expects at least 1 arg");
+                return this.emitSequencedExpr(T_STRING, fixedStringSpecs(1), ([path]) => `tsc_path_extname(${path})`);
             case "parse":
-                if (args.length !== 1) unsupported(call, "path.parse expects 1 arg");
-                return this.emitSequencedCall("tsc_path_parse", T_VALUE, stringSpecs());
+                if (args.length < 1) unsupported(call, "path.parse expects at least 1 arg");
+                return this.emitSequencedExpr(T_VALUE, fixedStringSpecs(1), ([path]) => `tsc_path_parse(${path})`);
             case "format": {
-                if (args.length !== 1) unsupported(call, "path.format expects 1 arg");
+                if (args.length < 1) unsupported(call, "path.format expects at least 1 arg");
                 const value = this.emitExpr(args[0]!);
-                return this.emitSequencedCall("tsc_path_format", T_STRING, [
-                    { value, target: T_VALUE, node: args[0]! },
-                ]);
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [
+                        { value, target: T_VALUE, node: args[0]! },
+                        ...this.ignoredArgumentSpecs(args, 1),
+                    ],
+                    ([pathObject]) => `tsc_path_format(${pathObject})`,
+                );
             }
         }
         unsupported(call, `path.${name} (Phase 10 subset only)`);
