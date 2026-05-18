@@ -16165,7 +16165,8 @@ class Emitter {
         }
         if (r.ty.kind === "void" || r.ty.kind === "never") {
             const value = arg.kind === ts.SyntaxKind.NullKeyword ? "0.0" : "NAN";
-            return this.emitSequencedExpr(T_NUMBER, [{ value: r }, ...ignored], () => value);
+            const first = { c: `({ (void)(${r.c}); false; })`, ty: T_BOOLEAN };
+            return this.emitSequencedExpr(T_NUMBER, [{ value: first }, ...ignored], () => value);
         }
         return this.emitSequencedExpr(T_NUMBER, [
             { value: r, target: T_VALUE, node: arg },
@@ -16223,7 +16224,8 @@ class Emitter {
         const r = this.emitExpr(arg);
         const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
         if (r.ty.kind === "void" || r.ty.kind === "never") {
-            return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], () => "false");
+            const first = { c: `({ (void)(${r.c}); false; })`, ty: T_BOOLEAN };
+            return this.emitSequencedExpr(T_BOOLEAN, [{ value: first }, ...ignored], () => "false");
         }
         return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], ([value]) =>
             this.truthyC({ c: value, ty: r.ty }, arg),
@@ -16237,7 +16239,8 @@ class Emitter {
         const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
         if (r.ty.kind === "void" || r.ty.kind === "never") {
             const text = arg.kind === ts.SyntaxKind.NullKeyword ? "null" : "undefined";
-            return this.emitSequencedExpr(T_STRING, [{ value: r }, ...ignored], () => this.stringLit(text));
+            const first = { c: `({ (void)(${r.c}); false; })`, ty: T_BOOLEAN };
+            return this.emitSequencedExpr(T_STRING, [{ value: first }, ...ignored], () => this.stringLit(text));
         }
         return this.emitSequencedExpr(T_STRING, [{ value: r }, ...ignored], ([value]) =>
             this.coerceToString({ c: value, ty: r.ty }, arg),
