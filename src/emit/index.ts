@@ -14135,12 +14135,17 @@ class Emitter {
                 );
             case "setTime": {
                 const arg = call.arguments[0];
-                if (!arg || call.arguments.length !== 1) unsupported(call, "Date.setTime expects one numeric timestamp");
-                const value = this.emitExpr(arg);
-                return this.emitSequencedCall("tsc_date_set_time", T_NUMBER, [
+                if (!arg) unsupported(call, "Date.setTime expects one numeric timestamp");
+                const specs: SequencedCallArg[] = [
                     { value: recv },
-                    { value, target: T_NUMBER, node: arg },
-                ]);
+                    { value: this.emitExpr(arg), target: T_NUMBER, node: arg },
+                    ...Array.from(call.arguments.slice(1), (extra) => ({ value: this.emitExpr(extra), node: extra })),
+                ];
+                return this.emitSequencedExpr(
+                    T_NUMBER,
+                    specs,
+                    ([date, ms]) => `tsc_date_set_time(${date}, ${ms})`,
+                );
             }
             case "setUTCFullYear":
             case "setUTCMonth":
@@ -14159,19 +14164,20 @@ class Emitter {
                     setUTCMilliseconds: [6, 1, 1],
                 };
                 const [part, minArgs, maxArgs] = ranges[method]!;
-                if (call.arguments.length < minArgs || call.arguments.length > maxArgs) {
+                if (call.arguments.length < minArgs) {
                     unsupported(call, `Date.${method} expects ${minArgs === maxArgs ? minArgs : `${minArgs} to ${maxArgs}`} numeric args`);
                 }
                 const specs: SequencedCallArg[] = [{ value: recv }];
-                for (const arg of call.arguments) {
+                for (let i = 0; i < call.arguments.length; i++) {
+                    const arg = call.arguments[i]!;
                     const value = this.emitExpr(arg);
-                    specs.push({ value, target: T_NUMBER, node: arg });
+                    specs.push({ value, target: i < maxArgs ? T_NUMBER : undefined, node: arg });
                 }
                 return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
                     const date = vals[0]!;
-                    const args = vals.slice(1);
+                    const args = vals.slice(1, 1 + maxArgs);
                     while (args.length < 4) args.push("0.0");
-                    return `tsc_date_set_utc_part(${date}, ${part}, ${args.join(", ")}, ${call.arguments.length})`;
+                    return `tsc_date_set_utc_part(${date}, ${part}, ${args.join(", ")}, ${Math.min(call.arguments.length, maxArgs)})`;
                 });
             }
             case "setFullYear":
@@ -14191,18 +14197,20 @@ class Emitter {
                     setMilliseconds: { part: 6, min: 1, max: 1 },
                 };
                 const config = localSetters[method]!;
-                if (call.arguments.length < config.min || call.arguments.length > config.max) {
+                if (call.arguments.length < config.min) {
                     unsupported(call, `Date.${method} expects ${config.min === config.max ? config.min : `${config.min} to ${config.max}`} numeric args`);
                 }
                 const specs: { value: EmitResult; target?: CType; node?: ts.Expression }[] = [{ value: recv }];
-                for (const arg of call.arguments) {
+                for (let i = 0; i < call.arguments.length; i++) {
+                    const arg = call.arguments[i]!;
                     const value = this.emitExpr(arg);
-                    specs.push({ value, target: T_NUMBER, node: arg });
+                    specs.push({ value, target: i < config.max ? T_NUMBER : undefined, node: arg });
                 }
                 return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
                     const date = vals[0]!;
-                    const args = [vals[1]!, vals[2] ?? "0", vals[3] ?? "0", vals[4] ?? "0"];
-                    return `tsc_date_set_local_part(${date}, ${config.part}, ${args.join(", ")}, ${call.arguments.length})`;
+                    const args = vals.slice(1, 1 + config.max);
+                    while (args.length < 4) args.push("0.0");
+                    return `tsc_date_set_local_part(${date}, ${config.part}, ${args.join(", ")}, ${Math.min(call.arguments.length, config.max)})`;
                 });
             }
             case "getUTCFullYear":
@@ -14256,11 +14264,11 @@ class Emitter {
             }
             case "setYear": {
                 const arg = call.arguments[0];
-                if (!arg || call.arguments.length !== 1) unsupported(call, "Date.setYear expects one numeric year");
-                const value = this.emitExpr(arg);
+                if (!arg) unsupported(call, "Date.setYear expects one numeric year");
                 return this.emitSequencedExpr(T_NUMBER, [
                     { value: recv },
-                    { value, target: T_NUMBER, node: arg },
+                    { value: this.emitExpr(arg), target: T_NUMBER, node: arg },
+                    ...Array.from(call.arguments.slice(1), (extra) => ({ value: this.emitExpr(extra), node: extra })),
                 ], ([date, year]) => `tsc_date_set_legacy_year(${date}, ${year!})`);
             }
             case "getTimezoneOffset":
