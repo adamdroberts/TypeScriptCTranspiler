@@ -4,6 +4,12 @@ const globalA: symbol = Symbol.for("shared");
 const globalB: symbol = Symbol.for("shared");
 const iter: symbol = Symbol.iterator;
 const asyncIter: symbol = Symbol.asyncIterator;
+let seen = "";
+
+function mark(label: string): string {
+    seen += label;
+    return label;
+}
 
 console.log("local eq:", localA === localB);
 console.log("global eq:", globalA === globalB);
@@ -15,3 +21,8 @@ console.log("string:", localA.toString(), Symbol().toString());
 console.log("typeof:", typeof localA);
 console.log("iterator:", iter === Symbol.iterator, iter.description);
 console.log("async:", asyncIter === Symbol.asyncIterator, asyncIter.description);
+
+const ignoredDesc = Symbol(mark("d"), mark("x"));
+const ignoredGlobal = Symbol.for(mark("f"), mark("g"));
+console.log("ignored desc:", ignoredDesc.description, Symbol.keyFor(ignoredGlobal, mark("k")));
+console.log("ignored methods:", ignoredDesc.toString(mark("t")), ignoredDesc.toLocaleString(mark("l")), ignoredDesc.valueOf(mark("v")) === ignoredDesc, seen);

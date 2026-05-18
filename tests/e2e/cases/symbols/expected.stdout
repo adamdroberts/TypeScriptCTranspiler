@@ -8,3 +8,5 @@ string: Symbol(local) Symbol()
 typeof: symbol
 iterator: true Symbol.iterator
 async: true Symbol.asyncIterator
+ignored desc: d f
+ignored methods: Symbol(d) Symbol(d) true dxfgktlv

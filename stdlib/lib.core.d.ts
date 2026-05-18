@@ -4,14 +4,14 @@
 // --- iterator protocol (minimal, for for-of on arrays) ---
 interface Symbol {
     readonly description: string | undefined;
-    toLocaleString(): string;
-    toString(): string;
-    valueOf(): symbol;
+    toLocaleString(...ignored: any[]): string;
+    toString(...ignored: any[]): string;
+    valueOf(...ignored: any[]): symbol;
 }
 interface SymbolConstructor {
-    (description?: string): symbol;
-    for(key: string): symbol;
-    keyFor(sym: symbol): string | undefined;
+    (description?: string, ...ignored: any[]): symbol;
+    for(key: string, ...ignored: any[]): symbol;
+    keyFor(sym: symbol, ...ignored: any[]): string | undefined;
     readonly iterator: symbol;
     readonly asyncIterator: symbol;
 }

@@ -16248,12 +16248,12 @@ class Emitter {
     }
 
     private emitSymbolConstructor(call: ts.CallExpression): EmitResult {
-        if (call.arguments.length > 1) unsupported(call, "Symbol expects 0 or 1 args");
         const specs: SequencedCallArg[] = [];
         if (call.arguments[0]) {
             const desc = this.emitExpr(call.arguments[0]);
             specs.push({ value: desc, target: T_STRING, node: call.arguments[0] });
         }
+        specs.push(...this.ignoredArgumentSpecs(call.arguments, 1));
         return this.emitSequencedExpr(T_SYMBOL, specs, (vals) =>
             `tsc_symbol_new(${vals[0] ?? "NULL"})`,
         );
@@ -16262,21 +16262,27 @@ class Emitter {
     private emitSymbolStatic(call: ts.CallExpression, name: string): EmitResult {
         switch (name) {
             case "for": {
-                if (call.arguments.length !== 1) unsupported(call, "Symbol.for expects 1 arg");
+                if (call.arguments.length < 1) unsupported(call, "Symbol.for expects at least 1 arg");
                 const key = this.emitExpr(call.arguments[0]!);
-                return this.emitSequencedCall(
-                    "tsc_symbol_for",
+                return this.emitSequencedExpr(
                     T_SYMBOL,
-                    [{ value: key, target: T_STRING, node: call.arguments[0]! }],
+                    [
+                        { value: key, target: T_STRING, node: call.arguments[0]! },
+                        ...this.ignoredArgumentSpecs(call.arguments, 1),
+                    ],
+                    ([value]) => `tsc_symbol_for(${value})`,
                 );
             }
             case "keyFor": {
-                if (call.arguments.length !== 1) unsupported(call, "Symbol.keyFor expects 1 arg");
+                if (call.arguments.length < 1) unsupported(call, "Symbol.keyFor expects at least 1 arg");
                 const sym = this.emitExpr(call.arguments[0]!);
-                return this.emitSequencedCall(
-                    "tsc_symbol_key_for",
+                return this.emitSequencedExpr(
                     T_STRING,
-                    [{ value: sym, target: T_SYMBOL, node: call.arguments[0]! }],
+                    [
+                        { value: sym, target: T_SYMBOL, node: call.arguments[0]! },
+                        ...this.ignoredArgumentSpecs(call.arguments, 1),
+                    ],
+                    ([value]) => `tsc_symbol_key_for(${value})`,
                 );
             }
         }
@@ -16291,12 +16297,18 @@ class Emitter {
         switch (method) {
             case "toLocaleString":
             case "toString": {
-                if (call.arguments.length !== 0) unsupported(call, `Symbol.${method} expects no args`);
-                return this.emitSequencedCall("tsc_symbol_to_string", T_STRING, [{ value: recv }]);
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
+                    ([value]) => `tsc_symbol_to_string(${value})`,
+                );
             }
             case "valueOf":
-                if (call.arguments.length !== 0) unsupported(call, "Symbol.valueOf expects no args");
-                return recv;
+                return this.emitSequencedExpr(
+                    T_SYMBOL,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
+                    ([value]) => value,
+                );
             case "hasOwnProperty":
             case "propertyIsEnumerable":
                 return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "Symbol");

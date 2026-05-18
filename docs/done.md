@@ -11,7 +11,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` -> 661 passed.
 ### Literals
 - Numeric literals — decimal, `0x`/`0o`/`0b`, underscore separators → `formatNumericLiteral` in `src/emit/index.ts`. Test: `arith`
 - BigInt literals (`0n`, `0xfn`, `0o77n`, `0b101n`), `BigInt(...)`, arithmetic/comparison/equality, unary minus, compound arithmetic assignment, `typeof`, `.toString(radix?)`, `.toLocaleString()`, `.valueOf()`, and inherited `hasOwnProperty` / `propertyIsEnumerable` backed by GMP. Tests: `bigint`, `symbol_bigint_object_methods`
-- Symbol values via `Symbol(description?)`, `Symbol.for`, `Symbol.keyFor`, `Symbol.iterator`, `Symbol.asyncIterator`, `.description`, `.toString()`, `.toLocaleString()`, `.valueOf()`, inherited `hasOwnProperty` / `propertyIsEnumerable`, equality, and `typeof`. Tests: `symbols`, `symbol_bigint_object_methods`
+- Symbol values via `Symbol(description?, ...ignored)`, `Symbol.for(key, ...ignored)`, `Symbol.keyFor(sym, ...ignored)`, `Symbol.iterator`, `Symbol.asyncIterator`, `.description`, `.toString(...ignored)`, `.toLocaleString(...ignored)`, `.valueOf(...ignored)`, inherited `hasOwnProperty` / `propertyIsEnumerable`, equality, and `typeof`. Tests: `symbols`, `symbol_bigint_object_methods`
 - String literals with full C escape handling for UTF-8 and non-BMP code points → `escapeCString` in `src/emit/cbuf.ts`. Test: `hello`, `strings`, `string_for_of`
 - Template literals with `${expr}` interpolation → `emitTemplate`. Test: `greet`, `fizzbuzz`
 - Tagged template calls with a `TemplateStringsArray` first parameter and fixed substitution parameters. Test: `tagged_templates`
