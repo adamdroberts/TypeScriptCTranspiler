@@ -9951,13 +9951,26 @@ tsc_error_t* tsc_error_new_named(tsc_str_t* name, tsc_str_t* message) {
     tsc_error_t* e = (tsc_error_t*)TSC_GC_MALLOC(sizeof(tsc_error_t));
     e->name = name ? name : tsc_str_from_lit("Error", 5);
     e->message = message ? message : tsc_str_from_lit("", 0);
+    e->cause = tsc_value_undefined();
     e->errors = NULL;
+    return e;
+}
+
+tsc_error_t* tsc_error_new_named_cause(tsc_str_t* name, tsc_str_t* message, tsc_value_t cause) {
+    tsc_error_t* e = tsc_error_new_named(name, message);
+    e->cause = cause;
     return e;
 }
 
 tsc_error_t* tsc_aggregate_error_new(tsc_array_t* errors, tsc_str_t* message) {
     tsc_error_t* e = tsc_error_new_named(tsc_str_from_lit("AggregateError", 14), message);
     e->errors = errors ? errors : tsc_array_new(sizeof(tsc_value_t), 1);
+    return e;
+}
+
+tsc_error_t* tsc_aggregate_error_new_cause(tsc_array_t* errors, tsc_str_t* message, tsc_value_t cause) {
+    tsc_error_t* e = tsc_aggregate_error_new(errors, message);
+    e->cause = cause;
     return e;
 }
 

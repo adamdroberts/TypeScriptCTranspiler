@@ -1,0 +1,4 @@
+outer: Error outer root
+typed: TypeError bad 42
+empty: RangeError range undefined
+aggregate: AggregateError many true one

@@ -2,7 +2,7 @@
 
 Everything in this file compiles end-to-end to a native binary via `./bin/tsc2c file.ts -o out`. Each bullet points at the test case under `tests/e2e/cases/` that exercises it and, where useful, at the runtime symbol or emitter method that implements it.
 
-Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` -> 657 passed.
+Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` -> 658 passed.
 
 ---
 
@@ -280,7 +280,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 
 - `throw expr` — stringifies `expr` and `longjmp`s to the nearest enclosing `try`. Test: `exceptions`
 - `try { } catch (e) { } finally { }` — catch binding is `tsc_str_t* e = tsc_current_error()`
-- `new Error(message?)`, callable `Error(message?)`, and the same constructor/callable forms for `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError`, `URIError`, and `AggregateError` create a narrow Error object subset exposing `.name`, `.message`, `.toString()`, `.toLocaleString()`, and `.valueOf()`. `AggregateError` stores `.errors`; throwing one of these errors still stringifies into the existing exception string channel. Tests: `error_instances`, `error_constructors`, `error_more_constructors`, `aggregate_error_constructor`
+- `new Error(message?, options?)`, callable `Error(message?, options?)`, and the same constructor/callable forms for `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError`, `URIError`, and `AggregateError` create a narrow Error object subset exposing `.name`, `.message`, `.cause`, `.toString()`, `.toLocaleString()`, and `.valueOf()`. Literal `{ cause }` options are stored as dynamic values, `AggregateError` stores `.errors`, and throwing one of these errors still stringifies into the existing exception string channel. Tests: `error_instances`, `error_constructors`, `error_more_constructors`, `aggregate_error_constructor`, `error_cause`
 - Nested try/catch with re-throw. Test: `exceptions`
 - Uncaught exceptions print `Uncaught: <msg>` and exit 1
 - Runtime: `tsc_try_push`, `tsc_try_pop`, `tsc_throw_str`, `tsc_rethrow`, `tsc_current_error` + `setjmp`/`longjmp`
@@ -647,6 +647,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dns_promises_lookup` | immediate dns.promises.lookup fulfilled result objects |
 | `enums` | numeric enum constants |
 | `error_constructors` | TypeError, RangeError, and SyntaxError constructors share Error object behavior |
+| `error_cause` | Error-family and AggregateError literal cause options exposed through .cause |
 | `error_instances` | Error object subset with name/message/stringification/valueOf and throw stringification |
 | `error_more_constructors` | ReferenceError, EvalError, and URIError constructors share Error object behavior |
 | `event_emitter` | synchronous EventEmitter listener registration, emit, once, removal, and listener counts |

@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Error-family constructors and `AggregateError` now accept literal `{ cause }` options and expose `.cause` as a dynamic value. Test: `error_cause`.
 - Callable `Date()` now returns the current local Date string without constructing a Date object, while `new Date()` keeps returning a Date instance. Test: `date_callable`.
 - `setFullYear()` and `setUTCFullYear()` now rebuild invalid Date receivers from the local/UTC epoch when given valid year arguments. Tests: `date_local_setters`, `date_utc_setters`.
 - Date instances now support `.toLocaleDateString()` and `.toLocaleTimeString()` in the bounded en-US local format subset. Test: `date_locale_parts`.

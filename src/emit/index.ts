@@ -14331,19 +14331,26 @@ class Emitter {
 
     private emitErrorConstructor(call: ts.CallExpression | ts.NewExpression, name: string): EmitResult {
         const args = call.arguments ?? [];
-        if (args.length > 1) unsupported(call, "Error expects optional message");
+        if (args.length > 2) unsupported(call, "Error expects optional message and options");
         const nameLit = `tsc_str_from_lit("${name}", ${name.length})`;
-        if (args.length === 0) return { c: `tsc_error_new_named(${nameLit}, tsc_str_from_lit("", 0))`, ty: T_ERROR };
-        const message = this.emitExpr(args[0]!);
-        return this.emitSequencedCall("tsc_error_new_named", T_ERROR, [
+        const specs: SequencedCallArg[] = [
             { value: { c: nameLit, ty: T_STRING } },
-            { value: message, target: T_STRING, node: args[0]! },
-        ]);
+        ];
+        if (args[0]) {
+            specs.push({ value: this.emitExpr(args[0]), target: T_STRING, node: args[0] });
+        } else {
+            specs.push({ value: { c: `tsc_str_from_lit("", 0)`, ty: T_STRING } });
+        }
+        if (args[1]) {
+            specs.push({ value: this.emitErrorCauseOption(args[1]), target: T_VALUE, node: args[1] });
+            return this.emitSequencedCall("tsc_error_new_named_cause", T_ERROR, specs);
+        }
+        return this.emitSequencedCall("tsc_error_new_named", T_ERROR, specs);
     }
 
     private emitAggregateErrorConstructor(call: ts.CallExpression | ts.NewExpression): EmitResult {
         const args = call.arguments ?? [];
-        if (args.length < 1 || args.length > 2) unsupported(call, "AggregateError expects errors and optional message");
+        if (args.length < 1 || args.length > 3) unsupported(call, "AggregateError expects errors, optional message, and options");
         const errors = this.emitExpr(args[0]!);
         const specs: SequencedCallArg[] = [
             { value: errors, target: arrayType(T_VALUE), node: args[0]! },
@@ -14352,9 +14359,34 @@ class Emitter {
             const message = this.emitExpr(args[1]);
             specs.push({ value: message, target: T_STRING, node: args[1] });
         }
-        return this.emitSequencedExpr(T_ERROR, specs, ([errorsC, messageC]) =>
-            `tsc_aggregate_error_new(${errorsC}, ${messageC ?? 'tsc_str_from_lit("", 0)'})`,
+        if (args[2]) {
+            specs.push({ value: this.emitErrorCauseOption(args[2]), target: T_VALUE, node: args[2] });
+        }
+        return this.emitSequencedExpr(T_ERROR, specs, ([errorsC, messageC, causeC]) =>
+            causeC
+                ? `tsc_aggregate_error_new_cause(${errorsC}, ${messageC ?? 'tsc_str_from_lit("", 0)'}, ${causeC})`
+                : `tsc_aggregate_error_new(${errorsC}, ${messageC ?? 'tsc_str_from_lit("", 0)'})`,
         );
+    }
+
+    private emitErrorCauseOption(options: ts.Expression): EmitResult {
+        let cur = options;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isObjectLiteralExpression(cur)) {
+            unsupported(options, "Error options must be an object literal in this subset");
+        }
+        for (const prop of cur.properties) {
+            if (ts.isSpreadAssignment(prop)) {
+                unsupported(prop, "Error options spread is not supported");
+            }
+            if (ts.isPropertyAssignment(prop) && this.staticPropertyName(prop.name) === "cause") {
+                return this.emitExpr(prop.initializer);
+            }
+            if (ts.isShorthandPropertyAssignment(prop) && prop.name.text === "cause") {
+                return this.emitExpr(prop.name);
+            }
+        }
+        return { c: "tsc_value_undefined()", ty: T_VALUE };
     }
 
     private emitArrayMethod(
@@ -22027,6 +22059,9 @@ class Emitter {
             }
             if (pa.name.text === "message") {
                 return { c: `${recv.c}->message`, ty: T_STRING };
+            }
+            if (pa.name.text === "cause") {
+                return { c: `${recv.c}->cause`, ty: T_VALUE };
             }
             if (pa.name.text === "errors") {
                 return { c: `(${recv.c}->errors ? ${recv.c}->errors : tsc_array_new(sizeof(tsc_value_t), 1))`, ty: arrayType(T_VALUE) };
