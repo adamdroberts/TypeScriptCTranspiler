@@ -1,3 +1,3 @@
 {
-  "description": "Date.toJSON returns null for invalid dates and ISO strings for valid dates"
+  "description": "Date.toJSON returns null for invalid dates, ISO strings for valid dates, and ignores evaluated key arguments"
 }

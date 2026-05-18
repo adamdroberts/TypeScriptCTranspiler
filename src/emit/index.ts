@@ -14269,8 +14269,12 @@ class Emitter {
                 if (call.arguments.length !== 0) unsupported(call, "Date.toTimeString expects no args");
                 return this.emitSequencedCall("tsc_date_to_time_string", T_STRING, [{ value: recv }]);
             case "toJSON":
-                if (call.arguments.length !== 0) unsupported(call, "Date.toJSON expects no args");
-                return this.emitSequencedCall("tsc_date_to_json", T_VALUE, [{ value: recv }]);
+                if (call.arguments.length > 1) unsupported(call, "Date.toJSON expects 0 or 1 args");
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [{ value: recv }, ...Array.from(call.arguments, (arg) => ({ value: this.emitExpr(arg), node: arg }))],
+                    ([date]) => `tsc_date_to_json(${date})`,
+                );
             case "hasOwnProperty":
             case "propertyIsEnumerable":
                 return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Date");

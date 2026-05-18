@@ -746,7 +746,7 @@ interface Date {
     toISOString(): string;
     toUTCString(): string;
     toGMTString(): string;
-    toJSON(): any;
+    toJSON(key?: any): any;
 }
 interface DateConstructor {
     (...args: any[]): string;
