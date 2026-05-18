@@ -13,11 +13,12 @@ console.log("read flag:", fs.readFileSync(syncPath, { flag: "r" }));
 console.log("read encoding flag:", readFileSync(syncPath, { encoding: "utf8", flag: "rs" }));
 
 appendFileSync(syncPath, "-beta", { encoding: "utf8", flag: "a" });
+fs.appendFileSync(syncPath, "-gamma", { flag: "as+" });
 console.log("append flag:", fs.readFileSync(syncPath, { encoding: "utf8", flag: "r" }));
 
-fs.appendFileSync(exclusivePath, "first", { flag: "ax" });
+fs.appendFileSync(exclusivePath, "first", { flag: "ax+" });
 try {
-    fs.appendFileSync(exclusivePath, "second", { flag: "ax" });
+    fs.appendFileSync(exclusivePath, "second", { flag: "ax+" });
     console.log("sync append exclusive: wrote");
 } catch (err: any) {
     console.log("sync append exclusive:", err);
@@ -30,7 +31,8 @@ fs.promises.readFile(promisePath, { encoding: "utf-8", flag: "r" }).then((text) 
     return text;
 });
 fs.promises.appendFile(promisePath, "-two", { flag: "a" });
-fs.promises.appendFile(promisePath, "-again", { flag: "ax" }).catch((reason: string): any => {
+fs.promises.appendFile(promisePath, "-three", { flag: "a+" });
+fs.promises.appendFile(promisePath, "-again", { flag: "ax+" }).catch((reason: string): any => {
     console.log("promise append exclusive:", reason);
 });
 console.log("promise append flag:", fs.readFileSync(promisePath));

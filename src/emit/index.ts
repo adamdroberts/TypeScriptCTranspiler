@@ -16851,10 +16851,11 @@ class Emitter {
             }
         };
         const checkFlag = (node: ts.Expression): void => {
-            if (!ts.isStringLiteralLike(node) || (node.text !== "a" && node.text !== "ax")) {
-                unsupported(node, `${label} only supports literal "a" or "ax" flags in this subset`);
+            const supportedFlags = ["a", "ax", "a+", "ax+", "as", "as+"];
+            if (!ts.isStringLiteralLike(node) || !supportedFlags.includes(node.text)) {
+                unsupported(node, `${label} only supports literal "a", "ax", "a+", "ax+", "as", or "as+" flags in this subset`);
             }
-            out.exclusive = node.text === "ax";
+            out.exclusive = node.text === "ax" || node.text === "ax+";
         };
         if (ts.isStringLiteralLike(options)) {
             checkEncoding(options);

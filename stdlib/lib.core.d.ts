@@ -845,7 +845,7 @@ interface FSWriteFileOptions extends FSEncodingOptions {
     flag?: FSWriteFileFlag;
     mode?: number;
 }
-type FSAppendFileFlag = "a" | "ax";
+type FSAppendFileFlag = "a" | "ax" | "a+" | "ax+" | "as" | "as+";
 interface FSAppendFileOptions extends FSEncodingOptions {
     flag?: FSAppendFileFlag;
     mode?: number;
