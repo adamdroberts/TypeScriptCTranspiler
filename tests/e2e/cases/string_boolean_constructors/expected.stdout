@@ -6,3 +6,4 @@ string undefined: undefined
 string dynamic: 7
 boolean values: true false false true false
 boolean dynamic: false
+ignored: s true false stbc

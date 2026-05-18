@@ -25,14 +25,14 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` -> 661 passed.
 
 ### Primitives
 - `number` → C `double` with shortest round-trip formatting. Runtime: `tsc_str_from_num`
-- Callable `Number(value?)` returns JS-style numeric coercion for typed and dynamic values. Test: `number_constructor`
+- Callable `Number(value?, ...ignored)` returns JS-style numeric coercion for typed and dynamic values while evaluating ignored extra arguments. Test: `number_constructor`
 - Number primitives expose `.toString(radix?)`, `.toFixed(fractionDigits?)`, `.toExponential(fractionDigits?)`, `.toPrecision(precision?)`, `.toLocaleString()`, `.valueOf()`, and inherited `hasOwnProperty` / `propertyIsEnumerable`; non-decimal radix conversion uses `tsc_str_from_num_radix`, fixed-point formatting uses `tsc_str_from_num_fixed`, scientific notation uses `tsc_str_from_num_exponential`, and significant-digit formatting uses `tsc_str_from_num_precision`. Tests: `primitive_object_methods`, `number_to_fixed`, `number_to_exponential`, `number_to_precision`
 - `Number.isFinite`, `Number.isNaN`, `Number.isInteger`, and `Number.isSafeInteger` accept any typed or dynamic value, evaluate ignored extra arguments, and return `false` for non-number inputs; global `isNaN` and `isFinite` coerce typed and dynamic values with JS-style number conversion while evaluating ignored extra arguments. Tests: `number_static_more`, `global_number_predicates`
 - `string` → immutable UTF-8 `tsc_str_t*`. Runtime: `tsc_str_from_lit`, `tsc_str_concat`, `tsc_str_eq`, `tsc_str_cmp`
-- Callable `String(value?)` returns JS-style string coercion for typed and dynamic values. Test: `string_boolean_constructors`
+- Callable `String(value?, ...ignored)` returns JS-style string coercion for typed and dynamic values while evaluating ignored extra arguments. Test: `string_boolean_constructors`
 - `boolean` → C `bool` (stdbool.h)
 - Boolean primitives expose `.toString()`, `.toLocaleString()`, `.valueOf()`, and inherited `hasOwnProperty` / `propertyIsEnumerable`. Test: `primitive_object_methods`
-- Callable `Boolean(value?)` returns JS-style truthiness for typed and dynamic values. Test: `string_boolean_constructors`
+- Callable `Boolean(value?, ...ignored)` returns JS-style truthiness for typed and dynamic values while evaluating ignored extra arguments. Test: `string_boolean_constructors`
 - `void` / `undefined` / `null` as `NULL` for pointer-typed contexts
 
 ### Operators

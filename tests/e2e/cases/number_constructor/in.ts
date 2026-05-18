@@ -6,3 +6,10 @@ console.log("nullish:", Number(null), Number(undefined));
 
 const dynamicString: any = JSON.parse("\"5.25\"");
 console.log("dynamic:", Number(dynamicString));
+
+let seen = "";
+function mark(label: string): string {
+    seen += label;
+    return label;
+}
+console.log("ignored:", Number(8, mark("n")), Number(dynamicString, mark("d")), seen);

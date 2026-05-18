@@ -16153,18 +16153,23 @@ class Emitter {
     }
 
     private emitNumberConstructor(call: ts.CallExpression): EmitResult {
-        if (call.arguments.length > 1) unsupported(call, "Number expects 0 or 1 args");
         const arg = call.arguments[0];
         if (!arg) return { c: "0.0", ty: T_NUMBER };
         const r = this.emitExpr(arg);
-        if (r.ty.kind === "number") return r;
-        if (r.ty.kind === "boolean") return { c: `((${r.c}) ? 1.0 : 0.0)`, ty: T_NUMBER };
+        const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
+        if (r.ty.kind === "number") {
+            return this.emitSequencedExpr(T_NUMBER, [{ value: r }, ...ignored], ([value]) => value);
+        }
+        if (r.ty.kind === "boolean") {
+            return this.emitSequencedExpr(T_NUMBER, [{ value: r }, ...ignored], ([value]) => `((${value}) ? 1.0 : 0.0)`);
+        }
         if (r.ty.kind === "void" || r.ty.kind === "never") {
             const value = arg.kind === ts.SyntaxKind.NullKeyword ? "0.0" : "NAN";
-            return { c: `({ (void)(${r.c}); ${value}; })`, ty: T_NUMBER };
+            return this.emitSequencedExpr(T_NUMBER, [{ value: r }, ...ignored], () => value);
         }
         return this.emitSequencedExpr(T_NUMBER, [
             { value: r, target: T_VALUE, node: arg },
+            ...ignored,
         ], ([v]) => `tsc_value_as_num(${v})`);
     }
 
@@ -16213,29 +16218,30 @@ class Emitter {
     }
 
     private emitBooleanConstructor(call: ts.CallExpression): EmitResult {
-        if (call.arguments.length > 1) unsupported(call, "Boolean expects 0 or 1 args");
         const arg = call.arguments[0];
         if (!arg) return { c: "false", ty: T_BOOLEAN };
         const r = this.emitExpr(arg);
+        const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
         if (r.ty.kind === "void" || r.ty.kind === "never") {
-            return { c: `({ (void)(${r.c}); false; })`, ty: T_BOOLEAN };
+            return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], () => "false");
         }
-        return { c: this.truthyC(r, arg), ty: T_BOOLEAN };
+        return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], ([value]) =>
+            this.truthyC({ c: value, ty: r.ty }, arg),
+        );
     }
 
     private emitStringConstructor(call: ts.CallExpression): EmitResult {
-        if (call.arguments.length > 1) unsupported(call, "String expects 0 or 1 args");
         const arg = call.arguments[0];
         if (!arg) return { c: `tsc_str_from_lit("", 0)`, ty: T_STRING };
         const r = this.emitExpr(arg);
+        const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
         if (r.ty.kind === "void" || r.ty.kind === "never") {
             const text = arg.kind === ts.SyntaxKind.NullKeyword ? "null" : "undefined";
-            return {
-                c: `({ (void)(${r.c}); ${this.stringLit(text)}; })`,
-                ty: T_STRING,
-            };
+            return this.emitSequencedExpr(T_STRING, [{ value: r }, ...ignored], () => this.stringLit(text));
         }
-        return { c: this.coerceToString(r, arg), ty: T_STRING };
+        return this.emitSequencedExpr(T_STRING, [{ value: r }, ...ignored], ([value]) =>
+            this.coerceToString({ c: value, ty: r.ty }, arg),
+        );
     }
 
     private emitSymbolConstructor(call: ts.CallExpression): EmitResult {

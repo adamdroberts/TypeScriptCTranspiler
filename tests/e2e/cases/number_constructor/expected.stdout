@@ -4,3 +4,4 @@ bools: 1 0
 strings: 42.5 0 NaN
 nullish: 0 NaN
 dynamic: 5.25
+ignored: 8 5.25 nd

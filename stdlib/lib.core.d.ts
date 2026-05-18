@@ -114,7 +114,7 @@ interface String extends Iterable<string> {
     [Symbol.iterator](): IterableIterator<string>;
 }
 interface StringConstructor {
-    (value?: any): string;
+    (value?: any, ...ignored: any[]): string;
     fromCharCode(...codes: number[]): string;
     fromCodePoint(...codes: number[]): string;
     raw(strings: TemplateStringsArray, ...substitutions: any[]): string;
@@ -127,7 +127,7 @@ interface Boolean {
     valueOf(): boolean;
 }
 interface BooleanConstructor {
-    (value?: any): boolean;
+    (value?: any, ...ignored: any[]): boolean;
 }
 declare var Boolean: BooleanConstructor;
 interface Number {
@@ -762,7 +762,7 @@ interface DateConstructor {
 declare var Date: DateConstructor;
 
 interface NumberConstructor {
-    (value?: any): number;
+    (value?: any, ...ignored: any[]): number;
     readonly EPSILON: number;
     readonly MAX_SAFE_INTEGER: number;
     readonly MAX_VALUE: number;
