@@ -10232,7 +10232,13 @@ class Emitter {
             return this.emitOsCall(call, memberName);
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Date") {
-            if (memberName === "now") return { c: `tsc_date_now()`, ty: T_NUMBER };
+            if (memberName === "now") {
+                return this.emitSequencedExpr(
+                    T_NUMBER,
+                    Array.from(call.arguments, (arg) => ({ value: this.emitExpr(arg), node: arg })),
+                    () => "tsc_date_now()",
+                );
+            }
             if (memberName === "parse") {
                 const arg = call.arguments[0];
                 if (!arg || call.arguments.length !== 1) unsupported(call, "Date.parse expects one string argument");
@@ -14102,6 +14108,13 @@ class Emitter {
         unsupported(call, `URL method .${method}`);
     }
 
+    private dateIgnoredArgSpecs(recv: EmitResult, args: readonly ts.Expression[]): SequencedCallArg[] {
+        return [
+            { value: recv },
+            ...Array.from(args, (arg) => ({ value: this.emitExpr(arg), node: arg })),
+        ];
+    }
+
     private emitDateMethod(
         call: ts.CallExpression,
         recv: EmitResult,
@@ -14110,8 +14123,11 @@ class Emitter {
         switch (method) {
             case "getTime":
             case "valueOf":
-                if (call.arguments.length !== 0) unsupported(call, `Date.${method} expects no args`);
-                return this.emitSequencedCall("tsc_date_get_time", T_NUMBER, [{ value: recv }]);
+                return this.emitSequencedExpr(
+                    T_NUMBER,
+                    this.dateIgnoredArgSpecs(recv, call.arguments),
+                    ([date]) => `tsc_date_get_time(${date})`,
+                );
             case "setTime": {
                 const arg = call.arguments[0];
                 if (!arg || call.arguments.length !== 1) unsupported(call, "Date.setTime expects one numeric timestamp");
@@ -14192,7 +14208,6 @@ class Emitter {
             case "getUTCMinutes":
             case "getUTCSeconds":
             case "getUTCMilliseconds": {
-                if (call.arguments.length !== 0) unsupported(call, `Date.${method} expects no args`);
                 const part = {
                     getUTCFullYear: 0,
                     getUTCMonth: 1,
@@ -14203,7 +14218,11 @@ class Emitter {
                     getUTCSeconds: 6,
                     getUTCMilliseconds: 7,
                 }[method]!;
-                return this.emitSequencedExpr(T_NUMBER, [{ value: recv }], ([date]) => `tsc_date_get_utc_part(${date}, ${part})`);
+                return this.emitSequencedExpr(
+                    T_NUMBER,
+                    this.dateIgnoredArgSpecs(recv, call.arguments),
+                    ([date]) => `tsc_date_get_utc_part(${date}, ${part})`,
+                );
             }
             case "getFullYear":
             case "getYear":
@@ -14214,7 +14233,6 @@ class Emitter {
             case "getMinutes":
             case "getSeconds":
             case "getMilliseconds": {
-                if (call.arguments.length !== 0) unsupported(call, `Date.${method} expects no args`);
                 const part = {
                     getFullYear: 0,
                     getYear: 0,
@@ -14226,7 +14244,7 @@ class Emitter {
                     getSeconds: 6,
                     getMilliseconds: 7,
                 }[method]!;
-                return this.emitSequencedExpr(T_NUMBER, [{ value: recv }], ([date]) => {
+                return this.emitSequencedExpr(T_NUMBER, this.dateIgnoredArgSpecs(recv, call.arguments), ([date]) => {
                     const value = `tsc_date_get_local_part(${date}, ${part})`;
                     return method === "getYear" ? `(${value} - 1900.0)` : value;
                 });
@@ -14241,38 +14259,64 @@ class Emitter {
                 ], ([date, year]) => `tsc_date_set_legacy_year(${date}, ${year!})`);
             }
             case "getTimezoneOffset":
-                if (call.arguments.length !== 0) unsupported(call, "Date.getTimezoneOffset expects no args");
-                return this.emitSequencedCall("tsc_date_get_timezone_offset", T_NUMBER, [{ value: recv }]);
+                return this.emitSequencedExpr(
+                    T_NUMBER,
+                    this.dateIgnoredArgSpecs(recv, call.arguments),
+                    ([date]) => `tsc_date_get_timezone_offset(${date})`,
+                );
             case "toString":
-                if (call.arguments.length !== 0) unsupported(call, `Date.${method} expects no args`);
-                return this.emitSequencedCall("tsc_date_to_string", T_STRING, [{ value: recv }]);
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    this.dateIgnoredArgSpecs(recv, call.arguments),
+                    ([date]) => `tsc_date_to_string(${date})`,
+                );
             case "toLocaleString":
-                if (call.arguments.length !== 0) unsupported(call, "Date.toLocaleString expects no args");
-                return this.emitSequencedCall("tsc_date_to_locale_string", T_STRING, [{ value: recv }]);
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    this.dateIgnoredArgSpecs(recv, call.arguments),
+                    ([date]) => `tsc_date_to_locale_string(${date})`,
+                );
             case "toLocaleDateString":
-                if (call.arguments.length !== 0) unsupported(call, "Date.toLocaleDateString expects no args");
-                return this.emitSequencedCall("tsc_date_to_locale_date_string", T_STRING, [{ value: recv }]);
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    this.dateIgnoredArgSpecs(recv, call.arguments),
+                    ([date]) => `tsc_date_to_locale_date_string(${date})`,
+                );
             case "toLocaleTimeString":
-                if (call.arguments.length !== 0) unsupported(call, "Date.toLocaleTimeString expects no args");
-                return this.emitSequencedCall("tsc_date_to_locale_time_string", T_STRING, [{ value: recv }]);
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    this.dateIgnoredArgSpecs(recv, call.arguments),
+                    ([date]) => `tsc_date_to_locale_time_string(${date})`,
+                );
             case "toISOString":
-                if (call.arguments.length !== 0) unsupported(call, "Date.toISOString expects no args");
-                return this.emitSequencedCall("tsc_date_to_iso_string", T_STRING, [{ value: recv }]);
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    this.dateIgnoredArgSpecs(recv, call.arguments),
+                    ([date]) => `tsc_date_to_iso_string(${date})`,
+                );
             case "toGMTString":
             case "toUTCString":
-                if (call.arguments.length !== 0) unsupported(call, `Date.${method} expects no args`);
-                return this.emitSequencedCall("tsc_date_to_utc_string", T_STRING, [{ value: recv }]);
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    this.dateIgnoredArgSpecs(recv, call.arguments),
+                    ([date]) => `tsc_date_to_utc_string(${date})`,
+                );
             case "toDateString":
-                if (call.arguments.length !== 0) unsupported(call, "Date.toDateString expects no args");
-                return this.emitSequencedCall("tsc_date_to_date_string", T_STRING, [{ value: recv }]);
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    this.dateIgnoredArgSpecs(recv, call.arguments),
+                    ([date]) => `tsc_date_to_date_string(${date})`,
+                );
             case "toTimeString":
-                if (call.arguments.length !== 0) unsupported(call, "Date.toTimeString expects no args");
-                return this.emitSequencedCall("tsc_date_to_time_string", T_STRING, [{ value: recv }]);
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    this.dateIgnoredArgSpecs(recv, call.arguments),
+                    ([date]) => `tsc_date_to_time_string(${date})`,
+                );
             case "toJSON":
-                if (call.arguments.length > 1) unsupported(call, "Date.toJSON expects 0 or 1 args");
                 return this.emitSequencedExpr(
                     T_VALUE,
-                    [{ value: recv }, ...Array.from(call.arguments, (arg) => ({ value: this.emitExpr(arg), node: arg }))],
+                    this.dateIgnoredArgSpecs(recv, call.arguments),
                     ([date]) => `tsc_date_to_json(${date})`,
                 );
             case "hasOwnProperty":
