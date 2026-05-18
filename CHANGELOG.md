@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Callable `Date(...)` now accepts and evaluates arbitrary arguments for side effects, then ignores them and returns the current local Date string like JavaScript. Test: `date_callable`.
 - `Date.prototype.toISOString()` now throws `RangeError: Invalid time value` for invalid Date receivers while preserving UTC ISO output for valid dates. Test: `date_to_iso_string`.
 - `Date.prototype.toJSON()` now returns `null` for invalid Date receivers while preserving UTC ISO strings for valid dates. Test: `date_to_json_invalid`.
 - Error-family constructors and `AggregateError` now accept literal `{ cause }` options and expose `.cause` as a dynamic value. Test: `error_cause`.

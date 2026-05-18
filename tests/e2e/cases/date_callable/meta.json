@@ -1,3 +1,3 @@
 {
-  "description": "callable Date returns current local date string without constructing Date object"
+  "description": "callable Date returns current local date string and ignores evaluated arguments"
 }
