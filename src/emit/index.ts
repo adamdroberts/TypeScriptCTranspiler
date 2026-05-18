@@ -9981,12 +9981,25 @@ class Emitter {
             return this.emitSequencedCall(moduleNsMember, retType, specs);
         }
 
-        const earlyRecvType = this.prepareType(mapType(recvExpr, this.checker));
-        if (earlyRecvType.kind === "fsstats") {
-            return this.emitFsStatsMethod(call, this.emitExpr(recvExpr), memberName);
-        }
-        if (earlyRecvType.kind === "fsdirent") {
-            return this.emitFsDirentMethod(call, this.emitExpr(recvExpr), memberName);
+        if (
+            memberName === "isFile" ||
+            memberName === "isDirectory" ||
+            memberName === "isSymbolicLink" ||
+            memberName === "isBlockDevice" ||
+            memberName === "isCharacterDevice" ||
+            memberName === "isFIFO" ||
+            memberName === "isSocket" ||
+            memberName === "toLocaleString" ||
+            memberName === "toString" ||
+            memberName === "valueOf"
+        ) {
+            const earlyRecvType = this.prepareType(mapType(recvExpr, this.checker));
+            if (earlyRecvType.kind === "fsstats") {
+                return this.emitFsStatsMethod(call, this.emitExpr(recvExpr), memberName);
+            }
+            if (earlyRecvType.kind === "fsdirent") {
+                return this.emitFsDirentMethod(call, this.emitExpr(recvExpr), memberName);
+            }
         }
 
         if (ts.isIdentifier(pa.name) && this.isNamespaceReceiver(recvExpr)) {
