@@ -9850,8 +9850,66 @@ tsc_str_t* tsc_date_to_time_string(const tsc_date_t* d) {
     return tsc_str_from_cstr(buf);
 }
 
+tsc_str_t* tsc_date_to_locale_string(const tsc_date_t* d) {
+    if (!d || isnan(d->ms)) return tsc_str_from_lit("Invalid Date", 12);
+    double seconds_double = floor(d->ms / 1000.0);
+    time_t seconds = (time_t)seconds_double;
+    struct tm tm;
+    if (!localtime_r(&seconds, &tm)) return tsc_str_from_lit("Invalid Date", 12);
+
+    int hour = tm.tm_hour % 12;
+    if (hour == 0) hour = 12;
+    const char* ampm = tm.tm_hour < 12 ? "AM" : "PM";
+    char buf[32];
+    snprintf(
+        buf,
+        sizeof(buf),
+        "%d/%d/%04d, %d:%02d:%02d %s",
+        tm.tm_mon + 1,
+        tm.tm_mday,
+        tm.tm_year + 1900,
+        hour,
+        tm.tm_min,
+        tm.tm_sec,
+        ampm
+    );
+    return tsc_str_from_cstr(buf);
+}
+
 tsc_str_t* tsc_date_to_string(const tsc_date_t* d) {
-    return d ? tsc_str_from_num(d->ms) : tsc_str_from_lit("Invalid Date", 12);
+    if (!d || isnan(d->ms)) return tsc_str_from_lit("Invalid Date", 12);
+    double seconds_double = floor(d->ms / 1000.0);
+    time_t seconds = (time_t)seconds_double;
+    struct tm tm;
+    if (!localtime_r(&seconds, &tm)) return tsc_str_from_lit("Invalid Date", 12);
+
+    static const char* weekdays[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+    static const char* months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+    int offset_minutes = (int)-tsc_date_get_timezone_offset(d);
+    char sign = offset_minutes < 0 ? '-' : '+';
+    if (offset_minutes < 0) offset_minutes = -offset_minutes;
+    int offset_hours = offset_minutes / 60;
+    int offset_remainder = offset_minutes % 60;
+    const char* zone_name = offset_minutes == 0 ? "Coordinated Universal Time" : "Local Time";
+
+    char buf[96];
+    snprintf(
+        buf,
+        sizeof(buf),
+        "%s %s %02d %04d %02d:%02d:%02d GMT%c%02d%02d (%s)",
+        weekdays[tm.tm_wday],
+        months[tm.tm_mon],
+        tm.tm_mday,
+        tm.tm_year + 1900,
+        tm.tm_hour,
+        tm.tm_min,
+        tm.tm_sec,
+        sign,
+        offset_hours,
+        offset_remainder,
+        zone_name
+    );
+    return tsc_str_from_cstr(buf);
 }
 
 tsc_error_t* tsc_error_new(tsc_str_t* message) {

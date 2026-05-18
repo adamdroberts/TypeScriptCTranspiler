@@ -320,6 +320,7 @@ tsc_str_t* tsc_date_to_iso_string(const tsc_date_t* d);
 tsc_str_t* tsc_date_to_utc_string(const tsc_date_t* d);
 tsc_str_t* tsc_date_to_date_string(const tsc_date_t* d);
 tsc_str_t* tsc_date_to_time_string(const tsc_date_t* d);
+tsc_str_t* tsc_date_to_locale_string(const tsc_date_t* d);
 tsc_str_t* tsc_date_to_string(const tsc_date_t* d);
 
 /* ------------- Error ------------- */

@@ -14239,10 +14239,12 @@ class Emitter {
             case "getTimezoneOffset":
                 if (call.arguments.length !== 0) unsupported(call, "Date.getTimezoneOffset expects no args");
                 return this.emitSequencedCall("tsc_date_get_timezone_offset", T_NUMBER, [{ value: recv }]);
-            case "toLocaleString":
             case "toString":
                 if (call.arguments.length !== 0) unsupported(call, `Date.${method} expects no args`);
                 return this.emitSequencedCall("tsc_date_to_string", T_STRING, [{ value: recv }]);
+            case "toLocaleString":
+                if (call.arguments.length !== 0) unsupported(call, "Date.toLocaleString expects no args");
+                return this.emitSequencedCall("tsc_date_to_locale_string", T_STRING, [{ value: recv }]);
             case "toISOString":
                 if (call.arguments.length !== 0) unsupported(call, "Date.toISOString expects no args");
                 return this.emitSequencedCall("tsc_date_to_iso_string", T_STRING, [{ value: recv }]);

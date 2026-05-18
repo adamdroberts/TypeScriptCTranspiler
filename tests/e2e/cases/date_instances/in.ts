@@ -1,3 +1,5 @@
+process.env.TZ = "UTC";
+
 const fixed = new Date(1234);
 const later = new Date(fixed.valueOf() + 66);
 const now = new Date();
