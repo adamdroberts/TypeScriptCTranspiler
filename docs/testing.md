@@ -257,7 +257,7 @@ e2e: url_parse … OK
 e2e: void_operator … OK
 e2e: wordcount … OK
 
-651 passed, 0 failed
+652 passed, 0 failed
 ```
 
 Non-zero exit if any case fails.

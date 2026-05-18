@@ -16762,8 +16762,8 @@ class Emitter {
             unsupported(node, `${label} only supports UTF-8, buffer, or null encoding options in this subset`);
         };
         const checkFlag = (node: ts.Expression): void => {
-            if (!ts.isStringLiteralLike(node) || (node.text !== "r" && node.text !== "rs")) {
-                unsupported(node, `${label} only supports literal "r" or "rs" flags in this subset`);
+            if (!ts.isStringLiteralLike(node) || !["r", "rs", "r+", "rs+"].includes(node.text)) {
+                unsupported(node, `${label} only supports literal "r", "rs", "r+", or "rs+" flags in this subset`);
             }
         };
         if (ts.isStringLiteralLike(options)) {

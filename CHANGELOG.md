@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- `fs.readFileSync` / immediate `fs.promises.readFile` now accept literal read flags `{ flag: "r+" | "rs+" }` alongside the existing read-only flags. Test: `fs_read_file_plus_flags`.
 - `EventTarget.addEventListener` / `removeEventListener` now accept literal listener options, with `{ once: true }` removing listeners before invocation and literal `capture` / `passive` accepted as inert compatibility flags. Test: `event_target_options`.
 - Supported fs calls now accept `file:` URL path arguments in the bounded `PathLike` subset for sync, named-import, and immediate-promise forms by resolving URL objects to their filesystem pathname before runtime dispatch. Test: `fs_file_url_path_like`.
 - Supported fs calls now accept Buffer path arguments in the bounded `PathLike` subset for sync, named-import, and immediate-promise forms by coercing Buffer paths to UTF-8 strings before runtime dispatch. Test: `fs_buffer_path_like`.
@@ -23,7 +24,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Date instances now expose local-time component getters (`getFullYear`, `getMonth`, `getDate`, `getDay`, `getHours`, `getMinutes`, `getSeconds`, `getMilliseconds`) plus `getTimezoneOffset()`, with `process.env.TZ` mutations refreshing the C timezone cache. Test: `date_local_getters`.
 - `fs.readFileSync(path, null | { encoding: null })` now returns a Buffer, matching the existing explicit `"buffer"` forms. Test: `fs_read_file_null_buffer_options`.
 - `fs.writeFileSync` / `fs.appendFileSync` and their immediate `fs.promises` counterparts now accept numeric `{ mode }` options for newly created files while preserving existing-file modes. Test: `fs_write_append_mode_options`.
-- `fs.readFileSync` / immediate `fs.promises.readFile` now accept literal read flags `{ flag: "r" | "rs" }`, and `fs.appendFileSync` / immediate `fs.promises.appendFile` accept literal append flags `{ flag: "a" | "ax" }` for exclusive append-create behavior. Test: `fs_file_flag_options`.
+- `fs.readFileSync` / immediate `fs.promises.readFile` now accept literal read flags `{ flag: "r" | "rs" | "r+" | "rs+" }`, and `fs.appendFileSync` / immediate `fs.promises.appendFile` accept literal append flags `{ flag: "a" | "ax" }` for exclusive append-create behavior. Tests: `fs_file_flag_options`, `fs_read_file_plus_flags`.
 - `fs.readFileSync(path, "buffer" | { encoding: "buffer" })` now returns a Buffer for explicit buffer encoding options. Test: `fs_read_file_buffer_options`.
 - Added a synchronous global `Event` / `EventTarget` subset with typed listener adapters, duplicate listener suppression, identity-based removal, same-target dispatch, `type` / `target` / `currentTarget` / `defaultPrevented` / `cancelable`, cancelable event options, and `preventDefault()` return-value semantics. Test: `event_target`.
 - `setTimeout(callback, 0, ...args)` now supports a bounded before-exit zero-delay callback queue with up to three typed callback arguments, drained after next ticks and microtasks and before `setImmediate`; nonzero/libuv-backed timers remain deferred. Test: `set_timeout_zero`.

@@ -832,7 +832,7 @@ interface FSEncodingOptions {
 interface FSBufferEncodingOptions {
     encoding: FSBufferEncoding | null;
 }
-type FSReadFileFlag = "r" | "rs";
+type FSReadFileFlag = "r" | "rs" | "r+" | "rs+";
 interface FSReadFileOptions extends FSEncodingOptions {
     flag?: FSReadFileFlag;
 }

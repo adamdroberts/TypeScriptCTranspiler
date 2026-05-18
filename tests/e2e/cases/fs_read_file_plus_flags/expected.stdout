@@ -1,0 +1,4 @@
+sync r+: plus flags
+named rs+: plus flags
+promise r+: plus flags
+promise rs+ buffer: plus flags
