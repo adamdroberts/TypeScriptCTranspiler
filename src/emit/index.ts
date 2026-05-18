@@ -14333,16 +14333,15 @@ class Emitter {
 
     private emitDateStaticUtc(call: ts.CallExpression): EmitResult {
         const args = call.arguments;
-        if (args.length > 7) unsupported(call, "Date.UTC expects 0 to 7 numeric args");
         const defaults = ["NAN", "0.0", "1.0", "0.0", "0.0", "0.0", "0.0"];
         const specs: SequencedCallArg[] = [];
         for (let i = 0; i < args.length; i++) {
             const arg = args[i]!;
             const value = this.emitExpr(arg);
-            specs.push({ value, target: T_NUMBER, node: arg });
+            specs.push({ value, target: i < 7 ? T_NUMBER : undefined, node: arg });
         }
         return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
-            const all = [...vals];
+            const all = vals.slice(0, 7);
             while (all.length < 7) {
                 all.push(defaults[all.length]!);
             }
@@ -21612,11 +21611,10 @@ class Emitter {
             const args = n.arguments ?? [];
             if (args.length === 0) return { c: "tsc_date_new_now()", ty: T_DATE };
             if (args.length >= 2) {
-                if (args.length > 7) unsupported(n, "new Date(year, month, ...) expects 2 to 7 numeric args");
                 const emitted = args.map((arg) => this.emitExpr(arg));
                 return this.emitSequencedExpr(
                     T_DATE,
-                    emitted.map((value, i) => ({ value, target: T_NUMBER, node: args[i] })),
+                    emitted.map((value, i) => ({ value, target: i < 7 ? T_NUMBER : undefined, node: args[i] })),
                     (vals) => {
                         const all = [
                             vals[0]!,

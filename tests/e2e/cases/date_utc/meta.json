@@ -1,3 +1,3 @@
 {
-  "description": "Date.UTC optional argument defaults and numeric normalization"
+  "description": "Date.UTC optional defaults, ignored extras, and numeric normalization"
 }

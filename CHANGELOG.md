@@ -12,9 +12,10 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- `Date.UTC(...)` and `new Date(year, month, ...)` now evaluate and ignore arguments beyond the seventh JavaScript date component instead of rejecting them. Tests: `date_utc`, `date_local_constructor`.
 - `Date.parse(text?)` now supports JavaScript optional-argument behavior, returning `NaN` with no argument and evaluating then ignoring extra arguments. Test: `date_parse`.
 - Zero-argument Date statics/methods now evaluate and ignore extra call arguments where JavaScript does, including `Date.now()`, getters, string formatters, `valueOf()`, and `toJSON(...)`. Test: `date_ignored_arguments`.
-- `Date.UTC()` now supports JavaScript optional-argument defaults, returning `NaN` with no year and defaulting one-argument calls to January 1 of that year. Test: `date_utc`.
+- `Date.UTC()` now supports JavaScript optional-argument defaults, returning `NaN` with no year, defaulting one-argument calls to January 1 of that year, and evaluating then ignoring arguments beyond the seventh date component. Test: `date_utc`.
 - `Date.prototype.toJSON(key?)` now accepts and evaluates the optional key argument before ignoring it, while preserving invalid-date `null` and valid-date UTC ISO results. Test: `date_to_json_invalid`.
 - Callable `Date(...)` now accepts and evaluates arbitrary arguments for side effects, then ignores them and returns the current local Date string like JavaScript. Test: `date_callable`.
 - `Date.prototype.toISOString()` now throws `RangeError: Invalid time value` for invalid Date receivers while preserving UTC ISO output for valid dates. Test: `date_to_iso_string`.

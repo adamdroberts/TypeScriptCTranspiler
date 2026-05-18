@@ -751,10 +751,10 @@ interface Date {
 interface DateConstructor {
     (...args: any[]): string;
     new(value?: number | string | Date): Date;
-    new(year: number, month: number, date?: number, hours?: number, minutes?: number, seconds?: number, ms?: number): Date;
+    new(year: number, month: number, date?: number, hours?: number, minutes?: number, seconds?: number, ms?: number, ...ignored: any[]): Date;
     now(): number;
     parse(text?: any): number;
-    UTC(year?: number, month?: number, date?: number, hours?: number, minutes?: number, seconds?: number, ms?: number): number;
+    UTC(year?: number, month?: number, date?: number, hours?: number, minutes?: number, seconds?: number, ms?: number, ...ignored: any[]): number;
 }
 declare var Date: DateConstructor;
 
