@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Date instances now support `.toLocaleDateString()` and `.toLocaleTimeString()` in the bounded en-US local format subset. Test: `date_locale_parts`.
 - Date instances now render `.toString()` / `String(date)` as local date-time strings and `.toLocaleString()` as a bounded en-US local format. Test: `date_instances`.
 - Date instances now support `.toTimeString()` local time and timezone formatting. Test: `date_to_time_string`.
 - Date instances now support `.toDateString()` local date formatting. Test: `date_to_date_string`.

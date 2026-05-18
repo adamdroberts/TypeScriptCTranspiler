@@ -9876,6 +9876,33 @@ tsc_str_t* tsc_date_to_locale_string(const tsc_date_t* d) {
     return tsc_str_from_cstr(buf);
 }
 
+tsc_str_t* tsc_date_to_locale_date_string(const tsc_date_t* d) {
+    if (!d || isnan(d->ms)) return tsc_str_from_lit("Invalid Date", 12);
+    double seconds_double = floor(d->ms / 1000.0);
+    time_t seconds = (time_t)seconds_double;
+    struct tm tm;
+    if (!localtime_r(&seconds, &tm)) return tsc_str_from_lit("Invalid Date", 12);
+
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d/%d/%04d", tm.tm_mon + 1, tm.tm_mday, tm.tm_year + 1900);
+    return tsc_str_from_cstr(buf);
+}
+
+tsc_str_t* tsc_date_to_locale_time_string(const tsc_date_t* d) {
+    if (!d || isnan(d->ms)) return tsc_str_from_lit("Invalid Date", 12);
+    double seconds_double = floor(d->ms / 1000.0);
+    time_t seconds = (time_t)seconds_double;
+    struct tm tm;
+    if (!localtime_r(&seconds, &tm)) return tsc_str_from_lit("Invalid Date", 12);
+
+    int hour = tm.tm_hour % 12;
+    if (hour == 0) hour = 12;
+    const char* ampm = tm.tm_hour < 12 ? "AM" : "PM";
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d:%02d:%02d %s", hour, tm.tm_min, tm.tm_sec, ampm);
+    return tsc_str_from_cstr(buf);
+}
+
 tsc_str_t* tsc_date_to_string(const tsc_date_t* d) {
     if (!d || isnan(d->ms)) return tsc_str_from_lit("Invalid Date", 12);
     double seconds_double = floor(d->ms / 1000.0);

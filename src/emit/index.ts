@@ -14245,6 +14245,12 @@ class Emitter {
             case "toLocaleString":
                 if (call.arguments.length !== 0) unsupported(call, "Date.toLocaleString expects no args");
                 return this.emitSequencedCall("tsc_date_to_locale_string", T_STRING, [{ value: recv }]);
+            case "toLocaleDateString":
+                if (call.arguments.length !== 0) unsupported(call, "Date.toLocaleDateString expects no args");
+                return this.emitSequencedCall("tsc_date_to_locale_date_string", T_STRING, [{ value: recv }]);
+            case "toLocaleTimeString":
+                if (call.arguments.length !== 0) unsupported(call, "Date.toLocaleTimeString expects no args");
+                return this.emitSequencedCall("tsc_date_to_locale_time_string", T_STRING, [{ value: recv }]);
             case "toISOString":
                 if (call.arguments.length !== 0) unsupported(call, "Date.toISOString expects no args");
                 return this.emitSequencedCall("tsc_date_to_iso_string", T_STRING, [{ value: recv }]);
