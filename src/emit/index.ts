@@ -8773,6 +8773,21 @@ class Emitter {
         if (this.isErrorConstructorName(name)) {
             return this.emitErrorConstructor(call, name);
         }
+        if (name === "encodeURI" || name === "encodeURIComponent" || name === "decodeURI" || name === "decodeURIComponent") {
+            if (call.arguments.length < 1) unsupported(call, `${name} expects at least 1 arg`);
+            const arg = call.arguments[0]!;
+            const value = this.emitExpr(arg);
+            const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
+            let fn = "";
+            if (name === "encodeURI") fn = "tsc_str_encode_uri";
+            if (name === "encodeURIComponent") fn = "tsc_str_encode_uri_component";
+            if (name === "decodeURI") fn = "tsc_str_decode_uri";
+            if (name === "decodeURIComponent") fn = "tsc_str_decode_uri_component";
+            return this.emitSequencedCall(fn, T_STRING, [
+                { value, target: T_STRING, node: arg },
+                ...ignored,
+            ]);
+        }
         if (name === "isNaN") {
             if (call.arguments.length < 1) unsupported(call, "isNaN expects at least 1 arg");
             return this.emitGlobalNumberPredicate(call, "isNaN");

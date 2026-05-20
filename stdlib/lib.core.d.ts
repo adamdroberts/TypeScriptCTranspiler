@@ -565,6 +565,10 @@ declare const process: Process;
 
 declare function parseInt(value: any, radix?: number, ...ignored: any[]): number;
 declare function parseFloat(value: any, ...ignored: any[]): number;
+declare function encodeURI(uri: string, ...ignored: any[]): string;
+declare function encodeURIComponent(uriComponent: string | number | boolean, ...ignored: any[]): string;
+declare function decodeURI(encodedURI: string, ...ignored: any[]): string;
+declare function decodeURIComponent(encodedURIComponent: string, ...ignored: any[]): string;
 declare function isNaN(value: any, ...ignored: any[]): boolean;
 declare function isFinite(value: any, ...ignored: any[]): boolean;
 declare function btoa(value: string): string;
