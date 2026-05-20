@@ -65,7 +65,7 @@ This is the next item that most directly expands what programs can be written ag
   - Additional dynamic `Reflect.apply` coverage is implemented for invoking boxed accessor descriptor `get`/`set` identities with a supplied receiver. Test: `reflect_receiver`.
   - Additional typed `Reflect.get(target, key, receiver)` coverage is implemented for optional receiver evaluation on typed arrays, typed interface/class objects, and Buffer data-property reads. Test: `reflect_get_receiver_typed`.
   - Additional `Reflect.apply` coverage is implemented for binding `thisArg` into function values that declare `this: any`. Test: `reflect_apply`.
-  - Still missing: hidden classes / shape trees, inline caches and diagnostics, complete built-in object/array prototype behavior, broader prototype method coverage, remaining descriptor/prototype edge cases, and clean source split into `runtime/tsc_value.*` / `runtime/tsc_object.*`.
+  - Still missing: hidden classes / shape trees, inline caches and diagnostics, complete built-in object/array prototype behavior, broader prototype method coverage, and remaining descriptor/prototype edge cases.
   - Still blocks: production-quality untyped npm packages, `Proxy`, full `Reflect`, remaining property descriptor edge cases, and high-performance dynamic property access.
 
 ---

@@ -5063,7 +5063,7 @@ class Emitter {
             : null;
         if (tailCtx) {
             this.tailFunctionStack.push(tailCtx);
-            this.defs.line(`${tailCtx.label}: ;`);
+            this.defs.line(`${tailCtx.label}: __attribute__((unused));`);
         }
         this.emitCapturedParameterCells(this.defs, fd.parameters, capturedCells);
         try {
@@ -9604,7 +9604,7 @@ class Emitter {
                 : null;
             if (tailCtx) {
                 this.tailFunctionStack.push(tailCtx);
-                this.genericDefs.line(`${tailCtx.label}: ;`);
+                this.genericDefs.line(`${tailCtx.label}: __attribute__((unused));`);
             }
             try {
                 if (!fd.body) unsupported(fd, "function without body");

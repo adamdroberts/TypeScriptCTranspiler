@@ -557,7 +557,7 @@ interface Process {
     getgroups(...ignored: any[]): number[];
     umask(mask?: number, ...ignored: any[]): number;
     memoryUsage(...ignored: any[]): any;
-    cpuUsage(): any;
+    cpuUsage(previousValue?: any, ...ignored: any[]): any;
     resourceUsage(...ignored: any[]): any;
     kill(pid: number, signal?: 0 | 9 | 15 | "SIGTERM" | "SIGKILL"): boolean;
 }

@@ -33,8 +33,18 @@ export interface CompileResult {
     mainC: string;
 }
 
-const RUNTIME_SOURCES = ["tsc_runtime.c"];
-const RUNTIME_HEADERS = ["tsc_runtime.h"];
+const RUNTIME_SOURCES = [
+    "tsc_core.c",
+    "tsc_value.c",
+    "tsc_string.c",
+    "tsc_array.c",
+    "tsc_object.c",
+    "tsc_map_set.c",
+    "tsc_builtin.c",
+    "tsc_node.c",
+    "tsc_promise.c"
+];
+const RUNTIME_HEADERS = ["tsc_runtime.h", "tsc_internal.h"];
 const execFileAsync = promisify(execFile);
 
 interface Pcre2Flags {
@@ -59,7 +69,14 @@ async function pcre2Flags(): Promise<Pcre2Flags> {
             linkFlags: exactLib ? [exactLib] : [],
             useDefaultLib: !exactLib,
         };
-    } catch {
+    } catch (e) {
+        if (require('node:fs').existsSync('/home/adam/miniconda3/include/pcre2.h')) {
+            return {
+                compileFlags: ['-I/home/adam/miniconda3/include'],
+                linkFlags: ['-L/home/adam/miniconda3/lib', '-Wl,-rpath,/home/adam/miniconda3/lib', '-lpcre2-8'],
+                useDefaultLib: false
+            };
+        }
         return { compileFlags: [], linkFlags: [], useDefaultLib: true };
     }
 }
@@ -388,8 +405,10 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     });
     if (cc.exitCode !== 0) {
         process.stderr.write(`tsc2c: gcc exited ${cc.exitCode}\n`);
+        if (opts.buildDir === undefined) fsSync.rmSync(buildDir, { recursive: true, force: true });
         return { exitCode: cc.exitCode, buildDir, mainC };
     }
     if (opts.verbose) console.error(`[tsc2c] wrote ${opts.output}`);
+    if (opts.buildDir === undefined) fsSync.rmSync(buildDir, { recursive: true, force: true });
     return { exitCode: 0, buildDir, mainC };
 }
