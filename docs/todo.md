@@ -179,7 +179,7 @@ Within-phase gaps that can be picked off individually without the big phase-leve
 
 These are not permanent product limits, but every reachable module, native bridge, and runtime-compiled source must be closed over at build time. `tsc2c` should keep rejecting cases it cannot prove or list ahead of time.
 
-- **Native C++ addons under `node_modules/*/build/Release/*.node`.** Literal native addon specifiers and native-addon packages can now be security allow-listed through a compile-time native-addon manifest, which lowers known `require(...)`/import bindings to `runtime/tsc_node_embed.cc` via `tsc_node_native_addon(<manifest path>)` and links `libnode`. Unlisted native addons still reject. Remaining work: validate against a real addon binary, cover package export/import condition edge cases, and add richer declaration/type support for direct `.node` imports.
+- **Native C++ addons under `node_modules/*/build/Release/*.node`.** Literal native addon specifiers and native-addon packages can now be security allow-listed through a compile-time native-addon manifest, which lowers known `require(...)`/import bindings to `runtime/tsc_node_embed.cc` via `tsc_node_native_addon(<manifest path>)` and links `libnode`. Package `exports` / `imports` condition maps and package-private `#...` imports are included in the native-addon closure checks, and direct `.node` default imports are typed as `any` for manifest-backed bridge imports. Unlisted native addons still reject. Remaining work: validate execution against a real addon binary in an environment with `libnode`.
 
 ---
 
