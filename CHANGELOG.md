@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Value-returning dynamic `require(name)` finite dispatch now also materializes AOT-known CommonJS named exports into a dynamic object for modules that assign `module.exports.name = ...`. Test: `dynamic_require`.
 - Value-returning dynamic `require(name)` calls now dispatch finite conditional specifier alternatives at runtime for AOT-known `module.exports = ...` values. Test: `dynamic_require`.
 - Side-effect-only dynamic `require(name)` statements now collect finite conditional specifier alternatives into the AOT module graph while still rejecting non-finite variables and value-returning finite-set requires. Test: `dynamic_require`.
 - Dynamic `require(name)` specifier proofs now include finite top-level const string concatenation and template expressions, so those edges enter the AOT module graph instead of requiring runtime loading. Test: `dynamic_require`.
