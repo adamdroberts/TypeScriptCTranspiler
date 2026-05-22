@@ -3016,20 +3016,9 @@ class Emitter {
     private commonJsModuleExportsObjectAssignment(
         stmt: ts.Statement,
     ): { left: ts.PropertyAccessExpression; right: ts.ObjectLiteralExpression } | null {
-        if (!ts.isExpressionStatement(stmt)) return null;
-        const expr = stmt.expression;
-        if (
-            !ts.isBinaryExpression(expr) ||
-            expr.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
-            !ts.isPropertyAccessExpression(expr.left) ||
-            !this.isModuleExportsAccess(expr.left)
-        ) {
-            return null;
-        }
-        if (!ts.isObjectLiteralExpression(expr.right)) {
-            unsupported(expr.right, "CommonJS module.exports assignment currently requires an object literal");
-        }
-        for (const prop of expr.right.properties) {
+        const assignment = this.commonJsModuleExportsValueAssignmentChain(stmt);
+        if (!assignment || !ts.isObjectLiteralExpression(assignment.right)) return null;
+        for (const prop of assignment.right.properties) {
             if (ts.isSpreadAssignment(prop) && this.isCommonJsModuleExportsSpreadValue(prop.expression)) continue;
             if (ts.isShorthandPropertyAssignment(prop)) continue;
             if (ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.initializer)) continue;
@@ -3054,7 +3043,7 @@ class Emitter {
             if (ts.isGetAccessorDeclaration(prop) && this.commonJsObjectAssignGetterReturnExpression(prop)) continue;
             unsupported(prop, "CommonJS module.exports object currently supports declared identifier, function-valued, arrow-function-valued, static require values, and static literal-value exports only");
         }
-        return { left: expr.left, right: expr.right };
+        return { left: assignment.left, right: assignment.right };
     }
 
     private commonJsModuleExportsObjectAssignmentEntries(
@@ -3950,22 +3939,14 @@ class Emitter {
                 }
                 continue;
             }
-            if (!ts.isExpressionStatement(stmt) || !ts.isBinaryExpression(stmt.expression)) continue;
-            const expr = stmt.expression;
-            if (
-                expr.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
-                !ts.isPropertyAccessExpression(expr.left) ||
-                !this.isModuleExportsAccess(expr.left) ||
-                !ts.isObjectLiteralExpression(expr.right)
-            ) {
-                continue;
-            }
-            for (const prop of expr.right.properties) {
+            const moduleObjectAssignment = this.commonJsModuleExportsObjectAssignment(stmt);
+            if (!moduleObjectAssignment) continue;
+            for (const prop of moduleObjectAssignment.right.properties) {
                 if (!ts.isSpreadAssignment(prop)) continue;
                 const spreadMembers = this.commonJsRequireSpreadMemberDeclarations(prop.expression);
                 if (spreadMembers) out.push(...spreadMembers);
             }
-            for (const prop of this.commonJsModuleExportsObjectAssignmentEntries(expr.right)) {
+            for (const prop of this.commonJsModuleExportsObjectAssignmentEntries(moduleObjectAssignment.right)) {
                 if (ts.isShorthandPropertyAssignment(prop)) {
                     out.push({ name: prop.name.text, decl: prop });
                     continue;

@@ -297,6 +297,10 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "identifier-default",\n  greet: function greet(name) { return "identifier " + name; },\n  label: local.label,\n  count: 72,\n  double: local.double,\n  enabled: true\n};\nmodule.exports = api;\n',
         "local.js": 'exports.label = "object-identifier";\nexports.double = function double(value) { return value * 2; };\n',
     }),
+    "tsc2c-cjs-module-object-chain": cjsPackage("tsc2c-cjs-module-object-chain", {
+        "index.js": 'const local = require("./local.js");\nexports = module.exports = {\n  label: local.label,\n  count: 81,\n  triple: local.triple,\n  greet(name) { return "chain " + name; },\n  enabled: true\n};\n',
+        "local.js": 'exports.label = "object-chain";\nexports.triple = function triple(value) { return value * 3; };\n',
+    }),
     "tsc2c-cjs-module-object-require-binding": cjsPackage("tsc2c-cjs-module-object-require-binding", {
         "index.js": 'const defaultValue = require("./default.js");\nconst local = require("./local.js");\nmodule.exports = {\n  greet: defaultValue,\n  label: local.label,\n  count: local.count,\n  double: local.double\n};\n',
         "default.js": 'module.exports = function greet(name) { return "hello " + name; };\n',
