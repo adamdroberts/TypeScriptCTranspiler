@@ -412,9 +412,17 @@ interface FinalizationRegistryConstructor {
     new <T>(cleanupCallback: (heldValue: T) => void): FinalizationRegistry<T>;
 }
 declare var FinalizationRegistry: FinalizationRegistryConstructor;
-interface Function {}
+interface Function {
+    (...args: unknown[]): unknown;
+}
+interface FunctionConstructor {
+    new (...args: string[]): Function;
+    (...args: string[]): Function;
+}
+declare var Function: FunctionConstructor;
 interface CallableFunction extends Function {}
 interface NewableFunction extends Function {}
+declare function eval(source: string, ...ignored: unknown[]): unknown;
 interface RegExp {
     exec(s: string, ...ignored: any[]): string[] | null;
     test(s: string, ...ignored: any[]): boolean;

@@ -26,6 +26,8 @@ export interface CompileOptions {
     noGc?: boolean;
     /** If true, optimize for smaller release binaries and strip symbols. */
     release?: boolean;
+    /** If true, lower eval/Function to the embedded Node bridge. Requires libnode when linking. */
+    unsafeEval?: boolean;
 }
 
 export interface CompileResult {
@@ -45,6 +47,7 @@ const RUNTIME_SOURCES = [
     "tsc_node.c",
     "tsc_promise.c"
 ];
+const NODE_EMBED_RUNTIME_SOURCES = ["tsc_node_embed.cc"];
 const RUNTIME_HEADERS = ["tsc_runtime.h", "tsc_internal.h"];
 const execFileAsync = promisify(execFile);
 
@@ -127,6 +130,7 @@ interface PermanentLimitDiagnostic {
 function permanentLimitDiagnostics(
     program: ts.Program,
     libCoreDts: string,
+    opts: { unsafeEval?: boolean } = {},
 ): PermanentLimitDiagnostic[] {
     const diagnostics: PermanentLimitDiagnostic[] = [];
     for (const sf of program.getSourceFiles()) {
@@ -148,17 +152,21 @@ function permanentLimitDiagnostics(
                 const expr = node.expression;
                 if (ts.isIdentifier(expr)) {
                     if (expr.text === "eval") {
-                        diagnostics.push({
-                            node,
-                            message:
-                                "runtime code compilation via eval() cannot be AOT-compiled",
-                        });
+                        if (!opts.unsafeEval) {
+                            diagnostics.push({
+                                node,
+                                message:
+                                    "runtime code compilation via eval() cannot be AOT-compiled without --unsafe-eval",
+                            });
+                        }
                     } else if (expr.text === "Function") {
-                        diagnostics.push({
-                            node,
-                            message:
-                                "runtime code compilation via Function() cannot be AOT-compiled",
-                        });
+                        if (!opts.unsafeEval) {
+                            diagnostics.push({
+                                node,
+                                message:
+                                    "runtime code compilation via Function() cannot be AOT-compiled without --unsafe-eval",
+                            });
+                        }
                     } else if (expr.text === "require") {
                         const spec = node.arguments[0];
                         const literalSpec = spec ? stringSpecifierText(spec) : null;
@@ -217,17 +225,62 @@ function permanentLimitDiagnostics(
                 ts.isIdentifier(node.expression) &&
                 node.expression.text === "Function"
             ) {
-                diagnostics.push({
-                    node,
-                    message:
-                        "runtime code compilation via new Function() cannot be AOT-compiled",
-                });
+                if (!opts.unsafeEval) {
+                    diagnostics.push({
+                        node,
+                        message:
+                            "runtime code compilation via new Function() cannot be AOT-compiled without --unsafe-eval",
+                    });
+                }
             }
             ts.forEachChild(node, visit);
         };
         visit(sf);
     }
     return diagnostics;
+}
+
+interface NodeEmbedLinkOptions {
+    includeDir: string;
+    libnode: string;
+    rpath?: string;
+}
+
+function findNodeEmbedLinkOptions(): NodeEmbedLinkOptions | null {
+    const includeDir =
+        process.env.TSC2C_NODE_INCLUDE ??
+        path.resolve(path.dirname(process.execPath), "..", "include", "node");
+    if (!fsSync.existsSync(path.join(includeDir, "node.h"))) return null;
+
+    const explicit = process.env.TSC2C_LIBNODE;
+    if (explicit && fsSync.existsSync(explicit)) {
+        return { includeDir, libnode: explicit, rpath: path.dirname(explicit) };
+    }
+
+    const roots = [
+        path.resolve(path.dirname(process.execPath), ".."),
+        "/usr",
+        "/usr/local",
+    ];
+    for (const root of roots) {
+        for (const libDir of [path.join(root, "lib"), path.join(root, "lib64")]) {
+            try {
+                const match = fsSync
+                    .readdirSync(libDir)
+                    .find((name) => /^libnode\.(so|dylib|a)(\.|$)/.test(name));
+                if (match) {
+                    return {
+                        includeDir,
+                        libnode: path.join(libDir, match),
+                        rpath: match.endsWith(".a") ? undefined : libDir,
+                    };
+                }
+            } catch {
+                // try next lib directory
+            }
+        }
+    }
+    return null;
 }
 
 function stringSpecifierText(expr: ts.Expression): string | null {
@@ -334,7 +387,9 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         entry: opts.entry,
         packageRoot: pkg,
     });
-    const permanent = permanentLimitDiagnostics(program, libCoreDts);
+    const permanent = permanentLimitDiagnostics(program, libCoreDts, {
+        unsafeEval: opts.unsafeEval,
+    });
     if (permanent.length > 0) {
         for (const d of permanent) {
             process.stderr.write(
@@ -371,7 +426,10 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     if (opts.verbose) console.error(`[tsc2c] wrote ${mainPath}`);
 
     const runtimeSrc = path.join(pkg, "runtime");
-    for (const f of RUNTIME_SOURCES) {
+    const runtimeSources = opts.unsafeEval
+        ? [...RUNTIME_SOURCES, ...NODE_EMBED_RUNTIME_SOURCES]
+        : RUNTIME_SOURCES;
+    for (const f of runtimeSources) {
         await fs.copyFile(path.join(runtimeSrc, f), path.join(buildDir, f));
     }
     for (const f of RUNTIME_HEADERS) {
@@ -384,17 +442,34 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     }
 
     const pcFlags = await pcre2Flags();
+    const nodeEmbed = opts.unsafeEval ? findNodeEmbedLinkOptions() : null;
+    if (opts.unsafeEval && !nodeEmbed) {
+        process.stderr.write(
+            "tsc2c: --unsafe-eval requires embedded Node link inputs; set TSC2C_LIBNODE to libnode.so/libnode.a and optionally TSC2C_NODE_INCLUDE to Node headers\n",
+        );
+        if (opts.buildDir === undefined) fsSync.rmSync(buildDir, { recursive: true, force: true });
+        return { exitCode: 3, buildDir, mainC };
+    }
     const baseLibs = opts.noGc
         ? ["m", "crypto", "icuuc", "icudata", "gmp"]
         : ["gc", "m", "crypto", "icuuc", "icudata", "gmp"];
     const libs = pcFlags.useDefaultLib ? [...baseLibs, "pcre2-8"] : baseLibs;
     const cc = await invokeCc({
-        sources: [mainPath, ...RUNTIME_SOURCES.map((f) => path.join(buildDir, f))],
+        sources: [mainPath, ...runtimeSources.map((f) => path.join(buildDir, f))],
         output: opts.output,
-        includeDirs: [buildDir],
+        includeDirs: nodeEmbed ? [buildDir, nodeEmbed.includeDir] : [buildDir],
         libs,
-        extraFlags: opts.noGc ? ["-DTSC_NO_GC", ...pcFlags.compileFlags] : pcFlags.compileFlags,
-        linkFlags: pcFlags.linkFlags,
+        extraFlags: [
+            ...(opts.noGc ? ["-DTSC_NO_GC"] : []),
+            ...(opts.unsafeEval ? ["-DTSC_UNSAFE_EVAL", "-DTSC_HAS_LIBNODE"] : []),
+            ...pcFlags.compileFlags,
+        ],
+        linkFlags: [
+            ...pcFlags.linkFlags,
+            ...(nodeEmbed
+                ? [nodeEmbed.libnode, ...(nodeEmbed.rpath ? [`-Wl,-rpath,${nodeEmbed.rpath}`] : [])]
+                : []),
+        ],
         release: !!opts.release,
         verbose: !!opts.verbose,
     });

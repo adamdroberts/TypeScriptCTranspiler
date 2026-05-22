@@ -17,6 +17,10 @@ program
     )
     .option("--no-gc", "link without Boehm GC (leaks — for bootstrap only)")
     .option("--release", "optimize for smaller release binaries and strip symbols")
+    .option(
+        "--unsafe-eval",
+        "lower eval/Function to the embedded Node bridge; requires libnode when linking",
+    )
     .option("--verbose", "print compile steps")
     .action(async (entry: string, opts: Record<string, unknown>) => {
         const result = await compile({
@@ -29,6 +33,7 @@ program
             verbose: !!opts.verbose,
             noGc: opts.gc === false,
             release: !!opts.release,
+            unsafeEval: !!opts.unsafeEval,
         });
         process.exit(result.exitCode);
     });

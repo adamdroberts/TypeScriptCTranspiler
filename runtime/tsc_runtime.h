@@ -71,6 +71,11 @@ typedef struct tsc_str {
 
 tsc_str_t* tsc_str_from_lit(const char* data, size_t len);
 tsc_str_t* tsc_str_from_cstr(const char* s);
+
+/* ------------- embedded Node bridge ------------- */
+tsc_value_t tsc_node_eval(tsc_str_t* source);
+tsc_value_t tsc_node_function(tsc_str_t* body);
+
 tsc_str_t* tsc_str_concat(const tsc_str_t* a, const tsc_str_t* b);
 tsc_str_t* tsc_str_concat_lit_int(const char* lit, size_t lit_len, int64_t n);
 tsc_str_t* tsc_str_concat_int_lit(int64_t n, const char* lit, size_t lit_len);

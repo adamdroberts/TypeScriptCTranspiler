@@ -8742,6 +8742,12 @@ class Emitter {
         }
         const calleeId = call.expression;
         const name = calleeId.text;
+        if (name === "eval") {
+            return this.emitUnsafeEvalCall(call);
+        }
+        if (name === "Function") {
+            return this.emitUnsafeFunctionConstructor(call);
+        }
         if (name === "parseInt" || name === "parseFloat") {
             return this.emitParseNumber(call, name);
         }
@@ -8979,6 +8985,29 @@ class Emitter {
             const decl = param.valueDeclaration;
             return !!decl && ts.isParameter(decl) && !!decl.dotDotDotToken;
         });
+    }
+
+    private emitUnsafeEvalCall(call: ts.CallExpression): EmitResult {
+        if (call.arguments.length < 1) unsupported(call, "eval expects source text");
+        const sourceNode = call.arguments[0]!;
+        const source = this.emitExpr(sourceNode);
+        return this.emitSequencedCall("tsc_node_eval", T_VALUE, [
+            { value: source, target: T_STRING, node: sourceNode },
+            ...this.ignoredArgumentSpecs(call.arguments, 1),
+        ]);
+    }
+
+    private emitUnsafeFunctionConstructor(call: ts.CallExpression | ts.NewExpression): EmitResult {
+        const args = call.arguments ?? [];
+        if (args.length < 1) unsupported(call, "Function constructor expects source text");
+        if (args.length > 1) {
+            unsupported(call, "unsafe Function bridge currently expects a single function body string");
+        }
+        const bodyNode = args[0]!;
+        const body = this.emitExpr(bodyNode);
+        return this.emitSequencedCall("tsc_node_function", T_VALUE, [
+            { value: body, target: T_STRING, node: bodyNode },
+        ]);
     }
 
     private emitStaticSpreadCall(
@@ -21895,6 +21924,9 @@ class Emitter {
         if (!ts.isIdentifier(n.expression))
             unsupported(n, "new expression must use a class identifier");
         const cls = this.identifierName(n.expression);
+        if (cls === "Function") {
+            return this.emitUnsafeFunctionConstructor(n);
+        }
         // Built-in Map / Set constructors.
         if (cls === "Map") {
             const ty = this.checker.getTypeAtLocation(n);

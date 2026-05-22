@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import * as path from "node:path";
 
 export interface CcOptions {
     sources: string[];
@@ -17,6 +18,9 @@ export interface CcResult {
 }
 
 export async function invokeCc(opts: CcOptions): Promise<CcResult> {
+    const hasCxx = opts.sources.some((source) => /\.(cc|cpp|cxx)$/i.test(source));
+    if (hasCxx) return invokeCcWithCxx(opts);
+
     const args: string[] = [
         "-std=c11",
         opts.release ? "-Os" : "-O2",
@@ -50,6 +54,75 @@ export async function invokeCc(opts: CcOptions): Promise<CcResult> {
         proc.stderr.on("data", (d) => (stderr += d.toString()));
         proc.on("close", (code) => {
             if (stderr && (code !== 0 || opts.verbose)) process.stderr.write(stderr);
+            resolve({ exitCode: code ?? 1, stderr });
+        });
+    });
+}
+
+async function invokeCcWithCxx(opts: CcOptions): Promise<CcResult> {
+    const commonFlags = [
+        opts.release ? "-Os" : "-O2",
+        "-flto",
+        "-fno-plt",
+        "-fno-semantic-interposition",
+        "-fno-math-errno",
+        "-fno-trapping-math",
+        "-Wall",
+        "-Wno-unused-variable",
+        "-Wno-unused-parameter",
+        "-Wno-unused-but-set-variable",
+        "-Wno-parentheses-equality",
+        "-Wno-stringop-overflow",
+    ];
+    const includeFlags = opts.includeDirs.flatMap((dir) => ["-I", dir]);
+    const extraFlags = opts.extraFlags ?? [];
+    const objects = opts.sources.map((source) =>
+        path.join(path.dirname(source), path.basename(source).replace(/[^A-Za-z0-9_.-]/g, "_") + ".o"),
+    );
+
+    for (let i = 0; i < opts.sources.length; i++) {
+        const source = opts.sources[i]!;
+        const object = objects[i]!;
+        const isCxx = /\.(cc|cpp|cxx)$/i.test(source);
+        const compiler = isCxx ? "g++" : "gcc";
+        const args = [
+            isCxx ? "-std=c++17" : "-std=c11",
+            ...commonFlags,
+            ...includeFlags,
+            ...extraFlags,
+            "-c",
+            source,
+            "-o",
+            object,
+        ];
+        const result = await spawnCompiler(compiler, args, opts.verbose);
+        if (result.exitCode !== 0) return result;
+    }
+
+    const linkArgs: string[] = [];
+    if (opts.release) linkArgs.push("-s");
+    linkArgs.push(...commonFlags.filter((flag) => flag !== "-Wall" && !flag.startsWith("-Wno-")));
+    linkArgs.push(...objects);
+    linkArgs.push(...(opts.linkFlags ?? []));
+    for (const lib of opts.libs) linkArgs.push("-l" + lib);
+    linkArgs.push("-o", opts.output);
+    return spawnCompiler("g++", linkArgs, opts.verbose);
+}
+
+function spawnCompiler(
+    command: string,
+    args: readonly string[],
+    verbose?: boolean,
+): Promise<CcResult> {
+    if (verbose) {
+        console.error(`[tsc2c] ${command} ${args.join(" ")}`);
+    }
+    return new Promise((resolve) => {
+        const proc = spawn(command, args, { stdio: ["ignore", "inherit", "pipe"] });
+        let stderr = "";
+        proc.stderr.on("data", (d) => (stderr += d.toString()));
+        proc.on("close", (code) => {
+            if (stderr && (code !== 0 || verbose)) process.stderr.write(stderr);
             resolve({ exitCode: code ?? 1, stderr });
         });
     });
