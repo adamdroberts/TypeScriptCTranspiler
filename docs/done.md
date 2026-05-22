@@ -155,7 +155,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - `Array.from(arr)` — identity copy for typed arrays and dynamic `tsc_value_t` arrays. Tests: `advanced`, `array_static_dynamic`
 - `Array.from(set)` — typed Set value copy preserving insertion order. Test: `array_from_set`
 - `Array.from(map)` — typed `Map<string, V>` entry materialization as `ObjectEntry<V>[]` in insertion order. Test: `array_from_map`
-- `Array.from(items, mapfn)` two-argument form transforms typed arrays, typed Set sources, typed `Map<string, V>` entry sources, string code-point sequences, and boxed dynamic array/string sources into typed `U[]`, accepting inline arrow/function-expression callbacks with expression bodies or single-return block bodies, plus function references (including generic functions where the source is typed). Tests: `array_from_mapper`, `array_from_set`, `array_from_map`, `array_from_dynamic_mapper`
+- `Array.from(items, mapfn)` / `Array.from(items, mapfn, thisArg)` transforms typed arrays, typed Set sources, typed `Map<string, V>` entry sources, string code-point sequences, and boxed dynamic array/string sources into typed `U[]`, accepting inline arrow/function-expression callbacks with expression bodies or single-return block bodies, plus function references (including generic functions where the source is typed). Optional mapper `thisArg` values are evaluated once and bound for callbacks that declare `this: any`. Tests: `array_from_mapper`, `array_from_set`, `array_from_map`, `array_from_dynamic_mapper`, `array_from_mapper_this_arg`
 - `Array.of(...items)` — typed array construction, including `Array.of<any>(...)` followed by dynamic array coercion. Tests: `array_of`, `dynamic_array_of`
 
 ### `Map<K, V>`
@@ -1207,6 +1207,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `string_compound_plus` | typed `string +=` compound assignment with implicit coercion of mixed rhs |
 | `object_group_by` | ES2024 Object.groupBy over typed arrays returning a dynamic null-prototype object with expression/block-body callbacks |
 | `array_from_mapper` | Array.from(items, mapfn) for typed arrays and string code-point sequences with expression/block-body callbacks |
+| `array_from_mapper_this_arg` | Array.from(items, mapfn, thisArg) with evaluated and bound mapper thisArg |
 | `array_from_dynamic_mapper` | Array.from(dynamic, mapfn) over boxed dynamic array/string sources |
 | `array_from_set` | Array.from over typed Set sources with and without mapper callbacks |
 | `array_from_map` | Array.from over typed Map<string, V> sources with and without mapper callbacks |
