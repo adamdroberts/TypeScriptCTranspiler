@@ -1,0 +1,10 @@
+get: 1 v
+has: true true
+delete: true false
+define: true 3
+desc: desc
+keys: b,virtual
+proto: true proto
+ext: true true false
+apply: 16
+events: set:b:2|get:a|get:virtual|has:a|has:virtual|delete:a|has:a|define:c:3|desc:virtual|ownKeys|desc:a|desc:b|desc:hidden|desc:virtual|setProto|getProto|isExtensible|preventExtensions|apply:0

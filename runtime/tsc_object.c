@@ -520,7 +520,6 @@ tsc_array_t* tsc_object_keys_dyn(const tsc_object_t* o) {
             }
             return tsc_array_new(sizeof(tsc_str_t*), 1);
         }
-        // If trapped, Object.keys technically filters by enumerable, but for simplicity we'll just return the array contents
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
         tsc_array_push_value(args, o->proxy_target);
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
@@ -530,6 +529,7 @@ tsc_array_t* tsc_object_keys_dyn(const tsc_object_t* o) {
             for (size_t i = 0; i < arr->len; i++) {
                 tsc_value_t v = TSC_ARR(tsc_value_t, arr, i);
                 tsc_str_t* key = tsc_value_as_string(v);
+                if (!tsc_object_property_is_enumerable(o, key)) continue;
                 tsc_array_push_raw(result, &key);
             }
             return result;
