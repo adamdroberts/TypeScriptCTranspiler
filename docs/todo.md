@@ -178,7 +178,7 @@ Within-phase gaps that can be picked off individually without the big phase-leve
 - Dynamic property/index exponent and logical assignment is implemented with descriptor-aware writes and RHS short-circuiting. Test: `dynamic_property_logical_assign`.
 - `for (const k in expr)` enumeration over typed classes/interfaces, typed arrays, and dynamic `tsc_value_t` objects is implemented. Test: `for_in`.
 - Typed `string +=` compound assignment is implemented. Test: `string_compound_plus`.
-- Decorators — requires metadata + Proxy support.
+- Decorators — basic standard class decorator evaluation for named classes is implemented with dynamic `kind`/`name` context objects. Still missing class replacement, metadata, `addInitializer`, member decorators, and Proxy-backed decorator edge cases. Test: `class_decorator_basic`.
 
 ---
 
