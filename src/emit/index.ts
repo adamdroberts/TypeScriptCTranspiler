@@ -12528,16 +12528,25 @@ class Emitter {
             const bindings: string[] = [];
             let keyBody: EmitResult;
             if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
+                const sig = this.checker.getSignatureFromDeclaration(cb);
+                if (!sig) unsupported(cb, "Map.groupBy callback must be callable");
+                const thisType = this.signatureThisType(sig, cb);
                 const bodyExpr = this.callbackReturnExpression(cb, "Map.groupBy");
-                const valueParam = cb.parameters[0];
-                const indexParam = cb.parameters[1];
+                const params = cb.parameters.filter((p) => !this.isThisParameter(p));
+                const valueParam = params[0];
+                const indexParam = params[1];
                 if (valueParam && ts.isIdentifier(valueParam.name)) {
                     bindings.push(`${t.c} ${mangleIdent(valueParam.name.text)} = ${item};`);
                 }
                 if (indexParam && ts.isIdentifier(indexParam.name)) {
                     bindings.push(`double ${mangleIdent(indexParam.name.text)} = (double)${iv};`);
                 }
-                keyBody = this.emitExpr(bodyExpr);
+                if (thisType) this.functionThisStack.push({ c: "tsc_value_undefined()", ty: thisType });
+                try {
+                    keyBody = this.emitExpr(bodyExpr);
+                } finally {
+                    if (thisType) this.functionThisStack.pop();
+                }
             } else if (ts.isIdentifier(cb)) {
                 const cbType = this.checker.getTypeAtLocation(cb);
                 const sig = cbType.getCallSignatures()[0];
@@ -12567,6 +12576,8 @@ class Emitter {
                         );
                         return this.coerce(sources[index]!, target, cb);
                     });
+                    const thisType = this.directCallableThisType(cb);
+                    if (thisType) callArgs.unshift("tsc_value_undefined()");
                     const retType = this.prepareType(
                         genericBindings
                             ? withTypeBindings(genericBindings, () =>
@@ -21017,16 +21028,25 @@ class Emitter {
             const bindings: string[] = [];
             let keyBody: EmitResult;
             if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
+                const sig = this.checker.getSignatureFromDeclaration(cb);
+                if (!sig) unsupported(cb, "Object.groupBy callback must be callable");
+                const thisType = this.signatureThisType(sig, cb);
                 const bodyExpr = this.callbackReturnExpression(cb, "Object.groupBy");
-                const valueParam = cb.parameters[0];
-                const indexParam = cb.parameters[1];
+                const params = cb.parameters.filter((p) => !this.isThisParameter(p));
+                const valueParam = params[0];
+                const indexParam = params[1];
                 if (valueParam && ts.isIdentifier(valueParam.name)) {
                     bindings.push(`${t.c} ${mangleIdent(valueParam.name.text)} = ${item};`);
                 }
                 if (indexParam && ts.isIdentifier(indexParam.name)) {
                     bindings.push(`double ${mangleIdent(indexParam.name.text)} = (double)${iv};`);
                 }
-                keyBody = this.emitExpr(bodyExpr);
+                if (thisType) this.functionThisStack.push({ c: "tsc_value_undefined()", ty: thisType });
+                try {
+                    keyBody = this.emitExpr(bodyExpr);
+                } finally {
+                    if (thisType) this.functionThisStack.pop();
+                }
             } else if (ts.isIdentifier(cb)) {
                 const cbType = this.checker.getTypeAtLocation(cb);
                 const sig = cbType.getCallSignatures()[0];
@@ -21056,6 +21076,8 @@ class Emitter {
                         );
                         return this.coerce(sources[index]!, target, cb);
                     });
+                    const thisType = this.directCallableThisType(cb);
+                    if (thisType) callArgs.unshift("tsc_value_undefined()");
                     const retType = this.prepareType(
                         genericBindings
                             ? withTypeBindings(genericBindings, () =>

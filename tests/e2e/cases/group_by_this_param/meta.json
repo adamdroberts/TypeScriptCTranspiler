@@ -1,0 +1,3 @@
+{
+  "description": "Object.groupBy and Map.groupBy callbacks with explicit this parameters receive undefined"
+}

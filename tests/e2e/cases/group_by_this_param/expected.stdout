@@ -1,0 +1,4 @@
+object direct: [2,6] [4]
+object inline: [1] [2]
+map direct: aa,ab ba
+map inline: x yy
