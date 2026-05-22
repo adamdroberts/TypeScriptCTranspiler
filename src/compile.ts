@@ -22,8 +22,12 @@ import {
     type DynamicRequireManifest,
 } from "./dynamic-require";
 import {
+    loadRuntimeCodeManifest,
     parseAotEvalConstant,
     parseAotFunctionBodyConstant,
+    runtimeCodeManifestHasEval,
+    runtimeCodeManifestHasFunctions,
+    type RuntimeCodeManifest,
 } from "./runtime-code-aot";
 import {
     formatTsDiagnostics,
@@ -47,6 +51,8 @@ export interface CompileOptions {
     nativeAddonManifest?: string;
     /** JSON allow-list of finite dynamic require specifiers compiled into the AOT graph. */
     dynamicRequireManifest?: string;
+    /** JSON allow-list of runtime code strings compiled into AOT dispatch. */
+    runtimeCodeManifest?: string;
 }
 
 export interface CompileResult {
@@ -153,6 +159,7 @@ function permanentLimitDiagnostics(
         unsafeEval?: boolean;
         nativeAddons?: NativeAddonManifest;
         dynamicRequires?: DynamicRequireManifest;
+        runtimeCode?: RuntimeCodeManifest;
     } = {},
 ): PermanentLimitDiagnostic[] {
     const diagnostics: PermanentLimitDiagnostic[] = [];
@@ -177,7 +184,11 @@ function permanentLimitDiagnostics(
                 const expr = node.expression;
                 if (ts.isIdentifier(expr)) {
                     if (expr.text === "eval") {
-                        if (!opts.unsafeEval && !canAotCompileEvalCall(node)) {
+                        if (
+                            !opts.unsafeEval &&
+                            !canAotCompileEvalCall(node) &&
+                            !(opts.runtimeCode && runtimeCodeManifestHasEval(opts.runtimeCode))
+                        ) {
                             diagnostics.push({
                                 node,
                                 message:
@@ -185,7 +196,11 @@ function permanentLimitDiagnostics(
                             });
                         }
                     } else if (expr.text === "Function") {
-                        if (!opts.unsafeEval && !canAotCompileFunctionConstructor(node)) {
+                        if (
+                            !opts.unsafeEval &&
+                            !canAotCompileFunctionConstructor(node) &&
+                            !(opts.runtimeCode && runtimeCodeManifestHasFunctions(opts.runtimeCode))
+                        ) {
                             diagnostics.push({
                                 node,
                                 message:
@@ -242,7 +257,11 @@ function permanentLimitDiagnostics(
                 ts.isIdentifier(node.expression) &&
                 node.expression.text === "Function"
             ) {
-                if (!opts.unsafeEval && !canAotCompileFunctionConstructor(node)) {
+                if (
+                    !opts.unsafeEval &&
+                    !canAotCompileFunctionConstructor(node) &&
+                    !(opts.runtimeCode && runtimeCodeManifestHasFunctions(opts.runtimeCode))
+                ) {
                     diagnostics.push({
                         node,
                         message:
@@ -442,9 +461,11 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     await fs.mkdir(buildDir, { recursive: true });
     let nativeAddons: NativeAddonManifest;
     let dynamicRequires: DynamicRequireManifest;
+    let runtimeCode: RuntimeCodeManifest;
     try {
         nativeAddons = await loadNativeAddonManifest(opts.nativeAddonManifest);
         dynamicRequires = await loadDynamicRequireManifest(opts.dynamicRequireManifest);
+        runtimeCode = await loadRuntimeCodeManifest(opts.runtimeCodeManifest);
     } catch (e) {
         process.stderr.write(`tsc2c: ${(e as Error).message}\n`);
         return { exitCode: 3, buildDir, mainC: "" };
@@ -460,6 +481,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         unsafeEval: opts.unsafeEval,
         nativeAddons,
         dynamicRequires,
+        runtimeCode,
     });
     if (permanent.length > 0) {
         for (const d of permanent) {
@@ -489,7 +511,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         console.error(`[tsc2c] topo: ${graph.topoOrder.join(" -> ")}`);
     }
 
-    const { mainC, diagnostics } = emitProgram(graph, checker, { nativeAddons, dynamicRequires });
+    const { mainC, diagnostics } = emitProgram(graph, checker, { nativeAddons, dynamicRequires, runtimeCode });
     if (diagnostics.length > 0) {
         for (const d of diagnostics) process.stderr.write(d + "\n");
         return { exitCode: 3, buildDir, mainC: "" };

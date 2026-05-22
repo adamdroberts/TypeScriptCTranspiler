@@ -20,6 +20,7 @@ interface Case {
     emitCOnly?: boolean;
     nativeAddonManifest?: string;
     dynamicRequireManifest?: string;
+    runtimeCodeManifest?: string;
     release?: boolean;
 }
 
@@ -38,6 +39,7 @@ async function discoverCases(): Promise<Case[]> {
         const emitCOnlyPath = path.join(casesDir, d, "compile.emit_c_only");
         const nativeAddonManifestPath = path.join(casesDir, d, "native-addon-manifest.json");
         const dynamicRequireManifestPath = path.join(casesDir, d, "dynamic-require-manifest.json");
+        const runtimeCodeManifestPath = path.join(casesDir, d, "runtime-code-manifest.json");
         const releasePath = path.join(casesDir, d, "compile.release");
         try {
             await fs.access(entry);
@@ -69,6 +71,13 @@ async function discoverCases(): Promise<Case[]> {
             } catch {
                 // optional dynamic require allow-list
             }
+            let runtimeCodeManifest: string | undefined;
+            try {
+                await fs.access(runtimeCodeManifestPath);
+                runtimeCodeManifest = runtimeCodeManifestPath;
+            } catch {
+                // optional runtime code allow-list
+            }
             let expectedMainCContains: string | undefined;
             try {
                 expectedMainCContains = (await fs.readFile(expectedMainCContainsPath, "utf8")).trimEnd();
@@ -85,6 +94,7 @@ async function discoverCases(): Promise<Case[]> {
                     emitCOnly,
                     nativeAddonManifest,
                     dynamicRequireManifest,
+                    runtimeCodeManifest,
                     release,
                 });
                 continue;
@@ -105,6 +115,7 @@ async function discoverCases(): Promise<Case[]> {
                 emitCOnly,
                 nativeAddonManifest,
                 dynamicRequireManifest,
+                runtimeCodeManifest,
                 release,
             });
         } catch {
@@ -148,6 +159,7 @@ async function main(): Promise<void> {
             emitCOnly: c.emitCOnly,
             nativeAddonManifest: c.nativeAddonManifest,
             dynamicRequireManifest: c.dynamicRequireManifest,
+            runtimeCodeManifest: c.runtimeCodeManifest,
         });
         if (c.expectedExitCode !== undefined) {
             if (r.exitCode !== c.expectedExitCode) {

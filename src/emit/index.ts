@@ -54,8 +54,13 @@ import {
 } from "../dynamic-require";
 import {
     type AotRuntimeConstant,
+    type AotRuntimeCodeEntry,
+    emptyRuntimeCodeManifest,
     parseAotEvalConstant,
     parseAotFunctionBodyConstant,
+    runtimeCodeManifestHasEval,
+    runtimeCodeManifestHasFunctions,
+    type RuntimeCodeManifest,
 } from "../runtime-code-aot";
 import type { ModuleGraph, ModuleInfo } from "../resolve";
 
@@ -179,7 +184,11 @@ export interface EmittedProgram {
 export function emitProgram(
     graph: ModuleGraph,
     checker: ts.TypeChecker,
-    options: { nativeAddons?: NativeAddonManifest; dynamicRequires?: DynamicRequireManifest } = {},
+    options: {
+        nativeAddons?: NativeAddonManifest;
+        dynamicRequires?: DynamicRequireManifest;
+        runtimeCode?: RuntimeCodeManifest;
+    } = {},
 ): EmittedProgram {
     const em = new Emitter(checker, graph, options);
     return em.run();
@@ -251,7 +260,11 @@ class Emitter {
     constructor(
         private checker: ts.TypeChecker,
         private graph: ModuleGraph,
-        private options: { nativeAddons?: NativeAddonManifest; dynamicRequires?: DynamicRequireManifest } = {},
+        private options: {
+            nativeAddons?: NativeAddonManifest;
+            dynamicRequires?: DynamicRequireManifest;
+            runtimeCode?: RuntimeCodeManifest;
+        } = {},
     ) {}
 
     private freshTemp(prefix = "_t"): string {
@@ -9213,6 +9226,10 @@ class Emitter {
                 );
             }
         }
+        const runtimeCode = this.options.runtimeCode ?? emptyRuntimeCodeManifest();
+        if (runtimeCodeManifestHasEval(runtimeCode)) {
+            return this.emitAotEvalManifestDispatch(call, sourceNode, runtimeCode.eval);
+        }
         const source = this.emitExpr(sourceNode);
         return this.emitSequencedCall("tsc_node_eval", T_VALUE, [
             { value: source, target: T_STRING, node: sourceNode },
@@ -9229,6 +9246,10 @@ class Emitter {
                 const constant = parseAotFunctionBodyConstant(bodyText);
                 if (constant) return this.emitAotFunctionConstructor(call, constant);
             }
+        }
+        const runtimeCode = this.options.runtimeCode ?? emptyRuntimeCodeManifest();
+        if (runtimeCodeManifestHasFunctions(runtimeCode)) {
+            return this.emitAotFunctionManifestDispatch(call, args[0]!, runtimeCode.functions);
         }
         if (args.length > 1) {
             unsupported(call, "unsafe Function bridge currently expects a single function body string");
@@ -9255,19 +9276,73 @@ class Emitter {
         });
     }
 
+    private emitAotEvalManifestDispatch(
+        call: ts.CallExpression,
+        sourceNode: ts.Expression,
+        entries: AotRuntimeCodeEntry[],
+    ): EmitResult {
+        const source = this.emitExpr(sourceNode);
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: source, target: T_STRING, node: sourceNode },
+            ...this.ignoredArgumentSpecs(call.arguments, 1),
+        ], ([sourceValue]) => {
+            const out = this.freshTemp("_aot_eval");
+            const pieces = [`tsc_value_t ${out} = tsc_value_undefined()`];
+            let dispatch = "";
+            entries.forEach((entry, index) => {
+                const cond = `${index === 0 ? "if" : "else if"} (tsc_str_eq(${sourceValue}, ${this.cStringLiteral(entry.source)}))`;
+                dispatch += `${cond} { ${out} = ${this.emitAotRuntimeConstant(entry.constant).c}; } `;
+            });
+            dispatch += `else { tsc_throw_str(tsc_str_from_cstr("runtime eval source outside AOT allow-list")); }`;
+            pieces.push(dispatch);
+            pieces.push(out);
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
     private emitAotFunctionConstructor(call: ts.CallExpression | ts.NewExpression, constant: AotRuntimeConstant): EmitResult {
         const type = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
         if (type.kind !== "function" || !type.closureName || !type.ret || type.ret.kind !== "value") {
             unsupported(call, "AOT Function constructor result must be callable");
         }
         const adapter = this.ensureAotConstantFunctionAdapter(type, constant);
-        return this.emitSequencedExpr(type, [], () => {
-            const fn = this.freshTemp("_aot_fn");
-            return (
-                `({ ${type.c} ${fn} = (${type.c})TSC_GC_MALLOC(sizeof(${type.closureName})); ` +
-                `${fn}->fn = ${adapter}; ${fn}->env = NULL; ${fn}; })`
-            );
+        return this.emitSequencedExpr(type, [], () => this.emitAotFunctionAllocation(type, adapter));
+    }
+
+    private emitAotFunctionManifestDispatch(
+        call: ts.CallExpression | ts.NewExpression,
+        bodyNode: ts.Expression,
+        entries: AotRuntimeCodeEntry[],
+    ): EmitResult {
+        const type = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
+        if (type.kind !== "function" || !type.closureName || !type.ret || type.ret.kind !== "value") {
+            unsupported(call, "AOT Function constructor result must be callable");
+        }
+        const body = this.emitExpr(bodyNode);
+        return this.emitSequencedExpr(type, [
+            { value: body, target: T_STRING, node: bodyNode },
+        ], ([bodyValue]) => {
+            const out = this.freshTemp("_aot_fn_out");
+            const pieces = [`${type.c} ${out} = NULL`];
+            let dispatch = "";
+            entries.forEach((entry, index) => {
+                const adapter = this.ensureAotConstantFunctionAdapter(type, entry.constant);
+                const cond = `${index === 0 ? "if" : "else if"} (tsc_str_eq(${bodyValue}, ${this.cStringLiteral(entry.source)}))`;
+                dispatch += `${cond} { ${out} = ${this.emitAotFunctionAllocation(type, adapter)}; } `;
+            });
+            dispatch += `else { tsc_throw_str(tsc_str_from_cstr("runtime Function source outside AOT allow-list")); }`;
+            pieces.push(dispatch);
+            pieces.push(out);
+            return `({ ${pieces.join("; ")}; })`;
         });
+    }
+
+    private emitAotFunctionAllocation(type: CType, adapter: string): string {
+        const fn = this.freshTemp("_aot_fn");
+        return (
+            `({ ${type.c} ${fn} = (${type.c})TSC_GC_MALLOC(sizeof(${type.closureName})); ` +
+            `${fn}->fn = ${adapter}; ${fn}->env = NULL; ${fn}; })`
+        );
     }
 
     private ensureAotConstantFunctionAdapter(type: CType, constant: AotRuntimeConstant): string {
@@ -9304,6 +9379,10 @@ class Emitter {
             case "undefined":
                 return { c: "tsc_value_undefined()", ty: T_VALUE };
         }
+    }
+
+    private cStringLiteral(value: string): string {
+        return `tsc_str_from_lit("${escapeCString(value)}", ${utf8ByteLen(value)})`;
     }
 
     private aotRuntimeConstantKey(value: AotRuntimeConstant): string {

@@ -29,6 +29,10 @@ program
         "--dynamic-require-manifest <path>",
         "JSON allow-list of finite dynamic require specifiers compiled into the AOT graph",
     )
+    .option(
+        "--runtime-code-manifest <path>",
+        "JSON allow-list of eval/Function source strings compiled into AOT dispatch",
+    )
     .option("--verbose", "print compile steps")
     .action(async (entry: string, opts: Record<string, unknown>) => {
         const result = await compile({
@@ -47,6 +51,9 @@ program
                 : undefined,
             dynamicRequireManifest: opts.dynamicRequireManifest
                 ? path.resolve(opts.dynamicRequireManifest as string)
+                : undefined,
+            runtimeCodeManifest: opts.runtimeCodeManifest
+                ? path.resolve(opts.runtimeCodeManifest as string)
                 : undefined,
         });
         process.exit(result.exitCode);

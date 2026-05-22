@@ -1,3 +1,4 @@
+import * as fs from "node:fs/promises";
 import ts from "typescript";
 
 export type AotRuntimeConstant =
@@ -6,6 +7,40 @@ export type AotRuntimeConstant =
     | { kind: "boolean"; value: boolean }
     | { kind: "null" }
     | { kind: "undefined" };
+
+export interface AotRuntimeCodeEntry {
+    source: string;
+    constant: AotRuntimeConstant;
+}
+
+export interface RuntimeCodeManifest {
+    eval: AotRuntimeCodeEntry[];
+    functions: AotRuntimeCodeEntry[];
+}
+
+export function emptyRuntimeCodeManifest(): RuntimeCodeManifest {
+    return { eval: [], functions: [] };
+}
+
+export function runtimeCodeManifestHasEval(manifest: RuntimeCodeManifest): boolean {
+    return manifest.eval.length > 0;
+}
+
+export function runtimeCodeManifestHasFunctions(manifest: RuntimeCodeManifest): boolean {
+    return manifest.functions.length > 0;
+}
+
+export async function loadRuntimeCodeManifest(
+    manifestPath: string | undefined,
+): Promise<RuntimeCodeManifest> {
+    if (!manifestPath) return emptyRuntimeCodeManifest();
+    const raw = await fs.readFile(manifestPath, "utf8");
+    const parsed = JSON.parse(raw) as { eval?: unknown; functions?: unknown };
+    return {
+        eval: parseManifestList(parsed.eval, "eval", parseAotEvalConstant),
+        functions: parseManifestList(parsed.functions, "functions", parseAotFunctionBodyConstant),
+    };
+}
 
 export function parseAotEvalConstant(source: string): AotRuntimeConstant | null {
     const expr = parseExpression(source);
@@ -113,4 +148,30 @@ function constantToJsValue(value: AotRuntimeConstant): unknown {
         case "undefined":
             return undefined;
     }
+}
+
+function parseManifestList(
+    raw: unknown,
+    fieldName: string,
+    parse: (source: string) => AotRuntimeConstant | null,
+): AotRuntimeCodeEntry[] {
+    if (raw === undefined) return [];
+    if (!Array.isArray(raw)) {
+        throw new Error(`runtime code manifest field '${fieldName}' must be an array of strings`);
+    }
+    const entries: AotRuntimeCodeEntry[] = [];
+    const seen = new Set<string>();
+    for (const item of raw) {
+        if (typeof item !== "string" || item.length === 0) {
+            throw new Error(`runtime code manifest field '${fieldName}' entries must be non-empty strings`);
+        }
+        if (seen.has(item)) continue;
+        const constant = parse(item);
+        if (!constant) {
+            throw new Error(`runtime code manifest field '${fieldName}' entry is not supported for AOT: ${item}`);
+        }
+        seen.add(item);
+        entries.push({ source: item, constant });
+    }
+    return entries;
 }
