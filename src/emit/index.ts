@@ -8845,6 +8845,17 @@ class Emitter {
                 if (!cName) unsupported(exportDecl, `unsupported CommonJS module.exports value for require("${spec}")`);
                 return { c: cName, ty: this.commonJsExportedCType(exportDecl) };
             }
+        } else {
+            const exportDecl = this.requireCallModuleExportsDeclaration(call);
+            if (exportDecl) {
+                const cName = this.declarationCName(exportDecl);
+                if (!cName) unsupported(exportDecl, `unsupported CommonJS module.exports value for require("${spec}")`);
+                if (!this.commonJsExportGlobals.has(cName)) {
+                    return { c: `tsc_value_object(tsc_object_new())`, ty: T_VALUE };
+                }
+                const ty = this.commonJsExportedCType(exportDecl);
+                return { c: this.coerce({ c: cName, ty }, T_VALUE, call), ty: T_VALUE };
+            }
         }
         return { c: `tsc_value_object(tsc_object_new())`, ty: T_VALUE };
     }

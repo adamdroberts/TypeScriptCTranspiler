@@ -478,6 +478,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-object-from-entries-computed-named-package": cjsPackage("tsc2c-cjs-object-from-entries-computed-named-package", {
         "index.js": 'const defaultKey = "def" + "ault";\nconst labelKey = `label`;\nconst countPrefix = "co";\nmodule.exports = Object.fromEntries([\n  [defaultKey, "from-entries-computed-default"],\n  [labelKey, "from-entries-computed-named"],\n  [countPrefix + "unt", 94],\n  [`enabled`, true]\n]);\n',
     }),
+    "tsc2c-cjs-module-exports-dynamic-computed": cjsPackage("tsc2c-cjs-module-exports-dynamic-computed", {
+        "index.js": 'const suffix = "bel";\nconst entries = [["la" + suffix, "dynamic-computed"], ["count", 71]];\nmodule.exports = Object.fromEntries(entries);\n',
+    }),
     "tsc2c-cjs-object-from-entries-object-entries-named-package": cjsPackage("tsc2c-cjs-object-from-entries-object-entries-named-package", {
         "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "from-entries-object-default",\n  label: local.label,\n  count: 95,\n  enabled: true\n};\nmodule.exports = Object.fromEntries(Object.entries(api));\n',
         "local.js": 'exports.label = "from-entries-object-named";\n',
