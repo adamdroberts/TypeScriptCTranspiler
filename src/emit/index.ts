@@ -21275,6 +21275,19 @@ class Emitter {
     private emitReflectConstruct(call: ts.CallExpression): EmitResult {
         const args = call.arguments;
         if (args.length !== 2) unsupported(call, "Reflect.construct expects target and argumentsList");
+        if (!(ts.isIdentifier(args[0]!) && this.findClassDecl(args[0]!.text))) {
+            const target = this.emitExpr(args[0]!);
+            if (target.ty.kind === "value") {
+                const list = this.emitReflectArgumentsListExpr(args[1]!);
+                if (list.ty.kind !== "array" && list.ty.kind !== "value") {
+                    unsupported(args[1]!, "Reflect.construct argumentsList must be an array literal, typed array, or dynamic array");
+                }
+                return this.emitSequencedCall("tsc_value_construct", T_VALUE, [
+                    { value: target, target: T_VALUE, node: args[0]! },
+                    { value: list, target: T_VALUE, node: args[1]! },
+                ]);
+            }
+        }
         if (!ts.isIdentifier(args[0]!)) {
             unsupported(args[0]!, "Reflect.construct target must be a class identifier");
         }

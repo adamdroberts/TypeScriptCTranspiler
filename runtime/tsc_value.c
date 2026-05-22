@@ -74,6 +74,40 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
     return tsc_value_undefined();
 }
 
+tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args) {
+    if (!value_is_box(args) || value_tag(args) != TSC_VALUE_TAG_ARRAY) {
+        tsc_panic("Reflect.construct argumentsList must be an array");
+    }
+    if (value_is_box(target) && value_tag(target) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* o = (tsc_object_t*)value_ptr(target);
+        if (o->is_proxy) {
+            if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'construct' on a proxy that has been revoked"));
+            tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("construct", 9));
+            if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
+                return tsc_value_construct(o->proxy_target, args);
+            }
+            tsc_array_t* trap_args = tsc_array_new(sizeof(tsc_value_t), 4);
+            tsc_array_push_value(trap_args, o->proxy_target);
+            tsc_array_push_value(trap_args, args);
+            tsc_array_push_value(trap_args, target);
+            tsc_value_t result = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(trap_args));
+            if (
+                !value_is_box(result) ||
+                (
+                    value_tag(result) != TSC_VALUE_TAG_OBJECT &&
+                    value_tag(result) != TSC_VALUE_TAG_ARRAY &&
+                    value_tag(result) != TSC_VALUE_TAG_FUNCTION
+                )
+            ) {
+                tsc_panic("Proxy construct trap must return an object");
+            }
+            return result;
+        }
+    }
+    tsc_panic("Reflect.construct target is not a supported constructor");
+    return tsc_value_undefined();
+}
+
 
 tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
     if (!value_is_box(v)) return tsc_value_undefined();
@@ -1468,4 +1502,3 @@ tsc_value_t tsc_value_method_pad_end(tsc_value_t recv, tsc_value_t target, tsc_v
     }
     return tsc_value_undefined();
 }
-
