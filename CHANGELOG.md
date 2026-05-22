@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 - Standard class decorators now evaluate during module initialization for named classes, with direct decorator functions and decorator-factory closure results receiving a dynamic context object containing `kind: "class"` and `name`; class replacement, metadata, and `addInitializer` remain deferred. Tests: `class_decorator_basic`, `class_decorator_factory`.
+- Standard method decorators now evaluate during module initialization for named instance and static methods, with direct decorator functions receiving dynamic context objects containing `kind`, `name`, `static`, and `private`. Method replacement, metadata, and `addInitializer` remain deferred. Test: `method_decorator_basic`.
 - `Object.groupBy` and `Map.groupBy` callbacks that declare `this: any` now receive the JavaScript default `undefined` receiver across direct and inline callbacks. Test: `group_by_this_param`.
 - Typed `Map.prototype.forEach` and `Set.prototype.forEach` now accept optional `thisArg` values, evaluate them once, and bind them for callbacks that declare `this: any`. Test: `map_set_for_each_this_arg`.
 - Default parameters can now initialize omitted function-typed arguments with arrow/function closure values, while preserving the existing rejection of default initializers that reference `this`, `arguments`, or parameters. Test: `default_parameter_function_initializers`.

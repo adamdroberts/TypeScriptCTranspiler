@@ -108,6 +108,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - **Static initialization blocks** — emitted in member order with static field initializers during module initialization. Test: `class_static_blocks`
 - **Static methods** — called as `ClassName_method(args)`, including computed names. Tests: `inheritance`, `class_computed_members`
 - Standard class decorators on named classes are evaluated during module initialization. Direct decorator functions and decorator-factory closure results receive a dynamic context object with `kind: "class"` and `name`; class replacement, metadata, `addInitializer`, and member decorators remain deferred. Tests: `class_decorator_basic`, `class_decorator_factory`
+- Standard method decorators on named instance and static methods are evaluated during module initialization. Direct decorator functions receive a dynamic context object with `kind`, `name`, `static`, and `private`; method replacement, metadata, `addInitializer`, field/accessor decorators, and computed non-literal decorator names remain deferred. Test: `method_decorator_basic`
 - Inherited method dispatch — `d.describe()` on `Dog extends Animal` resolves to `Animal_describe((Animal_t*)d)`. Test: `inheritance`
 - `abstract` classes, access modifiers, and `readonly` fields are accepted as TS-only modifiers. Test: `class_modifiers`
 - `interface` declarations → C struct types (no runtime overhead); `extends` emits inherited fields in base-first order for field access and typed Object/Reflect field-list helpers. Tests: `interfaces`, `interface_inheritance`
@@ -1209,6 +1210,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `set_composition` | ES2025 Set union/intersection/difference/symmetricDifference and subset/superset/disjoint predicates |
 | `set_constructor_from_set` | typed Set copy construction from another Set |
 | `map_group_by` | ES2024 Map.groupBy over typed arrays with arrow/block-body and named callback references |
+| `method_decorator_basic` | standard method decorators with dynamic method context |
 | `string_compound_plus` | typed `string +=` compound assignment with implicit coercion of mixed rhs |
 | `object_group_by` | ES2024 Object.groupBy over typed arrays returning a dynamic null-prototype object with expression/block-body callbacks |
 | `array_from_mapper` | Array.from(items, mapfn) for typed arrays and string code-point sequences with expression/block-body callbacks |
