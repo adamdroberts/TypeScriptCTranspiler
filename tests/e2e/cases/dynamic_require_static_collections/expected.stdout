@@ -1,0 +1,5 @@
+static map a init
+static map b init
+static array a init
+static array b init
+static collection requires done

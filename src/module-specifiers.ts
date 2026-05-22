@@ -62,6 +62,12 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             }
             return out;
         }
+        if (ts.isElementAccessExpression(node) && node.argumentExpression) {
+            return resolveStaticCollectionAccess(node.expression, node.argumentExpression);
+        }
+        if (ts.isPropertyAccessExpression(node)) {
+            return resolveStaticCollectionAccess(node.expression, node.name);
+        }
         if (!ts.isIdentifier(node)) return [];
         const decl = topLevelConstStringDeclaration(node);
         if (decl?.initializer) {
@@ -72,6 +78,106 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (values.length > 0) return values;
         }
         return stringLiteralUnionIdentifierTexts(node);
+    };
+
+    const resolveStaticCollectionAccess = (
+        collectionExpr: ts.Expression,
+        keyExpr: ts.Expression | ts.Identifier,
+    ): string[] => {
+        while (
+            ts.isParenthesizedExpression(collectionExpr) ||
+            ts.isAsExpression(collectionExpr) ||
+            ts.isTypeAssertionExpression(collectionExpr) ||
+            ts.isSatisfiesExpression(collectionExpr)
+        ) {
+            collectionExpr = collectionExpr.expression;
+        }
+        if (!ts.isIdentifier(collectionExpr)) return [];
+        const decl = topLevelConstStringDeclaration(collectionExpr);
+        if (!decl?.initializer || seen.has(decl)) return [];
+        seen.add(decl);
+        let init = decl.initializer;
+        while (
+            ts.isParenthesizedExpression(init) ||
+            ts.isAsExpression(init) ||
+            ts.isTypeAssertionExpression(init) ||
+            ts.isSatisfiesExpression(init)
+        ) {
+            init = init.expression;
+        }
+
+        let values: string[] = [];
+        if (ts.isArrayLiteralExpression(init)) {
+            values = resolveStaticArrayAccess(init, keyExpr);
+        } else if (ts.isObjectLiteralExpression(init)) {
+            values = resolveStaticObjectAccess(init, keyExpr);
+        }
+        seen.delete(decl);
+        return dedupe(values);
+    };
+
+    const resolveStaticArrayAccess = (
+        init: ts.ArrayLiteralExpression,
+        keyExpr: ts.Expression | ts.Identifier,
+    ): string[] => {
+        const elements: string[][] = [];
+        for (const element of init.elements) {
+            if (ts.isSpreadElement(element)) return [];
+            const values = resolve(element);
+            if (values.length === 0) return [];
+            elements.push(values);
+        }
+        const keys = resolveStaticNumericKeys(keyExpr);
+        if (keys.length === 0) return dedupe(elements.flat());
+        const out: string[] = [];
+        for (const key of keys) {
+            const values = elements[key];
+            if (!values) return [];
+            out.push(...values);
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticObjectAccess = (
+        init: ts.ObjectLiteralExpression,
+        keyExpr: ts.Expression | ts.Identifier,
+    ): string[] => {
+        const entries = new Map<string, string[]>();
+        for (const prop of init.properties) {
+            if (!ts.isPropertyAssignment(prop)) return [];
+            const key = staticPropertyName(prop.name);
+            if (key == null) return [];
+            const values = resolve(prop.initializer);
+            if (values.length === 0) return [];
+            entries.set(key, values);
+        }
+        const keys = resolveKeyTexts(keyExpr);
+        if (keys.length === 0) return dedupe([...entries.values()].flat());
+        const out: string[] = [];
+        for (const key of keys) {
+            const values = entries.get(key);
+            if (!values) return [];
+            out.push(...values);
+        }
+        return dedupe(out);
+    };
+
+    const resolveKeyTexts = (keyExpr: ts.Expression | ts.Identifier): string[] => {
+        if (ts.isIdentifier(keyExpr) && ts.isPropertyAccessExpression(keyExpr.parent) && keyExpr.parent.name === keyExpr) {
+            return [keyExpr.text];
+        }
+        return resolve(keyExpr as ts.Expression);
+    };
+
+    const resolveStaticNumericKeys = (keyExpr: ts.Expression | ts.Identifier): number[] => {
+        const texts = resolveKeyTexts(keyExpr);
+        if (texts.length === 0) return [];
+        const keys: number[] = [];
+        for (const text of texts) {
+            if (!/^(0|[1-9][0-9]*)$/.test(text)) return [];
+            keys.push(Number(text));
+        }
+        return keys;
     };
 
     return dedupe(resolve(expr));
@@ -181,4 +287,11 @@ function stringLiteralUnionTypeTexts(typeNode: ts.TypeNode | undefined): string[
         }
     }
     return values;
+}
+
+function staticPropertyName(name: ts.PropertyName): string | null {
+    if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
+        return name.text;
+    }
+    return null;
 }
