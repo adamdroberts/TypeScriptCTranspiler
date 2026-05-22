@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Typed `Map.prototype.forEach` and `Set.prototype.forEach` now accept optional `thisArg` values, evaluate them once, and bind them for callbacks that declare `this: any`. Test: `map_set_for_each_this_arg`.
 - Default parameters can now initialize omitted function-typed arguments with arrow/function closure values, while preserving the existing rejection of default initializers that reference `this`, `arguments`, or parameters. Test: `default_parameter_function_initializers`.
 - `Array.from(items, mapfn, thisArg)` now evaluates the optional mapper `thisArg` once and binds it for callbacks that declare `this: any` across typed array, string, Set, Map, and boxed dynamic array/string sources. Test: `array_from_mapper_this_arg`.
 - Typed and dynamic array higher-order methods now accept optional `thisArg` values, evaluate them once, and bind them for callbacks that declare `this: any`. Test: `array_hof_this_arg`.

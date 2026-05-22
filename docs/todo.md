@@ -50,7 +50,7 @@ This is the next item that most directly expands what programs can be written ag
   - Additional dynamic array string-key write and `length` write coverage is implemented for `arr["1"] = value` and `Reflect.set`. Test: `dynamic_array_property_writes`.
   - Additional dynamic array HOF callback-reference coverage is implemented for named callbacks with declared parameter coercion. Test: `dynamic_array_hof_refs`.
   - Additional bounded dynamic array `defineProperty` coverage is implemented for dense indexes and `length`. Test: `dynamic_array_define_property`.
-  - Additional typed Map/Set `forEach` coverage is implemented for single-return block-body inline callbacks and named callback references with value/key-or-value2/receiver parameters. Tests: `map_set_for_each`, `map_set_for_each_refs`.
+  - Additional typed Map/Set `forEach` coverage is implemented for single-return block-body inline callbacks and named callback references with value/key-or-value2/receiver parameters, plus optional `thisArg` evaluation and binding for callbacks that declare `this: any`. Tests: `map_set_for_each`, `map_set_for_each_refs`, `map_set_for_each_this_arg`.
   - Additional dynamic accessor descriptor coverage is implemented for function-scope closure-valued getters/setters and inline closure expressions. Test: `object_accessor_closures`.
   - Additional configurable accessor descriptor redefinition coverage is implemented for omitted hook/flag preservation and explicit undefined hook clearing. Test: `object_accessor_preserve`.
   - Additional dynamic `Object.defineProperties` coverage is implemented for static descriptor maps containing data and closure-valued accessor descriptors. Test: `object_define_properties`.

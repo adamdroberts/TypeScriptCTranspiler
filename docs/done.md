@@ -162,7 +162,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - `new Map<K, V>()`, `new Map(Object.entries(obj))` for string-key `ObjectEntry<V>[]` sources, and `new Map(existingMap)` for typed Map sources — `tsc_map_new(sizeof(K), sizeof(V), keyKind, initialCap)`. Tests: `map_set_constructors`, `map_constructor_from_map`
 - `.set(k, v)`, `.get(k)`, `.has(k)`, `.delete(k)`, `.clear()`; numeric keys use SameValueZero semantics so `NaN` matches `NaN` and `-0` matches `0`. Tests: `map_set`, `map_set_same_value_zero`
 - `.keys(...ignored)`, `.values(...ignored)` — returns typed array; `.entries(...ignored)` returns a typed `ObjectEntry<V>[]` for `Map<string, V>`. Ignored extra arguments are evaluated before being discarded. Test: `map_entries`
-- `.forEach((value, key, map) => expr)` — inline expression-body or single-return block-body callbacks and named callback references over insertion order. Tests: `map_set_for_each`, `map_set_for_each_refs`
+- `.forEach((value, key, map) => expr, thisArg?)` — inline expression-body or single-return block-body callbacks and named callback references over insertion order; optional `thisArg` values are evaluated once and bound for callbacks that declare `this: any`. Tests: `map_set_for_each`, `map_set_for_each_refs`, `map_set_for_each_this_arg`
 - Direct `for...of` with `[key, value]` destructuring. Test: `map_set_for_of`
 - `.size` property. Test: `map_set`, `wordcount`
 - `.toString(...ignored)`, `.toLocaleString(...ignored)`, and `.valueOf(...ignored)`. Test: `collection_object_methods`
@@ -171,7 +171,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 
 ### `Set<T>`
 - `new Set<T>()`, `new Set(valuesArray)`, and `new Set(existingSet)` — `tsc_set_new(sizeof(T), keyKind, initialCap)` plus per-value insertion. Tests: `map_set_constructors`, `set_constructor_from_set`
-- `.add(v)`, `.has(v)`, `.delete(v)`, `.clear()`, `.keys(...ignored)`, `.values(...ignored)`, `.forEach((value, value2, set) => expr)`, `.size`; numeric values use SameValueZero semantics, ignored key/value iterator arguments are evaluated before being discarded, and `forEach` accepts inline expression-body or single-return block-body callbacks and named callback references. Tests: `map_set`, `map_set_same_value_zero`, `set_keys`, `map_set_for_each`, `map_set_for_each_refs`
+- `.add(v)`, `.has(v)`, `.delete(v)`, `.clear()`, `.keys(...ignored)`, `.values(...ignored)`, `.forEach((value, value2, set) => expr, thisArg?)`, `.size`; numeric values use SameValueZero semantics, ignored key/value iterator arguments are evaluated before being discarded, and `forEach` accepts inline expression-body or single-return block-body callbacks and named callback references. Optional `thisArg` values are evaluated once and bound for callbacks that declare `this: any`. Tests: `map_set`, `map_set_same_value_zero`, `set_keys`, `map_set_for_each`, `map_set_for_each_refs`, `map_set_for_each_this_arg`
 - Direct `for...of` over values. Test: `map_set_for_of`
 - `.toString(...ignored)`, `.toLocaleString(...ignored)`, and `.valueOf(...ignored)`. Test: `collection_object_methods`
 - ES2025 set composition: `.union(other)`, `.intersection(other)`, `.difference(other)`, `.symmetricDifference(other)`, `.isSubsetOf(other)`, `.isSupersetOf(other)`, `.isDisjointFrom(other)`. The argument must be a `Set<T>` of the same element type; runtime helpers `tsc_set_union`/`tsc_set_intersection`/`tsc_set_difference`/`tsc_set_symmetric_difference`/`tsc_set_is_subset_of`/`tsc_set_is_superset_of`/`tsc_set_is_disjoint_from` honor SameValueZero element matching and insertion order. Test: `set_composition`
@@ -821,6 +821,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `map_set_constructors` | Map from Object.entries and Set from array constructors |
 | `map_set_for_each` | Map and Set forEach inline expression/block-body callbacks |
 | `map_set_for_each_refs` | Map and Set forEach named callback references |
+| `map_set_for_each_this_arg` | Map and Set forEach callbacks with evaluated and bound optional thisArg |
 | `map_set_for_of` | direct Map `[key, value]` and Set value iteration |
 | `map_set_same_value_zero` | Map and Set SameValueZero numeric key semantics |
 | `native_addon` | expected diagnostic for literal native addon imports |
