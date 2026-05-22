@@ -17,6 +17,8 @@ interface Case {
     expected?: string;
     expectedExitCode?: number;
     expectedMainCContains?: string;
+    emitCOnly?: boolean;
+    nativeAddonManifest?: string;
     release?: boolean;
 }
 
@@ -32,6 +34,8 @@ async function discoverCases(): Promise<Case[]> {
         const expectedPath = path.join(casesDir, d, "expected.stdout");
         const expectedExitPath = path.join(casesDir, d, "expected.exitcode");
         const expectedMainCContainsPath = path.join(casesDir, d, "expected.mainc.contains");
+        const emitCOnlyPath = path.join(casesDir, d, "compile.emit_c_only");
+        const nativeAddonManifestPath = path.join(casesDir, d, "native-addon-manifest.json");
         const releasePath = path.join(casesDir, d, "compile.release");
         try {
             await fs.access(entry);
@@ -42,9 +46,23 @@ async function discoverCases(): Promise<Case[]> {
             } catch {
                 // default debug/speed build
             }
+            let emitCOnly = false;
+            try {
+                await fs.access(emitCOnlyPath);
+                emitCOnly = true;
+            } catch {
+                // default compile-and-run case
+            }
+            let nativeAddonManifest: string | undefined;
+            try {
+                await fs.access(nativeAddonManifestPath);
+                nativeAddonManifest = nativeAddonManifestPath;
+            } catch {
+                // optional native-addon allow-list
+            }
             let expectedMainCContains: string | undefined;
             try {
-                expectedMainCContains = await fs.readFile(expectedMainCContainsPath, "utf8");
+                expectedMainCContains = (await fs.readFile(expectedMainCContainsPath, "utf8")).trimEnd();
             } catch {
                 // optional generated-C assertion
             }
@@ -55,14 +73,21 @@ async function discoverCases(): Promise<Case[]> {
                     entry,
                     expectedExitCode: Number(raw.trim()),
                     expectedMainCContains,
+                    emitCOnly,
+                    nativeAddonManifest,
                     release,
                 });
                 continue;
             } catch {
                 // fall through to positive stdout case
             }
-            const expected = await fs.readFile(expectedPath, "utf8");
-            cases.push({ name: d, entry, expected, expectedMainCContains, release });
+            let expected = "";
+            try {
+                expected = await fs.readFile(expectedPath, "utf8");
+            } catch {
+                if (!emitCOnly) throw new Error(`missing expected.stdout for ${d}`);
+            }
+            cases.push({ name: d, entry, expected, expectedMainCContains, emitCOnly, nativeAddonManifest, release });
         } catch {
             // ignore non-case dirs
         }
@@ -95,7 +120,15 @@ async function main(): Promise<void> {
         const bin = path.join(tmpRoot, c.name);
         const buildDir = path.join(tmpRoot, c.name + "-build");
         process.stdout.write(`e2e: ${c.name} … `);
-        const r = await compile({ entry: c.entry, output: bin, buildDir, noGc: process.env.TSC2C_NO_GC === "1", release: c.release });
+        const r = await compile({
+            entry: c.entry,
+            output: bin,
+            buildDir,
+            noGc: process.env.TSC2C_NO_GC === "1",
+            release: c.release,
+            emitCOnly: c.emitCOnly,
+            nativeAddonManifest: c.nativeAddonManifest,
+        });
         if (c.expectedExitCode !== undefined) {
             if (r.exitCode !== c.expectedExitCode) {
                 console.log(`EXIT MISMATCH (expected ${c.expectedExitCode}, got ${r.exitCode})`);
@@ -112,7 +145,10 @@ async function main(): Promise<void> {
             continue;
         }
         if (c.expectedMainCContains !== undefined) {
-            const needle = c.expectedMainCContains.replaceAll("{{ENTRY}}", c.entry);
+            const nativePkgNode = path.resolve(casesDir, "../../../node_modules/native-pkg/build/Release/native.node");
+            const needle = c.expectedMainCContains
+                .replaceAll("{{ENTRY}}", c.entry)
+                .replaceAll("{{NATIVE_PKG_NODE}}", nativePkgNode);
             if (!r.mainC.includes(needle)) {
                 console.log("MAINC MISSING EXPECTED SUBSTRING");
                 console.log("---expected substring---");
@@ -121,6 +157,11 @@ async function main(): Promise<void> {
                 failed++;
                 continue;
             }
+        }
+        if (c.emitCOnly) {
+            console.log("OK");
+            passed++;
+            continue;
         }
         const run = await runBinary(bin);
         if (run.code !== 0) {

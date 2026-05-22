@@ -21,6 +21,10 @@ program
         "--unsafe-eval",
         "lower eval/Function to the embedded Node bridge; requires libnode when linking",
     )
+    .option(
+        "--native-addon-manifest <path>",
+        "JSON allow-list mapping native addon specifiers to concrete .node files",
+    )
     .option("--verbose", "print compile steps")
     .action(async (entry: string, opts: Record<string, unknown>) => {
         const result = await compile({
@@ -34,6 +38,9 @@ program
             noGc: opts.gc === false,
             release: !!opts.release,
             unsafeEval: !!opts.unsafeEval,
+            nativeAddonManifest: opts.nativeAddonManifest
+                ? path.resolve(opts.nativeAddonManifest as string)
+                : undefined,
         });
         process.exit(result.exitCode);
     });

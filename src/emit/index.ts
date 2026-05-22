@@ -42,6 +42,11 @@ import {
     formatUnsupported,
 } from "../diagnostics";
 import { staticStringExpressionText } from "../module-specifiers";
+import {
+    type NativeAddonManifest,
+    emptyNativeAddonManifest,
+    nativeAddonPathForSpecifier,
+} from "../native-addons";
 import type { ModuleGraph, ModuleInfo } from "../resolve";
 
 interface EmitResult {
@@ -164,8 +169,9 @@ export interface EmittedProgram {
 export function emitProgram(
     graph: ModuleGraph,
     checker: ts.TypeChecker,
+    options: { nativeAddons?: NativeAddonManifest } = {},
 ): EmittedProgram {
-    const em = new Emitter(checker, graph);
+    const em = new Emitter(checker, graph, options);
     return em.run();
 }
 
@@ -235,6 +241,7 @@ class Emitter {
     constructor(
         private checker: ts.TypeChecker,
         private graph: ModuleGraph,
+        private options: { nativeAddons?: NativeAddonManifest } = {},
     ) {}
 
     private freshTemp(prefix = "_t"): string {
@@ -3582,6 +3589,22 @@ class Emitter {
         if (!ts.isObjectBindingPattern(d.name)) {
             unsupported(d.name, "destructuring at module scope");
         }
+        const nativeAddon = this.emitNativeAddonValue(spec, d.getSourceFile().fileName);
+        if (nativeAddon) {
+            for (const element of d.name.elements) {
+                const exportName = this.requireDestructureExportName(element);
+                if (!ts.isIdentifier(element.name)) {
+                    unsupported(element.name, "top-level require destructuring requires identifier bindings");
+                }
+                const localName = this.declaredName(element.name);
+                const key = `tsc_str_from_lit("${escapeCString(exportName)}", ${utf8ByteLen(exportName)})`;
+                this.globalDecls.line(`static tsc_value_t ${localName};`);
+                initBuf.line(`${localName} = tsc_value_get_prop(${nativeAddon.c}, ${key});`);
+                const sym = this.symbolForIdentifier(element.name);
+                if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
+            }
+            return;
+        }
         const info = this.resolvedModuleInfoForSpecifier(spec, d.getSourceFile().fileName);
         if (!info) {
             unsupported(d.initializer ?? d, `unresolved require("${spec}")`);
@@ -3661,6 +3684,54 @@ class Emitter {
                 ) {
                     const spec = this.requireCallSpecifier(fallbackDecl.initializer);
                     if (spec) return spec;
+                }
+            }
+        }
+        return null;
+    }
+
+    private nativeAddonPathForSpecifier(spec: string, containingFile: string): string | null {
+        return nativeAddonPathForSpecifier(
+            this.options.nativeAddons ?? emptyNativeAddonManifest(),
+            spec,
+            containingFile,
+        );
+    }
+
+    private emitNativeAddonValue(spec: string, containingFile: string): EmitResult | null {
+        const addonPath = this.nativeAddonPathForSpecifier(spec, containingFile);
+        if (!addonPath) return null;
+        return {
+            c: `tsc_node_native_addon(${this.stringLit(addonPath)})`,
+            ty: T_VALUE,
+        };
+    }
+
+    private nativeAddonImportedBinding(id: ts.Identifier): { spec: string; exportName: string | null } | null {
+        const raw = this.checker.getSymbolAtLocation(id);
+        for (const decl of raw?.declarations ?? []) {
+            if (ts.isImportClause(decl) && decl.name?.text === id.text) {
+                const importDecl = decl.parent;
+                const spec = importDecl.moduleSpecifier;
+                if (ts.isStringLiteralLike(spec) && this.nativeAddonPathForSpecifier(spec.text, id.getSourceFile().fileName)) {
+                    return { spec: spec.text, exportName: null };
+                }
+            }
+            if (ts.isNamespaceImport(decl) && decl.name.text === id.text) {
+                const importDecl = decl.parent.parent;
+                const spec = importDecl.moduleSpecifier;
+                if (ts.isStringLiteralLike(spec) && this.nativeAddonPathForSpecifier(spec.text, id.getSourceFile().fileName)) {
+                    return { spec: spec.text, exportName: null };
+                }
+            }
+            if (ts.isImportSpecifier(decl) && decl.name.text === id.text) {
+                const importDecl = decl.parent.parent.parent;
+                const spec = importDecl.moduleSpecifier;
+                if (ts.isStringLiteralLike(spec) && this.nativeAddonPathForSpecifier(spec.text, id.getSourceFile().fileName)) {
+                    return {
+                        spec: spec.text,
+                        exportName: decl.propertyName?.text ?? decl.name.text,
+                    };
                 }
             }
         }
@@ -7073,9 +7144,25 @@ class Emitter {
             if (sym && this.catchStringSymbols.has(sym)) {
                 return { c: this.identifierRead(expr), ty: T_STRING };
             }
+            const requireBindingSpec = this.requireBindingSpecifier(expr);
+            if (requireBindingSpec && this.nativeAddonPathForSpecifier(requireBindingSpec, expr.getSourceFile().fileName)) {
+                return { c: this.identifierRead(expr), ty: T_VALUE };
+            }
             const requireDestructureType = this.requireDestructureBindingType(expr);
             if (requireDestructureType) {
                 return { c: this.identifierRead(expr), ty: requireDestructureType };
+            }
+            const nativeImported = this.nativeAddonImportedBinding(expr);
+            if (nativeImported) {
+                const addon = this.emitNativeAddonValue(nativeImported.spec, expr.getSourceFile().fileName);
+                if (addon) {
+                    if (!nativeImported.exportName) return addon;
+                    const key = nativeImported.exportName;
+                    return {
+                        c: `tsc_value_get_prop(${addon.c}, tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}))`,
+                        ty: T_VALUE,
+                    };
+                }
             }
             const requireDefault = this.requireBindingModuleExportsCName(expr);
             if (requireDefault) {
@@ -8694,6 +8781,8 @@ class Emitter {
     }
 
     private emitCommonJsRequireCall(call: ts.CallExpression, spec: string): EmitResult {
+        const nativeAddon = this.emitNativeAddonValue(spec, call.getSourceFile().fileName);
+        if (nativeAddon) return nativeAddon;
         if (!this.isRequireBindingInitializer(call)) {
             const exportDecl = this.requireCallModuleExportsDeclaration(call);
             if (exportDecl) {

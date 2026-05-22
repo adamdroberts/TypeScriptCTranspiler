@@ -11,6 +11,12 @@ import { emitProgram } from "./emit/index";
 import { invokeCc } from "./link/cc";
 import { staticStringExpressionText } from "./module-specifiers";
 import {
+    type NativeAddonManifest,
+    loadNativeAddonManifest,
+    nativeAddonManifestHasEntries,
+    nativeAddonPathForSpecifier,
+} from "./native-addons";
+import {
     formatTsDiagnostics,
     formatUnsupported,
     UnsupportedError,
@@ -28,6 +34,8 @@ export interface CompileOptions {
     release?: boolean;
     /** If true, lower eval/Function to the embedded Node bridge. Requires libnode when linking. */
     unsafeEval?: boolean;
+    /** JSON allow-list mapping native addon specifiers to concrete .node paths. */
+    nativeAddonManifest?: string;
 }
 
 export interface CompileResult {
@@ -130,7 +138,7 @@ interface PermanentLimitDiagnostic {
 function permanentLimitDiagnostics(
     program: ts.Program,
     libCoreDts: string,
-    opts: { unsafeEval?: boolean } = {},
+    opts: { unsafeEval?: boolean; nativeAddons?: NativeAddonManifest } = {},
 ): PermanentLimitDiagnostic[] {
     const diagnostics: PermanentLimitDiagnostic[] = [];
     for (const sf of program.getSourceFiles()) {
@@ -139,13 +147,15 @@ function permanentLimitDiagnostics(
             if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
                 const spec = node.moduleSpecifier;
                 if (spec && ts.isStringLiteral(spec) && isNativeAddonSpecifier(spec.text)) {
-                    diagnostics.push({
-                        node: spec,
-                        message:
-                            "native C++ addon modules (*.node) cannot be AOT-compiled",
-                    });
+                    if (!opts.nativeAddons || !nativeAddonPathForSpecifier(opts.nativeAddons, spec.text, sf.fileName)) {
+                        diagnostics.push({
+                            node: spec,
+                            message:
+                                "native C++ addon modules (*.node) require --native-addon-manifest allow-list entry",
+                        });
+                    }
                 } else if (spec && ts.isStringLiteral(spec)) {
-                    const message = nativeAddonPackageMessage(spec.text, sf.fileName);
+                    const message = nativeAddonPackageMessage(spec.text, sf.fileName, opts.nativeAddons);
                     if (message) diagnostics.push({ node: spec, message });
                 }
             } else if (ts.isCallExpression(node)) {
@@ -171,13 +181,15 @@ function permanentLimitDiagnostics(
                         const spec = node.arguments[0];
                         const literalSpec = spec ? stringSpecifierText(spec) : null;
                         if (literalSpec && isNativeAddonSpecifier(literalSpec)) {
-                            diagnostics.push({
-                                node,
-                                message:
-                                    "native C++ addon modules (*.node) cannot be AOT-compiled",
-                            });
+                            if (!opts.nativeAddons || !nativeAddonPathForSpecifier(opts.nativeAddons, literalSpec, sf.fileName)) {
+                                diagnostics.push({
+                                    node,
+                                    message:
+                                        "native C++ addon modules (*.node) require --native-addon-manifest allow-list entry",
+                                });
+                            }
                         } else if (literalSpec) {
-                            const message = nativeAddonPackageMessage(literalSpec, sf.fileName);
+                            const message = nativeAddonPackageMessage(literalSpec, sf.fileName, opts.nativeAddons);
                             if (message) diagnostics.push({ node, message });
                         } else if (!literalSpec) {
                             diagnostics.push({
@@ -191,13 +203,15 @@ function permanentLimitDiagnostics(
                     const spec = node.arguments[0];
                     const literalSpec = spec ? stringSpecifierText(spec) : null;
                     if (literalSpec && isNativeAddonSpecifier(literalSpec)) {
-                        diagnostics.push({
-                            node,
-                            message:
-                                "native C++ addon modules (*.node) cannot be AOT-compiled",
-                        });
+                        if (!opts.nativeAddons || !nativeAddonPathForSpecifier(opts.nativeAddons, literalSpec, sf.fileName)) {
+                            diagnostics.push({
+                                node,
+                                message:
+                                    "native C++ addon modules (*.node) require --native-addon-manifest allow-list entry",
+                            });
+                        }
                     } else if (literalSpec) {
-                        const message = nativeAddonPackageMessage(literalSpec, sf.fileName);
+                        const message = nativeAddonPackageMessage(literalSpec, sf.fileName, opts.nativeAddons);
                         if (message) diagnostics.push({ node, message });
                     } else if (!literalSpec) {
                         diagnostics.push({
@@ -210,13 +224,15 @@ function permanentLimitDiagnostics(
                     const spec = node.arguments[0];
                     const literalSpec = spec ? stringSpecifierText(spec) : null;
                     if (literalSpec && isNativeAddonSpecifier(literalSpec)) {
-                        diagnostics.push({
-                            node,
-                            message:
-                                "native C++ addon modules (*.node) cannot be AOT-compiled",
-                        });
+                        if (!opts.nativeAddons || !nativeAddonPathForSpecifier(opts.nativeAddons, literalSpec, sf.fileName)) {
+                            diagnostics.push({
+                                node,
+                                message:
+                                    "native C++ addon modules (*.node) require --native-addon-manifest allow-list entry",
+                            });
+                        }
                     } else if (literalSpec) {
-                        const message = nativeAddonPackageMessage(literalSpec, sf.fileName);
+                        const message = nativeAddonPackageMessage(literalSpec, sf.fileName, opts.nativeAddons);
                         if (message) diagnostics.push({ node, message });
                     }
                 }
@@ -301,6 +317,7 @@ function isNativeAddonSpecifier(spec: string): boolean {
 function nativeAddonPackageMessage(
     spec: string,
     containingFile: string,
+    manifest: NativeAddonManifest | undefined,
 ): string | null {
     if (spec.startsWith(".") || spec.startsWith("/") || spec.startsWith("node:")) {
         return null;
@@ -310,7 +327,8 @@ function nativeAddonPackageMessage(
     const packageRoot = findNodeModulePackage(packageName, path.dirname(containingFile));
     if (!packageRoot) return null;
     if (!packageContainsNativeAddon(packageRoot)) return null;
-    return `native C++ addon package '${packageName}' contains or resolves to a .node binary and cannot be AOT-compiled; use a pure-JS alternative`;
+    if (manifest && nativeAddonPathForSpecifier(manifest, spec, containingFile)) return null;
+    return `native C++ addon package '${packageName}' contains or resolves to a .node binary and requires --native-addon-manifest allow-list entry`;
 }
 
 function packageNameFromSpecifier(spec: string): string | null {
@@ -382,6 +400,14 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         opts.buildDir ?? (await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-")));
     if (opts.verbose) console.error(`[tsc2c] build dir: ${buildDir}`);
     await fs.mkdir(buildDir, { recursive: true });
+    let nativeAddons: NativeAddonManifest;
+    try {
+        nativeAddons = await loadNativeAddonManifest(opts.nativeAddonManifest);
+    } catch (e) {
+        process.stderr.write(`tsc2c: ${(e as Error).message}\n`);
+        return { exitCode: 3, buildDir, mainC: "" };
+    }
+    const usesNodeEmbed = !!opts.unsafeEval || nativeAddonManifestHasEntries(nativeAddons);
 
     const { program, checker, entrySourceFile, libCoreDts } = buildProgram({
         entry: opts.entry,
@@ -389,6 +415,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     });
     const permanent = permanentLimitDiagnostics(program, libCoreDts, {
         unsafeEval: opts.unsafeEval,
+        nativeAddons,
     });
     if (permanent.length > 0) {
         for (const d of permanent) {
@@ -416,7 +443,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         console.error(`[tsc2c] topo: ${graph.topoOrder.join(" -> ")}`);
     }
 
-    const { mainC, diagnostics } = emitProgram(graph, checker);
+    const { mainC, diagnostics } = emitProgram(graph, checker, { nativeAddons });
     if (diagnostics.length > 0) {
         for (const d of diagnostics) process.stderr.write(d + "\n");
         return { exitCode: 3, buildDir, mainC: "" };
@@ -426,7 +453,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     if (opts.verbose) console.error(`[tsc2c] wrote ${mainPath}`);
 
     const runtimeSrc = path.join(pkg, "runtime");
-    const runtimeSources = opts.unsafeEval
+    const runtimeSources = usesNodeEmbed
         ? [...RUNTIME_SOURCES, ...NODE_EMBED_RUNTIME_SOURCES]
         : RUNTIME_SOURCES;
     for (const f of runtimeSources) {
@@ -442,10 +469,10 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     }
 
     const pcFlags = await pcre2Flags();
-    const nodeEmbed = opts.unsafeEval ? findNodeEmbedLinkOptions() : null;
-    if (opts.unsafeEval && !nodeEmbed) {
+    const nodeEmbed = usesNodeEmbed ? findNodeEmbedLinkOptions() : null;
+    if (usesNodeEmbed && !nodeEmbed) {
         process.stderr.write(
-            "tsc2c: --unsafe-eval requires embedded Node link inputs; set TSC2C_LIBNODE to libnode.so/libnode.a and optionally TSC2C_NODE_INCLUDE to Node headers\n",
+            "tsc2c: embedded Node bridge requires link inputs; set TSC2C_LIBNODE to libnode.so/libnode.a and optionally TSC2C_NODE_INCLUDE to Node headers\n",
         );
         if (opts.buildDir === undefined) fsSync.rmSync(buildDir, { recursive: true, force: true });
         return { exitCode: 3, buildDir, mainC };
@@ -461,7 +488,8 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         libs,
         extraFlags: [
             ...(opts.noGc ? ["-DTSC_NO_GC"] : []),
-            ...(opts.unsafeEval ? ["-DTSC_UNSAFE_EVAL", "-DTSC_HAS_LIBNODE"] : []),
+            ...(opts.unsafeEval ? ["-DTSC_UNSAFE_EVAL"] : []),
+            ...(usesNodeEmbed ? ["-DTSC_HAS_LIBNODE"] : []),
             ...pcFlags.compileFlags,
         ],
         linkFlags: [

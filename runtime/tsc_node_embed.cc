@@ -25,6 +25,7 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
 tsc_value_t tsc_node_eval(tsc_str_t* source);
 tsc_value_t tsc_node_function(tsc_str_t* body);
 tsc_value_t tsc_node_function_call(tsc_value_t fn, tsc_array_t* args);
+tsc_value_t tsc_node_native_addon(tsc_str_t* resolved_path);
 }
 
 #ifndef TSC_HAS_LIBNODE
@@ -40,6 +41,11 @@ extern "C" tsc_value_t tsc_node_function(tsc_str_t*) {
 }
 
 extern "C" tsc_value_t tsc_node_function_call(tsc_value_t, tsc_array_t*) {
+    tsc_panic("embedded Node bridge unavailable: binary was not linked with libnode");
+    return tsc_value_undefined();
+}
+
+extern "C" tsc_value_t tsc_node_native_addon(tsc_str_t*) {
     tsc_panic("embedded Node bridge unavailable: binary was not linked with libnode");
     return tsc_value_undefined();
 }
@@ -70,6 +76,34 @@ struct NodeFunctionEnv {
 std::string tscToString(tsc_str_t* value) {
     if (!value || !value->data) return std::string();
     return std::string(value->data, value->len);
+}
+
+std::string quoteJsString(const std::string& value) {
+    std::string out = "'";
+    for (char ch : value) {
+        switch (ch) {
+            case '\\':
+                out += "\\\\";
+                break;
+            case '\'':
+                out += "\\'";
+                break;
+            case '\n':
+                out += "\\n";
+                break;
+            case '\r':
+                out += "\\r";
+                break;
+            case '\t':
+                out += "\\t";
+                break;
+            default:
+                out += ch;
+                break;
+        }
+    }
+    out += "'";
+    return out;
 }
 
 tsc_value_t fromV8(v8::Isolate* isolate, v8::Local<v8::Value> value) {
@@ -206,6 +240,14 @@ extern "C" tsc_value_t tsc_node_function(tsc_str_t* body) {
 
 extern "C" tsc_value_t tsc_node_function_call(tsc_value_t fn, tsc_array_t* args) {
     return tsc_value_apply_function(fn, tsc_value_undefined(), tsc_value_array(args));
+}
+
+extern "C" tsc_value_t tsc_node_native_addon(tsc_str_t* resolved_path) {
+    std::string source = "require(";
+    source += quoteJsString(tscToString(resolved_path));
+    source += ")";
+    tsc_str_t source_str = { source.size(), source.c_str(), 0 };
+    return evalSource(&source_str);
 }
 
 #endif
