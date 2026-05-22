@@ -346,6 +346,7 @@ int64_t array_strict_index(double value, int64_t len);
 int64_t array_range_index(double value, int64_t len, double fallback);
 void object_reserve(tsc_object_t* o, size_t cap);
 ssize_t object_find(const tsc_object_t* o, const tsc_str_t* key);
+void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* proxy, const tsc_str_t* key, tsc_value_t result);
 const tsc_object_t* object_prototype_object(const tsc_object_t* o);
 const tsc_object_prop_t* object_find_chain_prop(const tsc_object_t* o, const tsc_str_t* key);
 bool object_chain_contains(tsc_value_t prototype, const tsc_object_t* needle);

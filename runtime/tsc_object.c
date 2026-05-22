@@ -101,6 +101,77 @@ static void validate_proxy_define_property_result(const tsc_object_t* proxy, con
     }
 }
 
+static bool descriptor_has_prop(const tsc_object_t* desc, const char* name, size_t len, tsc_value_t* out) {
+    ssize_t found = object_find(desc, tsc_str_from_lit(name, len));
+    if (found < 0) return false;
+    if (out) *out = desc->props[(size_t)found].value;
+    return true;
+}
+
+void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* proxy, const tsc_str_t* key, tsc_value_t result) {
+    if (!proxy || !value_is_box(proxy->proxy_target) || value_tag(proxy->proxy_target) != TSC_VALUE_TAG_OBJECT) return;
+    const tsc_object_t* target = (const tsc_object_t*)value_ptr(proxy->proxy_target);
+    ssize_t found = object_find(target, key);
+    const tsc_object_prop_t* prop = found >= 0 ? &target->props[(size_t)found] : NULL;
+    if (tsc_value_is_undefined(result)) {
+        if (prop && !prop->configurable) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot hide non-configurable key"));
+        }
+        if (prop && !target->extensible) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot hide key on non-extensible target"));
+        }
+        return;
+    }
+    if (!value_is_box(result) || value_tag(result) != TSC_VALUE_TAG_OBJECT) {
+        tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap must return object or undefined"));
+    }
+    const tsc_object_t* desc = (const tsc_object_t*)value_ptr(result);
+    tsc_value_t configurable_value = tsc_value_undefined();
+    bool has_configurable = descriptor_has_prop(desc, "configurable", 12, &configurable_value);
+    bool configurable = has_configurable ? tsc_value_is_truthy(configurable_value) : false;
+    tsc_value_t writable_value = tsc_value_undefined();
+    bool has_writable = descriptor_has_prop(desc, "writable", 8, &writable_value);
+    bool writable = has_writable ? tsc_value_is_truthy(writable_value) : false;
+    tsc_value_t value = tsc_value_undefined();
+    bool has_value = descriptor_has_prop(desc, "value", 5, &value);
+    bool has_get = descriptor_has_prop(desc, "get", 3, NULL);
+    bool has_set = descriptor_has_prop(desc, "set", 3, NULL);
+
+    if (!prop) {
+        if (!target->extensible) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report new key on non-extensible target"));
+        }
+        if (!configurable) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report new non-configurable key"));
+        }
+        return;
+    }
+    if (!configurable && prop->configurable) {
+        tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report configurable key as non-configurable"));
+    }
+    if (prop->configurable) return;
+    if (configurable) {
+        tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report non-configurable key as configurable"));
+    }
+    if (prop->accessor) {
+        if (has_value || has_writable) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report data descriptor for non-configurable accessor key"));
+        }
+        return;
+    }
+    if (has_get || has_set) {
+        tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report accessor descriptor for non-configurable data key"));
+    }
+    if (!prop->writable) {
+        if (writable) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report non-configurable non-writable key as writable"));
+        }
+        if (has_value && !tsc_value_same_value_zero(value, prop->value)) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key"));
+        }
+    }
+}
+
 const tsc_object_t* object_prototype_object(const tsc_object_t* o) {
     if (!o || !value_is_object_value(o->prototype)) return NULL;
     return (const tsc_object_t*)value_ptr(o->prototype);
@@ -446,6 +517,7 @@ bool tsc_object_has_own(const tsc_object_t* o, const tsc_str_t* key) {
         tsc_array_push_value(args, o->proxy_target);
         tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+        tsc_proxy_validate_get_own_property_descriptor_result(o, key, res);
         return !tsc_value_is_undefined(res);
     }
     return object_find(o, key) >= 0;
@@ -466,6 +538,7 @@ bool tsc_object_property_is_enumerable(const tsc_object_t* o, const tsc_str_t* k
         tsc_array_push_value(args, o->proxy_target);
         tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+        tsc_proxy_validate_get_own_property_descriptor_result(o, key, res);
         if (tsc_value_is_undefined(res)) return false;
         tsc_value_t enum_val = tsc_value_get_prop(res, tsc_str_from_lit("enumerable", 10));
         return tsc_value_is_truthy(enum_val);

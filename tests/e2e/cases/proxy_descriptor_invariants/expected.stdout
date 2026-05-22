@@ -1,0 +1,11 @@
+bad descriptor: Proxy getOwnPropertyDescriptor trap must return object or undefined
+hide fixed: Proxy getOwnPropertyDescriptor trap cannot hide non-configurable key
+hide closed: Proxy getOwnPropertyDescriptor trap cannot hide key on non-extensible target
+new closed: Proxy getOwnPropertyDescriptor trap cannot report new key on non-extensible target
+new fixed: Proxy getOwnPropertyDescriptor trap cannot report new non-configurable key
+config false: Proxy getOwnPropertyDescriptor trap cannot report configurable key as non-configurable
+wrong fixed: Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key
+writable fixed: Proxy getOwnPropertyDescriptor trap cannot report non-configurable non-writable key as writable
+accessor as data: Proxy getOwnPropertyDescriptor trap cannot report data descriptor for non-configurable accessor key
+real descriptor: 1 false false
+keys descriptor: Proxy getOwnPropertyDescriptor trap cannot hide non-configurable key

@@ -652,7 +652,9 @@ tsc_value_t tsc_value_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key)
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 2);
         tsc_array_push_value(args, o->proxy_target);
         tsc_array_push_value(args, tsc_value_string(key));
-        return tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+        tsc_value_t result = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+        tsc_proxy_validate_get_own_property_descriptor_result(o, key, result);
+        return result;
     }
     for (size_t i = 0; i < o->len; i++) {
         if (!tsc_str_eq(o->props[i].key, key)) continue;
