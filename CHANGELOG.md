@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Proxy `has` and `deleteProperty` trap results now reject invariant violations for non-configurable target keys and existing keys on non-extensible targets. Test: `proxy_has_delete_invariants`.
 - Proxy `ownKeys` trap results now enforce duplicate-key, non-configurable target key, and non-extensible target key invariants for both `Reflect.ownKeys(proxy)` and `Object.keys(proxy)`. Test: `proxy_ownkeys_invariants`.
 - `--unsafe-eval` now gates runtime code compilation behind an embedded Node bridge: default `eval` / `Function` / `new Function` diagnostics remain hard failures, while the explicit flag emits `tsc_node_eval` / callable `tsc_node_function` bridge calls and links `runtime/tsc_node_embed.cc` only when `libnode` inputs are available. Focused checks cover default rejection, `--unsafe-eval --emit-c-only` bridge emission, callable `Function` bridge emission, and the local missing-`libnode` link diagnostic.
 - Top-level const string `require(name)` specifiers now resolve as finite AOT module edges instead of being treated as unknowable dynamic requires; genuinely non-finite dynamic require remains rejected. Tests: `dynamic_require`, `dynamic_require_unknown`.

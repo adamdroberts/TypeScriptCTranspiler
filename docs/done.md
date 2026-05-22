@@ -2,7 +2,7 @@
 
 Everything in this file compiles end-to-end to a native binary via `./bin/tsc2c file.ts -o out`. Each bullet points at the test case under `tests/e2e/cases/` that exercises it and, where useful, at the runtime symbol or emitter method that implements it.
 
-Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` -> 668 passed.
+Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts` -> 669 passed.
 
 ---
 
@@ -361,7 +361,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `Object.getOwnPropertyDescriptor(dynamic, key)` returns a dynamic data/accessor descriptor object for existing dynamic properties; accessor `get`/`set` fields are stable boxed function identities when present. Tests: `object_descriptors`, `reflect_receiver`
 - `Object.getOwnPropertyDescriptors(dynamic)` returns a dynamic object whose own properties are descriptor objects for every own dynamic property, including non-enumerable data properties and accessor `get`/`set` identities. Test: `object_get_own_property_descriptors`
 - `Reflect.get(dynamic, key, receiver?)`, `Reflect.set(dynamic, key, value, receiver?)`, `Reflect.has`, `Reflect.deleteProperty`, `Reflect.ownKeys`, `Reflect.defineProperty`, `Reflect.getPrototypeOf`, `Reflect.setPrototypeOf`, and `Reflect.getOwnPropertyDescriptor` handle dynamic object data properties/prototypes; receiver-aware dynamic `Reflect.set` writes inherited or missing writable data properties onto the receiver, accessor functions bind `this` to the get/set receiver when they declare `this: any`, descriptor reads preserve accessor function identity, and dynamic `Reflect.apply` can invoke those boxed accessor function identities with a supplied receiver. Tests: `reflect_dynamic`, `reflect_get_own_property_descriptor`, `reflect_receiver`, `object_prototypes`, `object_descriptors`
-- `new Proxy(target, handler)` and `Proxy.revocable(target, handler)` support dynamic object traps for `get`, `set`, `has`, `deleteProperty`, `defineProperty`, `getOwnPropertyDescriptor`, `ownKeys`, `getPrototypeOf`, `setPrototypeOf`, `isExtensible`, and `preventExtensions`, plus function `apply` traps through dynamic `Reflect.apply` and bounded `construct` traps through dynamic `Reflect.construct(proxyCtor, args)`. `Object.keys(proxy)` filters trapped `ownKeys` through `getOwnPropertyDescriptor(...).enumerable`, matching descriptor semantics instead of returning every trapped key; `ownKeys` trap result validation rejects duplicate keys, missing non-configurable target keys, and extra/missing keys on non-extensible targets. Tests: `proxy`, `proxy-ownkeys`, `proxy_traps`, `proxy_ownkeys_invariants`, `proxy_construct`
+- `new Proxy(target, handler)` and `Proxy.revocable(target, handler)` support dynamic object traps for `get`, `set`, `has`, `deleteProperty`, `defineProperty`, `getOwnPropertyDescriptor`, `ownKeys`, `getPrototypeOf`, `setPrototypeOf`, `isExtensible`, and `preventExtensions`, plus function `apply` traps through dynamic `Reflect.apply` and bounded `construct` traps through dynamic `Reflect.construct(proxyCtor, args)`. `Object.keys(proxy)` filters trapped `ownKeys` through `getOwnPropertyDescriptor(...).enumerable`, matching descriptor semantics instead of returning every trapped key; `ownKeys` trap result validation rejects duplicate keys, missing non-configurable target keys, and extra/missing keys on non-extensible targets; `has` and `deleteProperty` trap result validation rejects hiding or deleting non-configurable keys and existing keys on non-extensible targets. Tests: `proxy`, `proxy-ownkeys`, `proxy_traps`, `proxy_ownkeys_invariants`, `proxy_has_delete_invariants`, `proxy_construct`
 - `JSON.stringify(dynamic)` recurses through dynamic arrays/objects; object properties whose values are `undefined` or boxed function identities are omitted, while array slots still emit `null`. Tests: `dynamic_values`, `object_descriptor_defaults`
 
 ---
@@ -997,6 +997,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `reflect_construct` | Reflect.construct over statically known class constructors and array/spread argument lists |
 | `proxy_traps` | dynamic Proxy object traps plus function apply trap and enumerable ownKeys filtering |
 | `proxy_ownkeys_invariants` | Proxy ownKeys duplicate, non-configurable, and non-extensible target invariant checks |
+| `proxy_has_delete_invariants` | Proxy has/deleteProperty non-configurable and non-extensible target invariant checks |
 | `proxy_construct` | bounded Proxy construct trap dispatch through dynamic Reflect.construct |
 | `object_accessor_arrows` | dynamic lifted-arrow accessor descriptors |
 | `object_accessor_closures` | dynamic closure-valued accessor descriptors |
