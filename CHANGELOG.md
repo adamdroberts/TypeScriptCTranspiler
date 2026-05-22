@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Constant runtime-code strings now compile AOT for expression `eval("...")` and constant-body `Function("return ...")` / `new Function("return ...")` without enabling `--unsafe-eval`; non-static sources still reject unless unsafe eval is explicitly enabled. Tests: `runtime_eval`, `runtime_function_call`, `runtime_function_constructor`, `runtime_eval_unknown`, `runtime_function_call_unknown`, `runtime_function_constructor_unknown`.
 - Dynamic `require(name)` finite dispatch now materializes CommonJS object shapes that spread package-local `require(...)` results into `module.exports = { ...require("./base"), method() {} }` assignments. Test: `dynamic_require_commonjs_shapes`.
 - Dynamic `require(name)` finite specifier proofs now include top-level const string maps and arrays, so `require(table[key])` and `require(list[index])` can enter the AOT graph when every possible collection value is a static string. Test: `dynamic_require_static_collections`.
 - Dynamic `require(name)` finite specifier proofs now include identifiers annotated as string-literal unions, including function parameters and top-level variables, so those alternatives enter the AOT module graph and runtime finite dispatch. Test: `dynamic_require_literal_union`.
