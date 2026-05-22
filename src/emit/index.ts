@@ -2931,6 +2931,7 @@ class Emitter {
             !ts.isIdentifier(expr) &&
             !ts.isArrayLiteralExpression(expr) &&
             !this.requireCallModuleExportsDeclaration(expr) &&
+            !(ts.isCallExpression(expr) && this.commonJsRequireSpreadMemberDeclarations(expr)) &&
             !(ts.isPropertyAccessExpression(expr) && this.requireModuleMemberDeclaration(expr)) &&
             !this.isCommonJsRuntimeComputedModuleExportsValue(expr) &&
             !this.isCommonJsObjectLiteralExportValue(expr)
@@ -3917,6 +3918,11 @@ class Emitter {
                 }
                 continue;
             }
+            const moduleRequireValueExports = this.commonJsModuleExportsRequireValueExports(stmt);
+            if (moduleRequireValueExports) {
+                out.push(...moduleRequireValueExports);
+                continue;
+            }
             const definePropertiesExports = this.commonJsDefinePropertiesExports(stmt);
             if (definePropertiesExports) {
                 for (const exported of definePropertiesExports) {
@@ -3994,6 +4000,16 @@ class Emitter {
             out.push(entry);
         }
         return out.length > 0 ? out : null;
+    }
+
+    private commonJsModuleExportsRequireValueExports(
+        stmt: ts.Statement,
+    ): Array<{ name: string; decl: ts.Node }> | null {
+        const assignment = this.commonJsModuleExportsValueAssignmentChain(stmt);
+        if (!assignment || !this.requireCallSpecifier(assignment.right)) return null;
+        const members = this.commonJsRequireSpreadMemberDeclarations(assignment.right)
+            ?.filter((member) => member.name !== "__esModule") ?? [];
+        return members.length > 0 ? members : null;
     }
 
     private commonJsModuleExportsValueDeclaration(sf: ts.SourceFile): ts.BinaryExpression | null {
@@ -8919,6 +8935,7 @@ class Emitter {
                 if (!cName) unsupported(exportDecl, `unsupported CommonJS module.exports value for require("${spec}")`);
                 return { c: cName, ty: this.commonJsExportedCType(exportDecl) };
             }
+            return this.emitCommonJsRequireModuleValue(call, spec);
         } else {
             const exportDecl = this.requireCallModuleExportsDeclaration(call);
             if (exportDecl) {
