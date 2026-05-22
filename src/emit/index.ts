@@ -467,6 +467,7 @@ class Emitter {
                 if (ts.isFunctionDeclaration(inner)) continue;
                 if (ts.isClassDeclaration(inner)) {
                     this.emitClassStaticInitializers(initBuf, inner);
+                    this.emitClassDecorators(initBuf, inner);
                     continue;
                 }
                 if (ts.isInterfaceDeclaration(inner)) continue;
@@ -5132,6 +5133,97 @@ class Emitter {
                 for (const stmt of m.body.statements) this.emitStmt(buf, stmt);
             }
         }
+    }
+
+    private emitClassDecorators(buf: CBuf, cd: ts.ClassDeclaration): void {
+        if (!cd.name || !ts.canHaveDecorators(cd)) return;
+        const decorators = ts.getDecorators(cd) ?? [];
+        if (decorators.length === 0) return;
+        for (const decorator of decorators) {
+            const call = this.emitDecoratorFunctionCall(
+                decorator.expression,
+                [
+                    { c: "tsc_value_undefined()", ty: T_VALUE },
+                    this.classDecoratorContext(cd),
+                ],
+                "class decorator",
+            );
+            buf.line(`(void)(${call});`);
+        }
+    }
+
+    private classDecoratorContext(cd: ts.ClassDeclaration): EmitResult {
+        const name = cd.name?.text ?? "";
+        const obj = this.freshTemp("_class_decorator_ctx");
+        return {
+            c:
+                `({ tsc_object_t* ${obj} = tsc_object_new(); ` +
+                `tsc_object_set(${obj}, tsc_str_from_lit("kind", 4), tsc_value_string(tsc_str_from_lit("class", 5))); ` +
+                `tsc_object_set(${obj}, tsc_str_from_lit("name", 4), tsc_value_string(tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))); ` +
+                `tsc_value_object(${obj}); })`,
+            ty: T_VALUE,
+        };
+    }
+
+    private emitDecoratorFunctionCall(
+        expr: ts.Expression,
+        args: EmitResult[],
+        label: string,
+    ): string {
+        if (ts.isIdentifier(expr) && this.isDirectCallableIdentifier(expr)) {
+            const sym = this.symbolForIdentifier(expr);
+            const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+            const fnDecl = decl && ts.isVariableDeclaration(decl) && decl.initializer
+                ? decl.initializer
+                : decl;
+            const sig = fnDecl && (
+                ts.isFunctionDeclaration(fnDecl) ||
+                ts.isFunctionExpression(fnDecl) ||
+                ts.isArrowFunction(fnDecl)
+            )
+                ? this.checker.getSignatureFromDeclaration(fnDecl)
+                : null;
+            if (!sig) unsupported(expr, `${label} expression must be callable`);
+            const params = sig.getParameters();
+            if (params.length > args.length) {
+                unsupported(expr, `${label} callbacks currently support at most ${args.length} parameters`);
+            }
+            const thisType = this.directCallableThisType(expr);
+            const specs: SequencedCallArg[] = params.map((param, index) => {
+                const decl = param.valueDeclaration ?? expr;
+                return {
+                    value: args[index]!,
+                    target: this.prepareType(mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker)),
+                    node: expr,
+                };
+            });
+            const fnName = this.identifierName(expr);
+            return this.emitSequencedExpr(T_VOID, specs, (vals) =>
+                `({ (void)(${fnName}(${[...(thisType ? ["tsc_value_undefined()"] : []), ...vals].join(", ")})); })`,
+            ).c;
+        }
+        const callee = this.emitExpr(expr);
+        if (callee.ty.kind !== "function" || !callee.ty.ret) {
+            unsupported(expr, `${label} expression must be callable`);
+        }
+        const params = callee.ty.params ?? [];
+        if (params.length > args.length) {
+            unsupported(expr, `${label} callbacks currently support at most ${args.length} parameters`);
+        }
+        const specs: SequencedCallArg[] = [
+            { value: callee, target: callee.ty, node: expr },
+            ...params.map((param, index) => ({
+                value: args[index]!,
+                target: param,
+                node: expr,
+            })),
+        ];
+        return this.emitSequencedExpr(T_VOID, specs, (vals) => {
+            const fn = vals[0]!;
+            const callArgs = vals.slice(1);
+            const call = `${fn}->fn(${[`${fn}->env`, ...(callee.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`;
+            return `({ (void)(${call}); })`;
+        }).c;
     }
 
     private collectParams(ps: readonly ts.ParameterDeclaration[]): string[] {

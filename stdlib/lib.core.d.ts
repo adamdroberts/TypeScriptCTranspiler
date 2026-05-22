@@ -465,6 +465,12 @@ interface FunctionConstructor {
 declare var Function: FunctionConstructor;
 interface CallableFunction extends Function {}
 interface NewableFunction extends Function {}
+interface ClassDecoratorContext<Class = unknown> {
+    readonly kind: "class";
+    readonly name: string | undefined;
+    readonly metadata: any;
+    addInitializer(initializer: () => void): void;
+}
 declare function eval(source: string, ...ignored: unknown[]): unknown;
 interface RegExp {
     exec(s: string, ...ignored: any[]): string[] | null;

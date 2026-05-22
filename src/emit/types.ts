@@ -425,6 +425,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         if (sym?.getName() === "FSDirent") return T_FS_DIRENT;
         if (sym?.getName() === "TemplateStringsArray") return arrayType(T_STRING);
         if (sym?.getName() === "ProxyHandler") return T_VALUE;
+        if (sym?.getName() === "ClassDecoratorContext") return T_VALUE;
     }
 
     // User-defined class or interface?
