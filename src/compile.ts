@@ -22,6 +22,10 @@ import {
     type DynamicRequireManifest,
 } from "./dynamic-require";
 import {
+    parseAotEvalConstant,
+    parseAotFunctionBodyConstant,
+} from "./runtime-code-aot";
+import {
     formatTsDiagnostics,
     formatUnsupported,
     UnsupportedError,
@@ -173,7 +177,7 @@ function permanentLimitDiagnostics(
                 const expr = node.expression;
                 if (ts.isIdentifier(expr)) {
                     if (expr.text === "eval") {
-                        if (!opts.unsafeEval) {
+                        if (!opts.unsafeEval && !canAotCompileEvalCall(node)) {
                             diagnostics.push({
                                 node,
                                 message:
@@ -181,7 +185,7 @@ function permanentLimitDiagnostics(
                             });
                         }
                     } else if (expr.text === "Function") {
-                        if (!opts.unsafeEval) {
+                        if (!opts.unsafeEval && !canAotCompileFunctionConstructor(node)) {
                             diagnostics.push({
                                 node,
                                 message:
@@ -238,7 +242,7 @@ function permanentLimitDiagnostics(
                 ts.isIdentifier(node.expression) &&
                 node.expression.text === "Function"
             ) {
-                if (!opts.unsafeEval) {
+                if (!opts.unsafeEval && !canAotCompileFunctionConstructor(node)) {
                     diagnostics.push({
                         node,
                         message:
@@ -302,6 +306,18 @@ function stringSpecifierText(expr: ts.Expression): string | null {
 
 function stringSpecifierTexts(expr: ts.Expression): string[] {
     return staticStringExpressionTexts(expr);
+}
+
+function canAotCompileEvalCall(call: ts.CallExpression): boolean {
+    const source = call.arguments[0] ? stringSpecifierText(call.arguments[0]!) : null;
+    return source !== null && parseAotEvalConstant(source) !== null;
+}
+
+function canAotCompileFunctionConstructor(call: ts.CallExpression | ts.NewExpression): boolean {
+    const args = call.arguments ?? [];
+    if (args.length !== 1) return false;
+    const body = stringSpecifierText(args[0]!);
+    return body !== null && parseAotFunctionBodyConstant(body) !== null;
 }
 
 function addNativeAddonDiagnostics(
