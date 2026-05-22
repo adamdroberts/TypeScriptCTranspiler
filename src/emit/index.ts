@@ -206,6 +206,7 @@ class Emitter {
     private microtaskAdapters = new Map<string, string>();
     private immediateAdapters = new Map<string, string>();
     private timeoutAdapters = new Map<string, string>();
+    private nodeFunctionAdapters = new Set<string>();
     private eventListenerAdapters = new Map<string, string>();
     private eventTargetListenerAdapters = new Map<string, string>();
     private eventListenerIdentities = new Map<string, string>();
@@ -9005,9 +9006,50 @@ class Emitter {
         }
         const bodyNode = args[0]!;
         const body = this.emitExpr(bodyNode);
-        return this.emitSequencedCall("tsc_node_function", T_VALUE, [
+        const type = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
+        if (type.kind !== "function" || !type.closureName) {
+            unsupported(call, "Function constructor result must be callable");
+        }
+        const adapter = this.ensureNodeFunctionAdapter(call, type);
+        const envType = `${adapter}_env_t`;
+        return this.emitSequencedExpr(type, [
             { value: body, target: T_STRING, node: bodyNode },
-        ]);
+        ], ([source]) => {
+            const env = this.freshTemp("_node_fn_env");
+            const fn = this.freshTemp("_node_fn");
+            return (
+                `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
+                `${env}->fn = tsc_node_function(${source}); ` +
+                `${type.c} ${fn} = (${type.c})TSC_GC_MALLOC(sizeof(${type.closureName})); ` +
+                `${fn}->fn = ${adapter}; ${fn}->env = ${env}; ${fn}; })`
+            );
+        });
+    }
+
+    private ensureNodeFunctionAdapter(node: ts.Node, type: CType): string {
+        if (
+            type.kind !== "function" ||
+            !type.closureName ||
+            !type.ret ||
+            type.ret.kind !== "value" ||
+            (type.params?.length ?? 0) !== 1 ||
+            type.params?.[0]?.kind !== "array" ||
+            type.params?.[0]?.elem?.kind !== "value"
+        ) {
+            unsupported(node, "unsafe Function bridge currently supports (...args: unknown[]) => unknown");
+        }
+        const name = `${type.closureName}_node_bridge`;
+        if (this.nodeFunctionAdapters.has(name)) return name;
+        this.nodeFunctionAdapters.add(name);
+        const envType = `${name}_env_t`;
+        this.structDecls.open(`typedef struct ${envType}`);
+        this.structDecls.line("tsc_value_t fn;");
+        this.structDecls.close(` ${envType};`);
+        this.defs.open(`static tsc_value_t ${name}(void* raw_env, tsc_array_t* args)`);
+        this.defs.line(`${envType}* env = (${envType}*)raw_env;`);
+        this.defs.line("return tsc_node_function_call(env->fn, args);");
+        this.defs.close();
+        return name;
     }
 
     private emitStaticSpreadCall(

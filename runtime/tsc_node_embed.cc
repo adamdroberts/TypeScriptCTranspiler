@@ -9,6 +9,8 @@ typedef struct tsc_str {
     const char* data;
     uint64_t hash;
 } tsc_str_t;
+typedef struct tsc_array tsc_array_t;
+typedef tsc_value_t (*tsc_generic_function_t)(void* env, tsc_value_t this_arg, tsc_array_t* args);
 
 void tsc_panic(const char* msg);
 tsc_str_t* tsc_str_from_lit(const char* data, size_t len);
@@ -17,8 +19,12 @@ tsc_value_t tsc_value_null(void);
 tsc_value_t tsc_value_num(double n);
 tsc_value_t tsc_value_bool(bool b);
 tsc_value_t tsc_value_string(tsc_str_t* s);
+tsc_value_t tsc_value_array(tsc_array_t* a);
+tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env);
+tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args);
 tsc_value_t tsc_node_eval(tsc_str_t* source);
 tsc_value_t tsc_node_function(tsc_str_t* body);
+tsc_value_t tsc_node_function_call(tsc_value_t fn, tsc_array_t* args);
 }
 
 #ifndef TSC_HAS_LIBNODE
@@ -29,6 +35,11 @@ extern "C" tsc_value_t tsc_node_eval(tsc_str_t*) {
 }
 
 extern "C" tsc_value_t tsc_node_function(tsc_str_t*) {
+    tsc_panic("embedded Node bridge unavailable: binary was not linked with libnode");
+    return tsc_value_undefined();
+}
+
+extern "C" tsc_value_t tsc_node_function_call(tsc_value_t, tsc_array_t*) {
     tsc_panic("embedded Node bridge unavailable: binary was not linked with libnode");
     return tsc_value_undefined();
 }
@@ -51,6 +62,10 @@ struct NodeEmbedState {
 };
 
 NodeEmbedState* state = nullptr;
+
+struct NodeFunctionEnv {
+    v8::Global<v8::Function> fn;
+};
 
 std::string tscToString(tsc_str_t* value) {
     if (!value || !value->data) return std::string();
@@ -129,6 +144,24 @@ tsc_value_t evalSource(tsc_str_t* source) {
     return fromV8(isolate, result);
 }
 
+tsc_value_t callNodeFunction(void* rawEnv, tsc_value_t, tsc_array_t*) {
+    NodeEmbedState* current = ensureState();
+    v8::Isolate* isolate = current->isolate;
+    v8::Isolate::Scope isolateScope(isolate);
+    v8::HandleScope handleScope(isolate);
+    v8::Local<v8::Context> context = current->context.Get(isolate);
+    v8::Context::Scope contextScope(context);
+
+    NodeFunctionEnv* env = static_cast<NodeFunctionEnv*>(rawEnv);
+    v8::Local<v8::Function> fn = env->fn.Get(isolate);
+    v8::TryCatch tryCatch(isolate);
+    v8::Local<v8::Value> result;
+    if (!fn->Call(context, v8::Undefined(isolate), 0, nullptr).ToLocal(&result)) {
+        tsc_panic("embedded Node bridge: Function execution failed");
+    }
+    return fromV8(isolate, result);
+}
+
 } // namespace
 
 extern "C" tsc_value_t tsc_node_eval(tsc_str_t* source) {
@@ -140,7 +173,39 @@ extern "C" tsc_value_t tsc_node_function(tsc_str_t* body) {
     wrapped += tscToString(body);
     wrapped += "\n})";
     tsc_str_t source = { wrapped.size(), wrapped.c_str(), 0 };
-    return evalSource(&source);
+    NodeEmbedState* current = ensureState();
+    v8::Isolate* isolate = current->isolate;
+    v8::Isolate::Scope isolateScope(isolate);
+    v8::HandleScope handleScope(isolate);
+    v8::Local<v8::Context> context = current->context.Get(isolate);
+    v8::Context::Scope contextScope(context);
+
+    std::string src = tscToString(&source);
+    v8::Local<v8::String> code;
+    if (!v8::String::NewFromUtf8(
+             isolate,
+             src.c_str(),
+             v8::NewStringType::kNormal,
+             (int)src.size(),
+         ).ToLocal(&code)) {
+        tsc_panic("embedded Node bridge: could not allocate Function source string");
+    }
+    v8::TryCatch tryCatch(isolate);
+    v8::Local<v8::Script> script;
+    if (!v8::Script::Compile(context, code).ToLocal(&script)) {
+        tsc_panic("embedded Node bridge: Function compile failed");
+    }
+    v8::Local<v8::Value> result;
+    if (!script->Run(context).ToLocal(&result) || !result->IsFunction()) {
+        tsc_panic("embedded Node bridge: Function source did not produce a callable");
+    }
+    NodeFunctionEnv* env = new NodeFunctionEnv();
+    env->fn.Reset(isolate, v8::Local<v8::Function>::Cast(result));
+    return tsc_value_function_generic(callNodeFunction, env);
+}
+
+extern "C" tsc_value_t tsc_node_function_call(tsc_value_t fn, tsc_array_t* args) {
+    return tsc_value_apply_function(fn, tsc_value_undefined(), tsc_value_array(args));
 }
 
 #endif
