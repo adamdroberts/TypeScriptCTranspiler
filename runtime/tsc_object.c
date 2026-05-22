@@ -33,6 +33,74 @@ ssize_t object_find(const tsc_object_t* o, const tsc_str_t* key) {
     return -1;
 }
 
+static void validate_proxy_get_result(const tsc_object_t* proxy, const tsc_str_t* key, tsc_value_t result) {
+    if (!proxy || !value_is_box(proxy->proxy_target) || value_tag(proxy->proxy_target) != TSC_VALUE_TAG_OBJECT) return;
+    const tsc_object_t* target = (const tsc_object_t*)value_ptr(proxy->proxy_target);
+    ssize_t found = object_find(target, key);
+    if (found < 0) return;
+    const tsc_object_prop_t* prop = &target->props[(size_t)found];
+    if (prop->configurable) return;
+    if (!prop->accessor && !prop->writable && !tsc_value_same_value_zero(result, prop->value)) {
+        tsc_throw_str(tsc_str_from_cstr("Proxy get trap cannot report different value for non-configurable non-writable key"));
+    }
+    if (prop->accessor && !prop->getter && !tsc_value_is_undefined(result)) {
+        tsc_throw_str(tsc_str_from_cstr("Proxy get trap cannot report value for non-configurable accessor without getter"));
+    }
+}
+
+static void validate_proxy_set_result(const tsc_object_t* proxy, const tsc_str_t* key, tsc_value_t value, bool success) {
+    if (!success || !proxy || !value_is_box(proxy->proxy_target) || value_tag(proxy->proxy_target) != TSC_VALUE_TAG_OBJECT) return;
+    const tsc_object_t* target = (const tsc_object_t*)value_ptr(proxy->proxy_target);
+    ssize_t found = object_find(target, key);
+    if (found < 0) return;
+    const tsc_object_prop_t* prop = &target->props[(size_t)found];
+    if (prop->configurable) return;
+    if (!prop->accessor && !prop->writable && !tsc_value_same_value_zero(value, prop->value)) {
+        tsc_throw_str(tsc_str_from_cstr("Proxy set trap cannot report success changing non-configurable non-writable key"));
+    }
+    if (prop->accessor && !prop->setter) {
+        tsc_throw_str(tsc_str_from_cstr("Proxy set trap cannot report success for non-configurable accessor without setter"));
+    }
+}
+
+static void validate_proxy_define_property_result(const tsc_object_t* proxy, const tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable, bool success) {
+    if (!success || !proxy || !value_is_box(proxy->proxy_target) || value_tag(proxy->proxy_target) != TSC_VALUE_TAG_OBJECT) return;
+    const tsc_object_t* target = (const tsc_object_t*)value_ptr(proxy->proxy_target);
+    ssize_t found = object_find(target, key);
+    if (found < 0) {
+        if (!target->extensible) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot add key to non-extensible target"));
+        }
+        if (has_configurable && !configurable) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot report new non-configurable key"));
+        }
+        return;
+    }
+    const tsc_object_prop_t* prop = &target->props[(size_t)found];
+    if (has_configurable && !configurable && prop->configurable) {
+        tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot report configurable key as non-configurable"));
+    }
+    if (prop->configurable) return;
+    if (has_configurable && configurable) {
+        tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot make non-configurable key configurable"));
+    }
+    if (has_enumerable && enumerable != prop->enumerable) {
+        tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot change non-configurable enumerable flag"));
+    }
+    if (prop->accessor) {
+        if (has_value || has_writable) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot redefine non-configurable accessor key as data"));
+        }
+        return;
+    }
+    if (has_writable && writable && !prop->writable) {
+        tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot make non-configurable non-writable key writable"));
+    }
+    if (!prop->writable && has_value && !tsc_value_same_value_zero(value, prop->value)) {
+        tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot change non-configurable non-writable key"));
+    }
+}
+
 const tsc_object_t* object_prototype_object(const tsc_object_t* o) {
     if (!o || !value_is_object_value(o->prototype)) return NULL;
     return (const tsc_object_t*)value_ptr(o->prototype);
@@ -120,7 +188,9 @@ bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value,
         tsc_array_push_value(args, value);
         tsc_array_push_value(args, receiver);
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
-        return tsc_value_is_truthy(res);
+        bool success = tsc_value_is_truthy(res);
+        validate_proxy_set_result(o, key, value, success);
+        return success;
     }
     ssize_t idx = object_find(o, key);
     if (idx >= 0) {
@@ -164,7 +234,9 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
         tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
         tsc_array_push_value(args, tsc_value_object(desc));
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
-        return tsc_value_is_truthy(res);
+        bool success = tsc_value_is_truthy(res);
+        validate_proxy_define_property_result(o, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable, success);
+        return success;
     }
     ssize_t found = object_find(o, key);
     if (found >= 0) {
@@ -338,7 +410,9 @@ tsc_value_t tsc_object_get_receiver(const tsc_object_t* o, const tsc_str_t* key,
         tsc_array_push_value(args, o->proxy_target);
         tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
         tsc_array_push_value(args, receiver);
-        return tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+        tsc_value_t result = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+        validate_proxy_get_result(o, key, result);
+        return result;
     }
     ssize_t idx = object_find(o, key);
     if (idx >= 0) {
