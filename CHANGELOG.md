@@ -13,7 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 - Default parameters can now initialize omitted function-typed arguments with arrow/function closure values, while preserving the existing rejection of default initializers that reference `this`, `arguments`, or parameters. Test: `default_parameter_function_initializers`.
-- CommonJS chained object-literal assignments such as `exports = module.exports = { ... }` now expose static named metadata and require-bound whole-object reads. Test: `node_modules_commonjs_module_exports_object_chain_named`.
+- CommonJS chained object-literal assignments such as `exports = module.exports = { ... }` and `module.exports = exports = { ... }` now expose static named metadata and require-bound whole-object reads. Tests: `node_modules_commonjs_module_exports_object_chain_named`, `node_modules_commonjs_module_exports_object_reverse_chain_named`.
 - CommonJS `const local = require("./local.js"); module.exports = local;` re-exports now expose the target module's static named metadata and require-bound whole-object reads when the target uses supported `exports.*` assignments. Test: `node_modules_commonjs_relative_require_binding_object_named`.
 - CommonJS `module.exports = require("./local.js")` re-exports now expose the target module's static named metadata and require-bound whole-object reads when the target uses supported `exports.*` assignments. Test: `node_modules_commonjs_relative_require_object_named`.
 - CommonJS package sources now expose static named metadata and require-bound whole-object reads for direct declared-object assignments such as `const api = { ... }; module.exports = api;`. Test: `node_modules_commonjs_module_exports_object_identifier_named`.
