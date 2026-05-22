@@ -593,6 +593,9 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'module.exports = exports.default = function() { return "first chain"; };\n',
         "second.js": 'module.exports = exports.default = function() { return "second chain"; };\n',
     }),
+    "tsc2c-cjs-module-exports-object-value-chain": cjsPackage("tsc2c-cjs-module-exports-object-value-chain", {
+        "index.js": 'module.exports = exports.default = {\n  label: "object value chain",\n  count: 91,\n  enabled: true\n};\n',
+    }),
     "tsc2c-cjs-module-metadata-package": cjsPackage("tsc2c-cjs-module-metadata-package", {
         "index.js": 'exports.filenameMatches = module.filename.endsWith("index.js");\nexports.pathMatches = module.path.endsWith("tsc2c-cjs-module-metadata-package");\nexports.idMatches = module.id.endsWith("index.js");\nexports.loaded = module.loaded;\n',
     }),

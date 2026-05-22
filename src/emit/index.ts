@@ -2902,17 +2902,25 @@ class Emitter {
 
     private commonJsModuleExportsValueAssignmentChain(
         stmt: ts.Statement,
-    ): { left: ts.PropertyAccessExpression; right: ts.Expression; assignment: ts.BinaryExpression } | null {
+    ): {
+        left: ts.PropertyAccessExpression;
+        right: ts.Expression;
+        assignment: ts.BinaryExpression;
+        exportLefts: CommonJsExportAccess[];
+    } | null {
         if (!ts.isExpressionStatement(stmt)) return null;
         let expr: ts.Expression = stmt.expression;
         let moduleExportsLeft: ts.PropertyAccessExpression | null = null;
         let moduleExportsAssignment: ts.BinaryExpression | null = null;
+        const exportLefts: CommonJsExportAccess[] = [];
         while (ts.isBinaryExpression(expr) && expr.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
             if (ts.isPropertyAccessExpression(expr.left) && this.isModuleExportsAccess(expr.left)) {
                 moduleExportsLeft ??= expr.left;
                 moduleExportsAssignment ??= expr;
+            } else if (this.isCommonJsExportAccess(expr.left)) {
+                if (!this.commonJsExportName(expr.left)) return null;
+                exportLefts.push(expr.left);
             } else if (
-                !this.isCommonJsExportAccess(expr.left) &&
                 !(ts.isIdentifier(expr.left) && expr.left.text === "exports")
             ) {
                 return null;
@@ -2920,7 +2928,7 @@ class Emitter {
             expr = expr.right;
         }
         return moduleExportsLeft && moduleExportsAssignment
-            ? { left: moduleExportsLeft, right: expr, assignment: moduleExportsAssignment }
+            ? { left: moduleExportsLeft, right: expr, assignment: moduleExportsAssignment, exportLefts }
             : null;
     }
 
@@ -3015,7 +3023,11 @@ class Emitter {
 
     private commonJsModuleExportsObjectAssignment(
         stmt: ts.Statement,
-    ): { left: ts.PropertyAccessExpression; right: ts.ObjectLiteralExpression } | null {
+    ): {
+        left: ts.PropertyAccessExpression;
+        right: ts.ObjectLiteralExpression;
+        exportLefts: CommonJsExportAccess[];
+    } | null {
         const assignment = this.commonJsModuleExportsValueAssignmentChain(stmt);
         if (!assignment || !ts.isObjectLiteralExpression(assignment.right)) return null;
         for (const prop of assignment.right.properties) {
@@ -3043,7 +3055,7 @@ class Emitter {
             if (ts.isGetAccessorDeclaration(prop) && this.commonJsObjectAssignGetterReturnExpression(prop)) continue;
             unsupported(prop, "CommonJS module.exports object currently supports declared identifier, function-valued, arrow-function-valued, static require values, and static literal-value exports only");
         }
-        return { left: assignment.left, right: assignment.right };
+        return { left: assignment.left, right: assignment.right, exportLefts: assignment.exportLefts };
     }
 
     private commonJsModuleExportsObjectAssignmentEntries(
@@ -3249,7 +3261,11 @@ class Emitter {
 
     private emitCommonJsModuleExportsObjectAssignment(
         buf: CBuf,
-        assignment: { left: ts.PropertyAccessExpression; right: ts.ObjectLiteralExpression },
+        assignment: {
+            left: ts.PropertyAccessExpression;
+            right: ts.ObjectLiteralExpression;
+            exportLefts?: CommonJsExportAccess[];
+        },
     ): void {
         if (this.isCommonJsObjectLiteralDefaultValue(assignment.right)) {
             const cName = this.commonJsModuleExportsCName(assignment.left);
@@ -3258,7 +3274,22 @@ class Emitter {
                 this.globalDecls.line(`static ${T_VALUE.c} ${cName};`);
             }
             const value = this.emitCommonJsObjectLiteralDefaultValue(assignment.right);
-            buf.line(`${cName} = ${value.c};`);
+            if (assignment.exportLefts?.length) {
+                const tmp = this.freshTemp("_cjsobj");
+                buf.line(`${T_VALUE.c} ${tmp} = ${value.c};`);
+                buf.line(`${cName} = ${tmp};`);
+                for (const left of assignment.exportLefts) {
+                    const exportCName = this.commonJsExportCName(left);
+                    if (!exportCName) unsupported(left, "unsupported CommonJS export assignment");
+                    if (!this.commonJsExportGlobals.has(exportCName)) {
+                        this.commonJsExportGlobals.add(exportCName);
+                        this.globalDecls.line(`static ${T_VALUE.c} ${exportCName};`);
+                    }
+                    buf.line(`${exportCName} = ${tmp};`);
+                }
+            } else {
+                buf.line(`${cName} = ${value.c};`);
+            }
         }
         for (const prop of this.commonJsModuleExportsObjectAssignmentEntries(assignment.right)) {
             if (ts.isShorthandPropertyAssignment(prop)) continue;
@@ -3941,6 +3972,10 @@ class Emitter {
             }
             const moduleObjectAssignment = this.commonJsModuleExportsObjectAssignment(stmt);
             if (!moduleObjectAssignment) continue;
+            for (const left of moduleObjectAssignment.exportLefts) {
+                const name = this.commonJsExportName(left);
+                if (name) out.push({ name, decl: left });
+            }
             for (const prop of moduleObjectAssignment.right.properties) {
                 if (!ts.isSpreadAssignment(prop)) continue;
                 const spreadMembers = this.commonJsRequireSpreadMemberDeclarations(prop.expression);
