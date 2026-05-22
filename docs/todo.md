@@ -66,7 +66,7 @@ This is the next item that most directly expands what programs can be written ag
   - Additional typed `Reflect.get(target, key, receiver)` coverage is implemented for optional receiver evaluation on typed arrays, typed interface/class objects, and Buffer data-property reads. Test: `reflect_get_receiver_typed`.
   - Additional `Reflect.apply` coverage is implemented for binding `thisArg` into function values that declare `this: any`. Test: `reflect_apply`.
   - Still missing: hidden classes / shape trees, inline caches and diagnostics, complete built-in object/array prototype behavior, broader prototype method coverage, and remaining descriptor/prototype edge cases.
-  - Still blocks: production-quality untyped npm packages, `Proxy`, full `Reflect`, remaining property descriptor edge cases, and high-performance dynamic property access.
+  - Still blocks: production-quality untyped npm packages, remaining `Proxy` construct/invariant coverage, full `Reflect`, remaining property descriptor edge cases, and high-performance dynamic property access.
 
 ---
 
@@ -103,7 +103,8 @@ This is the next item that most directly expands what programs can be written ag
   - Broader iterator protocol edge cases remain, including lazy generator-backed iterables and async iterables.
 
 - **Phase 9 — `Proxy` + `Reflect`** (~2 weeks)
-  - All 13 `Proxy` traps (`get`, `set`, `has`, `deleteProperty`, `apply`, `construct`, etc.)
+  - `Proxy` object traps for `get`, `set`, `has`, `deleteProperty`, `defineProperty`, `getOwnPropertyDescriptor`, `ownKeys`, `getPrototypeOf`, `setPrototypeOf`, `isExtensible`, and `preventExtensions` are implemented for dynamic objects, including `Object.keys(proxy)` filtering trapped `ownKeys` through descriptor enumerability. Function `apply` traps are implemented through dynamic `Reflect.apply`. Tests: `proxy`, `proxy-ownkeys`, `proxy_traps`.
+  - Still missing: `construct` traps, full ECMAScript proxy invariant enforcement for non-configurable/non-extensible targets, proxy callable/newable identity edge cases, and broader trap result validation.
   - `Reflect.*` API; dynamic `Reflect.get`/`Reflect.set`/`Reflect.has`/`Reflect.deleteProperty`/`Reflect.ownKeys`/`Reflect.defineProperty`/`Reflect.getPrototypeOf`/`Reflect.setPrototypeOf`/`Reflect.getOwnPropertyDescriptor`/`Reflect.isExtensible`/`Reflect.preventExtensions` are implemented, dynamic get/set accept receiver arguments for data/accessor dispatch, dynamic `Reflect.apply` can invoke boxed accessor descriptor functions, and bounded static `Reflect.apply`/`Reflect.construct` over known function/class values accepts array-literal, array-literal-spread, typed-array, and dynamic-array argument lists
   - `Object.defineProperty` with full property descriptor semantics; dynamic data descriptors enforce `writable`/`configurable`/`enumerable`, named-function, lifted-arrow/function-expression, and closure-valued accessors work, accessors can observe receiver-bound `this` through `this: any`, descriptor `get`/`set` values expose stable boxed function identities, and those boxed accessor identities are callable through dynamic `Reflect.apply`
   - **Depends on Phase 3** heavily — proxies intercept dynamic property access.
