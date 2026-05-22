@@ -64,12 +64,14 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
         if (!ts.isIdentifier(node)) return [];
         const decl = topLevelConstStringDeclaration(node);
-        if (!decl || !decl.initializer) return [];
-        if (seen.has(decl)) return [];
-        seen.add(decl);
-        const values = resolve(decl.initializer);
-        seen.delete(decl);
-        return values;
+        if (decl?.initializer) {
+            if (seen.has(decl)) return [];
+            seen.add(decl);
+            const values = resolve(decl.initializer);
+            seen.delete(decl);
+            if (values.length > 0) return values;
+        }
+        return stringLiteralUnionIdentifierTexts(node);
     };
 
     return dedupe(resolve(expr));
@@ -120,4 +122,63 @@ function topLevelConstStringDeclaration(id: ts.Identifier): ts.VariableDeclarati
         }
     }
     return null;
+}
+
+function stringLiteralUnionIdentifierTexts(id: ts.Identifier): string[] {
+    const paramValues = parameterStringLiteralUnionTexts(id);
+    if (paramValues.length > 0) return paramValues;
+    const topLevelValues = topLevelVariableStringLiteralUnionTexts(id);
+    if (topLevelValues.length > 0) return topLevelValues;
+    return [];
+}
+
+function parameterStringLiteralUnionTexts(id: ts.Identifier): string[] {
+    let cur: ts.Node | undefined = id.parent;
+    while (cur) {
+        if (ts.isFunctionLike(cur)) {
+            for (const param of cur.parameters) {
+                if (ts.isIdentifier(param.name) && param.name.text === id.text) {
+                    return stringLiteralUnionTypeTexts(param.type);
+                }
+            }
+        }
+        cur = cur.parent;
+    }
+    return [];
+}
+
+function topLevelVariableStringLiteralUnionTexts(id: ts.Identifier): string[] {
+    const sf = id.getSourceFile();
+    for (const stmt of sf.statements) {
+        if (!ts.isVariableStatement(stmt)) continue;
+        for (const decl of stmt.declarationList.declarations) {
+            if (ts.isIdentifier(decl.name) && decl.name.text === id.text) {
+                return stringLiteralUnionTypeTexts(decl.type);
+            }
+        }
+    }
+    return [];
+}
+
+function stringLiteralUnionTypeTexts(typeNode: ts.TypeNode | undefined): string[] {
+    if (!typeNode) return [];
+    if (ts.isParenthesizedTypeNode(typeNode)) {
+        return stringLiteralUnionTypeTexts(typeNode.type);
+    }
+    if (ts.isLiteralTypeNode(typeNode) && ts.isStringLiteral(typeNode.literal)) {
+        return [typeNode.literal.text];
+    }
+    if (!ts.isUnionTypeNode(typeNode)) return [];
+    const values: string[] = [];
+    const seen = new Set<string>();
+    for (const part of typeNode.types) {
+        const partValues = stringLiteralUnionTypeTexts(part);
+        if (partValues.length === 0) return [];
+        for (const value of partValues) {
+            if (seen.has(value)) continue;
+            seen.add(value);
+            values.push(value);
+        }
+    }
+    return values;
 }

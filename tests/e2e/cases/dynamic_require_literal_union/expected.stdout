@@ -1,0 +1,4 @@
+literal union a init
+literal union b init
+literal union first: literal-b
+literal union second: literal-a
