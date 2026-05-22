@@ -12628,9 +12628,14 @@ class Emitter {
         const k = recv.ty.key!;
         const v = recv.ty.elem!;
         const args = call.arguments;
-        if (args.length !== 1) unsupported(call, "Map.forEach expects 1 callback");
+        if (args.length < 1 || args.length > 2) unsupported(call, "Map.forEach expects callback and optional thisArg");
         const cb = args[0]!;
-        return this.emitSequencedExpr(T_VOID, [{ value: recv }], ([map]) => {
+        const specs: SequencedCallArg[] = [{ value: recv }];
+        if (args[1]) {
+            specs.push({ value: this.emitExpr(args[1]), target: T_VALUE, node: args[1] });
+        }
+        return this.emitSequencedExpr(T_VOID, specs, ([map, thisArg]) => {
+            const callbackThisArg = thisArg ?? "tsc_value_undefined()";
             const mt = this.freshTemp("_map_each");
             const iv = this.freshTemp("_i");
             const valueExpr = `*((${v.c}*)((char*)${mt}->values + ${iv} * ${mt}->vs))`;
@@ -12638,10 +12643,14 @@ class Emitter {
             const bindings: string[] = [];
             let bodyC: string;
             if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
+                const sig = this.checker.getSignatureFromDeclaration(cb);
+                if (!sig) unsupported(cb, "Map.forEach callback must be callable");
+                const thisType = this.signatureThisType(sig, cb);
                 const bodyExpr = this.callbackReturnExpression(cb, "Map.forEach");
-                const valueParam = cb.parameters[0];
-                const keyParam = cb.parameters[1];
-                const mapParam = cb.parameters[2];
+                const params = cb.parameters.filter((p) => !this.isThisParameter(p));
+                const valueParam = params[0];
+                const keyParam = params[1];
+                const mapParam = params[2];
                 if (valueParam && ts.isIdentifier(valueParam.name)) {
                     bindings.push(`${v.c} ${mangleIdent(valueParam.name.text)} = ${valueExpr};`);
                 }
@@ -12651,7 +12660,12 @@ class Emitter {
                 if (mapParam && ts.isIdentifier(mapParam.name)) {
                     bindings.push(`${recv.ty.c} ${mangleIdent(mapParam.name.text)} = ${mt};`);
                 }
-                bodyC = this.emitExpr(bodyExpr).c;
+                if (thisType) this.functionThisStack.push({ c: callbackThisArg, ty: thisType });
+                try {
+                    bodyC = this.emitExpr(bodyExpr).c;
+                } finally {
+                    if (thisType) this.functionThisStack.pop();
+                }
             } else if (ts.isIdentifier(cb)) {
                 const cbType = this.checker.getTypeAtLocation(cb);
                 const sig = cbType.getCallSignatures()[0];
@@ -12680,6 +12694,8 @@ class Emitter {
                             : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker));
                         return this.coerce(sources[index]!, target, cb);
                     });
+                    const thisType = this.directCallableThisType(cb);
+                    if (thisType) callArgs.unshift(callbackThisArg);
                     bodyC = `${fnName}(${callArgs.join(", ")})`;
                 } else {
                     const fn = this.emitExpr(cb);
@@ -12692,7 +12708,7 @@ class Emitter {
                     const callArgs = params.slice(0, 3).map((param, index) =>
                         this.coerce(sources[index]!, param, cb),
                     );
-                    bodyC = `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`;
+                    bodyC = `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? [callbackThisArg] : []), ...callArgs].join(", ")})`;
                 }
             } else {
                 unsupported(cb, "Map.forEach callback must be an inline arrow/function expression or function reference");
@@ -12853,19 +12869,28 @@ class Emitter {
     private emitSetForEach(call: ts.CallExpression, recv: EmitResult): EmitResult {
         const e = recv.ty.elem!;
         const args = call.arguments;
-        if (args.length !== 1) unsupported(call, "Set.forEach expects 1 callback");
+        if (args.length < 1 || args.length > 2) unsupported(call, "Set.forEach expects callback and optional thisArg");
         const cb = args[0]!;
-        return this.emitSequencedExpr(T_VOID, [{ value: recv }], ([set]) => {
+        const specs: SequencedCallArg[] = [{ value: recv }];
+        if (args[1]) {
+            specs.push({ value: this.emitExpr(args[1]), target: T_VALUE, node: args[1] });
+        }
+        return this.emitSequencedExpr(T_VOID, specs, ([set, thisArg]) => {
+            const callbackThisArg = thisArg ?? "tsc_value_undefined()";
             const st = this.freshTemp("_set_each");
             const iv = this.freshTemp("_i");
             const elemExpr = `*((${e.c}*)((char*)${st}->data + ${iv} * ${st}->es))`;
             const bindings: string[] = [];
             let bodyC: string;
             if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
+                const sig = this.checker.getSignatureFromDeclaration(cb);
+                if (!sig) unsupported(cb, "Set.forEach callback must be callable");
+                const thisType = this.signatureThisType(sig, cb);
                 const bodyExpr = this.callbackReturnExpression(cb, "Set.forEach");
-                const valueParam = cb.parameters[0];
-                const value2Param = cb.parameters[1];
-                const setParam = cb.parameters[2];
+                const params = cb.parameters.filter((p) => !this.isThisParameter(p));
+                const valueParam = params[0];
+                const value2Param = params[1];
+                const setParam = params[2];
                 if (valueParam && ts.isIdentifier(valueParam.name)) {
                     bindings.push(`${e.c} ${mangleIdent(valueParam.name.text)} = ${elemExpr};`);
                 }
@@ -12875,7 +12900,12 @@ class Emitter {
                 if (setParam && ts.isIdentifier(setParam.name)) {
                     bindings.push(`${recv.ty.c} ${mangleIdent(setParam.name.text)} = ${st};`);
                 }
-                bodyC = this.emitExpr(bodyExpr).c;
+                if (thisType) this.functionThisStack.push({ c: callbackThisArg, ty: thisType });
+                try {
+                    bodyC = this.emitExpr(bodyExpr).c;
+                } finally {
+                    if (thisType) this.functionThisStack.pop();
+                }
             } else if (ts.isIdentifier(cb)) {
                 const cbType = this.checker.getTypeAtLocation(cb);
                 const sig = cbType.getCallSignatures()[0];
@@ -12904,6 +12934,8 @@ class Emitter {
                             : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker));
                         return this.coerce(sources[index]!, target, cb);
                     });
+                    const thisType = this.directCallableThisType(cb);
+                    if (thisType) callArgs.unshift(callbackThisArg);
                     bodyC = `${fnName}(${callArgs.join(", ")})`;
                 } else {
                     const fn = this.emitExpr(cb);
@@ -12916,7 +12948,7 @@ class Emitter {
                     const callArgs = params.slice(0, 3).map((param, index) =>
                         this.coerce(sources[index]!, param, cb),
                     );
-                    bodyC = `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`;
+                    bodyC = `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? [callbackThisArg] : []), ...callArgs].join(", ")})`;
                 }
             } else {
                 unsupported(cb, "Set.forEach callback must be an inline arrow/function expression or function reference");
