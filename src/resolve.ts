@@ -3,6 +3,7 @@ import * as path from "node:path";
 import {
     isCommonJsRequireCallee,
     requireCallSpecifier as staticRequireCallSpecifier,
+    requireCallSpecifiers as staticRequireCallSpecifiers,
 } from "./module-specifiers";
 
 export interface ModuleInfo {
@@ -137,8 +138,8 @@ function isTypeOnlyModuleEdge(stmt: ts.ImportDeclaration | ts.ExportDeclaration)
 function staticRequireSpecifiers(stmt: ts.Statement, requireAliases: Set<string>): string[] {
     const specs: string[] = [];
     const visit = (node: ts.Node): void => {
-        const spec = ts.isExpression(node) ? requireCallSpecifier(node, requireAliases) : null;
-        if (spec) specs.push(spec);
+        const nodeSpecs = ts.isExpression(node) ? requireCallSpecifiers(node, requireAliases) : null;
+        if (nodeSpecs) specs.push(...nodeSpecs);
         ts.forEachChild(node, visit);
     };
     visit(stmt);
@@ -147,6 +148,10 @@ function staticRequireSpecifiers(stmt: ts.Statement, requireAliases: Set<string>
 
 function requireCallSpecifier(expr: ts.Expression, requireAliases: Set<string>): string | null {
     return staticRequireCallSpecifier(expr, requireAliases);
+}
+
+function requireCallSpecifiers(expr: ts.Expression, requireAliases: Set<string>): string[] | null {
+    return staticRequireCallSpecifiers(expr, requireAliases);
 }
 
 function commonJsRequireAliases(sf: ts.SourceFile): Set<string> {

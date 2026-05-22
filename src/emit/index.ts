@@ -41,7 +41,7 @@ import {
     UnsupportedError,
     formatUnsupported,
 } from "../diagnostics";
-import { staticStringExpressionText } from "../module-specifiers";
+import { staticStringExpressionText, staticStringExpressionTexts } from "../module-specifiers";
 import {
     type NativeAddonManifest,
     emptyNativeAddonManifest,
@@ -3559,6 +3559,17 @@ class Emitter {
             expr.arguments.length === 1
         ) {
             return staticStringExpressionText(expr.arguments[0]!);
+        }
+        return null;
+    }
+
+    private requireCallSpecifiers(expr: ts.Expression): string[] | null {
+        if (
+            ts.isCallExpression(expr) &&
+            this.isCommonJsRequireCallee(expr.expression) &&
+            expr.arguments.length === 1
+        ) {
+            return staticStringExpressionTexts(expr.arguments[0]!);
         }
         return null;
     }
@@ -8811,7 +8822,13 @@ class Emitter {
 
         if (this.isCommonJsRequireCallee(call.expression)) {
             const spec = this.requireCallSpecifier(call);
-            if (!spec) unsupported(call, "require expects one string-literal module specifier");
+            if (!spec) {
+                const specs = this.requireCallSpecifiers(call);
+                if (specs && specs.length > 0 && ts.isExpressionStatement(call.parent)) {
+                    return { c: "(void)0", ty: T_VOID };
+                }
+                unsupported(call, "require expects one finite string module specifier when its value is used");
+            }
             return this.emitCommonJsRequireCall(call, spec);
         }
 

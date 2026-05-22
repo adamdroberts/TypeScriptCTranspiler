@@ -1,3 +1,5 @@
 dynamic require side effect
 dynamic require concat side effect
 dynamic require template side effect
+dynamic require branch a side effect
+dynamic require branch b side effect

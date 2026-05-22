@@ -9,7 +9,7 @@ import { buildProgram, resolvePackageRoot } from "./program";
 import { buildModuleGraph } from "./resolve";
 import { emitProgram } from "./emit/index";
 import { invokeCc } from "./link/cc";
-import { staticStringExpressionText } from "./module-specifiers";
+import { staticStringExpressionText, staticStringExpressionTexts } from "./module-specifiers";
 import {
     type NativeAddonManifest,
     loadNativeAddonManifest,
@@ -179,19 +179,10 @@ function permanentLimitDiagnostics(
                         }
                     } else if (expr.text === "require") {
                         const spec = node.arguments[0];
-                        const literalSpec = spec ? stringSpecifierText(spec) : null;
-                        if (literalSpec && isNativeAddonSpecifier(literalSpec)) {
-                            if (!opts.nativeAddons || !nativeAddonPathForSpecifier(opts.nativeAddons, literalSpec, sf.fileName)) {
-                                diagnostics.push({
-                                    node,
-                                    message:
-                                        "native C++ addon modules (*.node) require --native-addon-manifest allow-list entry",
-                                });
-                            }
-                        } else if (literalSpec) {
-                            const message = nativeAddonPackageMessage(literalSpec, sf.fileName, opts.nativeAddons);
-                            if (message) diagnostics.push({ node, message });
-                        } else if (!literalSpec) {
+                        const literalSpecs = spec ? stringSpecifierTexts(spec) : [];
+                        if (literalSpecs.length > 0) {
+                            addNativeAddonDiagnostics(node, literalSpecs, sf.fileName, opts, diagnostics);
+                        } else {
                             diagnostics.push({
                                 node,
                                 message:
@@ -201,19 +192,10 @@ function permanentLimitDiagnostics(
                     }
                 } else if (isModuleRequireAccess(expr)) {
                     const spec = node.arguments[0];
-                    const literalSpec = spec ? stringSpecifierText(spec) : null;
-                    if (literalSpec && isNativeAddonSpecifier(literalSpec)) {
-                        if (!opts.nativeAddons || !nativeAddonPathForSpecifier(opts.nativeAddons, literalSpec, sf.fileName)) {
-                            diagnostics.push({
-                                node,
-                                message:
-                                    "native C++ addon modules (*.node) require --native-addon-manifest allow-list entry",
-                            });
-                        }
-                    } else if (literalSpec) {
-                        const message = nativeAddonPackageMessage(literalSpec, sf.fileName, opts.nativeAddons);
-                        if (message) diagnostics.push({ node, message });
-                    } else if (!literalSpec) {
+                    const literalSpecs = spec ? stringSpecifierTexts(spec) : [];
+                    if (literalSpecs.length > 0) {
+                        addNativeAddonDiagnostics(node, literalSpecs, sf.fileName, opts, diagnostics);
+                    } else {
                         diagnostics.push({
                             node,
                             message:
@@ -301,6 +283,33 @@ function findNodeEmbedLinkOptions(): NodeEmbedLinkOptions | null {
 
 function stringSpecifierText(expr: ts.Expression): string | null {
     return staticStringExpressionText(expr);
+}
+
+function stringSpecifierTexts(expr: ts.Expression): string[] {
+    return staticStringExpressionTexts(expr);
+}
+
+function addNativeAddonDiagnostics(
+    node: ts.Node,
+    specs: string[],
+    containingFile: string,
+    opts: { nativeAddons?: NativeAddonManifest },
+    diagnostics: PermanentLimitDiagnostic[],
+): void {
+    for (const spec of specs) {
+        if (isNativeAddonSpecifier(spec)) {
+            if (!opts.nativeAddons || !nativeAddonPathForSpecifier(opts.nativeAddons, spec, containingFile)) {
+                diagnostics.push({
+                    node,
+                    message:
+                        "native C++ addon modules (*.node) require --native-addon-manifest allow-list entry",
+                });
+            }
+        } else {
+            const message = nativeAddonPackageMessage(spec, containingFile, opts.nativeAddons);
+            if (message) diagnostics.push({ node, message });
+        }
+    }
 }
 
 function isModuleRequireAccess(expr: ts.Expression): boolean {

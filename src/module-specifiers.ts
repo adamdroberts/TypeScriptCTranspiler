@@ -1,9 +1,40 @@
 import ts from "typescript";
 
+const MAX_STATIC_STRING_ALTERNATIVES = 64;
+
 export function staticStringExpressionText(expr: ts.Expression): string | null {
+    const texts = staticStringExpressionTexts(expr);
+    return texts.length === 1 ? texts[0]! : null;
+}
+
+export function staticStringExpressionTexts(expr: ts.Expression): string[] {
     const seen = new Set<ts.VariableDeclaration>();
 
-    const resolve = (node: ts.Expression): string | null => {
+    const dedupe = (values: string[]): string[] => {
+        const out: string[] = [];
+        const seenValues = new Set<string>();
+        for (const value of values) {
+            if (seenValues.has(value)) continue;
+            seenValues.add(value);
+            out.push(value);
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+        return out;
+    };
+
+    const concat = (left: string[], right: string[]): string[] => {
+        if (left.length === 0 || right.length === 0) return [];
+        const out: string[] = [];
+        for (const l of left) {
+            for (const r of right) {
+                out.push(l + r);
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
+    };
+
+    const resolve = (node: ts.Expression): string[] => {
         while (
             ts.isParenthesizedExpression(node) ||
             ts.isAsExpression(node) ||
@@ -13,43 +44,55 @@ export function staticStringExpressionText(expr: ts.Expression): string | null {
             node = node.expression;
         }
         if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
-            return node.text;
+            return [node.text];
         }
         if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
             const left = resolve(node.left);
             const right = resolve(node.right);
-            return left !== null && right !== null ? left + right : null;
+            return concat(left, right);
+        }
+        if (ts.isConditionalExpression(node)) {
+            return dedupe([...resolve(node.whenTrue), ...resolve(node.whenFalse)]);
         }
         if (ts.isTemplateExpression(node)) {
-            let out = node.head.text;
+            let out = [node.head.text];
             for (const span of node.templateSpans) {
-                const value = resolve(span.expression);
-                if (value === null) return null;
-                out += value + span.literal.text;
+                out = concat(concat(out, resolve(span.expression)), [span.literal.text]);
+                if (out.length === 0) return [];
             }
             return out;
         }
-        if (!ts.isIdentifier(node)) return null;
+        if (!ts.isIdentifier(node)) return [];
         const decl = topLevelConstStringDeclaration(node);
-        if (!decl || !decl.initializer) return null;
-        if (seen.has(decl)) return null;
+        if (!decl || !decl.initializer) return [];
+        if (seen.has(decl)) return [];
         seen.add(decl);
-        return resolve(decl.initializer);
+        const values = resolve(decl.initializer);
+        seen.delete(decl);
+        return values;
     };
 
-    return resolve(expr);
+    return dedupe(resolve(expr));
 }
 
 export function requireCallSpecifier(
     expr: ts.Expression,
     requireAliases: Set<string>,
 ): string | null {
+    const specs = requireCallSpecifiers(expr, requireAliases);
+    return specs && specs.length === 1 ? specs[0]! : null;
+}
+
+export function requireCallSpecifiers(
+    expr: ts.Expression,
+    requireAliases: Set<string>,
+): string[] | null {
     if (
         ts.isCallExpression(expr) &&
         isCommonJsRequireCallee(expr.expression, requireAliases) &&
         expr.arguments.length === 1
     ) {
-        return staticStringExpressionText(expr.arguments[0]!);
+        return staticStringExpressionTexts(expr.arguments[0]!);
     }
     return null;
 }

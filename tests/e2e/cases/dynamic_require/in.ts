@@ -7,3 +7,7 @@ require(concatModuleName);
 const templateTarget = "other_template";
 const templateModuleName = `./${templateTarget}`;
 require(templateModuleName);
+
+const chooseBranch: boolean = true;
+const branchModuleName = chooseBranch ? "./other_branch_a" : "./other_branch_b";
+require(branchModuleName);
