@@ -10,6 +10,7 @@ import {
     dynamicRequireManifestHasEntries,
     type DynamicRequireManifest,
 } from "./dynamic-require";
+import { resolveCommonJsRequireModuleName } from "./commonjs-resolve";
 
 export interface BuildProgramOpts {
     entry: string;
@@ -95,8 +96,7 @@ function collectStaticRequireRoots(
         const requireAliases = commonJsRequireAliases(sf);
         for (const stmt of sf.statements) {
             for (const spec of staticRequireSpecifiers(stmt, requireAliases, dynamicRequires)) {
-                const resolved = ts.resolveModuleName(spec, fileName, compilerOptions, ts.sys);
-                const resolvedFile = resolved.resolvedModule?.resolvedFileName;
+                const resolvedFile = resolveCommonJsRequireModuleName(spec, fileName, compilerOptions);
                 if (!resolvedFile || seen.has(resolvedFile)) continue;
                 seen.add(resolvedFile);
                 roots.push(resolvedFile);

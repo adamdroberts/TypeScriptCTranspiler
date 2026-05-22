@@ -9,6 +9,7 @@ import {
     dynamicRequireManifestHasEntries,
     type DynamicRequireManifest,
 } from "./dynamic-require";
+import { resolveCommonJsRequireModuleName } from "./commonjs-resolve";
 
 export interface ModuleInfo {
     sf: ts.SourceFile;
@@ -84,14 +85,15 @@ export function buildModuleGraph(
     for (const [id, info] of modules) {
         const requireAliases = commonJsRequireAliases(info.sf);
         for (const stmt of info.sf.statements) {
-            const specs: string[] = [];
+            const importSpecs: string[] = [];
+            const requireSpecs: string[] = [];
             if (ts.isImportDeclaration(stmt) || ts.isExportDeclaration(stmt)) {
                 if (isTypeOnlyModuleEdge(stmt)) continue;
                 const m = stmt.moduleSpecifier;
-                if (m && ts.isStringLiteral(m)) specs.push(m.text);
+                if (m && ts.isStringLiteral(m)) importSpecs.push(m.text);
             }
-            specs.push(...staticRequireSpecifiers(stmt, requireAliases, options_.dynamicRequires));
-            for (const spec of specs) {
+            requireSpecs.push(...staticRequireSpecifiers(stmt, requireAliases, options_.dynamicRequires));
+            for (const spec of importSpecs) {
                 const resolved = ts.resolveModuleName(
                     spec,
                     info.sf.fileName,
@@ -99,8 +101,21 @@ export function buildModuleGraph(
                     ts.sys,
                 );
                 const mod = resolved.resolvedModule;
-                if (!mod) continue;
-                const depId = fileToModuleId.get(mod.resolvedFileName);
+                const depId = mod ? fileToModuleId.get(mod.resolvedFileName) : undefined;
+                if (depId) {
+                    info.resolvedSpecifiers.set(spec, depId);
+                    if (depId !== id && !info.imports.includes(depId)) {
+                        info.imports.push(depId);
+                    }
+                }
+            }
+            for (const spec of requireSpecs) {
+                const resolvedFile = resolveCommonJsRequireModuleName(
+                    spec,
+                    info.sf.fileName,
+                    options,
+                );
+                const depId = resolvedFile ? fileToModuleId.get(resolvedFile) : undefined;
                 if (depId) {
                     info.resolvedSpecifiers.set(spec, depId);
                     if (depId !== id && !info.imports.includes(depId)) {
