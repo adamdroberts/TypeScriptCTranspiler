@@ -8802,7 +8802,7 @@ class Emitter {
                 return { c: cName, ty: this.commonJsExportedCType(exportDecl) };
             }
         }
-        return { c: `tsc_value_object(tsc_object_new())`, ty: T_VALUE };
+        return this.emitCommonJsRequireModuleValue(call, spec);
     }
 
     private emitCommonJsRequireModuleValue(call: ts.CallExpression, spec: string): EmitResult {
@@ -8816,6 +8816,21 @@ class Emitter {
             if (!cName) unsupported(exportDecl, `unsupported CommonJS module.exports value for require("${spec}")`);
             const ty = this.commonJsExportedCType(exportDecl);
             return { c: this.coerce({ c: cName, ty }, T_VALUE, call), ty: T_VALUE };
+        }
+        const exportedMembers = this.commonJsExportedMemberDeclarations(info.sf);
+        if (exportedMembers.length > 0) {
+            const obj = this.freshTemp("_reqobj");
+            const pieces = [`tsc_object_t* ${obj} = tsc_object_new()`];
+            for (const exported of exportedMembers) {
+                const cName = this.declarationCName(exported.decl);
+                if (!cName) unsupported(exported.decl, `unsupported CommonJS export "${exported.name}" for require("${spec}")`);
+                const ty = this.commonJsExportedCType(exported.decl);
+                pieces.push(
+                    `tsc_object_set(${obj}, tsc_str_from_lit("${escapeCString(exported.name)}", ${utf8ByteLen(exported.name)}), ${this.coerce({ c: cName, ty }, T_VALUE, call)})`,
+                );
+            }
+            pieces.push(`tsc_value_object(${obj})`);
+            return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
         }
         return { c: `tsc_value_object(tsc_object_new())`, ty: T_VALUE };
     }

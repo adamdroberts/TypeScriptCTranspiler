@@ -4,3 +4,4 @@ dynamic require template side effect
 dynamic require branch a side effect
 dynamic require branch b side effect
 dynamic require value: value-b
+dynamic require named: named-a
