@@ -609,6 +609,10 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'module.exports = require("./local.js");\n',
         "local.js": 'exports.label = "relative-object";\nexports.count = 33;\nexports.double = function double(value) { return value * 2; };\n',
     }),
+    "tsc2c-cjs-relative-require-binding-object": cjsPackage("tsc2c-cjs-relative-require-binding-object", {
+        "index.js": 'const local = require("./local.js");\nmodule.exports = local;\n',
+        "local.js": 'exports.label = "relative-binding";\nexports.count = 44;\nexports.triple = function triple(value) { return value * 3; };\n',
+    }),
     "tsc2c-cjs-relative-require-direct-default": cjsPackage("tsc2c-cjs-relative-require-direct-default", {
         "index.js": 'module.exports = module.require("./local.js");\n',
         "local.js": "module.exports = function triple(value) { return value * 3; };\n",

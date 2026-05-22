@@ -3923,6 +3923,12 @@ class Emitter {
                 out.push(...moduleRequireValueExports);
                 continue;
             }
+            const moduleRequireBindingValueExports =
+                this.commonJsModuleExportsRequireBindingValueExports(stmt);
+            if (moduleRequireBindingValueExports) {
+                out.push(...moduleRequireBindingValueExports);
+                continue;
+            }
             const definePropertiesExports = this.commonJsDefinePropertiesExports(stmt);
             if (definePropertiesExports) {
                 for (const exported of definePropertiesExports) {
@@ -4009,6 +4015,20 @@ class Emitter {
         if (!assignment || !this.requireCallSpecifier(assignment.right)) return null;
         const members = this.commonJsRequireSpreadMemberDeclarations(assignment.right)
             ?.filter((member) => member.name !== "__esModule") ?? [];
+        return members.length > 0 ? members : null;
+    }
+
+    private commonJsModuleExportsRequireBindingValueExports(
+        stmt: ts.Statement,
+    ): Array<{ name: string; decl: ts.Node }> | null {
+        const assignment = this.commonJsModuleExportsValueAssignmentChain(stmt);
+        if (!assignment || !ts.isIdentifier(assignment.right)) return null;
+        const spec = this.requireBindingSpecifier(assignment.right);
+        if (!spec) return null;
+        const info = this.resolvedModuleInfoForSpecifier(spec, assignment.right.getSourceFile().fileName);
+        if (!info) unsupported(assignment.right, `unresolved require("${spec}")`);
+        const members = this.commonJsExportedMemberDeclarations(info.sf)
+            .filter((member) => member.name !== "__esModule");
         return members.length > 0 ? members : null;
     }
 
@@ -8947,6 +8967,7 @@ class Emitter {
                 const ty = this.commonJsExportedCType(exportDecl);
                 return { c: this.coerce({ c: cName, ty }, T_VALUE, call), ty: T_VALUE };
             }
+            return this.emitCommonJsRequireModuleValue(call, spec);
         }
         return { c: `tsc_value_object(tsc_object_new())`, ty: T_VALUE };
     }
