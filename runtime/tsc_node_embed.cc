@@ -10,15 +10,20 @@ typedef struct tsc_str {
     uint64_t hash;
 } tsc_str_t;
 typedef struct tsc_array tsc_array_t;
+typedef struct tsc_object tsc_object_t;
 typedef tsc_value_t (*tsc_generic_function_t)(void* env, tsc_value_t this_arg, tsc_array_t* args);
 
 void tsc_panic(const char* msg);
 tsc_str_t* tsc_str_from_lit(const char* data, size_t len);
+tsc_str_t* tsc_str_from_cstr(const char* s);
+tsc_object_t* tsc_object_new(void);
+bool tsc_object_set(tsc_object_t* o, tsc_str_t* key, tsc_value_t value);
 tsc_value_t tsc_value_undefined(void);
 tsc_value_t tsc_value_null(void);
 tsc_value_t tsc_value_num(double n);
 tsc_value_t tsc_value_bool(bool b);
 tsc_value_t tsc_value_string(tsc_str_t* s);
+tsc_value_t tsc_value_object(tsc_object_t* o);
 tsc_value_t tsc_value_array(tsc_array_t* a);
 tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env);
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args);
@@ -63,8 +68,10 @@ namespace {
 
 struct NodeEmbedState {
     std::unique_ptr<node::MultiIsolatePlatform> platform;
+    std::unique_ptr<node::CommonEnvironmentSetup> setup;
     v8::Isolate* isolate = nullptr;
     v8::Global<v8::Context> context;
+    node::Environment* env = nullptr;
 };
 
 NodeEmbedState* state = nullptr;
@@ -115,9 +122,29 @@ tsc_value_t fromV8(v8::Isolate* isolate, v8::Local<v8::Value> value) {
         v8::Maybe<double> number = value->NumberValue(context);
         if (number.IsJust()) return tsc_value_num(number.FromJust());
     }
+    if (value->IsObject()) {
+        v8::Local<v8::Object> object;
+        if (value->ToObject(context).ToLocal(&object)) {
+            v8::Local<v8::Array> keys;
+            if (object->GetOwnPropertyNames(context).ToLocal(&keys)) {
+                tsc_object_t* out = tsc_object_new();
+                uint32_t length = keys->Length();
+                for (uint32_t i = 0; i < length; i++) {
+                    v8::Local<v8::Value> keyValue;
+                    if (!keys->Get(context, i).ToLocal(&keyValue)) continue;
+                    v8::String::Utf8Value keyUtf8(isolate, keyValue);
+                    if (!*keyUtf8) continue;
+                    v8::Local<v8::Value> propValue;
+                    if (!object->Get(context, keyValue).ToLocal(&propValue)) continue;
+                    tsc_object_set(out, tsc_str_from_cstr(*keyUtf8), fromV8(isolate, propValue));
+                }
+                return tsc_value_object(out);
+            }
+        }
+    }
     v8::String::Utf8Value utf8(isolate, value);
     if (*utf8) {
-        return tsc_value_string(tsc_str_from_lit(*utf8, (size_t)utf8.length()));
+        return tsc_value_string(tsc_str_from_cstr(*utf8));
     }
     return tsc_value_undefined();
 }
@@ -125,24 +152,34 @@ tsc_value_t fromV8(v8::Isolate* isolate, v8::Local<v8::Value> value) {
 NodeEmbedState* ensureState() {
     if (state) return state;
 
+    std::vector<std::string> args{"tsc2c-embedded-node"};
     node::InitializeOncePerProcess(
-        std::vector<std::string>{"tsc2c-embedded-node"},
-        node::ProcessInitializationFlags::kNoInitializeV8 |
-            node::ProcessInitializationFlags::kNoInitializeNodeV8Platform,
+        args,
+        static_cast<node::ProcessInitializationFlags::Flags>(
+            node::ProcessInitializationFlags::kNoInitializeV8 |
+            node::ProcessInitializationFlags::kNoInitializeNodeV8Platform)
     );
     state = new NodeEmbedState();
     state->platform = node::MultiIsolatePlatform::Create(1);
     v8::V8::InitializePlatform(state->platform.get());
     v8::V8::Initialize();
 
-    v8::Isolate::CreateParams params;
-    params.array_buffer_allocator = node::ArrayBufferAllocator::Create().release();
-    state->isolate = v8::Isolate::New(params);
+    std::vector<std::string> errors;
+    state->setup = node::CommonEnvironmentSetup::Create(state->platform.get(), &errors, args, std::vector<std::string>{});
+    if (!state->setup) {
+        tsc_panic(errors.empty() ? "embedded Node bridge: environment setup failed" : errors[0].c_str());
+    }
+    state->isolate = state->setup->isolate();
+    state->env = state->setup->env();
     {
         v8::Isolate::Scope isolateScope(state->isolate);
         v8::HandleScope handleScope(state->isolate);
-        v8::Local<v8::Context> context = v8::Context::New(state->isolate);
+        v8::Local<v8::Context> context = state->setup->context();
         state->context.Reset(state->isolate, context);
+        v8::Context::Scope contextScope(context);
+        if (node::LoadEnvironment(state->env, "globalThis.__tsc2c_require = require;\n").IsEmpty()) {
+            tsc_panic("embedded Node bridge: environment load failed");
+        }
     }
     return state;
 }
@@ -161,7 +198,7 @@ tsc_value_t evalSource(tsc_str_t* source) {
              isolate,
              src.c_str(),
              v8::NewStringType::kNormal,
-             (int)src.size(),
+             (int)src.size()
          ).ToLocal(&code)) {
         tsc_panic("embedded Node bridge: could not allocate source string");
     }
@@ -220,7 +257,7 @@ extern "C" tsc_value_t tsc_node_function(tsc_str_t* body) {
              isolate,
              src.c_str(),
              v8::NewStringType::kNormal,
-             (int)src.size(),
+             (int)src.size()
          ).ToLocal(&code)) {
         tsc_panic("embedded Node bridge: could not allocate Function source string");
     }
@@ -243,7 +280,7 @@ extern "C" tsc_value_t tsc_node_function_call(tsc_value_t fn, tsc_array_t* args)
 }
 
 extern "C" tsc_value_t tsc_node_native_addon(tsc_str_t* resolved_path) {
-    std::string source = "require(";
+    std::string source = "globalThis.__tsc2c_require(";
     source += quoteJsString(tscToString(resolved_path));
     source += ")";
     tsc_str_t source_str = { source.size(), source.c_str(), 0 };
