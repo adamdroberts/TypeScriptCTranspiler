@@ -167,7 +167,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - `.size` property. Test: `map_set`, `wordcount`
 - `.toString(...ignored)`, `.toLocaleString(...ignored)`, and `.valueOf(...ignored)`. Test: `collection_object_methods`
 - Key equality is polymorphic by tag: SameValueZero numbers, string content, booleans, and pointers. Runtime: `key_eq`
-- ES2024 static `Map.groupBy(items: T[], keyFn: (value: T, index: number) => K): Map<K, T[]>` groups a typed array into a typed `Map<K, T[]>` by the callback's return value. The callback may be an inline arrow/function expression with an expression body or single-return block body, or a function reference (including generic functions). Test: `map_group_by`
+- ES2024 static `Map.groupBy(items: T[], keyFn: (value: T, index: number) => K): Map<K, T[]>` groups a typed array into a typed `Map<K, T[]>` by the callback's return value. The callback may be an inline arrow/function expression with an expression body or single-return block body, or a function reference (including generic functions); callbacks that declare `this: any` receive the JavaScript default `undefined` receiver. Tests: `map_group_by`, `group_by_this_param`
 
 ### `Set<T>`
 - `new Set<T>()`, `new Set(valuesArray)`, and `new Set(existingSet)` — `tsc_set_new(sizeof(T), keyKind, initialCap)` plus per-value insertion. Tests: `map_set_constructors`, `set_constructor_from_set`
@@ -348,7 +348,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Dynamic strings participate in dynamic index/property reads, `Object.keys`, `Object.values`, `Object.entries`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, `propertyIsEnumerable`, `Reflect.get`, `Reflect.has`, `Reflect.ownKeys`, `Reflect.deleteProperty`, and `Reflect.set` with string index own keys plus non-enumerable `length`. Test: `dynamic_string_object_enumeration`
 - `Object.fromEntries(dynamicEntries)` builds a dynamic object from dynamic `[key, value]` arrays and uses string conversion for keys. Test: `dynamic_object_from_entries`
 - `Object.is(a, b)` uses SameValue semantics over boxed dynamic values, including `NaN`, signed zero, strings, and object identity. Test: `object_is`
-- ES2024 static `Object.groupBy(items: T[], keyFn: (item: T, index: number) => string): unknown` groups a typed array into a null-prototype dynamic object whose string keys map to dynamic arrays of boxed items. The callback may be an inline arrow/function expression with an expression body or single-return block body, or a function reference. Elements must be types boxable into `tsc_value_t` (number, boolean, string, array, value). Test: `object_group_by`
+- ES2024 static `Object.groupBy(items: T[], keyFn: (item: T, index: number) => string): unknown` groups a typed array into a null-prototype dynamic object whose string keys map to dynamic arrays of boxed items. The callback may be an inline arrow/function expression with an expression body or single-return block body, or a function reference; callbacks that declare `this: any` receive the JavaScript default `undefined` receiver. Elements must be types boxable into `tsc_value_t` (number, boolean, string, array, value). Tests: `object_group_by`, `group_by_this_param`
 - `Object.assign(dynamicTarget, ...dynamicSources)` copies enumerable dynamic object data properties, and `Object.getOwnPropertyNames(dynamic)` / `Object.hasOwn(dynamic, key)` use the dynamic object property table. Test: `object_static_methods`
 - `dynamicObj.hasOwnProperty(key)` checks the dynamic object's own property table without walking prototypes. Test: `object_has_own_property`
 - `dynamicObj.isPrototypeOf(value)` checks whether the dynamic receiver appears in another dynamic object's prototype chain. Test: `object_is_prototype_of`
@@ -813,6 +813,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generic_classes` | erased generic class fields/methods using dynamic value storage and spread method calls |
 | `generic_function_values` | generic top-level functions assigned to concrete function-typed values |
 | `global_number_predicates` | global isNaN/isFinite coercion for typed and dynamic values |
+| `group_by_this_param` | Object.groupBy and Map.groupBy callbacks with explicit this parameters |
 | `in_operator_narrowing` | in-operator narrowing and typed field-list checks |
 | `line_directives` | generated C contains TS source `#line` markers |
 | `logical_assign` | logical assignment with RHS short-circuiting |
