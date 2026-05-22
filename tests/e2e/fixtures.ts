@@ -104,6 +104,37 @@ const packages: Record<string, PackageFixture> = {
             "src/math.ts": "export function triple(value: number): number {\n    return value * 3;\n}\n",
         },
     },
+    "tsc2c-conditional-exports-package": {
+        packageJson: {
+            name: "tsc2c-conditional-exports-package",
+            version: "1.0.0",
+            type: "module",
+            exports: {
+                ".": {
+                    import: "./src/import-entry.ts",
+                    default: "./src/default-entry.ts",
+                },
+                "./feature": {
+                    import: "./src/feature-import.ts",
+                    default: "./src/feature-default.ts",
+                },
+            },
+            imports: {
+                "#flavor": {
+                    import: "./src/flavor-import.ts",
+                    default: "./src/flavor-default.ts",
+                },
+            },
+        },
+        files: {
+            "src/import-entry.ts": 'import { flavor } from "#flavor";\nexport const label = "conditional:" + flavor;\nexport function pick(value: number): string {\n    return "import-entry:" + value;\n}\n',
+            "src/default-entry.ts": 'export const label = "wrong-default";\nexport function pick(value: number): string {\n    return "wrong:" + value;\n}\n',
+            "src/feature-import.ts": 'export const feature = "feature-import";\nexport function scale(value: number): number {\n    return value * 4;\n}\n',
+            "src/feature-default.ts": 'export const feature = "wrong-feature";\nexport function scale(value: number): number {\n    return value * 99;\n}\n',
+            "src/flavor-import.ts": 'export const flavor = "import-condition";\n',
+            "src/flavor-default.ts": 'export const flavor = "wrong-flavor";\n',
+        },
+    },
     "tsc2c-main-package": esmPackage("tsc2c-main-package", {
         "index.js": 'export const label = "main-pkg";\nexport function square(value) { return value * value; }\n',
     }),
