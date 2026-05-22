@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Side-effect-only dynamic `require(name)` statements now collect finite conditional specifier alternatives into the AOT module graph while still rejecting non-finite variables and value-returning finite-set requires. Test: `dynamic_require`.
 - Dynamic `require(name)` specifier proofs now include finite top-level const string concatenation and template expressions, so those edges enter the AOT module graph instead of requiring runtime loading. Test: `dynamic_require`.
 - Proxy `getOwnPropertyDescriptor` trap results now enforce descriptor object/undefined returns, non-configurable target keys, non-extensible target keys, descriptor-kind consistency, and fixed-data value invariants. Test: `proxy_descriptor_invariants`.
 - Proxy `get`, `set`, and `defineProperty` trap results now enforce fixed-data/accessor invariants, non-extensible target additions, and invalid non-configurable descriptor claims. Test: `proxy_get_set_define_invariants`.
