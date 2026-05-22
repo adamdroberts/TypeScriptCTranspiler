@@ -8805,6 +8805,42 @@ class Emitter {
         return { c: `tsc_value_object(tsc_object_new())`, ty: T_VALUE };
     }
 
+    private emitCommonJsRequireModuleValue(call: ts.CallExpression, spec: string): EmitResult {
+        const nativeAddon = this.emitNativeAddonValue(spec, call.getSourceFile().fileName);
+        if (nativeAddon) return nativeAddon;
+        const info = this.resolvedModuleInfoForSpecifier(spec, call.getSourceFile().fileName);
+        if (!info) unsupported(call, `unresolved require("${spec}")`);
+        const exportDecl = this.commonJsModuleExportsValueDeclaration(info.sf);
+        if (exportDecl) {
+            const cName = this.declarationCName(exportDecl);
+            if (!cName) unsupported(exportDecl, `unsupported CommonJS module.exports value for require("${spec}")`);
+            const ty = this.commonJsExportedCType(exportDecl);
+            return { c: this.coerce({ c: cName, ty }, T_VALUE, call), ty: T_VALUE };
+        }
+        return { c: `tsc_value_object(tsc_object_new())`, ty: T_VALUE };
+    }
+
+    private emitFiniteCommonJsRequireDispatch(call: ts.CallExpression, specs: string[]): EmitResult {
+        const arg = call.arguments[0]!;
+        const specValue = this.emitExpr(arg);
+        const specTmp = this.freshTemp("_reqspec");
+        const out = this.freshTemp("_reqout");
+        const pieces: string[] = [
+            `tsc_str_t* ${specTmp} = ${this.coerce(specValue, T_STRING, arg)}`,
+            `tsc_value_t ${out} = tsc_value_undefined()`,
+        ];
+        let dispatch = "";
+        specs.forEach((spec, index) => {
+            const value = this.emitCommonJsRequireModuleValue(call, spec);
+            const cond = `${index === 0 ? "if" : "else if"} (tsc_str_eq(${specTmp}, tsc_str_from_lit("${escapeCString(spec)}", ${utf8ByteLen(spec)})))`;
+            dispatch += `${cond} { ${out} = ${this.coerce(value, T_VALUE, call)}; } `;
+        });
+        dispatch += `else { tsc_throw_str(tsc_str_from_cstr("dynamic require resolved outside finite AOT set")); }`;
+        pieces.push(dispatch);
+        pieces.push(out);
+        return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
+    }
+
     private emitCall(call: ts.CallExpression): EmitResult {
         // super(args) inside a subclass ctor -> Base_init((Base*)self, args)
         if (call.expression.kind === ts.SyntaxKind.SuperKeyword) {
@@ -8826,6 +8862,9 @@ class Emitter {
                 const specs = this.requireCallSpecifiers(call);
                 if (specs && specs.length > 0 && ts.isExpressionStatement(call.parent)) {
                     return { c: "(void)0", ty: T_VOID };
+                }
+                if (specs && specs.length > 0) {
+                    return this.emitFiniteCommonJsRequireDispatch(call, specs);
                 }
                 unsupported(call, "require expects one finite string module specifier when its value is used");
             }
