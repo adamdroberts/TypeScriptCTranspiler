@@ -279,7 +279,17 @@ tsc_value_t tsc_object_get_prototype_of(const tsc_object_t* o) {
         }
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
-        return tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+        tsc_value_t proto = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+        if (!value_is_valid_prototype(proto)) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy getPrototypeOf trap must return object or null"));
+        }
+        if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+            const tsc_object_t* target = (const tsc_object_t*)value_ptr(o->proxy_target);
+            if (!target->extensible && proto != target->prototype) {
+                tsc_throw_str(tsc_str_from_cstr("Proxy getPrototypeOf trap cannot report different prototype for non-extensible target"));
+            }
+        }
+        return proto;
     }
     return o ? o->prototype : tsc_value_undefined();
 }
@@ -299,7 +309,14 @@ bool tsc_object_set_prototype_of(tsc_object_t* o, tsc_value_t prototype) {
         tsc_array_push_value(args, o->proxy_target);
         tsc_array_push_value(args, prototype);
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
-        return tsc_value_is_truthy(res);
+        bool changed = tsc_value_is_truthy(res);
+        if (changed && value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+            const tsc_object_t* target = (const tsc_object_t*)value_ptr(o->proxy_target);
+            if (!target->extensible && prototype != target->prototype) {
+                tsc_throw_str(tsc_str_from_cstr("Proxy setPrototypeOf trap cannot change prototype of non-extensible target"));
+            }
+        }
+        return changed;
     }
     if (!o || !value_is_valid_prototype(prototype)) return false;
     if (o->prototype == prototype) return true;
@@ -478,7 +495,14 @@ bool tsc_object_is_extensible(const tsc_object_t* o) {
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
-        return tsc_value_is_truthy(res);
+        bool extensible = tsc_value_is_truthy(res);
+        if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+            const tsc_object_t* target = (const tsc_object_t*)value_ptr(o->proxy_target);
+            if (extensible != target->extensible) {
+                tsc_throw_str(tsc_str_from_cstr("Proxy isExtensible trap result does not match target"));
+            }
+        }
+        return extensible;
     }
     return o->extensible;
 }
@@ -497,7 +521,14 @@ bool tsc_object_prevent_extensions(tsc_object_t* o) {
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
-        return tsc_value_is_truthy(res);
+        bool prevented = tsc_value_is_truthy(res);
+        if (prevented && value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+            const tsc_object_t* target = (const tsc_object_t*)value_ptr(o->proxy_target);
+            if (target->extensible) {
+                tsc_throw_str(tsc_str_from_cstr("Proxy preventExtensions trap cannot report success for extensible target"));
+            }
+        }
+        return prevented;
     }
     o->extensible = false;
     return true;
