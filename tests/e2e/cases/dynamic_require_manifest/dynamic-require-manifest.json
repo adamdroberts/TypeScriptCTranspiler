@@ -1,0 +1,3 @@
+{
+  "requires": ["./allow_a", "./allow_b"]
+}

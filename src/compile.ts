@@ -17,6 +17,11 @@ import {
     nativeAddonPathForSpecifier,
 } from "./native-addons";
 import {
+    dynamicRequireManifestHasEntries,
+    loadDynamicRequireManifest,
+    type DynamicRequireManifest,
+} from "./dynamic-require";
+import {
     formatTsDiagnostics,
     formatUnsupported,
     UnsupportedError,
@@ -36,6 +41,8 @@ export interface CompileOptions {
     unsafeEval?: boolean;
     /** JSON allow-list mapping native addon specifiers to concrete .node paths. */
     nativeAddonManifest?: string;
+    /** JSON allow-list of finite dynamic require specifiers compiled into the AOT graph. */
+    dynamicRequireManifest?: string;
 }
 
 export interface CompileResult {
@@ -138,7 +145,11 @@ interface PermanentLimitDiagnostic {
 function permanentLimitDiagnostics(
     program: ts.Program,
     libCoreDts: string,
-    opts: { unsafeEval?: boolean; nativeAddons?: NativeAddonManifest } = {},
+    opts: {
+        unsafeEval?: boolean;
+        nativeAddons?: NativeAddonManifest;
+        dynamicRequires?: DynamicRequireManifest;
+    } = {},
 ): PermanentLimitDiagnostic[] {
     const diagnostics: PermanentLimitDiagnostic[] = [];
     for (const sf of program.getSourceFiles()) {
@@ -182,6 +193,8 @@ function permanentLimitDiagnostics(
                         const literalSpecs = spec ? stringSpecifierTexts(spec) : [];
                         if (literalSpecs.length > 0) {
                             addNativeAddonDiagnostics(node, literalSpecs, sf.fileName, opts, diagnostics);
+                        } else if (opts.dynamicRequires && dynamicRequireManifestHasEntries(opts.dynamicRequires)) {
+                            addNativeAddonDiagnostics(node, opts.dynamicRequires.specifiers, sf.fileName, opts, diagnostics);
                         } else {
                             diagnostics.push({
                                 node,
@@ -195,6 +208,8 @@ function permanentLimitDiagnostics(
                     const literalSpecs = spec ? stringSpecifierTexts(spec) : [];
                     if (literalSpecs.length > 0) {
                         addNativeAddonDiagnostics(node, literalSpecs, sf.fileName, opts, diagnostics);
+                    } else if (opts.dynamicRequires && dynamicRequireManifestHasEntries(opts.dynamicRequires)) {
+                        addNativeAddonDiagnostics(node, opts.dynamicRequires.specifiers, sf.fileName, opts, diagnostics);
                     } else {
                         diagnostics.push({
                             node,
@@ -410,8 +425,10 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     if (opts.verbose) console.error(`[tsc2c] build dir: ${buildDir}`);
     await fs.mkdir(buildDir, { recursive: true });
     let nativeAddons: NativeAddonManifest;
+    let dynamicRequires: DynamicRequireManifest;
     try {
         nativeAddons = await loadNativeAddonManifest(opts.nativeAddonManifest);
+        dynamicRequires = await loadDynamicRequireManifest(opts.dynamicRequireManifest);
     } catch (e) {
         process.stderr.write(`tsc2c: ${(e as Error).message}\n`);
         return { exitCode: 3, buildDir, mainC: "" };
@@ -421,10 +438,12 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     const { program, checker, entrySourceFile, libCoreDts } = buildProgram({
         entry: opts.entry,
         packageRoot: pkg,
+        dynamicRequires,
     });
     const permanent = permanentLimitDiagnostics(program, libCoreDts, {
         unsafeEval: opts.unsafeEval,
         nativeAddons,
+        dynamicRequires,
     });
     if (permanent.length > 0) {
         for (const d of permanent) {
@@ -444,7 +463,9 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         return { exitCode: 2, buildDir, mainC: "" };
     }
 
-    const graph = buildModuleGraph(program, libCoreDts, entrySourceFile.fileName);
+    const graph = buildModuleGraph(program, libCoreDts, entrySourceFile.fileName, {
+        dynamicRequires,
+    });
     if (opts.verbose) {
         console.error(
             `[tsc2c] modules: ${[...graph.modules.keys()].join(", ")}`,
@@ -452,7 +473,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         console.error(`[tsc2c] topo: ${graph.topoOrder.join(" -> ")}`);
     }
 
-    const { mainC, diagnostics } = emitProgram(graph, checker, { nativeAddons });
+    const { mainC, diagnostics } = emitProgram(graph, checker, { nativeAddons, dynamicRequires });
     if (diagnostics.length > 0) {
         for (const d of diagnostics) process.stderr.write(d + "\n");
         return { exitCode: 3, buildDir, mainC: "" };

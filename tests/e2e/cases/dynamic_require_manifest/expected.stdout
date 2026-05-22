@@ -1,0 +1,4 @@
+allowlisted a init
+allowlisted b init
+allowlisted first: allow-a
+allowlisted second: allow-b

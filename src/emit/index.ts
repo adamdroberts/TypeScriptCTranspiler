@@ -47,6 +47,11 @@ import {
     emptyNativeAddonManifest,
     nativeAddonPathForSpecifier,
 } from "../native-addons";
+import {
+    dynamicRequireManifestHasEntries,
+    emptyDynamicRequireManifest,
+    type DynamicRequireManifest,
+} from "../dynamic-require";
 import type { ModuleGraph, ModuleInfo } from "../resolve";
 
 interface EmitResult {
@@ -169,7 +174,7 @@ export interface EmittedProgram {
 export function emitProgram(
     graph: ModuleGraph,
     checker: ts.TypeChecker,
-    options: { nativeAddons?: NativeAddonManifest } = {},
+    options: { nativeAddons?: NativeAddonManifest; dynamicRequires?: DynamicRequireManifest } = {},
 ): EmittedProgram {
     const em = new Emitter(checker, graph, options);
     return em.run();
@@ -241,7 +246,7 @@ class Emitter {
     constructor(
         private checker: ts.TypeChecker,
         private graph: ModuleGraph,
-        private options: { nativeAddons?: NativeAddonManifest } = {},
+        private options: { nativeAddons?: NativeAddonManifest; dynamicRequires?: DynamicRequireManifest } = {},
     ) {}
 
     private freshTemp(prefix = "_t"): string {
@@ -3569,7 +3574,10 @@ class Emitter {
             this.isCommonJsRequireCallee(expr.expression) &&
             expr.arguments.length === 1
         ) {
-            return staticStringExpressionTexts(expr.arguments[0]!);
+            const staticSpecs = staticStringExpressionTexts(expr.arguments[0]!);
+            if (staticSpecs.length > 0) return staticSpecs;
+            const dynamicRequires = this.options.dynamicRequires ?? emptyDynamicRequireManifest();
+            return dynamicRequireManifestHasEntries(dynamicRequires) ? dynamicRequires.specifiers : [];
         }
         return null;
     }

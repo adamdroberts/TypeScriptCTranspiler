@@ -25,6 +25,10 @@ program
         "--native-addon-manifest <path>",
         "JSON allow-list mapping native addon specifiers to concrete .node files",
     )
+    .option(
+        "--dynamic-require-manifest <path>",
+        "JSON allow-list of finite dynamic require specifiers compiled into the AOT graph",
+    )
     .option("--verbose", "print compile steps")
     .action(async (entry: string, opts: Record<string, unknown>) => {
         const result = await compile({
@@ -40,6 +44,9 @@ program
             unsafeEval: !!opts.unsafeEval,
             nativeAddonManifest: opts.nativeAddonManifest
                 ? path.resolve(opts.nativeAddonManifest as string)
+                : undefined,
+            dynamicRequireManifest: opts.dynamicRequireManifest
+                ? path.resolve(opts.dynamicRequireManifest as string)
                 : undefined,
         });
         process.exit(result.exitCode);

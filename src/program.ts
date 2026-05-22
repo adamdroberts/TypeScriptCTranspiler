@@ -6,10 +6,15 @@ import {
     requireCallSpecifier as staticRequireCallSpecifier,
     requireCallSpecifiers as staticRequireCallSpecifiers,
 } from "./module-specifiers";
+import {
+    dynamicRequireManifestHasEntries,
+    type DynamicRequireManifest,
+} from "./dynamic-require";
 
 export interface BuildProgramOpts {
     entry: string;
     packageRoot: string;
+    dynamicRequires?: DynamicRequireManifest;
 }
 
 export interface BuiltProgram {
@@ -51,7 +56,7 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
     const rootNames = [
         libCoreDts,
         opts.entry,
-        ...collectStaticRequireRoots(opts.entry, compilerOptions),
+        ...collectStaticRequireRoots(opts.entry, compilerOptions, opts.dynamicRequires),
     ];
 
     const program = ts.createProgram({
@@ -71,6 +76,7 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
 function collectStaticRequireRoots(
     entry: string,
     compilerOptions: ts.CompilerOptions,
+    dynamicRequires: DynamicRequireManifest | undefined,
 ): string[] {
     const roots: string[] = [];
     const seen = new Set<string>([path.resolve(entry)]);
@@ -88,7 +94,7 @@ function collectStaticRequireRoots(
         );
         const requireAliases = commonJsRequireAliases(sf);
         for (const stmt of sf.statements) {
-            for (const spec of staticRequireSpecifiers(stmt, requireAliases)) {
+            for (const spec of staticRequireSpecifiers(stmt, requireAliases, dynamicRequires)) {
                 const resolved = ts.resolveModuleName(spec, fileName, compilerOptions, ts.sys);
                 const resolvedFile = resolved.resolvedModule?.resolvedFileName;
                 if (!resolvedFile || seen.has(resolvedFile)) continue;
@@ -108,11 +114,21 @@ function scriptKindForFile(fileName: string): ts.ScriptKind {
     return ts.ScriptKind.TS;
 }
 
-function staticRequireSpecifiers(stmt: ts.Statement, requireAliases: Set<string>): string[] {
+function staticRequireSpecifiers(
+    stmt: ts.Statement,
+    requireAliases: Set<string>,
+    dynamicRequires: DynamicRequireManifest | undefined,
+): string[] {
     const specs: string[] = [];
     const visit = (node: ts.Node): void => {
         const nodeSpecs = ts.isExpression(node) ? requireCallSpecifiers(node, requireAliases) : null;
-        if (nodeSpecs) specs.push(...nodeSpecs);
+        if (nodeSpecs) {
+            if (nodeSpecs.length > 0) {
+                specs.push(...nodeSpecs);
+            } else if (dynamicRequires && dynamicRequireManifestHasEntries(dynamicRequires)) {
+                specs.push(...dynamicRequires.specifiers);
+            }
+        }
         ts.forEachChild(node, visit);
     };
     visit(stmt);

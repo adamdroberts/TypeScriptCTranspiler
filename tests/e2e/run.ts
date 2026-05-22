@@ -19,6 +19,7 @@ interface Case {
     expectedMainCContains?: string;
     emitCOnly?: boolean;
     nativeAddonManifest?: string;
+    dynamicRequireManifest?: string;
     release?: boolean;
 }
 
@@ -36,6 +37,7 @@ async function discoverCases(): Promise<Case[]> {
         const expectedMainCContainsPath = path.join(casesDir, d, "expected.mainc.contains");
         const emitCOnlyPath = path.join(casesDir, d, "compile.emit_c_only");
         const nativeAddonManifestPath = path.join(casesDir, d, "native-addon-manifest.json");
+        const dynamicRequireManifestPath = path.join(casesDir, d, "dynamic-require-manifest.json");
         const releasePath = path.join(casesDir, d, "compile.release");
         try {
             await fs.access(entry);
@@ -60,6 +62,13 @@ async function discoverCases(): Promise<Case[]> {
             } catch {
                 // optional native-addon allow-list
             }
+            let dynamicRequireManifest: string | undefined;
+            try {
+                await fs.access(dynamicRequireManifestPath);
+                dynamicRequireManifest = dynamicRequireManifestPath;
+            } catch {
+                // optional dynamic require allow-list
+            }
             let expectedMainCContains: string | undefined;
             try {
                 expectedMainCContains = (await fs.readFile(expectedMainCContainsPath, "utf8")).trimEnd();
@@ -75,6 +84,7 @@ async function discoverCases(): Promise<Case[]> {
                     expectedMainCContains,
                     emitCOnly,
                     nativeAddonManifest,
+                    dynamicRequireManifest,
                     release,
                 });
                 continue;
@@ -87,7 +97,16 @@ async function discoverCases(): Promise<Case[]> {
             } catch {
                 if (!emitCOnly) throw new Error(`missing expected.stdout for ${d}`);
             }
-            cases.push({ name: d, entry, expected, expectedMainCContains, emitCOnly, nativeAddonManifest, release });
+            cases.push({
+                name: d,
+                entry,
+                expected,
+                expectedMainCContains,
+                emitCOnly,
+                nativeAddonManifest,
+                dynamicRequireManifest,
+                release,
+            });
         } catch {
             // ignore non-case dirs
         }
@@ -128,6 +147,7 @@ async function main(): Promise<void> {
             release: c.release,
             emitCOnly: c.emitCOnly,
             nativeAddonManifest: c.nativeAddonManifest,
+            dynamicRequireManifest: c.dynamicRequireManifest,
         });
         if (c.expectedExitCode !== undefined) {
             if (r.exitCode !== c.expectedExitCode) {

@@ -5,6 +5,10 @@ import {
     requireCallSpecifier as staticRequireCallSpecifier,
     requireCallSpecifiers as staticRequireCallSpecifiers,
 } from "./module-specifiers";
+import {
+    dynamicRequireManifestHasEntries,
+    type DynamicRequireManifest,
+} from "./dynamic-require";
 
 export interface ModuleInfo {
     sf: ts.SourceFile;
@@ -51,6 +55,7 @@ export function buildModuleGraph(
     program: ts.Program,
     libCoreDts: string,
     entry: string,
+    options_: { dynamicRequires?: DynamicRequireManifest } = {},
 ): ModuleGraph {
     const modules = new Map<string, ModuleInfo>();
     const fileToModuleId = new Map<string, string>();
@@ -85,7 +90,7 @@ export function buildModuleGraph(
                 const m = stmt.moduleSpecifier;
                 if (m && ts.isStringLiteral(m)) specs.push(m.text);
             }
-            specs.push(...staticRequireSpecifiers(stmt, requireAliases));
+            specs.push(...staticRequireSpecifiers(stmt, requireAliases, options_.dynamicRequires));
             for (const spec of specs) {
                 const resolved = ts.resolveModuleName(
                     spec,
@@ -135,11 +140,21 @@ function isTypeOnlyModuleEdge(stmt: ts.ImportDeclaration | ts.ExportDeclaration)
     return stmt.isTypeOnly === true;
 }
 
-function staticRequireSpecifiers(stmt: ts.Statement, requireAliases: Set<string>): string[] {
+function staticRequireSpecifiers(
+    stmt: ts.Statement,
+    requireAliases: Set<string>,
+    dynamicRequires: DynamicRequireManifest | undefined,
+): string[] {
     const specs: string[] = [];
     const visit = (node: ts.Node): void => {
         const nodeSpecs = ts.isExpression(node) ? requireCallSpecifiers(node, requireAliases) : null;
-        if (nodeSpecs) specs.push(...nodeSpecs);
+        if (nodeSpecs) {
+            if (nodeSpecs.length > 0) {
+                specs.push(...nodeSpecs);
+            } else if (dynamicRequires && dynamicRequireManifestHasEntries(dynamicRequires)) {
+                specs.push(...dynamicRequires.specifiers);
+            }
+        }
         ts.forEachChild(node, visit);
     };
     visit(stmt);
