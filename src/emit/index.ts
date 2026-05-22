@@ -625,6 +625,11 @@ class Emitter {
                     continue;
                 }
                 if (this.commonJsExportPlaceholderAssignment(inner)) continue;
+                const commonJsModuleExportObject = this.commonJsModuleExportsObjectAssignment(inner);
+                if (commonJsModuleExportObject) {
+                    this.emitCommonJsModuleExportsObjectAssignment(initBuf, commonJsModuleExportObject);
+                    continue;
+                }
                 const commonJsExportChain = this.commonJsExportAssignmentChain(inner);
                 if (commonJsExportChain && commonJsExportChain.lefts.length > 1) {
                     this.emitCommonJsExportAssignmentChain(initBuf, commonJsExportChain);
@@ -638,11 +643,6 @@ class Emitter {
                 const commonJsModuleExport = this.commonJsModuleExportsValueAssignment(inner);
                 if (commonJsModuleExport) {
                     this.emitCommonJsModuleExportsValueAssignment(initBuf, commonJsModuleExport);
-                    continue;
-                }
-                const commonJsModuleExportObject = this.commonJsModuleExportsObjectAssignment(inner);
-                if (commonJsModuleExportObject) {
-                    this.emitCommonJsModuleExportsObjectAssignment(initBuf, commonJsModuleExportObject);
                     continue;
                 }
                 if (this.getLiftableArrow(inner)) continue; // lifted to static fn
@@ -3962,6 +3962,34 @@ class Emitter {
                 continue;
             }
             if (this.commonJsExportPlaceholderAssignment(stmt)) continue;
+            const moduleObjectAssignment = this.commonJsModuleExportsObjectAssignment(stmt);
+            if (moduleObjectAssignment) {
+                for (const left of moduleObjectAssignment.exportLefts) {
+                    const name = this.commonJsExportName(left);
+                    if (name) out.push({ name, decl: left });
+                }
+                for (const prop of moduleObjectAssignment.right.properties) {
+                    if (!ts.isSpreadAssignment(prop)) continue;
+                    const spreadMembers = this.commonJsRequireSpreadMemberDeclarations(prop.expression);
+                    if (spreadMembers) out.push(...spreadMembers);
+                }
+                for (const prop of this.commonJsModuleExportsObjectAssignmentEntries(moduleObjectAssignment.right)) {
+                    if (ts.isShorthandPropertyAssignment(prop)) {
+                        out.push({ name: prop.name.text, decl: prop });
+                        continue;
+                    }
+                    if (ts.isPropertyAssignment(prop)) {
+                        const propName = this.staticPropertyName(prop.name);
+                        if (propName) out.push({ name: propName, decl: prop });
+                        continue;
+                    }
+                    if (ts.isMethodDeclaration(prop) || ts.isGetAccessorDeclaration(prop)) {
+                        const propName = this.staticPropertyName(prop.name);
+                        if (propName) out.push({ name: propName, decl: prop });
+                    }
+                }
+                continue;
+            }
             const assignmentChain = this.commonJsExportAssignmentChain(stmt);
             if (assignmentChain) {
                 for (const left of assignmentChain.lefts) {
@@ -3969,32 +3997,6 @@ class Emitter {
                     if (assignmentName) out.push({ name: assignmentName, decl: left });
                 }
                 continue;
-            }
-            const moduleObjectAssignment = this.commonJsModuleExportsObjectAssignment(stmt);
-            if (!moduleObjectAssignment) continue;
-            for (const left of moduleObjectAssignment.exportLefts) {
-                const name = this.commonJsExportName(left);
-                if (name) out.push({ name, decl: left });
-            }
-            for (const prop of moduleObjectAssignment.right.properties) {
-                if (!ts.isSpreadAssignment(prop)) continue;
-                const spreadMembers = this.commonJsRequireSpreadMemberDeclarations(prop.expression);
-                if (spreadMembers) out.push(...spreadMembers);
-            }
-            for (const prop of this.commonJsModuleExportsObjectAssignmentEntries(moduleObjectAssignment.right)) {
-                if (ts.isShorthandPropertyAssignment(prop)) {
-                    out.push({ name: prop.name.text, decl: prop });
-                    continue;
-                }
-                if (ts.isPropertyAssignment(prop)) {
-                    const propName = this.staticPropertyName(prop.name);
-                    if (propName) out.push({ name: propName, decl: prop });
-                    continue;
-                }
-                if (ts.isMethodDeclaration(prop) || ts.isGetAccessorDeclaration(prop)) {
-                    const propName = this.staticPropertyName(prop.name);
-                    if (propName) out.push({ name: propName, decl: prop });
-                }
             }
         }
         return out;
