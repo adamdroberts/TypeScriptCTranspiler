@@ -1,1 +1,3 @@
 dynamic require side effect
+dynamic require concat side effect
+dynamic require template side effect

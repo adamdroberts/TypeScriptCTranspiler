@@ -15,6 +15,20 @@ export function staticStringExpressionText(expr: ts.Expression): string | null {
         if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
             return node.text;
         }
+        if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+            const left = resolve(node.left);
+            const right = resolve(node.right);
+            return left !== null && right !== null ? left + right : null;
+        }
+        if (ts.isTemplateExpression(node)) {
+            let out = node.head.text;
+            for (const span of node.templateSpans) {
+                const value = resolve(span.expression);
+                if (value === null) return null;
+                out += value + span.literal.text;
+            }
+            return out;
+        }
         if (!ts.isIdentifier(node)) return null;
         const decl = topLevelConstStringDeclaration(node);
         if (!decl || !decl.initializer) return null;
