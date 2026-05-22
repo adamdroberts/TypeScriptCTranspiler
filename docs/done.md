@@ -71,7 +71,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 ## 2. Functions
 
 - Top-level `function` declarations with typed params and return. Test: `greet`
-- Default-initialized parameters are supported for omitted trailing arguments on top-level functions, constructors, instance methods, and static methods when the default expression does not reference `this`, `arguments`, or another parameter. Omitted optional parameters without defaults are supported for pointer-like and dynamic parameter types, including strings, arrays, classes, function-typed parameters, and first-class closure values; numeric/boolean optional parameters still require explicit defaults. Tests: `default_parameters`, `optional_parameters`, `closure_optional_parameters`
+- Default-initialized parameters are supported for omitted trailing arguments on top-level functions, constructors, instance methods, and static methods when the default expression does not reference `this`, `arguments`, or another parameter, including function-typed defaults initialized from arrow/function closure values. Omitted optional parameters without defaults are supported for pointer-like and dynamic parameter types, including strings, arrays, classes, function-typed parameters, and first-class closure values; numeric/boolean optional parameters still require explicit defaults. Tests: `default_parameters`, `default_parameter_function_initializers`, `optional_parameters`, `closure_optional_parameters`
 - Recursion (direct)
 - Top-level `const f = (...) => ...` **lifted to a static C function** — usable both as a call target and as an HOF callback. Test: `fn_refs`
 - Inline arrow functions in HOF call sites, including expression bodies and single-return block bodies (body expanded inline via GCC statement expressions). Test: `array_hof`
@@ -712,6 +712,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `number_to_exponential` | Number.toExponential typed and dynamic scientific formatting |
 | `number_to_fixed` | Number.toFixed typed and dynamic fixed-point formatting |
 | `number_to_precision` | Number.toPrecision typed and dynamic significant-digit formatting |
+| `default_parameter_function_initializers` | default parameters can initialize omitted function-typed arguments with arrow/function closure values |
 | `optional_parameters` | omitted optional pointer and function parameters lower to undefined/null sentinels |
 | `os_more` | os.type/release/endianness/EOL through global, namespace, and named imports |
 | `os_host_more` | os.availableParallelism/machine/version through global, namespace, and named imports |
