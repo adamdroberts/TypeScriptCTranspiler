@@ -5117,9 +5117,6 @@ class Emitter {
             }
         }
         const visit = (node: ts.Node): void => {
-            if (ts.isFunctionLike(node)) {
-                unsupported(node, "default parameter function initializers are not supported yet");
-            }
             if (node.kind === ts.SyntaxKind.ThisKeyword) {
                 unsupported(node, "default parameter initializers cannot reference this yet");
             }
