@@ -39,6 +39,7 @@ This is the next item that most directly expands what programs can be written ag
   - Additional typed `Array.prototype.flatMap()` coverage is implemented for scalar callback results as well as array callback results. Test: `array_flat`.
   - Additional typed array higher-order callback coverage is implemented for the standard receiver array argument across inline expression/single-return-block callbacks, direct function references, and closure callback values. Test: `array_hof`.
   - Additional dynamic array higher-order callback coverage is implemented for the standard receiver array argument across inline expression/single-return-block callbacks, direct function references, closure callback values, and `reduce`/`reduceRight`. Tests: `dynamic_array_hof`, `dynamic_array_hof_refs`.
+  - Additional typed and dynamic array higher-order `thisArg` coverage is implemented for optional `thisArg` evaluation and binding into direct/inline callbacks that declare `this: any`. Test: `array_hof_this_arg`.
   - Additional typed and dynamic string-pattern coverage is implemented for `match("pattern")` and `matchAll("pattern")`. Tests: `string_match_string`, `dynamic_string_match_string`.
   - Additional typed and dynamic string-pattern coverage is implemented for `search("pattern")`. Tests: `string_search_string`, `dynamic_string_search`.
   - Additional static `Reflect.apply`/`Reflect.construct` coverage is implemented for typed-array, dynamic-array, and array-literal-spread argument lists. Tests: `reflect_apply`, `reflect_construct`.

@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 - Default parameters can now initialize omitted function-typed arguments with arrow/function closure values, while preserving the existing rejection of default initializers that reference `this`, `arguments`, or parameters. Test: `default_parameter_function_initializers`.
+- Typed and dynamic array higher-order methods now accept optional `thisArg` values, evaluate them once, and bind them for callbacks that declare `this: any`. Test: `array_hof_this_arg`.
 - CommonJS `require(...)` package edges now resolve package `exports` and package-private `imports` condition maps through `require` branches while building the AOT module graph. Test: `node_modules_package_require_conditions`.
 - Package source resolution now has focused coverage for package `exports` and package-private `imports` condition maps selecting `import` branches into the AOT module graph. Test: `node_modules_package_conditional_exports`.
 - Native addon bridge smoke coverage now lives behind `bun run test:native-addon-smoke`: it builds a tiny N-API `.node` addon, compiles an allow-listed import through the embedded Node bridge, and verifies exported object properties when `libnode` is available. The embedded bridge now initializes a Node environment, captures `require`, and converts V8 object own properties into `tsc_value_t` objects.
