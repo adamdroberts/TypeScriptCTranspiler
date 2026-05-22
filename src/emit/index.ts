@@ -2935,7 +2935,8 @@ class Emitter {
         }
         if (ts.isCallExpression(cur)) {
             return this.isCommonJsRuntimeComputedModuleExportsValue(cur) ||
-                !!this.requireCallModuleExportsDeclaration(cur);
+                !!this.requireCallModuleExportsDeclaration(cur) ||
+                this.commonJsRequireSpreadMemberDeclarations(cur) !== null;
         }
         return false;
     }
@@ -3031,6 +3032,8 @@ class Emitter {
         const entries: CommonJsObjectAssignExportEntry[] = [];
         for (const prop of object.properties) {
             if (ts.isSpreadAssignment(prop)) {
+                const requireSpreadMembers = this.commonJsRequireSpreadMemberDeclarations(prop.expression);
+                if (requireSpreadMembers) continue;
                 const spreadEntries = this.commonJsObjectAssignExportSourceEntries(prop.expression);
                 if (!spreadEntries) {
                     unsupported(prop.expression, "CommonJS module.exports object spread requires static object-literal sources");
@@ -3867,6 +3870,11 @@ class Emitter {
             ) {
                 continue;
             }
+            for (const prop of expr.right.properties) {
+                if (!ts.isSpreadAssignment(prop)) continue;
+                const spreadMembers = this.commonJsRequireSpreadMemberDeclarations(prop.expression);
+                if (spreadMembers) out.push(...spreadMembers);
+            }
             for (const prop of this.commonJsModuleExportsObjectAssignmentEntries(expr.right)) {
                 if (ts.isShorthandPropertyAssignment(prop)) {
                     out.push({ name: prop.name.text, decl: prop });
@@ -3949,6 +3957,16 @@ class Emitter {
         if (!spec) return null;
         const info = this.resolvedModuleInfoForSpecifier(spec, expr.getSourceFile().fileName);
         return info ? this.commonJsModuleExportsValueDeclaration(info.sf) : null;
+    }
+
+    private commonJsRequireSpreadMemberDeclarations(expr: ts.Expression): Array<{ name: string; decl: ts.Node }> | null {
+        const spec = this.requireCallSpecifier(expr);
+        if (!spec) return null;
+        const info = this.resolvedModuleInfoForSpecifier(spec, expr.getSourceFile().fileName);
+        if (!info) unsupported(expr, `unresolved require("${spec}")`);
+        const members = this.commonJsExportedMemberDeclarations(info.sf)
+            .filter((member) => member.name !== "__esModule");
+        return members.length > 0 ? members : null;
     }
 
     private isRequireBindingInitializer(call: ts.CallExpression): boolean {
