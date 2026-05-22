@@ -398,7 +398,21 @@ bool tsc_object_has(const tsc_object_t* o, const tsc_str_t* key) {
         tsc_array_push_value(args, o->proxy_target);
         tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
-        return tsc_value_is_truthy(res);
+        bool found = tsc_value_is_truthy(res);
+        if (!found && value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+            const tsc_object_t* target = (const tsc_object_t*)value_ptr(o->proxy_target);
+            ssize_t idx = object_find(target, key);
+            if (idx >= 0) {
+                const tsc_object_prop_t* prop = &target->props[(size_t)idx];
+                if (!prop->configurable) {
+                    tsc_throw_str(tsc_str_from_cstr("Proxy has trap cannot report false for non-configurable key"));
+                }
+                if (!target->extensible) {
+                    tsc_throw_str(tsc_str_from_cstr("Proxy has trap cannot report false for key on non-extensible target"));
+                }
+            }
+        }
+        return found;
     }
     ssize_t idx = object_find(o, key);
     if (idx >= 0) return true;
@@ -423,7 +437,21 @@ bool tsc_object_delete(tsc_object_t* o, const tsc_str_t* key) {
         tsc_array_push_value(args, o->proxy_target);
         tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
-        return tsc_value_is_truthy(res);
+        bool deleted = tsc_value_is_truthy(res);
+        if (deleted && value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+            const tsc_object_t* target = (const tsc_object_t*)value_ptr(o->proxy_target);
+            ssize_t idx = object_find(target, key);
+            if (idx >= 0) {
+                const tsc_object_prop_t* prop = &target->props[(size_t)idx];
+                if (!prop->configurable) {
+                    tsc_throw_str(tsc_str_from_cstr("Proxy deleteProperty trap cannot report deletion of non-configurable key"));
+                }
+                if (!target->extensible) {
+                    tsc_throw_str(tsc_str_from_cstr("Proxy deleteProperty trap cannot report deletion of key on non-extensible target"));
+                }
+            }
+        }
+        return deleted;
     }
     ssize_t found = object_find(o, key);
     if (found < 0) return true;
