@@ -366,13 +366,13 @@ Every `.ts` file reachable from the entry is compiled into the same `main.c`. Ea
 
 `throw` constructs an error frame and `longjmp`s to the most recent `setjmp` set by a `try`. No stack traces yet, but the message is preserved through `tsc_current_error()`. Uncaught exceptions exit the process with a printed message.
 
-### Three hard limits
+### AOT closure requirements
 
-Three TS/JS features can't be AOT-compiled regardless of engineering effort:
+Some TS/JS features require build-time proof, an explicit security allow list, or an explicitly gated embedded-Node bridge:
 
-1. **Native C++ addons** under `node_modules/*/build/Release/*.node` — compiled against Node's V8 ABI. Literal `.node` imports/requires and imported package roots containing `build/Release/*.node` are rejected before TypeScript diagnostics, including transitively from emitted package sources.
-2. **`eval`** and the `Function` constructor — require a compiler at runtime. Calls are rejected before TypeScript diagnostics.
-3. **Dynamic `require(variable)`** where the module path isn't a string literal — can't be walked statically. Non-literal calls are rejected before emission.
+1. **Native C++ addons** under `node_modules/*/build/Release/*.node` — default builds reject them; support should route known native-addon manifests through the embedded Node bridge rather than direct C++ calls.
+2. **`eval`** and the `Function` constructor — default builds reject them. `--unsafe-eval` emits embedded Node bridge calls and requires `libnode` at link time; constant or allow-listed sources should still prefer AOT generation.
+3. **Dynamic `require(variable)`** — finite const-string specifiers are part of the AOT graph; non-finite unlisted specifiers remain rejected.
 
 ## Tests
 
@@ -2227,7 +2227,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 
 - TypeScript type-checking via the official compiler API — any TS type error is surfaced with full source context (file:line:col + code frame) before emission. Test: try `/tmp/bad.ts` with `const x: number = "str"`.
 - Unsupported-feature diagnostics include source location and a one-line reason — exit code 3 distinguishes them from TS errors (exit 2) and gcc failures (exit 1).
-- AOT closure diagnostics reject `eval`, `Function` / `new Function`, non-finite `require(variable)`, literal native addon specifiers ending in `.node`, and literal package imports/requires whose installed package root contains `build/Release/*.node`, including transitive imports from emitted package sources under `node_modules`. Top-level const string `require(name)` specifiers are resolved into the AOT module graph. Tests: `runtime_eval`, `runtime_function_call`, `runtime_function_constructor`, `dynamic_require`, `dynamic_require_unknown`, `native_addon`, `native_addon_package`, `node_modules_transitive_native_addon`
+- AOT closure diagnostics reject `eval`, `Function` / `new Function`, non-finite `require(variable)`, literal native addon specifiers ending in `.node`, and literal package imports/requires whose installed package root contains `build/Release/*.node`, including transitive imports from emitted package sources under `node_modules`. Top-level const string `require(name)` specifiers are resolved into the AOT module graph. `--unsafe-eval` is an explicit compile-time gate for runtime code compilation: it emits embedded Node bridge calls for `eval` and callable `Function` values, copies `runtime/tsc_node_embed.cc`, and requires discoverable `libnode` inputs when linking. Tests/checks: `runtime_eval`, `runtime_function_call`, `runtime_function_constructor`, `dynamic_require`, `dynamic_require_unknown`, `native_addon`, `native_addon_package`, `node_modules_transitive_native_addon`, focused `--unsafe-eval --emit-c-only` bridge checks
 - Generated C includes `#line` directives for emitted TypeScript statements so debugger and compiler locations can point back to TS source. Test: `line_directives`
 - `--emit-c-only` — skip gcc, just write the generated `main.c` for inspection.
 - `--keep-build-dir <path>` — keep intermediate files rather than using a tempdir.
@@ -3063,8 +3063,8 @@ Within-phase gaps that can be picked off individually without the big phase-leve
 
 These are not permanent product limits, but every reachable module, native bridge, and runtime-compiled source must be closed over at build time. `tsc2c` should keep rejecting cases it cannot prove or list ahead of time.
 
-- **Native C++ addons under `node_modules/*/build/Release/*.node`.** Add an embedded-Node bridge runtime, linked with `libnode`, so known native addons can be instantiated through Node's ABI from the compiled binary. The bridge must be fed by a compile-time native-addon manifest; it must not search arbitrary runtime paths.
-- **Runtime code compilation.** Constant `eval`, `Function(...)`, and `new Function(...)` source strings should compile to generated AOT functions where possible. Security allow-listed source strings can compile into dispatch tables. Unknown runtime source strings require an explicit gated compile-time flag such as `--unsafe-eval` and route through the embedded-Node bridge; without that flag they stay rejected.
+- **Native C++ addons under `node_modules/*/build/Release/*.node`.** Extend the embedded-Node bridge runtime (`runtime/tsc_node_embed.cc`, linked with `libnode`) so known native addons can be instantiated through Node's ABI from the compiled binary. The bridge must be fed by a compile-time native-addon manifest; it must not search arbitrary runtime paths.
+- **Runtime code compilation.** Default builds still reject `eval`, `Function(...)`, and `new Function(...)`. `--unsafe-eval` now gates unknown runtime source strings through the embedded-Node bridge and requires `libnode` at link time. Constant and security-allow-listed source strings should still prefer generated AOT functions or dispatch tables where possible.
 - **Dynamic `require(variable)`.** Finite const-string require specifiers are included in the AOT module graph now. Extend this to literal unions, switch/if branches, static maps/arrays, finite template literals, and explicit security allow-list manifests. Non-finite dynamic requires without a proof or allow-list entry remain rejected.
 
 ---
@@ -3686,8 +3686,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 Features that require build-time proof or an explicit security allow list, documented once and referenced from [`docs/todo.md`](docs/todo.md):
 
-- Native C++ addons (`node_modules/*/build/Release/*.node`) — use an embedded-Node bridge linked with `libnode` for known native-addon manifests.
-- Runtime code compilation — constant and allow-listed sources can compile AOT; truly unknown sources require `--unsafe-eval` and the embedded-Node bridge.
+- Native C++ addons (`node_modules/*/build/Release/*.node`) — extend the embedded-Node bridge linked with `libnode` for known native-addon manifests.
+- Runtime code compilation — default builds reject it; `--unsafe-eval` now routes unknown sources through the embedded-Node bridge and link-time `libnode` requirement, while constant and allow-listed sources should still prefer AOT generation.
 - Dynamic `require(variable)` — finite or allow-listed specifiers compile into AOT dispatch tables; non-finite unlisted specifiers remain rejected.
 
 These are AOT closure requirements, not permanent product limits.

@@ -178,8 +178,8 @@ Within-phase gaps that can be picked off individually without the big phase-leve
 
 These are not permanent product limits, but every reachable module, native bridge, and runtime-compiled source must be closed over at build time. `tsc2c` should keep rejecting cases it cannot prove or list ahead of time.
 
-- **Native C++ addons under `node_modules/*/build/Release/*.node`.** Add an embedded-Node bridge runtime, linked with `libnode`, so known native addons can be instantiated through Node's ABI from the compiled binary. The bridge must be fed by a compile-time native-addon manifest; it must not search arbitrary runtime paths.
-- **Runtime code compilation.** Constant `eval`, `Function(...)`, and `new Function(...)` source strings should compile to generated AOT functions where possible. Security allow-listed source strings can compile into dispatch tables. Unknown runtime source strings require an explicit gated compile-time flag such as `--unsafe-eval` and route through the embedded-Node bridge; without that flag they stay rejected.
+- **Native C++ addons under `node_modules/*/build/Release/*.node`.** Extend the embedded-Node bridge runtime (`runtime/tsc_node_embed.cc`, linked with `libnode`) so known native addons can be instantiated through Node's ABI from the compiled binary. The bridge must be fed by a compile-time native-addon manifest; it must not search arbitrary runtime paths.
+- **Runtime code compilation.** Default builds still reject `eval`, `Function(...)`, and `new Function(...)`. `--unsafe-eval` now gates unknown runtime source strings through the embedded-Node bridge and requires `libnode` at link time. Constant and security-allow-listed source strings should still prefer generated AOT functions or dispatch tables where possible.
 - **Dynamic `require(variable)`.** Finite const-string require specifiers are included in the AOT module graph now. Extend this to literal unions, switch/if branches, static maps/arrays, finite template literals, and explicit security allow-list manifests. Non-finite dynamic requires without a proof or allow-list entry remain rejected.
 
 ---

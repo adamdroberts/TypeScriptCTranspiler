@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- `--unsafe-eval` now gates runtime code compilation behind an embedded Node bridge: default `eval` / `Function` / `new Function` diagnostics remain hard failures, while the explicit flag emits `tsc_node_eval` / callable `tsc_node_function` bridge calls and links `runtime/tsc_node_embed.cc` only when `libnode` inputs are available. Focused checks cover default rejection, `--unsafe-eval --emit-c-only` bridge emission, callable `Function` bridge emission, and the local missing-`libnode` link diagnostic.
 - Top-level const string `require(name)` specifiers now resolve as finite AOT module edges instead of being treated as unknowable dynamic requires; genuinely non-finite dynamic require remains rejected. Tests: `dynamic_require`, `dynamic_require_unknown`.
 - Typed String fixed-input methods now evaluate and ignore extra arguments after their JavaScript-consumed inputs, covering character lookup, search-position, repeat/pad, replacement, match/search, and split helpers. Tests: `string_char_code_at`, `string_search_positions`, `strings`.
 - Fixed-input `path` helpers now evaluate and ignore extra arguments after their JavaScript-consumed path inputs, covering `normalize`, `isAbsolute`, `relative`, `toNamespacedPath`, `basename`, `dirname`, `extname`, `parse`, and `format`. Tests: `path_normalize`, `path_relative`, `path_basename_suffix`, `path_parse_format`, `path_to_namespaced`.
@@ -705,12 +706,12 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `--no-gc` compile flag using `-DTSC_NO_GC` as a fallback for environments without `libgc-dev`.
 - e2e test harness at `tests/e2e/run.ts` with `hello`, `fizzbuzz`, `arith`, `greet` cases.
 
-## Permanent limits
+## AOT closure requirements
 
-Features that will never be supported, documented once and referenced from [`docs/todo.md`](docs/todo.md):
+Features that require build-time proof or an explicit security allow list, documented once and referenced from [`docs/todo.md`](docs/todo.md):
 
-- Native C++ addons (`node_modules/*/build/Release/*.node`) — linked against Node's V8 ABI.
-- Runtime code compilation (JS constructs that compile strings at runtime) — `tsc2c` is ahead-of-time.
-- Dynamic `require(variable)` with a non-literal argument — can't be walked statically.
+- Native C++ addons (`node_modules/*/build/Release/*.node`) — use an embedded-Node bridge linked with `libnode` for known native-addon manifests.
+- Runtime code compilation — constant and allow-listed sources can compile AOT; truly unknown sources require `--unsafe-eval` and the embedded-Node bridge.
+- Dynamic `require(variable)` — finite or allow-listed specifiers compile into AOT dispatch tables; non-finite unlisted specifiers remain rejected.
 
-These are hard limits, not backlog items. The plan explicitly acknowledges them.
+These are AOT closure requirements, not permanent product limits.
