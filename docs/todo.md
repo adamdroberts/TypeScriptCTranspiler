@@ -133,7 +133,7 @@ This is the next item that most directly expands what programs can be written ag
   - CommonJS `const local = require("./local.js"); module.exports = local;` assignments are implemented for supported target `exports.*` metadata, with named import metadata and require-bound whole-object reads covered by `node_modules_commonjs_relative_require_binding_object_named`.
   - Dual CJS/ESM resolution
   - Basic `allowJs: true` package-source loading is implemented for pure ESM JavaScript packages; broader JS package patterns remain
-  - Native addon package detection for literal imports/requires now rejects installed package roots containing `build/Release/*.node`, including transitive imports from emitted package sources under `node_modules`, unless the specifier is listed in a compile-time native-addon manifest. Manifest-listed literal require/import bindings lower to the embedded Node bridge with a concrete `.node` path instead of a runtime search; broader package export/imports/condition resolution and real-addon smoke coverage remain.
+  - Native addon package detection for literal imports/requires now rejects installed package roots containing `build/Release/*.node`, including transitive imports from emitted package sources under `node_modules`, unless the specifier is listed in a compile-time native-addon manifest. Manifest-listed literal require/import bindings lower to the embedded Node bridge with a concrete `.node` path instead of a runtime search; `bun run test:native-addon-smoke` builds and executes a real N-API addon through that bridge when `libnode` is available. Broader package export/imports/condition resolution remains.
 
 - **Phase 15 — perf & polish** (ongoing)
   - Inline-caching stats and diagnostics
@@ -184,7 +184,7 @@ Within-phase gaps that can be picked off individually without the big phase-leve
 
 These are not permanent product limits, but every reachable module, native bridge, and runtime-compiled source must be closed over at build time. `tsc2c` should keep rejecting cases it cannot prove or list ahead of time.
 
-- **Native C++ addons under `node_modules/*/build/Release/*.node`.** Literal native addon specifiers and native-addon packages can now be security allow-listed through a compile-time native-addon manifest, which lowers known `require(...)`/import bindings to `runtime/tsc_node_embed.cc` via `tsc_node_native_addon(<manifest path>)` and links `libnode`. Package `exports` / `imports` condition maps and package-private `#...` imports are included in the native-addon closure checks, and direct `.node` default imports are typed as `any` for manifest-backed bridge imports. Unlisted native addons still reject. Remaining work: validate execution against a real addon binary in an environment with `libnode`.
+- **Native C++ addons under `node_modules/*/build/Release/*.node`.** Literal native addon specifiers and native-addon packages can now be security allow-listed through a compile-time native-addon manifest, which lowers known `require(...)`/import bindings to `runtime/tsc_node_embed.cc` via `tsc_node_native_addon(<manifest path>)` and links `libnode`. Package `exports` / `imports` condition maps and package-private `#...` imports are included in the native-addon closure checks, direct `.node` default imports are typed as `any` for manifest-backed bridge imports, and `bun run test:native-addon-smoke` validates a real N-API addon path when `libnode` is available. Unlisted native addons still reject.
 
 ---
 
