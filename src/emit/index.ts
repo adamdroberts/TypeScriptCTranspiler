@@ -41,6 +41,7 @@ import {
     UnsupportedError,
     formatUnsupported,
 } from "../diagnostics";
+import { staticStringExpressionText } from "../module-specifiers";
 import type { ModuleGraph, ModuleInfo } from "../resolve";
 
 interface EmitResult {
@@ -3546,10 +3547,9 @@ class Emitter {
         if (
             ts.isCallExpression(expr) &&
             this.isCommonJsRequireCallee(expr.expression) &&
-            expr.arguments.length === 1 &&
-            ts.isStringLiteralLike(expr.arguments[0])
+            expr.arguments.length === 1
         ) {
-            return expr.arguments[0].text;
+            return staticStringExpressionText(expr.arguments[0]!);
         }
         return null;
     }

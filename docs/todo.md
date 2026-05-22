@@ -174,13 +174,13 @@ Within-phase gaps that can be picked off individually without the big phase-leve
 
 ---
 
-## 5. Permanent limits (will never be done)
+## 5. AOT closure requirements
 
-These are genuinely impossible to AOT-compile at any engineering investment. The plan documents them, and `tsc2c` emits hard errors for the limits it can see before emission.
+These are not permanent product limits, but every reachable module, native bridge, and runtime-compiled source must be closed over at build time. `tsc2c` should keep rejecting cases it cannot prove or list ahead of time.
 
-- **Native C++ addons under `node_modules/*/build/Release/*.node`.** They're compiled against Node's V8 ABI and the embedder's internals. We can't transpile their source because we don't have it — they're binary `.node` files. Literal `.node` import/require specifiers and literal package imports/requires whose installed package root contains `build/Release/*.node` are rejected now, including transitive imports from emitted package sources under `node_modules`; broader package export/condition handling remains Phase 14. Suggested workaround is to document pure-JS alternatives.
-- **Runtime code compilation** — JavaScript offers two constructs that require compiling source text at runtime. `tsc2c` is ahead-of-time and has no compiler in the produced binary, so `eval`, `Function(...)`, and `new Function(...)` are rejected before TypeScript diagnostics.
-- **Dynamic `require(variable)`** where the argument isn't a string literal. The import graph is walked statically; a variable-valued specifier is unknowable at compile time, so non-literal `require(...)` is rejected before emission.
+- **Native C++ addons under `node_modules/*/build/Release/*.node`.** Add an embedded-Node bridge runtime, linked with `libnode`, so known native addons can be instantiated through Node's ABI from the compiled binary. The bridge must be fed by a compile-time native-addon manifest; it must not search arbitrary runtime paths.
+- **Runtime code compilation.** Constant `eval`, `Function(...)`, and `new Function(...)` source strings should compile to generated AOT functions where possible. Security allow-listed source strings can compile into dispatch tables. Unknown runtime source strings require an explicit gated compile-time flag such as `--unsafe-eval` and route through the embedded-Node bridge; without that flag they stay rejected.
+- **Dynamic `require(variable)`.** Finite const-string require specifiers are included in the AOT module graph now. Extend this to literal unions, switch/if branches, static maps/arrays, finite template literals, and explicit security allow-list manifests. Non-finite dynamic requires without a proof or allow-list entry remain rejected.
 
 ---
 

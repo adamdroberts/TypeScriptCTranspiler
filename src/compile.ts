@@ -9,6 +9,7 @@ import { buildProgram, resolvePackageRoot } from "./program";
 import { buildModuleGraph } from "./resolve";
 import { emitProgram } from "./emit/index";
 import { invokeCc } from "./link/cc";
+import { staticStringExpressionText } from "./module-specifiers";
 import {
     formatTsDiagnostics,
     formatUnsupported,
@@ -229,14 +230,8 @@ function permanentLimitDiagnostics(
     return diagnostics;
 }
 
-function isStringSpecifier(
-    expr: ts.Expression,
-): expr is ts.StringLiteral | ts.NoSubstitutionTemplateLiteral {
-    return ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr);
-}
-
 function stringSpecifierText(expr: ts.Expression): string | null {
-    return isStringSpecifier(expr) ? expr.text : null;
+    return staticStringExpressionText(expr);
 }
 
 function isModuleRequireAccess(expr: ts.Expression): boolean {

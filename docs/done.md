@@ -498,7 +498,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 
 - TypeScript type-checking via the official compiler API — any TS type error is surfaced with full source context (file:line:col + code frame) before emission. Test: try `/tmp/bad.ts` with `const x: number = "str"`.
 - Unsupported-feature diagnostics include source location and a one-line reason — exit code 3 distinguishes them from TS errors (exit 2) and gcc failures (exit 1).
-- Permanent AOT-limit diagnostics reject `eval`, `Function` / `new Function`, non-literal `require(variable)`, literal native addon specifiers ending in `.node`, and literal package imports/requires whose installed package root contains `build/Release/*.node`, including transitive imports from emitted package sources under `node_modules`. Tests: `runtime_eval`, `runtime_function_call`, `runtime_function_constructor`, `dynamic_require`, `native_addon`, `native_addon_package`, `node_modules_transitive_native_addon`
+- AOT closure diagnostics reject `eval`, `Function` / `new Function`, non-finite `require(variable)`, literal native addon specifiers ending in `.node`, and literal package imports/requires whose installed package root contains `build/Release/*.node`, including transitive imports from emitted package sources under `node_modules`. Top-level const string `require(name)` specifiers are resolved into the AOT module graph. Tests: `runtime_eval`, `runtime_function_call`, `runtime_function_constructor`, `dynamic_require`, `dynamic_require_unknown`, `native_addon`, `native_addon_package`, `node_modules_transitive_native_addon`
 - Generated C includes `#line` directives for emitted TypeScript statements so debugger and compiler locations can point back to TS source. Test: `line_directives`
 - `--emit-c-only` — skip gcc, just write the generated `main.c` for inspection.
 - `--keep-build-dir <path>` — keep intermediate files rather than using a tempdir.
@@ -1030,7 +1030,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_string_substr` | dynamic string substr start/length semantics |
 | `dynamic_string_substring` | dynamic string substring clamp/swap semantics |
 | `dynamic_string_trim_edges` | dynamic string trimStart and trimEnd |
-| `dynamic_require` | expected diagnostic for non-literal `require(variable)` |
+| `dynamic_require` | top-level const string `require(name)` resolved as an AOT module edge |
+| `dynamic_require_unknown` | expected diagnostic for non-finite `require(variable)` |
 | `dynamic_coercions` | `any`/`unknown` unboxing into typed number/boolean/string/array destinations |
 | `dynamic_index_assignment` | dynamic array index writes and compound index writes |
 | `dynamic_last_index_of` | dynamic string and array lastIndexOf |

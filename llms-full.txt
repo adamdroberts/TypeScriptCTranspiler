@@ -2227,7 +2227,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 
 - TypeScript type-checking via the official compiler API — any TS type error is surfaced with full source context (file:line:col + code frame) before emission. Test: try `/tmp/bad.ts` with `const x: number = "str"`.
 - Unsupported-feature diagnostics include source location and a one-line reason — exit code 3 distinguishes them from TS errors (exit 2) and gcc failures (exit 1).
-- Permanent AOT-limit diagnostics reject `eval`, `Function` / `new Function`, non-literal `require(variable)`, literal native addon specifiers ending in `.node`, and literal package imports/requires whose installed package root contains `build/Release/*.node`, including transitive imports from emitted package sources under `node_modules`. Tests: `runtime_eval`, `runtime_function_call`, `runtime_function_constructor`, `dynamic_require`, `native_addon`, `native_addon_package`, `node_modules_transitive_native_addon`
+- AOT closure diagnostics reject `eval`, `Function` / `new Function`, non-finite `require(variable)`, literal native addon specifiers ending in `.node`, and literal package imports/requires whose installed package root contains `build/Release/*.node`, including transitive imports from emitted package sources under `node_modules`. Top-level const string `require(name)` specifiers are resolved into the AOT module graph. Tests: `runtime_eval`, `runtime_function_call`, `runtime_function_constructor`, `dynamic_require`, `dynamic_require_unknown`, `native_addon`, `native_addon_package`, `node_modules_transitive_native_addon`
 - Generated C includes `#line` directives for emitted TypeScript statements so debugger and compiler locations can point back to TS source. Test: `line_directives`
 - `--emit-c-only` — skip gcc, just write the generated `main.c` for inspection.
 - `--keep-build-dir <path>` — keep intermediate files rather than using a tempdir.
@@ -2739,7 +2739,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_string_substr` | dynamic string substr start/length semantics |
 | `dynamic_string_substring` | dynamic string substring clamp/swap semantics |
 | `dynamic_string_trim_edges` | dynamic string trimStart and trimEnd |
-| `dynamic_require` | expected diagnostic for non-literal `require(variable)` |
+| `dynamic_require` | top-level const string `require(name)` resolved as an AOT module edge |
+| `dynamic_require_unknown` | expected diagnostic for non-finite `require(variable)` |
 | `dynamic_coercions` | `any`/`unknown` unboxing into typed number/boolean/string/array destinations |
 | `dynamic_index_assignment` | dynamic array index writes and compound index writes |
 | `dynamic_last_index_of` | dynamic string and array lastIndexOf |
@@ -3058,13 +3059,13 @@ Within-phase gaps that can be picked off individually without the big phase-leve
 
 ---
 
-## 5. Permanent limits (will never be done)
+## 5. AOT closure requirements
 
-These are genuinely impossible to AOT-compile at any engineering investment. The plan documents them, and `tsc2c` emits hard errors for the limits it can see before emission.
+These are not permanent product limits, but every reachable module, native bridge, and runtime-compiled source must be closed over at build time. `tsc2c` should keep rejecting cases it cannot prove or list ahead of time.
 
-- **Native C++ addons under `node_modules/*/build/Release/*.node`.** They're compiled against Node's V8 ABI and the embedder's internals. We can't transpile their source because we don't have it — they're binary `.node` files. Literal `.node` import/require specifiers and literal package imports/requires whose installed package root contains `build/Release/*.node` are rejected now, including transitive imports from emitted package sources under `node_modules`; broader package export/condition handling remains Phase 14. Suggested workaround is to document pure-JS alternatives.
-- **Runtime code compilation** — JavaScript offers two constructs that require compiling source text at runtime. `tsc2c` is ahead-of-time and has no compiler in the produced binary, so `eval`, `Function(...)`, and `new Function(...)` are rejected before TypeScript diagnostics.
-- **Dynamic `require(variable)`** where the argument isn't a string literal. The import graph is walked statically; a variable-valued specifier is unknowable at compile time, so non-literal `require(...)` is rejected before emission.
+- **Native C++ addons under `node_modules/*/build/Release/*.node`.** Add an embedded-Node bridge runtime, linked with `libnode`, so known native addons can be instantiated through Node's ABI from the compiled binary. The bridge must be fed by a compile-time native-addon manifest; it must not search arbitrary runtime paths.
+- **Runtime code compilation.** Constant `eval`, `Function(...)`, and `new Function(...)` source strings should compile to generated AOT functions where possible. Security allow-listed source strings can compile into dispatch tables. Unknown runtime source strings require an explicit gated compile-time flag such as `--unsafe-eval` and route through the embedded-Node bridge; without that flag they stay rejected.
+- **Dynamic `require(variable)`.** Finite const-string require specifiers are included in the AOT module graph now. Extend this to literal unions, switch/if branches, static maps/arrays, finite template literals, and explicit security allow-list manifests. Non-finite dynamic requires without a proof or allow-list entry remain rejected.
 
 ---
 
@@ -3681,15 +3682,15 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `--no-gc` compile flag using `-DTSC_NO_GC` as a fallback for environments without `libgc-dev`.
 - e2e test harness at `tests/e2e/run.ts` with `hello`, `fizzbuzz`, `arith`, `greet` cases.
 
-## Permanent limits
+## AOT closure requirements
 
-Features that will never be supported, documented once and referenced from [`docs/todo.md`](docs/todo.md):
+Features that require build-time proof or an explicit security allow list, documented once and referenced from [`docs/todo.md`](docs/todo.md):
 
-- Native C++ addons (`node_modules/*/build/Release/*.node`) — linked against Node's V8 ABI.
-- Runtime code compilation (JS constructs that compile strings at runtime) — `tsc2c` is ahead-of-time.
-- Dynamic `require(variable)` with a non-literal argument — can't be walked statically.
+- Native C++ addons (`node_modules/*/build/Release/*.node`) — use an embedded-Node bridge linked with `libnode` for known native-addon manifests.
+- Runtime code compilation — constant and allow-listed sources can compile AOT; truly unknown sources require `--unsafe-eval` and the embedded-Node bridge.
+- Dynamic `require(variable)` — finite or allow-listed specifiers compile into AOT dispatch tables; non-finite unlisted specifiers remain rejected.
 
-These are hard limits, not backlog items. The plan explicitly acknowledges them.
+These are AOT closure requirements, not permanent product limits.
 
 ---
 

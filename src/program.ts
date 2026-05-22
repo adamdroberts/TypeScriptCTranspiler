@@ -1,6 +1,10 @@
 import ts from "typescript";
 import * as path from "node:path";
 import * as url from "node:url";
+import {
+    isCommonJsRequireCallee,
+    requireCallSpecifier as staticRequireCallSpecifier,
+} from "./module-specifiers";
 
 export interface BuildProgramOpts {
     entry: string;
@@ -113,25 +117,7 @@ function staticRequireSpecifiers(stmt: ts.Statement, requireAliases: Set<string>
 }
 
 function requireCallSpecifier(expr: ts.Expression, requireAliases: Set<string>): string | null {
-    if (
-        ts.isCallExpression(expr) &&
-        isCommonJsRequireCallee(expr.expression, requireAliases) &&
-        expr.arguments.length === 1 &&
-        ts.isStringLiteralLike(expr.arguments[0])
-    ) {
-        return expr.arguments[0].text;
-    }
-    return null;
-}
-
-function isCommonJsRequireCallee(expr: ts.Expression, requireAliases: Set<string>): boolean {
-    return (ts.isIdentifier(expr) && (expr.text === "require" || requireAliases.has(expr.text))) ||
-        (
-            ts.isPropertyAccessExpression(expr) &&
-            expr.name.text === "require" &&
-            ts.isIdentifier(expr.expression) &&
-            expr.expression.text === "module"
-        );
+    return staticRequireCallSpecifier(expr, requireAliases);
 }
 
 function commonJsRequireAliases(sf: ts.SourceFile): Set<string> {
@@ -149,11 +135,5 @@ function commonJsRequireAliases(sf: ts.SourceFile): Set<string> {
 }
 
 function isCommonJsRequireAliasInitializer(expr: ts.Expression): boolean {
-    return (ts.isIdentifier(expr) && expr.text === "require") ||
-        (
-            ts.isPropertyAccessExpression(expr) &&
-            expr.name.text === "require" &&
-            ts.isIdentifier(expr.expression) &&
-            expr.expression.text === "module"
-        );
+    return isCommonJsRequireCallee(expr, new Set());
 }
