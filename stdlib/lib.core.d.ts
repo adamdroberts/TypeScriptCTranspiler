@@ -57,6 +57,12 @@ interface PromiseConstructor {
 declare var Promise: PromiseConstructor;
 
 declare function require(specifier: string): any;
+
+declare module "*.node" {
+    const addon: any;
+    export default addon;
+}
+
 declare const __filename: string;
 declare const __dirname: string;
 declare const module: {

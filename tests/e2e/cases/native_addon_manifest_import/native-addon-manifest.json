@@ -1,0 +1,5 @@
+{
+  "addons": {
+    "./build/Release/native.node": "./build/Release/native.node"
+  }
+}

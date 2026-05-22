@@ -378,6 +378,9 @@ function nativeAddonPackageMessage(
     containingFile: string,
     manifest: NativeAddonManifest | undefined,
 ): string | null {
+    if (spec.startsWith("#")) {
+        return nativeAddonPackageImportMessage(spec, containingFile, manifest);
+    }
     if (spec.startsWith(".") || spec.startsWith("/") || spec.startsWith("node:")) {
         return null;
     }
@@ -390,6 +393,19 @@ function nativeAddonPackageMessage(
     return `native C++ addon package '${packageName}' contains or resolves to a .node binary and requires --native-addon-manifest allow-list entry`;
 }
 
+function nativeAddonPackageImportMessage(
+    spec: string,
+    containingFile: string,
+    manifest: NativeAddonManifest | undefined,
+): string | null {
+    if (manifest && nativeAddonPathForSpecifier(manifest, spec, containingFile)) return null;
+    const packageRoot = findNearestPackageRoot(path.dirname(containingFile));
+    if (!packageRoot) return null;
+    const importsTarget = packageImportTarget(packageRoot, spec);
+    if (!containsNativeAddonReference(importsTarget)) return null;
+    return `native C++ addon package import '${spec}' resolves to a .node binary and requires --native-addon-manifest allow-list entry`;
+}
+
 function packageNameFromSpecifier(spec: string): string | null {
     const parts = spec.split("/");
     if (spec.startsWith("@")) {
@@ -397,6 +413,19 @@ function packageNameFromSpecifier(spec: string): string | null {
         return `${parts[0]}/${parts[1]}`;
     }
     return parts[0] || null;
+}
+
+function findNearestPackageRoot(fromDir: string): string | null {
+    let dir = path.resolve(fromDir);
+    while (true) {
+        const packageJson = path.join(dir, "package.json");
+        if (fsSync.existsSync(packageJson) && fsSync.statSync(packageJson).isFile()) {
+            return dir;
+        }
+        const parent = path.dirname(dir);
+        if (parent === dir) return null;
+        dir = parent;
+    }
 }
 
 function findNodeModulePackage(
@@ -434,13 +463,35 @@ function packageContainsNativeAddon(packageRoot: string): boolean {
             main?: unknown;
             module?: unknown;
             exports?: unknown;
+            imports?: unknown;
             bin?: unknown;
         };
-        return [pkg.main, pkg.module, pkg.exports, pkg.bin].some(
+        return [pkg.main, pkg.module, pkg.exports, pkg.imports, pkg.bin].some(
             containsNativeAddonReference,
         );
     } catch {
         return false;
+    }
+}
+
+function packageImportTarget(packageRoot: string, spec: string): unknown {
+    try {
+        const raw = fsSync.readFileSync(path.join(packageRoot, "package.json"), "utf8");
+        const pkg = JSON.parse(raw) as { imports?: unknown };
+        const imports = pkg.imports;
+        if (!imports || typeof imports !== "object" || Array.isArray(imports)) return undefined;
+        const importMap = imports as Record<string, unknown>;
+        if (Object.prototype.hasOwnProperty.call(importMap, spec)) return importMap[spec];
+        for (const [key, value] of Object.entries(importMap)) {
+            const star = key.indexOf("*");
+            if (star < 0) continue;
+            const prefix = key.slice(0, star);
+            const suffix = key.slice(star + 1);
+            if (spec.startsWith(prefix) && spec.endsWith(suffix)) return value;
+        }
+        return undefined;
+    } catch {
+        return undefined;
     }
 }
 

@@ -51,6 +51,24 @@ const packages: Record<string, PackageFixture> = {
             "build/Release/native.node": "",
         },
     },
+    "native-imports-pkg": {
+        packageJson: {
+            name: "native-imports-pkg",
+            version: "1.0.0",
+            main: "index.js",
+            imports: {
+                "#native": {
+                    node: "./build/Release/native.node",
+                    default: "./fallback.js",
+                },
+            },
+        },
+        files: {
+            "index.js": "module.exports = 3;\n",
+            "fallback.js": "module.exports = 0;\n",
+            "build/Release/native.node": "",
+        },
+    },
     "outer-native-user": cjsPackage("outer-native-user", {
         "index.js": 'const native = require("inner-native-pkg");\nexports.value = native.value;\n',
     }),
