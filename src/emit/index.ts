@@ -10987,7 +10987,8 @@ class Emitter {
             if (!a) unsupported(call, "Array.from needs an argument");
             const mapfn = call.arguments[1];
             if (mapfn) {
-                return this.emitArrayFromWithMapper(call, a, mapfn);
+                if (call.arguments.length > 3) unsupported(call, "Array.from(items, mapfn) expects optional thisArg");
+                return this.emitArrayFromWithMapper(call, a, mapfn, call.arguments[2]);
             }
             const r = this.emitExpr(a);
             if (r.ty.kind === "value") {
@@ -12305,6 +12306,7 @@ class Emitter {
         call: ts.CallExpression,
         itemsArg: ts.Expression,
         mapfnArg: ts.Expression,
+        thisArg: ts.Expression | undefined,
     ): EmitResult {
         const callType = this.prepareType(
             mapTsType(call, this.checker.getTypeAtLocation(call), this.checker),
@@ -12314,8 +12316,14 @@ class Emitter {
         const u = callType.elem;
 
         const items = this.emitExpr(itemsArg);
+        const thisArgValue = thisArg ? this.emitExpr(thisArg) : null;
+        const thisArgTemp = thisArgValue ? this.freshTemp("_this_arg") : null;
+        const thisArgSetup = thisArgValue
+            ? `tsc_value_t ${thisArgTemp} = ${this.coerce(thisArgValue, T_VALUE, thisArg!)}; `
+            : "";
+        const callbackThisArg = thisArgTemp ?? "tsc_value_undefined()";
         if (items.ty.kind === "string") {
-            return this.emitArrayFromMapperStringSource(call, items, mapfnArg, u);
+            return this.emitArrayFromMapperStringSource(call, items, mapfnArg, u, thisArgSetup, callbackThisArg);
         }
         if (items.ty.kind === "value") {
             return this.emitSequencedExpr(callType, [{ value: items, target: T_VALUE, node: itemsArg }], ([itemsExpr]) => {
@@ -12325,10 +12333,11 @@ class Emitter {
                 const item = this.freshTemp("_af_dyn_item");
                 const mapped = this.freshTemp("_af_dyn_mapped");
                 const itemExpr = `TSC_ARR(tsc_value_t, ${src}, ${iv})`;
-                const { bindings, body } = this.bindArrayFromCallback(mapfnArg, T_VALUE, u, item, iv);
+                const { bindings, body } = this.bindArrayFromCallback(mapfnArg, T_VALUE, u, item, iv, callbackThisArg);
                 const mappedC = this.coerce(body, u, mapfnArg);
                 return (
                     `({ tsc_array_t* const ${src} = tsc_value_iter_values(${itemsExpr!}); ` +
+                    `${thisArgSetup}` +
                     `tsc_array_t* ${out} = tsc_array_new(sizeof(${u.c}), ${src}->len ? ${src}->len : 1); ` +
                     `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
                     `tsc_value_t ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
@@ -12353,10 +12362,11 @@ class Emitter {
             const item = this.freshTemp("_af_item");
             const mapped = this.freshTemp("_af_mapped");
             const itemExpr = `TSC_ARR(${t.c}, ${src}, ${iv})`;
-            const { bindings, body } = this.bindArrayFromCallback(mapfnArg, t, u, item, iv);
+            const { bindings, body } = this.bindArrayFromCallback(mapfnArg, t, u, item, iv, callbackThisArg);
             const mappedC = this.coerce(body, u, mapfnArg);
             return (
                 `({ tsc_array_t* const ${src} = ${sourceArray(itemsExpr!)}; ` +
+                `${thisArgSetup}` +
                 `tsc_array_t* ${out} = tsc_array_new(sizeof(${u.c}), ${src}->len ? ${src}->len : 1); ` +
                 `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
                 `${t.c} ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
@@ -12371,6 +12381,8 @@ class Emitter {
         items: EmitResult,
         mapfnArg: ts.Expression,
         u: CType,
+        thisArgSetup: string,
+        callbackThisArg: string,
     ): EmitResult {
         // String source: walk one code point per iteration via tsc_str_chars.
         const callType = arrayType(u);
@@ -12381,10 +12393,11 @@ class Emitter {
             const item = this.freshTemp("_afs_item");
             const mapped = this.freshTemp("_afs_mapped");
             const itemExpr = `TSC_ARR(tsc_str_t*, ${src}, ${iv})`;
-            const { bindings, body } = this.bindArrayFromCallback(mapfnArg, T_STRING, u, item, iv);
+            const { bindings, body } = this.bindArrayFromCallback(mapfnArg, T_STRING, u, item, iv, callbackThisArg);
             const mappedC = this.coerce(body, u, mapfnArg);
             return (
                 `({ tsc_array_t* const ${src} = tsc_str_chars(${s}); ` +
+                `${thisArgSetup}` +
                 `tsc_array_t* ${out} = tsc_array_new(sizeof(${u.c}), ${src}->len ? ${src}->len : 1); ` +
                 `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
                 `tsc_str_t* ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
@@ -12400,19 +12413,29 @@ class Emitter {
         u: CType,
         itemTemp: string,
         indexTemp: string,
+        callbackThisArg: string,
     ): { bindings: string[]; body: EmitResult } {
         const bindings: string[] = [];
         if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
+            const sig = this.checker.getSignatureFromDeclaration(cb);
+            if (!sig) unsupported(cb, "Array.from callback must be callable");
+            const thisType = this.signatureThisType(sig, cb);
+            const params = cb.parameters.filter((p) => !this.isThisParameter(p));
             const bodyExpr = this.callbackReturnExpression(cb, "Array.from");
-            const valueParam = cb.parameters[0];
-            const indexParam = cb.parameters[1];
+            const valueParam = params[0];
+            const indexParam = params[1];
             if (valueParam && ts.isIdentifier(valueParam.name)) {
                 bindings.push(`${t.c} ${mangleIdent(valueParam.name.text)} = ${itemTemp};`);
             }
             if (indexParam && ts.isIdentifier(indexParam.name)) {
                 bindings.push(`double ${mangleIdent(indexParam.name.text)} = (double)${indexTemp};`);
             }
-            return { bindings, body: this.emitExpr(bodyExpr) };
+            if (thisType) this.functionThisStack.push({ c: callbackThisArg, ty: thisType });
+            try {
+                return { bindings, body: this.emitExpr(bodyExpr) };
+            } finally {
+                if (thisType) this.functionThisStack.pop();
+            }
         }
         if (ts.isIdentifier(cb)) {
             const cbType = this.checker.getTypeAtLocation(cb);
@@ -12443,6 +12466,8 @@ class Emitter {
                     );
                     return this.coerce(sources[index]!, target, cb);
                 });
+                const thisType = this.directCallableThisType(cb);
+                if (thisType) callArgs.unshift(callbackThisArg);
                 const retType = this.prepareType(
                     genericBindings
                         ? withTypeBindings(genericBindings, () =>
@@ -12464,7 +12489,7 @@ class Emitter {
             return {
                 bindings,
                 body: {
-                    c: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`,
+                    c: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? [callbackThisArg] : []), ...callArgs].join(", ")})`,
                     ty: this.prepareType(fn.ty.ret),
                 },
             };

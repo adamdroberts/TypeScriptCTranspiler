@@ -1,0 +1,3 @@
+{
+  "description": "Array.from mapper callbacks evaluate optional thisArg and bind it for callbacks with explicit this parameters"
+}

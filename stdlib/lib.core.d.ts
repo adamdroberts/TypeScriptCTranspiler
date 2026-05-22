@@ -309,10 +309,10 @@ interface ArrayConstructor {
     from<T>(arr: T[]): T[];
     from<T>(set: Set<T>): T[];
     from<T>(map: Map<string, T>): ObjectEntry<T>[];
-    from<U>(s: string, mapfn: (v: string, k: number) => U): U[];
-    from<T, U>(arr: T[], mapfn: (v: T, k: number) => U): U[];
-    from<T, U>(set: Set<T>, mapfn: (v: T, k: number) => U): U[];
-    from<T, U>(map: Map<string, T>, mapfn: (v: ObjectEntry<T>, k: number) => U): U[];
+    from<U>(s: string, mapfn: (v: string, k: number) => U, thisArg?: any): U[];
+    from<T, U>(arr: T[], mapfn: (v: T, k: number) => U, thisArg?: any): U[];
+    from<T, U>(set: Set<T>, mapfn: (v: T, k: number) => U, thisArg?: any): U[];
+    from<T, U>(map: Map<string, T>, mapfn: (v: ObjectEntry<T>, k: number) => U, thisArg?: any): U[];
     of<T>(...items: T[]): T[];
 }
 declare var Array: ArrayConstructor;
