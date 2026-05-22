@@ -75,6 +75,8 @@ const RUNTIME_SOURCES = [
 const NODE_EMBED_RUNTIME_SOURCES = ["tsc_node_embed.cc"];
 const RUNTIME_HEADERS = ["tsc_runtime.h", "tsc_internal.h"];
 const execFileAsync = promisify(execFile);
+const DYNAMIC_REQUIRE_AOT_MESSAGE =
+    "dynamic require(variable) needs a finite AOT specifier proof or --dynamic-require-manifest allow-list";
 
 interface Pcre2Flags {
     compileFlags: string[];
@@ -217,8 +219,7 @@ function permanentLimitDiagnostics(
                         } else {
                             diagnostics.push({
                                 node,
-                                message:
-                                    "dynamic require(variable) cannot be AOT-compiled; use a string-literal specifier",
+                                message: DYNAMIC_REQUIRE_AOT_MESSAGE,
                             });
                         }
                     }
@@ -232,8 +233,7 @@ function permanentLimitDiagnostics(
                     } else {
                         diagnostics.push({
                             node,
-                            message:
-                                "dynamic require(variable) cannot be AOT-compiled; use a string-literal specifier",
+                            message: DYNAMIC_REQUIRE_AOT_MESSAGE,
                         });
                     }
                 } else if (expr.kind === ts.SyntaxKind.ImportKeyword) {
