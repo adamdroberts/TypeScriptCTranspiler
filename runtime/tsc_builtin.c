@@ -1550,3 +1550,54 @@ tsc_buffer_t* tsc_buffer_swap(tsc_buffer_t* b, size_t width) {
 }
 
 
+
+
+tsc_value_t tsc_proxy_new(tsc_value_t target, tsc_value_t handler) {
+    if (!value_is_box(target) || value_tag(target) != TSC_VALUE_TAG_OBJECT) {
+        if (!value_is_box(target) || value_tag(target) != TSC_VALUE_TAG_FUNCTION) {
+            tsc_panic("Cannot create proxy with a non-object as target or handler");
+        }
+    }
+    if (!value_is_box(handler) || value_tag(handler) != TSC_VALUE_TAG_OBJECT) {
+        tsc_panic("Cannot create proxy with a non-object as target or handler");
+    }
+    tsc_object_t* o = (tsc_object_t*)TSC_GC_MALLOC(sizeof(tsc_object_t));
+    o->len = 0;
+    o->cap = 0;
+    o->extensible = true;
+    o->prototype = tsc_value_null();
+    o->props = NULL;
+    o->is_proxy = true;
+    o->proxy_revoked = false;
+    o->proxy_target = target;
+    o->proxy_handler = handler;
+    return tsc_value_object(o);
+}
+
+tsc_value_t tsc_proxy_revoke(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)receiver;
+    (void)args;
+    tsc_value_t proxy_val = *(tsc_value_t*)env;
+    if (value_is_box(proxy_val) && value_tag(proxy_val) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* o = (tsc_object_t*)value_ptr(proxy_val);
+        if (o->is_proxy) {
+            o->proxy_revoked = true;
+            o->proxy_target = tsc_value_null();
+            o->proxy_handler = tsc_value_null();
+        }
+    }
+    return tsc_value_undefined();
+}
+
+tsc_value_t tsc_proxy_revocable(tsc_value_t target, tsc_value_t handler) {
+    tsc_value_t proxy = tsc_proxy_new(target, handler);
+    tsc_object_t* ret = tsc_object_new();
+    tsc_object_set(ret, tsc_str_from_lit("proxy", 5), proxy);
+
+    tsc_value_t* env = (tsc_value_t*)TSC_GC_MALLOC(sizeof(tsc_value_t));
+    *env = proxy;
+    tsc_value_t revoke_fn = tsc_value_function_generic(tsc_proxy_revoke, env);
+    tsc_object_set(ret, tsc_str_from_lit("revoke", 6), revoke_fn);
+
+    return tsc_value_object(ret);
+}

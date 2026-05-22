@@ -24,6 +24,14 @@ tsc_promise_t* tsc_promise_resolve_buffer(tsc_buffer_t* value) {
     return p;
 }
 
+tsc_promise_t* tsc_promise_resolve_array(tsc_array_t* value) {
+    tsc_promise_t* p = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(tsc_promise_t));
+    p->state = TSC_PROMISE_FULFILLED;
+    p->result = tsc_value_undefined();
+    p->ptr_result = value;
+    return p;
+}
+
 tsc_promise_t* tsc_promise_reject(tsc_value_t reason) {
     tsc_promise_t* p = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(tsc_promise_t));
     p->state = TSC_PROMISE_REJECTED;
@@ -80,6 +88,15 @@ tsc_fs_stats_t* tsc_promise_fs_stats_value(const tsc_promise_t* p) {
 
 tsc_buffer_t* tsc_promise_buffer_value(const tsc_promise_t* p) {
     return p ? (tsc_buffer_t*)p->ptr_result : NULL;
+}
+
+tsc_array_t* tsc_promise_array_value(const tsc_promise_t* p) {
+    if (!p) return NULL;
+    if (p->ptr_result) return (tsc_array_t*)p->ptr_result;
+    if (value_is_box(p->result) && value_tag(p->result) == TSC_VALUE_TAG_ARRAY) {
+        return (tsc_array_t*)value_ptr(p->result);
+    }
+    return NULL;
 }
 
 tsc_value_t tsc_promise_reason(const tsc_promise_t* p) {
@@ -209,5 +226,4 @@ tsc_promise_t* tsc_event_emitter_once_promise(tsc_event_emitter_t* ee, tsc_str_t
     }
     return promise;
 }
-
 

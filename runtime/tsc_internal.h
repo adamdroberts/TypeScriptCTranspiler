@@ -78,6 +78,7 @@ typedef enum {
     TSC_FUNCTION_IDENTITY_SETTER,
     TSC_FUNCTION_IDENTITY_EVENT_LISTENER,
     TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER,
+    TSC_FUNCTION_IDENTITY_GENERIC,
 } tsc_function_identity_kind_t;
 
 typedef struct tsc_function_identity {
@@ -85,6 +86,7 @@ typedef struct tsc_function_identity {
     union {
         tsc_accessor_getter_t getter;
         tsc_accessor_setter_t setter;
+        tsc_generic_function_t generic;
         void* event_identity;
         struct {
             void* identity;
@@ -101,6 +103,10 @@ struct tsc_object {
     size_t len;
     size_t cap;
     bool extensible;
+    bool is_proxy;
+    bool proxy_revoked;
+    tsc_value_t proxy_target;
+    tsc_value_t proxy_handler;
     tsc_value_t prototype;
     tsc_object_prop_t* props;
 };

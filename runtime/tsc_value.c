@@ -26,7 +26,32 @@ bool tsc_value_is_array(tsc_value_t v) {
     return value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY;
 }
 
+tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env) {
+    tsc_function_identity_t* id = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
+    id->kind = TSC_FUNCTION_IDENTITY_GENERIC;
+    id->code.generic = fn;
+    id->env = env;
+    id->next = g_function_identities;
+    g_function_identities = id;
+    return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)id);
+}
+
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args) {
+    if (value_is_box(fn) && value_tag(fn) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* o = (tsc_object_t*)value_ptr(fn);
+        if (o->is_proxy) {
+            if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'apply' on a proxy that has been revoked"));
+            tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("apply", 5));
+            if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
+                return tsc_value_apply_function(o->proxy_target, this_arg, args);
+            }
+            tsc_array_t* trap_args = tsc_array_new(sizeof(tsc_value_t), 4);
+            tsc_array_push_value(trap_args, o->proxy_target);
+            tsc_array_push_value(trap_args, this_arg);
+            tsc_array_push_value(trap_args, args);
+            return tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(trap_args));
+        }
+    }
     if (!value_is_box(fn) || value_tag(fn) != TSC_VALUE_TAG_FUNCTION) {
         tsc_panic("Reflect.apply target is not a function");
     }
@@ -38,6 +63,9 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
     if (ident->kind == TSC_FUNCTION_IDENTITY_GETTER) {
         return ident->code.getter(ident->env, this_arg);
     }
+    if (ident->kind == TSC_FUNCTION_IDENTITY_GENERIC) {
+        return ident->code.generic(ident->env, this_arg, list);
+    }
     if (ident->kind != TSC_FUNCTION_IDENTITY_SETTER) {
         tsc_panic("Reflect.apply target is not a callable function identity");
     }
@@ -45,6 +73,7 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
     ident->code.setter(ident->env, this_arg, value);
     return tsc_value_undefined();
 }
+
 
 tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
     if (!value_is_box(v)) return tsc_value_undefined();
@@ -580,12 +609,24 @@ tsc_value_t tsc_value_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key)
     }
     if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) return tsc_value_undefined();
     tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+    if (o->is_proxy) {
+        if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'getOwnPropertyDescriptor' on a proxy that has been revoked"));
+        tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("getOwnPropertyDescriptor", 24));
+        if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
+            return tsc_value_get_own_property_descriptor(o->proxy_target, key);
+        }
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 2);
+        tsc_array_push_value(args, o->proxy_target);
+        tsc_array_push_value(args, tsc_value_string(key));
+        return tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+    }
     for (size_t i = 0; i < o->len; i++) {
         if (!tsc_str_eq(o->props[i].key, key)) continue;
         return value_descriptor_from_prop(&o->props[i]);
     }
     return tsc_value_undefined();
 }
+
 
 tsc_value_t tsc_value_get_own_property_descriptors(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {

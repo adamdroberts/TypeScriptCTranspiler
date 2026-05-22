@@ -68,6 +68,7 @@ typedef struct tsc_str {
     const char* data;
     uint64_t hash;
 } tsc_str_t;
+struct tsc_array; /* fwd */
 
 tsc_str_t* tsc_str_from_lit(const char* data, size_t len);
 tsc_str_t* tsc_str_from_cstr(const char* s);
@@ -148,7 +149,6 @@ tsc_str_t* tsc_str_pad_end(const tsc_str_t* s, double target, const tsc_str_t* p
 tsc_str_t* tsc_str_replace(const tsc_str_t* s, const tsc_str_t* search, const tsc_str_t* repl);
 tsc_str_t* tsc_str_replace_all(const tsc_str_t* s, const tsc_str_t* search, const tsc_str_t* repl);
 
-struct tsc_array; /* fwd */
 struct tsc_buffer; /* fwd */
 struct tsc_array* tsc_str_split(const tsc_str_t* s, const tsc_str_t* sep);
 struct tsc_array* tsc_str_split_limit(const tsc_str_t* s, const tsc_str_t* sep, uint32_t limit);
@@ -464,6 +464,7 @@ typedef struct tsc_dns_lookup_result tsc_dns_lookup_result_t;
 typedef struct tsc_dns_lookup_all_result tsc_dns_lookup_all_result_t;
 typedef tsc_value_t (*tsc_accessor_getter_t)(void* env, tsc_value_t receiver);
 typedef bool (*tsc_accessor_setter_t)(void* env, tsc_value_t receiver, tsc_value_t value);
+typedef tsc_value_t (*tsc_generic_function_t)(void* env, tsc_value_t this_arg, tsc_array_t* args);
 typedef void (*tsc_event_listener_fn_t)(void* env, tsc_array_t* args);
 typedef void (*tsc_event_target_listener_fn_t)(void* env, tsc_event_t* event);
 
@@ -474,6 +475,7 @@ tsc_value_t tsc_value_num(double n);
 tsc_value_t tsc_value_string(tsc_str_t* s);
 tsc_value_t tsc_value_array(tsc_array_t* a);
 tsc_value_t tsc_value_object(tsc_object_t* o);
+tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env);
 
 bool tsc_value_is_truthy(tsc_value_t v);
 bool tsc_value_number_is_integer(tsc_value_t v);
@@ -528,6 +530,7 @@ tsc_value_t tsc_value_object_from_entries(tsc_value_t entries);
 tsc_promise_t* tsc_promise_resolve(tsc_value_t value);
 tsc_promise_t* tsc_promise_resolve_fs_stats(tsc_fs_stats_t* value);
 tsc_promise_t* tsc_promise_resolve_buffer(tsc_buffer_t* value);
+tsc_promise_t* tsc_promise_resolve_array(tsc_array_t* value);
 tsc_promise_t* tsc_promise_reject(tsc_value_t reason);
 tsc_promise_t* tsc_promise_pending(void);
 tsc_promise_t* tsc_promise_adopt(tsc_promise_t* promise);
@@ -539,6 +542,7 @@ bool tsc_promise_is_pending(const tsc_promise_t* p);
 tsc_value_t tsc_promise_value(const tsc_promise_t* p);
 tsc_fs_stats_t* tsc_promise_fs_stats_value(const tsc_promise_t* p);
 tsc_buffer_t* tsc_promise_buffer_value(const tsc_promise_t* p);
+tsc_array_t* tsc_promise_array_value(const tsc_promise_t* p);
 tsc_value_t tsc_promise_reason(const tsc_promise_t* p);
 
 tsc_event_emitter_t* tsc_event_emitter_new(void);
@@ -922,5 +926,12 @@ void tsc_try_pop(void);
 void tsc_throw_str(tsc_str_t* message);
 void tsc_rethrow(void);
 tsc_str_t* tsc_current_error(void);
+
+tsc_value_t tsc_proxy_new(tsc_value_t target, tsc_value_t handler);
+tsc_value_t tsc_proxy_revocable(tsc_value_t target, tsc_value_t handler);
+
+static inline void tsc_array_push_value(tsc_array_t* a, tsc_value_t v) {
+    tsc_array_push_raw(a, &v);
+}
 
 #endif /* TSC_RUNTIME_H */

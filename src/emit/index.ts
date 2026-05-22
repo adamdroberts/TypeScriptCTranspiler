@@ -207,6 +207,7 @@ class Emitter {
     private immediateAdapters = new Map<string, string>();
     private timeoutAdapters = new Map<string, string>();
     private nodeFunctionAdapters = new Set<string>();
+    private dynamicFunctionAdapters = new Map<string, string>();
     private eventListenerAdapters = new Map<string, string>();
     private eventTargetListenerAdapters = new Map<string, string>();
     private eventListenerIdentities = new Map<string, string>();
@@ -7174,6 +7175,8 @@ class Emitter {
                 fulfilled = `tsc_promise_fs_stats_value(${p})`;
             } else if (awaited.kind === "buffer") {
                 fulfilled = `tsc_promise_buffer_value(${p})`;
+            } else if (awaited.kind === "array") {
+                fulfilled = `tsc_promise_array_value(${p})`;
             } else if (awaited.kind === "void" || awaited.kind === "never") {
                 fulfilled = `(void)tsc_promise_value(${p})`;
             } else {
@@ -8719,6 +8722,21 @@ class Emitter {
             const spec = this.requireCallSpecifier(call);
             if (!spec) unsupported(call, "require expects one string-literal module specifier");
             return this.emitCommonJsRequireCall(call, spec);
+        }
+
+        if (
+            ts.isPropertyAccessExpression(call.expression) &&
+            ts.isIdentifier(call.expression.expression) &&
+            call.expression.expression.text === "Proxy" &&
+            call.expression.name.text === "revocable"
+        ) {
+            if (call.arguments.length !== 2) unsupported(call, "Proxy.revocable expects target and handler");
+            const target = this.emitExpr(call.arguments[0]!);
+            const handler = this.emitExpr(call.arguments[1]!);
+            return this.emitSequencedCall("tsc_proxy_revocable", T_VALUE, [
+                { value: target, target: T_VALUE, node: call.arguments[0]! },
+                { value: handler, target: T_VALUE, node: call.arguments[1]! },
+            ]);
         }
 
         if (ts.isPropertyAccessExpression(call.expression)) {
@@ -10433,6 +10451,16 @@ class Emitter {
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Promise") {
             return this.emitPromiseStatic(call, memberName);
         }
+        if (ts.isIdentifier(recvExpr) && recvExpr.text === "Proxy") {
+            if (memberName !== "revocable") unsupported(call, `Proxy.${memberName}`);
+            if (call.arguments.length !== 2) unsupported(call, "Proxy.revocable expects target and handler");
+            const target = this.emitExpr(call.arguments[0]!);
+            const handler = this.emitExpr(call.arguments[1]!);
+            return this.emitSequencedCall("tsc_proxy_revocable", T_VALUE, [
+                { value: target, target: T_VALUE, node: call.arguments[0]! },
+                { value: handler, target: T_VALUE, node: call.arguments[1]! },
+            ]);
+        }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Reflect") {
             return this.emitReflectCall(call, memberName);
         }
@@ -11207,7 +11235,27 @@ class Emitter {
                     ([target]) => target!,
                 );
         }
-        unsupported(call, `dynamic method .${method}`);
+        const specs: SequencedCallArg[] = [
+            { value: recv, target: T_VALUE, node: call.expression },
+        ];
+        for (const arg of args) {
+            specs.push({ value: this.emitExpr(arg), target: T_VALUE, node: arg });
+        }
+        return this.emitSequencedExpr(T_VALUE, specs, ([target, ...values]) => {
+            const av = this.freshTemp("_dyn_call_args");
+            const fn = this.freshTemp("_dyn_call_fn");
+            const pieces = [
+                `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${values.length || 1})`,
+            ];
+            for (const value of values) {
+                const tmp = this.freshTemp("_dyn_call_arg");
+                pieces.push(`tsc_value_t ${tmp} = ${value}`);
+                pieces.push(`tsc_array_push_raw(${av}, &${tmp})`);
+            }
+            pieces.push(`tsc_value_t ${fn} = tsc_value_get_prop(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}))`);
+            pieces.push(`tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${av}))`);
+            return `({ ${pieces.join("; ")}; })`;
+        });
     }
 
     private emitDynamicArraySort(
@@ -12977,6 +13025,9 @@ class Emitter {
         if (stored.kind === "buffer") {
             return { c: `tsc_promise_buffer_value(${promise})`, ty: T_BUFFER };
         }
+        if (stored.kind === "array") {
+            return { c: `tsc_promise_array_value(${promise})`, ty: stored };
+        }
         return { c: `tsc_promise_value(${promise})`, ty: T_VALUE };
     }
 
@@ -12987,6 +13038,9 @@ class Emitter {
         }
         if (stored.kind === "buffer") {
             return `tsc_promise_resolve_buffer(tsc_promise_buffer_value(${promise}))`;
+        }
+        if (stored.kind === "array") {
+            return `tsc_promise_resolve_array(tsc_promise_array_value(${promise}))`;
         }
         return `tsc_promise_resolve(tsc_promise_value(${promise}))`;
     }
@@ -13001,6 +13055,9 @@ class Emitter {
         }
         if (stored.kind === "buffer") {
             return `tsc_promise_resolve_buffer(${result.c})`;
+        }
+        if (stored.kind === "array") {
+            return `tsc_promise_resolve_array(${result.c})`;
         }
         return `tsc_promise_resolve(${this.coerce(result, T_VALUE, node)})`;
     }
@@ -17730,6 +17787,9 @@ class Emitter {
                             : options.recursive
                                 ? "tsc_fs_readdir_recursive_sync"
                                 : "tsc_fs_readdir_sync";
+                    if (mapped.elem?.kind === "array") {
+                        return settle(`tsc_promise_resolve_array(${fn}(${path!}))`);
+                    }
                     return settle(`tsc_promise_resolve(tsc_value_array(${fn}(${path!})))`);
                 });
             }
@@ -19913,9 +19973,9 @@ class Emitter {
                 unsupported(arg, "Object.isExtensible currently supports dynamic objects, arrays, and primitives only");
             }
             const obj = this.emitExpr(arg);
-            return this.emitSequencedCall("tsc_value_is_extensible", T_BOOLEAN, [
-                { value: obj, target: T_VALUE, node: arg },
-            ]);
+            return this.emitSequencedExpr(T_BOOLEAN, [
+                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
+            ], ([o]) => `tsc_value_is_extensible(${mapped.kind === "array" ? `tsc_value_array(${o})` : o})`);
         }
         if (name === "isSealed") {
             if (args.length !== 1) unsupported(call, "Object.isSealed expects object");
@@ -19927,9 +19987,9 @@ class Emitter {
                 unsupported(arg, "Object.isSealed currently supports dynamic objects, arrays, and primitives only");
             }
             const obj = this.emitExpr(arg);
-            return this.emitSequencedCall("tsc_value_is_sealed", T_BOOLEAN, [
-                { value: obj, target: T_VALUE, node: arg },
-            ]);
+            return this.emitSequencedExpr(T_BOOLEAN, [
+                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
+            ], ([o]) => `tsc_value_is_sealed(${mapped.kind === "array" ? `tsc_value_array(${o})` : o})`);
         }
         if (name === "isFrozen") {
             if (args.length !== 1) unsupported(call, "Object.isFrozen expects object");
@@ -19941,9 +20001,9 @@ class Emitter {
                 unsupported(arg, "Object.isFrozen currently supports dynamic objects, arrays, and primitives only");
             }
             const obj = this.emitExpr(arg);
-            return this.emitSequencedCall("tsc_value_is_frozen", T_BOOLEAN, [
-                { value: obj, target: T_VALUE, node: arg },
-            ]);
+            return this.emitSequencedExpr(T_BOOLEAN, [
+                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
+            ], ([o]) => `tsc_value_is_frozen(${mapped.kind === "array" ? `tsc_value_array(${o})` : o})`);
         }
         if (name === "preventExtensions") {
             if (args.length !== 1) unsupported(call, "Object.preventExtensions expects object");
@@ -21430,10 +21490,12 @@ class Emitter {
             }
             case "isExtensible": {
                 if (args.length !== 1) unsupported(call, "Reflect.isExtensible expects target");
+                const targetType = this.checker.getTypeAtLocation(args[0]!);
+                const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
-                return this.emitSequencedCall("tsc_value_is_extensible", T_BOOLEAN, [
-                    { value: target, target: T_VALUE, node: args[0]! },
-                ]);
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: target, target: mapped.kind === "value" ? T_VALUE : undefined, node: args[0]! },
+                ], ([t]) => `tsc_value_is_extensible(${mapped.kind === "array" ? `tsc_value_array(${t})` : t})`);
             }
             case "ownKeys": {
                 if (args.length !== 1) unsupported(call, "Reflect.ownKeys expects target");
@@ -21484,10 +21546,12 @@ class Emitter {
             }
             case "preventExtensions": {
                 if (args.length !== 1) unsupported(call, "Reflect.preventExtensions expects target");
+                const targetType = this.checker.getTypeAtLocation(args[0]!);
+                const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
-                return this.emitSequencedCall("tsc_value_prevent_extensions", T_BOOLEAN, [
-                    { value: target, target: T_VALUE, node: args[0]! },
-                ]);
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: target, target: mapped.kind === "value" ? T_VALUE : undefined, node: args[0]! },
+                ], ([t]) => `tsc_value_prevent_extensions(${mapped.kind === "array" ? `tsc_value_array(${t})` : t})`);
             }
             case "set": {
                 if (args.length !== 3 && args.length !== 4) unsupported(call, "Reflect.set expects target, key, value, and optional receiver");
@@ -21965,6 +22029,16 @@ class Emitter {
         }
         if (!ts.isIdentifier(n.expression))
             unsupported(n, "new expression must use a class identifier");
+        if (n.expression.text === "Proxy") {
+            const args = n.arguments ?? [];
+            if (args.length !== 2) unsupported(n, "new Proxy expects target and handler");
+            const target = this.emitExpr(args[0]!);
+            const handler = this.emitExpr(args[1]!);
+            return this.emitSequencedCall("tsc_proxy_new", T_VALUE, [
+                { value: target, target: T_VALUE, node: args[0]! },
+                { value: handler, target: T_VALUE, node: args[1]! },
+            ]);
+        }
         const cls = this.identifierName(n.expression);
         if (cls === "Function") {
             return this.emitUnsafeFunctionConstructor(n);
@@ -23163,8 +23237,17 @@ class Emitter {
                     return `tsc_value_as_bool(${r.c})`;
                 case "string":
                     return `tsc_value_as_string(${r.c})`;
-                case "array":
+                case "array": {
+                    if (target.elem && target.elem.kind !== "value") {
+                        const tmpIn = this.freshTemp("_arrIn");
+                        const tmpOut = this.freshTemp("_arrOut");
+                        const idx = this.freshTemp("_idx");
+                        const elem = this.freshTemp("_elem");
+                        const unboxed = this.coerce({ c: elem, ty: T_VALUE }, target.elem, node);
+                        return `({ tsc_array_t* ${tmpIn} = tsc_value_as_array(${r.c}); tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(${target.elem.c}), ${tmpIn}->len ? ${tmpIn}->len : 1); for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { tsc_value_t ${elem} = TSC_ARR(tsc_value_t, ${tmpIn}, ${idx}); ${target.elem.c} _unboxed = ${unboxed}; tsc_array_push_raw(${tmpOut}, &_unboxed); } ${tmpOut}; })`;
+                    }
                     return `tsc_value_as_array(${r.c})`;
+                }
             }
         }
         if (target.kind === "value") {
@@ -23175,8 +23258,19 @@ class Emitter {
                     return `tsc_value_bool(${r.c})`;
                 case "string":
                     return `tsc_value_string(${r.c})`;
-                case "array":
+                case "array": {
+                    if (r.ty.elem && r.ty.elem.kind !== "value") {
+                        const tmpIn = this.freshTemp("_arrIn");
+                        const tmpOut = this.freshTemp("_arrOut");
+                        const idx = this.freshTemp("_idx");
+                        const elem = this.freshTemp("_elem");
+                        const boxed = this.coerce({ c: elem, ty: r.ty.elem }, T_VALUE, node);
+                        return `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(tsc_value_t), ${tmpIn}->len ? ${tmpIn}->len : 1); for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { ${r.ty.elem.c} ${elem} = TSC_ARR(${r.ty.elem.c}, ${tmpIn}, ${idx}); tsc_value_t _boxed = ${boxed}; tsc_array_push_raw(${tmpOut}, &_boxed); } tsc_value_array(${tmpOut}); })`;
+                    }
                     return `tsc_value_array(${r.c})`;
+                }
+                case "function":
+                    return `tsc_value_function_generic(${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${r.c})`;
                 case "void":
                     return `tsc_value_null()`;
                 case "value":
@@ -23188,6 +23282,42 @@ class Emitter {
         if (target.kind === "string") return this.coerceToString(r, node);
         if (target.kind === "void") return r.c;
         unsupported(node, `cannot coerce ${r.ty.c} to ${target.c}`);
+    }
+
+    private ensureDynamicFunctionAdapter(node: ts.Node, type: CType): string {
+        if (type.kind !== "function" || !type.closureName || !type.ret) {
+            unsupported(node, "dynamic function boxing requires a function value");
+        }
+        this.prepareType(type);
+        const key = this.typeKey(type);
+        const existing = this.dynamicFunctionAdapters.get(key);
+        if (existing) return existing;
+        const name = `tsc_dynamic_function_adapter_${this.dynamicFunctionAdapters.size}`;
+        this.dynamicFunctionAdapters.set(key, name);
+        const params = type.params ?? [];
+        const ret = this.prepareType(type.ret);
+        this.defs.open(`static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`);
+        this.defs.line(`${type.c} fn = (${type.c})env;`);
+        if (!type.thisParam) this.defs.line("(void)this_arg;");
+        this.defs.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
+        const callArgs: string[] = ["fn->env"];
+        if (type.thisParam) {
+            callArgs.push(this.coerce({ c: "this_arg", ty: T_VALUE }, type.thisParam, node));
+        }
+        for (let i = 0; i < params.length; i++) {
+            const raw = `(${i} < args->len ? TSC_ARR(tsc_value_t, args, ${i}) : tsc_value_undefined())`;
+            callArgs.push(this.coerce({ c: raw, ty: T_VALUE }, params[i]!, node));
+        }
+        const call = `fn->fn(${callArgs.join(", ")})`;
+        if (ret.kind === "void" || ret.kind === "never") {
+            this.defs.line(`${call};`);
+            this.defs.line("return tsc_value_undefined();");
+        } else {
+            this.defs.line(`${ret.c} result = ${call};`);
+            this.defs.line(`return ${this.coerce({ c: "result", ty: ret }, T_VALUE, node)};`);
+        }
+        this.defs.close();
+        return name;
     }
 }
 

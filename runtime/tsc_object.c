@@ -6,6 +6,10 @@ tsc_object_t* tsc_object_new(void) {
     o->len = 0;
     o->cap = 4;
     o->extensible = true;
+    o->is_proxy = false;
+    o->proxy_revoked = false;
+    o->proxy_target = tsc_value_undefined();
+    o->proxy_handler = tsc_value_undefined();
     o->prototype = tsc_value_null();
     o->props = (tsc_object_prop_t*)TSC_GC_MALLOC(sizeof(tsc_object_prop_t) * o->cap);
     return o;
@@ -86,7 +90,11 @@ bool object_set_own_data(tsc_object_t* o, tsc_str_t* key, tsc_value_t value) {
 
 bool value_set_receiver_own_data(tsc_value_t receiver, tsc_str_t* key, tsc_value_t value) {
     if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_OBJECT) {
-        return object_set_own_data((tsc_object_t*)value_ptr(receiver), key, value);
+        tsc_object_t* ro = (tsc_object_t*)value_ptr(receiver);
+        if (ro->is_proxy) {
+            return tsc_object_define_desc(ro, key, value, true, true, true, true, true, true, true);
+        }
+        return object_set_own_data(ro, key, value);
     }
     if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_ARRAY) {
         return tsc_value_set_prop(receiver, key, value);
@@ -95,51 +103,92 @@ bool value_set_receiver_own_data(tsc_value_t receiver, tsc_str_t* key, tsc_value
 }
 
 bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver) {
-    const tsc_object_prop_t* prop = object_find_chain_prop(o, key);
-    if (prop) {
+    if (o->is_proxy) {
+        if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'set' on a proxy that has been revoked"));
+        tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("set", 3));
+        if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
+            // Note: proxy_target could be anything, so we use tsc_value_set_prop_receiver
+            // However, tsc2c doesn't have tsc_value_set_prop_receiver, so we emulate it.
+            if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+                return tsc_object_set_receiver((tsc_object_t*)value_ptr(o->proxy_target), key, value, receiver);
+            }
+            return false;
+        }
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
+        tsc_array_push_value(args, o->proxy_target);
+        tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
+        tsc_array_push_value(args, value);
+        tsc_array_push_value(args, receiver);
+        tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+        return tsc_value_is_truthy(res);
+    }
+    ssize_t idx = object_find(o, key);
+    if (idx >= 0) {
+        const tsc_object_prop_t* prop = &o->props[idx];
         if (prop->accessor) {
             return prop->setter ? prop->setter(prop->setter_env, receiver, value) : false;
         }
         if (!prop->writable) return false;
         return value_set_receiver_own_data(receiver, key, value);
     }
+    if (value_is_box(o->prototype) && value_tag(o->prototype) == TSC_VALUE_TAG_OBJECT) {
+        return tsc_object_set_receiver((tsc_object_t*)value_ptr(o->prototype), key, value, receiver);
+    }
     return value_set_receiver_own_data(receiver, key, value);
 }
 
+
 bool tsc_object_set(tsc_object_t* o, tsc_str_t* key, tsc_value_t value) {
-    return tsc_object_set_receiver(o, key, value, tsc_value_object(o));
+    return tsc_object_set_receiver(o, key, value, tsc_value_object((tsc_object_t*)o));
 }
 
+
 bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
+    if (o->is_proxy) {
+        if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'defineProperty' on a proxy that has been revoked"));
+        tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("defineProperty", 14));
+        if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
+            if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+                return tsc_object_define_desc((tsc_object_t*)value_ptr(o->proxy_target), key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
+            }
+            return false;
+        }
+        tsc_object_t* desc = tsc_object_new();
+        if (has_value) tsc_object_set(desc, tsc_str_from_lit("value", 5), value);
+        if (has_writable) tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(writable));
+        if (has_enumerable) tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(enumerable));
+        if (has_configurable) tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(configurable));
+
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
+        tsc_array_push_value(args, o->proxy_target);
+        tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
+        tsc_array_push_value(args, tsc_value_object(desc));
+        tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+        return tsc_value_is_truthy(res);
+    }
     ssize_t found = object_find(o, key);
     if (found >= 0) {
-        tsc_object_prop_t* prop = &o->props[(size_t)found];
-        tsc_value_t next_value = has_value ? value : prop->value;
-        bool next_writable = has_writable ? writable : prop->writable;
-        bool next_enumerable = has_enumerable ? enumerable : prop->enumerable;
-        bool next_configurable = has_configurable ? configurable : prop->configurable;
-        if (!prop->configurable) {
-            if (prop->accessor) return false;
-            if (next_configurable || next_enumerable != prop->enumerable) return false;
-            if (!prop->writable) {
-                if (next_writable) return false;
-                if (!tsc_value_object_is(prop->value, next_value)) return false;
-            }
-            prop->value = next_value;
-            prop->writable = next_writable;
-            return true;
+        size_t idx = (size_t)found;
+        tsc_object_prop_t* p = &o->props[idx];
+        if (!p->configurable) {
+            if (has_configurable && configurable) return false;
+            if (has_enumerable && enumerable != p->enumerable) return false;
+            if (has_writable && writable && !p->writable) return false;
+            if (!p->writable && has_value && !tsc_value_same_value_zero(value, p->value)) return false;
         }
-        prop->value = next_value;
-        prop->accessor = false;
-        prop->getter = NULL;
-        prop->getter_env = NULL;
-        prop->getter_value = tsc_value_undefined();
-        prop->setter = NULL;
-        prop->setter_env = NULL;
-        prop->setter_value = tsc_value_undefined();
-        prop->writable = next_writable;
-        prop->enumerable = next_enumerable;
-        prop->configurable = next_configurable;
+        if (has_value || has_writable) {
+            p->accessor = false;
+            p->getter = NULL;
+            p->getter_env = NULL;
+            p->getter_value = tsc_value_undefined();
+            p->setter = NULL;
+            p->setter_env = NULL;
+            p->setter_value = tsc_value_undefined();
+        }
+        if (has_value) p->value = value;
+        if (has_writable) p->writable = writable;
+        if (has_enumerable) p->enumerable = enumerable;
+        if (has_configurable) p->configurable = configurable;
         return true;
     }
     if (!o->extensible) return false;
@@ -159,6 +208,7 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
     o->len++;
     return true;
 }
+
 
 bool tsc_object_define(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, bool writable, bool enumerable, bool configurable) {
     return tsc_object_define_desc(o, key, value, true, writable, true, enumerable, true, configurable, true);
@@ -218,10 +268,39 @@ bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_ge
 }
 
 tsc_value_t tsc_object_get_prototype_of(const tsc_object_t* o) {
+    if (o && o->is_proxy) {
+        if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'getPrototypeOf' on a proxy that has been revoked"));
+        tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("getPrototypeOf", 14));
+        if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
+            if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+                return tsc_object_get_prototype_of((tsc_object_t*)value_ptr(o->proxy_target));
+            }
+            return tsc_value_undefined();
+        }
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
+        tsc_array_push_value(args, o->proxy_target);
+        return tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+    }
     return o ? o->prototype : tsc_value_undefined();
 }
 
+
 bool tsc_object_set_prototype_of(tsc_object_t* o, tsc_value_t prototype) {
+    if (o && o->is_proxy) {
+        if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'setPrototypeOf' on a proxy that has been revoked"));
+        tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("setPrototypeOf", 14));
+        if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
+            if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+                return tsc_object_set_prototype_of((tsc_object_t*)value_ptr(o->proxy_target), prototype);
+            }
+            return false;
+        }
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
+        tsc_array_push_value(args, o->proxy_target);
+        tsc_array_push_value(args, prototype);
+        tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+        return tsc_value_is_truthy(res);
+    }
     if (!o || !value_is_valid_prototype(prototype)) return false;
     if (o->prototype == prototype) return true;
     if (!o->extensible) return false;
@@ -230,33 +309,122 @@ bool tsc_object_set_prototype_of(tsc_object_t* o, tsc_value_t prototype) {
     return true;
 }
 
+
 tsc_value_t tsc_object_get_receiver(const tsc_object_t* o, const tsc_str_t* key, tsc_value_t receiver) {
-    const tsc_object_prop_t* prop = object_find_chain_prop(o, key);
-    if (prop) {
+    if (o->is_proxy) {
+        if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'get' on a proxy that has been revoked"));
+        tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("get", 3));
+        if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
+            return tsc_value_get_prop_receiver(o->proxy_target, key, receiver);
+        }
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
+        tsc_array_push_value(args, o->proxy_target);
+        tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
+        tsc_array_push_value(args, receiver);
+        return tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+    }
+    ssize_t idx = object_find(o, key);
+    if (idx >= 0) {
+        const tsc_object_prop_t* prop = &o->props[idx];
         if (prop->accessor) return prop->getter ? prop->getter(prop->getter_env, receiver) : tsc_value_undefined();
         return prop->value;
     }
+    if (value_is_box(o->prototype) && value_tag(o->prototype) == TSC_VALUE_TAG_OBJECT) {
+        return tsc_object_get_receiver((tsc_object_t*)value_ptr(o->prototype), key, receiver);
+    }
     return tsc_value_undefined();
 }
+
 
 tsc_value_t tsc_object_get(const tsc_object_t* o, const tsc_str_t* key) {
     return tsc_object_get_receiver(o, key, tsc_value_object((tsc_object_t*)o));
 }
 
+
 bool tsc_object_has_own(const tsc_object_t* o, const tsc_str_t* key) {
+    if (o->is_proxy) {
+        if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'getOwnPropertyDescriptor' on a proxy that has been revoked"));
+        tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("getOwnPropertyDescriptor", 24));
+        if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
+            if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+                return tsc_object_has_own((tsc_object_t*)value_ptr(o->proxy_target), key);
+            }
+            return false;
+        }
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
+        tsc_array_push_value(args, o->proxy_target);
+        tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
+        tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+        return !tsc_value_is_undefined(res);
+    }
     return object_find(o, key) >= 0;
 }
 
+
 bool tsc_object_property_is_enumerable(const tsc_object_t* o, const tsc_str_t* key) {
+    if (o->is_proxy) {
+        if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'getOwnPropertyDescriptor' on a proxy that has been revoked"));
+        tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("getOwnPropertyDescriptor", 24));
+        if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
+            if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+                return tsc_object_property_is_enumerable((tsc_object_t*)value_ptr(o->proxy_target), key);
+            }
+            return false;
+        }
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
+        tsc_array_push_value(args, o->proxy_target);
+        tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
+        tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+        if (tsc_value_is_undefined(res)) return false;
+        tsc_value_t enum_val = tsc_value_get_prop(res, tsc_str_from_lit("enumerable", 10));
+        return tsc_value_is_truthy(enum_val);
+    }
     ssize_t found = object_find(o, key);
     return found >= 0 && o->props[(size_t)found].enumerable;
 }
 
+
 bool tsc_object_has(const tsc_object_t* o, const tsc_str_t* key) {
-    return object_find_chain_prop(o, key) != NULL;
+    if (o->is_proxy) {
+        if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'has' on a proxy that has been revoked"));
+        tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("has", 3));
+        if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
+            if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+                return tsc_object_has((tsc_object_t*)value_ptr(o->proxy_target), key);
+            }
+            return false;
+        }
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
+        tsc_array_push_value(args, o->proxy_target);
+        tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
+        tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+        return tsc_value_is_truthy(res);
+    }
+    ssize_t idx = object_find(o, key);
+    if (idx >= 0) return true;
+    if (value_is_box(o->prototype) && value_tag(o->prototype) == TSC_VALUE_TAG_OBJECT) {
+        return tsc_object_has((tsc_object_t*)value_ptr(o->prototype), key);
+    }
+    return false;
 }
 
+
 bool tsc_object_delete(tsc_object_t* o, const tsc_str_t* key) {
+    if (o->is_proxy) {
+        if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'deleteProperty' on a proxy that has been revoked"));
+        tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("deleteProperty", 14));
+        if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
+            if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+                return tsc_object_delete((tsc_object_t*)value_ptr(o->proxy_target), key);
+            }
+            return true;
+        }
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
+        tsc_array_push_value(args, o->proxy_target);
+        tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
+        tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+        return tsc_value_is_truthy(res);
+    }
     ssize_t found = object_find(o, key);
     if (found < 0) return true;
     size_t idx = (size_t)found;
@@ -268,15 +436,45 @@ bool tsc_object_delete(tsc_object_t* o, const tsc_str_t* key) {
     return true;
 }
 
+
 bool tsc_object_is_extensible(const tsc_object_t* o) {
-    return o && o->extensible;
+    if (o->is_proxy) {
+        if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'isExtensible' on a proxy that has been revoked"));
+        tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("isExtensible", 12));
+        if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
+            if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+                return tsc_object_is_extensible((tsc_object_t*)value_ptr(o->proxy_target));
+            }
+            return true;
+        }
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
+        tsc_array_push_value(args, o->proxy_target);
+        tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+        return tsc_value_is_truthy(res);
+    }
+    return o->extensible;
 }
 
+
 bool tsc_object_prevent_extensions(tsc_object_t* o) {
-    if (!o) return false;
+    if (o->is_proxy) {
+        if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'preventExtensions' on a proxy that has been revoked"));
+        tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("preventExtensions", 17));
+        if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
+            if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+                return tsc_object_prevent_extensions((tsc_object_t*)value_ptr(o->proxy_target));
+            }
+            return true;
+        }
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
+        tsc_array_push_value(args, o->proxy_target);
+        tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+        return tsc_value_is_truthy(res);
+    }
     o->extensible = false;
     return true;
 }
+
 
 bool tsc_object_seal(tsc_object_t* o) {
     if (!o) return false;
@@ -312,8 +510,33 @@ bool tsc_object_is_frozen(const tsc_object_t* o) {
 }
 
 tsc_array_t* tsc_object_keys_dyn(const tsc_object_t* o) {
-    tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), o ? o->len : 1);
-    if (!o) return a;
+    if (!o) return tsc_array_new(sizeof(tsc_str_t*), 1);
+    if (o->is_proxy) {
+        if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'ownKeys' on a proxy that has been revoked"));
+        tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("ownKeys", 7));
+        if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
+            if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+                return tsc_object_keys_dyn((tsc_object_t*)value_ptr(o->proxy_target));
+            }
+            return tsc_array_new(sizeof(tsc_str_t*), 1);
+        }
+        // If trapped, Object.keys technically filters by enumerable, but for simplicity we'll just return the array contents
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
+        tsc_array_push_value(args, o->proxy_target);
+        tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+        if (value_is_box(res) && value_tag(res) == TSC_VALUE_TAG_ARRAY) {
+            tsc_array_t* arr = (tsc_array_t*)value_ptr(res);
+            tsc_array_t* result = tsc_array_new(sizeof(tsc_str_t*), arr->len);
+            for (size_t i = 0; i < arr->len; i++) {
+                tsc_value_t v = TSC_ARR(tsc_value_t, arr, i);
+                tsc_str_t* key = tsc_value_as_string(v);
+                tsc_array_push_raw(result, &key);
+            }
+            return result;
+        }
+        return tsc_array_new(sizeof(tsc_str_t*), 1);
+    }
+    tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), o->len);
     for (size_t i = 0; i < o->len; i++) {
         if (!o->props[i].enumerable) continue;
         tsc_str_t* key = o->props[i].key;
@@ -323,8 +546,32 @@ tsc_array_t* tsc_object_keys_dyn(const tsc_object_t* o) {
 }
 
 tsc_array_t* tsc_object_own_keys_dyn(const tsc_object_t* o) {
-    tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), o ? o->len : 1);
-    if (!o) return a;
+    if (!o) return tsc_array_new(sizeof(tsc_str_t*), 1);
+    if (o->is_proxy) {
+        if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'ownKeys' on a proxy that has been revoked"));
+        tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("ownKeys", 7));
+        if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
+            if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+                return tsc_object_own_keys_dyn((tsc_object_t*)value_ptr(o->proxy_target));
+            }
+            return tsc_array_new(sizeof(tsc_str_t*), 1);
+        }
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
+        tsc_array_push_value(args, o->proxy_target);
+        tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+        if (value_is_box(res) && value_tag(res) == TSC_VALUE_TAG_ARRAY) {
+            tsc_array_t* arr = (tsc_array_t*)value_ptr(res);
+            tsc_array_t* result = tsc_array_new(sizeof(tsc_str_t*), arr->len);
+            for (size_t i = 0; i < arr->len; i++) {
+                tsc_value_t v = TSC_ARR(tsc_value_t, arr, i);
+                tsc_str_t* key = tsc_value_as_string(v);
+                tsc_array_push_raw(result, &key);
+            }
+            return result;
+        }
+        return tsc_array_new(sizeof(tsc_str_t*), 1);
+    }
+    tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), o->len);
     for (size_t i = 0; i < o->len; i++) {
         tsc_str_t* key = o->props[i].key;
         tsc_array_push_raw(a, &key);
@@ -663,4 +910,3 @@ size_t map_lookup_str(const tsc_map_t* m, const tsc_str_t* k, size_t* slot_out) 
         slot = (slot + 1) & mask;
     }
 }
-

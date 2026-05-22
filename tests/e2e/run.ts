@@ -21,9 +21,13 @@ interface Case {
 }
 
 async function discoverCases(): Promise<Case[]> {
+    const filterIdx = process.argv.indexOf('--filter');
+    const filterStr = filterIdx >= 0 ? process.argv[filterIdx + 1] : undefined;
+
     const dirs = await fs.readdir(casesDir);
     const cases: Case[] = [];
     for (const d of dirs) {
+        if (filterStr && !d.includes(filterStr)) continue;
         const entry = path.join(casesDir, d, "in.ts");
         const expectedPath = path.join(casesDir, d, "expected.stdout");
         const expectedExitPath = path.join(casesDir, d, "expected.exitcode");

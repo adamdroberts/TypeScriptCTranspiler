@@ -401,6 +401,43 @@ interface WeakRefConstructor {
 }
 declare var WeakRef: WeakRefConstructor;
 
+interface ProxyHandler<T extends object> {
+    apply?(target: T, thisArg: any, argArray: any[]): any;
+    construct?(target: T, argArray: any[], newTarget: Function): object;
+    defineProperty?(target: T, property: string | symbol, attributes: PropertyDescriptor): boolean;
+    deleteProperty?(target: T, p: string | symbol): boolean;
+    get?(target: T, p: string | symbol, receiver: any): any;
+    getOwnPropertyDescriptor?(target: T, p: string | symbol): PropertyDescriptor | undefined;
+    getPrototypeOf?(target: T): object | null;
+    has?(target: T, p: string | symbol): boolean;
+    isExtensible?(target: T): boolean;
+    ownKeys?(target: T): ArrayLike<string | symbol>;
+    preventExtensions?(target: T): boolean;
+    set?(target: T, p: string | symbol, newValue: any, receiver: any): boolean;
+    setPrototypeOf?(target: T, v: object | null): boolean;
+}
+
+declare class Proxy<T extends object> {
+    constructor(target: T, handler: ProxyHandler<T>);
+    static revocable<T extends object>(target: T, handler: ProxyHandler<T>): any;
+}
+
+declare namespace Reflect {
+    function apply(target: Function, thisArgument: any, argumentsList: ArrayLike<any>): any;
+    function construct(target: Function, argumentsList: ArrayLike<any>, newTarget?: Function): any;
+    function defineProperty(target: object, propertyKey: PropertyKey, attributes: PropertyDescriptor): boolean;
+    function deleteProperty(target: object, propertyKey: PropertyKey): boolean;
+    function get(target: object, propertyKey: PropertyKey, receiver?: any): any;
+    function getOwnPropertyDescriptor(target: object, propertyKey: PropertyKey): PropertyDescriptor | undefined;
+    function getPrototypeOf(target: object): object | null;
+    function has(target: object, propertyKey: PropertyKey): boolean;
+    function isExtensible(target: object): boolean;
+    function ownKeys(target: object): ArrayLike<PropertyKey>;
+    function preventExtensions(target: object): boolean;
+    function set(target: object, propertyKey: PropertyKey, value: any, receiver?: any): boolean;
+    function setPrototypeOf(target: object, proto: object | null): boolean;
+}
+
 interface FinalizationRegistry<T> {
     register(target: object, heldValue: T, unregisterToken?: object, ...ignored: any[]): void;
     unregister(unregisterToken: object, ...ignored: any[]): boolean;
