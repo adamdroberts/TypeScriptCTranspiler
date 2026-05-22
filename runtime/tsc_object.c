@@ -509,6 +509,44 @@ bool tsc_object_is_frozen(const tsc_object_t* o) {
     return true;
 }
 
+static bool str_array_contains(const tsc_array_t* keys, const tsc_str_t* key) {
+    if (!keys || !key) return false;
+    for (size_t i = 0; i < keys->len; i++) {
+        if (tsc_str_eq(TSC_ARR(tsc_str_t*, keys, i), key)) return true;
+    }
+    return false;
+}
+
+static void validate_proxy_own_keys_result(const tsc_object_t* proxy, const tsc_array_t* keys) {
+    if (!keys) return;
+    for (size_t i = 0; i < keys->len; i++) {
+        tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
+        for (size_t j = i + 1; j < keys->len; j++) {
+            if (tsc_str_eq(key, TSC_ARR(tsc_str_t*, keys, j))) {
+                tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap returned duplicate key"));
+            }
+        }
+    }
+    if (!proxy || !value_is_box(proxy->proxy_target) || value_tag(proxy->proxy_target) != TSC_VALUE_TAG_OBJECT) return;
+    const tsc_object_t* target = (const tsc_object_t*)value_ptr(proxy->proxy_target);
+    for (size_t i = 0; i < target->len; i++) {
+        const tsc_object_prop_t* prop = &target->props[i];
+        if (!prop->configurable && !str_array_contains(keys, prop->key)) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result missing non-configurable key"));
+        }
+        if (!target->extensible && !str_array_contains(keys, prop->key)) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result missing key on non-extensible target"));
+        }
+    }
+    if (!target->extensible) {
+        for (size_t i = 0; i < keys->len; i++) {
+            if (object_find(target, TSC_ARR(tsc_str_t*, keys, i)) < 0) {
+                tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result included extra key on non-extensible target"));
+            }
+        }
+    }
+}
+
 tsc_array_t* tsc_object_keys_dyn(const tsc_object_t* o) {
     if (!o) return tsc_array_new(sizeof(tsc_str_t*), 1);
     if (o->is_proxy) {
@@ -529,10 +567,19 @@ tsc_array_t* tsc_object_keys_dyn(const tsc_object_t* o) {
             for (size_t i = 0; i < arr->len; i++) {
                 tsc_value_t v = TSC_ARR(tsc_value_t, arr, i);
                 tsc_str_t* key = tsc_value_as_string(v);
-                if (!tsc_object_property_is_enumerable(o, key)) continue;
+                if (str_array_contains(result, key)) {
+                    tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap returned duplicate key"));
+                }
                 tsc_array_push_raw(result, &key);
             }
-            return result;
+            validate_proxy_own_keys_result(o, result);
+            tsc_array_t* enumerable = tsc_array_new(sizeof(tsc_str_t*), result->len);
+            for (size_t i = 0; i < result->len; i++) {
+                tsc_str_t* key = TSC_ARR(tsc_str_t*, result, i);
+                if (!tsc_object_property_is_enumerable(o, key)) continue;
+                tsc_array_push_raw(enumerable, &key);
+            }
+            return enumerable;
         }
         return tsc_array_new(sizeof(tsc_str_t*), 1);
     }
@@ -567,6 +614,7 @@ tsc_array_t* tsc_object_own_keys_dyn(const tsc_object_t* o) {
                 tsc_str_t* key = tsc_value_as_string(v);
                 tsc_array_push_raw(result, &key);
             }
+            validate_proxy_own_keys_result(o, result);
             return result;
         }
         return tsc_array_new(sizeof(tsc_str_t*), 1);

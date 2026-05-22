@@ -1,0 +1,6 @@
+missing fixed: Proxy ownKeys trap result missing non-configurable key
+duplicate: Proxy ownKeys trap returned duplicate key
+extra closed: Proxy ownKeys trap result included extra key on non-extensible target
+missing closed: Proxy ownKeys trap result missing key on non-extensible target
+exact closed: a
+object keys: Proxy ownKeys trap result missing non-configurable key

@@ -1,0 +1,3 @@
+{
+  "description": "Proxy ownKeys invariant enforcement for duplicate, non-configurable, and non-extensible target keys"
+}
