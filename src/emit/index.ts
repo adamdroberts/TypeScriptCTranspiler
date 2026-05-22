@@ -467,6 +467,7 @@ class Emitter {
                 if (ts.isFunctionDeclaration(inner)) continue;
                 if (ts.isClassDeclaration(inner)) {
                     this.emitClassStaticInitializers(initBuf, inner);
+                    this.emitClassMemberDecorators(initBuf, inner);
                     this.emitClassDecorators(initBuf, inner);
                     continue;
                 }
@@ -5152,6 +5153,30 @@ class Emitter {
         }
     }
 
+    private emitClassMemberDecorators(buf: CBuf, cd: ts.ClassDeclaration): void {
+        if (!cd.name) return;
+        for (const member of cd.members) {
+            if (!ts.isMethodDeclaration(member) || !ts.canHaveDecorators(member)) continue;
+            const decorators = ts.getDecorators(member) ?? [];
+            if (decorators.length === 0) continue;
+            const memberName = this.staticPropertyName(member.name);
+            if (!memberName) {
+                unsupported(member.name, "decorated method names must resolve to a string or number literal");
+            }
+            for (const decorator of decorators) {
+                const call = this.emitDecoratorFunctionCall(
+                    decorator.expression,
+                    [
+                        { c: "tsc_value_undefined()", ty: T_VALUE },
+                        this.classMemberDecoratorContext(member, "method", memberName),
+                    ],
+                    "method decorator",
+                );
+                buf.line(`(void)(${call});`);
+            }
+        }
+    }
+
     private classDecoratorContext(cd: ts.ClassDeclaration): EmitResult {
         const name = cd.name?.text ?? "";
         const obj = this.freshTemp("_class_decorator_ctx");
@@ -5160,6 +5185,25 @@ class Emitter {
                 `({ tsc_object_t* ${obj} = tsc_object_new(); ` +
                 `tsc_object_set(${obj}, tsc_str_from_lit("kind", 4), tsc_value_string(tsc_str_from_lit("class", 5))); ` +
                 `tsc_object_set(${obj}, tsc_str_from_lit("name", 4), tsc_value_string(tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))); ` +
+                `tsc_value_object(${obj}); })`,
+            ty: T_VALUE,
+        };
+    }
+
+    private classMemberDecoratorContext(
+        member: ts.ClassElement,
+        kind: "method",
+        name: string,
+    ): EmitResult {
+        const obj = this.freshTemp("_member_decorator_ctx");
+        const isStaticMember = isStatic(member) ? "true" : "false";
+        return {
+            c:
+                `({ tsc_object_t* ${obj} = tsc_object_new(); ` +
+                `tsc_object_set(${obj}, tsc_str_from_lit("kind", 4), tsc_value_string(tsc_str_from_lit("${kind}", ${kind.length}))); ` +
+                `tsc_object_set(${obj}, tsc_str_from_lit("name", 4), tsc_value_string(tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))); ` +
+                `tsc_object_set(${obj}, tsc_str_from_lit("static", 6), tsc_value_bool(${isStaticMember})); ` +
+                `tsc_object_set(${obj}, tsc_str_from_lit("private", 7), tsc_value_bool(false)); ` +
                 `tsc_value_object(${obj}); })`,
             ty: T_VALUE,
         };

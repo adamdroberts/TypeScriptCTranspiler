@@ -471,6 +471,14 @@ interface ClassDecoratorContext<Class = unknown> {
     readonly metadata: any;
     addInitializer(initializer: () => void): void;
 }
+interface ClassMethodDecoratorContext<This = unknown, Value = unknown> {
+    readonly kind: "method";
+    readonly name: string | symbol;
+    readonly static: boolean;
+    readonly private: boolean;
+    readonly metadata: any;
+    addInitializer(initializer: () => void): void;
+}
 declare function eval(source: string, ...ignored: unknown[]): unknown;
 interface RegExp {
     exec(s: string, ...ignored: any[]): string[] | null;
