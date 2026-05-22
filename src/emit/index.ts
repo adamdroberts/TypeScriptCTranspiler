@@ -11888,7 +11888,14 @@ class Emitter {
     ): EmitResult {
         const cb = call.arguments[0];
         if (!cb) unsupported(call, `${method}: missing callback`);
-        if (call.arguments.length !== 1) unsupported(call, `${method} expects exactly one callback`);
+        if (call.arguments.length > 2) unsupported(call, `${method} expects callback and optional thisArg`);
+        const thisArg = call.arguments[1];
+        const thisArgValue = thisArg ? this.emitExpr(thisArg) : null;
+        const thisArgTemp = thisArgValue ? this.freshTemp("_this_arg") : null;
+        const thisArgSetup = thisArgValue
+            ? `tsc_value_t ${thisArgTemp} = ${this.coerce(thisArgValue, T_VALUE, thisArg)}; `
+            : "";
+        const callbackThisArg = thisArgTemp ?? "tsc_value_undefined()";
         const av = this.freshTemp("_dynhof");
         const iv = this.freshTemp("_i");
         const dst = this.freshTemp("_dst");
@@ -11898,15 +11905,19 @@ class Emitter {
         let bodyNode: ts.Expression = cb;
 
         if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
-            const elemSlot = cb.parameters[0];
+            const sig = this.checker.getSignatureFromDeclaration(cb);
+            if (!sig) unsupported(cb, `dynamic ${method}: could not resolve callback signature`);
+            const thisType = this.signatureThisType(sig, cb);
+            const params = cb.parameters.filter((p) => !this.isThisParameter(p));
+            const elemSlot = params[0];
             if (!elemSlot || !ts.isIdentifier(elemSlot.name)) {
                 unsupported(cb, `dynamic ${method}: callback needs an element parameter`);
             }
-            const idxSlot = cb.parameters[1];
+            const idxSlot = params[1];
             if (idxSlot && !ts.isIdentifier(idxSlot.name)) {
                 unsupported(idxSlot, `dynamic ${method}: index parameter must be an identifier`);
             }
-            const arraySlot = cb.parameters[2];
+            const arraySlot = params[2];
             if (arraySlot && !ts.isIdentifier(arraySlot.name)) {
                 unsupported(arraySlot, `dynamic ${method}: array parameter must be an identifier`);
             }
@@ -11920,7 +11931,12 @@ class Emitter {
             if (arrayName) {
                 bindings.push(`tsc_value_t ${mangleIdent(arrayName)} = tsc_value_array(${av})`);
             }
-            body = this.emitExpr(bodyExpr);
+            if (thisType) this.functionThisStack.push({ c: callbackThisArg, ty: thisType });
+            try {
+                body = this.emitExpr(bodyExpr);
+            } finally {
+                if (thisType) this.functionThisStack.pop();
+            }
             bodyNode = bodyExpr;
         } else if (ts.isIdentifier(cb)) {
             const cbType = this.checker.getTypeAtLocation(cb);
@@ -11956,7 +11972,7 @@ class Emitter {
                 if (params.length >= 2) callArgs.push(typedArg(1, { c: `(double)${iv}`, ty: T_NUMBER }));
                 if (params.length >= 3) callArgs.push(typedArg(2, { c: `tsc_value_array(${av})`, ty: T_VALUE }));
                 const thisType = this.directCallableThisType(cb);
-                if (thisType) callArgs.unshift("tsc_value_undefined()");
+                if (thisType) callArgs.unshift(callbackThisArg);
                 const retType = this.prepareType(genericBindings
                     ? withTypeBindings(genericBindings, () =>
                         mapTsType(cb, sig.getReturnType(), this.checker),
@@ -11982,7 +11998,7 @@ class Emitter {
                     callArgs.push(this.coerce({ c: `tsc_value_array(${av})`, ty: T_VALUE }, params[2]!, cb));
                 }
                 body = {
-                    c: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`,
+                    c: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? [callbackThisArg] : []), ...callArgs].join(", ")})`,
                     ty: this.prepareType(fn.ty.ret),
                 };
             }
@@ -11994,6 +12010,7 @@ class Emitter {
                 { value: recv, target: T_VALUE, node: call.expression },
             ], ([value]) =>
                 `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); ` +
+                `${thisArgSetup}` +
                 `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                 `{ ${bindings.join("; ")}; (void)(${body.c}); } (void)0; })`,
             );
@@ -12005,6 +12022,7 @@ class Emitter {
                 { value: recv, target: T_VALUE, node: call.expression },
             ], ([value]) =>
                 `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); ` +
+                `${thisArgSetup}` +
                 `tsc_array_t* ${dst} = tsc_array_new(sizeof(tsc_value_t), ${av}->len ? ${av}->len : 1); ` +
                 `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                 `{ ${bindings.join("; ")}; tsc_value_t ${out} = ${mapped}; tsc_array_push_raw(${dst}, &${out}); } ` +
@@ -12018,6 +12036,7 @@ class Emitter {
                 { value: recv, target: T_VALUE, node: call.expression },
             ], ([value]) =>
                 `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); ` +
+                `${thisArgSetup}` +
                 `tsc_array_t* ${dst} = tsc_array_new(sizeof(tsc_value_t), ${av}->len ? ${av}->len : 1); ` +
                 `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                 `{ ${bindings.join("; ")}; tsc_value_t ${out} = ${mapped}; tsc_value_array_push_flat(${dst}, ${out}); } ` +
@@ -12031,6 +12050,7 @@ class Emitter {
                 { value: recv, target: T_VALUE, node: call.expression },
             ], ([value]) =>
                 `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); bool ${result} = false; ` +
+                `${thisArgSetup}` +
                 `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                 `{ ${bindings.join("; ")}; if (${cond}) { ${result} = true; break; } } ${result}; })`,
             );
@@ -12041,6 +12061,7 @@ class Emitter {
                 { value: recv, target: T_VALUE, node: call.expression },
             ], ([value]) =>
                 `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); bool ${result} = true; ` +
+                `${thisArgSetup}` +
                 `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                 `{ ${bindings.join("; ")}; if (!(${cond})) { ${result} = false; break; } } ${result}; })`,
             );
@@ -12051,6 +12072,7 @@ class Emitter {
                 { value: recv, target: T_VALUE, node: call.expression },
             ], ([value]) =>
                 `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); tsc_value_t ${result} = tsc_value_undefined(); ` +
+                `${thisArgSetup}` +
                 `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                 `{ ${bindings.join("; ")}; if (${cond}) { ${result} = ${elem}; break; } } ${result}; })`,
             );
@@ -12061,6 +12083,7 @@ class Emitter {
                 { value: recv, target: T_VALUE, node: call.expression },
             ], ([value]) =>
                 `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); double ${result} = -1.0; ` +
+                `${thisArgSetup}` +
                 `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                 `{ ${bindings.join("; ")}; if (${cond}) { ${result} = (double)${iv}; break; } } ${result}; })`,
             );
@@ -12071,6 +12094,7 @@ class Emitter {
                 { value: recv, target: T_VALUE, node: call.expression },
             ], ([value]) =>
                 `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); tsc_value_t ${result} = tsc_value_undefined(); ` +
+                `${thisArgSetup}` +
                 `for (size_t ${iv} = ${av}->len; ${iv}-- > 0;) ` +
                 `{ ${bindings.join("; ")}; if (${cond}) { ${result} = ${elem}; break; } } ${result}; })`,
             );
@@ -12081,6 +12105,7 @@ class Emitter {
                 { value: recv, target: T_VALUE, node: call.expression },
             ], ([value]) =>
                 `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); double ${result} = -1.0; ` +
+                `${thisArgSetup}` +
                 `for (size_t ${iv} = ${av}->len; ${iv}-- > 0;) ` +
                 `{ ${bindings.join("; ")}; if (${cond}) { ${result} = (double)${iv}; break; } } ${result}; })`,
             );
@@ -12089,6 +12114,7 @@ class Emitter {
             { value: recv, target: T_VALUE, node: call.expression },
         ], ([value]) =>
             `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); ` +
+            `${thisArgSetup}` +
             `tsc_array_t* ${dst} = tsc_array_new(sizeof(tsc_value_t), ${av}->len ? ${av}->len : 1); ` +
             `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
             `{ ${bindings.join("; ")}; if (${cond}) tsc_array_push_raw(${dst}, &${elem}); } ` +
@@ -15974,6 +16000,17 @@ class Emitter {
         const args = call.arguments;
         const cb = args[0];
         if (!cb) unsupported(call, `${method}: missing callback`);
+        const supportsThisArg = method !== "reduce" && method !== "reduceRight";
+        if (supportsThisArg && args.length > 2) {
+            unsupported(call, `${method} expects callback and optional thisArg`);
+        }
+        const thisArg = supportsThisArg ? args[1] : undefined;
+        const thisArgValue = thisArg ? this.emitExpr(thisArg) : null;
+        const thisArgTemp = thisArgValue ? this.freshTemp("_this_arg") : null;
+        const thisArgSetup = thisArgValue
+            ? `tsc_value_t ${thisArgTemp} = ${this.coerce(thisArgValue, T_VALUE, thisArg!)}; `
+            : "";
+        const callbackThisArg = thisArgTemp ?? "tsc_value_undefined()";
         const av = this.freshTemp("_a");
         const iv = this.freshTemp("_i");
 
@@ -15989,12 +16026,16 @@ class Emitter {
         if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
             // Inline path.
             const arrowFn = cb;
+            const sig = this.checker.getSignatureFromDeclaration(arrowFn);
+            if (!sig) unsupported(arrowFn, `${method}: could not resolve callback signature`);
+            const thisType = this.signatureThisType(sig, arrowFn);
+            const params = arrowFn.parameters.filter((p) => !this.isThisParameter(p));
             const paramBindings: { name: string; type: CType; src: string }[] = [];
             const isReduce = method === "reduce" || method === "reduceRight";
-            const accParam = isReduce ? arrowFn.parameters[0] : undefined;
-            const elemSlot = isReduce ? arrowFn.parameters[1] : arrowFn.parameters[0];
-            const idxSlot = isReduce ? arrowFn.parameters[2] : arrowFn.parameters[1];
-            const arraySlot = isReduce ? arrowFn.parameters[3] : arrowFn.parameters[2];
+            const accParam = isReduce ? params[0] : undefined;
+            const elemSlot = isReduce ? params[1] : params[0];
+            const idxSlot = isReduce ? params[2] : params[1];
+            const arraySlot = isReduce ? params[3] : params[2];
             if (isReduce) {
                 if (!accParam || !ts.isIdentifier(accParam.name))
                     unsupported(arrowFn, `${method}: missing acc parameter`);
@@ -16028,7 +16069,13 @@ class Emitter {
                 });
             }
             const bodyExpr = this.callbackReturnExpression(arrowFn, method);
-            const bodyR = this.emitExpr(bodyExpr);
+            if (thisType) this.functionThisStack.push({ c: callbackThisArg, ty: thisType });
+            let bodyR: EmitResult;
+            try {
+                bodyR = this.emitExpr(bodyExpr);
+            } finally {
+                if (thisType) this.functionThisStack.pop();
+            }
             const bindings = paramBindings
                 .map((b) => `${b.type.c} ${b.name} = ${b.src};`)
                 .join(" ");
@@ -16056,7 +16103,7 @@ class Emitter {
                 const fnv = this.freshTemp("_cb");
                 callbackDetails = {
                     bindings: `${fn.ty.c} ${fnv} = ${fn.c};`,
-                    bodyC: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`,
+                    bodyC: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? [callbackThisArg] : []), ...callArgs].join(", ")})`,
                     bodyType: retType,
                 };
             } else {
@@ -16096,7 +16143,7 @@ class Emitter {
                     if (paramCount >= 3) callArgs.push(av);
                 }
                 const thisType = this.directCallableThisType(cb);
-                if (thisType) callArgs.unshift("tsc_value_undefined()");
+                if (thisType) callArgs.unshift(callbackThisArg);
                 callbackDetails = {
                     bindings: "",
                     bodyC: `${fnName}(${callArgs.join(", ")})`,
@@ -16116,6 +16163,7 @@ class Emitter {
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ` +
+                        `${thisArgSetup}` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                         `{ ${bindings} (void)(${bodyC}); } (void)0; })`,
                     ty: T_VOID,
@@ -16124,6 +16172,7 @@ class Emitter {
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ` +
+                        `${thisArgSetup}` +
                         `tsc_array_t* _dst = tsc_array_new(sizeof(${bodyType.c}), ${av}->len); ` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                         `{ ${bindings} ${bodyType.c} _r = ${bodyC}; ` +
@@ -16136,6 +16185,7 @@ class Emitter {
                     return {
                         c:
                             `({ tsc_array_t* const ${av} = ${recv.c}; ` +
+                            `${thisArgSetup}` +
                             `tsc_array_t* _dst = tsc_array_new(sizeof(${inner.c}), ${av}->len); ` +
                             `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                             `{ ${bindings} ${inner.c} _r = ${bodyC}; ` +
@@ -16146,6 +16196,7 @@ class Emitter {
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ` +
+                        `${thisArgSetup}` +
                         `tsc_array_t* _dst = tsc_array_new(sizeof(${inner.c}), ${av}->len); ` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                         `{ ${bindings} tsc_array_t* _r = ${bodyC}; ` +
@@ -16157,6 +16208,7 @@ class Emitter {
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ` +
+                        `${thisArgSetup}` +
                         `tsc_array_t* _dst = tsc_array_new(sizeof(${et.c}), ${av}->len); ` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                         `{ ${et.c} _el = TSC_ARR(${et.c}, ${av}, ${iv}); ${bindings} ` +
@@ -16173,7 +16225,7 @@ class Emitter {
                 // For function ref: we use _acc_rd as the implicit acc name.
                 let accName = "_acc_rd";
                 if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
-                    const p0 = cb.parameters[0];
+                    const p0 = cb.parameters.find((p) => !this.isThisParameter(p));
                     if (p0 && ts.isIdentifier(p0.name)) accName = mangleIdent(p0.name.text);
                 }
                 const initC = initR
@@ -16197,7 +16249,7 @@ class Emitter {
                 const accType = initR ? initR.ty : et;
                 let accName = "_acc_rd";
                 if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
-                    const p0 = cb.parameters[0];
+                    const p0 = cb.parameters.find((p) => !this.isThisParameter(p));
                     if (p0 && ts.isIdentifier(p0.name)) accName = mangleIdent(p0.name.text);
                 }
                 const initC = initR
@@ -16217,6 +16269,7 @@ class Emitter {
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ${et.c} _r = (${et.c})0; bool _f = false; ` +
+                        `${thisArgSetup}` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len && !_f; ${iv}++) ` +
                         `{ ${bindings} if (${bodyC}) { _r = TSC_ARR(${et.c}, ${av}, ${iv}); _f = true; } } _r; })`,
                     ty: et,
@@ -16225,6 +16278,7 @@ class Emitter {
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; double _r = -1.0; ` +
+                        `${thisArgSetup}` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                         `{ ${bindings} if (${bodyC}) { _r = (double)${iv}; break; } } _r; })`,
                     ty: T_NUMBER,
@@ -16233,6 +16287,7 @@ class Emitter {
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ${et.c} _r = (${et.c})0; bool _f = false; ` +
+                        `${thisArgSetup}` +
                         `for (size_t ${iv} = ${av}->len; ${iv}-- > 0 && !_f;) ` +
                         `{ ${bindings} if (${bodyC}) { _r = TSC_ARR(${et.c}, ${av}, ${iv}); _f = true; } } _r; })`,
                     ty: et,
@@ -16241,6 +16296,7 @@ class Emitter {
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; double _r = -1.0; ` +
+                        `${thisArgSetup}` +
                         `for (size_t ${iv} = ${av}->len; ${iv}-- > 0;) ` +
                         `{ ${bindings} if (${bodyC}) { _r = (double)${iv}; break; } } _r; })`,
                     ty: T_NUMBER,
@@ -16249,6 +16305,7 @@ class Emitter {
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; bool _r = false; ` +
+                        `${thisArgSetup}` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len && !_r; ${iv}++) ` +
                         `{ ${bindings} if (${bodyC}) _r = true; } _r; })`,
                     ty: T_BOOLEAN,
@@ -16257,6 +16314,7 @@ class Emitter {
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; bool _r = true; ` +
+                        `${thisArgSetup}` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len && _r; ${iv}++) ` +
                         `{ ${bindings} if (!(${bodyC})) _r = false; } _r; })`,
                     ty: T_BOOLEAN,

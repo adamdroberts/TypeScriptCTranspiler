@@ -1,0 +1,4 @@
+typed find: 3
+typed filter: 3,4
+typed map ignored: 2,4,6,8 abc
+dyn: 2 11 13 true abcdef

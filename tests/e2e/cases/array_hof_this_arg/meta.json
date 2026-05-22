@@ -1,0 +1,3 @@
+{
+  "description": "typed and dynamic array higher-order methods evaluate optional thisArg and bind it for callbacks with explicit this parameters"
+}
