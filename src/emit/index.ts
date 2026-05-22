@@ -4004,6 +4004,9 @@ class Emitter {
         if (!ts.isIdentifier(pa.expression)) return null;
         const spec = this.moduleNamespaceImportSpecifier(pa.expression);
         if (!spec || this.isNodeBuiltinModuleSpecifier(spec)) return null;
+        const info = this.resolvedModuleInfoForSpecifier(spec, pa.getSourceFile().fileName);
+        const commonJsDecl = info ? this.commonJsExportedMemberDeclaration(info.sf, pa.name.text) : null;
+        if (commonJsDecl) return commonJsDecl;
         const sym = this.checker.getSymbolAtLocation(pa.name);
         if (sym) {
             let target = sym;
@@ -4017,8 +4020,7 @@ class Emitter {
             const decl = target.valueDeclaration ?? target.declarations?.[0];
             if (decl) return decl;
         }
-        const info = this.resolvedModuleInfoForSpecifier(spec, pa.getSourceFile().fileName);
-        return info ? this.commonJsExportedMemberDeclaration(info.sf, pa.name.text) : null;
+        return null;
     }
 
     private moduleNamespaceMemberCName(pa: ts.PropertyAccessExpression): string | null {
@@ -10081,7 +10083,7 @@ class Emitter {
                     this.isCommonJsStaticRequireBackedExportProperty(decl) ||
                     (ts.isCallExpression(decl) && !!this.commonJsDefinePropertyExportForCallDeclaration(decl)) ||
                     (ts.isPropertyAssignment(decl) && !!this.commonJsDefinePropertiesExportEntry(decl)) ||
-                    this.isCommonJsModuleExportsObjectExportEntry(decl) ||
+                    (this.isCommonJsModuleExportsObjectExportEntry(decl) && !ts.isShorthandPropertyAssignment(decl)) ||
                     (ts.isArrayLiteralExpression(decl) && !!this.commonJsObjectFromEntriesExportEntry(decl)) ||
                     !!this.commonJsObjectAssignExportEntry(decl)
                 )

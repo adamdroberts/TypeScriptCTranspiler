@@ -444,15 +444,16 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
                     }
                 }
                 if (ts.isTypeLiteralNode(d)) {
-                    // Anonymous { x: number } object type: treat as unsupported
-                    // for now (Phase 3 shapes/dynamic will handle).
-                    unsupported(
-                        node,
-                        "anonymous object types (declare an interface or class)",
-                    );
+                    return T_VALUE;
                 }
             }
         }
+    }
+    if (checker.typeToString(t).startsWith("typeof import(")) {
+        return T_VALUE;
+    }
+    if (t.flags & ts.TypeFlags.Object) {
+        return T_VALUE;
     }
 
     unsupported(node, `type not supported yet: ${checker.typeToString(t)}`);

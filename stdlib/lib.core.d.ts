@@ -281,7 +281,7 @@ interface ObjectConstructor {
 declare var Object: ObjectConstructor;
 
 interface ReflectConstructor {
-    apply(target: Function, thisArgument: any, argumentsList: any[]): any;
+    apply(target: any, thisArgument: any, argumentsList: any[]): any;
     construct(target: any, argumentsList: any[]): any;
     defineProperty(target: any, propertyKey: string, attributes: any): boolean;
     deleteProperty(target: any, propertyKey: string): boolean;
@@ -423,7 +423,7 @@ declare class Proxy<T extends object> {
 }
 
 declare namespace Reflect {
-    function apply(target: Function, thisArgument: any, argumentsList: ArrayLike<any>): any;
+    function apply(target: any, thisArgument: any, argumentsList: ArrayLike<any>): any;
     function construct(target: Function, argumentsList: ArrayLike<any>, newTarget?: Function): any;
     function defineProperty(target: object, propertyKey: PropertyKey, attributes: PropertyDescriptor): boolean;
     function deleteProperty(target: object, propertyKey: PropertyKey): boolean;
@@ -450,7 +450,7 @@ interface FinalizationRegistryConstructor {
 }
 declare var FinalizationRegistry: FinalizationRegistryConstructor;
 interface Function {
-    (...args: unknown[]): unknown;
+    (...args: any[]): any;
 }
 interface FunctionConstructor {
     new (...args: string[]): Function;

@@ -40,6 +40,8 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
         // Crucial: disable default lib; we supply our own via rootFiles.
         noLib: true,
         types: [],
+        esModuleInterop: true,
+        allowSyntheticDefaultImports: true,
         allowJs: true,
         checkJs: false,
         maxNodeModuleJsDepth: 5,
