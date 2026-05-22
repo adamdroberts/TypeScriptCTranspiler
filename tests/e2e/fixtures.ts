@@ -293,6 +293,10 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-object-default-package": cjsPackage("tsc2c-cjs-object-default-package", {
         "index.js": 'module.exports = { label: "object-default", count: 7 };\n',
     }),
+    "tsc2c-cjs-module-object-identifier": cjsPackage("tsc2c-cjs-module-object-identifier", {
+        "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "identifier-default",\n  greet: function greet(name) { return "identifier " + name; },\n  label: local.label,\n  count: 72,\n  double: local.double,\n  enabled: true\n};\nmodule.exports = api;\n',
+        "local.js": 'exports.label = "object-identifier";\nexports.double = function double(value) { return value * 2; };\n',
+    }),
     "tsc2c-cjs-module-object-require-binding": cjsPackage("tsc2c-cjs-module-object-require-binding", {
         "index.js": 'const defaultValue = require("./default.js");\nconst local = require("./local.js");\nmodule.exports = {\n  greet: defaultValue,\n  label: local.label,\n  count: local.count,\n  double: local.double\n};\n',
         "default.js": 'module.exports = function greet(name) { return "hello " + name; };\n',

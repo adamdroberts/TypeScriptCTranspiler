@@ -600,6 +600,18 @@ class Emitter {
                     }
                     continue;
                 }
+                const commonJsModuleDeclaredObjectExports =
+                    this.commonJsModuleExportsDeclaredObjectValueExports(inner);
+                if (commonJsModuleDeclaredObjectExports) {
+                    for (const entry of commonJsModuleDeclaredObjectExports) {
+                        this.emitCommonJsModuleExportsObjectEntry(initBuf, entry);
+                    }
+                    const commonJsModuleExport = this.commonJsModuleExportsValueAssignment(inner);
+                    if (commonJsModuleExport) {
+                        this.emitCommonJsModuleExportsValueAssignment(initBuf, commonJsModuleExport);
+                    }
+                    continue;
+                }
                 const commonJsDefinePropertiesExports = this.commonJsDefinePropertiesExports(inner);
                 if (commonJsDefinePropertiesExports) {
                     for (const commonJsDefineExport of commonJsDefinePropertiesExports) {
@@ -3296,6 +3308,46 @@ class Emitter {
         }
     }
 
+    private emitCommonJsModuleExportsObjectEntry(
+        buf: CBuf,
+        prop: CommonJsObjectAssignExportEntry,
+    ): void {
+        if (ts.isShorthandPropertyAssignment(prop)) return;
+        if (!ts.isPropertyAssignment(prop) && !ts.isMethodDeclaration(prop) && !ts.isGetAccessorDeclaration(prop)) return;
+        if (
+            ts.isPropertyAssignment(prop) &&
+            ts.isIdentifier(prop.initializer) &&
+            !this.requireBindingModuleExportsDeclaration(prop.initializer)
+        ) {
+            return;
+        }
+        const cName = this.commonJsObjectPropertyExportCName(prop);
+        const ty = this.commonJsExportedCType(prop);
+        if (!this.commonJsExportGlobals.has(cName)) {
+            this.commonJsExportGlobals.add(cName);
+            this.globalDecls.line(`static ${ty.c} ${cName};`);
+        }
+        const getterReturn = ts.isGetAccessorDeclaration(prop)
+            ? this.commonJsObjectAssignGetterReturnExpression(prop)
+            : null;
+        if (ts.isGetAccessorDeclaration(prop) && !getterReturn) {
+            unsupported(prop, "CommonJS module.exports getter exports require a single return value");
+        }
+        const valueNode = ts.isMethodDeclaration(prop)
+            ? prop
+            : getterReturn ?? (ts.isPropertyAssignment(prop) ? prop.initializer : prop);
+        const value = ts.isMethodDeclaration(prop)
+            ? this.emitClosureExpression(prop)
+            : getterReturn
+                ? this.emitExpr(getterReturn)
+            : ts.isPropertyAssignment(prop) && this.isCommonJsModuleExportsDefaultValue(prop.initializer)
+                ? this.emitCommonJsModuleExportsDefaultValue(prop.initializer)
+            : ts.isPropertyAssignment(prop)
+                ? this.emitExpr(prop.initializer)
+            : unsupported(prop, "CommonJS module.exports object export requires a value");
+        buf.line(`${cName} = ${this.coerce(value, ty, valueNode)};`);
+    }
+
     private emitCommonJsDefinePropertyExport(
         buf: CBuf,
         assignment: { call: ts.CallExpression; name: string; right: ts.Expression },
@@ -3857,6 +3909,14 @@ class Emitter {
                 }
                 continue;
             }
+            const moduleDeclaredObjectExports = this.commonJsModuleExportsDeclaredObjectValueExports(stmt);
+            if (moduleDeclaredObjectExports) {
+                for (const entry of moduleDeclaredObjectExports) {
+                    const name = this.commonJsObjectAssignExportName(entry);
+                    if (name && name !== "__esModule") out.push({ name, decl: entry });
+                }
+                continue;
+            }
             const definePropertiesExports = this.commonJsDefinePropertiesExports(stmt);
             if (definePropertiesExports) {
                 for (const exported of definePropertiesExports) {
@@ -3917,6 +3977,23 @@ class Emitter {
             if (exported.name === name) return exported.decl;
         }
         return null;
+    }
+
+    private commonJsModuleExportsDeclaredObjectValueExports(
+        stmt: ts.Statement,
+    ): CommonJsObjectAssignExportEntry[] | null {
+        const assignment = this.commonJsModuleExportsValueAssignmentChain(stmt);
+        if (!assignment || ts.isObjectLiteralExpression(assignment.right)) return null;
+        const entries = this.commonJsObjectAssignExportSourceEntries(assignment.right);
+        if (!entries) return null;
+        const out: CommonJsObjectAssignExportEntry[] = [];
+        for (const entry of entries) {
+            const name = this.commonJsObjectAssignExportName(entry);
+            if (!name || name === "__esModule") continue;
+            this.validateCommonJsObjectAssignExportEntry(entry);
+            out.push(entry);
+        }
+        return out.length > 0 ? out : null;
     }
 
     private commonJsModuleExportsValueDeclaration(sf: ts.SourceFile): ts.BinaryExpression | null {
