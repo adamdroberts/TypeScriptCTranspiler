@@ -8802,7 +8802,7 @@ class Emitter {
                 return { c: cName, ty: this.commonJsExportedCType(exportDecl) };
             }
         }
-        return this.emitCommonJsRequireModuleValue(call, spec);
+        return { c: `tsc_value_object(tsc_object_new())`, ty: T_VALUE };
     }
 
     private emitCommonJsRequireModuleValue(call: ts.CallExpression, spec: string): EmitResult {
@@ -8814,8 +8814,10 @@ class Emitter {
         if (exportDecl) {
             const cName = this.declarationCName(exportDecl);
             if (!cName) unsupported(exportDecl, `unsupported CommonJS module.exports value for require("${spec}")`);
-            const ty = this.commonJsExportedCType(exportDecl);
-            return { c: this.coerce({ c: cName, ty }, T_VALUE, call), ty: T_VALUE };
+            if (this.commonJsExportGlobals.has(cName)) {
+                const ty = this.commonJsExportedCType(exportDecl);
+                return { c: this.coerce({ c: cName, ty }, T_VALUE, call), ty: T_VALUE };
+            }
         }
         const exportedMembers = this.commonJsExportedMemberDeclarations(info.sf);
         if (exportedMembers.length > 0) {
