@@ -6,6 +6,18 @@ class UsedBox {
     }
 
     read(): number {
+        class DeadLocalBox {
+            value: number;
+
+            constructor(value: number) {
+                this.value = value;
+            }
+
+            read(): number {
+                return this.value;
+            }
+        }
+
         return this.value + 2;
     }
 }

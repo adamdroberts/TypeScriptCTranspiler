@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now omits unreferenced local class declarations with conservative no-side-effect definitions. Test: `generated_c_dce_class`.
 - Generated-C DCE now omits unreferenced local function declarations instead of rejecting otherwise supported enclosing functions. Test: `generated_c_dce`.
 - Generated-C DCE now prunes unreferenced namespace-top-level classes using the same conservative no-side-effect checks as source-file classes. Test: `generated_c_dce_class`.
 - Generated-C DCE now prunes statements after conservative always-exiting loops. Test: `generated_c_dce_const`.

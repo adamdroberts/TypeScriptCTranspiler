@@ -248,6 +248,7 @@ class Emitter {
     private referencedTopLevelClasses = new WeakSet<ts.ClassDeclaration>();
     private referencedTopLevelVariables = new WeakSet<ts.VariableDeclaration>();
     private referencedLocalFunctions = new WeakSet<ts.FunctionDeclaration>();
+    private referencedLocalClasses = new WeakSet<ts.ClassDeclaration>();
     private referencedVariables = new WeakSet<ts.VariableDeclaration>();
     /**
      * Symbols whose value is provably integer-shape at every read site.
@@ -352,6 +353,11 @@ class Emitter {
             this.referencedLocalFunctions.add(decl);
             changed = true;
         };
+        const markLocalClass = (decl: ts.ClassDeclaration): void => {
+            if (this.referencedLocalClasses.has(decl)) return;
+            this.referencedLocalClasses.add(decl);
+            changed = true;
+        };
         const markVariable = (decl: ts.VariableDeclaration): void => {
             if (this.referencedVariables.has(decl)) return;
             this.referencedVariables.add(decl);
@@ -408,6 +414,13 @@ class Emitter {
             ) {
                 return;
             }
+            if (
+                ts.isClassDeclaration(node) &&
+                this.isPrunableLocalClass(node) &&
+                !this.referencedLocalClasses.has(node)
+            ) {
+                return;
+            }
             if (ts.isSourceFile(node) || ts.isBlock(node)) {
                 visitStatementList(node.statements);
                 return;
@@ -453,6 +466,13 @@ class Emitter {
                     this.isPrunableTopLevelClass(decl)
                 ) {
                     markTopLevelClass(decl);
+                }
+                if (
+                    decl &&
+                    ts.isClassDeclaration(decl) &&
+                    this.isPrunableLocalClass(decl)
+                ) {
+                    markLocalClass(decl);
                 }
                 if (
                     decl &&
@@ -630,6 +650,35 @@ class Emitter {
 
     private shouldEmitClassDeclaration(cd: ts.ClassDeclaration): boolean {
         return !this.isPrunableTopLevelClass(cd) || this.referencedTopLevelClasses.has(cd);
+    }
+
+    private isPrunableLocalClass(cd: ts.ClassDeclaration): boolean {
+        if (!cd.name) return false;
+        if (ts.isSourceFile(cd.parent) || this.isNamespaceTopLevelDeclaration(cd)) return false;
+        if (!this.classHeritageHasNoDefinitionSideEffects(cd)) return false;
+        if (this.classHasDecorators(cd)) return false;
+        const modifiers = ts.canHaveModifiers(cd) ? ts.getModifiers(cd) : undefined;
+        if (modifiers?.some((m) =>
+            m.kind === ts.SyntaxKind.ExportKeyword ||
+            m.kind === ts.SyntaxKind.DefaultKeyword ||
+            m.kind === ts.SyntaxKind.DeclareKeyword
+        )) {
+            return false;
+        }
+        for (const member of cd.members) {
+            if (ts.isClassStaticBlockDeclaration(member)) return false;
+            if (member.name && !this.classMemberNameHasNoDefinitionSideEffects(member.name)) {
+                return false;
+            }
+            if (isStatic(member) && !this.staticClassMemberHasNoDefinitionSideEffects(member)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private shouldEmitLocalClassDeclaration(cd: ts.ClassDeclaration): boolean {
+        return !this.isPrunableLocalClass(cd) || this.referencedLocalClasses.has(cd);
     }
 
     private isPrunableTopLevelVariable(decl: ts.VariableDeclaration): boolean {
@@ -7200,6 +7249,10 @@ class Emitter {
         if (ts.isFunctionDeclaration(stmt)) {
             if (!this.shouldEmitLocalFunctionDeclaration(stmt)) return;
             unsupported(stmt, "referenced local function declarations are not supported yet");
+        }
+        if (ts.isClassDeclaration(stmt)) {
+            if (!this.shouldEmitLocalClassDeclaration(stmt)) return;
+            unsupported(stmt, "referenced local class declarations are not supported yet");
         }
         if (ts.isIfStatement(stmt)) return this.emitIf(buf, stmt);
         if (ts.isWhileStatement(stmt)) return this.emitWhile(buf, stmt);
