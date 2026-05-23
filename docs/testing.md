@@ -124,6 +124,7 @@ e2e: dynamic_unary_ops … OK
 e2e: dynamic_update_ops … OK
 e2e: exponent_assign … OK
 e2e: dynamic_require … OK
+e2e: function_integrity … OK
 e2e: function_prototypes … OK
 e2e: function_value_spread … OK
 e2e: generic_classes … OK
@@ -283,7 +284,7 @@ e2e: url_parse … OK
 e2e: void_operator … OK
 e2e: wordcount … OK
 
-821 passed, 0 failed
+822 passed, 0 failed
 ```
 
 Non-zero exit if any case fails.
