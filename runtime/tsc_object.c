@@ -788,6 +788,7 @@ tsc_array_t* tsc_object_keys_dyn(const tsc_object_t* o) {
             }
             return enumerable;
         }
+        tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap must return an array"));
         return tsc_array_new(sizeof(tsc_str_t*), 1);
     }
     tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), o->len);
@@ -824,6 +825,7 @@ tsc_array_t* tsc_object_own_keys_dyn(const tsc_object_t* o) {
             validate_proxy_own_keys_result(o, result);
             return result;
         }
+        tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap must return an array"));
         return tsc_array_new(sizeof(tsc_str_t*), 1);
     }
     tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), o->len);
