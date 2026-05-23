@@ -516,7 +516,13 @@ class Emitter {
     }
 
     private isSideEffectFreeTopLevelConstInitializer(expr: ts.Expression): boolean {
-        while (ts.isParenthesizedExpression(expr) || ts.isAsExpression(expr) || ts.isTypeAssertionExpression(expr)) {
+        while (
+            ts.isParenthesizedExpression(expr) ||
+            ts.isAsExpression(expr) ||
+            ts.isTypeAssertionExpression(expr) ||
+            ts.isNonNullExpression(expr) ||
+            ts.isSatisfiesExpression(expr)
+        ) {
             expr = expr.expression;
         }
         switch (expr.kind) {
@@ -586,13 +592,19 @@ class Emitter {
             );
         }
         if (ts.isArrayLiteralExpression(expr)) {
-            return expr.elements.every((element) =>
-                ts.isOmittedExpression(element) ||
-                (!ts.isSpreadElement(element) && this.isSideEffectFreeTopLevelConstInitializer(element))
-            );
+            return expr.elements.every((element) => {
+                if (ts.isOmittedExpression(element)) return true;
+                if (ts.isSpreadElement(element)) {
+                    return this.isSideEffectFreeArraySpreadOperand(element.expression);
+                }
+                return this.isSideEffectFreeTopLevelConstInitializer(element);
+            });
         }
         if (ts.isObjectLiteralExpression(expr)) {
             return expr.properties.every((prop) => {
+                if (ts.isSpreadAssignment(prop)) {
+                    return this.isSideEffectFreeObjectSpreadOperand(prop.expression);
+                }
                 if (!ts.isPropertyAssignment(prop)) return false;
                 if (
                     !ts.isIdentifier(prop.name) &&
@@ -605,6 +617,37 @@ class Emitter {
             });
         }
         return false;
+    }
+
+    private unwrapSideEffectFreeStaticExpression(expr: ts.Expression): ts.Expression {
+        while (
+            ts.isParenthesizedExpression(expr) ||
+            ts.isAsExpression(expr) ||
+            ts.isTypeAssertionExpression(expr) ||
+            ts.isNonNullExpression(expr) ||
+            ts.isSatisfiesExpression(expr)
+        ) {
+            expr = expr.expression;
+        }
+        return expr;
+    }
+
+    private isSideEffectFreeArraySpreadOperand(expr: ts.Expression): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            !ts.isArrayLiteralExpression(unwrapped) &&
+            !ts.isStringLiteral(unwrapped) &&
+            !ts.isNoSubstitutionTemplateLiteral(unwrapped)
+        ) {
+            return false;
+        }
+        return this.isSideEffectFreeTopLevelConstInitializer(unwrapped);
+    }
+
+    private isSideEffectFreeObjectSpreadOperand(expr: ts.Expression): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (!ts.isObjectLiteralExpression(unwrapped)) return false;
+        return this.isSideEffectFreeTopLevelConstInitializer(unwrapped);
     }
 
     private shouldEmitTopLevelVariable(decl: ts.VariableDeclaration): boolean {
