@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated C now omits provably unreferenced non-exported top-level function declarations, and the e2e harness can assert forbidden generated-C substrings. Test: `generated_c_dce`.
 - Release builds on Linux now compile with function/data sections and link with section garbage collection, shrinking binaries by letting the linker discard unused sections. Test: `release_build`.
 - Added Linux GitHub Actions CI wiring for build, no-GC e2e, benchmark smoke, and scheduled/manual long benchmark policy checks.
 - Added `bun run bench:long` with `manual-tests/benchmarks/thresholds-long.json` for broader scheduled/manual benchmark threshold runs.

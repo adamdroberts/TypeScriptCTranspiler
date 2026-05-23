@@ -309,7 +309,7 @@ tests/e2e/
         └── expected.stdout
 ```
 
-Each subdirectory under `tests/e2e/cases/` is one test. The harness auto-discovers every directory with `in.ts` plus either `expected.stdout` or `expected.exitcode`. A case may also include `expected.mainc.contains` to assert that generated `main.c` contains a substring; `{{ENTRY}}` expands to the case entry path. `run.env` adds `KEY=VALUE` pairs to the binary execution environment, and `expected.stderr.contains` asserts that the captured stderr includes each non-empty diagnostic substring line. A `compile.release` marker compiles that case with `--release`.
+Each subdirectory under `tests/e2e/cases/` is one test. The harness auto-discovers every directory with `in.ts` plus either `expected.stdout` or `expected.exitcode`. A case may also include `expected.mainc.contains` to assert that generated `main.c` contains a substring, or `expected.mainc.not_contains` to assert that one substring per line is absent; `{{ENTRY}}` expands to the case entry path. `run.env` adds `KEY=VALUE` pairs to the binary execution environment, and `expected.stderr.contains` asserts that the captured stderr includes each non-empty diagnostic substring line. A `compile.release` marker compiles that case with `--release`.
 
 ## How the harness works
 
@@ -320,7 +320,7 @@ Each subdirectory under `tests/e2e/cases/` is one test. The harness auto-discove
    - Call `compile({ entry: in.ts, output: /tmp/<case>, buildDir: /tmp/<case>-build, noGc: env, release: marker })`.
    - If `expected.exitcode` exists, compare the compile exit code and skip binary execution.
    - If compile exits non-zero unexpectedly → print the error → mark **COMPILE FAIL**.
-   - If `expected.mainc.contains` exists, check the generated C before running the binary.
+   - If `expected.mainc.contains` or `expected.mainc.not_contains` exists, check the generated C before running the binary.
    - Run the binary with no stdin, plus any environment entries from `run.env`.
    - If the binary exits non-zero → **RUN FAIL**.
    - If `expected.stderr.contains` exists, assert that captured stderr includes it.

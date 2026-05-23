@@ -243,6 +243,7 @@ class Emitter {
     private cellScopes: Map<ts.Symbol, CaptureCell>[] = [];
     private closureEnvScopes: Map<ts.Symbol, ClosureEnvBinding>[] = [];
     private catchStringSymbols = new Set<ts.Symbol>();
+    private referencedTopLevelFunctions = new WeakSet<ts.FunctionDeclaration>();
     /**
      * Symbols whose value is provably integer-shape at every read site.
      * Populated per source file by analyzeIntegerSymbols(); consulted by
@@ -319,8 +320,73 @@ class Emitter {
         buf.lineRaw(`#line ${line + 1} "${escapeCString(sf.fileName)}"`);
     }
 
+    private analyzeReferencedTopLevelFunctions(emitOrder: readonly string[]): void {
+        const visit = (node: ts.Node): void => {
+            if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node)) {
+                const sym = this.symbolForIdentifier(node);
+                const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+                if (
+                    decl &&
+                    ts.isFunctionDeclaration(decl) &&
+                    this.isPrunableTopLevelFunction(decl)
+                ) {
+                    this.referencedTopLevelFunctions.add(decl);
+                }
+            }
+            ts.forEachChild(node, visit);
+        };
+
+        for (const modId of emitOrder) {
+            const info = this.graph.modules.get(modId);
+            if (info) visit(info.sf);
+        }
+    }
+
+    private isValueReferenceIdentifier(id: ts.Identifier): boolean {
+        const p = id.parent;
+        if (
+            (ts.isFunctionDeclaration(p) || ts.isClassDeclaration(p) || ts.isInterfaceDeclaration(p) || ts.isEnumDeclaration(p)) &&
+            p.name === id
+        ) {
+            return false;
+        }
+        if (ts.isVariableDeclaration(p) && p.name === id) return false;
+        if (ts.isParameter(p) && p.name === id) return false;
+        if (ts.isPropertyAccessExpression(p) && p.name === id) return false;
+        if (ts.isPropertyAssignment(p) && p.name === id) return false;
+        if (ts.isPropertyDeclaration(p) && p.name === id) return false;
+        if (ts.isMethodDeclaration(p) && p.name === id) return false;
+        if (ts.isGetAccessorDeclaration(p) && p.name === id) return false;
+        if (ts.isSetAccessorDeclaration(p) && p.name === id) return false;
+        if (ts.isImportSpecifier(p) || ts.isImportClause(p) || ts.isNamespaceImport(p)) return false;
+        if (ts.isExportSpecifier(p)) return false;
+        if (ts.isTypeReferenceNode(p) || ts.isTypeAliasDeclaration(p) || ts.isInterfaceDeclaration(p)) return false;
+        return true;
+    }
+
+    private isPrunableTopLevelFunction(fd: ts.FunctionDeclaration): boolean {
+        if (!fd.body) return false;
+        if (!this.functionDeclarationHasCName(fd)) return false;
+        if (this.isGenericFunction(fd)) return false;
+        if (!ts.isSourceFile(fd.parent) && !this.isNamespaceTopLevelDeclaration(fd)) return false;
+        const modifiers = ts.canHaveModifiers(fd) ? ts.getModifiers(fd) : undefined;
+        if (modifiers?.some((m) =>
+            m.kind === ts.SyntaxKind.ExportKeyword ||
+            m.kind === ts.SyntaxKind.DefaultKeyword ||
+            m.kind === ts.SyntaxKind.DeclareKeyword
+        )) {
+            return false;
+        }
+        return true;
+    }
+
+    private shouldEmitFunctionDeclaration(fd: ts.FunctionDeclaration): boolean {
+        return !this.isPrunableTopLevelFunction(fd) || this.referencedTopLevelFunctions.has(fd);
+    }
+
     run(): EmittedProgram {
         const emitOrder = this.graph.emitOrder ?? this.graph.topoOrder;
+        this.analyzeReferencedTopLevelFunctions(emitOrder);
         // Emit each module in program order so type-only dependencies can still
         // contribute declarations; only runtime-reachable modules are called
         // from main() below.
@@ -435,6 +501,7 @@ class Emitter {
                     inner &&
                     ts.isFunctionDeclaration(inner) &&
                     this.functionDeclarationHasCName(inner) &&
+                    this.shouldEmitFunctionDeclaration(inner) &&
                     !this.isGenericFunction(inner)
                 ) {
                     this.emitFunctionPrototype(inner);
@@ -452,6 +519,7 @@ class Emitter {
                     ts.isFunctionDeclaration(inner) &&
                     this.functionDeclarationHasCName(inner) &&
                     inner.body &&
+                    this.shouldEmitFunctionDeclaration(inner) &&
                     !this.isGenericFunction(inner)
                 ) {
                     this.emitFunctionBody(inner);

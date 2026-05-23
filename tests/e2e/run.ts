@@ -19,6 +19,7 @@ interface Case {
     expectedStderrContains?: string;
     expectedExitCode?: number;
     expectedMainCContains?: string;
+    expectedMainCNotContains?: string;
     emitCOnly?: boolean;
     nativeAddonManifest?: string;
     dynamicRequireManifest?: string;
@@ -50,6 +51,7 @@ async function discoverCases(): Promise<Case[]> {
         const expectedStderrContainsPath = path.join(casesDir, d, "expected.stderr.contains");
         const expectedExitPath = path.join(casesDir, d, "expected.exitcode");
         const expectedMainCContainsPath = path.join(casesDir, d, "expected.mainc.contains");
+        const expectedMainCNotContainsPath = path.join(casesDir, d, "expected.mainc.not_contains");
         const emitCOnlyPath = path.join(casesDir, d, "compile.emit_c_only");
         const nativeAddonManifestPath = path.join(casesDir, d, "native-addon-manifest.json");
         const dynamicRequireManifestPath = path.join(casesDir, d, "dynamic-require-manifest.json");
@@ -74,6 +76,9 @@ async function discoverCases(): Promise<Case[]> {
         const expectedMainCContains = await exists(expectedMainCContainsPath)
             ? (await fs.readFile(expectedMainCContainsPath, "utf8")).trimEnd()
             : undefined;
+        const expectedMainCNotContains = await exists(expectedMainCNotContainsPath)
+            ? (await fs.readFile(expectedMainCNotContainsPath, "utf8")).trimEnd()
+            : undefined;
         const expectedStderrContains = await exists(expectedStderrContainsPath)
             ? (await fs.readFile(expectedStderrContainsPath, "utf8")).trimEnd()
             : undefined;
@@ -93,6 +98,7 @@ async function discoverCases(): Promise<Case[]> {
                 expectedExitCode,
                 expectedStderrContains,
                 expectedMainCContains,
+                expectedMainCNotContains,
                 emitCOnly,
                 nativeAddonManifest,
                 dynamicRequireManifest,
@@ -116,6 +122,7 @@ async function discoverCases(): Promise<Case[]> {
             expected,
             expectedStderrContains,
             expectedMainCContains,
+            expectedMainCNotContains,
             emitCOnly,
             nativeAddonManifest,
             dynamicRequireManifest,
@@ -203,6 +210,18 @@ async function main(): Promise<void> {
                 console.log("MAINC MISSING EXPECTED SUBSTRING");
                 console.log("---expected substring---");
                 process.stdout.write(needle);
+                console.log("---end---");
+                failed++;
+                continue;
+            }
+        }
+        if (c.expectedMainCNotContains !== undefined) {
+            const needles = c.expectedMainCNotContains.split(/\r?\n/).filter((line) => line.length > 0);
+            const present = needles.find((needle) => r.mainC.includes(needle));
+            if (present !== undefined) {
+                console.log("MAINC CONTAINS FORBIDDEN SUBSTRING");
+                console.log("---forbidden substring---");
+                process.stdout.write(present);
                 console.log("---end---");
                 failed++;
                 continue;
