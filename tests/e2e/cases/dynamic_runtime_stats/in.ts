@@ -11,7 +11,11 @@ const receiver: any = {};
 for (let i = 0; i < 2; i++) {
     console.log("reflect:", Reflect.get(obj, key, receiver));
 }
+for (let i = 0; i < 2; i++) {
+    obj.cached = i;
+}
 obj.y = 2;
 console.log("has:", "y" in obj);
 delete obj.y;
 console.log("deleted:", "y" in obj);
+console.log("cached:", obj.cached);

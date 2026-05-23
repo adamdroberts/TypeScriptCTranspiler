@@ -9162,12 +9162,14 @@ class Emitter {
                 : `tsc_str_from_lit("${escapeCString(literalKey!)}", ${utf8ByteLen(literalKey!)})`;
             const cur = this.freshTemp("_dynupd");
             const next = this.freshTemp("_dynupd_next");
-            const existing = indexUpdate
-                ? `tsc_value_get_index(${obj}, ${keyC})`
-                : `tsc_value_get_prop(${obj}, ${keyC})`;
-            const set = indexUpdate
-                ? `tsc_value_set_index(${obj}, ${keyC}, ${next})`
-                : `tsc_value_set_prop(${obj}, ${keyC}, ${next})`;
+            if (!indexUpdate) {
+                const cache = this.freshTemp("_prop_cache");
+                const existing = `tsc_value_get_prop_cached(${obj}, ${keyC}, &${cache})`;
+                const set = `tsc_value_set_prop_cached(${obj}, ${keyC}, ${next}, &${cache})`;
+                return `({ static tsc_prop_cache_t ${cache}; tsc_value_t ${cur} = tsc_value_pos(${existing}); tsc_value_t ${next} = ${fn}(${cur}, tsc_value_num(1.0)); ${set}; ${prefix ? next : cur}; })`;
+            }
+            const existing = `tsc_value_get_index(${obj}, ${keyC})`;
+            const set = `tsc_value_set_index(${obj}, ${keyC}, ${next})`;
             return `({ tsc_value_t ${cur} = tsc_value_pos(${existing}); tsc_value_t ${next} = ${fn}(${cur}, tsc_value_num(1.0)); ${set}; ${prefix ? next : cur}; })`;
         });
     }
@@ -10312,12 +10314,14 @@ class Emitter {
                 ? values[1]!
                 : `tsc_str_from_lit("${escapeCString(literalKey!)}", ${utf8ByteLen(literalKey!)})`;
             const out = this.freshTemp("_dynassign");
+            const cache = !indexAssignment ? this.freshTemp("_prop_cache") : null;
             const existing = indexAssignment
                 ? `tsc_value_get_index(${obj}, ${keyC})`
-                : `tsc_value_get_prop(${obj}, ${keyC})`;
+                : `tsc_value_get_prop_cached(${obj}, ${keyC}, &${cache})`;
             const set = (value: string) => indexAssignment
                 ? `tsc_value_set_index(${obj}, ${keyC}, ${value})`
-                : `tsc_value_set_prop(${obj}, ${keyC}, ${value})`;
+                : `tsc_value_set_prop_cached(${obj}, ${keyC}, ${value}, &${cache})`;
+            const prefix = cache ? `static tsc_prop_cache_t ${cache}; ` : "";
             if (logicalOp) {
                 const rhsValue = this.coerce(rhs, T_VALUE, bin.right);
                 const cond =
@@ -10326,7 +10330,7 @@ class Emitter {
                         : op === ts.SyntaxKind.BarBarEqualsToken
                             ? `!tsc_value_is_truthy(${out})`
                             : `tsc_value_is_nullish(${out})`;
-                return `({ tsc_value_t ${out} = ${existing}; if (${cond}) { ${out} = ${rhsValue}; ${set(out)}; } ${out}; })`;
+                return `({ ${prefix}tsc_value_t ${out} = ${existing}; if (${cond}) { ${out} = ${rhsValue}; ${set(out)}; } ${out}; })`;
             }
             const value = values[keyExpr ? 2 : 1]!;
             if (indexAssignment) {
@@ -10336,9 +10340,9 @@ class Emitter {
                 return `({ tsc_value_t ${out} = ${compoundFn}(${existing}, ${value}); ${set(out)}; ${out}; })`;
             }
             if (op === ts.SyntaxKind.EqualsToken) {
-                return `({ tsc_value_t ${out} = ${value}; tsc_value_set_prop(${obj}, ${keyC}, ${out}); ${out}; })`;
+                return `({ ${prefix}tsc_value_t ${out} = ${value}; ${set(out)}; ${out}; })`;
             }
-            return `({ tsc_value_t ${out} = ${compoundFn}(${existing}, ${value}); ${set(out)}; ${out}; })`;
+            return `({ ${prefix}tsc_value_t ${out} = ${compoundFn}(${existing}, ${value}); ${set(out)}; ${out}; })`;
         });
     }
 

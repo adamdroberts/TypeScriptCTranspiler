@@ -665,6 +665,40 @@ bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
     return false;
 }
 
+bool tsc_value_set_prop_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_prop_cache_t* cache) {
+    if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) {
+        return tsc_value_set_prop(v, key, value);
+    }
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_SET_PROP);
+    tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+    if (!o || o->is_proxy || !cache) {
+        tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_MISS);
+        return tsc_object_set(o, key, value);
+    }
+    if (
+        cache->object == o &&
+        cache->shape_version == o->shape_version &&
+        cache->index < o->len &&
+        tsc_str_eq(o->props[cache->index].key, key)
+    ) {
+        tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_HIT);
+        tsc_object_prop_t* prop = &o->props[cache->index];
+        if (prop->accessor) return prop->setter ? prop->setter(prop->setter_env, v, value) : false;
+        if (!prop->writable) return false;
+        prop->value = value;
+        return true;
+    }
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_MISS);
+    bool ok = tsc_object_set(o, key, value);
+    ssize_t idx = object_find(o, key);
+    if (idx >= 0) {
+        cache->object = o;
+        cache->shape_version = o->shape_version;
+        cache->index = (size_t)idx;
+    }
+    return ok;
+}
+
 bool tsc_value_set_prop_receiver(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver) {
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_SET_PROP_RECEIVER);
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
