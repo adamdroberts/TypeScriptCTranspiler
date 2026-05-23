@@ -620,7 +620,7 @@ class Emitter {
             this.isSideEffectFreeTopLevelConstInitializer(name.expression);
     }
 
-    private classHeritageHasNoDefinitionSideEffects(cd: ts.ClassDeclaration): boolean {
+    private classHeritageHasNoDefinitionSideEffects(cd: ts.ClassLikeDeclaration): boolean {
         if (!cd.heritageClauses?.length) return true;
         for (const clause of cd.heritageClauses) {
             if (clause.token !== ts.SyntaxKind.ExtendsKeyword) return false;
@@ -650,6 +650,21 @@ class Emitter {
 
     private shouldEmitClassDeclaration(cd: ts.ClassDeclaration): boolean {
         return !this.isPrunableTopLevelClass(cd) || this.referencedTopLevelClasses.has(cd);
+    }
+
+    private classExpressionHasNoDefinitionSideEffects(expr: ts.ClassExpression): boolean {
+        if (!this.classHeritageHasNoDefinitionSideEffects(expr)) return false;
+        if (this.classHasDecorators(expr)) return false;
+        for (const member of expr.members) {
+            if (ts.isClassStaticBlockDeclaration(member)) return false;
+            if (member.name && !this.classMemberNameHasNoDefinitionSideEffects(member.name)) {
+                return false;
+            }
+            if (isStatic(member) && !this.staticClassMemberHasNoDefinitionSideEffects(member)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private isPrunableLocalClass(cd: ts.ClassDeclaration): boolean {
@@ -734,6 +749,9 @@ class Emitter {
         }
         if (ts.isArrowFunction(expr) || ts.isFunctionExpression(expr)) {
             return true;
+        }
+        if (ts.isClassExpression(expr)) {
+            return this.classExpressionHasNoDefinitionSideEffects(expr);
         }
         if (ts.isIdentifier(expr)) {
             return this.isSideEffectFreeConstIdentifier(expr, seenConsts);
@@ -6051,7 +6069,7 @@ class Emitter {
         }
     }
 
-    private classHasDecorators(cd: ts.ClassDeclaration): boolean {
+    private classHasDecorators(cd: ts.ClassLikeDeclaration): boolean {
         if (ts.canHaveDecorators(cd) && (ts.getDecorators(cd) ?? []).length > 0) {
             return true;
         }

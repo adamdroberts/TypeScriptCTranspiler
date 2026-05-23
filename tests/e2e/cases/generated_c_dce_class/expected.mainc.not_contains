@@ -6,6 +6,8 @@ DeadLocalBox_read(
 DeadBase_t
 DeadDerived_t
 DeadDerived_extra(
+DeadClassExpression
+DeadLocalClassExpression
 dead_method_name
 DeadComputedBox_t
 DeadComputedBox_read(

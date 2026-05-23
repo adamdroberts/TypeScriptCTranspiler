@@ -17,6 +17,13 @@ class UsedBox {
                 return this.value;
             }
         }
+        const DeadLocalClassExpression = class {
+            value = 2;
+
+            read(): number {
+                return this.value;
+            }
+        };
 
         return this.value + 2;
     }
@@ -53,6 +60,14 @@ class DeadDerived extends DeadBase {
 }
 
 const dead_method_name = "read";
+
+const DeadClassExpression = class {
+    value = 1;
+
+    read(): number {
+        return this.value;
+    }
+};
 
 class DeadComputedBox {
     [dead_method_name](): number {
