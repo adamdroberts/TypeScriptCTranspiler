@@ -27,6 +27,9 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Fixed
 - The e2e harness now treats any directory with `in.ts` as a real case and fails discovery when it lacks `expected.stdout`, `expected.exitcode`, or `compile.emit_c_only`, so malformed fixtures cannot be silently skipped.
+- Event and EventTarget option objects now treat explicitly `undefined` supported properties as defaults. Test: `event_target_undefined_options`.
+- `process.stdout.write(...)` and `process.stderr.write(...)` now treat explicitly `undefined` optional encoding/callback slots as defaults. Test: `process_stdio_write_undefined_options`.
+- `dns.lookup(...)` and `dns.promises.lookup(...)` option objects now treat explicitly `undefined` supported properties as defaults. Test: `dns_lookup_option_property_undefined`.
 - Supported `child_process` option objects now treat explicitly `undefined` property values as defaults across callback, sync, and `spawnSync` subsets. Test: `child_process_option_property_undefined`.
 - Supported fs option objects now treat explicitly `undefined` property values as defaults for sync and immediate `fs.promises` calls. Test: `fs_option_property_undefined`.
 - `crypto.randomUUID(...)` now accepts a bounded `{ disableEntropyCache }` options object plus ignored extra arguments for global, namespace, and named import forms. Test: `crypto_random_uuid`.
