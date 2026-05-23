@@ -108,8 +108,9 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - **Static initialization blocks** — emitted in member order with static field initializers during module initialization. Test: `class_static_blocks`
 - **Static methods** — called as `ClassName_method(args)`, including computed names. Tests: `inheritance`, `class_computed_members`
 - Standard class decorators on named classes are evaluated during module initialization. Direct decorator functions and decorator-factory closure results receive a dynamic context object with `kind: "class"` and `name`; class replacement, metadata, `addInitializer`, and member decorators remain deferred. Tests: `class_decorator_basic`, `class_decorator_factory`
-- Standard method decorators on named instance and static methods are evaluated during module initialization. Direct decorator functions receive a dynamic context object with `kind`, `name`, `static`, and `private`; method replacement, metadata, `addInitializer`, accessor decorators, and computed non-literal decorator names remain deferred. Test: `method_decorator_basic`
-- Standard field decorators on named instance and static fields are evaluated during module initialization. Direct decorator functions receive a dynamic context object with `kind`, `name`, `static`, and `private`; field replacement, metadata, `addInitializer`, accessor decorators, and computed non-literal decorator names remain deferred. Test: `field_decorator_basic`
+- Standard method decorators on named instance and static methods are evaluated during module initialization. Direct decorator functions receive a dynamic context object with `kind`, `name`, `static`, and `private`; method replacement, metadata, `addInitializer`, and computed non-literal decorator names remain deferred. Test: `method_decorator_basic`
+- Standard field decorators on named instance and static fields are evaluated during module initialization. Direct decorator functions receive a dynamic context object with `kind`, `name`, `static`, and `private`; field replacement, metadata, `addInitializer`, and computed non-literal decorator names remain deferred. Test: `field_decorator_basic`
+- Standard getter and setter decorators on named instance and static accessors are evaluated during module initialization. Direct decorator functions receive a dynamic context object with `kind`, `name`, `static`, and `private`; accessor replacement, accessor invocation, metadata, `addInitializer`, and computed non-literal decorator names remain deferred. Test: `accessor_decorator_basic`
 - Inherited method dispatch — `d.describe()` on `Dog extends Animal` resolves to `Animal_describe((Animal_t*)d)`. Test: `inheritance`
 - `abstract` classes, access modifiers, and `readonly` fields are accepted as TS-only modifiers. Test: `class_modifiers`
 - `interface` declarations → C struct types (no runtime overhead); `extends` emits inherited fields in base-first order for field access and typed Object/Reflect field-list helpers. Tests: `interfaces`, `interface_inheritance`
@@ -589,6 +590,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `buffer_uint8_io` | Buffer readUInt8/writeUInt8 byte accessors |
 | `buffer_uint_multi_io` | Buffer unsigned 16/32-bit little/big-endian read/write methods |
 | `buffer_write` | Buffer.write UTF-8/hex string bytes with offset/length clipping |
+| `accessor_decorator_basic` | standard getter/setter decorators with dynamic accessor context |
 | `class_computed_members` | literal and const-literal computed class fields/methods |
 | `class_decorator_basic` | standard class decorators with dynamic class context |
 | `class_decorator_factory` | class decorator factory expressions returning closure decorators |
