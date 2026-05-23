@@ -239,6 +239,7 @@ e2e: comma_operator … OK
 e2e: promise_callback_adopt … OK
 e2e: promise_finally_adopt … OK
 e2e: promise_try … OK
+e2e: proxy_array_mutation_forward … OK
 e2e: proxy_array_object_helpers … OK
 e2e: proxy_array_is_array … OK
 e2e: proxy_array_to_string_tag … OK
@@ -270,7 +271,7 @@ e2e: url_parse … OK
 e2e: void_operator … OK
 e2e: wordcount … OK
 
-807 passed, 0 failed
+808 passed, 0 failed
 ```
 
 Non-zero exit if any case fails.
