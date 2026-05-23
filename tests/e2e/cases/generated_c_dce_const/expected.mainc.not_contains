@@ -84,6 +84,9 @@ unused_array_includes_call
 unused_array_keys_method_call
 unused_array_values_method_call
 unused_array_entries_method_call
+unused_array_concat_call
+unused_array_flat_call
+unused_array_to_sorted_call
 unused_array_to_reversed_call
 unused_array_value_of_call
 unused_error_constructor
@@ -117,6 +120,10 @@ dead_array_includes
 dead_array_keys_method
 dead_array_values_method
 dead_array_entries_method
+dead_array_concat
+dead_array_concat_tail
+dead_array_flat
+dead_array_to_sorted
 dead_array_to_reversed
 dead_error_constructor
 dead_type_error_constructor
@@ -253,6 +260,11 @@ top_level_dead_array_slice
 top_level_dead_array_at
 top_level_dead_array_includes
 top_level_dead_array_keys_method
+top_level_dead_array_concat
+top_level_dead_array_concat_tail
+top_level_dead_array_flat
+top_level_dead_array_flat_tail
+top_level_dead_array_to_sorted
 top_level_dead_array_to_reversed
 top_level_dead_error_constructor
 top_level_dead_range_error_constructor
@@ -347,6 +359,10 @@ local_dead_array_at
 local_dead_array_includes
 local_dead_array_values_method
 local_dead_array_entries_method
+local_dead_array_concat
+local_dead_array_concat_tail
+local_dead_array_flat
+local_dead_array_to_sorted
 local_dead_error_constructor
 local_dead_syntax_error_constructor
 local_dead_object_is

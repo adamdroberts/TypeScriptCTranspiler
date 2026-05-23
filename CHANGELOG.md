@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused pure `Array.prototype.concat(...)`, `flat(...)`, and default `toSorted()` calls on pure array operands as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes `Object.setPrototypeOf(...)` and `Reflect.setPrototypeOf(...)` over fresh object/array literal targets and pure object/null prototypes as side-effect-free when unused. Test: `generated_c_dce_const`.
 - Generated-C DCE now folds switches with statically-known discriminants and literal case labels when the selected clause exits without switch-break fallthrough. Test: `generated_c_dce_const`.
 - Generated-C DCE now folds static truthy/falsy literal conditions, including numeric and string literals wrapped in transparent TypeScript assertions. Test: `generated_c_dce_const`.

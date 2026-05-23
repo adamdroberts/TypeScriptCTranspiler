@@ -1314,6 +1314,12 @@ class Emitter {
             case "lastIndexOf":
             case "includes":
                 return searchArgs();
+            case "concat":
+                return allArgsPure();
+            case "flat":
+                return numberArgs(1);
+            case "toSorted":
+                return args.length === 0;
             case "keys":
             case "values":
             case "entries":
