@@ -15,6 +15,7 @@ unused_spread_object
 unused_spread_source_array
 unused_spread_source_object
 unused_from_entries_source
+unused_string_method_source
 unused_const_spread_array
 unused_const_spread_object
 unused_string_length
@@ -55,6 +56,11 @@ unused_number_parse_float
 unused_string_constructor_call
 unused_number_constructor_call
 unused_boolean_constructor_call
+unused_string_char_at_call
+unused_string_index_of_call
+unused_string_slice_call
+unused_string_case_call
+unused_const_string_trim_call
 dead_global_parse_int
 dead_global_parse_float
 dead_global_is_nan
@@ -63,6 +69,11 @@ dead_number_parse_int
 dead_number_parse_float
 dead_string_constructor
 dead_boolean_constructor
+dead_string_method_source
+dead_string_char_at
+dead_string_index_of
+dead_string_slice
+dead_string_case
 unused_object_is
 unused_math_abs_call
 unused_math_max_call
@@ -156,6 +167,11 @@ top_level_dead_number_parse_int
 top_level_dead_number_parse_float
 top_level_dead_string_constructor
 top_level_dead_boolean_constructor
+top_level_dead_string_char_at
+top_level_dead_string_includes
+top_level_dead_string_slice
+top_level_dead_string_case
+top_level_dead_string_trim
 top_level_dead_object_is
 top_level_dead_math_call
 top_level_dead_from_char_code
@@ -208,6 +224,11 @@ local_dead_number_parse_int
 local_dead_number_parse_float
 local_dead_string_constructor
 local_dead_boolean_constructor
+local_dead_string_char_at
+local_dead_string_starts_with
+local_dead_string_substring
+local_dead_string_case
+local_dead_string_trim
 local_dead_object_is
 local_dead_math_call
 local_dead_from_char_code

@@ -957,6 +957,9 @@ class Emitter {
         if (!ts.isPropertyAccessExpression(call.expression)) return false;
         const recv = call.expression.expression;
         const method = call.expression.name.text;
+        if (this.isSideEffectFreeStringMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
         if (
             ts.isIdentifier(recv) &&
             method === "isArray" &&
@@ -1150,6 +1153,93 @@ class Emitter {
             return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts);
         }
         return false;
+    }
+
+    private isSideEffectFreeStringMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!this.isSideEffectFreeStringOperand(recv, seenConsts)) return false;
+        const allArgsPure = (from = 0): boolean =>
+            Array.from(args).slice(from).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+        const numberArgs = (max: number): boolean =>
+            args.length <= max &&
+            Array.from(args).every((arg) =>
+                this.isSideEffectFreePrimitiveNumberCoercion(arg, seenConsts)
+            );
+        const stringThenNumberArgs = (): boolean =>
+            args.length >= 1 &&
+            args.length <= 2 &&
+            this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
+            (!args[1] || this.isSideEffectFreePrimitiveNumberCoercion(args[1], seenConsts));
+        switch (method) {
+            case "charAt":
+            case "charCodeAt":
+            case "at":
+            case "codePointAt":
+                return numberArgs(1) && allArgsPure(1);
+            case "slice":
+            case "substring":
+            case "substr":
+                return numberArgs(2) && allArgsPure(2);
+            case "includes":
+            case "indexOf":
+            case "lastIndexOf":
+            case "startsWith":
+            case "endsWith":
+                return stringThenNumberArgs() && allArgsPure(2);
+            case "localeCompare":
+                return args.length >= 1 &&
+                    this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
+                    allArgsPure(1);
+            case "concat":
+                return Array.from(args).every((arg) =>
+                    this.isSideEffectFreeStringCoercion(arg, seenConsts)
+                );
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+            case "toUpperCase":
+            case "toLowerCase":
+            case "trim":
+            case "trimLeft":
+            case "trimRight":
+            case "trimStart":
+            case "trimEnd":
+            case "isWellFormed":
+            case "toWellFormed":
+                return allArgsPure();
+            default:
+                return false;
+        }
+    }
+
+    private isSideEffectFreeStringOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
+            return true;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeStringOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeStringCoercion(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
+            return true;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeStringCoercion(init, seenConsts);
     }
 
     private isSideEffectFreeGlobalCall(

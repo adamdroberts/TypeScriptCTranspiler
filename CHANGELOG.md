@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes supported string literal and pure const string method calls such as `charAt(...)`, search/slice methods, case conversion, and trim methods as side-effect-free when their result is unused. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unshadowed callable `String(...)`, `Number(...)`, and `Boolean(...)` coercions with primitive-only inputs as side-effect-free when their result is unused. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unshadowed global `parseInt(...)`, `parseFloat(...)`, `isNaN(...)`, `isFinite(...)`, and `Number.parseInt(...)` / `Number.parseFloat(...)` calls with primitive-only coercions as side-effect-free when their result is unused. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unshadowed `Object.fromEntries(...)` calls over pure literal entry arrays as side-effect-free when their result is unused. Test: `generated_c_dce_const`.
