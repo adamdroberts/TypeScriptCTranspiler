@@ -20,7 +20,7 @@
 //   BUN=/path/to/bun NODE=/path/to/node bun ...           # override binaries
 
 import { spawnSync } from "node:child_process";
-import { closeSync, cpSync, existsSync, mkdtempSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, cpSync, existsSync, mkdtempSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ts from "typescript";
@@ -72,7 +72,9 @@ interface CaseResult {
     name: string;
     mode: Metric;
     compile_ms?: number;
+    c_binary_bytes?: number;
     bundle_ms?: number;
+    js_bundle_bytes?: number;
     samples: Sample[];
     notes: string[];
 }
@@ -397,7 +399,9 @@ for (const c of targets) {
     const jsBundle = join(BUILD_DIR, buildName + ".js");
     const notes: string[] = [];
     let compile_ms: number | undefined;
+    let c_binary_bytes: number | undefined;
     let bundle_ms: number | undefined;
+    let js_bundle_bytes: number | undefined;
 
     let cBinReady = existsSync(cBin) && !FORCE;
     if (!cBinReady) {
@@ -414,6 +418,7 @@ for (const c of targets) {
             notes.push("tsc2c compile failed: " + r.stderr.split("\n").slice(0, 3).join(" | "));
         }
     }
+    if (cBinReady) c_binary_bytes = statSync(cBin).size;
 
     let jsReady = existsSync(jsBundle) && !FORCE;
     if (!jsReady) {
@@ -428,6 +433,7 @@ for (const c of targets) {
             notes.push("bun build failed: " + r.stderr.split("\n").slice(0, 3).join(" | "));
         }
     }
+    if (jsReady) js_bundle_bytes = statSync(jsBundle).size;
 
     process.stderr.write(`[run    ] ${name} `);
     const samples: Sample[] = [];
@@ -455,7 +461,7 @@ for (const c of targets) {
         notes.push("checksum mismatch across backends: " + samples.map((s) => `${s.backend}=${s.checksum}`).join(", "));
     }
 
-    results.push({ name, mode: c.mode, compile_ms, bundle_ms, samples, notes });
+    results.push({ name, mode: c.mode, compile_ms, c_binary_bytes, bundle_ms, js_bundle_bytes, samples, notes });
 }
 
 const payload = {
@@ -484,6 +490,12 @@ function fmtOps(n: number | undefined, w: number): string {
     if (n >= 1000) return ((n / 1000).toFixed(1) + "k").padStart(w);
     return n.toFixed(0).padStart(w);
 }
+function fmtBytes(n: number | undefined, w: number): string {
+    if (n === undefined || !isFinite(n)) return "—".padStart(w);
+    if (n >= 1024 * 1024) return ((n / (1024 * 1024)).toFixed(2) + "MiB").padStart(w);
+    if (n >= 1024) return ((n / 1024).toFixed(1) + "KiB").padStart(w);
+    return (n.toFixed(0) + "B").padStart(w);
+}
 function pad(s: string, w: number): string { return s.padEnd(w); }
 
 const hasOps = results.some((r) => r.samples.some((s) => s.ops_per_sec !== undefined));
@@ -492,6 +504,7 @@ const cols: Array<{ label: string; w: number; kind: "label" | "num" | "ratio" | 
     { label: "tsc2c (ms)",  w: 12, kind: "num"   as const },
     { label: "bun (ms)",    w: 12, kind: "num"   as const },
     { label: "node (ms)",   w: 12, kind: "num"   as const },
+    { label: "bin size",    w: 12, kind: "num"   as const },
     ...(hasOps ? [
         { label: "tsc2c ops/s", w: 13, kind: "ops" as const },
         { label: "bun ops/s",   w: 13, kind: "ops" as const },
@@ -527,6 +540,7 @@ for (const r of results) {
         fmt(t?.bench_ms, 12),
         fmt(b?.bench_ms, 12),
         fmt(n?.bench_ms, 12),
+        fmtBytes(r.c_binary_bytes, 12),
     ];
     if (hasOps) {
         row.push(
@@ -550,6 +564,7 @@ function geomean(xs: number[]): number {
 console.log(cols.map((c) => "-".repeat(c.w)).join("  "));
 console.log([
     pad("geomean", cols[0].w),
+    "".padStart(12),
     "".padStart(12),
     "".padStart(12),
     "".padStart(12),

@@ -163,7 +163,7 @@ This is the next item that most directly expands what programs can be written ag
   - Inline-caching stats and diagnostics
   - Basic escape analysis to stack-allocate objects that don't outlive their frame
   - Dead-code elimination on the generated C
-  - Further binary-size optimization and CI matrix (Linux ✓, macOS, Windows later)
+  - Benchmark output now records `tsc2c` binary size together with timing/ops data; remaining work is thresholding/regression gates, further binary-size optimization, and CI matrix expansion (Linux ✓, macOS, Windows later)
 
 ---
 

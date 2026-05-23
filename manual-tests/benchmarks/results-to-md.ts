@@ -27,6 +27,7 @@ interface Sample {
 
 interface CaseResult {
     name: string;
+    c_binary_bytes?: number;
     samples: Sample[];
 }
 
@@ -52,6 +53,13 @@ function fmtMs(value: number | undefined): string {
 function fmtRatio(value: number | undefined): string {
     if (value === undefined || !Number.isFinite(value)) return "-";
     return value.toFixed(2) + "x";
+}
+
+function fmtBytes(value: number | undefined): string {
+    if (value === undefined || !Number.isFinite(value)) return "-";
+    if (value >= 1024 * 1024) return (value / (1024 * 1024)).toFixed(2) + "MiB";
+    if (value >= 1024) return (value / 1024).toFixed(1) + "KiB";
+    return value.toFixed(0) + "B";
 }
 
 function ratio(reference: Sample | undefined, compared: Sample | undefined): number | undefined {
@@ -115,6 +123,7 @@ lines.push(`    <col style="min-width: ${benchColMin};">`);
 lines.push("    <col style=\"width: 7rem;\">");
 lines.push("    <col style=\"width: 7rem;\">");
 lines.push("    <col style=\"width: 7rem;\">");
+lines.push("    <col style=\"width: 7rem;\">");
 lines.push("    <col style=\"width: 6rem;\">");
 lines.push("    <col style=\"width: 6rem;\">");
 lines.push("  </colgroup>");
@@ -124,6 +133,7 @@ lines.push(`      <th align="left" style="${firstColStyle}" nowrap>Benchmark</th
 lines.push("      <th align=\"right\" style=\"white-space: nowrap;\" nowrap>tsc2c ms</th>");
 lines.push("      <th align=\"right\" style=\"white-space: nowrap;\" nowrap>bun ms</th>");
 lines.push("      <th align=\"right\" style=\"white-space: nowrap;\" nowrap>node ms</th>");
+lines.push("      <th align=\"right\" style=\"white-space: nowrap;\" nowrap>bin size</th>");
 lines.push("      <th align=\"right\" style=\"white-space: nowrap;\" nowrap>vs bun</th>");
 lines.push("      <th align=\"right\" style=\"white-space: nowrap;\" nowrap>vs node</th>");
 lines.push("    </tr>");
@@ -146,6 +156,7 @@ for (const result of results) {
     lines.push(td(fmtMs(tsc2c?.bench_ms), "right"));
     lines.push(td(fmtMs(bun?.bench_ms), "right"));
     lines.push(td(fmtMs(node?.bench_ms), "right"));
+    lines.push(td(fmtBytes(result.c_binary_bytes), "right"));
     lines.push(td(fmtRatio(vsBun), "right"));
     lines.push(td(fmtRatio(vsNode), "right"));
     lines.push("    </tr>");
@@ -153,6 +164,7 @@ for (const result of results) {
 
 lines.push("    <tr>");
 lines.push(td("<strong>geomean</strong>", "left", firstColStyle));
+lines.push(td(""));
 lines.push(td(""));
 lines.push(td(""));
 lines.push(td(""));
