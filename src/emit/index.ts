@@ -474,7 +474,7 @@ class Emitter {
         if (!ts.isIdentifier(decl.name)) return false;
         if (!decl.initializer) return false;
         if (!ts.isVariableStatement(decl.parent.parent)) return false;
-        if (decl.parent.parent.parent !== decl.getSourceFile()) return false;
+        if (!this.isTopLevelValueDeclaration(decl)) return false;
         if ((decl.parent.flags & ts.NodeFlags.Const) === 0) return false;
         if (this.isPrunableTopLevelLiftedArrow(decl)) return false;
         const modifiers = ts.canHaveModifiers(decl.parent.parent)

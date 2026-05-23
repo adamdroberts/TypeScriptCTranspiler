@@ -8,4 +8,9 @@ const unused_math = (1 + 2) * 3;
 const unused_template = `dead-${1 + 2}`;
 const unused_conditional = true ? "dead" : "live";
 
-console.log(used_count + 3);
+namespace DceNamespace {
+    const unused_namespace_value = { label: "dead", count: 4 };
+    export const kept = 7;
+}
+
+console.log(used_count + 3, DceNamespace.kept);
