@@ -6,12 +6,13 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Changed
 - The e2e harness now materializes its small `node_modules` package fixtures before case discovery, so normal dependency installs no longer remove the ignored package-source fixtures needed by Phase 14 tests.
-- Documentation drift sync: top-level `README.md` and `llms.txt` now reflect the current 806-passing test suite, ~43,100 LOC inventory, and full phase status including the implemented Proxy/Reflect surface, native-addon bridge path, AOT runtime-code compilation, dynamic-require manifests, and current Phase 14/decorator polish remaining work. `llms-full.txt` was regenerated from the updated source pages.
+- Documentation drift sync: top-level `README.md` and `llms.txt` now reflect the current 807-passing test suite, ~43,100 LOC inventory, and full phase status including the implemented Proxy/Reflect surface, native-addon bridge path, AOT runtime-code compilation, dynamic-require manifests, and current Phase 14/decorator polish remaining work. `llms-full.txt` was regenerated from the updated source pages.
 - The benchmark harness can now run the manual suite, generated operation-loop benchmarks for stdout-producing e2e cases via `--full` / `BENCH_SOURCE=e2e`, or both, records ops/sec in JSON/table output, and writes selectable JSON result files.
 - Runtime and emitter hot paths for classes, typed object literals, string/number concatenation, JSON stringification, Map/Set, regex matching, arrays, and no-GC allocation were optimized for the benchmark suite.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Fixed
+- Trapless array Proxy values now forward `Object.keys`, `Object.values`, `Object.entries`, `Reflect.ownKeys`, descriptor lookup, `Object.hasOwn`, `in`, and `propertyIsEnumerable` object-helper operations to their array targets. Test: `proxy_array_object_helpers`.
 - `Object.prototype.toString.call(...)` now reports array Proxy chains as `[object Array]` and rejects revoked array proxy chains instead of tagging them as ordinary objects. Test: `proxy_array_to_string_tag`.
 - `new Proxy(array, handler)` and `Proxy.revocable(array, handler)` now accept array targets, `Array.isArray(...)` follows direct and nested array proxy chains, dynamic array-proxy `.length` reads preserve the target length, and revoked array proxies throw through `Array.isArray(...)`. Test: `proxy_array_is_array`.
 - `Object.prototype.toString.call(...)` now reports callable Proxy chains as `[object Function]` and rejects revoked callable proxy chains instead of tagging them as ordinary objects. Test: `proxy_callable_to_string_tag`.
