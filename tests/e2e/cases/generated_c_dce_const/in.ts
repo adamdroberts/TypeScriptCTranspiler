@@ -21,6 +21,8 @@ function usedLocal(value: number): number {
     let unused_local_empty: string;
     const kept_local = value + 3;
     return kept_local;
+    const unreachable_local = "dead";
+    console.log(unreachable_local);
 }
 
 console.log(usedLocal(used_count), DceNamespace.kept);

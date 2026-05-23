@@ -5530,7 +5530,7 @@ class Emitter {
             this.currentBaseClass = baseName;
             this.returnStack.push(T_VOID);
             try {
-                for (const s of ctor.body.statements) this.emitStmt(this.defs, s);
+                this.emitStmtList(this.defs, ctor.body.statements);
             } finally {
                 this.returnStack.pop();
                 this.currentClass = null;
@@ -5589,7 +5589,7 @@ class Emitter {
                 this.returnStack.push(mappedRet);
                 if (isAsync) this.asyncFunctionStack.push({ promiseType: mappedRet });
                 try {
-                    for (const s of m.body.statements) this.emitStmt(this.defs, s);
+                    this.emitStmtList(this.defs, m.body.statements);
                     if (isAsync) this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
                 } finally {
                     if (isAsync) this.asyncFunctionStack.pop();
@@ -5611,7 +5611,7 @@ class Emitter {
                 if (!isStatic(m)) this.currentClass = name;
                 this.returnStack.push(ret);
                 try {
-                    for (const s of m.body.statements) this.emitStmt(this.defs, s);
+                    this.emitStmtList(this.defs, m.body.statements);
                 } finally {
                     this.returnStack.pop();
                     this.currentClass = null;
@@ -5630,7 +5630,7 @@ class Emitter {
                 if (!isStatic(m)) this.currentClass = name;
                 this.returnStack.push(T_VOID);
                 try {
-                    for (const s of m.body.statements) this.emitStmt(this.defs, s);
+                    this.emitStmtList(this.defs, m.body.statements);
                 } finally {
                     this.returnStack.pop();
                     this.currentClass = null;
@@ -6754,9 +6754,7 @@ class Emitter {
         this.emitCapturedParameterCells(this.defs, fd.parameters, capturedCells);
         try {
             if (!fd.body) unsupported(fd, "function without body");
-            for (const s of fd.body.statements) {
-                this.emitStmt(this.defs, s);
-            }
+            this.emitStmtList(this.defs, fd.body.statements);
         } finally {
             if (tailCtx) this.tailFunctionStack.pop();
             if (thisType) this.functionThisStack.pop();
@@ -6785,9 +6783,7 @@ class Emitter {
         this.emitCapturedParameterCells(this.defs, fd.parameters, capturedCells);
         try {
             if (!fd.body) unsupported(fd, "function without body");
-            for (const s of fd.body.statements) {
-                this.emitStmt(this.defs, s);
-            }
+            this.emitStmtList(this.defs, fd.body.statements);
             this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
         } finally {
             if (thisType) this.functionThisStack.pop();
@@ -6833,9 +6829,7 @@ class Emitter {
         this.emitCapturedParameterCells(this.defs, fd.parameters, capturedCells);
         try {
             if (!fd.body) unsupported(fd, "function without body");
-            for (const s of fd.body.statements) {
-                this.emitStmt(this.defs, s);
-            }
+            this.emitStmtList(this.defs, fd.body.statements);
             this.defs.line(`return ${arrayVar};`);
         } finally {
             if (thisType) this.functionThisStack.pop();
@@ -8525,8 +8519,25 @@ class Emitter {
 
     private emitBlock(buf: CBuf, b: ts.Block): void {
         buf.open("");
-        for (const s of b.statements) this.emitStmt(buf, s);
+        this.emitStmtList(buf, b.statements);
         buf.close();
+    }
+
+    private emitStmtList(
+        buf: CBuf,
+        statements: ts.NodeArray<ts.Statement> | readonly ts.Statement[],
+    ): void {
+        for (const stmt of statements) {
+            this.emitStmt(buf, stmt);
+            if (this.statementAlwaysExits(stmt)) break;
+        }
+    }
+
+    private statementAlwaysExits(stmt: ts.Statement): boolean {
+        return ts.isReturnStatement(stmt) ||
+            ts.isThrowStatement(stmt) ||
+            stmt.kind === ts.SyntaxKind.BreakStatement ||
+            stmt.kind === ts.SyntaxKind.ContinueStatement;
     }
 
     private emitReturn(buf: CBuf, r: ts.ReturnStatement): void {

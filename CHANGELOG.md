@@ -8,6 +8,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Generated-C DCE now also omits provably unreferenced non-exported source-file or namespace-level side-effect-free `const` primitive/array/object literals and pure literal expressions. Test: `generated_c_dce_const`.
 - Generated-C DCE now also omits provably unreferenced non-exported top-level `let` declarations when they have no side-effectful initializer. Test: `generated_c_dce_const`.
 - Generated-C DCE now also omits provably unreferenced local `let`/`const` declarations when they have no side-effectful initializer. Test: `generated_c_dce_const`.
+- Generated-C DCE now also omits straight-line unreachable statements after unconditional `return`, `throw`, `break`, or `continue` exits in supported statement lists. Test: `generated_c_dce_const`.
 - Generated-C DCE now also omits provably unreferenced non-exported top-level classes when class definition cannot have side effects. Test: `generated_c_dce_class`.
 - Materialized synchronous generators now expose explicit `return value` results once through the first completed `.next()`. Test: `generator_return_value`.
 - Generated-C DCE now also omits provably unreferenced non-exported lifted top-level arrow/function-expression constants. Test: `generated_c_dce_lifted_arrow`.
