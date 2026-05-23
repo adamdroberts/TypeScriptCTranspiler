@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Fixed
+- `fs.chownSync(...)`, `fs.lchownSync(...)`, and their immediate `fs.promises` counterparts now evaluate ignored extra arguments after uid/gid. Test: `fs_chown_ignored_arguments`.
 - `fs.promises.stat(...)`, `fs.promises.lstat(...)`, and `fs.promises.access(...)` now treat explicit `undefined` options as defaults and evaluate ignored extra arguments. Test: `fs_promises_stat_access_ignored_arguments`.
 - `fs` mutation calls including `symlink`, `link`, `truncate`, `utimes`, `lutimes`, `chmod`, `mkdir`, `rm`, `rmdir`, `unlink`, `cp`, `copyFile`, and `rename` now evaluate Node-compatible ignored trailing arguments for sync and immediate `fs.promises` forms. Test: `fs_mutation_ignored_arguments`.
 - `fs.writeFileSync(...)`, `fs.appendFileSync(...)`, and their immediate `fs.promises` counterparts now treat explicit `undefined` options as defaults and evaluate ignored extra arguments. Test: `fs_write_append_ignored_arguments`.
