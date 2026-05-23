@@ -103,6 +103,10 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
 }
 
 tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args) {
+    return tsc_value_construct_with_new_target(target, args, target);
+}
+
+tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t args, tsc_value_t new_target) {
     if (!value_is_box(args) || value_tag(args) != TSC_VALUE_TAG_ARRAY) {
         tsc_panic("Reflect.construct argumentsList must be an array");
     }
@@ -130,7 +134,7 @@ tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args) {
             if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'construct' on a proxy that has been revoked"));
             tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("construct", 9));
             if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
-                return tsc_value_construct(o->proxy_target, args);
+                return tsc_value_construct_with_new_target(o->proxy_target, args, new_target);
             }
             if (!value_is_callable_function(trap)) {
                 tsc_throw_str(tsc_str_from_cstr("Proxy construct trap must be callable"));
@@ -138,7 +142,7 @@ tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args) {
             tsc_array_t* trap_args = tsc_array_new(sizeof(tsc_value_t), 4);
             tsc_array_push_value(trap_args, o->proxy_target);
             tsc_array_push_value(trap_args, args);
-            tsc_array_push_value(trap_args, target);
+            tsc_array_push_value(trap_args, new_target);
             tsc_value_t result = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(trap_args));
             if (
                 !value_is_box(result) ||

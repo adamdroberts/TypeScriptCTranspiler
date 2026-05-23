@@ -288,7 +288,7 @@ declare var Object: ObjectConstructor;
 
 interface ReflectConstructor {
     apply(target: any, thisArgument: any, argumentsList: any[]): any;
-    construct(target: any, argumentsList: any[]): any;
+    construct(target: any, argumentsList: any[], newTarget?: any): any;
     defineProperty(target: any, propertyKey: string, attributes: any): boolean;
     deleteProperty(target: any, propertyKey: string): boolean;
     get(target: any, propertyKey: string, receiver?: any): any;

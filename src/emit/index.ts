@@ -23361,7 +23361,7 @@ class Emitter {
 
     private emitReflectConstruct(call: ts.CallExpression): EmitResult {
         const args = call.arguments;
-        if (args.length !== 2) unsupported(call, "Reflect.construct expects target and argumentsList");
+        if (args.length < 2 || args.length > 3) unsupported(call, "Reflect.construct expects target and argumentsList");
         if (!(ts.isIdentifier(args[0]!) && this.findClassDecl(args[0]!.text))) {
             const target = this.emitExpr(args[0]!);
             if (target.ty.kind === "value") {
@@ -23369,12 +23369,18 @@ class Emitter {
                 if (list.ty.kind !== "array" && list.ty.kind !== "value") {
                     unsupported(args[1]!, "Reflect.construct argumentsList must be an array literal, typed array, or dynamic array");
                 }
-                return this.emitSequencedCall("tsc_value_construct", T_VALUE, [
+                const specs: SequencedCallArg[] = [
                     { value: target, target: T_VALUE, node: args[0]! },
                     { value: list, target: T_VALUE, node: args[1]! },
-                ]);
+                ];
+                if (args[2]) {
+                    specs.push({ value: this.emitExpr(args[2]), target: T_VALUE, node: args[2] });
+                    return this.emitSequencedCall("tsc_value_construct_with_new_target", T_VALUE, specs);
+                }
+                return this.emitSequencedCall("tsc_value_construct", T_VALUE, specs);
             }
         }
+        if (args.length === 3) unsupported(args[2]!, "Reflect.construct newTarget is supported only for dynamic targets");
         if (!ts.isIdentifier(args[0]!)) {
             unsupported(args[0]!, "Reflect.construct target must be a class identifier");
         }

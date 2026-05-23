@@ -494,6 +494,7 @@ tsc_str_t* tsc_value_typeof(tsc_value_t v);
 tsc_str_t* tsc_value_json_stringify(tsc_value_t v);
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args);
 tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args);
+tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t args, tsc_value_t new_target);
 bool tsc_value_is_array(tsc_value_t v);
 bool tsc_value_is_nullish(tsc_value_t v);
 bool tsc_value_is_undefined(tsc_value_t v);
