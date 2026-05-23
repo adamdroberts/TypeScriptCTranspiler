@@ -1016,8 +1016,8 @@ interface FSConstants {
 }
 interface FS {
     readonly constants: FSConstants;
-    readFileSync(path: FSPathLike, options: FSReadFileBufferOptions): Buffer;
-    readFileSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReadFileOptions): string;
+    readFileSync(path: FSPathLike, options: FSReadFileBufferOptions, ...ignored: any[]): Buffer;
+    readFileSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReadFileOptions, ...ignored: any[]): string;
     writeFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions): void;
     appendFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSAppendFileOptions): void;
     existsSync(path: FSPathLike, ...ignored: any[]): boolean;
@@ -1053,8 +1053,8 @@ interface FS {
     promises: FSPromises;
 }
 interface FSPromises {
-    readFile(path: FSPathLike, options: FSReadFileBufferOptions): Promise<Buffer>;
-    readFile(path: FSPathLike, options?: FSFileEncodingOptions | FSReadFileOptions): Promise<string>;
+    readFile(path: FSPathLike, options: FSReadFileBufferOptions, ...ignored: any[]): Promise<Buffer>;
+    readFile(path: FSPathLike, options?: FSFileEncodingOptions | FSReadFileOptions, ...ignored: any[]): Promise<string>;
     writeFile(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions): Promise<void>;
     appendFile(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSAppendFileOptions): Promise<void>;
     readdir(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Promise<Buffer[]>;
@@ -1091,8 +1091,8 @@ declare const fs: FS;
 declare module "fs" {
     export const constants: FSConstants;
     export const promises: FSPromises;
-    export function readFileSync(path: FSPathLike, options: FSReadFileBufferOptions): Buffer;
-    export function readFileSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReadFileOptions): string;
+    export function readFileSync(path: FSPathLike, options: FSReadFileBufferOptions, ...ignored: any[]): Buffer;
+    export function readFileSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReadFileOptions, ...ignored: any[]): string;
     export function writeFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions): void;
     export function appendFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSAppendFileOptions): void;
     export function existsSync(path: FSPathLike, ...ignored: any[]): boolean;
@@ -1129,8 +1129,8 @@ declare module "fs" {
 declare module "node:fs" {
     export const constants: FSConstants;
     export const promises: FSPromises;
-    export function readFileSync(path: FSPathLike, options: FSReadFileBufferOptions): Buffer;
-    export function readFileSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReadFileOptions): string;
+    export function readFileSync(path: FSPathLike, options: FSReadFileBufferOptions, ...ignored: any[]): Buffer;
+    export function readFileSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReadFileOptions, ...ignored: any[]): string;
     export function writeFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions): void;
     export function appendFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSAppendFileOptions): void;
     export function existsSync(path: FSPathLike, ...ignored: any[]): boolean;

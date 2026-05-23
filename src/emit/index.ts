@@ -19700,11 +19700,12 @@ class Emitter {
         const args = call.arguments;
         switch (name) {
             case "readFileSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.readFileSync needs path and optional UTF-8/buffer encoding/flag options");
+                if (args.length < 1) unsupported(call, "fs.readFileSync needs path and optional UTF-8/buffer encoding/flag options");
                 const result = this.validateFsReadFileOptions(args[1], "fs.readFileSync");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(result === "buffer" ? T_BUFFER : T_STRING, [
                     this.fsPathSpec(p, args[0]!, "fs.readFileSync path"),
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => `${result === "buffer" ? "tsc_fs_read_file_buffer_sync" : "tsc_fs_read_file_sync"}(${path!})`);
             }
             case "writeFileSync": {
@@ -20402,11 +20403,12 @@ class Emitter {
         const settle = (successExpr: string) => this.emitImmediatePromiseTry(successExpr);
         switch (name) {
             case "readFile": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.readFile needs path and optional UTF-8/buffer/null encoding/flag options");
+                if (args.length < 1) unsupported(call, "fs.promises.readFile needs path and optional UTF-8/buffer/null encoding/flag options");
                 const result = this.validateFsReadFileOptions(args[1], "fs.promises.readFile");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.readFile path"),
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => {
                     const read = result === "buffer"
                         ? `tsc_promise_resolve_buffer(tsc_fs_read_file_buffer_sync(${path!}))`

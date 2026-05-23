@@ -1,0 +1,3 @@
+promise: read file ignored
+sync: read file ignored true read file ignored
+events: global|named|promise
