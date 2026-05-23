@@ -964,6 +964,19 @@ class Emitter {
         ) {
             return this.isSideEffectFreeTopLevelConstInitializer(call.arguments[0]!, seenConsts);
         }
+        if (
+            ts.isIdentifier(recv) &&
+            (
+                method === "isFinite" ||
+                method === "isInteger" ||
+                method === "isNaN" ||
+                method === "isSafeInteger"
+            ) &&
+            call.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Number")
+        ) {
+            return this.isSideEffectFreeTopLevelConstInitializer(call.arguments[0]!, seenConsts);
+        }
         return false;
     }
 
