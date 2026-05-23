@@ -15945,7 +15945,7 @@ class Emitter {
 
     private dnsLookupOptions(options: ts.Expression | undefined): { family: number; all: boolean; hints: number } {
         const out = { family: 0, all: false, hints: 0 };
-        if (!options) return out;
+        if (!options || this.isUndefinedExpression(options)) return out;
         while (
             ts.isParenthesizedExpression(options) ||
             ts.isAsExpression(options) ||
@@ -19835,23 +19835,25 @@ class Emitter {
                 });
             }
             case "symlinkSync": {
-                if (args.length < 2 || args.length > 3) unsupported(call, "fs.symlinkSync needs target, path, and optional type");
+                if (args.length < 2) unsupported(call, "fs.symlinkSync needs target, path, and optional type");
                 this.validateFsSymlinkType(args[2], "fs.symlinkSync");
                 const target = this.emitExpr(args[0]!);
                 const p = this.emitExpr(args[1]!);
-                return this.emitSequencedCall("tsc_fs_symlink_sync", T_VOID, [
+                return this.emitSequencedExpr(T_VOID, [
                     this.fsPathSpec(target, args[0]!, "fs.symlinkSync target"),
                     this.fsPathSpec(p, args[1]!, "fs.symlinkSync path"),
-                ]);
+                    ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
+                ], ([targetPath, linkPath]) => `tsc_fs_symlink_sync(${targetPath!}, ${linkPath!})`);
             }
             case "linkSync": {
-                if (args.length !== 2) unsupported(call, "fs.linkSync needs existing path and new path");
+                if (args.length < 2) unsupported(call, "fs.linkSync needs existing path and new path");
                 const existingPath = this.emitExpr(args[0]!);
                 const newPath = this.emitExpr(args[1]!);
-                return this.emitSequencedCall("tsc_fs_link_sync", T_VOID, [
+                return this.emitSequencedExpr(T_VOID, [
                     this.fsPathSpec(existingPath, args[0]!, "fs.linkSync existingPath"),
                     this.fsPathSpec(newPath, args[1]!, "fs.linkSync newPath"),
-                ]);
+                    ...this.ignoredArgumentSpecs(args, 2),
+                ], ([oldPath, newPathValue]) => `tsc_fs_link_sync(${oldPath!}, ${newPathValue!})`);
             }
             case "mkdtempSync": {
                 if (args.length < 1) unsupported(call, "fs.mkdtempSync needs prefix and optional UTF-8/buffer encoding options");
@@ -19866,20 +19868,25 @@ class Emitter {
                 });
             }
             case "truncateSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.truncateSync needs path and optional length");
+                if (args.length < 1) unsupported(call, "fs.truncateSync needs path and optional length");
                 const p = this.emitExpr(args[0]!);
-                const len = args[1] ? this.emitExpr(args[1]) : undefined;
+                const len = args[1] && !this.isUndefinedExpression(args[1]) ? this.emitExpr(args[1]) : undefined;
                 const specs: SequencedCallArg[] = [
                     this.fsPathSpec(p, args[0]!, "fs.truncateSync path"),
+                    {
+                        value: len ?? { c: "0.0", ty: T_NUMBER },
+                        target: T_NUMBER,
+                        node: args[1] ?? call,
+                    },
                 ];
-                if (len) specs.push({ value: len, target: T_NUMBER, node: args[1]! });
+                specs.push(...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1));
                 return this.emitSequencedExpr(T_VOID, specs, ([path, length]) =>
-                    `tsc_fs_truncate_sync(${path!}, ${length ?? "0"})`,
+                    `tsc_fs_truncate_sync(${path!}, ${length!})`,
                 );
             }
             case "utimesSync":
             case "lutimesSync": {
-                if (args.length !== 3) unsupported(call, `fs.${name} needs path, atime, and mtime`);
+                if (args.length < 3) unsupported(call, `fs.${name} needs path, atime, and mtime`);
                 const p = this.emitExpr(args[0]!);
                 const atime = this.emitFsTimeArg(args[1]!, `fs.${name} atime`);
                 const mtime = this.emitFsTimeArg(args[2]!, `fs.${name} mtime`);
@@ -19888,6 +19895,7 @@ class Emitter {
                     this.fsPathSpec(p, args[0]!, `fs.${name} path`),
                     atime,
                     mtime,
+                    ...this.ignoredArgumentSpecs(args, 3),
                 ], ([path, atimeValue, mtimeValue]) =>
                     `${fn}(${path!}, ${this.fsTimeArgC(atimeValue!, atime.value.ty)}, ${this.fsTimeArgC(mtimeValue!, mtime.value.ty)})`,
                 );
@@ -19915,47 +19923,52 @@ class Emitter {
                 ]);
             }
             case "chmodSync": {
-                if (args.length !== 2) unsupported(call, "fs.chmodSync needs path and numeric mode");
+                if (args.length < 2) unsupported(call, "fs.chmodSync needs path and numeric mode");
                 const p = this.emitExpr(args[0]!);
                 const mode = this.emitExpr(args[1]!);
-                return this.emitSequencedCall("tsc_fs_chmod_sync", T_VOID, [
+                return this.emitSequencedExpr(T_VOID, [
                     this.fsPathSpec(p, args[0]!, "fs.chmodSync path"),
                     { value: mode, target: T_NUMBER, node: args[1]! },
-                ]);
+                    ...this.ignoredArgumentSpecs(args, 2),
+                ], ([path, modeValue]) => `tsc_fs_chmod_sync(${path!}, ${modeValue!})`);
             }
             case "mkdirSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.mkdirSync needs path and optional options");
+                if (args.length < 1) unsupported(call, "fs.mkdirSync needs path and optional options");
                 const p = this.emitExpr(args[0]!);
                 const options = this.emitFsMkdirOptions(args[1], `fs.${name}`);
                 return this.emitSequencedExpr(T_VOID, [
                     this.fsPathSpec(p, args[0]!, `fs.${name} path`),
                     options.mode,
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path, mode]) => `tsc_fs_mkdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"}, ${mode!})`);
             }
             case "rmSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.rmSync needs path and optional options");
+                if (args.length < 1) unsupported(call, "fs.rmSync needs path and optional options");
                 const p = this.emitExpr(args[0]!);
                 const options = this.emitFsBooleanOptions(args[1], ["recursive", "force"], `fs.${name}`, ["maxRetries", "retryDelay"]);
                 return this.emitSequencedExpr(T_VOID, [
                     this.fsPathSpec(p, args[0]!, `fs.${name} path`),
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => `tsc_fs_rm_sync_opts(${path!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"})`);
             }
             case "unlinkSync":
             case "rmdirSync": {
-                if (args.length < 1 || args.length > (name === "rmdirSync" ? 2 : 1)) unsupported(call, `fs.${name} needs path${name === "rmdirSync" ? " and optional options" : ""}`);
+                if (args.length < 1) unsupported(call, `fs.${name} needs path${name === "rmdirSync" ? " and optional options" : ""}`);
                 const p = this.emitExpr(args[0]!);
                 if (name === "rmdirSync") {
                     const options = this.emitFsBooleanOptions(args[1], ["recursive"], `fs.${name}`, ["maxRetries", "retryDelay"]);
                     return this.emitSequencedExpr(T_VOID, [
                         this.fsPathSpec(p, args[0]!, `fs.${name} path`),
+                        ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                     ], ([path]) => `tsc_fs_rmdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"})`);
                 }
-                return this.emitSequencedCall("tsc_fs_unlink_sync", T_VOID, [
+                return this.emitSequencedExpr(T_VOID, [
                     this.fsPathSpec(p, args[0]!, `fs.${name} path`),
-                ]);
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ], ([path]) => `tsc_fs_unlink_sync(${path!})`);
             }
             case "cpSync": {
-                if (args.length < 2 || args.length > 3) unsupported(call, "fs.cpSync needs source, destination, and optional options");
+                if (args.length < 2) unsupported(call, "fs.cpSync needs source, destination, and optional options");
                 const options = this.emitFsCpOptions(args[2], "fs.cpSync");
                 const src = this.emitExpr(args[0]!);
                 const dest = this.emitExpr(args[1]!);
@@ -19963,6 +19976,7 @@ class Emitter {
                     this.fsPathSpec(src, args[0]!, "fs.cpSync source"),
                     this.fsPathSpec(dest, args[1]!, "fs.cpSync destination"),
                     options.mode,
+                    ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
                 ], ([srcPath, destPath, mode]) =>
                     `tsc_fs_cp_sync_opts(${srcPath!}, ${destPath!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}, ${mode!}, ${options.preserveTimestamps ? "true" : "false"})`,
                 );
@@ -19970,7 +19984,7 @@ class Emitter {
             case "copyFileSync":
             case "renameSync": {
                 const isCopy = name === "copyFileSync";
-                if ((!isCopy && args.length !== 2) || (isCopy && (args.length < 2 || args.length > 3))) {
+                if (args.length < 2) {
                     unsupported(call, `fs.${name} needs source and destination paths${isCopy ? " plus optional flags" : ""}`);
                 }
                 const a = this.emitExpr(args[0]!);
@@ -19981,13 +19995,17 @@ class Emitter {
                 ];
                 if (isCopy) {
                     specs.push({
-                        value: args[2] ? this.emitExpr(args[2]) : { c: "0.0", ty: T_NUMBER },
+                        value: args[2] && !this.isUndefinedExpression(args[2]) ? this.emitExpr(args[2]) : { c: "0.0", ty: T_NUMBER },
                         target: T_NUMBER,
                         node: args[2] ?? call,
                     });
-                    return this.emitSequencedCall("tsc_fs_copy_file_sync_mode", T_VOID, specs);
+                    specs.push(...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2));
+                    return this.emitSequencedExpr(T_VOID, specs, ([src, dest, flags]) =>
+                        `tsc_fs_copy_file_sync_mode(${src!}, ${dest!}, ${flags!})`,
+                    );
                 }
-                return this.emitSequencedCall("tsc_fs_rename_sync", T_VOID, specs);
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
+                return this.emitSequencedExpr(T_VOID, specs, ([src, dest]) => `tsc_fs_rename_sync(${src!}, ${dest!})`);
             }
         }
         unsupported(call, `fs.${name} (Phase 10 sync subset only)`);
@@ -20078,7 +20096,7 @@ class Emitter {
     ): Record<string, boolean> {
         const out: Record<string, boolean> = {};
         for (const key of allowed) out[key] = false;
-        if (!options) return out;
+        if (!options || this.isUndefinedExpression(options)) return out;
         if (!ts.isObjectLiteralExpression(options)) {
             unsupported(options, `${label} options must be an object literal in this subset`);
         }
@@ -20524,24 +20542,26 @@ class Emitter {
                 });
             }
             case "symlink": {
-                if (args.length < 2 || args.length > 3) unsupported(call, "fs.promises.symlink needs target, path, and optional type");
+                if (args.length < 2) unsupported(call, "fs.promises.symlink needs target, path, and optional type");
                 this.validateFsSymlinkType(args[2], "fs.promises.symlink");
                 const target = this.emitExpr(args[0]!);
                 const p = this.emitExpr(args[1]!);
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(target, args[0]!, "fs.promises.symlink target"),
                     this.fsPathSpec(p, args[1]!, "fs.promises.symlink path"),
+                    ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
                 ], ([targetPath, linkPath]) =>
                     settle(`({ tsc_fs_symlink_sync(${targetPath!}, ${linkPath!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "link": {
-                if (args.length !== 2) unsupported(call, "fs.promises.link needs existing path and new path");
+                if (args.length < 2) unsupported(call, "fs.promises.link needs existing path and new path");
                 const existingPath = this.emitExpr(args[0]!);
                 const newPath = this.emitExpr(args[1]!);
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(existingPath, args[0]!, "fs.promises.link existingPath"),
                     this.fsPathSpec(newPath, args[1]!, "fs.promises.link newPath"),
+                    ...this.ignoredArgumentSpecs(args, 2),
                 ], ([oldPath, newPathValue]) =>
                     settle(`({ tsc_fs_link_sync(${oldPath!}, ${newPathValue!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
@@ -20562,20 +20582,25 @@ class Emitter {
                 });
             }
             case "truncate": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.truncate needs path and optional length");
+                if (args.length < 1) unsupported(call, "fs.promises.truncate needs path and optional length");
                 const p = this.emitExpr(args[0]!);
-                const len = args[1] ? this.emitExpr(args[1]) : undefined;
+                const len = args[1] && !this.isUndefinedExpression(args[1]) ? this.emitExpr(args[1]) : undefined;
                 const specs: SequencedCallArg[] = [
                     this.fsPathSpec(p, args[0]!, "fs.promises.truncate path"),
+                    {
+                        value: len ?? { c: "0.0", ty: T_NUMBER },
+                        target: T_NUMBER,
+                        node: args[1] ?? call,
+                    },
                 ];
-                if (len) specs.push({ value: len, target: T_NUMBER, node: args[1]! });
+                specs.push(...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1));
                 return this.emitSequencedExpr(mapped, specs, ([path, length]) =>
-                    settle(`({ tsc_fs_truncate_sync(${path!}, ${length ?? "0"}); tsc_promise_resolve(tsc_value_undefined()); })`),
+                    settle(`({ tsc_fs_truncate_sync(${path!}, ${length!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "utimes":
             case "lutimes": {
-                if (args.length !== 3) unsupported(call, `fs.promises.${name} needs path, atime, and mtime`);
+                if (args.length < 3) unsupported(call, `fs.promises.${name} needs path, atime, and mtime`);
                 const p = this.emitExpr(args[0]!);
                 const atime = this.emitFsTimeArg(args[1]!, `fs.promises.${name} atime`);
                 const mtime = this.emitFsTimeArg(args[2]!, `fs.promises.${name} mtime`);
@@ -20584,6 +20609,7 @@ class Emitter {
                     this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
                     atime,
                     mtime,
+                    ...this.ignoredArgumentSpecs(args, 3),
                 ], ([path, atimeValue, mtimeValue]) =>
                     settle(`({ ${fn}(${path!}, ${this.fsTimeArgC(atimeValue!, atime.value.ty)}, ${this.fsTimeArgC(mtimeValue!, mtime.value.ty)}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
@@ -20615,12 +20641,13 @@ class Emitter {
                 );
             }
             case "chmod": {
-                if (args.length !== 2) unsupported(call, "fs.promises.chmod needs path and numeric mode");
+                if (args.length < 2) unsupported(call, "fs.promises.chmod needs path and numeric mode");
                 const p = this.emitExpr(args[0]!);
                 const mode = this.emitExpr(args[1]!);
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.chmod path"),
                     { value: mode, target: T_NUMBER, node: args[1]! },
+                    ...this.ignoredArgumentSpecs(args, 2),
                 ], ([path, modeValue]) =>
                     settle(`({ tsc_fs_chmod_sync(${path!}, ${modeValue!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
@@ -20639,34 +20666,37 @@ class Emitter {
                 );
             }
             case "mkdir": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.mkdir needs path and optional options");
+                if (args.length < 1) unsupported(call, "fs.promises.mkdir needs path and optional options");
                 const p = this.emitExpr(args[0]!);
                 const options = this.emitFsMkdirOptions(args[1], `fs.promises.${name}`);
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
                     options.mode,
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path, mode]) =>
                     settle(`({ tsc_fs_mkdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"}, ${mode!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "rm": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.rm needs path and optional options");
+                if (args.length < 1) unsupported(call, "fs.promises.rm needs path and optional options");
                 const p = this.emitExpr(args[0]!);
                 const options = this.emitFsBooleanOptions(args[1], ["recursive", "force"], `fs.promises.${name}`, ["maxRetries", "retryDelay"]);
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) =>
                     settle(`({ tsc_fs_rm_sync_opts(${path!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "unlink":
             case "rmdir": {
-                if (args.length < 1 || args.length > (name === "rmdir" ? 2 : 1)) unsupported(call, `fs.promises.${name} needs a path${name === "rmdir" ? " and optional options" : ""}`);
+                if (args.length < 1) unsupported(call, `fs.promises.${name} needs a path${name === "rmdir" ? " and optional options" : ""}`);
                 const p = this.emitExpr(args[0]!);
                 if (name === "rmdir") {
                     const options = this.emitFsBooleanOptions(args[1], ["recursive"], `fs.promises.${name}`, ["maxRetries", "retryDelay"]);
                     return this.emitSequencedExpr(mapped, [
                         this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
+                        ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                     ], ([path]) =>
                         settle(`({ tsc_fs_rmdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`),
                     );
@@ -20674,12 +20704,13 @@ class Emitter {
                 const fn = "tsc_fs_unlink_sync";
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
+                    ...this.ignoredArgumentSpecs(args, 1),
                 ], ([path]) =>
                     settle(`({ ${fn}(${path!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "cp": {
-                if (args.length < 2 || args.length > 3) unsupported(call, "fs.promises.cp needs source, destination, and optional options");
+                if (args.length < 2) unsupported(call, "fs.promises.cp needs source, destination, and optional options");
                 const options = this.emitFsCpOptions(args[2], "fs.promises.cp");
                 const src = this.emitExpr(args[0]!);
                 const dest = this.emitExpr(args[1]!);
@@ -20687,6 +20718,7 @@ class Emitter {
                     this.fsPathSpec(src, args[0]!, "fs.promises.cp source"),
                     this.fsPathSpec(dest, args[1]!, "fs.promises.cp destination"),
                     options.mode,
+                    ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
                 ], ([srcPath, destPath, mode]) =>
                     settle(`({ tsc_fs_cp_sync_opts(${srcPath!}, ${destPath!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}, ${mode!}, ${options.preserveTimestamps ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
@@ -20694,7 +20726,7 @@ class Emitter {
             case "copyFile":
             case "rename": {
                 const isCopy = name === "copyFile";
-                if ((!isCopy && args.length !== 2) || (isCopy && (args.length < 2 || args.length > 3))) {
+                if (args.length < 2) {
                     unsupported(call, `fs.promises.${name} needs source and destination paths${isCopy ? " plus optional flags" : ""}`);
                 }
                 const a = this.emitExpr(args[0]!);
@@ -20705,10 +20737,13 @@ class Emitter {
                 ];
                 if (isCopy) {
                     specs.push({
-                        value: args[2] ? this.emitExpr(args[2]) : { c: "0.0", ty: T_NUMBER },
+                        value: args[2] && !this.isUndefinedExpression(args[2]) ? this.emitExpr(args[2]) : { c: "0.0", ty: T_NUMBER },
                         target: T_NUMBER,
                         node: args[2] ?? call,
                     });
+                    specs.push(...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2));
+                } else {
+                    specs.push(...this.ignoredArgumentSpecs(args, 2));
                 }
                 return this.emitSequencedExpr(mapped, specs, ([src, dest, flags]) =>
                     settle(`({ ${isCopy ? `tsc_fs_copy_file_sync_mode(${src!}, ${dest!}, ${flags!})` : `tsc_fs_rename_sync(${src!}, ${dest!})`}; tsc_promise_resolve(tsc_value_undefined()); })`),

@@ -1,0 +1,3 @@
+sync: 0 true false false false
+promise: 0 true false false false
+events: mkdir|copy|rename|link|symlink|truncate|utimes|lutimes|chmod|cp|unlink|rmdir|rm|pmkdir|pcopy|prename|plink|psymlink|ptruncate|putimes|plutimes|pchmod|pcp|punlink|prmdir|prm
