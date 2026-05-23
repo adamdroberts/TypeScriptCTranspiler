@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Standard class decorator replacements now apply to fixed-arity spread constructor calls for ordinary and erased generic classes. Tests: `class_decorator_spread_replacement`, `generic_class_decorator_spread_replacement`.
 - Standard class decorator replacements now apply to erased generic class constructor calls, so `new Box<T>(...)` uses the AOT replacement path instead of bypassing it. Test: `generic_class_decorator_replacement`.
 - Proxy `getOwnPropertyDescriptor` result validation now rejects descriptor trap results that change the `enumerable` flag of a non-configurable target property. Test: `proxy_descriptor_invariants`.
 - Proxy `getOwnPropertyDescriptor` result validation now rejects descriptor trap results that report a different getter or setter for a non-configurable accessor property. Test: `proxy_descriptor_invariants`.
