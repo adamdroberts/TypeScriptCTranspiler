@@ -1,0 +1,14 @@
+get target: Reflect.get target must be an object
+set target: Reflect.set target must be an object
+has target: Reflect.has target must be an object
+delete target: Reflect.deleteProperty target must be an object
+ownKeys target: Reflect.ownKeys target must be an object
+gopd target: Reflect.getOwnPropertyDescriptor target must be an object
+define target: Reflect.defineProperty target must be an object
+valid get: 1
+valid set: true 2
+valid has: true
+valid delete: true false
+valid define: true 3
+valid keys: next
+valid desc: 3 true

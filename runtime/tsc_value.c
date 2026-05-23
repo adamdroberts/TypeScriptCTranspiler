@@ -312,6 +312,8 @@ tsc_value_t tsc_value_define_property(tsc_value_t v, tsc_str_t* key, tsc_value_t
     return v;
 }
 
+static void require_reflect_object_target(tsc_value_t v, const char* message);
+
 bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_define_desc((tsc_object_t*)value_ptr(v), key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
@@ -353,6 +355,16 @@ bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_
         return tsc_object_define_accessor((tsc_object_t*)value_ptr(v), key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
     }
     return false;
+}
+
+bool tsc_reflect_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
+    require_reflect_object_target(v, "Reflect.defineProperty target must be an object");
+    return tsc_value_define_property_desc(v, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
+}
+
+bool tsc_reflect_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_getter_t getter, void* getter_env, bool has_getter, tsc_accessor_setter_t setter, void* setter_env, bool has_setter, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
+    require_reflect_object_target(v, "Reflect.defineProperty target must be an object");
+    return tsc_value_define_accessor_desc(v, key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
 }
 
 tsc_value_t tsc_value_object_create(tsc_value_t prototype) {
@@ -418,6 +430,16 @@ bool tsc_reflect_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
     return tsc_value_set_prototype_of(v, prototype);
 }
 
+tsc_value_t tsc_reflect_get_prop(tsc_value_t v, const tsc_str_t* key) {
+    require_reflect_object_target(v, "Reflect.get target must be an object");
+    return tsc_value_get_prop(v, key);
+}
+
+tsc_value_t tsc_reflect_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc_value_t receiver) {
+    require_reflect_object_target(v, "Reflect.get target must be an object");
+    return tsc_value_get_prop_receiver(v, key, receiver);
+}
+
 bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_set((tsc_object_t*)value_ptr(v), key, value);
@@ -439,6 +461,16 @@ bool tsc_value_set_prop_receiver(tsc_value_t v, tsc_str_t* key, tsc_value_t valu
         return tsc_value_set_prop(receiver, key, value);
     }
     return false;
+}
+
+bool tsc_reflect_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
+    require_reflect_object_target(v, "Reflect.set target must be an object");
+    return tsc_value_set_prop(v, key, value);
+}
+
+bool tsc_reflect_set_prop_receiver(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver) {
+    require_reflect_object_target(v, "Reflect.set target must be an object");
+    return tsc_value_set_prop_receiver(v, key, value, receiver);
 }
 
 bool tsc_value_has_own_prop(tsc_value_t v, const tsc_str_t* key) {
@@ -485,6 +517,11 @@ bool tsc_value_has_prop(tsc_value_t v, const tsc_str_t* key) {
     return false;
 }
 
+bool tsc_reflect_has_prop(tsc_value_t v, const tsc_str_t* key) {
+    require_reflect_object_target(v, "Reflect.has target must be an object");
+    return tsc_value_has_prop(v, key);
+}
+
 bool tsc_value_delete_prop(tsc_value_t v, tsc_str_t* key) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_delete((tsc_object_t*)value_ptr(v), key);
@@ -502,6 +539,11 @@ bool tsc_value_delete_prop(tsc_value_t v, tsc_str_t* key) {
         return !tsc_value_has_own_prop(v, key);
     }
     return true;
+}
+
+bool tsc_reflect_delete_prop(tsc_value_t v, tsc_str_t* key) {
+    require_reflect_object_target(v, "Reflect.deleteProperty target must be an object");
+    return tsc_value_delete_prop(v, key);
 }
 
 bool tsc_value_is_extensible(tsc_value_t v) {
@@ -754,6 +796,11 @@ tsc_array_t* tsc_value_own_keys(tsc_value_t v) {
     return tsc_array_new(sizeof(tsc_str_t*), 1);
 }
 
+tsc_array_t* tsc_reflect_own_keys(tsc_value_t v) {
+    require_reflect_object_target(v, "Reflect.ownKeys target must be an object");
+    return tsc_value_own_keys(v);
+}
+
 tsc_value_t value_descriptor_from_prop(const tsc_object_prop_t* prop) {
     tsc_object_t* desc = tsc_object_new();
     if (prop->accessor) {
@@ -795,6 +842,11 @@ tsc_value_t tsc_value_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key)
         return value_descriptor_from_prop(&o->props[i]);
     }
     return tsc_value_undefined();
+}
+
+tsc_value_t tsc_reflect_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key) {
+    require_reflect_object_target(v, "Reflect.getOwnPropertyDescriptor target must be an object");
+    return tsc_value_get_own_property_descriptor(v, key);
 }
 
 

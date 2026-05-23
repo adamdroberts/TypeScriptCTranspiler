@@ -23553,7 +23553,7 @@ class Emitter {
                             const k = vals[1]!;
                             const getterEnv = getterEnvPos >= 0 ? vals[getterEnvPos]! : "NULL";
                             const setterEnv = setterEnvPos >= 0 ? vals[setterEnvPos]! : "NULL";
-                            return `tsc_value_define_accessor_desc(${t}, ${k}, ${desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${desc.hasGetter}, ${desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${desc.hasSetter}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})`;
+                            return `tsc_reflect_define_accessor_desc(${t}, ${k}, ${desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${desc.hasGetter}, ${desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${desc.hasSetter}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})`;
                         },
                     );
                 }
@@ -23567,7 +23567,7 @@ class Emitter {
                         { value: key, target: T_STRING, node: args[1]! },
                         { value, target: T_VALUE, node: desc.value ?? args[2]! },
                     ],
-                    ([t, k, v]) => `tsc_value_define_property_desc(${t}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})`,
+                    ([t, k, v]) => `tsc_reflect_define_property_desc(${t}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})`,
                 );
             }
             case "deleteProperty": {
@@ -23579,7 +23579,7 @@ class Emitter {
                     return this.emitTypedArrayReflectDelete(args[0]!, target, args[1]!);
                 }
                 const key = this.emitExpr(args[1]!);
-                return this.emitSequencedCall("tsc_value_delete_prop", T_BOOLEAN, [
+                return this.emitSequencedCall("tsc_reflect_delete_prop", T_BOOLEAN, [
                     { value: target, target: T_VALUE, node: args[0]! },
                     { value: key, target: T_STRING, node: args[1]! },
                 ]);
@@ -23602,13 +23602,13 @@ class Emitter {
                 const key = this.emitExpr(args[1]!);
                 if (args.length === 3) {
                     const receiver = this.emitExpr(args[2]!);
-                    return this.emitSequencedCall("tsc_value_get_prop_receiver", T_VALUE, [
+                    return this.emitSequencedCall("tsc_reflect_get_prop_receiver", T_VALUE, [
                         { value: target, target: T_VALUE, node: args[0]! },
                         { value: key, target: T_STRING, node: args[1]! },
                         { value: receiver, target: T_VALUE, node: args[2]! },
                     ]);
                 }
-                return this.emitSequencedCall("tsc_value_get_prop", T_VALUE, [
+                return this.emitSequencedCall("tsc_reflect_get_prop", T_VALUE, [
                     { value: target, target: T_VALUE, node: args[0]! },
                     { value: key, target: T_STRING, node: args[1]! },
                 ]);
@@ -23643,7 +23643,7 @@ class Emitter {
                     return this.emitTypedGetOwnPropertyDescriptor(args[0]!, target, args[1]!, targetType);
                 }
                 const key = this.emitExpr(args[1]!);
-                return this.emitSequencedCall("tsc_value_get_own_property_descriptor", T_VALUE, [
+                return this.emitSequencedCall("tsc_reflect_get_own_property_descriptor", T_VALUE, [
                     { value: target, target: T_VALUE, node: args[0]! },
                     { value: key, target: T_STRING, node: args[1]! },
                 ]);
@@ -23680,7 +23680,7 @@ class Emitter {
                     );
                 }
                 const key = this.emitExpr(args[1]!);
-                return this.emitSequencedCall("tsc_value_has_prop", T_BOOLEAN, [
+                return this.emitSequencedCall("tsc_reflect_has_prop", T_BOOLEAN, [
                     { value: target, target: T_VALUE, node: args[0]! },
                     { value: key, target: T_STRING, node: args[1]! },
                 ]);
@@ -23737,7 +23737,7 @@ class Emitter {
                     );
                 }
                 const target = this.emitExpr(args[0]!);
-                return this.emitSequencedCall("tsc_value_own_keys", arrayType(T_STRING), [
+                return this.emitSequencedCall("tsc_reflect_own_keys", arrayType(T_STRING), [
                     { value: target, target: T_VALUE, node: args[0]! },
                 ]);
             }
@@ -23767,14 +23767,14 @@ class Emitter {
                 const value = this.emitExpr(args[2]!);
                 if (args.length === 4) {
                     const receiver = this.emitExpr(args[3]!);
-                    return this.emitSequencedCall("tsc_value_set_prop_receiver", T_BOOLEAN, [
+                    return this.emitSequencedCall("tsc_reflect_set_prop_receiver", T_BOOLEAN, [
                         { value: target, target: T_VALUE, node: args[0]! },
                         { value: key, target: T_STRING, node: args[1]! },
                         { value, target: T_VALUE, node: args[2]! },
                         { value: receiver, target: T_VALUE, node: args[3]! },
                     ]);
                 }
-                return this.emitSequencedCall("tsc_value_set_prop", T_BOOLEAN, [
+                return this.emitSequencedCall("tsc_reflect_set_prop", T_BOOLEAN, [
                     { value: target, target: T_VALUE, node: args[0]! },
                     { value: key, target: T_STRING, node: args[1]! },
                     { value, target: T_VALUE, node: args[2]! },
