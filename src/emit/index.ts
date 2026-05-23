@@ -16157,6 +16157,9 @@ class Emitter {
             if (key !== "family" && key !== "all" && key !== "verbatim" && key !== "order" && key !== "hints") {
                 unsupported(prop.name, `dns.lookup unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
+            if (this.isUndefinedExpression(prop.initializer)) {
+                continue;
+            }
             if (key === "family") {
                 if (!ts.isNumericLiteral(prop.initializer)) {
                     unsupported(prop.initializer, "dns.lookup family must be numeric literal 0, 4, or 6 in this subset");
