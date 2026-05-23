@@ -153,7 +153,10 @@ e2e: regex_pcre2 … OK
 e2e: release_build … OK
 e2e: rest_spread … OK
 e2e: runtime_eval … OK
+e2e: runtime_eval_unsafe_bridge … OK
 e2e: runtime_function_constructor … OK
+e2e: runtime_function_constructor_unsafe_bridge … OK
+e2e: runtime_function_unsafe_bridge … OK
 e2e: set_constructor_from_set … OK
 e2e: set_keys … OK
 e2e: set_immediate … OK
