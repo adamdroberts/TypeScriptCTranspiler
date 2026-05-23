@@ -34,6 +34,7 @@ tsc_promise_t* tsc_promise_resolve_array(tsc_array_t* value) {
 
 typedef struct {
     tsc_promise_t* promise;
+    tsc_value_t thenable;
     bool done;
 } tsc_promise_thenable_state_t;
 
@@ -53,6 +54,10 @@ static tsc_value_t promise_thenable_resolve(void* env, tsc_value_t this_arg, tsc
     if (state && state->promise) {
         if (state->done) return tsc_value_undefined();
         state->done = true;
+        if (tsc_value_eq(value, state->thenable)) {
+            tsc_promise_reject_in_place(state->promise, tsc_value_string(tsc_str_from_cstr("TypeError: Promise resolved with itself")));
+            return tsc_value_undefined();
+        }
         promise_adopt_into(state->promise, tsc_promise_resolve_thenable(value));
     }
     return tsc_value_undefined();
@@ -83,6 +88,7 @@ tsc_promise_t* tsc_promise_resolve_thenable(tsc_value_t value) {
         out = tsc_promise_pending();
         tsc_promise_thenable_state_t* state = (tsc_promise_thenable_state_t*)TSC_GC_MALLOC(sizeof(tsc_promise_thenable_state_t));
         state->promise = out;
+        state->thenable = value;
         state->done = false;
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 2);
         tsc_value_t resolve = tsc_value_function_generic_arity(promise_thenable_resolve, state, 1.0);

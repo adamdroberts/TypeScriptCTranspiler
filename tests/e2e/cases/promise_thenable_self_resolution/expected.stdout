@@ -1,0 +1,3 @@
+self: TypeError: Promise resolved with itself
+outer: TypeError: Promise resolved with itself
+events: self|outer
