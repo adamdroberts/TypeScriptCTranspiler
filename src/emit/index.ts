@@ -1073,6 +1073,14 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            method === "fromEntries" &&
+            call.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Object")
+        ) {
+            return this.isSideEffectFreeObjectFromEntriesOperand(call.arguments[0]!, seenConsts);
+        }
+        if (
+            ts.isIdentifier(recv) &&
             method === "hasOwn" &&
             call.arguments.length === 2 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
@@ -1158,6 +1166,61 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeObjectCreatePrototypeOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeObjectFromEntriesOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            return unwrapped.elements.every((element) => {
+                if (!ts.isExpression(element)) return false;
+                const entry = this.unwrapSideEffectFreeStaticExpression(element);
+                if (!ts.isArrayLiteralExpression(entry) || entry.elements.length < 2) return false;
+                const key = entry.elements[0]!;
+                const value = entry.elements[1]!;
+                return ts.isExpression(key) &&
+                    ts.isExpression(value) &&
+                    this.isSideEffectFreePropertyKeyCoercion(key, seenConsts) &&
+                    this.isSideEffectFreeTopLevelConstInitializer(value, seenConsts);
+            });
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeObjectFromEntriesOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreePropertyKeyCoercion(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        switch (unwrapped.kind) {
+            case ts.SyntaxKind.TrueKeyword:
+            case ts.SyntaxKind.FalseKeyword:
+            case ts.SyntaxKind.NullKeyword:
+            case ts.SyntaxKind.UndefinedKeyword:
+                return true;
+        }
+        if (
+            ts.isStringLiteral(unwrapped) ||
+            ts.isNoSubstitutionTemplateLiteral(unwrapped) ||
+            ts.isNumericLiteral(unwrapped) ||
+            ts.isBigIntLiteral(unwrapped)
+        ) {
+            return true;
+        }
+        if (
+            ts.isPrefixUnaryExpression(unwrapped) &&
+            (
+                unwrapped.operator === ts.SyntaxKind.PlusToken ||
+                unwrapped.operator === ts.SyntaxKind.MinusToken
+            )
+        ) {
+            return this.isSideEffectFreePropertyKeyCoercion(unwrapped.operand, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreePropertyKeyCoercion(init, seenConsts);
     }
 
     private isSideEffectFreeObjectEnumerationOperand(
