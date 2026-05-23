@@ -16470,7 +16470,9 @@ class Emitter {
         if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
             unsupported(expr, "process.nextTick callback must be a function");
         }
-        if (prepared.thisParam) unsupported(expr, "process.nextTick callback this parameters are not supported");
+        if (prepared.thisParam && prepared.thisParam.kind !== "value") {
+            unsupported(expr, "process.nextTick callback this parameter must be any/unknown");
+        }
         const params = prepared.params ?? [];
         if (params.length !== argTypes.length) unsupported(expr, "process.nextTick callback parameter count must match queued arguments in this subset");
         const args = argTypes.map((arg) => this.prepareType(arg));
@@ -16489,7 +16491,7 @@ class Emitter {
         buf.open(`void ${name}(void* env)`);
         buf.line(`${envType}* state = (${envType}*)env;`);
         buf.line(`${prepared.c} fn = state->fn;`);
-        const callArgs = ["fn->env", ...params.map((_, i) => `state->arg${i}`)];
+        const callArgs = ["fn->env", ...(prepared.thisParam ? ["tsc_value_undefined()"] : []), ...params.map((_, i) => `state->arg${i}`)];
         buf.line(`(void)fn->fn(${callArgs.join(", ")});`);
         buf.close();
         this.closureDefs.write(buf.toString());
@@ -16501,7 +16503,9 @@ class Emitter {
         if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
             unsupported(expr, "queueMicrotask callback must be a function");
         }
-        if (prepared.thisParam) unsupported(expr, "queueMicrotask callback this parameters are not supported");
+        if (prepared.thisParam && prepared.thisParam.kind !== "value") {
+            unsupported(expr, "queueMicrotask callback this parameter must be any/unknown");
+        }
         const params = prepared.params ?? [];
         if (params.length !== 0) unsupported(expr, "queueMicrotask callback must not require parameters in this subset");
         const key = `microtask:${this.typeKey(prepared)}`;
@@ -16518,7 +16522,7 @@ class Emitter {
         buf.open(`void ${name}(void* env)`);
         buf.line(`${envType}* state = (${envType}*)env;`);
         buf.line(`${prepared.c} fn = state->fn;`);
-        buf.line("(void)fn->fn(fn->env);");
+        buf.line(`(void)fn->fn(${["fn->env", ...(prepared.thisParam ? ["tsc_value_undefined()"] : [])].join(", ")});`);
         buf.close();
         this.closureDefs.write(buf.toString());
         return name;
@@ -16553,7 +16557,9 @@ class Emitter {
         if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
             unsupported(expr, "setImmediate callback must be a function");
         }
-        if (prepared.thisParam) unsupported(expr, "setImmediate callback this parameters are not supported");
+        if (prepared.thisParam && prepared.thisParam.kind !== "value") {
+            unsupported(expr, "setImmediate callback this parameter must be any/unknown");
+        }
         const params = prepared.params ?? [];
         if (params.length !== argTypes.length) unsupported(expr, "setImmediate callback parameter count must match queued arguments in this subset");
         const args = argTypes.map((arg) => this.prepareType(arg));
@@ -16572,7 +16578,7 @@ class Emitter {
         buf.open(`void ${name}(void* env)`);
         buf.line(`${envType}* state = (${envType}*)env;`);
         buf.line(`${prepared.c} fn = state->fn;`);
-        const callArgs = ["fn->env", ...params.map((_, i) => `state->arg${i}`)];
+        const callArgs = ["fn->env", ...(prepared.thisParam ? ["tsc_value_undefined()"] : []), ...params.map((_, i) => `state->arg${i}`)];
         buf.line(`(void)fn->fn(${callArgs.join(", ")});`);
         buf.close();
         this.closureDefs.write(buf.toString());
@@ -16584,7 +16590,9 @@ class Emitter {
         if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
             unsupported(expr, "setTimeout callback must be a function");
         }
-        if (prepared.thisParam) unsupported(expr, "setTimeout callback this parameters are not supported");
+        if (prepared.thisParam && prepared.thisParam.kind !== "value") {
+            unsupported(expr, "setTimeout callback this parameter must be any/unknown");
+        }
         const params = prepared.params ?? [];
         if (params.length !== argTypes.length) unsupported(expr, "setTimeout callback parameter count must match queued arguments in this subset");
         const args = argTypes.map((arg) => this.prepareType(arg));
@@ -16603,7 +16611,7 @@ class Emitter {
         buf.open(`void ${name}(void* env)`);
         buf.line(`${envType}* state = (${envType}*)env;`);
         buf.line(`${prepared.c} fn = state->fn;`);
-        const callArgs = ["fn->env", ...params.map((_, i) => `state->arg${i}`)];
+        const callArgs = ["fn->env", ...(prepared.thisParam ? ["tsc_value_undefined()"] : []), ...params.map((_, i) => `state->arg${i}`)];
         buf.line(`(void)fn->fn(${callArgs.join(", ")});`);
         buf.close();
         this.closureDefs.write(buf.toString());
