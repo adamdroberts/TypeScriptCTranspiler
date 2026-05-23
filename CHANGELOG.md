@@ -46,6 +46,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `JSON.parse(...)` syntax failures now throw through the catchable runtime exception path instead of aborting the process. Test: `json_parse_errors`.
 - Static `Reflect.apply` / `Reflect.construct` and fixed-arity spread-call runtime arity mismatches now throw catchable runtime exceptions instead of aborting the process. Test: `reflect_length_errors`.
 - `Number.prototype.toFixed`, `toExponential`, and `toPrecision` validation failures now throw catchable runtime exceptions for typed and dynamic receivers instead of aborting the process. Test: `number_format_errors`.
+- `Number.prototype.toString(radix)` radix and bounded magnitude validation failures now throw catchable runtime exceptions for typed and dynamic receivers instead of aborting the process. Test: `number_to_string_errors`.
 - `Array.prototype.with(...)` out-of-range failures now throw catchable runtime exceptions for typed and dynamic receivers instead of aborting the process. Test: `array_with_errors`.
 - Unknown-source `eval` / `Function` diagnostics now describe the available AOT manifest and gated embedded-Node paths instead of implying an impossible runtime-code blocker.
 - Documentation and agent indexes now describe native addons, runtime code compilation, and dynamic `require(...)` as AOT closure requirements rather than impossible blockers; README and LLM indexes no longer list Proxy or load-on-demand require execution as remaining targets.
