@@ -18,6 +18,10 @@ const syncRealpathBuffer = fs.realpathSync(path.join(nested, ".."), "buffer");
 const syncReadlinkBuffer = nodefs.readlinkSync(link, { encoding: "buffer" });
 console.log("sync buffer:", Buffer.isBuffer(syncRealpathBuffer), syncRealpathBuffer.toString() === root, syncReadlinkBuffer.toString() === target);
 
+const syncRealpathNull = fs.realpathSync(path.join(nested, ".."), { encoding: null });
+const syncReadlinkNull = nodefs.readlinkSync(link, { encoding: null });
+console.log("sync null:", Buffer.isBuffer(syncRealpathNull), syncRealpathNull.toString() === root, syncReadlinkNull.toString() === target);
+
 fs.promises.realpath(path.join(nested, ".."), { encoding: "utf8" }).then((promiseRealpath) => {
     console.log("promise realpath:", promiseRealpath === root);
 });
@@ -32,6 +36,14 @@ fs.promises.realpath(path.join(nested, ".."), { encoding: "buffer" }).then((prom
 
 nodefs.promises.readlink(link, "buffer").then((promiseReadlink: Buffer): void => {
     console.log("promise readlink buffer:", Buffer.isBuffer(promiseReadlink), promiseReadlink.toString() === target);
+});
+
+fs.promises.realpath(path.join(nested, ".."), { encoding: null }).then((promiseRealpath: Buffer): void => {
+    console.log("promise realpath null:", Buffer.isBuffer(promiseRealpath), promiseRealpath.toString() === root);
+});
+
+nodefs.promises.readlink(link, { encoding: null }).then((promiseReadlink: Buffer): void => {
+    console.log("promise readlink null:", Buffer.isBuffer(promiseReadlink), promiseReadlink.toString() === target);
 });
 
 fs.rmSync(root, { recursive: true, force: true });

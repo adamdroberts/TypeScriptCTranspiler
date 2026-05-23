@@ -19641,7 +19641,8 @@ class Emitter {
                 if (node.text === "utf8" || node.text === "utf-8") return "string";
                 if (node.text === "buffer") return "buffer";
             }
-            unsupported(node, `${label} only supports UTF-8 or buffer encoding options in this subset`);
+            if (node.kind === ts.SyntaxKind.NullKeyword) return "buffer";
+            unsupported(node, `${label} only supports UTF-8, buffer, or null encoding options in this subset`);
         };
         if (ts.isStringLiteralLike(options)) {
             return checkEncoding(options);
