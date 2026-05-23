@@ -209,6 +209,35 @@ const packages: Record<string, PackageFixture> = {
             "src/flavor-addons.cjs": 'exports.label = "node-addons-imports";\n',
         },
     },
+    "tsc2c-require-pattern-conditions-package": {
+        packageJson: {
+            name: "tsc2c-require-pattern-conditions-package",
+            version: "1.0.0",
+            type: "module",
+            exports: {
+                "./features/*": {
+                    require: "./src/features/*.cjs",
+                    default: "./src/wrong/*.ts",
+                },
+            },
+            imports: {
+                "#labels/*": {
+                    require: "./src/labels/*.cjs",
+                    default: "./src/wrong-labels/*.ts",
+                },
+            },
+        },
+        files: {
+            "src/features/math.cjs": 'const label = require("#labels/math");\nexports.label = "pattern:" + label.name;\nexports.scale = function scale(value) { return value * 8; };\n',
+            "src/features/words.cjs": 'const label = require("#labels/words");\nexports.label = "pattern:" + label.name;\nexports.join = function join(left, right) { return left + "-" + right; };\n',
+            "src/labels/math.cjs": 'exports.name = "math";\n',
+            "src/labels/words.cjs": 'exports.name = "words";\n',
+            "src/wrong/math.ts": 'export const label = "wrong-math";\nexport function scale(value: number): number {\n    return value * 99;\n}\n',
+            "src/wrong/words.ts": 'export const label = "wrong-words";\nexport function join(left: string, right: string): string {\n    return left + right;\n}\n',
+            "src/wrong-labels/math.ts": 'export const name = "wrong-math-label";\n',
+            "src/wrong-labels/words.ts": 'export const name = "wrong-words-label";\n',
+        },
+    },
     "tsc2c-main-package": esmPackage("tsc2c-main-package", {
         "index.js": 'export const label = "main-pkg";\nexport function square(value) { return value * value; }\n',
     }),
