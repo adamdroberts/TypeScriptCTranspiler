@@ -32,6 +32,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Typed function values now route direct `Reflect.get`, `Reflect.has`, `Reflect.ownKeys`, `Reflect.getOwnPropertyDescriptor`, `Reflect.getPrototypeOf`, `Reflect.setPrototypeOf`, `Reflect.isExtensible`, and `Reflect.preventExtensions` through the boxed function-object path without requiring an `as any` cast. Test: `function_integrity`.
 - Typed function metadata now respects non-configurable `length`/`name` descriptors for compatible `Object.defineProperty` / `Reflect.defineProperty` redefinitions and `Reflect.deleteProperty` refusal; direct `Object.defineProperty` works on typed function operands without `as any`. Test: `function_integrity`.
 - Function-target Proxy `defineProperty` and `deleteProperty` traps now enforce non-configurable `length`/`name` metadata invariants. Test: `function_integrity`.
+- Function-target Proxy `has` traps now enforce non-configurable `length`/`name` metadata invariants. Test: `function_integrity`.
 - Function-target Proxy `get`, `set`, `getOwnPropertyDescriptor`, and `ownKeys` traps now enforce non-configurable `length`/`name` metadata invariants. Test: `function_integrity`.
 - Function-target Proxy `getPrototypeOf` and `setPrototypeOf` traps now forward to function targets and enforce non-extensible prototype invariants. Test: `proxy_function_prototype_invariants`.
 - Proxy construct traps now have explicit coverage for returning arrays, functions, ordinary objects, and rejected primitive results. Test: `proxy_construct_return_objects`.
