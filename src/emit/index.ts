@@ -1373,6 +1373,18 @@ class Emitter {
             return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
                 this.isSideEffectFreeRegExpConstructorArgs(call.arguments, seenConsts);
         }
+        if (name === "Symbol") {
+            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+                (
+                    call.arguments.length === 0 ||
+                    (
+                        this.isSideEffectFreeStringCoercion(call.arguments[0]!, seenConsts) &&
+                        Array.from(call.arguments).slice(1).every((arg) =>
+                            this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                        )
+                    )
+                );
+        }
         if (
             name === "encodeURI" ||
             name === "encodeURIComponent" ||
