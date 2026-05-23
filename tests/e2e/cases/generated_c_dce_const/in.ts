@@ -112,11 +112,26 @@ function tryCatchExit(value: boolean): number {
     return try_catch_after_exit;
 }
 
+function switchExit(value: "a" | "b"): number {
+    switch (value) {
+        case "a":
+            return 40;
+        case "b":
+            return 41;
+        default:
+            return 42;
+    }
+    const switch_after_exit = 43;
+    console.log(switch_after_exit);
+    return switch_after_exit;
+}
+
 console.log(
     usedLocal(used_count),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),
     tryCatchExit(false),
+    switchExit("a"),
     DceNamespace.kept,
 );

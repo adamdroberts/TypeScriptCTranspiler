@@ -8850,6 +8850,9 @@ class Emitter {
             return !stmt.catchClause ||
                 this.statementListAlwaysExits(stmt.catchClause.block.statements);
         }
+        if (ts.isSwitchStatement(stmt)) {
+            return this.switchStatementAlwaysExits(stmt);
+        }
         return false;
     }
 
@@ -8858,6 +8861,36 @@ class Emitter {
             if (this.statementAlwaysExits(stmt)) return true;
         }
         return false;
+    }
+
+    private switchStatementAlwaysExits(stmt: ts.SwitchStatement): boolean {
+        let hasDefault = false;
+        for (const clause of stmt.caseBlock.clauses) {
+            if (ts.isDefaultClause(clause)) hasDefault = true;
+            if (clause.statements.some((s) => this.statementContainsBreak(s))) return false;
+            if (!this.statementListAlwaysExits(clause.statements)) return false;
+        }
+        return hasDefault;
+    }
+
+    private statementContainsBreak(stmt: ts.Statement): boolean {
+        let found = false;
+        const visit = (node: ts.Node): void => {
+            if (found) return;
+            if (node.kind === ts.SyntaxKind.BreakStatement) {
+                found = true;
+                return;
+            }
+            if (
+                node !== stmt &&
+                (ts.isFunctionLike(node) || ts.isClassLike(node))
+            ) {
+                return;
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(stmt);
+        return found;
     }
 
     private emitReturn(buf: CBuf, r: ts.ReturnStatement): void {

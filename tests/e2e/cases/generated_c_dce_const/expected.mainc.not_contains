@@ -53,3 +53,4 @@ branch_after_exit
 nested_after_block
 try_after_exit
 try_catch_after_exit
+switch_after_exit
