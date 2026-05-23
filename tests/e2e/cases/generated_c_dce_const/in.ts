@@ -109,6 +109,7 @@ const unused_object_is_frozen_call = Object.isFrozen(unused_spread_source_object
 const unused_object_prevent_extensions_call = Object.preventExtensions({ dead_object_prevent_extensions: 1 });
 const unused_object_seal_call = Object.seal({ dead_object_seal: 1 });
 const unused_object_freeze_call = Object.freeze(["dead_object_freeze"]);
+const unused_object_set_prototype_call = Object.setPrototypeOf({ dead_object_set_prototype: 1 }, { proto: "dead_object_set_prototype_proto" });
 const unused_object_create_null_call = Object.create(null);
 const unused_object_create_object_call = Object.create({ dead_object_create_object: 1 });
 const unused_object_create_const_call = Object.create(unused_spread_source_object);
@@ -123,6 +124,7 @@ const unused_reflect_descriptor_call = Reflect.getOwnPropertyDescriptor({ dead_r
 const unused_reflect_get_prototype_call = Reflect.getPrototypeOf({ dead_reflect_get_prototype: 1 });
 const unused_reflect_is_extensible_call = Reflect.isExtensible(["dead_reflect_is_extensible"]);
 const unused_reflect_prevent_extensions_call = Reflect.preventExtensions({ dead_reflect_prevent_extensions: 1 });
+const unused_reflect_set_prototype_call = Reflect.setPrototypeOf({ dead_reflect_set_prototype: 1 }, null);
 const unused_chain_seed = "dead";
 const unused_chain_mid = unused_chain_seed;
 const unused_chain_object = { label: unused_chain_mid };
@@ -202,6 +204,7 @@ Object.isFrozen({ top_level_dead_is_frozen: 1 });
 Object.preventExtensions({ top_level_dead_prevent_extensions: 1 });
 Object.seal({ top_level_dead_seal: 1 });
 Object.freeze(["top_level_dead_freeze"]);
+Object.setPrototypeOf({ top_level_dead_set_prototype: 1 }, { proto: "top_level_dead_set_prototype_proto" });
 Object.create(null);
 Object.create({ top_level_dead_create_object: 1 });
 Object.assign({ top_level_dead_assign_target: 1 }, { top_level_dead_assign_source: 2 });
@@ -212,6 +215,7 @@ Reflect.ownKeys({ top_level_dead_reflect_own_keys: 1 });
 Reflect.getPrototypeOf({ top_level_dead_reflect_get_prototype: 1 });
 Reflect.isExtensible(["top_level_dead_reflect_is_extensible"]);
 Reflect.preventExtensions({ top_level_dead_reflect_prevent_extensions: 1 });
+Reflect.setPrototypeOf({ top_level_dead_reflect_set_prototype: 1 }, null);
 (1 + 2) * 3;
 "top_level_dead_length".length;
 "top_level_dead_index"[0];
@@ -317,6 +321,7 @@ function usedLocal(value: number): number {
     Object.preventExtensions({ local_dead_prevent_extensions: 1 });
     Object.seal({ local_dead_seal: 1 });
     Object.freeze(["local_dead_freeze"]);
+    Object.setPrototypeOf({ local_dead_set_prototype: 1 }, { proto: "local_dead_set_prototype_proto" });
     Object.create(null);
     Object.create({ local_dead_create_object: 1 });
     Object.assign({ local_dead_assign_target: 1 }, { local_dead_assign_source: 2 });
@@ -327,6 +332,7 @@ function usedLocal(value: number): number {
     Reflect.getPrototypeOf({ local_dead_reflect_get_prototype: 1 });
     Reflect.isExtensible(["local_dead_reflect_is_extensible"]);
     Reflect.preventExtensions({ local_dead_reflect_prevent_extensions: 1 });
+    Reflect.setPrototypeOf({ local_dead_reflect_set_prototype: 1 }, null);
     "local_dead_length".length;
     "local_dead_index"[0];
     ({ label: "local_dead_prop" }).label;

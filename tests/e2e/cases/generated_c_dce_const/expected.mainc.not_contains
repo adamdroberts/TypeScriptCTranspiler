@@ -145,6 +145,7 @@ unused_object_is_frozen_call
 unused_object_prevent_extensions_call
 unused_object_seal_call
 unused_object_freeze_call
+unused_object_set_prototype_call
 unused_object_create_null_call
 unused_object_create_object_call
 unused_object_create_const_call
@@ -159,6 +160,7 @@ unused_reflect_descriptor_call
 unused_reflect_get_prototype_call
 unused_reflect_is_extensible_call
 unused_reflect_prevent_extensions_call
+unused_reflect_set_prototype_call
 dead_object_keys
 dead_object_values
 dead_object_entries
@@ -172,6 +174,8 @@ dead_object_is_sealed
 dead_object_prevent_extensions
 dead_object_seal
 dead_object_freeze
+dead_object_set_prototype
+dead_object_set_prototype_proto
 dead_object_create_object
 dead_object_assign_target
 dead_object_assign_source
@@ -188,6 +192,7 @@ dead_reflect_descriptor
 dead_reflect_get_prototype
 dead_reflect_is_extensible
 dead_reflect_prevent_extensions
+dead_reflect_set_prototype
 unused_chain_seed
 unused_chain_mid
 unused_chain_object
@@ -267,6 +272,8 @@ top_level_dead_is_frozen
 top_level_dead_prevent_extensions
 top_level_dead_seal
 top_level_dead_freeze
+top_level_dead_set_prototype
+top_level_dead_set_prototype_proto
 top_level_dead_create_object
 top_level_dead_assign_target
 top_level_dead_assign_source
@@ -279,6 +286,7 @@ top_level_dead_reflect_own_keys
 top_level_dead_reflect_get_prototype
 top_level_dead_reflect_is_extensible
 top_level_dead_reflect_prevent_extensions
+top_level_dead_reflect_set_prototype
 top_level_dead_length
 top_level_dead_index
 top_level_dead_prop
@@ -357,6 +365,8 @@ local_dead_is_frozen
 local_dead_prevent_extensions
 local_dead_seal
 local_dead_freeze
+local_dead_set_prototype
+local_dead_set_prototype_proto
 local_dead_create_object
 local_dead_assign_target
 local_dead_assign_source
@@ -369,6 +379,7 @@ local_dead_reflect_array_keys
 local_dead_reflect_get_prototype
 local_dead_reflect_is_extensible
 local_dead_reflect_prevent_extensions
+local_dead_reflect_set_prototype
 local_dead_length
 local_dead_index
 local_dead_prop
