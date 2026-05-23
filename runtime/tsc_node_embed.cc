@@ -9,7 +9,17 @@ typedef struct tsc_str {
     const char* data;
     uint64_t hash;
 } tsc_str_t;
-typedef struct tsc_array tsc_array_t;
+typedef struct tsc_array {
+    size_t len;
+    size_t cap;
+    size_t es;
+    bool extensible;
+    bool sealed;
+    bool frozen;
+    tsc_value_t prototype;
+    size_t iter_pos;
+    void* data;
+} tsc_array_t;
 typedef struct tsc_object tsc_object_t;
 typedef tsc_value_t (*tsc_generic_function_t)(void* env, tsc_value_t this_arg, tsc_array_t* args);
 
@@ -27,6 +37,7 @@ tsc_value_t tsc_value_object(tsc_object_t* o);
 tsc_value_t tsc_value_array(tsc_array_t* a);
 tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env);
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args);
+tsc_str_t* tsc_value_to_string(tsc_value_t v);
 tsc_value_t tsc_node_eval(tsc_str_t* source);
 tsc_value_t tsc_node_function(tsc_str_t* body);
 tsc_value_t tsc_node_function_call(tsc_value_t fn, tsc_array_t* args);
@@ -80,9 +91,84 @@ struct NodeFunctionEnv {
     v8::Global<v8::Function> fn;
 };
 
+constexpr uint64_t TSC_VALUE_BOX_MASK = UINT64_C(0x7ffc000000000000);
+constexpr uint64_t TSC_VALUE_PAYLOAD_MASK = UINT64_C(0x0000ffffffffffff);
+
+enum TscValueTag {
+    TSC_VALUE_TAG_FUNCTION = 0,
+    TSC_VALUE_TAG_UNDEFINED = 1,
+    TSC_VALUE_TAG_NULL = 2,
+    TSC_VALUE_TAG_FALSE = 3,
+    TSC_VALUE_TAG_TRUE = 4,
+    TSC_VALUE_TAG_STRING = 5,
+    TSC_VALUE_TAG_ARRAY = 6,
+    TSC_VALUE_TAG_OBJECT = 7,
+};
+
+bool valueIsBox(tsc_value_t value) {
+    return (value & TSC_VALUE_BOX_MASK) == TSC_VALUE_BOX_MASK;
+}
+
+TscValueTag valueTag(tsc_value_t value) {
+    return static_cast<TscValueTag>(value & 0x7);
+}
+
+void* valuePtr(tsc_value_t value) {
+    return reinterpret_cast<void*>(static_cast<uintptr_t>((value & TSC_VALUE_PAYLOAD_MASK) & ~UINT64_C(0x7)));
+}
+
 std::string tscToString(tsc_str_t* value) {
     if (!value || !value->data) return std::string();
     return std::string(value->data, value->len);
+}
+
+v8::Local<v8::String> stringToV8(v8::Isolate* isolate, tsc_str_t* value) {
+    std::string text = tscToString(value);
+    v8::Local<v8::String> out;
+    if (!v8::String::NewFromUtf8(
+             isolate,
+             text.c_str(),
+             v8::NewStringType::kNormal,
+             static_cast<int>(text.size())
+         ).ToLocal(&out)) {
+        return v8::String::Empty(isolate);
+    }
+    return out;
+}
+
+v8::Local<v8::Value> toV8(v8::Isolate* isolate, v8::Local<v8::Context> context, tsc_value_t value) {
+    if (!valueIsBox(value)) {
+        double number;
+        memcpy(&number, &value, sizeof number);
+        return v8::Number::New(isolate, number).As<v8::Value>();
+    }
+    switch (valueTag(value)) {
+        case TSC_VALUE_TAG_UNDEFINED:
+            return v8::Undefined(isolate).As<v8::Value>();
+        case TSC_VALUE_TAG_NULL:
+            return v8::Null(isolate).As<v8::Value>();
+        case TSC_VALUE_TAG_FALSE:
+            return v8::Boolean::New(isolate, false).As<v8::Value>();
+        case TSC_VALUE_TAG_TRUE:
+            return v8::Boolean::New(isolate, true).As<v8::Value>();
+        case TSC_VALUE_TAG_STRING:
+            return stringToV8(isolate, static_cast<tsc_str_t*>(valuePtr(value))).As<v8::Value>();
+        case TSC_VALUE_TAG_ARRAY: {
+            tsc_array_t* array = static_cast<tsc_array_t*>(valuePtr(value));
+            uint32_t length = array && array->len <= UINT32_MAX ? static_cast<uint32_t>(array->len) : 0;
+            v8::Local<v8::Array> out = v8::Array::New(isolate, static_cast<int>(length));
+            if (!array || array->es != sizeof(tsc_value_t)) return out.As<v8::Value>();
+            for (uint32_t i = 0; i < length; i++) {
+                tsc_value_t item = static_cast<tsc_value_t*>(array->data)[i];
+                out->Set(context, i, toV8(isolate, context, item)).FromMaybe(false);
+            }
+            return out.As<v8::Value>();
+        }
+        case TSC_VALUE_TAG_FUNCTION:
+        case TSC_VALUE_TAG_OBJECT:
+            return stringToV8(isolate, tsc_value_to_string(value)).As<v8::Value>();
+    }
+    return v8::Undefined(isolate).As<v8::Value>();
 }
 
 std::string quoteJsString(const std::string& value) {
@@ -215,7 +301,7 @@ tsc_value_t evalSource(tsc_str_t* source) {
     return fromV8(isolate, result);
 }
 
-tsc_value_t callNodeFunction(void* rawEnv, tsc_value_t, tsc_array_t*) {
+tsc_value_t callNodeFunction(void* rawEnv, tsc_value_t, tsc_array_t* args) {
     NodeEmbedState* current = ensureState();
     v8::Isolate* isolate = current->isolate;
     v8::Isolate::Scope isolateScope(isolate);
@@ -225,9 +311,24 @@ tsc_value_t callNodeFunction(void* rawEnv, tsc_value_t, tsc_array_t*) {
 
     NodeFunctionEnv* env = static_cast<NodeFunctionEnv*>(rawEnv);
     v8::Local<v8::Function> fn = env->fn.Get(isolate);
+    size_t argc = args ? args->len : 0;
+    std::vector<v8::Local<v8::Value>> argv;
+    argv.reserve(argc);
+    if (args && args->es == sizeof(tsc_value_t)) {
+        for (size_t i = 0; i < argc; i++) {
+            argv.push_back(toV8(isolate, context, static_cast<tsc_value_t*>(args->data)[i]));
+        }
+    } else {
+        argc = 0;
+    }
     v8::TryCatch tryCatch(isolate);
     v8::Local<v8::Value> result;
-    if (!fn->Call(context, v8::Undefined(isolate), 0, nullptr).ToLocal(&result)) {
+    if (!fn->Call(
+             context,
+             v8::Undefined(isolate).As<v8::Value>(),
+             static_cast<int>(argc),
+             argc > 0 ? argv.data() : nullptr
+         ).ToLocal(&result)) {
         tsc_panic("embedded Node bridge: Function execution failed");
     }
     return fromV8(isolate, result);
