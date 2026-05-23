@@ -1024,6 +1024,18 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            (
+                method === "preventExtensions" ||
+                method === "seal" ||
+                method === "freeze"
+            ) &&
+            call.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Object")
+        ) {
+            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts);
+        }
+        if (
+            ts.isIdentifier(recv) &&
             method === "hasOwn" &&
             call.arguments.length === 2 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
@@ -1078,7 +1090,24 @@ class Emitter {
         ) {
             return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts);
         }
+        if (
+            ts.isIdentifier(recv) &&
+            method === "preventExtensions" &&
+            call.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Reflect")
+        ) {
+            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts);
+        }
         return false;
+    }
+
+    private isSideEffectFreeFreshObjectOrArrayLiteralOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        return (ts.isObjectLiteralExpression(unwrapped) || ts.isArrayLiteralExpression(unwrapped)) &&
+            this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
     }
 
     private isSideEffectFreeObjectEnumerationOperand(
