@@ -1,0 +1,3 @@
+{
+  "description": "os.userInfo treats explicit undefined options and encoding properties as defaults"
+}

@@ -27,6 +27,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Fixed
 - The e2e harness now treats any directory with `in.ts` as a real case and fails discovery when it lacks `expected.stdout`, `expected.exitcode`, or `compile.emit_c_only`, so malformed fixtures cannot be silently skipped.
+- `os.userInfo(...)` now treats explicit `undefined` options and `encoding` properties as defaults. Test: `os_user_info_undefined_options`.
 - Event and EventTarget option objects now treat explicitly `undefined` supported properties as defaults. Test: `event_target_undefined_options`.
 - `process.stdout.write(...)` and `process.stderr.write(...)` now treat explicitly `undefined` optional encoding/callback slots as defaults. Test: `process_stdio_write_undefined_options`.
 - `dns.lookup(...)` and `dns.promises.lookup(...)` option objects now treat explicitly `undefined` supported properties as defaults. Test: `dns_lookup_option_property_undefined`.

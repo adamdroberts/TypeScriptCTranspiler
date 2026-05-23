@@ -1,0 +1,3 @@
+global: string string true
+namespace: string string
+named: string true
