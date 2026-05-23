@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Proxy object traps now reject non-callable `get`, `set`, `has`, `deleteProperty`, `defineProperty`, `getOwnPropertyDescriptor`, `ownKeys`, `getPrototypeOf`, `setPrototypeOf`, `isExtensible`, and `preventExtensions` trap values before dispatch while preserving callable proxy-valued trap forwarding. Test: `proxy_object_trap_callable_validation`.
 - `Object.setPrototypeOf(dynamic, proto)` now rejects nullish targets, invalid prototype values, failed non-extensible updates, and falsy proxy `setPrototypeOf` trap results through catchable runtime errors while keeping primitive targets compatible. Test: `object_set_prototype_of_validation`.
 - Dynamic object method calls now have focused coverage for callable Proxy property values, including `this` receiver binding, trapless forwarding, revoked-callable errors, and non-callable proxy target validation. Test: `proxy_method_call`.
 - Dynamic `any` new expressions now dispatch through boxed constructable identities, including identifier and property-access constructor values, constructable Proxy values with `construct` traps, trapless forwarding, revoked-construct errors, and non-constructable proxy target validation. Test: `proxy_direct_construct`.
