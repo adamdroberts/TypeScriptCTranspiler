@@ -14,6 +14,9 @@ for (let i = 0; i < 2; i++) {
 for (let i = 0; i < 2; i++) {
     obj.cached = i;
 }
+for (let i = 0; i < 2; i++) {
+    console.log("reflect set:", Reflect.set(obj, "reflectCached", i));
+}
 obj.y = 2;
 console.log("has:", "y" in obj);
 delete obj.y;

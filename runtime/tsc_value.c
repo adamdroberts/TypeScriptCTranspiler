@@ -715,6 +715,11 @@ bool tsc_reflect_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
     return tsc_value_set_prop(v, key, value);
 }
 
+bool tsc_reflect_set_prop_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_prop_cache_t* cache) {
+    require_reflect_object_target(v, "Reflect.set target must be an object");
+    return tsc_value_set_prop_cached(v, key, value, cache);
+}
+
 bool tsc_reflect_set_prop_receiver(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver) {
     require_reflect_object_target(v, "Reflect.set target must be an object");
     return tsc_value_set_prop_receiver(v, key, value, receiver);

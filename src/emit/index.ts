@@ -24472,11 +24472,16 @@ class Emitter {
                         { value: receiver, target: T_VALUE, node: args[3]! },
                     ]);
                 }
-                return this.emitSequencedCall("tsc_reflect_set_prop", T_BOOLEAN, [
-                    { value: target, target: T_VALUE, node: args[0]! },
-                    { value: key, target: T_STRING, node: args[1]! },
-                    { value, target: T_VALUE, node: args[2]! },
-                ]);
+                const cache = this.freshTemp("_prop_cache");
+                return this.emitSequencedExpr(
+                    T_BOOLEAN,
+                    [
+                        { value: target, target: T_VALUE, node: args[0]! },
+                        { value: key, target: T_STRING, node: args[1]! },
+                        { value, target: T_VALUE, node: args[2]! },
+                    ],
+                    ([t, k, v]) => `({ static tsc_prop_cache_t ${cache}; tsc_reflect_set_prop_cached(${t}, ${k}, ${v}, &${cache}); })`,
+                );
             }
             case "setPrototypeOf": {
                 if (args.length !== 2) unsupported(call, "Reflect.setPrototypeOf expects target and prototype");
