@@ -5051,6 +5051,10 @@ class Emitter {
                 this.defs.line(`static tsc_value_t ${this.classStaticMethodDecoratorReplacementName(cd, m)};`);
                 this.ensureClassStaticMethodDecoratorAdapter(cd, m);
             }
+            if (ts.isMethodDeclaration(m) && !isStatic(m) && this.classMemberHasDecorators(m)) {
+                this.defs.line(`static tsc_value_t ${this.classInstanceMethodDecoratorReplacementName(cd, m)};`);
+                this.ensureClassInstanceMethodDecoratorAdapter(cd, m);
+            }
             if (ts.isGetAccessorDeclaration(m) && isStatic(m) && this.classMemberHasDecorators(m)) {
                 this.defs.line(`static tsc_value_t ${this.classStaticGetterDecoratorReplacementName(cd, m)};`);
                 this.ensureClassStaticGetterDecoratorAdapter(cd, m);
@@ -5271,6 +5275,18 @@ class Emitter {
         return `${cd.name.text}_static_${mangleIdent(methodName)}_decorator_replacement`;
     }
 
+    private classInstanceMethodDecoratorReplacementName(
+        cd: ts.ClassDeclaration,
+        member: ts.MethodDeclaration,
+    ): string {
+        if (!cd.name) unsupported(cd, "decorated instance methods require a named class");
+        const methodName = this.staticPropertyName(member.name);
+        if (!methodName) {
+            unsupported(member.name, "decorated instance method names must resolve to a string or number literal");
+        }
+        return `${cd.name.text}_instance_${mangleIdent(methodName)}_decorator_replacement`;
+    }
+
     private classStaticGetterDecoratorReplacementName(
         cd: ts.ClassDeclaration,
         member: ts.GetAccessorDeclaration,
@@ -5302,6 +5318,8 @@ class Emitter {
                 buf.line(`${this.classFieldDecoratorInitializersName(cd, member)} = tsc_array_new(sizeof(tsc_value_t), 2);`);
             } else if (ts.isMethodDeclaration(member) && isStatic(member)) {
                 buf.line(`${this.classStaticMethodDecoratorReplacementName(cd, member)} = tsc_value_undefined();`);
+            } else if (ts.isMethodDeclaration(member) && !isStatic(member)) {
+                buf.line(`${this.classInstanceMethodDecoratorReplacementName(cd, member)} = tsc_value_undefined();`);
             } else if (ts.isGetAccessorDeclaration(member) && isStatic(member)) {
                 buf.line(`${this.classStaticGetterDecoratorReplacementName(cd, member)} = tsc_value_undefined();`);
             } else if (ts.isSetAccessorDeclaration(member) && isStatic(member)) {
@@ -5366,6 +5384,8 @@ class Emitter {
             for (const decorator of decorators) {
                 const valueArg = ts.isMethodDeclaration(member) && isStatic(member)
                     ? this.classStaticMethodDecoratorValue(cd, member)
+                    : ts.isMethodDeclaration(member) && !isStatic(member)
+                        ? this.classInstanceMethodDecoratorValue(cd, member)
                     : ts.isGetAccessorDeclaration(member) && isStatic(member)
                         ? this.classStaticGetterDecoratorValue(cd, member)
                         : ts.isSetAccessorDeclaration(member) && isStatic(member)
@@ -5390,6 +5410,10 @@ class Emitter {
                 if (ts.isMethodDeclaration(member) && isStatic(member)) {
                     const out = this.freshTemp("_method_decorator_result");
                     const replacement = this.classStaticMethodDecoratorReplacementName(cd, member);
+                    buf.line(`{ tsc_value_t ${out} = ${result}; if (!tsc_value_is_undefined(${out})) ${replacement} = ${out}; }`);
+                } else if (ts.isMethodDeclaration(member) && !isStatic(member)) {
+                    const out = this.freshTemp("_method_decorator_result");
+                    const replacement = this.classInstanceMethodDecoratorReplacementName(cd, member);
                     buf.line(`{ tsc_value_t ${out} = ${result}; if (!tsc_value_is_undefined(${out})) ${replacement} = ${out}; }`);
                 } else if (ts.isGetAccessorDeclaration(member) && isStatic(member)) {
                     const out = this.freshTemp("_getter_decorator_result");
@@ -5478,6 +5502,44 @@ class Emitter {
             buf.line(`${ret.c} result = ${call};`);
             buf.line(`return ${this.coerce({ c: "result", ty: ret }, T_VALUE, member)};`);
         }
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
+    private classInstanceMethodDecoratorValue(
+        cd: ts.ClassDeclaration,
+        member: ts.MethodDeclaration,
+    ): EmitResult {
+        const replacement = this.classInstanceMethodDecoratorReplacementName(cd, member);
+        const adapter = this.ensureClassInstanceMethodDecoratorAdapter(cd, member);
+        return {
+            c: `({ tsc_value_t _decorator_current = ${replacement}; tsc_value_is_undefined(_decorator_current) ? tsc_value_function_generic(${adapter}, NULL) : _decorator_current; })`,
+            ty: T_VALUE,
+        };
+    }
+
+    private ensureClassInstanceMethodDecoratorAdapter(
+        cd: ts.ClassDeclaration,
+        member: ts.MethodDeclaration,
+    ): string {
+        if (!cd.name) unsupported(cd, "decorated instance methods require a named class");
+        if (isStatic(member)) unsupported(member, "instance method decorator adapter requires an instance method");
+        const methodName = this.classMethodCName(member.name);
+        if (!methodName) unsupported(member, "computed instance method names");
+        const name = `${cd.name.text}_${methodName}_decorator_original`;
+        if (this.nodeFunctionAdapters.has(name)) return name;
+        this.nodeFunctionAdapters.add(name);
+        const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
+        this.protos.line(signature + ";");
+        const buf = new CBuf();
+        buf.open(signature);
+        buf.line("(void)env;");
+        buf.line("(void)this_arg;");
+        buf.line("(void)args;");
+        buf.line("tsc_panic(\"decorated instance method original calls require a typed receiver bridge\");");
+        buf.line("return tsc_value_undefined();");
         buf.close();
         buf.line();
         this.closureDefs.write(buf.toString());
@@ -18525,7 +18587,70 @@ class Emitter {
         } else {
             specs.push(...this.callSpecsFromSignature(call, call.arguments, params));
         }
+        if (
+            mdecl &&
+            ts.isMethodDeclaration(mdecl) &&
+            !isStatic(mdecl) &&
+            this.classMemberHasDecorators(mdecl)
+        ) {
+            return this.emitDecoratedInstanceMethodCall(call, mdecl, callee, ret, specs);
+        }
         return this.emitSequencedCall(callee, ret, specs);
+    }
+
+    private emitDecoratedInstanceMethodCall(
+        call: ts.CallExpression,
+        method: ts.MethodDeclaration,
+        callee: string,
+        ret: CType,
+        specs: readonly SequencedCallArg[],
+    ): EmitResult {
+        if (!method.parent || !ts.isClassDeclaration(method.parent)) {
+            unsupported(method, "decorated instance method requires a containing class");
+        }
+        const replacement = this.classInstanceMethodDecoratorReplacementName(method.parent, method);
+        return this.emitSequencedExpr(ret, specs, (args) => {
+            const fn = this.freshTemp("_method_replacement");
+            const av = this.freshTemp("_method_args");
+            const pieces: string[] = [
+                `tsc_value_t ${fn} = ${replacement};`,
+                `if (tsc_value_is_undefined(${fn})) {`,
+            ];
+            const originalCall = `${callee}(${args.join(", ")})`;
+            const methodArgs = args.slice(1);
+            const methodSpecs = specs.slice(1);
+            if (ret.kind === "void" || ret.kind === "never") {
+                pieces.push(`${originalCall};`);
+                pieces.push(`} else {`);
+                pieces.push(`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, methodArgs.length)});`);
+                methodArgs.forEach((arg, index) => {
+                    const spec = methodSpecs[index]!;
+                    const argType = spec.target ?? spec.value.ty;
+                    pieces.push(`tsc_array_push_value(${av}, ${this.coerce({ c: arg, ty: argType }, T_VALUE, spec.node ?? call)});`);
+                });
+                pieces.push(`(void)tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}));`);
+                pieces.push(`}`);
+                return `({ ${pieces.join(" ")} })`;
+            }
+            const out = this.freshTemp("_method_result");
+            pieces.splice(1, 0, `${ret.c} ${out} = ${this.zeroValue(ret)};`);
+            pieces.push(`${out} = ${originalCall};`);
+            pieces.push(`} else {`);
+            pieces.push(`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, methodArgs.length)});`);
+            methodArgs.forEach((arg, index) => {
+                const spec = methodSpecs[index]!;
+                const argType = spec.target ?? spec.value.ty;
+                pieces.push(`tsc_array_push_value(${av}, ${this.coerce({ c: arg, ty: argType }, T_VALUE, spec.node ?? call)});`);
+            });
+            const applied = {
+                c: `tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}))`,
+                ty: T_VALUE,
+            };
+            pieces.push(`${out} = ${this.coerce(applied, ret, call)};`);
+            pieces.push(`}`);
+            pieces.push(out);
+            return `({ ${pieces.join(" ")}; })`;
+        });
     }
 
     private emitDecoratedStaticMethodCall(
