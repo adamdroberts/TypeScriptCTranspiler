@@ -246,6 +246,7 @@ class Emitter {
     private referencedTopLevelFunctions = new WeakSet<ts.FunctionDeclaration>();
     private referencedTopLevelLiftedArrows = new WeakSet<ts.VariableDeclaration>();
     private referencedTopLevelClasses = new WeakSet<ts.ClassDeclaration>();
+    private referencedTopLevelVariables = new WeakSet<ts.VariableDeclaration>();
     /**
      * Symbols whose value is provably integer-shape at every read site.
      * Populated per source file by analyzeIntegerSymbols(); consulted by
@@ -347,6 +348,13 @@ class Emitter {
                     this.isPrunableTopLevelClass(decl)
                 ) {
                     this.referencedTopLevelClasses.add(decl);
+                }
+                if (
+                    decl &&
+                    ts.isVariableDeclaration(decl) &&
+                    this.isPrunableTopLevelVariable(decl)
+                ) {
+                    this.referencedTopLevelVariables.add(decl);
                 }
             }
             ts.forEachChild(node, visit);
@@ -460,6 +468,54 @@ class Emitter {
 
     private shouldEmitClassDeclaration(cd: ts.ClassDeclaration): boolean {
         return !this.isPrunableTopLevelClass(cd) || this.referencedTopLevelClasses.has(cd);
+    }
+
+    private isPrunableTopLevelVariable(decl: ts.VariableDeclaration): boolean {
+        if (!ts.isIdentifier(decl.name)) return false;
+        if (!decl.initializer) return false;
+        if (!ts.isVariableStatement(decl.parent.parent)) return false;
+        if (decl.parent.parent.parent !== decl.getSourceFile()) return false;
+        if ((decl.parent.flags & ts.NodeFlags.Const) === 0) return false;
+        if (this.isPrunableTopLevelLiftedArrow(decl)) return false;
+        const modifiers = ts.canHaveModifiers(decl.parent.parent)
+            ? ts.getModifiers(decl.parent.parent)
+            : undefined;
+        if (modifiers?.some((m) =>
+            m.kind === ts.SyntaxKind.ExportKeyword ||
+            m.kind === ts.SyntaxKind.DefaultKeyword ||
+            m.kind === ts.SyntaxKind.DeclareKeyword
+        )) {
+            return false;
+        }
+        return this.isSideEffectFreeTopLevelConstInitializer(decl.initializer);
+    }
+
+    private isSideEffectFreeTopLevelConstInitializer(expr: ts.Expression): boolean {
+        while (ts.isParenthesizedExpression(expr) || ts.isAsExpression(expr) || ts.isTypeAssertionExpression(expr)) {
+            expr = expr.expression;
+        }
+        switch (expr.kind) {
+            case ts.SyntaxKind.TrueKeyword:
+            case ts.SyntaxKind.FalseKeyword:
+            case ts.SyntaxKind.NullKeyword:
+            case ts.SyntaxKind.UndefinedKeyword:
+                return true;
+        }
+        if (ts.isNumericLiteral(expr) || ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) {
+            return true;
+        }
+        if (
+            ts.isPrefixUnaryExpression(expr) &&
+            (expr.operator === ts.SyntaxKind.PlusToken || expr.operator === ts.SyntaxKind.MinusToken) &&
+            ts.isNumericLiteral(expr.operand)
+        ) {
+            return true;
+        }
+        return false;
+    }
+
+    private shouldEmitTopLevelVariable(decl: ts.VariableDeclaration): boolean {
+        return !this.isPrunableTopLevelVariable(decl) || this.referencedTopLevelVariables.has(decl);
     }
 
     run(): EmittedProgram {
@@ -6836,6 +6892,7 @@ class Emitter {
             ) {
                 continue;
             }
+            if (!this.shouldEmitTopLevelVariable(d)) continue;
             const name = this.declaredName(d.name);
             const baseCt = d.initializer && this.requireCallSpecifier(d.initializer)
                 ? T_VALUE
