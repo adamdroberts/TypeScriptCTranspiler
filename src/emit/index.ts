@@ -9955,6 +9955,41 @@ class Emitter {
         if (unwrapped.kind === ts.SyntaxKind.TrueKeyword) return true;
         if (unwrapped.kind === ts.SyntaxKind.FalseKeyword) return false;
         if (
+            unwrapped.kind === ts.SyntaxKind.NullKeyword ||
+            unwrapped.kind === ts.SyntaxKind.UndefinedKeyword
+        ) {
+            return false;
+        }
+        if (
+            ts.isIdentifier(unwrapped) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped, "undefined")
+        ) {
+            return false;
+        }
+        if (ts.isNumericLiteral(unwrapped)) return Number(unwrapped.text) !== 0;
+        if (ts.isBigIntLiteral(unwrapped)) return !/^0+n$/i.test(unwrapped.text);
+        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
+            return unwrapped.text.length > 0;
+        }
+        if (
+            ts.isRegularExpressionLiteral(unwrapped) ||
+            ts.isArrowFunction(unwrapped) ||
+            ts.isFunctionExpression(unwrapped)
+        ) {
+            return true;
+        }
+        if (ts.isClassExpression(unwrapped) && this.classExpressionHasNoDefinitionSideEffects(unwrapped)) {
+            return true;
+        }
+        if (
+            ts.isArrayLiteralExpression(unwrapped) ||
+            ts.isObjectLiteralExpression(unwrapped)
+        ) {
+            return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts)
+                ? true
+                : null;
+        }
+        if (
             ts.isPrefixUnaryExpression(unwrapped) &&
             unwrapped.operator === ts.SyntaxKind.ExclamationToken
         ) {

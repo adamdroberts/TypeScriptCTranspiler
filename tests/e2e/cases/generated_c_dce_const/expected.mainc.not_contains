@@ -207,6 +207,7 @@ unused_static_nullish_dead_call
 dead_static_nullish_call
 unused_static_nullish_fallback
 dead_static_nullish_fallback_value
+top_level_static_truthy_string
 unused_namespace_value
 unused_let
 unused_empty
@@ -288,6 +289,9 @@ top_level_dead_static_else
 top_level_dead_while_false
 top_level_dead_for_false_increment
 top_level_dead_for_false_body
+top_level_dead_zero_if
+top_level_dead_truthy_then
+top_level_dead_truthy_else
 top_level_dead_static_conditional_call
 top_level_dead_static_conditional_value
 top_level_dead_static_and_call
@@ -401,6 +405,9 @@ branch_inner_after_return
 nested_branch_inner_after_return
 else_if_static_dead
 else_if_static_dead_tail
+local_static_empty_string
+local_dead_empty_string_if
+local_dead_truthy_tail
 branch_only_dead
 branch_after_exit
 nested_after_block

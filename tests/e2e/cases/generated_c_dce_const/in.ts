@@ -137,6 +137,7 @@ const unused_static_or_dead_call = !top_level_static_false || console.log("dead_
 const top_level_static_non_nullish = "alive";
 const unused_static_nullish_dead_call = top_level_static_non_nullish ?? console.log("dead_static_nullish_call");
 const unused_static_nullish_fallback = (undefined as string | undefined) ?? "dead_static_nullish_fallback_value";
+const top_level_static_truthy_string: string = "static truthy";
 let unused_let = 42;
 let unused_empty: number;
 "top_level_dead_expr";
@@ -230,6 +231,14 @@ while (false) {
 }
 for (; false; console.log("top_level_dead_for_false_increment")) {
     console.log("top_level_dead_for_false_body");
+}
+if (0 as number) {
+    console.log("top_level_dead_zero_if");
+}
+if (top_level_static_truthy_string) {
+    "top_level_dead_truthy_then";
+} else {
+    console.log("top_level_dead_truthy_else");
 }
 top_level_static_false ? console.log("top_level_dead_static_conditional_call") : "top_level_dead_static_conditional_value";
 top_level_static_false && console.log("top_level_dead_static_and_call");
@@ -391,6 +400,19 @@ function elseIfStatic(value: number): number {
     }
 }
 
+function literalTruthiness(): number {
+    const local_static_empty_string: string = "";
+    if (local_static_empty_string) {
+        console.log("local_dead_empty_string_if");
+        return 92;
+    } else if (1 as number) {
+        return 93;
+    } else {
+        console.log("local_dead_truthy_tail");
+        return 94;
+    }
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -508,6 +530,7 @@ console.log(
     constantBranch(used_count),
     branchInnerExit(true),
     elseIfStatic(used_count),
+    literalTruthiness(),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),
