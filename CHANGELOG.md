@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- `fs.statSync`, `fs.lstatSync`, `fs.promises.stat`, and `fs.promises.lstat` now accept literal `{ throwIfNoEntry: false }`, returning `undefined` for missing paths instead of throwing or rejecting while preserving the existing `Stats` result for present paths. Test: `fs_stat_options`.
 - Array-backed generator `.next(value)` calls now evaluate the optional input argument before advancing the materialized iterator, while still ignoring it in the eager generator subset. Test: `generator_next_argument`.
 - `process.stdin.readable`, `process.stdout.writable`, and `process.stderr.writable` now expose stable boolean stream-state flags for the bounded stdio stream subset. Test: `process_stdio_readable_writable`.
 - `process.stdin.fd` and `process.stdin.isTTY` now expose bounded readable-stream metadata alongside the existing stdout/stderr stream subset. Test: `process_stdin_metadata`.
