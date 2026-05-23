@@ -11397,7 +11397,7 @@ class Emitter {
             const args = paramTypes.map((paramType, index) =>
                 this.coerce({ c: `TSC_ARR(tsc_value_t, ${list}, ${index})`, ty: T_VALUE }, paramType, call),
             );
-            return `({ if (${list}->len != ${paramTypes.length}) tsc_panic("spread call argument length mismatch"); ${callee}(${[...fixedArgs, ...vals.slice(0, leadingSpecs.length), ...args].join(", ")}); })`;
+            return `({ if (${list}->len != ${paramTypes.length}) tsc_throw_str(tsc_str_from_cstr("spread call argument length mismatch")); ${callee}(${[...fixedArgs, ...vals.slice(0, leadingSpecs.length), ...args].join(", ")}); })`;
         });
     }
 
@@ -11446,7 +11446,7 @@ class Emitter {
                 for (let i = 0; i < params.length; i++) {
                     args.push(this.coerce({ c: `TSC_ARR(tsc_value_t, ${list}, ${i})`, ty: T_VALUE }, params[i]!, call));
                 }
-                return `({ if (${list}->len != ${params.length}) tsc_panic("function value argument length mismatch"); ${fn}->fn(${[`${fn}->env`, ...(callee.ty.thisParam ? ["tsc_value_undefined()"] : []), ...args].join(", ")}); })`;
+                return `({ if (${list}->len != ${params.length}) tsc_throw_str(tsc_str_from_cstr("function value argument length mismatch")); ${fn}->fn(${[`${fn}->env`, ...(callee.ty.thisParam ? ["tsc_value_undefined()"] : []), ...args].join(", ")}); })`;
             });
         }
         if (call.arguments.length > params.length) {
@@ -23837,7 +23837,7 @@ class Emitter {
                 } else {
                     lengthCheck = `(!tsc_value_is_array(${listC}) || (size_t)tsc_value_length(${listC}) != ${expected})`;
                 }
-                return `({ if (${lengthCheck}) tsc_panic("Reflect.apply argumentsList length mismatch"); ${fn}->fn(${[`${fn}->env`, ...(target.ty.thisParam ? [thisArg] : []), ...callArgs].join(", ")}); })`;
+                return `({ if (${lengthCheck}) tsc_throw_str(tsc_str_from_cstr("Reflect.apply argumentsList length mismatch")); ${fn}->fn(${[`${fn}->env`, ...(target.ty.thisParam ? [thisArg] : []), ...callArgs].join(", ")}); })`;
             });
         }
         const params = target.ty.params ?? [];
@@ -23856,7 +23856,7 @@ class Emitter {
                 for (let i = 0; i < params.length; i++) {
                     callArgs.push(this.coerce({ c: `TSC_ARR(tsc_value_t, ${listC}, ${i})`, ty: T_VALUE }, params[i]!, args[2]!));
                 }
-                return `({ if (${listC}->len != ${params.length}) tsc_panic("Reflect.apply argumentsList length mismatch"); ${fn}->fn(${[`${fn}->env`, ...(target.ty.thisParam ? [thisArg] : []), ...callArgs].join(", ")}); })`;
+                return `({ if (${listC}->len != ${params.length}) tsc_throw_str(tsc_str_from_cstr("Reflect.apply argumentsList length mismatch")); ${fn}->fn(${[`${fn}->env`, ...(target.ty.thisParam ? [thisArg] : []), ...callArgs].join(", ")}); })`;
             });
         }
         if (argList.elements.length !== params.length) {
@@ -23953,7 +23953,7 @@ class Emitter {
                 const lengthCheck = list.ty.kind === "array"
                     ? `${listC}->len != ${expected}`
                     : `(!tsc_value_is_array(${listC}) || (size_t)tsc_value_length(${listC}) != ${expected})`;
-                return `({ if (${lengthCheck}) tsc_panic("Reflect.construct argumentsList length mismatch"); ${cls}_new(${callArgs.join(", ")}); })`;
+                return `({ if (${lengthCheck}) tsc_throw_str(tsc_str_from_cstr("Reflect.construct argumentsList length mismatch")); ${cls}_new(${callArgs.join(", ")}); })`;
             });
         }
         const ctor = decl.members.find(ts.isConstructorDeclaration);
@@ -23972,7 +23972,7 @@ class Emitter {
                     const paramType = mapType(params[i]!, this.checker);
                     callArgs.push(this.coerce({ c: `TSC_ARR(tsc_value_t, ${listC}, ${i})`, ty: T_VALUE }, paramType, args[1]!));
                 }
-                return `({ if (${listC}->len != ${params.length}) tsc_panic("Reflect.construct argumentsList length mismatch"); ${cls}_new(${callArgs.join(", ")}); })`;
+                return `({ if (${listC}->len != ${params.length}) tsc_throw_str(tsc_str_from_cstr("Reflect.construct argumentsList length mismatch")); ${cls}_new(${callArgs.join(", ")}); })`;
             });
         }
         if (argList.elements.length !== params.length) {
@@ -24805,7 +24805,7 @@ class Emitter {
             const pieces: string[] = [
                 `tsc_value_t ${fn} = ${replacement}`,
                 `${ret.c} ${out} = NULL`,
-                `if (${list}->len != ${paramTypes.length}) tsc_panic("spread call argument length mismatch")`,
+                `if (${list}->len != ${paramTypes.length}) tsc_throw_str(tsc_str_from_cstr("spread call argument length mismatch"))`,
                 `if (tsc_value_is_undefined(${fn})) { ${out} = ${className}_new(${originalArgs.join(", ")}); } else { ${out} = ${this.coerce(constructed, ret, node)}; }`,
                 out,
             ];
@@ -24834,7 +24834,7 @@ class Emitter {
             let constructArgs: string;
             if (listValue.ty.kind === "array") {
                 const elem = listValue.ty.elem ?? T_VALUE;
-                pieces.push(`if (${list}->len != ${paramTypes.length}) tsc_panic("Reflect.construct argumentsList length mismatch")`);
+                pieces.push(`if (${list}->len != ${paramTypes.length}) tsc_throw_str(tsc_str_from_cstr("Reflect.construct argumentsList length mismatch"))`);
                 const av = this.freshTemp("_reflect_construct_args");
                 pieces.push(`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, paramTypes.length)})`);
                 for (let i = 0; i < paramTypes.length; i++) {
@@ -24846,7 +24846,7 @@ class Emitter {
                 }
                 constructArgs = `tsc_value_array(${av})`;
             } else {
-                pieces.push(`if (!tsc_value_is_array(${list}) || (size_t)tsc_value_length(${list}) != ${paramTypes.length}) tsc_panic("Reflect.construct argumentsList length mismatch")`);
+                pieces.push(`if (!tsc_value_is_array(${list}) || (size_t)tsc_value_length(${list}) != ${paramTypes.length}) tsc_throw_str(tsc_str_from_cstr("Reflect.construct argumentsList length mismatch"))`);
                 for (let i = 0; i < paramTypes.length; i++) {
                     originalArgs.push(this.coerce({ c: `tsc_value_get_index(${list}, ${i}.0)`, ty: T_VALUE }, paramTypes[i]!, argsNode));
                 }
