@@ -1,5 +1,6 @@
-function proto: stable
-function extensible: false false
+same boxed: true true
+shared proto: stable
+shared extensible: false false
 seal before: false false
 seal: true false true false
 freeze: true false true true

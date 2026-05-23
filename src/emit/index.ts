@@ -221,6 +221,7 @@ class Emitter {
     private functionTypes = new Set<string>();
     private closureCounter = 0;
     private functionRefAdapters = new Map<string, string>();
+    private functionRefClosureStatics = new Map<string, string>();
     private accessorAdapters = new Map<string, string>();
     private promiseResolveAdapters = new Map<string, string>();
     private promiseRejectAdapters = new Map<string, string>();
@@ -11527,11 +11528,18 @@ class Emitter {
         if (type.kind !== "function") unsupported(id, "function reference type expected");
         this.prepareType(type);
         const adapter = this.ensureFunctionReferenceAdapter(id, type);
-        const tmp = this.freshTemp("_fn");
+        const key = `${adapter}:${this.typeKey(type)}`;
+        let staticName = this.functionRefClosureStatics.get(key);
+        if (!staticName) {
+            staticName = `__tsc_fnref_closure_${this.functionRefClosureStatics.size}`;
+            this.functionRefClosureStatics.set(key, staticName);
+            this.globalDecls.line(`static ${type.closureName} ${staticName};`);
+            this.globalDecls.line(`static bool ${staticName}_initialized;`);
+        }
         return {
             c:
-                `({ ${type.c} ${tmp} = (${type.c})TSC_GC_MALLOC(sizeof(${type.closureName})); ` +
-                `${tmp}->fn = ${adapter}; ${tmp}->env = NULL; ${tmp}; })`,
+                `({ if (!${staticName}_initialized) { ${staticName}.fn = ${adapter}; ${staticName}.env = NULL; ${staticName}_initialized = true; } ` +
+                `&${staticName}; })`,
             ty: type,
         };
     }

@@ -5,12 +5,14 @@ function Proxied(this: any): void {}
 function FrozenProxy(this: any): void {}
 
 const first: any = Stable as any;
+const second: any = Stable as any;
 const stableProto: any = { marker: "stable" };
 
+console.log("same boxed:", Object.is(first, second), first === second);
 Object.setPrototypeOf(first, stableProto);
-console.log("function proto:", Object.getPrototypeOf(first).marker);
+console.log("shared proto:", Object.getPrototypeOf(second).marker);
 Object.preventExtensions(first);
-console.log("function extensible:", Reflect.isExtensible(first), Reflect.setPrototypeOf(first, { marker: "blocked" }));
+console.log("shared extensible:", Reflect.isExtensible(second), Reflect.setPrototypeOf(second, { marker: "blocked" }));
 
 const sealed: any = Sealed as any;
 console.log("seal before:", Object.isSealed(sealed), Object.isFrozen(sealed));
