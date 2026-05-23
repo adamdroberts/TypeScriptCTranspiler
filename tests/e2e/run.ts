@@ -25,6 +25,15 @@ interface Case {
     release?: boolean;
 }
 
+async function exists(p: string): Promise<boolean> {
+    try {
+        await fs.access(p);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 async function discoverCases(): Promise<Case[]> {
     const filterIdx = process.argv.indexOf('--filter');
     const filterStr = filterIdx >= 0 ? process.argv[filterIdx + 1] : undefined;
@@ -43,84 +52,34 @@ async function discoverCases(): Promise<Case[]> {
         const runtimeCodeManifestPath = path.join(casesDir, d, "runtime-code-manifest.json");
         const unsafeEvalPath = path.join(casesDir, d, "compile.unsafe_eval");
         const releasePath = path.join(casesDir, d, "compile.release");
-        try {
-            await fs.access(entry);
-            let release = false;
-            try {
-                await fs.access(releasePath);
-                release = true;
-            } catch {
-                // default debug/speed build
-            }
-            let emitCOnly = false;
-            try {
-                await fs.access(emitCOnlyPath);
-                emitCOnly = true;
-            } catch {
-                // default compile-and-run case
-            }
-            let nativeAddonManifest: string | undefined;
-            try {
-                await fs.access(nativeAddonManifestPath);
-                nativeAddonManifest = nativeAddonManifestPath;
-            } catch {
-                // optional native-addon allow-list
-            }
-            let dynamicRequireManifest: string | undefined;
-            try {
-                await fs.access(dynamicRequireManifestPath);
-                dynamicRequireManifest = dynamicRequireManifestPath;
-            } catch {
-                // optional dynamic require allow-list
-            }
-            let runtimeCodeManifest: string | undefined;
-            try {
-                await fs.access(runtimeCodeManifestPath);
-                runtimeCodeManifest = runtimeCodeManifestPath;
-            } catch {
-                // optional runtime code allow-list
-            }
-            let unsafeEval = false;
-            try {
-                await fs.access(unsafeEvalPath);
-                unsafeEval = true;
-            } catch {
-                // default safe AOT-only runtime-code compilation
-            }
-            let expectedMainCContains: string | undefined;
-            try {
-                expectedMainCContains = (await fs.readFile(expectedMainCContainsPath, "utf8")).trimEnd();
-            } catch {
-                // optional generated-C assertion
-            }
-            try {
-                const raw = await fs.readFile(expectedExitPath, "utf8");
-                cases.push({
-                    name: d,
-                    entry,
-                    expectedExitCode: Number(raw.trim()),
-                    expectedMainCContains,
-                    emitCOnly,
-                    nativeAddonManifest,
-                    dynamicRequireManifest,
-                    runtimeCodeManifest,
-                    unsafeEval,
-                    release,
-                });
-                continue;
-            } catch {
-                // fall through to positive stdout case
-            }
-            let expected = "";
-            try {
-                expected = await fs.readFile(expectedPath, "utf8");
-            } catch {
-                if (!emitCOnly) throw new Error(`missing expected.stdout for ${d}`);
+        if (!(await exists(entry))) continue;
+
+        const release = await exists(releasePath);
+        const emitCOnly = await exists(emitCOnlyPath);
+        const nativeAddonManifest = await exists(nativeAddonManifestPath)
+            ? nativeAddonManifestPath
+            : undefined;
+        const dynamicRequireManifest = await exists(dynamicRequireManifestPath)
+            ? dynamicRequireManifestPath
+            : undefined;
+        const runtimeCodeManifest = await exists(runtimeCodeManifestPath)
+            ? runtimeCodeManifestPath
+            : undefined;
+        const unsafeEval = await exists(unsafeEvalPath);
+        const expectedMainCContains = await exists(expectedMainCContainsPath)
+            ? (await fs.readFile(expectedMainCContainsPath, "utf8")).trimEnd()
+            : undefined;
+
+        if (await exists(expectedExitPath)) {
+            const raw = await fs.readFile(expectedExitPath, "utf8");
+            const expectedExitCode = Number(raw.trim());
+            if (!Number.isInteger(expectedExitCode)) {
+                throw new Error(`invalid expected.exitcode for ${d}: ${raw.trim()}`);
             }
             cases.push({
                 name: d,
                 entry,
-                expected,
+                expectedExitCode,
                 expectedMainCContains,
                 emitCOnly,
                 nativeAddonManifest,
@@ -129,9 +88,27 @@ async function discoverCases(): Promise<Case[]> {
                 unsafeEval,
                 release,
             });
-        } catch {
-            // ignore non-case dirs
+            continue;
         }
+
+        const expected = await exists(expectedPath)
+            ? await fs.readFile(expectedPath, "utf8")
+            : "";
+        if (!emitCOnly && !(await exists(expectedPath))) {
+            throw new Error(`missing expected.stdout or expected.exitcode for ${d}`);
+        }
+        cases.push({
+            name: d,
+            entry,
+            expected,
+            expectedMainCContains,
+            emitCOnly,
+            nativeAddonManifest,
+            dynamicRequireManifest,
+            runtimeCodeManifest,
+            unsafeEval,
+            release,
+        });
     }
     return cases.sort((a, b) => a.name.localeCompare(b.name));
 }

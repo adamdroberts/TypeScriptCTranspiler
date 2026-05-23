@@ -4,6 +4,8 @@
 
 The harness recreates its tiny `node_modules` package fixtures before case discovery, so running `bun install` does not remove the package-source cases needed by the Phase 14 tests.
 
+Any directory under `tests/e2e/cases/` with an `in.ts` file is a real case. It must also have `expected.stdout`, `expected.exitcode`, or `compile.emit_c_only`; malformed cases fail discovery instead of being silently skipped.
+
 ## Running the suite
 
 ```bash
