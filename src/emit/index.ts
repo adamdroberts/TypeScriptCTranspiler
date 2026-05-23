@@ -233,6 +233,7 @@ class Emitter {
     private timeoutAdapters = new Map<string, string>();
     private nodeFunctionAdapters = new Set<string>();
     private dynamicFunctionAdapters = new Map<string, string>();
+    private decoratorAddInitializerAdapter: string | null = null;
     private eventListenerAdapters = new Map<string, string>();
     private eventTargetListenerAdapters = new Map<string, string>();
     private eventListenerIdentities = new Map<string, string>();
@@ -470,11 +471,16 @@ class Emitter {
                     const metadata = this.classHasDecorators(inner)
                         ? this.freshTemp("_decorator_metadata")
                         : null;
+                    const initializers = metadata
+                        ? this.freshTemp("_decorator_initializers")
+                        : null;
                     if (metadata) {
                         initBuf.line(`tsc_object_t* ${metadata} = tsc_object_new();`);
+                        initBuf.line(`tsc_array_t* ${initializers} = tsc_array_new(sizeof(tsc_value_t), 4);`);
                     }
-                    this.emitClassMemberDecorators(initBuf, inner, metadata);
-                    this.emitClassDecorators(initBuf, inner, metadata);
+                    this.emitClassMemberDecorators(initBuf, inner, metadata, initializers);
+                    this.emitClassDecorators(initBuf, inner, metadata, initializers);
+                    this.emitDecoratorInitializers(initBuf, initializers);
                     continue;
                 }
                 if (ts.isInterfaceDeclaration(inner)) continue;
@@ -5213,6 +5219,7 @@ class Emitter {
         buf: CBuf,
         cd: ts.ClassDeclaration,
         metadata: string | null,
+        initializers: string | null,
     ): void {
         if (!cd.name || !ts.canHaveDecorators(cd)) return;
         const decorators = ts.getDecorators(cd) ?? [];
@@ -5222,7 +5229,7 @@ class Emitter {
                 decorator.expression,
                 [
                     { c: "tsc_value_undefined()", ty: T_VALUE },
-                    this.classDecoratorContext(cd, metadata),
+                    this.classDecoratorContext(cd, metadata, initializers),
                 ],
                 "class decorator",
             );
@@ -5234,6 +5241,7 @@ class Emitter {
         buf: CBuf,
         cd: ts.ClassDeclaration,
         metadata: string | null,
+        initializers: string | null,
     ): void {
         if (!cd.name) return;
         for (const member of cd.members) {
@@ -5265,7 +5273,7 @@ class Emitter {
                     decorator.expression,
                     [
                         { c: "tsc_value_undefined()", ty: T_VALUE },
-                        this.classMemberDecoratorContext(member, kind, memberName, metadata),
+                        this.classMemberDecoratorContext(member, kind, memberName, metadata, initializers),
                     ],
                     label,
                 );
@@ -5274,18 +5282,26 @@ class Emitter {
         }
     }
 
-    private classDecoratorContext(cd: ts.ClassDeclaration, metadata: string | null): EmitResult {
+    private classDecoratorContext(
+        cd: ts.ClassDeclaration,
+        metadata: string | null,
+        initializers: string | null,
+    ): EmitResult {
         const name = cd.name?.text ?? "";
         const obj = this.freshTemp("_class_decorator_ctx");
         const metadataValue = metadata
             ? `tsc_value_object(${metadata})`
             : "tsc_value_object(tsc_object_new())";
+        const initializerLine = initializers
+            ? `tsc_object_set(${obj}, tsc_str_from_lit("addInitializer", 14), tsc_value_function_generic(${this.ensureDecoratorAddInitializerAdapter()}, ${initializers})); `
+            : "";
         return {
             c:
                 `({ tsc_object_t* ${obj} = tsc_object_new(); ` +
                 `tsc_object_set(${obj}, tsc_str_from_lit("kind", 4), tsc_value_string(tsc_str_from_lit("class", 5))); ` +
                 `tsc_object_set(${obj}, tsc_str_from_lit("name", 4), tsc_value_string(tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))); ` +
                 `tsc_object_set(${obj}, tsc_str_from_lit("metadata", 8), ${metadataValue}); ` +
+                initializerLine +
                 `tsc_value_object(${obj}); })`,
             ty: T_VALUE,
         };
@@ -5296,12 +5312,16 @@ class Emitter {
         kind: "method" | "field" | "getter" | "setter",
         name: string,
         metadata: string | null,
+        initializers: string | null,
     ): EmitResult {
         const obj = this.freshTemp("_member_decorator_ctx");
         const isStaticMember = isStatic(member) ? "true" : "false";
         const metadataValue = metadata
             ? `tsc_value_object(${metadata})`
             : "tsc_value_object(tsc_object_new())";
+        const initializerLine = initializers
+            ? `tsc_object_set(${obj}, tsc_str_from_lit("addInitializer", 14), tsc_value_function_generic(${this.ensureDecoratorAddInitializerAdapter()}, ${initializers})); `
+            : "";
         return {
             c:
                 `({ tsc_object_t* ${obj} = tsc_object_new(); ` +
@@ -5310,9 +5330,37 @@ class Emitter {
                 `tsc_object_set(${obj}, tsc_str_from_lit("static", 6), tsc_value_bool(${isStaticMember})); ` +
                 `tsc_object_set(${obj}, tsc_str_from_lit("private", 7), tsc_value_bool(false)); ` +
                 `tsc_object_set(${obj}, tsc_str_from_lit("metadata", 8), ${metadataValue}); ` +
+                initializerLine +
                 `tsc_value_object(${obj}); })`,
             ty: T_VALUE,
         };
+    }
+
+    private ensureDecoratorAddInitializerAdapter(): string {
+        if (this.decoratorAddInitializerAdapter) return this.decoratorAddInitializerAdapter;
+        const name = "tsc_decorator_add_initializer";
+        this.decoratorAddInitializerAdapter = name;
+        this.defs.open(`static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`);
+        this.defs.line("(void)this_arg;");
+        this.defs.line("tsc_array_t* list = (tsc_array_t*)env;");
+        this.defs.line("if (!args || args->len < 1) tsc_panic(\"Decorator addInitializer expects a function\");");
+        this.defs.line("tsc_value_t fn = TSC_ARR(tsc_value_t, args, 0);");
+        this.defs.line("tsc_array_push_value(list, fn);");
+        this.defs.line("return tsc_value_undefined();");
+        this.defs.close();
+        return name;
+    }
+
+    private emitDecoratorInitializers(buf: CBuf, initializers: string | null): void {
+        if (!initializers) return;
+        const i = this.freshTemp("_decorator_init_i");
+        const fn = this.freshTemp("_decorator_init_fn");
+        const args = this.freshTemp("_decorator_init_args");
+        buf.open(`for (size_t ${i} = 0; ${i} < ${initializers}->len; ${i}++)`);
+        buf.line(`tsc_value_t ${fn} = TSC_ARR(tsc_value_t, ${initializers}, ${i});`);
+        buf.line(`tsc_array_t* ${args} = tsc_array_new(sizeof(tsc_value_t), 1);`);
+        buf.line(`(void)tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${args}));`);
+        buf.close();
     }
 
     private emitDecoratorFunctionCall(
@@ -24435,10 +24483,13 @@ class Emitter {
         this.dynamicFunctionAdapters.set(key, name);
         const params = type.params ?? [];
         const ret = this.prepareType(type.ret);
-        this.defs.open(`static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`);
-        this.defs.line(`${type.c} fn = (${type.c})env;`);
-        if (!type.thisParam) this.defs.line("(void)this_arg;");
-        this.defs.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
+        const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
+        this.protos.line(signature + ";");
+        const buf = new CBuf();
+        buf.open(signature);
+        buf.line(`${type.c} fn = (${type.c})env;`);
+        if (!type.thisParam) buf.line("(void)this_arg;");
+        buf.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
         const callArgs: string[] = ["fn->env"];
         if (type.thisParam) {
             callArgs.push(this.coerce({ c: "this_arg", ty: T_VALUE }, type.thisParam, node));
@@ -24449,13 +24500,15 @@ class Emitter {
         }
         const call = `fn->fn(${callArgs.join(", ")})`;
         if (ret.kind === "void" || ret.kind === "never") {
-            this.defs.line(`${call};`);
-            this.defs.line("return tsc_value_undefined();");
+            buf.line(`${call};`);
+            buf.line("return tsc_value_undefined();");
         } else {
-            this.defs.line(`${ret.c} result = ${call};`);
-            this.defs.line(`return ${this.coerce({ c: "result", ty: ret }, T_VALUE, node)};`);
+            buf.line(`${ret.c} result = ${call};`);
+            buf.line(`return ${this.coerce({ c: "result", ty: ret }, T_VALUE, node)};`);
         }
-        this.defs.close();
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
         return name;
     }
 }
