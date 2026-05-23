@@ -771,6 +771,9 @@ class Emitter {
         if (ts.isTypeOfExpression(expr) || ts.isVoidExpression(expr)) {
             return this.isSideEffectFreeTopLevelConstInitializer(expr.expression, seenConsts);
         }
+        if (ts.isDeleteExpression(expr)) {
+            return this.isSideEffectFreeDeleteExpression(expr, seenConsts);
+        }
         if (ts.isBinaryExpression(expr)) {
             switch (expr.operatorToken.kind) {
                 case ts.SyntaxKind.InKeyword:
@@ -914,6 +917,33 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeInRightOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeDeleteExpression(
+        expr: ts.DeleteExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const target = this.unwrapSideEffectFreeStaticExpression(expr.expression);
+        if (ts.isPropertyAccessExpression(target)) {
+            return this.isSideEffectFreeDeleteTargetOperand(target.expression, seenConsts);
+        }
+        if (ts.isElementAccessExpression(target) && target.argumentExpression) {
+            return this.isSideEffectFreeDeleteTargetOperand(target.expression, seenConsts) &&
+                this.isSideEffectFreeTopLevelConstInitializer(target.argumentExpression, seenConsts);
+        }
+        return false;
+    }
+
+    private isSideEffectFreeDeleteTargetOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isObjectLiteralExpression(unwrapped) || ts.isArrayLiteralExpression(unwrapped)) {
+            return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeDeleteTargetOperand(init, seenConsts);
     }
 
     private objectLiteralPropertyNameHasNoDefinitionSideEffects(

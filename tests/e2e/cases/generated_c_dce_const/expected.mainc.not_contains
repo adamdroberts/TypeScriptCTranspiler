@@ -28,6 +28,9 @@ unused_object_key_index
 unused_in_object
 unused_in_array
 unused_in_const_object
+unused_delete_object
+unused_delete_array
+unused_delete_const_object
 unused_chain_seed
 unused_chain_mid
 unused_chain_object
@@ -40,6 +43,7 @@ unused_empty
 top_level_dead_expr
 top_level_dead_regex
 top_level_dead_in
+top_level_dead_delete
 top_level_dead_length
 top_level_dead_index
 top_level_dead_prop
@@ -50,6 +54,7 @@ unused_local_empty
 local_dead_expr
 local_dead_regex
 local_dead_in
+local_dead_delete
 local_dead_length
 local_dead_index
 local_dead_prop
