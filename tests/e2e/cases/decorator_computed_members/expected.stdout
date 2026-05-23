@@ -1,0 +1,4 @@
+seen: field:tag:false|method:label:false|getter:current:false|setter:current:false|field-init:field|
+method: field:decorated:call:method
+current: field:decorated:value:set:get
+stored: field:decorated:value:set
