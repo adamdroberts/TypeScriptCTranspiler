@@ -98,6 +98,8 @@ unused_math_abs_call
 unused_math_max_call
 unused_math_hypot_call
 unused_string_from_char_code
+unused_regexp_escape_call
+dead_regexp_escape
 unused_object_keys_call
 unused_object_values_call
 unused_object_entries_call
@@ -201,6 +203,7 @@ top_level_dead_range_error_constructor
 top_level_dead_object_is
 top_level_dead_math_call
 top_level_dead_from_char_code
+top_level_dead_regexp_escape
 top_level_dead_object_keys
 top_level_dead_object_values
 top_level_dead_object_has_own
@@ -265,6 +268,7 @@ local_dead_syntax_error_constructor
 local_dead_object_is
 local_dead_math_call
 local_dead_from_char_code
+local_dead_regexp_escape
 local_dead_object_entries
 local_dead_array_keys
 local_dead_object_has_own

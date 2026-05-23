@@ -1121,6 +1121,14 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            method === "escape" &&
+            call.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "RegExp")
+        ) {
+            return this.isSideEffectFreeStringCoercion(call.arguments[0]!, seenConsts);
+        }
+        if (
+            ts.isIdentifier(recv) &&
             method === "ownKeys" &&
             call.arguments.length === 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Reflect")
