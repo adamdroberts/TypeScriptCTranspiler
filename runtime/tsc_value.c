@@ -53,6 +53,14 @@ tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env) {
     return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)id);
 }
 
+static bool value_is_callable_function(tsc_value_t v) {
+    if (!value_is_box(v)) return false;
+    if (value_tag(v) == TSC_VALUE_TAG_FUNCTION) return true;
+    if (value_tag(v) != TSC_VALUE_TAG_OBJECT) return false;
+    tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+    return o && o->is_proxy && value_is_callable_function(o->proxy_target);
+}
+
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args) {
     if (value_is_box(fn) && value_tag(fn) == TSC_VALUE_TAG_OBJECT) {
         tsc_object_t* o = (tsc_object_t*)value_ptr(fn);
@@ -61,6 +69,9 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
             tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("apply", 5));
             if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
                 return tsc_value_apply_function(o->proxy_target, this_arg, args);
+            }
+            if (!value_is_callable_function(trap)) {
+                tsc_throw_str(tsc_str_from_cstr("Proxy apply trap must be callable"));
             }
             tsc_array_t* trap_args = tsc_array_new(sizeof(tsc_value_t), 4);
             tsc_array_push_value(trap_args, o->proxy_target);
@@ -121,6 +132,9 @@ tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args) {
             if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
                 return tsc_value_construct(o->proxy_target, args);
             }
+            if (!value_is_callable_function(trap)) {
+                tsc_throw_str(tsc_str_from_cstr("Proxy construct trap must be callable"));
+            }
             tsc_array_t* trap_args = tsc_array_new(sizeof(tsc_value_t), 4);
             tsc_array_push_value(trap_args, o->proxy_target);
             tsc_array_push_value(trap_args, args);
@@ -134,7 +148,7 @@ tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args) {
                     value_tag(result) != TSC_VALUE_TAG_FUNCTION
                 )
             ) {
-                tsc_panic("Proxy construct trap must return an object");
+                tsc_throw_str(tsc_str_from_cstr("Proxy construct trap must return an object"));
             }
             return result;
         }
