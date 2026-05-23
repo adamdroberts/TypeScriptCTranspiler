@@ -23651,7 +23651,7 @@ class Emitter {
             case "getPrototypeOf": {
                 if (args.length !== 1) unsupported(call, "Reflect.getPrototypeOf expects target");
                 const target = this.emitExpr(args[0]!);
-                return this.emitSequencedCall("tsc_value_get_prototype_of", T_VALUE, [
+                return this.emitSequencedCall("tsc_reflect_get_prototype_of", T_VALUE, [
                     { value: target, target: T_VALUE, node: args[0]! },
                 ]);
             }
@@ -23692,7 +23692,7 @@ class Emitter {
                 const target = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: target, target: mapped.kind === "value" ? T_VALUE : undefined, node: args[0]! },
-                ], ([t]) => `tsc_value_is_extensible(${mapped.kind === "array" ? `tsc_value_array(${t})` : t})`);
+                ], ([t]) => `tsc_reflect_is_extensible(${mapped.kind === "array" ? `tsc_value_array(${t})` : t})`);
             }
             case "ownKeys": {
                 if (args.length !== 1) unsupported(call, "Reflect.ownKeys expects target");
@@ -23748,7 +23748,7 @@ class Emitter {
                 const target = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: target, target: mapped.kind === "value" ? T_VALUE : undefined, node: args[0]! },
-                ], ([t]) => `tsc_value_prevent_extensions(${mapped.kind === "array" ? `tsc_value_array(${t})` : t})`);
+                ], ([t]) => `tsc_reflect_prevent_extensions(${mapped.kind === "array" ? `tsc_value_array(${t})` : t})`);
             }
             case "set": {
                 if (args.length !== 3 && args.length !== 4) unsupported(call, "Reflect.set expects target, key, value, and optional receiver");
@@ -23784,7 +23784,7 @@ class Emitter {
                 if (args.length !== 2) unsupported(call, "Reflect.setPrototypeOf expects target and prototype");
                 const target = this.emitExpr(args[0]!);
                 const proto = this.emitExpr(args[1]!);
-                return this.emitSequencedCall("tsc_value_set_prototype_of", T_BOOLEAN, [
+                return this.emitSequencedCall("tsc_reflect_set_prototype_of", T_BOOLEAN, [
                     { value: target, target: T_VALUE, node: args[0]! },
                     { value: proto, target: T_VALUE, node: args[1]! },
                 ]);

@@ -1,0 +1,8 @@
+get proto target: Reflect.getPrototypeOf target must be an object
+set proto target: Reflect.setPrototypeOf target must be an object
+set proto value: Reflect.setPrototypeOf prototype must be an object or null
+is extensible target: Reflect.isExtensible target must be an object
+prevent target: Reflect.preventExtensions target must be an object
+valid before: true
+valid prevent: true
+valid after: false

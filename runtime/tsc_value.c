@@ -393,6 +393,31 @@ bool tsc_value_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
     return false;
 }
 
+static bool value_is_reflect_object_target(tsc_value_t v) {
+    if (!value_is_box(v)) return false;
+    tsc_value_tag_t tag = value_tag(v);
+    return tag == TSC_VALUE_TAG_OBJECT || tag == TSC_VALUE_TAG_ARRAY || tag == TSC_VALUE_TAG_FUNCTION;
+}
+
+static void require_reflect_object_target(tsc_value_t v, const char* message) {
+    if (!value_is_reflect_object_target(v)) {
+        tsc_throw_str(tsc_str_from_cstr(message));
+    }
+}
+
+tsc_value_t tsc_reflect_get_prototype_of(tsc_value_t v) {
+    require_reflect_object_target(v, "Reflect.getPrototypeOf target must be an object");
+    return tsc_value_get_prototype_of(v);
+}
+
+bool tsc_reflect_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
+    require_reflect_object_target(v, "Reflect.setPrototypeOf target must be an object");
+    if (!value_is_valid_prototype(prototype)) {
+        tsc_throw_str(tsc_str_from_cstr("Reflect.setPrototypeOf prototype must be an object or null"));
+    }
+    return tsc_value_set_prototype_of(v, prototype);
+}
+
 bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_set((tsc_object_t*)value_ptr(v), key, value);
@@ -498,6 +523,16 @@ bool tsc_value_prevent_extensions(tsc_value_t v) {
         return true;
     }
     return false;
+}
+
+bool tsc_reflect_is_extensible(tsc_value_t v) {
+    require_reflect_object_target(v, "Reflect.isExtensible target must be an object");
+    return tsc_value_is_extensible(v);
+}
+
+bool tsc_reflect_prevent_extensions(tsc_value_t v) {
+    require_reflect_object_target(v, "Reflect.preventExtensions target must be an object");
+    return tsc_value_prevent_extensions(v);
 }
 
 bool tsc_value_seal(tsc_value_t v) {
