@@ -726,6 +726,9 @@ class Emitter {
         if (ts.isNumericLiteral(expr) || ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) {
             return true;
         }
+        if (ts.isArrowFunction(expr) || ts.isFunctionExpression(expr)) {
+            return true;
+        }
         if (ts.isIdentifier(expr)) {
             return this.isSideEffectFreeConstIdentifier(expr, seenConsts);
         }
