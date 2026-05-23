@@ -156,12 +156,13 @@ function parseManifestList(
     parse: (source: string) => AotRuntimeConstant | null,
 ): AotRuntimeCodeEntry[] {
     if (raw === undefined) return [];
-    if (!Array.isArray(raw)) {
-        throw new Error(`runtime code manifest field '${fieldName}' must be an array of strings`);
+    const rawEntries = manifestSourceEntries(raw);
+    if (!rawEntries) {
+        throw new Error(`runtime code manifest field '${fieldName}' must be an array or object map of strings`);
     }
     const entries: AotRuntimeCodeEntry[] = [];
     const seen = new Set<string>();
-    for (const item of raw) {
+    for (const item of rawEntries) {
         if (typeof item !== "string" || item.length === 0) {
             throw new Error(`runtime code manifest field '${fieldName}' entries must be non-empty strings`);
         }
@@ -174,4 +175,10 @@ function parseManifestList(
         entries.push({ source: item, constant });
     }
     return entries;
+}
+
+function manifestSourceEntries(raw: unknown): unknown[] | null {
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === "object") return Object.values(raw);
+    return null;
 }

@@ -1,0 +1,10 @@
+{
+  "eval": {
+    "number": "1 + 9",
+    "string": "'mapped-' + 'eval'"
+  },
+  "functions": {
+    "number": "return 8 * 8;",
+    "string": "return 'mapped-fn';"
+  }
+}

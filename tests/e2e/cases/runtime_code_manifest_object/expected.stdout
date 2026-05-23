@@ -1,0 +1,4 @@
+manifest object eval number: 10
+manifest object eval string: mapped-eval
+manifest object function number: 64
+manifest object function string: mapped-fn
