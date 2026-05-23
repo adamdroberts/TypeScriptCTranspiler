@@ -5373,16 +5373,21 @@ class Emitter {
         if (!cd.name || !ts.canHaveDecorators(cd)) return;
         const decorators = ts.getDecorators(cd) ?? [];
         if (decorators.length === 0) return;
-        const decoratorFns = this.emitDecoratorFunctionValues(buf, decorators, "class decorator");
+        const decoratorFns = decorators.length > 1
+            ? this.emitDecoratorFunctionValues(buf, decorators, "class decorator")
+            : null;
         for (let i = decorators.length - 1; i >= 0; i--) {
             const decorator = decorators[i]!;
+            const callee = decoratorFns
+                ? { c: decoratorFns[i]!, ty: T_VALUE }
+                : decorator.expression;
             const call = this.emitDecoratorFunctionCall(
-                { c: decoratorFns[i]!, ty: T_VALUE },
+                callee,
                 [
                     { c: "tsc_value_undefined()", ty: T_VALUE },
                     this.classDecoratorContext(cd, metadata, initializers),
                 ],
-                decorator.expression,
+                decoratorFns ? decorator.expression : "class decorator",
             );
             buf.line(`(void)(${call});`);
         }
@@ -5419,9 +5424,14 @@ class Emitter {
                         ? "getter"
                         : "setter";
             const label = `${kind} decorator`;
-            const decoratorFns = this.emitDecoratorFunctionValues(buf, decorators, label);
+            const decoratorFns = decorators.length > 1
+                ? this.emitDecoratorFunctionValues(buf, decorators, label)
+                : null;
             for (let i = decorators.length - 1; i >= 0; i--) {
                 const decorator = decorators[i]!;
+                const callee = decoratorFns
+                    ? { c: decoratorFns[i]!, ty: T_VALUE }
+                    : decorator.expression;
                 const valueArg = ts.isMethodDeclaration(member) && isStatic(member)
                     ? this.classStaticMethodDecoratorValue(cd, member)
                     : ts.isMethodDeclaration(member) && !isStatic(member)
@@ -5441,9 +5451,9 @@ class Emitter {
                 ];
                 if (ts.isPropertyDeclaration(member)) {
                     const result = this.emitDecoratorFunctionCallValue(
-                        { c: decoratorFns[i]!, ty: T_VALUE },
+                        callee,
                         args,
-                        decorator.expression,
+                        decoratorFns ? decorator.expression : label,
                     );
                     const out = this.freshTemp("_field_decorator_result");
                     const list = this.classFieldDecoratorInitializersName(cd, member);
@@ -5451,9 +5461,9 @@ class Emitter {
                     continue;
                 }
                 const result = this.emitDecoratorFunctionCallValue(
-                    { c: decoratorFns[i]!, ty: T_VALUE },
+                    callee,
                     args,
-                    decorator.expression,
+                    decoratorFns ? decorator.expression : label,
                 );
                 if (ts.isMethodDeclaration(member) && isStatic(member)) {
                     const out = this.freshTemp("_method_decorator_result");
