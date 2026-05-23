@@ -1,0 +1,4 @@
+direct: 2 direct:decorated
+chained: 4 chain:decorated
+reflected: 6 reflect:decorated
+seen: class:Pair|replacement:1:direct|original:2:direct:decorated|replacement:3:chain|original:4:chain:decorated|replacement:5:reflect|original:6:reflect:decorated|
