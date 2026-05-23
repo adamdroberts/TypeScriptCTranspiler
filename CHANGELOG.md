@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Proxy `apply` and `construct` paths now reject object-target proxies before trap dispatch, so handlers cannot make non-callable or non-constructable targets callable. Test: `proxy_callable_target_validation`.
 - Proxy `ownKeys` trap validation now rejects non-string array entries through catchable runtime exceptions instead of coercing them to string keys. Test: `proxy_ownkeys_entry_validation`.
 - Revoked callable Proxy values now preserve `typeof proxy === "function"` identity while `String(proxy)` and `JSON.stringify(proxy)` report revoked-get errors instead of silently treating the proxy as an ordinary object. Test: `proxy_revocable_identity`.
 - Proxy `ownKeys` trap validation now rejects non-array trap results for both `Reflect.ownKeys(proxy)` and `Object.keys(proxy)` through catchable runtime exceptions. Test: `proxy_ownkeys_result_validation`.
