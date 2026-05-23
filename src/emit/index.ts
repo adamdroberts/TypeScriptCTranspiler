@@ -696,6 +696,9 @@ class Emitter {
         if (ts.isPropertyAccessExpression(expr) && expr.name.text === "length") {
             return this.isSideEffectFreeLengthOperand(expr.expression, seenConsts);
         }
+        if (ts.isElementAccessExpression(expr) && expr.argumentExpression) {
+            return this.isSideEffectFreeElementAccess(expr, seenConsts);
+        }
         if (ts.isTemplateExpression(expr)) {
             return expr.templateSpans.every((span) =>
                 this.isSideEffectFreeTopLevelConstInitializer(span.expression, seenConsts)
@@ -737,6 +740,31 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeLengthOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeElementAccess(
+        expr: ts.ElementAccessExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return this.isSideEffectFreeIndexableOperand(expr.expression, seenConsts) &&
+            !!expr.argumentExpression &&
+            this.isSideEffectFreeTopLevelConstInitializer(expr.argumentExpression, seenConsts);
+    }
+
+    private isSideEffectFreeIndexableOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isArrayLiteralExpression(unwrapped) ||
+            ts.isStringLiteral(unwrapped) ||
+            ts.isNoSubstitutionTemplateLiteral(unwrapped)
+        ) {
+            return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeIndexableOperand(init, seenConsts);
     }
 
     private objectLiteralPropertyNameHasNoDefinitionSideEffects(
