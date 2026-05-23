@@ -12222,17 +12222,48 @@ class Emitter {
             (recvExpr.name.text === "stdout" || recvExpr.name.text === "stderr") &&
             memberName === "write"
         ) {
-            if (call.arguments.length !== 1) unsupported(call, `process.${recvExpr.name.text}.write expects a string or Buffer`);
+            if (call.arguments.length < 1 || call.arguments.length > 3) {
+                unsupported(call, `process.${recvExpr.name.text}.write expects a string or Buffer with optional encoding/callback`);
+            }
             const chunk = this.emitExpr(call.arguments[0]!);
             if (chunk.ty.kind !== "string" && chunk.ty.kind !== "buffer") {
                 unsupported(call.arguments[0]!, `process.${recvExpr.name.text}.write expects a string or Buffer`);
             }
+            let encoding: { value: EmitResult; node: ts.Expression } | null = null;
+            let callback: { value: EmitResult; node: ts.Expression } | null = null;
+            if (call.arguments.length === 2) {
+                const secondNode = call.arguments[1]!;
+                const second = this.emitExpr(secondNode);
+                if (second.ty.kind === "function") {
+                    callback = { value: second, node: secondNode };
+                } else {
+                    encoding = { value: second, node: secondNode };
+                }
+            } else if (call.arguments.length === 3) {
+                const encodingNode = call.arguments[1]!;
+                const callbackNode = call.arguments[2]!;
+                encoding = { value: this.emitExpr(encodingNode), node: encodingNode };
+                callback = { value: this.emitExpr(callbackNode), node: callbackNode };
+            }
+            if (callback && callback.value.ty.kind !== "function") {
+                unsupported(callback.node, `process.${recvExpr.name.text}.write callback must be a function`);
+            }
             const fn = recvExpr.name.text === "stdout"
                 ? (chunk.ty.kind === "buffer" ? "tsc_process_stdout_write_buffer" : "tsc_process_stdout_write")
                 : (chunk.ty.kind === "buffer" ? "tsc_process_stderr_write_buffer" : "tsc_process_stderr_write");
-            return this.emitSequencedCall(fn, T_BOOLEAN, [
+            const specs: SequencedCallArg[] = [
                 { value: chunk, target: chunk.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: call.arguments[0]! },
-            ]);
+            ];
+            if (encoding) specs.push({ value: encoding.value, target: T_STRING, node: encoding.node });
+            if (callback) specs.push({ value: callback.value, target: callback.value.ty, node: callback.node });
+            return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) => {
+                const chunkC = vals[0]!;
+                const callbackC = callback ? vals[vals.length - 1]! : null;
+                const callbackCall = callbackC
+                    ? `${callbackC}->fn(${[`${callbackC}->env`, ...(callback!.value.ty.thisParam ? ["tsc_value_undefined()"] : [])].join(", ")})`
+                    : "";
+                return `({ bool _ok = ${fn}(${chunkC}); ${callbackCall}; _ok; })`;
+            });
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "process") {
             switch (memberName) {

@@ -611,7 +611,8 @@ interface ProcessHrtime {
     bigint(...ignored: any[]): bigint;
 }
 interface ProcessWritableStream {
-    write(chunk: string | Buffer): boolean;
+    write(chunk: string | Buffer, callback?: () => void): boolean;
+    write(chunk: string | Buffer, encoding?: string, callback?: () => void): boolean;
 }
 interface Process {
     readonly platform: string;
