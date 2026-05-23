@@ -1,0 +1,3 @@
+seen: apply:method:label|replace:method:label|
+label: box:value:proxy-replacement
+seen2: apply:method:label|replace:method:label|call:box:value|
