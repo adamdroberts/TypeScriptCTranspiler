@@ -1,0 +1,8 @@
+direct: direct function function true true
+property: property function function true true
+parenthesized: parenthesized function function true true
+spread: spread function function true true
+revoked type before: function
+revoked before: before target
+revoked type after: function
+revoked after: Cannot perform 'construct' on a proxy that has been revoked
