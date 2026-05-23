@@ -23,9 +23,11 @@ const revocable: any = Proxy.revocable(Target as any, {});
 const revokedProxy: any = revocable.proxy;
 const before: any = new revokedProxy(7);
 console.log("rev before:", before.value, before.kind);
+const propertyBefore: any = new revocable.proxy(8);
+console.log("property before:", propertyBefore.value, propertyBefore.kind);
 revocable.revoke();
 try {
-    console.log("rev after:", new revokedProxy(1));
+    console.log("rev after:", new revocable.proxy(1));
 } catch (e: any) {
     console.log("rev after:", e);
 }

@@ -24291,8 +24291,13 @@ class Emitter {
                 () => "tsc_event_emitter_new()",
             );
         }
-        if (!ts.isIdentifier(n.expression))
-            unsupported(n, "new expression must use a class identifier");
+        if (!ts.isIdentifier(n.expression)) {
+            const ctor = this.emitExpr(n.expression);
+            if (ctor.ty.kind === "value") {
+                return this.emitDynamicValueConstruct(n, ctor);
+            }
+            unsupported(n, "new expression must use a class identifier or dynamic constructor value");
+        }
         if (n.expression.text === "Proxy") {
             const args = n.arguments ?? [];
             if (args.length !== 2) unsupported(n, "new Proxy expects target and handler");
