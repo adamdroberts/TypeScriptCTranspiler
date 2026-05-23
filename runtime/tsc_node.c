@@ -1397,7 +1397,19 @@ tsc_str_t* tsc_value_typeof(tsc_value_t v) {
         case TSC_VALUE_TAG_TRUE: return tsc_str_from_lit("boolean", 7);
         case TSC_VALUE_TAG_STRING: return tsc_str_from_lit("string", 6);
         case TSC_VALUE_TAG_ARRAY:
-        case TSC_VALUE_TAG_OBJECT: return tsc_str_from_lit("object", 6);
+            return tsc_str_from_lit("object", 6);
+        case TSC_VALUE_TAG_OBJECT: {
+            tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+            if (
+                o &&
+                o->is_proxy &&
+                value_is_box(o->proxy_target) &&
+                value_tag(o->proxy_target) == TSC_VALUE_TAG_FUNCTION
+            ) {
+                return tsc_str_from_lit("function", 8);
+            }
+            return tsc_str_from_lit("object", 6);
+        }
     }
     return tsc_str_from_lit("undefined", 9);
 }
@@ -3648,5 +3660,4 @@ tsc_str_t* tsc_path_format(tsc_value_t path_object) {
     }
     return base;
 }
-
 

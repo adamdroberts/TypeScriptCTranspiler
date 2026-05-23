@@ -1,0 +1,4 @@
+types: function function function object
+apply: 15
+made: 42
+events: construct:function:function|apply:function:object
