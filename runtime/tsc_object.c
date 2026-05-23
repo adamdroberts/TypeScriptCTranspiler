@@ -56,6 +56,18 @@ void tsc_proxy_require_callable_trap(tsc_value_t trap, const char* message) {
     }
 }
 
+static bool proxy_trap_missing(const tsc_object_t* o, const char* name, size_t len) {
+    tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit(name, len));
+    return tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap);
+}
+
+static bool proxy_has_no_integrity_traps(const tsc_object_t* o, bool for_mutation) {
+    return proxy_trap_missing(o, "preventExtensions", 17) &&
+        proxy_trap_missing(o, "ownKeys", 7) &&
+        proxy_trap_missing(o, "getOwnPropertyDescriptor", 24) &&
+        (!for_mutation || proxy_trap_missing(o, "defineProperty", 14));
+}
+
 static void validate_proxy_get_result(const tsc_object_t* proxy, const tsc_str_t* key, tsc_value_t result) {
     if (!proxy || !value_is_box(proxy->proxy_target) || value_tag(proxy->proxy_target) != TSC_VALUE_TAG_OBJECT) return;
     const tsc_object_t* target = (const tsc_object_t*)value_ptr(proxy->proxy_target);
@@ -755,6 +767,10 @@ bool tsc_object_prevent_extensions(tsc_object_t* o) {
 
 bool tsc_object_seal(tsc_object_t* o) {
     if (!o) return false;
+    if (o->is_proxy) {
+        if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'seal' on a proxy that has been revoked"));
+        if (proxy_has_no_integrity_traps(o, true)) return tsc_value_seal(o->proxy_target);
+    }
     o->extensible = false;
     for (size_t i = 0; i < o->len; i++) {
         o->props[i].configurable = false;
@@ -763,6 +779,10 @@ bool tsc_object_seal(tsc_object_t* o) {
 }
 
 bool tsc_object_freeze(tsc_object_t* o) {
+    if (o && o->is_proxy) {
+        if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'freeze' on a proxy that has been revoked"));
+        if (proxy_has_no_integrity_traps(o, true)) return tsc_value_freeze(o->proxy_target);
+    }
     if (!tsc_object_seal(o)) return false;
     for (size_t i = 0; i < o->len; i++) {
         o->props[i].writable = false;
@@ -771,6 +791,10 @@ bool tsc_object_freeze(tsc_object_t* o) {
 }
 
 bool tsc_object_is_sealed(const tsc_object_t* o) {
+    if (o && o->is_proxy) {
+        if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'isSealed' on a proxy that has been revoked"));
+        if (proxy_has_no_integrity_traps(o, false)) return tsc_value_is_sealed(o->proxy_target);
+    }
     if (!o || o->extensible) return false;
     for (size_t i = 0; i < o->len; i++) {
         if (o->props[i].configurable) return false;
@@ -779,6 +803,10 @@ bool tsc_object_is_sealed(const tsc_object_t* o) {
 }
 
 bool tsc_object_is_frozen(const tsc_object_t* o) {
+    if (o && o->is_proxy) {
+        if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'isFrozen' on a proxy that has been revoked"));
+        if (proxy_has_no_integrity_traps(o, false)) return tsc_value_is_frozen(o->proxy_target);
+    }
     if (!tsc_object_is_sealed(o)) return false;
     for (size_t i = 0; i < o->len; i++) {
         if (!o->props[i].accessor && o->props[i].writable) return false;

@@ -1,0 +1,12 @@
+seal identity: true
+sealed states: false true false
+sealed set: true A
+sealed new: false 2 A|b
+sealed delete: false A
+sealed define existing: true A|B
+sealed define new: false
+freeze identity: true
+frozen states: false true true
+frozen set: false x
+frozen delete: false x
+frozen define existing: false x|y

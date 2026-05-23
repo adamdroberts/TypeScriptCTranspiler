@@ -380,10 +380,12 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
             bool next_writable = has_writable ? writable : (exists ? current_writable : false);
             bool next_enumerable = has_enumerable ? enumerable : (exists ? current_enumerable : false);
             bool next_configurable = has_configurable ? configurable : (exists ? current_configurable : false);
-            if (!next_writable || !next_enumerable || !next_configurable) return false;
+            if (!next_writable || !next_enumerable) return false;
             if (exists) {
                 if (next_writable != current_writable || next_enumerable != current_enumerable || next_configurable != current_configurable) return false;
             } else if (!a->extensible) {
+                return false;
+            } else if (!next_configurable) {
                 return false;
             }
             return has_value ? tsc_value_set_index(v, (double)idx, value) : true;
