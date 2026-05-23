@@ -20860,11 +20860,36 @@ class Emitter {
             );
         }
         if (name === "randomUUID") {
-            if (call.arguments.length !== 0)
-                unsupported(call, "crypto.randomUUID expects no args");
-            return { c: "tsc_crypto_random_uuid()", ty: T_STRING };
+            if (call.arguments.length > 0) {
+                this.validateCryptoRandomUUIDOptions(call.arguments[0]!, "crypto.randomUUID");
+            }
+            return this.emitSequencedExpr(
+                T_STRING,
+                this.ignoredArgumentSpecs(call.arguments, 0),
+                () => "tsc_crypto_random_uuid()",
+            );
         }
         unsupported(call, `crypto.${name} (supported: createHash, randomBytes, randomUUID)`);
+    }
+
+    private validateCryptoRandomUUIDOptions(options: ts.Expression, label: string): void {
+        if (this.isUndefinedExpression(options)) return;
+        if (!ts.isObjectLiteralExpression(options)) {
+            unsupported(options, `${label} options must be an object literal in this subset`);
+        }
+        for (const prop of options.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, `${label} options only support disableEntropyCache property assignments`);
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (key !== "disableEntropyCache") {
+                unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+            }
+            const value = prop.initializer;
+            if (value.kind !== ts.SyntaxKind.TrueKeyword && value.kind !== ts.SyntaxKind.FalseKeyword && !this.isUndefinedExpression(value)) {
+                unsupported(value, `${label}.disableEntropyCache must be a boolean literal in this subset`);
+            }
+        }
     }
 
     private emitHashMethod(

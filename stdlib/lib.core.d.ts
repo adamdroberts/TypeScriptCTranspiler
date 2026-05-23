@@ -1216,6 +1216,9 @@ declare module "node:path" {
 }
 
 type CryptoHashAlgorithm = "sha1" | "sha256" | "sha512";
+interface CryptoRandomUUIDOptions {
+    disableEntropyCache?: boolean;
+}
 interface CryptoHash {
     update(data: string | Buffer): CryptoHash;
     digest(encoding: "hex" | "base64"): string;
@@ -1223,18 +1226,18 @@ interface CryptoHash {
 interface Crypto {
     createHash(algorithm: CryptoHashAlgorithm): CryptoHash;
     randomBytes(size: number): Buffer;
-    randomUUID(): string;
+    randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
 }
 declare const crypto: Crypto;
 declare module "crypto" {
     export function createHash(algorithm: CryptoHashAlgorithm): CryptoHash;
     export function randomBytes(size: number): Buffer;
-    export function randomUUID(): string;
+    export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
 }
 declare module "node:crypto" {
     export function createHash(algorithm: CryptoHashAlgorithm): CryptoHash;
     export function randomBytes(size: number): Buffer;
-    export function randomUUID(): string;
+    export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
 }
 
 type BufferEncoding = "utf8" | "utf-8" | "hex" | "base64";
