@@ -77,6 +77,9 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
             if (!value_is_callable_function(o->proxy_target)) {
                 tsc_throw_str(tsc_str_from_cstr("Proxy apply target must be callable"));
             }
+            if (!value_is_box(args) || value_tag(args) != TSC_VALUE_TAG_ARRAY) {
+                tsc_throw_str(tsc_str_from_cstr("Reflect.apply argumentsList must be an array"));
+            }
             tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("apply", 5));
             if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
                 return tsc_value_apply_function(o->proxy_target, this_arg, args);
@@ -92,10 +95,10 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
         }
     }
     if (!value_is_box(fn) || value_tag(fn) != TSC_VALUE_TAG_FUNCTION) {
-        tsc_panic("Reflect.apply target is not a function");
+        tsc_throw_str(tsc_str_from_cstr("Reflect.apply target is not a function"));
     }
     if (!value_is_box(args) || value_tag(args) != TSC_VALUE_TAG_ARRAY) {
-        tsc_panic("Reflect.apply argumentsList must be an array");
+        tsc_throw_str(tsc_str_from_cstr("Reflect.apply argumentsList must be an array"));
     }
     tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(fn);
     tsc_array_t* list = (tsc_array_t*)value_ptr(args);

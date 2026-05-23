@@ -1,0 +1,4 @@
+bad target: Reflect.apply target is not a function
+bad args: Reflect.apply argumentsList must be an array
+proxy bad args: Reflect.apply argumentsList must be an array false
+valid: 5
