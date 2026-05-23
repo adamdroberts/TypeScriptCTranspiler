@@ -245,6 +245,7 @@ class Emitter {
     private catchStringSymbols = new Set<ts.Symbol>();
     private referencedTopLevelFunctions = new WeakSet<ts.FunctionDeclaration>();
     private referencedTopLevelLiftedArrows = new WeakSet<ts.VariableDeclaration>();
+    private referencedTopLevelClasses = new WeakSet<ts.ClassDeclaration>();
     /**
      * Symbols whose value is provably integer-shape at every read site.
      * Populated per source file by analyzeIntegerSymbols(); consulted by
@@ -340,6 +341,13 @@ class Emitter {
                 ) {
                     this.referencedTopLevelLiftedArrows.add(decl);
                 }
+                if (
+                    decl &&
+                    ts.isClassDeclaration(decl) &&
+                    this.isPrunableTopLevelClass(decl)
+                ) {
+                    this.referencedTopLevelClasses.add(decl);
+                }
             }
             ts.forEachChild(node, visit);
         };
@@ -420,6 +428,38 @@ class Emitter {
         return !decl ||
             !this.isPrunableTopLevelLiftedArrow(decl) ||
             this.referencedTopLevelLiftedArrows.has(decl);
+    }
+
+    private isPrunableTopLevelClass(cd: ts.ClassDeclaration): boolean {
+        if (!cd.name) return false;
+        if (!ts.isSourceFile(cd.parent)) return false;
+        if (cd.heritageClauses?.length) return false;
+        if (this.classHasDecorators(cd)) return false;
+        const modifiers = ts.canHaveModifiers(cd) ? ts.getModifiers(cd) : undefined;
+        if (modifiers?.some((m) =>
+            m.kind === ts.SyntaxKind.ExportKeyword ||
+            m.kind === ts.SyntaxKind.DefaultKeyword ||
+            m.kind === ts.SyntaxKind.DeclareKeyword
+        )) {
+            return false;
+        }
+        for (const member of cd.members) {
+            if (ts.isClassStaticBlockDeclaration(member)) return false;
+            if (isStatic(member)) return false;
+            if (
+                member.name &&
+                !ts.isIdentifier(member.name) &&
+                !ts.isStringLiteral(member.name) &&
+                !ts.isNumericLiteral(member.name)
+            ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private shouldEmitClassDeclaration(cd: ts.ClassDeclaration): boolean {
+        return !this.isPrunableTopLevelClass(cd) || this.referencedTopLevelClasses.has(cd);
     }
 
     run(): EmittedProgram {
@@ -516,7 +556,7 @@ class Emitter {
             this.analyzeStrbufSymbols(sf);
             // Pass A: struct forward-decls + typedefs for classes & interfaces.
             for (const inner of statements) {
-                if (inner && ts.isClassDeclaration(inner) && inner.name) {
+                if (inner && ts.isClassDeclaration(inner) && inner.name && this.shouldEmitClassDeclaration(inner)) {
                     this.structDecls.line(
                         `typedef struct ${inner.name.text}_t ${inner.name.text}_t;`,
                     );
@@ -529,7 +569,9 @@ class Emitter {
             }
             // Pass B: struct bodies.
             for (const inner of statements) {
-                if (inner && ts.isClassDeclaration(inner)) this.emitClassStruct(inner);
+                if (inner && ts.isClassDeclaration(inner) && this.shouldEmitClassDeclaration(inner)) {
+                    this.emitClassStruct(inner);
+                }
                 if (inner && ts.isInterfaceDeclaration(inner))
                     this.emitInterfaceStruct(inner);
             }
@@ -544,7 +586,9 @@ class Emitter {
                 ) {
                     this.emitFunctionPrototype(inner);
                 }
-                if (inner && ts.isClassDeclaration(inner)) this.emitClassPrototypes(inner);
+                if (inner && ts.isClassDeclaration(inner) && this.shouldEmitClassDeclaration(inner)) {
+                    this.emitClassPrototypes(inner);
+                }
                 if (inner) {
                     const lift = this.getLiftableArrow(inner);
                     if (lift && this.shouldEmitLiftedArrow(lift)) this.emitLiftedArrowPrototype(lift);
@@ -562,7 +606,9 @@ class Emitter {
                 ) {
                     this.emitFunctionBody(inner);
                 }
-                if (inner && ts.isClassDeclaration(inner)) this.emitClassBodies(inner);
+                if (inner && ts.isClassDeclaration(inner) && this.shouldEmitClassDeclaration(inner)) {
+                    this.emitClassBodies(inner);
+                }
                 if (inner) {
                     const lift = this.getLiftableArrow(inner);
                     if (lift && this.shouldEmitLiftedArrow(lift)) this.emitLiftedArrowBody(lift);
@@ -575,6 +621,7 @@ class Emitter {
                 if (!inner) continue;
                 if (ts.isFunctionDeclaration(inner)) continue;
                 if (ts.isClassDeclaration(inner)) {
+                    if (!this.shouldEmitClassDeclaration(inner)) continue;
                     this.emitClassStaticInitializers(initBuf, inner);
                     const metadata = this.classHasDecorators(inner)
                         ? this.freshTemp("_decorator_metadata")
