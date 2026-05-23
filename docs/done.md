@@ -516,7 +516,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `Object.entries(obj)`, `Object.fromEntries(entries)`, and `Object.fromEntries(map)` — typed `[string, T]` entry arrays or typed `Map<string, T>` sources for homogeneous object fields. Tests: `object_entries`, `object_from_entries_map`
 - `Map`, `Set`, `WeakMap`, `WeakSet`, `WeakRef`, and `FinalizationRegistry` instances expose empty own-property results through `Object.keys`, `Object.values`, `Object.entries`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, `Reflect.ownKeys`, and `Reflect.getOwnPropertyDescriptor`, while preserving receiver/key evaluation. Test: `collection_object_methods`
 - Global `parseInt` / `parseFloat` / `isNaN` / `isFinite` → mapped to runtime or C math builtins, with global `parseInt` sharing the JS-style radix inference path, `parseInt`/`parseFloat` evaluating ignored extra arguments, and global numeric predicates coercing non-number inputs while evaluating ignored extra arguments.
-- Global `btoa(value)` and `atob(value)` perform byte-string base64 encode/decode through the same runtime codec used by Buffer. Test: `base64_globals`
+- Global `btoa(value, ...ignored)` and `atob(value, ...ignored)` perform byte-string base64 encode/decode through the same runtime codec used by Buffer, evaluating ignored extra arguments after the input string. Test: `base64_globals`
 
 ---
 
