@@ -7,6 +7,8 @@ const unused_object = { label: "dead", count: 2, nested: { flag: false } };
 const unused_math = (1 + 2) * 3;
 const unused_template = `dead-${1 + 2}`;
 const unused_conditional = true ? "dead" : "live";
+let unused_let = 42;
+let unused_empty: number;
 
 namespace DceNamespace {
     const unused_namespace_value = { label: "dead", count: 4 };

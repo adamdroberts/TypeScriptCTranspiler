@@ -7,3 +7,5 @@ unused_math
 unused_template
 unused_conditional
 unused_namespace_value
+unused_let
+unused_empty

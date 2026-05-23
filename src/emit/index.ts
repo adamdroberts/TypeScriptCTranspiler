@@ -472,10 +472,11 @@ class Emitter {
 
     private isPrunableTopLevelVariable(decl: ts.VariableDeclaration): boolean {
         if (!ts.isIdentifier(decl.name)) return false;
-        if (!decl.initializer) return false;
         if (!ts.isVariableStatement(decl.parent.parent)) return false;
         if (!this.isTopLevelValueDeclaration(decl)) return false;
-        if ((decl.parent.flags & ts.NodeFlags.Const) === 0) return false;
+        const isConst = (decl.parent.flags & ts.NodeFlags.Const) !== 0;
+        const isLet = (decl.parent.flags & ts.NodeFlags.Let) !== 0;
+        if (!isConst && !isLet) return false;
         if (this.isPrunableTopLevelLiftedArrow(decl)) return false;
         const modifiers = ts.canHaveModifiers(decl.parent.parent)
             ? ts.getModifiers(decl.parent.parent)
@@ -487,6 +488,7 @@ class Emitter {
         )) {
             return false;
         }
+        if (!decl.initializer) return true;
         return this.isSideEffectFreeTopLevelConstInitializer(decl.initializer);
     }
 
