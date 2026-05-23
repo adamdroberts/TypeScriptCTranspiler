@@ -834,6 +834,31 @@ static void validate_proxy_own_keys_result(const tsc_object_t* proxy, const tsc_
             }
         }
     }
+    if (proxy && value_is_box(proxy->proxy_target) && value_tag(proxy->proxy_target) == TSC_VALUE_TAG_ARRAY) {
+        const tsc_array_t* target = (const tsc_array_t*)value_ptr(proxy->proxy_target);
+        if (!str_array_contains(keys, tsc_str_from_lit("length", 6))) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result missing non-configurable key"));
+        }
+        if (target->sealed || target->frozen || !target->extensible) {
+            for (size_t i = 0; i < target->len; i++) {
+                tsc_str_t* key = tsc_str_from_int((int64_t)i);
+                if (!str_array_contains(keys, key)) {
+                    if (target->sealed || target->frozen) {
+                        tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result missing non-configurable key"));
+                    }
+                    tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result missing key on non-extensible target"));
+                }
+            }
+        }
+        if (!target->extensible) {
+            for (size_t i = 0; i < keys->len; i++) {
+                if (!tsc_array_has_own_key(target, TSC_ARR(tsc_str_t*, keys, i))) {
+                    tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result included extra key on non-extensible target"));
+                }
+            }
+        }
+        return;
+    }
     if (!proxy || !value_is_box(proxy->proxy_target) || value_tag(proxy->proxy_target) != TSC_VALUE_TAG_OBJECT) return;
     const tsc_object_t* target = (const tsc_object_t*)value_ptr(proxy->proxy_target);
     for (size_t i = 0; i < target->len; i++) {
