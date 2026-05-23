@@ -8367,6 +8367,14 @@ class Emitter {
                     };
                 }
             }
+            const classDecl = this.findClassDecl(expr.text);
+            if (
+                classDecl &&
+                ts.canHaveDecorators(classDecl) &&
+                (ts.getDecorators(classDecl) ?? []).length > 0
+            ) {
+                return this.classDecoratorValue(classDecl);
+            }
             const requireDefault = this.requireBindingModuleExportsCName(expr);
             if (requireDefault) {
                 const decl = this.requireBindingModuleExportsDeclaration(expr);
