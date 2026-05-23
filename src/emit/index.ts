@@ -325,7 +325,26 @@ class Emitter {
     }
 
     private analyzeReferencedTopLevelFunctions(emitOrder: readonly string[]): void {
+        const visitStatementList = (statements: readonly ts.Statement[]): void => {
+            for (const stmt of statements) {
+                visit(stmt);
+                if (this.statementAlwaysExits(stmt)) break;
+            }
+        };
+
         const visit = (node: ts.Node): void => {
+            if (ts.isSourceFile(node) || ts.isBlock(node)) {
+                visitStatementList(node.statements);
+                return;
+            }
+            if (ts.isCaseClause(node) || ts.isDefaultClause(node)) {
+                visitStatementList(node.statements);
+                return;
+            }
+            if (ts.isClassStaticBlockDeclaration(node)) {
+                visitStatementList(node.body.statements);
+                return;
+            }
             if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node)) {
                 const sym = this.symbolForIdentifier(node);
                 const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
@@ -8534,10 +8553,28 @@ class Emitter {
     }
 
     private statementAlwaysExits(stmt: ts.Statement): boolean {
-        return ts.isReturnStatement(stmt) ||
+        if (
+            ts.isReturnStatement(stmt) ||
             ts.isThrowStatement(stmt) ||
             stmt.kind === ts.SyntaxKind.BreakStatement ||
-            stmt.kind === ts.SyntaxKind.ContinueStatement;
+            stmt.kind === ts.SyntaxKind.ContinueStatement
+        ) {
+            return true;
+        }
+        if (ts.isBlock(stmt)) return this.statementListAlwaysExits(stmt.statements);
+        if (ts.isIfStatement(stmt)) {
+            return this.statementAlwaysExits(stmt.thenStatement) &&
+                !!stmt.elseStatement &&
+                this.statementAlwaysExits(stmt.elseStatement);
+        }
+        return false;
+    }
+
+    private statementListAlwaysExits(statements: readonly ts.Statement[]): boolean {
+        for (const stmt of statements) {
+            if (this.statementAlwaysExits(stmt)) return true;
+        }
+        return false;
     }
 
     private emitReturn(buf: CBuf, r: ts.ReturnStatement): void {

@@ -25,4 +25,24 @@ function usedLocal(value: number): number {
     console.log(unreachable_local);
 }
 
-console.log(usedLocal(used_count), DceNamespace.kept);
+function branchExit(value: boolean): number {
+    const branch_only_dead = "dead";
+    if (value) {
+        return 11;
+    } else {
+        return 12;
+    }
+    console.log(branch_only_dead);
+    const branch_after_exit = 13;
+    return branch_after_exit;
+}
+
+function nestedBlockExit(): number {
+    {
+        return 14;
+    }
+    const nested_after_block = 15;
+    return nested_after_block;
+}
+
+console.log(usedLocal(used_count), branchExit(true), nestedBlockExit(), DceNamespace.kept);
