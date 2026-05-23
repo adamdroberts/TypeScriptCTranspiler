@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Static standard getter decorators can now return replacement getter functions used by direct `Class.property` reads. Test: `static_getter_decorator_replacement`.
 - Static standard method decorators can now return replacement functions used by direct `Class.method(...)` calls. Test: `static_method_decorator_replacement`.
 - Standard field decorators can now return initializer functions that transform instance and static field initial values during class initialization. Test: `field_decorator_initializer`.
 - Dynamic callable and proxy-backed standard class/member decorator functions now dispatch through the boxed function/proxy apply path during module initialization. Test: `decorator_proxy_basic`.
@@ -26,7 +27,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Standard class decorators now evaluate during module initialization for named classes, with direct decorator functions and decorator-factory closure results receiving a dynamic context object containing `kind: "class"` and `name`; class replacement remains deferred. Tests: `class_decorator_basic`, `class_decorator_factory`.
 - Standard method decorators now evaluate during module initialization for named instance and static methods, with direct decorator functions receiving dynamic context objects containing `kind`, `name`, `static`, and `private`. Broader method replacement remains deferred. Test: `method_decorator_basic`.
 - Standard field decorators now evaluate during module initialization for named instance and static fields, with direct decorator functions receiving dynamic context objects containing `kind`, `name`, `static`, and `private`. Test: `field_decorator_basic`.
-- Standard getter and setter decorators now evaluate during module initialization for named instance and static accessors, with direct decorator functions receiving dynamic context objects containing `kind`, `name`, `static`, and `private`. Accessor replacement and invocation remain deferred. Test: `accessor_decorator_basic`.
+- Standard getter and setter decorators now evaluate during module initialization for named instance and static accessors, with direct decorator functions receiving dynamic context objects containing `kind`, `name`, `static`, and `private`. Broader accessor replacement remains deferred. Test: `accessor_decorator_basic`.
 - `Object.groupBy` and `Map.groupBy` callbacks that declare `this: any` now receive the JavaScript default `undefined` receiver across direct and inline callbacks. Test: `group_by_this_param`.
 - Typed `Map.prototype.forEach` and `Set.prototype.forEach` now accept optional `thisArg` values, evaluate them once, and bind them for callbacks that declare `this: any`. Test: `map_set_for_each_this_arg`.
 - Default parameters can now initialize omitted function-typed arguments with arrow/function closure values, while preserving the existing rejection of default initializers that reference `this`, `arguments`, or parameters. Test: `default_parameter_function_initializers`.
