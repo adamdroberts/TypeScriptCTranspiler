@@ -247,6 +247,7 @@ class Emitter {
     private referencedTopLevelLiftedArrows = new WeakSet<ts.VariableDeclaration>();
     private referencedTopLevelClasses = new WeakSet<ts.ClassDeclaration>();
     private referencedTopLevelVariables = new WeakSet<ts.VariableDeclaration>();
+    private referencedLocalFunctions = new WeakSet<ts.FunctionDeclaration>();
     private referencedVariables = new WeakSet<ts.VariableDeclaration>();
     /**
      * Symbols whose value is provably integer-shape at every read site.
@@ -346,6 +347,11 @@ class Emitter {
             this.referencedTopLevelVariables.add(decl);
             changed = true;
         };
+        const markLocalFunction = (decl: ts.FunctionDeclaration): void => {
+            if (this.referencedLocalFunctions.has(decl)) return;
+            this.referencedLocalFunctions.add(decl);
+            changed = true;
+        };
         const markVariable = (decl: ts.VariableDeclaration): void => {
             if (this.referencedVariables.has(decl)) return;
             this.referencedVariables.add(decl);
@@ -364,6 +370,13 @@ class Emitter {
                 ts.isFunctionDeclaration(node) &&
                 this.isPrunableTopLevelFunction(node) &&
                 !this.referencedTopLevelFunctions.has(node)
+            ) {
+                return;
+            }
+            if (
+                ts.isFunctionDeclaration(node) &&
+                this.isPrunableLocalFunction(node) &&
+                !this.referencedLocalFunctions.has(node)
             ) {
                 return;
             }
@@ -416,6 +429,13 @@ class Emitter {
                     this.isPrunableTopLevelFunction(decl)
                 ) {
                     markTopLevelFunction(decl);
+                }
+                if (
+                    decl &&
+                    ts.isFunctionDeclaration(decl) &&
+                    this.isPrunableLocalFunction(decl)
+                ) {
+                    markLocalFunction(decl);
                 }
                 if (
                     decl &&
@@ -495,6 +515,25 @@ class Emitter {
 
     private shouldEmitFunctionDeclaration(fd: ts.FunctionDeclaration): boolean {
         return !this.isPrunableTopLevelFunction(fd) || this.referencedTopLevelFunctions.has(fd);
+    }
+
+    private isPrunableLocalFunction(fd: ts.FunctionDeclaration): boolean {
+        if (!fd.name || !fd.body) return false;
+        if (ts.isSourceFile(fd.parent) || this.isNamespaceTopLevelDeclaration(fd)) return false;
+        if (this.isGenericFunction(fd)) return false;
+        const modifiers = ts.canHaveModifiers(fd) ? ts.getModifiers(fd) : undefined;
+        if (modifiers?.some((m) =>
+            m.kind === ts.SyntaxKind.ExportKeyword ||
+            m.kind === ts.SyntaxKind.DefaultKeyword ||
+            m.kind === ts.SyntaxKind.DeclareKeyword
+        )) {
+            return false;
+        }
+        return true;
+    }
+
+    private shouldEmitLocalFunctionDeclaration(fd: ts.FunctionDeclaration): boolean {
+        return !this.isPrunableLocalFunction(fd) || this.referencedLocalFunctions.has(fd);
     }
 
     private isPrunableTopLevelLiftedArrow(decl: ts.VariableDeclaration): boolean {
@@ -7158,6 +7197,10 @@ class Emitter {
         this.emitLineDirective(buf, stmt);
         if (ts.isExpressionStatement(stmt)) return this.emitExprStmt(buf, stmt);
         if (ts.isVariableStatement(stmt)) return this.emitVarStmt(buf, stmt);
+        if (ts.isFunctionDeclaration(stmt)) {
+            if (!this.shouldEmitLocalFunctionDeclaration(stmt)) return;
+            unsupported(stmt, "referenced local function declarations are not supported yet");
+        }
         if (ts.isIfStatement(stmt)) return this.emitIf(buf, stmt);
         if (ts.isWhileStatement(stmt)) return this.emitWhile(buf, stmt);
         if (ts.isDoStatement(stmt)) return this.emitDoWhile(buf, stmt);

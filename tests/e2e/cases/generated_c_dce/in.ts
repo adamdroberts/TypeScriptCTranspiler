@@ -1,4 +1,9 @@
 function used(value: number): number {
+    function dead_local_helper(inner: number): number {
+        console.log("dead local effect");
+        return inner * 1000;
+    }
+
     return value + 3;
 }
 
