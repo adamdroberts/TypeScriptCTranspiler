@@ -234,6 +234,7 @@ class Emitter {
     private nodeFunctionAdapters = new Set<string>();
     private dynamicFunctionAdapters = new Map<string, string>();
     private decoratorAddInitializerAdapter: string | null = null;
+    private decoratorApplyFieldInitializersHelper = false;
     private eventListenerAdapters = new Map<string, string>();
     private eventTargetListenerAdapters = new Map<string, string>();
     private eventListenerIdentities = new Map<string, string>();
@@ -477,6 +478,7 @@ class Emitter {
                     if (metadata) {
                         initBuf.line(`tsc_object_t* ${metadata} = tsc_object_new();`);
                         initBuf.line(`tsc_array_t* ${initializers} = tsc_array_new(sizeof(tsc_value_t), 4);`);
+                        this.emitClassFieldDecoratorInitializerSetup(initBuf, inner);
                     }
                     this.emitClassMemberDecorators(initBuf, inner, metadata, initializers);
                     this.emitClassDecorators(initBuf, inner, metadata, initializers);
@@ -5041,6 +5043,11 @@ class Emitter {
                 this.defs.line(`${ft.c} ${name}_${mangleIdent(fieldName)};`);
             }
         }
+        for (const m of cd.members) {
+            if (ts.isPropertyDeclaration(m) && this.classMemberHasDecorators(m)) {
+                this.defs.line(`static tsc_array_t* ${this.classFieldDecoratorInitializersName(cd, m)};`);
+            }
+        }
         this.defs.line();
 
         // ClassName_init: runs ctor body + initializers on a pre-allocated self.
@@ -5062,9 +5069,17 @@ class Emitter {
                     unsupported(m.name, "computed property names in class must resolve to a string or number literal");
                 const init = this.emitExpr(m.initializer);
                 const pt = mapType(m, this.checker);
-                const coerced = this.coerce(init, pt, m.initializer);
+                let value = this.coerce(init, pt, m.initializer);
+                if (this.classMemberHasDecorators(m)) {
+                    const transformed = {
+                        c: `tsc_decorator_apply_field_initializers(${this.classFieldDecoratorInitializersName(cd, m)}, ${this.coerce({ c: value, ty: pt }, T_VALUE, m.initializer)})`,
+                        ty: T_VALUE,
+                    };
+                    value = this.coerce(transformed, pt, m.initializer);
+                    this.ensureDecoratorApplyFieldInitializersHelper();
+                }
                 this.defs.line(
-                    `self->${mangleIdent(fieldName)} = ${coerced};`,
+                    `self->${mangleIdent(fieldName)} = ${value};`,
                 );
             }
         }
@@ -5215,6 +5230,30 @@ class Emitter {
         );
     }
 
+    private classMemberHasDecorators(member: ts.ClassElement): boolean {
+        return ts.canHaveDecorators(member) && (ts.getDecorators(member) ?? []).length > 0;
+    }
+
+    private classFieldDecoratorInitializersName(
+        cd: ts.ClassDeclaration,
+        member: ts.PropertyDeclaration,
+    ): string {
+        if (!cd.name) unsupported(cd, "decorated fields require a named class");
+        const fieldName = this.staticPropertyName(member.name);
+        if (!fieldName) {
+            unsupported(member.name, "decorated field names must resolve to a string or number literal");
+        }
+        const scope = isStatic(member) ? "static" : "instance";
+        return `${cd.name.text}_${scope}_${mangleIdent(fieldName)}_decorator_initializers`;
+    }
+
+    private emitClassFieldDecoratorInitializerSetup(buf: CBuf, cd: ts.ClassDeclaration): void {
+        for (const member of cd.members) {
+            if (!ts.isPropertyDeclaration(member) || !this.classMemberHasDecorators(member)) continue;
+            buf.line(`${this.classFieldDecoratorInitializersName(cd, member)} = tsc_array_new(sizeof(tsc_value_t), 2);`);
+        }
+    }
+
     private emitClassDecorators(
         buf: CBuf,
         cd: ts.ClassDeclaration,
@@ -5269,15 +5308,37 @@ class Emitter {
                         : "setter";
             const label = `${kind} decorator`;
             for (const decorator of decorators) {
-                const call = this.emitDecoratorFunctionCall(
-                    decorator.expression,
-                    [
-                        { c: "tsc_value_undefined()", ty: T_VALUE },
-                        this.classMemberDecoratorContext(member, kind, memberName, metadata, initializers),
-                    ],
-                    label,
-                );
+                const args = [
+                    { c: "tsc_value_undefined()", ty: T_VALUE },
+                    this.classMemberDecoratorContext(member, kind, memberName, metadata, initializers),
+                ];
+                if (ts.isPropertyDeclaration(member)) {
+                    const result = this.emitDecoratorFunctionCallValue(
+                        decorator.expression,
+                        args,
+                        label,
+                    );
+                    const out = this.freshTemp("_field_decorator_result");
+                    const list = this.classFieldDecoratorInitializersName(cd, member);
+                    buf.line(`{ tsc_value_t ${out} = ${result}; if (!tsc_value_is_undefined(${out})) tsc_array_push_value(${list}, ${out}); }`);
+                    continue;
+                }
+                const call = this.emitDecoratorFunctionCall(decorator.expression, args, label);
                 buf.line(`(void)(${call});`);
+            }
+            if (ts.isPropertyDeclaration(member) && isStatic(member)) {
+                const list = this.classFieldDecoratorInitializersName(cd, member);
+                const fieldType = mapType(member, this.checker);
+                const current = {
+                    c: `${cd.name.text}_${mangleIdent(memberName)}`,
+                    ty: fieldType,
+                };
+                const transformed = {
+                    c: `tsc_decorator_apply_field_initializers(${list}, ${this.coerce(current, T_VALUE, member)})`,
+                    ty: T_VALUE,
+                };
+                this.ensureDecoratorApplyFieldInitializersHelper();
+                buf.line(`${current.c} = ${this.coerce(transformed, fieldType, member)};`);
             }
         }
     }
@@ -5363,7 +5424,36 @@ class Emitter {
         buf.close();
     }
 
+    private ensureDecoratorApplyFieldInitializersHelper(): void {
+        if (this.decoratorApplyFieldInitializersHelper) return;
+        this.decoratorApplyFieldInitializersHelper = true;
+        const signature = "static tsc_value_t tsc_decorator_apply_field_initializers(tsc_array_t* list, tsc_value_t initial)";
+        this.protos.line(signature + ";");
+        const buf = new CBuf();
+        buf.open(signature);
+        buf.line("if (!list || list->len == 0) return initial;");
+        buf.line("tsc_value_t current = initial;");
+        buf.open("for (size_t i = 0; i < list->len; i++)");
+        buf.line("tsc_value_t fn = TSC_ARR(tsc_value_t, list, i);");
+        buf.line("tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);");
+        buf.line("tsc_array_push_value(args, current);");
+        buf.line("current = tsc_value_apply_function(fn, tsc_value_undefined(), tsc_value_array(args));");
+        buf.close();
+        buf.line("return current;");
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+    }
+
     private emitDecoratorFunctionCall(
+        expr: ts.Expression,
+        args: EmitResult[],
+        label: string,
+    ): string {
+        return this.emitDecoratorFunctionCallValue(expr, args, label);
+    }
+
+    private emitDecoratorFunctionCallValue(
         expr: ts.Expression,
         args: EmitResult[],
         label: string,
@@ -5396,9 +5486,14 @@ class Emitter {
                 };
             });
             const fnName = this.identifierName(expr);
-            return this.emitSequencedExpr(T_VOID, specs, (vals) =>
-                `({ (void)(${fnName}(${[...(thisType ? ["tsc_value_undefined()"] : []), ...vals].join(", ")})); })`,
-            ).c;
+            const ret = this.prepareType(mapTsType(expr, sig.getReturnType(), this.checker));
+            return this.emitSequencedExpr(T_VALUE, specs, (vals) => {
+                const call = `${fnName}(${[...(thisType ? ["tsc_value_undefined()"] : []), ...vals].join(", ")})`;
+                if (ret.kind === "void" || ret.kind === "never") {
+                    return `({ ${call}; tsc_value_undefined(); })`;
+                }
+                return `({ ${ret.c} _decorator_return = ${call}; ${this.coerce({ c: "_decorator_return", ty: ret }, T_VALUE, expr)}; })`;
+            }).c;
         }
         if (ts.isIdentifier(expr) && this.identifierDeclaredType(expr)?.kind === "value") {
             return this.emitDynamicDecoratorFunctionCall(
@@ -5426,11 +5521,15 @@ class Emitter {
                 node: expr,
             })),
         ];
-        return this.emitSequencedExpr(T_VOID, specs, (vals) => {
+        return this.emitSequencedExpr(T_VALUE, specs, (vals) => {
             const fn = vals[0]!;
             const callArgs = vals.slice(1);
             const call = `${fn}->fn(${[`${fn}->env`, ...(callee.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`;
-            return `({ (void)(${call}); })`;
+            const ret = this.prepareType(callee.ty.ret!);
+            if (ret.kind === "void" || ret.kind === "never") {
+                return `({ ${call}; tsc_value_undefined(); })`;
+            }
+            return `({ ${ret.c} _decorator_return = ${call}; ${this.coerce({ c: "_decorator_return", ty: ret }, T_VALUE, expr)}; })`;
         }).c;
     }
 
@@ -5447,13 +5546,15 @@ class Emitter {
                 node,
             })),
         ];
-        return this.emitSequencedExpr(T_VOID, specs, ([fn, ...vals]) => {
+        return this.emitSequencedExpr(T_VALUE, specs, ([fn, ...vals]) => {
             const av = this.freshTemp("_decorator_args");
+            const result = this.freshTemp("_decorator_result");
             const pieces = [`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${vals.length || 1})`];
             for (const value of vals) {
                 pieces.push(`tsc_array_push_value(${av}, ${value})`);
             }
-            pieces.push(`(void)tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}))`);
+            pieces.push(`tsc_value_t ${result} = tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}))`);
+            pieces.push(result);
             return `({ ${pieces.join("; ")}; })`;
         }).c;
     }
