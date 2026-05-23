@@ -10,3 +10,5 @@ DeadComputedBox_read(
 DeadStaticBox_t
 DeadStaticBox_read(
 DeadStaticBox_count
+DeadNamespaceBox_t
+DeadNamespaceBox_read(

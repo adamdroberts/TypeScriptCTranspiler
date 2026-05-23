@@ -66,4 +66,18 @@ class StaticEffectBox {
     static value = keepStaticEffect();
 }
 
+namespace DeadClassNamespace {
+    class DeadNamespaceBox {
+        value: number;
+
+        constructor(value: number) {
+            this.value = value;
+        }
+
+        read(): number {
+            return this.value;
+        }
+    }
+}
+
 console.log(new UsedBox(5).read());

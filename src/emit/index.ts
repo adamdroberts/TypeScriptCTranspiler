@@ -529,7 +529,7 @@ class Emitter {
 
     private isPrunableTopLevelClass(cd: ts.ClassDeclaration): boolean {
         if (!cd.name) return false;
-        if (!ts.isSourceFile(cd.parent)) return false;
+        if (!ts.isSourceFile(cd.parent) && !this.isNamespaceTopLevelDeclaration(cd)) return false;
         if (!this.classHeritageHasNoDefinitionSideEffects(cd)) return false;
         if (this.classHasDecorators(cd)) return false;
         const modifiers = ts.canHaveModifiers(cd) ? ts.getModifiers(cd) : undefined;
