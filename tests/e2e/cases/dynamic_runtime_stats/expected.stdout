@@ -6,6 +6,8 @@ reflect: 1
 reflect: 1
 reflect set: true
 reflect set: true
+receiver set: true 0
+receiver set: true 1
 has: true
 deleted: false
 cached: 1

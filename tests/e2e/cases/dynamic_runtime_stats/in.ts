@@ -17,6 +17,10 @@ for (let i = 0; i < 2; i++) {
 for (let i = 0; i < 2; i++) {
     console.log("reflect set:", Reflect.set(obj, "reflectCached", i));
 }
+const writeReceiver: any = {};
+for (let i = 0; i < 2; i++) {
+    console.log("receiver set:", Reflect.set(obj, key, i, writeReceiver), writeReceiver.x);
+}
 obj.y = 2;
 console.log("has:", "y" in obj);
 delete obj.y;

@@ -24465,12 +24465,17 @@ class Emitter {
                 const value = this.emitExpr(args[2]!);
                 if (args.length === 4) {
                     const receiver = this.emitExpr(args[3]!);
-                    return this.emitSequencedCall("tsc_reflect_set_prop_receiver", T_BOOLEAN, [
-                        { value: target, target: T_VALUE, node: args[0]! },
-                        { value: key, target: T_STRING, node: args[1]! },
-                        { value, target: T_VALUE, node: args[2]! },
-                        { value: receiver, target: T_VALUE, node: args[3]! },
-                    ]);
+                    const cache = this.freshTemp("_prop_cache");
+                    return this.emitSequencedExpr(
+                        T_BOOLEAN,
+                        [
+                            { value: target, target: T_VALUE, node: args[0]! },
+                            { value: key, target: T_STRING, node: args[1]! },
+                            { value, target: T_VALUE, node: args[2]! },
+                            { value: receiver, target: T_VALUE, node: args[3]! },
+                        ],
+                        ([t, k, v, r]) => `({ static tsc_prop_cache_t ${cache}; tsc_reflect_set_prop_receiver_cached(${t}, ${k}, ${v}, ${r}, &${cache}); })`,
+                    );
                 }
                 const cache = this.freshTemp("_prop_cache");
                 return this.emitSequencedExpr(

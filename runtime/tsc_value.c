@@ -710,6 +710,39 @@ bool tsc_value_set_prop_receiver(tsc_value_t v, tsc_str_t* key, tsc_value_t valu
     return false;
 }
 
+bool tsc_value_set_prop_receiver_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver, tsc_prop_cache_t* cache) {
+    if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) {
+        return tsc_value_set_prop_receiver(v, key, value, receiver);
+    }
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_SET_PROP_RECEIVER);
+    tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+    if (!o || o->is_proxy || !cache) {
+        tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_MISS);
+        return tsc_object_set_receiver(o, key, value, receiver);
+    }
+    if (
+        cache->object == o &&
+        cache->shape_version == o->shape_version &&
+        cache->index < o->len &&
+        tsc_str_eq(o->props[cache->index].key, key)
+    ) {
+        tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_HIT);
+        tsc_object_prop_t* prop = &o->props[cache->index];
+        if (prop->accessor) return prop->setter ? prop->setter(prop->setter_env, receiver, value) : false;
+        if (!prop->writable) return false;
+        return value_set_receiver_own_data(receiver, key, value);
+    }
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_MISS);
+    bool ok = tsc_object_set_receiver(o, key, value, receiver);
+    ssize_t idx = object_find(o, key);
+    if (idx >= 0) {
+        cache->object = o;
+        cache->shape_version = o->shape_version;
+        cache->index = (size_t)idx;
+    }
+    return ok;
+}
+
 bool tsc_reflect_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
     require_reflect_object_target(v, "Reflect.set target must be an object");
     return tsc_value_set_prop(v, key, value);
@@ -723,6 +756,11 @@ bool tsc_reflect_set_prop_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t valu
 bool tsc_reflect_set_prop_receiver(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver) {
     require_reflect_object_target(v, "Reflect.set target must be an object");
     return tsc_value_set_prop_receiver(v, key, value, receiver);
+}
+
+bool tsc_reflect_set_prop_receiver_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver, tsc_prop_cache_t* cache) {
+    require_reflect_object_target(v, "Reflect.set target must be an object");
+    return tsc_value_set_prop_receiver_cached(v, key, value, receiver, cache);
 }
 
 bool tsc_value_has_own_prop(tsc_value_t v, const tsc_str_t* key) {
