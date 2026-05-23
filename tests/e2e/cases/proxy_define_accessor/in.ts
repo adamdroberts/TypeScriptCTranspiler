@@ -5,8 +5,16 @@ function readScore(): number {
     return current;
 }
 
+function readOtherScore(): number {
+    return current + 1;
+}
+
 function writeScore(value: number): void {
     current = value + 10;
+}
+
+function writeOtherScore(value: number): void {
+    current = value + 20;
 }
 
 function forwardDefine(target: any, prop: any, desc: any): boolean {
@@ -82,3 +90,28 @@ report("fixed data accessor", function(): any {
         get: readScore,
     });
 });
+
+const fixedAccessorTarget: any = {};
+Object.defineProperty(fixedAccessorTarget, "score", {
+    get: readScore,
+    set: writeScore,
+    enumerable: true,
+    configurable: false,
+});
+const fixedAccessorProxy: any = new Proxy(fixedAccessorTarget, { defineProperty: trueDefine as any });
+report("fixed accessor getter", function(): any {
+    return Reflect.defineProperty(fixedAccessorProxy, "score", {
+        get: readOtherScore,
+    });
+});
+report("fixed accessor setter", function(): any {
+    return Reflect.defineProperty(fixedAccessorProxy, "score", {
+        set: writeOtherScore,
+    });
+});
+console.log("fixed accessor same:", Reflect.defineProperty(fixedAccessorProxy, "score", {
+    get: readScore,
+    set: writeScore,
+    enumerable: true,
+    configurable: false,
+}));

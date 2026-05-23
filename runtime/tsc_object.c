@@ -86,7 +86,7 @@ static void validate_proxy_set_result(const tsc_object_t* proxy, const tsc_str_t
     }
 }
 
-static void validate_proxy_define_property_result(const tsc_object_t* proxy, const tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable, bool accessor_descriptor, bool success) {
+static void validate_proxy_define_property_result(const tsc_object_t* proxy, const tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable, bool accessor_descriptor, tsc_value_t getter_value, bool has_getter, tsc_value_t setter_value, bool has_setter, bool success) {
     if (!success || !proxy || !value_is_box(proxy->proxy_target) || value_tag(proxy->proxy_target) != TSC_VALUE_TAG_OBJECT) return;
     const tsc_object_t* target = (const tsc_object_t*)value_ptr(proxy->proxy_target);
     ssize_t found = object_find(target, key);
@@ -113,6 +113,12 @@ static void validate_proxy_define_property_result(const tsc_object_t* proxy, con
     if (prop->accessor) {
         if (has_value || has_writable) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot redefine non-configurable accessor key as data"));
+        }
+        if (has_getter && !tsc_value_same_value_zero(getter_value, prop->getter_value)) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot change non-configurable accessor getter"));
+        }
+        if (has_setter && !tsc_value_same_value_zero(setter_value, prop->setter_value)) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot change non-configurable accessor setter"));
         }
         return;
     }
@@ -334,7 +340,7 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
         tsc_array_push_value(args, tsc_value_object(desc));
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
         bool success = tsc_value_is_truthy(res);
-        validate_proxy_define_property_result(o, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable, false, success);
+        validate_proxy_define_property_result(o, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable, false, tsc_value_undefined(), false, tsc_value_undefined(), false, success);
         return success;
     }
     ssize_t found = object_find(o, key);
@@ -397,8 +403,10 @@ bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_ge
         }
         tsc_proxy_require_callable_trap(trap, "Proxy defineProperty trap must be callable");
         tsc_object_t* desc = tsc_object_new();
-        if (has_getter) tsc_object_set(desc, tsc_str_from_lit("get", 3), value_accessor_getter_identity(getter, getter_env));
-        if (has_setter) tsc_object_set(desc, tsc_str_from_lit("set", 3), value_accessor_setter_identity(setter, setter_env));
+        tsc_value_t getter_value = has_getter ? value_accessor_getter_identity(getter, getter_env) : tsc_value_undefined();
+        tsc_value_t setter_value = has_setter ? value_accessor_setter_identity(setter, setter_env) : tsc_value_undefined();
+        if (has_getter) tsc_object_set(desc, tsc_str_from_lit("get", 3), getter_value);
+        if (has_setter) tsc_object_set(desc, tsc_str_from_lit("set", 3), setter_value);
         if (has_enumerable) tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(enumerable));
         if (has_configurable) tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(configurable));
 
@@ -408,7 +416,7 @@ bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_ge
         tsc_array_push_value(args, tsc_value_object(desc));
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
         bool success = tsc_value_is_truthy(res);
-        validate_proxy_define_property_result(o, key, tsc_value_undefined(), false, false, false, enumerable, has_enumerable, configurable, has_configurable, true, success);
+        validate_proxy_define_property_result(o, key, tsc_value_undefined(), false, false, false, enumerable, has_enumerable, configurable, has_configurable, true, getter_value, has_getter, setter_value, has_setter, success);
         return success;
     }
     ssize_t found = object_find(o, key);
