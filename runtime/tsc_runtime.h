@@ -466,7 +466,7 @@ typedef struct tsc_dns_lookup_all_result tsc_dns_lookup_all_result_t;
 typedef tsc_value_t (*tsc_accessor_getter_t)(void* env, tsc_value_t receiver);
 typedef bool (*tsc_accessor_setter_t)(void* env, tsc_value_t receiver, tsc_value_t value);
 typedef tsc_value_t (*tsc_generic_function_t)(void* env, tsc_value_t this_arg, tsc_array_t* args);
-typedef void (*tsc_event_listener_fn_t)(void* env, tsc_array_t* args);
+typedef void (*tsc_event_listener_fn_t)(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args);
 typedef void (*tsc_event_target_listener_fn_t)(void* env, tsc_event_t* event);
 
 tsc_value_t tsc_value_undefined(void);

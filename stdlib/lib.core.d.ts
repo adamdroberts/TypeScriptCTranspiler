@@ -1335,16 +1335,16 @@ interface AddEventListenerOptions extends EventListenerOptions {
 }
 
 interface EventEmitter {
-    on(eventName: string, listener: (...args: any[]) => void): this;
-    addListener(eventName: string, listener: (...args: any[]) => void): this;
-    prependListener(eventName: string, listener: (...args: any[]) => void): this;
-    once(eventName: string, listener: (...args: any[]) => void): this;
-    prependOnceListener(eventName: string, listener: (...args: any[]) => void): this;
-    off(eventName: string, listener: (...args: any[]) => void): this;
-    removeListener(eventName: string, listener: (...args: any[]) => void): this;
+    on(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void): this;
+    addListener(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void): this;
+    prependListener(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void): this;
+    once(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void): this;
+    prependOnceListener(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void): this;
+    off(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void): this;
+    removeListener(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void): this;
     removeAllListeners(eventName?: string): this;
     emit(eventName: string, ...args: any[]): boolean;
-    listenerCount(eventName: string, listener?: (...args: any[]) => void): number;
+    listenerCount(eventName: string, listener?: (this: EventEmitter, ...args: any[]) => void): number;
     listeners(eventName: string): any[];
     rawListeners(eventName: string): any[];
     eventNames(...ignored: any[]): string[];
@@ -1354,13 +1354,13 @@ interface EventEmitter {
 interface EventEmitterConstructor {
     new(...ignored: any[]): EventEmitter;
     defaultMaxListeners: number;
-    listenerCount(emitter: EventEmitter, eventName: string, listener?: (...args: any[]) => void, ...ignored: any[]): number;
+    listenerCount(emitter: EventEmitter, eventName: string, listener?: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): number;
 }
 declare var EventEmitter: EventEmitterConstructor;
 declare module "events" {
     export const EventEmitter: EventEmitterConstructor;
     export let defaultMaxListeners: number;
-    export function listenerCount(emitter: EventEmitter, eventName: string, listener?: (...args: any[]) => void, ...ignored: any[]): number;
+    export function listenerCount(emitter: EventEmitter, eventName: string, listener?: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): number;
     export function getEventListeners(emitter: EventEmitter, eventName: string, ...ignored: any[]): any[];
     export function once(emitter: EventEmitter, eventName: string): Promise<any[]>;
     export function setMaxListeners(n: number, emitter: EventEmitter): void;
@@ -1369,7 +1369,7 @@ declare module "events" {
 declare module "node:events" {
     export const EventEmitter: EventEmitterConstructor;
     export let defaultMaxListeners: number;
-    export function listenerCount(emitter: EventEmitter, eventName: string, listener?: (...args: any[]) => void, ...ignored: any[]): number;
+    export function listenerCount(emitter: EventEmitter, eventName: string, listener?: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): number;
     export function getEventListeners(emitter: EventEmitter, eventName: string, ...ignored: any[]): any[];
     export function once(emitter: EventEmitter, eventName: string): Promise<any[]>;
     export function setMaxListeners(n: number, emitter: EventEmitter): void;

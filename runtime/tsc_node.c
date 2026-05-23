@@ -1065,9 +1065,9 @@ bool tsc_event_emitter_emit(tsc_event_emitter_t* ee, const tsc_str_t* event, tsc
         if (listener.once) {
             for (size_t j = i + 1; j < ee->len; j++) ee->listeners[j - 1] = ee->listeners[j];
             ee->len--;
-            listener.fn(listener.env, args);
+            listener.fn(listener.env, ee, args);
         } else {
-            listener.fn(listener.env, args);
+            listener.fn(listener.env, ee, args);
             i++;
         }
     }

@@ -1,0 +1,3 @@
+{
+  "description": "EventEmitter listeners with explicit this parameters receive the emitting EventEmitter"
+}

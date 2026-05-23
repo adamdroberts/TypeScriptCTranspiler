@@ -461,7 +461,7 @@ tsc_str_t* path_str_slice(const tsc_str_t* p, size_t start, size_t len);
 tsc_str_t* path_get_string_prop(tsc_value_t object, const char* key, size_t key_len);
 void event_emitter_reserve(tsc_event_emitter_t* ee, size_t cap);
 tsc_array_t* event_args_copy_as_values(tsc_array_t* args);
-void event_once_promise_resolve_listener(void* env, tsc_array_t* args);
-void event_once_promise_reject_listener(void* env, tsc_array_t* args);
+void event_once_promise_resolve_listener(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args);
+void event_once_promise_reject_listener(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args);
 
 #endif

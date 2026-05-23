@@ -6248,8 +6248,8 @@ class Emitter {
             }
         }
         if (!ty) return null;
-        if (ty.kind !== "value" && ty.kind !== "class") {
-            unsupported(node, "function this parameters are currently supported only as any/unknown or class instances");
+        if (ty.kind !== "value" && ty.kind !== "class" && ty.kind !== "eventemitter") {
+            unsupported(node, "function this parameters are currently supported only as any/unknown, class instances, or EventEmitter");
         }
         return ty;
     }
@@ -16404,18 +16404,21 @@ class Emitter {
         if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
             unsupported(expr, "EventEmitter listener must be a function");
         }
-        if (prepared.thisParam) unsupported(expr, "EventEmitter listener this parameters are not supported yet");
+        if (prepared.thisParam && prepared.thisParam.kind !== "eventemitter") {
+            unsupported(expr, "EventEmitter listener this parameter must be EventEmitter");
+        }
         const key = `event:${this.typeKey(prepared)}`;
         const existing = this.eventListenerAdapters.get(key);
         if (existing) return existing;
         const name = `tsc_event_listener_${this.eventListenerAdapters.size}`;
         this.eventListenerAdapters.set(key, name);
-        this.protos.line(`void ${name}(void* env, tsc_array_t* args);`);
+        this.protos.line(`void ${name}(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args);`);
         const buf = new CBuf();
-        buf.open(`void ${name}(void* env, tsc_array_t* args)`);
+        buf.open(`void ${name}(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args)`);
         buf.line(`${prepared.c} fn = (${prepared.c})env;`);
         const params = prepared.params ?? [];
         const callArgs: string[] = ["fn->env"];
+        if (prepared.thisParam) callArgs.push("emitter");
         for (let i = 0; i < params.length; i++) {
             const arg = this.coerce(
                 { c: `(args->len > ${i} ? TSC_ARR(tsc_value_t, args, ${i}) : tsc_value_undefined())`, ty: T_VALUE },

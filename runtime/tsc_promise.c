@@ -193,17 +193,19 @@ tsc_array_t* event_args_copy_as_values(tsc_array_t* args) {
     return out;
 }
 
-void event_once_promise_resolve_listener(void* env, tsc_array_t* args);
-void event_once_promise_reject_listener(void* env, tsc_array_t* args);
+void event_once_promise_resolve_listener(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args);
+void event_once_promise_reject_listener(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args);
 
-void event_once_promise_resolve_listener(void* env, tsc_array_t* args) {
+void event_once_promise_resolve_listener(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args) {
+    (void)emitter;
     tsc_event_once_promise_env_t* state = (tsc_event_once_promise_env_t*)env;
     if (!state || !state->promise) return;
     tsc_event_emitter_off(state->emitter, tsc_str_from_lit("error", 5), event_once_promise_reject_listener, state);
     tsc_promise_fulfill_in_place(state->promise, tsc_value_array(event_args_copy_as_values(args)));
 }
 
-void event_once_promise_reject_listener(void* env, tsc_array_t* args) {
+void event_once_promise_reject_listener(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args) {
+    (void)emitter;
     tsc_event_once_promise_env_t* state = (tsc_event_once_promise_env_t*)env;
     if (!state || !state->promise) return;
     tsc_event_emitter_off(state->emitter, state->event, event_once_promise_resolve_listener, state);
@@ -226,4 +228,3 @@ tsc_promise_t* tsc_event_emitter_once_promise(tsc_event_emitter_t* ee, tsc_str_t
     }
     return promise;
 }
-
