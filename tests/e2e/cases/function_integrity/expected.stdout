@@ -29,6 +29,7 @@ proxy function set length: Proxy set trap cannot report success changing non-con
 proxy function desc name: Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key
 proxy function keys missing: Proxy ownKeys trap result missing non-configurable key
 proxy function keys complete: 2
+proxy function keys extra: Proxy ownKeys trap result included extra key on non-extensible target
 proxy function has length: Proxy has trap cannot report false for non-configurable key
 proxy function has missing: false
 proxy function define same: true

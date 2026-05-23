@@ -7,6 +7,7 @@ function ProxyGet(this: any): void {}
 function ProxySet(this: any): void {}
 function ProxyDescriptor(this: any): void {}
 function ProxyKeys(this: any): void {}
+function ProxyKeysClosed(this: any): void {}
 function ProxyHas(this: any): void {}
 function ProxyDefine(this: any, value: number): void {}
 function ProxyDelete(this: any): void {}
@@ -107,6 +108,10 @@ function completeKeys(target: any): any {
     return ["length", "name"];
 }
 
+function extraKeys(target: any): any {
+    return ["length", "name", "extra"];
+}
+
 function falseHas(target: any, prop: any): boolean {
     return false;
 }
@@ -145,6 +150,15 @@ try {
 }
 const proxyCompleteKeys: any = new Proxy(proxyMissingKeysTarget, { ownKeys: completeKeys as any });
 console.log("proxy function keys complete:", Reflect.ownKeys(proxyCompleteKeys).length);
+
+const proxyExtraKeysTarget: any = ProxyKeysClosed as any;
+Object.preventExtensions(proxyExtraKeysTarget);
+const proxyExtraKeys: any = new Proxy(proxyExtraKeysTarget, { ownKeys: extraKeys as any });
+try {
+    console.log("proxy function keys extra:", Reflect.ownKeys(proxyExtraKeys).length);
+} catch (err: any) {
+    console.log("proxy function keys extra:", err);
+}
 
 const proxyHasTarget: any = ProxyHas as any;
 const proxyHas: any = new Proxy(proxyHasTarget, { has: falseHas as any });
