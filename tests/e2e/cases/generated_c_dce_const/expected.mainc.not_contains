@@ -408,6 +408,9 @@ else_if_static_dead_tail
 local_static_empty_string
 local_dead_empty_string_if
 local_dead_truthy_tail
+local_static_switch_key
+local_dead_static_switch_a
+local_dead_static_switch_default
 branch_only_dead
 branch_after_exit
 nested_after_block

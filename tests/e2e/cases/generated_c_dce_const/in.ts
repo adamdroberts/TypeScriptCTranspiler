@@ -413,6 +413,20 @@ function literalTruthiness(): number {
     }
 }
 
+function staticSwitchDce(): number {
+    const local_static_switch_key: "a" | "b" = top_level_static_false ? "a" : "b";
+    switch (local_static_switch_key) {
+        case "a":
+            console.log("local_dead_static_switch_a");
+            return 95;
+        case "b":
+            return 96;
+        default:
+            console.log("local_dead_static_switch_default");
+            return 97;
+    }
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -531,6 +545,7 @@ console.log(
     branchInnerExit(true),
     elseIfStatic(used_count),
     literalTruthiness(),
+    staticSwitchDce(),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),

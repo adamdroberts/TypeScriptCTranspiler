@@ -461,6 +461,13 @@ class Emitter {
                 if (node.initializer) visit(node.initializer);
                 return;
             }
+            if (ts.isSwitchStatement(node)) {
+                const selected = this.staticSwitchSelectedStatements(node);
+                if (selected) {
+                    if (selected.statements) visitStatementList(selected.statements);
+                    return;
+                }
+            }
             if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node)) {
                 const sym = this.symbolForIdentifier(node);
                 const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
@@ -10119,6 +10126,16 @@ class Emitter {
 
     private emitSwitch(buf: CBuf, sw: ts.SwitchStatement): void {
         this.assertExhaustiveSwitch(sw);
+        const selected = this.staticSwitchSelectedStatements(sw);
+        if (selected) {
+            if (selected.statements) {
+                for (const s of selected.statements) {
+                    this.emitStmt(buf, s);
+                    if (this.statementAlwaysExits(s)) break;
+                }
+            }
+            return;
+        }
         const disc = this.emitExpr(sw.expression);
         const isStr = disc.ty.kind === "string";
         const isBool = disc.ty.kind === "boolean";
@@ -10174,6 +10191,35 @@ class Emitter {
             // Trailing empty cases with no default — they have no effect.
         }
         buf.close();
+    }
+
+    private staticSwitchSelectedStatements(
+        sw: ts.SwitchStatement,
+    ): { statements: readonly ts.Statement[] | null } | null {
+        const key = this.staticSwitchKey(sw.expression);
+        if (!key) return null;
+        let selectedIndex = -1;
+        let defaultIndex = -1;
+        for (let i = 0; i < sw.caseBlock.clauses.length; i++) {
+            const clause = sw.caseBlock.clauses[i]!;
+            if (ts.isDefaultClause(clause)) {
+                defaultIndex = i;
+                continue;
+            }
+            const caseKey = this.staticSwitchKey(clause.expression);
+            if (!caseKey) return null;
+            if (caseKey === key && selectedIndex < 0) selectedIndex = i;
+        }
+        if (selectedIndex < 0) selectedIndex = defaultIndex;
+        if (selectedIndex < 0) return { statements: null };
+        for (let i = selectedIndex; i < sw.caseBlock.clauses.length; i++) {
+            const clause = sw.caseBlock.clauses[i]!;
+            if (clause.statements.length === 0) continue;
+            if (clause.statements.some((s) => this.statementContainsBreak(s))) return null;
+            if (!this.statementListAlwaysExits(clause.statements)) return null;
+            return { statements: clause.statements };
+        }
+        return { statements: null };
     }
 
     private assertExhaustiveSwitch(sw: ts.SwitchStatement): void {
@@ -10235,6 +10281,22 @@ class Emitter {
             }
         }
         return null;
+    }
+
+    private staticSwitchKey(
+        expr: ts.Expression,
+        seenConsts = new Set<ts.Symbol>(),
+    ): string | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        const direct = this.switchCaseKey(unwrapped);
+        if (direct) return direct;
+        if (ts.isConditionalExpression(unwrapped)) {
+            const condition = this.staticBooleanValue(unwrapped.condition, seenConsts);
+            if (condition === true) return this.staticSwitchKey(unwrapped.whenTrue, seenConsts);
+            if (condition === false) return this.staticSwitchKey(unwrapped.whenFalse, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.staticSwitchKey(init, seenConsts) : null;
     }
 
     private switchCaseKey(expr: ts.Expression): string | null {
