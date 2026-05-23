@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unshadowed `Object.is(...)` calls with side-effect-free arguments as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unshadowed `Number.isFinite(...)`, `Number.isInteger(...)`, `Number.isNaN(...)`, and `Number.isSafeInteger(...)` calls with side-effect-free arguments as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unshadowed `Array.isArray(...)` calls with side-effect-free arguments as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes `delete` operations against fresh object/array literals and earlier pure const object/array literals as side-effect-free. Test: `generated_c_dce_const`.

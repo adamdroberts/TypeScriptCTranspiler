@@ -977,6 +977,15 @@ class Emitter {
         ) {
             return this.isSideEffectFreeTopLevelConstInitializer(call.arguments[0]!, seenConsts);
         }
+        if (
+            ts.isIdentifier(recv) &&
+            method === "is" &&
+            call.arguments.length === 2 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Object")
+        ) {
+            return this.isSideEffectFreeTopLevelConstInitializer(call.arguments[0]!, seenConsts) &&
+                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts);
+        }
         return false;
     }
 
