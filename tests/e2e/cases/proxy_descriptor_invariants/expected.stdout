@@ -6,6 +6,7 @@ new fixed: Proxy getOwnPropertyDescriptor trap cannot report new non-configurabl
 config false: Proxy getOwnPropertyDescriptor trap cannot report configurable key as non-configurable
 wrong fixed: Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key
 writable fixed: Proxy getOwnPropertyDescriptor trap cannot report non-configurable non-writable key as writable
+wrong enumerable: Proxy getOwnPropertyDescriptor trap cannot report different enumerable flag for non-configurable key
 accessor as data: Proxy getOwnPropertyDescriptor trap cannot report data descriptor for non-configurable accessor key
 accessor wrong getter: Proxy getOwnPropertyDescriptor trap cannot report different getter for non-configurable accessor key
 accessor wrong setter: Proxy getOwnPropertyDescriptor trap cannot report different setter for non-configurable accessor key

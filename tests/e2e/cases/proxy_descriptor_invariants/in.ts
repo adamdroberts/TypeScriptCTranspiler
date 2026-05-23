@@ -26,6 +26,10 @@ function writableFixedDescriptor(target: any, prop: any): any {
     return { value: 1, writable: true, enumerable: true, configurable: false };
 }
 
+function wrongEnumerableDescriptor(target: any, prop: any): any {
+    return { value: 1, writable: false, enumerable: false, configurable: false };
+}
+
 function accessorAsDataDescriptor(target: any, prop: any): any {
     return { value: 1, enumerable: true, configurable: false };
 }
@@ -130,6 +134,13 @@ try {
     console.log("writable fixed:", Object.getOwnPropertyDescriptor(writableFixedProxy, "fixed")?.writable);
 } catch (e: any) {
     console.log("writable fixed:", e);
+}
+
+const wrongEnumerableProxy: any = new Proxy(fixedTarget, { getOwnPropertyDescriptor: wrongEnumerableDescriptor as any });
+try {
+    console.log("wrong enumerable:", Object.getOwnPropertyDescriptor(wrongEnumerableProxy, "fixed")?.enumerable);
+} catch (e: any) {
+    console.log("wrong enumerable:", e);
 }
 
 const accessorTarget: any = {};

@@ -164,6 +164,9 @@ void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* p
     tsc_value_t writable_value = tsc_value_undefined();
     bool has_writable = descriptor_has_prop(desc, "writable", 8, &writable_value);
     bool writable = has_writable ? tsc_value_is_truthy(writable_value) : false;
+    tsc_value_t enumerable_value = tsc_value_undefined();
+    bool has_enumerable = descriptor_has_prop(desc, "enumerable", 10, &enumerable_value);
+    bool enumerable = has_enumerable ? tsc_value_is_truthy(enumerable_value) : false;
     tsc_value_t value = tsc_value_undefined();
     bool has_value = descriptor_has_prop(desc, "value", 5, &value);
     tsc_value_t get_value = tsc_value_undefined();
@@ -186,6 +189,9 @@ void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* p
     if (prop->configurable) return;
     if (configurable) {
         tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report non-configurable key as configurable"));
+    }
+    if (has_enumerable && enumerable != prop->enumerable) {
+        tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report different enumerable flag for non-configurable key"));
     }
     if (prop->accessor) {
         if (has_value || has_writable) {
