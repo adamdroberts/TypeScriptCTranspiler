@@ -960,6 +960,9 @@ class Emitter {
         if (this.isSideEffectFreeStringMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeArrayMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
         if (
             ts.isIdentifier(recv) &&
             method === "isArray" &&
@@ -1153,6 +1156,60 @@ class Emitter {
             return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts);
         }
         return false;
+    }
+
+    private isSideEffectFreeArrayMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!this.isSideEffectFreeArrayOperand(recv, seenConsts)) return false;
+        const allArgsPure = (from = 0): boolean =>
+            Array.from(args).slice(from).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+        const numberArgs = (max: number): boolean =>
+            args.length <= max &&
+            Array.from(args).every((arg) =>
+                this.isSideEffectFreePrimitiveNumberCoercion(arg, seenConsts)
+            );
+        const searchArgs = (): boolean =>
+            args.length >= 1 &&
+            args.length <= 2 &&
+            this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts) &&
+            (!args[1] || this.isSideEffectFreePrimitiveNumberCoercion(args[1], seenConsts));
+        switch (method) {
+            case "at":
+                return args.length === 1 &&
+                    this.isSideEffectFreePrimitiveNumberCoercion(args[0]!, seenConsts);
+            case "slice":
+                return numberArgs(2);
+            case "indexOf":
+            case "lastIndexOf":
+            case "includes":
+                return searchArgs();
+            case "keys":
+            case "values":
+            case "entries":
+            case "toReversed":
+            case "valueOf":
+                return allArgsPure();
+            default:
+                return false;
+        }
+    }
+
+    private isSideEffectFreeArrayOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeArrayOperand(init, seenConsts);
     }
 
     private isSideEffectFreeStringMethodCall(
