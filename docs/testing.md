@@ -52,6 +52,7 @@ e2e: array_last_index_of … OK
 e2e: array_of … OK
 e2e: array_own_properties … OK
 e2e: array_property_descriptors … OK
+e2e: array_prototypes … OK
 e2e: array_reduce_no_initial … OK
 e2e: array_reduce_right … OK
 e2e: array_search_from_index … OK
@@ -250,6 +251,7 @@ e2e: proxy_array_get_set_invariants … OK
 e2e: proxy_array_has_delete_invariants … OK
 e2e: proxy_array_object_helpers … OK
 e2e: proxy_array_is_array … OK
+e2e: proxy_array_prototype_invariants … OK
 e2e: proxy_array_to_string_tag … OK
 e2e: proxy_callable_to_string_tag … OK
 e2e: reflect_apply … OK
@@ -279,7 +281,7 @@ e2e: url_parse … OK
 e2e: void_operator … OK
 e2e: wordcount … OK
 
-817 passed, 0 failed
+819 passed, 0 failed
 ```
 
 Non-zero exit if any case fails.
