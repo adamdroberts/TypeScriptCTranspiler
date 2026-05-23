@@ -49,10 +49,17 @@ unused_const_object_keys_call
 unused_array_keys_call
 unused_object_has_own_call
 unused_array_has_own_call
+unused_object_property_names_call
+unused_object_property_descriptor_call
+unused_object_property_descriptors_call
+unused_array_property_names_call
 dead_object_keys
 dead_object_values
 dead_object_entries
 dead_object_has_own
+dead_object_property_names
+dead_object_property_descriptor
+dead_object_property_descriptors
 unused_chain_seed
 unused_chain_mid
 unused_chain_object
@@ -74,6 +81,8 @@ top_level_dead_from_char_code
 top_level_dead_object_keys
 top_level_dead_object_values
 top_level_dead_object_has_own
+top_level_dead_property_names
+top_level_dead_property_descriptor
 top_level_dead_length
 top_level_dead_index
 top_level_dead_prop
@@ -93,6 +102,8 @@ local_dead_from_char_code
 local_dead_object_entries
 local_dead_array_keys
 local_dead_object_has_own
+local_dead_property_descriptors
+local_dead_array_property_names
 local_dead_length
 local_dead_index
 local_dead_prop
