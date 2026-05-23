@@ -3699,9 +3699,6 @@ class Emitter {
         if (!ts.isIdentifier(element.name)) {
             unsupported(element.name, "require destructuring requires identifier bindings");
         }
-        if (element.initializer) {
-            unsupported(element.initializer, "require destructuring does not support default values");
-        }
         if (!element.propertyName) return element.name.text;
         const name = this.staticPropertyName(element.propertyName);
         if (name == null) {
@@ -3745,7 +3742,16 @@ class Emitter {
             }
             const decl = this.commonJsExportedMemberDeclaration(info.sf, exportName);
             if (!decl) {
-                unsupported(element, `CommonJS require destructuring could not resolve export "${exportName}"`);
+                if (!element.initializer) {
+                    unsupported(element, `CommonJS require destructuring could not resolve export "${exportName}"`);
+                }
+                const fallback = this.emitExpr(element.initializer);
+                const localName = this.declaredName(element.name);
+                this.globalDecls.line(`static ${fallback.ty.c} ${localName};`);
+                initBuf.line(`${localName} = ${fallback.c};`);
+                const sym = this.symbolForIdentifier(element.name);
+                if (sym) this.requireDestructureTypes.set(sym, fallback.ty);
+                continue;
             }
             const cName = this.declarationCName(decl);
             if (!cName) {
@@ -3789,7 +3795,12 @@ class Emitter {
         const exportName = this.requireDestructureExportName(element);
         const exportDecl = this.commonJsExportedMemberDeclaration(info.sf, exportName);
         if (!exportDecl) {
-            unsupported(element, `CommonJS require destructuring could not resolve export "${exportName}"`);
+            if (!element.initializer) {
+                unsupported(element, `CommonJS require destructuring could not resolve export "${exportName}"`);
+            }
+            const ty = this.prepareType(mapTsType(element.initializer, this.checker.getTypeAtLocation(element.initializer), this.checker));
+            if (sym) this.requireDestructureTypes.set(sym, ty);
+            return ty;
         }
         const ty = this.commonJsExportedCType(exportDecl);
         if (sym) this.requireDestructureTypes.set(sym, ty);
