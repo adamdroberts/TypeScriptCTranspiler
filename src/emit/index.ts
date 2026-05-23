@@ -24657,6 +24657,9 @@ class Emitter {
                     : this.emitMissingOptionalArgument(paramDecl, paramType);
                 specs.push({ value: r, target: paramType, node: paramDecl.initializer });
             }
+            if (ts.canHaveDecorators(classDecl) && (ts.getDecorators(classDecl) ?? []).length > 0) {
+                return this.emitDecoratedClassNew(n, classDecl, cls, specs);
+            }
             return this.emitSequencedCall(`${cls}_new`, classType(cls), specs);
         }
         const sig = this.checker.getResolvedSignature(n);

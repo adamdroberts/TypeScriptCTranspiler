@@ -1,0 +1,3 @@
+seen: class:Box|
+value: box:decorated
+seen2: class:Box|replacement:box|original:box:decorated|
