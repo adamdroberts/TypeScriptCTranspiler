@@ -986,7 +986,31 @@ class Emitter {
             return this.isSideEffectFreeTopLevelConstInitializer(call.arguments[0]!, seenConsts) &&
                 this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts);
         }
+        if (
+            ts.isIdentifier(recv) &&
+            this.isSideEffectFreeMathCall(method, call.arguments, seenConsts) &&
+            this.isUnshadowedGlobalIdentifier(recv, "Math")
+        ) {
+            return true;
+        }
         return false;
+    }
+
+    private isSideEffectFreeMathCall(
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (method === "random") return false;
+        const supported = new Set([
+            "abs", "acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh",
+            "cbrt", "ceil", "clz32", "cos", "cosh", "exp", "expm1", "floor",
+            "fround", "hypot", "imul", "log", "log1p", "log2", "log10", "max",
+            "min", "pow", "round", "sign", "sin", "sinh", "sqrt", "tan",
+            "tanh", "trunc",
+        ]);
+        return supported.has(method) &&
+            args.every((arg) => this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts));
     }
 
     private isUnshadowedGlobalIdentifier(id: ts.Identifier, name: string): boolean {

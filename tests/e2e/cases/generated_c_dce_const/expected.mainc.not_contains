@@ -38,6 +38,9 @@ unused_number_is_integer
 unused_number_is_safe_integer
 unused_number_is_nan
 unused_object_is
+unused_math_abs_call
+unused_math_max_call
+unused_math_hypot_call
 unused_chain_seed
 unused_chain_mid
 unused_chain_object
@@ -54,6 +57,7 @@ top_level_dead_delete
 top_level_dead_array_is_array
 top_level_dead_number_is_finite
 top_level_dead_object_is
+top_level_dead_math_call
 top_level_dead_length
 top_level_dead_index
 top_level_dead_prop
@@ -68,6 +72,7 @@ local_dead_delete
 local_dead_array_is_array
 local_dead_number_is_integer
 local_dead_object_is
+local_dead_math_call
 local_dead_length
 local_dead_index
 local_dead_prop
