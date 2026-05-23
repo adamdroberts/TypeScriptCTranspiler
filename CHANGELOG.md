@@ -6,7 +6,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Changed
 - The e2e harness now materializes its small `node_modules` package fixtures before case discovery, so normal dependency installs no longer remove the ignored package-source fixtures needed by Phase 14 tests.
-- Documentation drift sync: top-level `README.md` and `llms.txt` now reflect the current 796-passing test suite, ~43,100 LOC inventory, and full phase status including the implemented Proxy/Reflect surface, native-addon bridge path, AOT runtime-code compilation, dynamic-require manifests, and current Phase 14/decorator polish remaining work. `llms-full.txt` was regenerated from the updated source pages.
+- Documentation drift sync: top-level `README.md` and `llms.txt` now reflect the current 798-passing test suite, ~43,100 LOC inventory, and full phase status including the implemented Proxy/Reflect surface, native-addon bridge path, AOT runtime-code compilation, dynamic-require manifests, and current Phase 14/decorator polish remaining work. `llms-full.txt` was regenerated from the updated source pages.
 - The benchmark harness can now run the manual suite, generated operation-loop benchmarks for stdout-producing e2e cases via `--full` / `BENCH_SOURCE=e2e`, or both, records ops/sec in JSON/table output, and writes selectable JSON result files.
 - Runtime and emitter hot paths for classes, typed object literals, string/number concatenation, JSON stringification, Map/Set, regex matching, arrays, and no-GC allocation were optimized for the benchmark suite.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
@@ -17,6 +17,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Inferred locals whose TypeScript type is erased to `tsc_value_t` now use boxed storage even when their initializer emits a narrower primitive, fixing nullish coalescing over `Map.get(...)` results and optional numeric field reads. Dynamic and typed string Reflect helpers again treat boxed strings as valid string-object targets. Tests: `nullish`, `wordcount`, `weak_ref`, `collection_object_methods`, `string_object_enumeration`, `dynamic_string_object_enumeration`.
 
 ### Added
+- `Object.prototype.hasOwnProperty.call(...)` and `Object.prototype.propertyIsEnumerable.call(...)` now compile through the AOT own-property dispatch path for typed objects, dynamic objects, arrays, strings, Buffers, and primitives. Test: `object_prototype_call`.
 - `--runtime-code-manifest` now accepts named object-map allow lists for `eval` expressions and `Function` bodies in addition to arrays, compiling mapped source strings into the AOT dispatch path. Test: `runtime_code_manifest_object`.
 - `--dynamic-require-manifest` now accepts named object-map allow lists in addition to array allow lists, compiling the mapped specifiers into the AOT module graph and runtime dispatch. Test: `dynamic_require_manifest_object`.
 - The e2e harness now supports a per-case `compile.unsafe_eval` marker, and emit-C-only cases cover `--unsafe-eval` bridge emission for unknown-source `eval`, `Function`, and `new Function` without requiring `libnode` at test time. Tests: `runtime_eval_unsafe_bridge`, `runtime_function_unsafe_bridge`, `runtime_function_constructor_unsafe_bridge`.
