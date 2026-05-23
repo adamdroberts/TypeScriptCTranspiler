@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Static standard setter decorators can now return replacement setter functions used by direct `Class.property = value` writes. Test: `static_setter_decorator_replacement`.
 - Static standard getter decorators can now return replacement getter functions used by direct `Class.property` reads. Test: `static_getter_decorator_replacement`.
 - Static standard method decorators can now return replacement functions used by direct `Class.method(...)` calls. Test: `static_method_decorator_replacement`.
 - Standard field decorators can now return initializer functions that transform instance and static field initial values during class initialization. Test: `field_decorator_initializer`.
