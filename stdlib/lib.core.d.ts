@@ -1422,20 +1422,20 @@ declare module "node:dns" {
 }
 
 interface Net {
-    isIP(input: string): number;
-    isIPv4(input: string): boolean;
-    isIPv6(input: string): boolean;
+    isIP(input: string, ...ignored: any[]): number;
+    isIPv4(input: string, ...ignored: any[]): boolean;
+    isIPv6(input: string, ...ignored: any[]): boolean;
 }
 declare const net: Net;
 declare module "net" {
-    export function isIP(input: string): number;
-    export function isIPv4(input: string): boolean;
-    export function isIPv6(input: string): boolean;
+    export function isIP(input: string, ...ignored: any[]): number;
+    export function isIPv4(input: string, ...ignored: any[]): boolean;
+    export function isIPv6(input: string, ...ignored: any[]): boolean;
 }
 declare module "node:net" {
-    export function isIP(input: string): number;
-    export function isIPv4(input: string): boolean;
-    export function isIPv6(input: string): boolean;
+    export function isIP(input: string, ...ignored: any[]): number;
+    export function isIPv4(input: string, ...ignored: any[]): boolean;
+    export function isIPv6(input: string, ...ignored: any[]): boolean;
 }
 
 type ChildProcessExecCallback = (error: any, stdout: string, stderr: string) => void;

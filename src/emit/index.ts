@@ -16048,22 +16048,20 @@ class Emitter {
     }
 
     private emitNetCall(call: ts.CallExpression, method: string): EmitResult {
-        if (call.arguments.length !== 1) unsupported(call, `net.${method} expects one input`);
+        if (call.arguments.length < 1) unsupported(call, `net.${method} expects one input`);
         const inputNode = call.arguments[0]!;
         const input = this.emitExpr(inputNode);
+        const specs: SequencedCallArg[] = [
+            { value: input, target: T_STRING, node: inputNode },
+            ...this.ignoredArgumentSpecs(call.arguments, 1),
+        ];
         switch (method) {
             case "isIP":
-                return this.emitSequencedCall("tsc_net_is_ip", T_NUMBER, [
-                    { value: input, target: T_STRING, node: inputNode },
-                ]);
+                return this.emitSequencedExpr(T_NUMBER, specs, ([value]) => `tsc_net_is_ip(${value!})`);
             case "isIPv4":
-                return this.emitSequencedCall("tsc_net_is_ipv4", T_BOOLEAN, [
-                    { value: input, target: T_STRING, node: inputNode },
-                ]);
+                return this.emitSequencedExpr(T_BOOLEAN, specs, ([value]) => `tsc_net_is_ipv4(${value!})`);
             case "isIPv6":
-                return this.emitSequencedCall("tsc_net_is_ipv6", T_BOOLEAN, [
-                    { value: input, target: T_STRING, node: inputNode },
-                ]);
+                return this.emitSequencedExpr(T_BOOLEAN, specs, ([value]) => `tsc_net_is_ipv6(${value!})`);
         }
         unsupported(call, `net.${method}`);
     }
