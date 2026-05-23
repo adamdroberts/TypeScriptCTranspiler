@@ -2537,7 +2537,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `modules` | multi-file import/export |
 | `namespaces` | namespace-scoped values/functions, lifted arrows, nested namespaces, and spread calls |
 | `strings` | every supported String method |
-| `math` | Math.* + constants, including Math.round negative-zero and min/max NaN behavior |
+| `math` | Math.* + constants, including Math.round negative-zero, min/max NaN behavior, atan2, and random range/ignored-argument behavior |
 | `math_constants_more` | Math.SQRT1_2 plus direct trunc/sign and sign negative-zero coverage |
 | `math_int32_float` | Math.imul, Math.clz32, and Math.fround |
 | `math_more` | additional libm-backed Math methods, including variadic hypot and inverse trig |
@@ -3395,6 +3395,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Constant-body `Function(...)` / `new Function(...)` calls now stay on the AOT path when they include static parameter-name strings, and runtime-code manifest dispatch uses the final function-body argument while requiring static parameter names. Tests: `runtime_function_params_aot`, `runtime_function_manifest_params`.
 - Dynamic strict equality now preserves `null` and `undefined` literal identity when boxing values into `tsc_value_t`, including transparent asserted null/undefined expressions and missing dynamic object properties compared with `undefined`. Test: `dynamic_nullish_equality`.
 - Explicit `this: void` function parameters are now treated as compile-time-only markers, so direct calls, function-typed values, and higher-order callbacks do not receive a generated receiver argument. Test: `function_this_void`.
+- Math coverage now explicitly exercises `Math.atan2(...)` and `Math.random(...ignored)` range and ignored-argument behavior. Test: `math`.
 - Bounded scheduler callbacks for `process.nextTick`, `queueMicrotask`, zero-delay `setTimeout`, and `setImmediate` now accept explicit `this: any` callback parameters and pass the runtime `undefined` value. Test: `scheduler_callback_this`.
 - EventTarget listener adapters now support explicit `this: EventTarget` listener parameters, passing the dispatch target while preserving duplicate suppression, removal, and once-listener behavior. Test: `event_target_this`.
 - EventEmitter listener adapters now support explicit `this: EventEmitter` listener parameters, passing the emitting instance for `on`/`once`/prepend variants while preserving listener identity filtering and removal. Test: `event_emitter_this`.

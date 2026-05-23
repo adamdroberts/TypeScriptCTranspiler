@@ -770,7 +770,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `modules` | multi-file import/export |
 | `namespaces` | namespace-scoped values/functions, lifted arrows, nested namespaces, and spread calls |
 | `strings` | every supported String method |
-| `math` | Math.* + constants, including Math.round negative-zero and min/max NaN behavior |
+| `math` | Math.* + constants, including Math.round negative-zero, min/max NaN behavior, atan2, and random range/ignored-argument behavior |
 | `math_constants_more` | Math.SQRT1_2 plus direct trunc/sign and sign negative-zero coverage |
 | `math_int32_float` | Math.imul, Math.clz32, and Math.fround |
 | `math_more` | additional libm-backed Math methods, including variadic hypot and inverse trig |

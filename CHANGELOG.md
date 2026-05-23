@@ -69,6 +69,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `fs.statSync`, `fs.lstatSync`, `fs.promises.stat`, and `fs.promises.lstat` now accept literal `{ throwIfNoEntry: false }`, returning `undefined` for missing paths instead of throwing or rejecting while preserving the existing `Stats` result for present paths. Test: `fs_stat_options`.
 - Array-backed generator `.next(value)` calls now evaluate the optional input argument before advancing the materialized iterator, while still ignoring it in the eager generator subset. Test: `generator_next_argument`.
 - Explicit `this: void` function parameters are now treated as compile-time-only markers, so direct calls, function-typed values, and higher-order callbacks do not receive a generated receiver argument. Test: `function_this_void`.
+- Math coverage now explicitly exercises `Math.atan2(...)` and `Math.random(...ignored)` range and ignored-argument behavior. Test: `math`.
 - `process.stdin.readable`, `process.stdout.writable`, and `process.stderr.writable` now expose stable boolean stream-state flags for the bounded stdio stream subset. Test: `process_stdio_readable_writable`.
 - `process.stdin.fd` and `process.stdin.isTTY` now expose bounded readable-stream metadata alongside the existing stdout/stderr stream subset. Test: `process_stdin_metadata`.
 - `process.stdout.fd`, `process.stderr.fd`, `process.stdout.isTTY`, and `process.stderr.isTTY` now expose bounded writable-stream metadata for the existing stdio subset. Test: `process_stdio_metadata`.
