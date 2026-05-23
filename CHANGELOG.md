@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- `fs.readdirSync` and immediate `fs.promises.readdir` now accept literal `{ withFileTypes: true, recursive: true }` options and return recursive bounded `Dirent` results. Test: `fs_readdir_dirents`.
 - Function-scoped literal CommonJS `require("pkg")` destructuring now supports default initializers for absent static exports while preserving present-export bindings without evaluating their defaults. Test: `node_modules_commonjs_function_scope_require`.
 - Top-level literal CommonJS `require("pkg")` destructuring now supports default initializers for absent static exports while preserving present-export bindings without evaluating their defaults. Test: `node_modules_commonjs_require_destructure`.
 - `fs.statSync`, `fs.lstatSync`, `fs.promises.stat`, and `fs.promises.lstat` now accept literal `{ throwIfNoEntry: false }`, returning `undefined` for missing paths instead of throwing or rejecting while preserving the existing `Stats` result for present paths. Test: `fs_stat_options`.
