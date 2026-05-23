@@ -24919,6 +24919,12 @@ class Emitter {
             switch (pa.name.text) {
                 case "fd": return { c: `${fd}.0`, ty: T_NUMBER };
                 case "isTTY": return { c: `tsc_process_stdio_is_tty(${fd})`, ty: T_BOOLEAN };
+                case "readable":
+                    if (pa.expression.name.text === "stdin") return { c: "true", ty: T_BOOLEAN };
+                    break;
+                case "writable":
+                    if (pa.expression.name.text !== "stdin") return { c: "true", ty: T_BOOLEAN };
+                    break;
             }
         }
 

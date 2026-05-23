@@ -1,0 +1,3 @@
+stdin readable: true
+stdout writable: true
+stderr writable: true

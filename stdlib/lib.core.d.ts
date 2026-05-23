@@ -613,12 +613,14 @@ interface ProcessHrtime {
 interface ProcessWritableStream {
     readonly fd: number;
     readonly isTTY: boolean;
+    readonly writable: boolean;
     write(chunk: string | Buffer, callback?: () => void): boolean;
     write(chunk: string | Buffer, encoding?: string, callback?: () => void): boolean;
 }
 interface ProcessReadableStream {
     readonly fd: number;
     readonly isTTY: boolean;
+    readonly readable: boolean;
 }
 interface Process {
     readonly platform: string;
