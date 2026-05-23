@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused `new Date(...)` allocations with pure string, numeric, or numeric component arguments as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes callable `Symbol(...)` with pure string descriptions as side-effect-free when its result is unused. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes callable `RegExp(...)` and `new RegExp(...)` with statically valid pure string pattern/flag arguments as side-effect-free when their result is unused. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes callable `BigInt(...)` with statically non-throwing primitive inputs as side-effect-free when its result is unused. Test: `generated_c_dce_const`.

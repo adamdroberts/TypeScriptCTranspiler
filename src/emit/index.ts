@@ -1417,9 +1417,11 @@ class Emitter {
             "URIError",
         ]);
         if (!pureErrorConstructors.has(name) || !this.isUnshadowedGlobalIdentifier(expr.expression, name)) {
-            return name === "RegExp" &&
-                this.isUnshadowedGlobalIdentifier(expr.expression, name) &&
-                this.isSideEffectFreeRegExpConstructorArgs(expr.arguments ?? ts.factory.createNodeArray(), seenConsts);
+            if (!this.isUnshadowedGlobalIdentifier(expr.expression, name)) return false;
+            const args = expr.arguments ?? ts.factory.createNodeArray();
+            if (name === "RegExp") return this.isSideEffectFreeRegExpConstructorArgs(args, seenConsts);
+            if (name === "Date") return this.isSideEffectFreeDateConstructorArgs(args, seenConsts);
+            return false;
         }
         const args = Array.from(expr.arguments ?? []);
         if (args.length === 0) return true;
@@ -1427,6 +1429,22 @@ class Emitter {
             args.slice(1).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
             );
+    }
+
+    private isSideEffectFreeDateConstructorArgs(
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (args.length === 0) return true;
+        if (args.length === 1) {
+            return this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) ||
+                this.isSideEffectFreePrimitiveNumberCoercion(args[0]!, seenConsts);
+        }
+        return Array.from(args).every((arg, index) =>
+            index < 7
+                ? this.isSideEffectFreePrimitiveNumberCoercion(arg, seenConsts)
+                : this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+        );
     }
 
     private isSideEffectFreeRegExpConstructorArgs(
