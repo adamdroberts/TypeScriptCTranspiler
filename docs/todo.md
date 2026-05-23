@@ -96,7 +96,7 @@ This is the next item that most directly expands what programs can be written ag
   - **Depends on Phase 3** for the `Promise<T>` value representation (mixed boxed + unboxed).
 
 - **Phase 7 remainder — ES language features** (~3 weeks)
-  - Synchronous `function*` declarations with ordinary `yield expr` statements, bounded `yield*` over arrays, strings, or dynamic iterable values, and materialized `.next()` / `.return(value)` / `.throw(error)` cursor interactions are implemented as eager materialized `Iterator<T>` / `IterableIterator<T>` arrays. Test: `generator_functions`
+  - Synchronous `function*` declarations with ordinary `yield expr` statements, bounded `yield*` over arrays, strings, or dynamic iterable values, and materialized `.next(value?)` / `.return(value)` / `.throw(error)` cursor interactions are implemented as eager materialized `Iterator<T>` / `IterableIterator<T>` arrays. Optional `.next(value)` inputs are evaluated and ignored in the eager subset. Tests: `generator_functions`, `generator_next_argument`
   - Still missing: lazy generator state-machine lowering with suspend/resume semantics, bidirectional `.next(value)` into suspended `yield`, non-eager side-effect timing, and `async function*`.
   - `FinalizationRegistry<T>` is implemented with `.register(target, heldValue, unregisterToken?)`, `.unregister(unregisterToken)`, and `[object FinalizationRegistry]` stringification; the cleanup callback is accepted by the constructor but never invoked because this AOT runtime has no GC-finalizer plumbing. Test: `finalization_registry`
   - `String.raw` tagged templates are implemented for raw segment preservation with stringified substitutions. Test: `string_raw`
