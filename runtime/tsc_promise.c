@@ -34,13 +34,27 @@ tsc_promise_t* tsc_promise_resolve_array(tsc_array_t* value) {
 
 typedef struct {
     tsc_promise_t* promise;
+    bool done;
 } tsc_promise_thenable_state_t;
+
+static void promise_adopt_into(tsc_promise_t* dest, tsc_promise_t* source) {
+    if (!dest || dest->state != TSC_PROMISE_PENDING || !source) return;
+    if (tsc_promise_is_fulfilled(source)) {
+        tsc_promise_fulfill_in_place(dest, tsc_promise_value(source));
+    } else if (tsc_promise_is_rejected(source)) {
+        tsc_promise_reject_in_place(dest, tsc_promise_reason(source));
+    }
+}
 
 static tsc_value_t promise_thenable_resolve(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     tsc_promise_thenable_state_t* state = (tsc_promise_thenable_state_t*)env;
     tsc_value_t value = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    if (state && state->promise) tsc_promise_fulfill_in_place(state->promise, value);
+    if (state && state->promise) {
+        if (state->done) return tsc_value_undefined();
+        state->done = true;
+        promise_adopt_into(state->promise, tsc_promise_resolve_thenable(value));
+    }
     return tsc_value_undefined();
 }
 
@@ -48,7 +62,11 @@ static tsc_value_t promise_thenable_reject(void* env, tsc_value_t this_arg, tsc_
     (void)this_arg;
     tsc_promise_thenable_state_t* state = (tsc_promise_thenable_state_t*)env;
     tsc_value_t reason = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    if (state && state->promise) tsc_promise_reject_in_place(state->promise, reason);
+    if (state && state->promise) {
+        if (state->done) return tsc_value_undefined();
+        state->done = true;
+        tsc_promise_reject_in_place(state->promise, reason);
+    }
     return tsc_value_undefined();
 }
 
@@ -65,6 +83,7 @@ tsc_promise_t* tsc_promise_resolve_thenable(tsc_value_t value) {
         out = tsc_promise_pending();
         tsc_promise_thenable_state_t* state = (tsc_promise_thenable_state_t*)TSC_GC_MALLOC(sizeof(tsc_promise_thenable_state_t));
         state->promise = out;
+        state->done = false;
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 2);
         tsc_value_t resolve = tsc_value_function_generic_arity(promise_thenable_resolve, state, 1.0);
         tsc_value_t reject = tsc_value_function_generic_arity(promise_thenable_reject, state, 1.0);
