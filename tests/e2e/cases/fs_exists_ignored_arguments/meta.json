@@ -1,0 +1,3 @@
+{
+  "description": "fs.existsSync evaluates and ignores extra arguments"
+}

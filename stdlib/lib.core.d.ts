@@ -1020,7 +1020,7 @@ interface FS {
     readFileSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReadFileOptions): string;
     writeFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions): void;
     appendFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSAppendFileOptions): void;
-    existsSync(path: FSPathLike): boolean;
+    existsSync(path: FSPathLike, ...ignored: any[]): boolean;
     accessSync(path: FSPathLike, mode?: number): void;
     readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions): Buffer[];
     readdirSync(path: FSPathLike, options: FSReaddirDirentOptions): FSDirent[];
@@ -1095,7 +1095,7 @@ declare module "fs" {
     export function readFileSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReadFileOptions): string;
     export function writeFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions): void;
     export function appendFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSAppendFileOptions): void;
-    export function existsSync(path: FSPathLike): boolean;
+    export function existsSync(path: FSPathLike, ...ignored: any[]): boolean;
     export function accessSync(path: FSPathLike, mode?: number): void;
     export function readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions): Buffer[];
     export function readdirSync(path: FSPathLike, options: FSReaddirDirentOptions): FSDirent[];
@@ -1133,7 +1133,7 @@ declare module "node:fs" {
     export function readFileSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReadFileOptions): string;
     export function writeFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions): void;
     export function appendFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSAppendFileOptions): void;
-    export function existsSync(path: FSPathLike): boolean;
+    export function existsSync(path: FSPathLike, ...ignored: any[]): boolean;
     export function accessSync(path: FSPathLike, mode?: number): void;
     export function readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions): Buffer[];
     export function readdirSync(path: FSPathLike, options: FSReaddirDirentOptions): FSDirent[];

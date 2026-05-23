@@ -19747,10 +19747,11 @@ class Emitter {
                 );
             }
             case "existsSync": {
-                if (args.length !== 1) unsupported(call, "fs.existsSync needs path");
+                if (args.length < 1) unsupported(call, "fs.existsSync needs path");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(T_BOOLEAN, [
                     this.fsPathSpec(p, args[0]!, "fs.existsSync path"),
+                    ...this.ignoredArgumentSpecs(args, 1),
                 ], ([path]) => `tsc_fs_exists_sync(${path!})`);
             }
             case "accessSync": {
