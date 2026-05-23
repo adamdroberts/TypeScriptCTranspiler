@@ -66,6 +66,8 @@ unused_decode_uri_component_call
 unused_bigint_constructor_string_call
 unused_bigint_constructor_number_call
 unused_bigint_constructor_boolean_call
+unused_regexp_constructor_call
+unused_new_regexp_constructor_call
 unused_string_char_at_call
 unused_string_index_of_call
 unused_string_slice_call
@@ -95,6 +97,8 @@ dead encode uri
 dead-decode-uri
 dead-decode-uri-component
 123456
+dead_regexp_constructor
+dead_new_regexp_constructor
 dead_string_method_source
 dead_string_char_at
 dead_string_index_of
@@ -210,6 +214,8 @@ top-level-dead-encode-uri-component
 top-level-dead-decode-uri
 top-level-dead-decode-uri-component
 234567
+top_level_dead_regexp_constructor
+top_level_dead_new_regexp_constructor
 top_level_dead_string_char_at
 top_level_dead_string_includes
 top_level_dead_string_slice
@@ -281,6 +287,8 @@ local-dead-encode-uri-component
 local-dead-decode-uri
 local-dead-decode-uri-component
 345678
+local_dead_regexp_constructor
+local_dead_new_regexp_constructor
 local_dead_string_char_at
 local_dead_string_starts_with
 local_dead_string_substring

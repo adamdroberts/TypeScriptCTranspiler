@@ -63,6 +63,8 @@ const unused_decode_uri_component_call = decodeURIComponent("dead-decode-uri-com
 const unused_bigint_constructor_string_call = BigInt("123456");
 const unused_bigint_constructor_number_call = BigInt(42);
 const unused_bigint_constructor_boolean_call = BigInt(true);
+const unused_regexp_constructor_call = RegExp("dead_regexp_constructor", "g");
+const unused_new_regexp_constructor_call = new RegExp("dead_new_regexp_constructor");
 const unused_string_char_at_call = "dead_string_char_at".charAt(1);
 const unused_string_index_of_call = "dead_string_index_of".indexOf("string");
 const unused_string_slice_call = "dead_string_slice".slice(1, 4);
@@ -153,6 +155,8 @@ decodeURIComponent("top-level-dead-decode-uri-component");
 BigInt("234567");
 BigInt(43);
 BigInt(false);
+RegExp("top_level_dead_regexp_constructor", "i");
+new RegExp("top_level_dead_new_regexp_constructor");
 "top_level_dead_string_char_at".charAt(1);
 "top_level_dead_string_includes".includes("string");
 "top_level_dead_string_slice".slice(1, 4);
@@ -235,6 +239,8 @@ function usedLocal(value: number): number {
     BigInt("345678");
     BigInt(44);
     BigInt(true);
+    RegExp("local_dead_regexp_constructor", "m");
+    new RegExp("local_dead_new_regexp_constructor");
     "local_dead_string_char_at".charAt(1);
     "local_dead_string_starts_with".startsWith("local");
     "local_dead_string_substring".substring(1, 4);

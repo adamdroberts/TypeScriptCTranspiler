@@ -1369,6 +1369,10 @@ class Emitter {
                     this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
                 );
         }
+        if (name === "RegExp") {
+            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+                this.isSideEffectFreeRegExpConstructorArgs(call.arguments, seenConsts);
+        }
         if (
             name === "encodeURI" ||
             name === "encodeURIComponent" ||
@@ -1401,7 +1405,9 @@ class Emitter {
             "URIError",
         ]);
         if (!pureErrorConstructors.has(name) || !this.isUnshadowedGlobalIdentifier(expr.expression, name)) {
-            return false;
+            return name === "RegExp" &&
+                this.isUnshadowedGlobalIdentifier(expr.expression, name) &&
+                this.isSideEffectFreeRegExpConstructorArgs(expr.arguments ?? ts.factory.createNodeArray(), seenConsts);
         }
         const args = Array.from(expr.arguments ?? []);
         if (args.length === 0) return true;
@@ -1409,6 +1415,25 @@ class Emitter {
             args.slice(1).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
             );
+    }
+
+    private isSideEffectFreeRegExpConstructorArgs(
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (args.length < 1 || args.length > 2) return false;
+        const pattern = this.sideEffectFreeStringLiteralText(args[0]!, seenConsts);
+        if (pattern === null) return false;
+        const flags = args[1]
+            ? this.sideEffectFreeStringLiteralText(args[1], seenConsts)
+            : "";
+        if (flags === null) return false;
+        try {
+            new RegExp(pattern, flags);
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     private isSideEffectFreeNumericParserArgs(
@@ -1448,6 +1473,18 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeUriStringCoercion(init, seenConsts);
+    }
+
+    private sideEffectFreeStringLiteralText(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): string | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
+            return unwrapped.text;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeStringLiteralText(init, seenConsts) : null;
     }
 
     private isSideEffectFreeBigIntCoercion(
