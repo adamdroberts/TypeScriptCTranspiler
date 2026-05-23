@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Negative user-defined type predicate branches now have focused coverage for narrowing interface-shaped dynamic unions. Test: `custom_predicates_negative`.
 - Compound literal discriminant checks using `||` and `&&` now have focused coverage for narrowing interface-shaped dynamic unions. Test: `discriminated_union_compound`.
 - Proxy-backed standard method decorators now have focused coverage for returning replacement functions that dispatch through the dynamic decorator apply path. Test: `decorator_proxy_replacement`.
 - Static standard method/getter/setter decorator replacements now have focused coverage for calling the original static member value through `Reflect.apply(value, undefined, args)`. Test: `static_decorator_originals`.
