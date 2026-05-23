@@ -27,6 +27,8 @@ console.log("block sum:", blockSum);
 const first = nums.find((n) => n > 3);
 console.log("first > 3:", first);
 
+console.log("first missing:", nums.find((n) => n > 9));
+
 const idx = nums.findIndex((n) => n === 4);
 console.log("index of 4:", idx);
 

@@ -17803,14 +17803,25 @@ class Emitter {
                 };
             }
             case "find":
+            case "findLast": {
+                const boxedResult = canBoxArrayFindElement(et);
+                const resultType = boxedResult ? T_VALUE : et;
+                const missing = boxedResult ? "tsc_value_undefined()" : `(${et.c})0`;
+                const found = boxedResult
+                    ? this.coerce({ c: `TSC_ARR(${et.c}, ${av}, ${iv})`, ty: et }, T_VALUE, call)
+                    : `TSC_ARR(${et.c}, ${av}, ${iv})`;
+                const forward = method === "find";
                 return {
                     c:
-                        `({ tsc_array_t* const ${av} = ${recv.c}; ${et.c} _r = (${et.c})0; bool _f = false; ` +
+                        `({ tsc_array_t* const ${av} = ${recv.c}; ${resultType.c} _r = ${missing}; bool _f = false; ` +
                         `${thisArgSetup}` +
-                        `for (size_t ${iv} = 0; ${iv} < ${av}->len && !_f; ${iv}++) ` +
-                        `{ ${bindings} if (${bodyC}) { _r = TSC_ARR(${et.c}, ${av}, ${iv}); _f = true; } } _r; })`,
-                    ty: et,
+                        (forward
+                            ? `for (size_t ${iv} = 0; ${iv} < ${av}->len && !_f; ${iv}++) `
+                            : `for (size_t ${iv} = ${av}->len; ${iv}-- > 0 && !_f;) `) +
+                        `{ ${bindings} if (${bodyC}) { _r = ${found}; _f = true; } } _r; })`,
+                    ty: resultType,
                 };
+            }
             case "findIndex":
                 return {
                     c:
@@ -17819,15 +17830,6 @@ class Emitter {
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                         `{ ${bindings} if (${bodyC}) { _r = (double)${iv}; break; } } _r; })`,
                     ty: T_NUMBER,
-                };
-            case "findLast":
-                return {
-                    c:
-                        `({ tsc_array_t* const ${av} = ${recv.c}; ${et.c} _r = (${et.c})0; bool _f = false; ` +
-                        `${thisArgSetup}` +
-                        `for (size_t ${iv} = ${av}->len; ${iv}-- > 0 && !_f;) ` +
-                        `{ ${bindings} if (${bodyC}) { _r = TSC_ARR(${et.c}, ${av}, ${iv}); _f = true; } } _r; })`,
-                    ty: et,
                 };
             case "findLastIndex":
                 return {
@@ -25808,6 +25810,10 @@ function isWeakObjectKey(t: CType): boolean {
         "fsstats",
         "fsdirent",
     ].includes(t.kind);
+}
+
+function canBoxArrayFindElement(t: CType): boolean {
+    return ["number", "boolean", "string", "array", "class", "function", "value", "void"].includes(t.kind);
 }
 
 function isPointerKind(t: CType): boolean {

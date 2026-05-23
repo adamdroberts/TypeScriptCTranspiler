@@ -10,6 +10,7 @@ sum: 15
 product: 120
 block sum: 30
 first > 3: 4
+first missing: undefined
 index of 4: 3
 has even: true
 all positive: true
