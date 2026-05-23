@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Dynamic callable and proxy-backed standard member decorator functions now dispatch through the boxed function/proxy apply path during module initialization. Test: `decorator_proxy_basic`.
 - Standard decorator contexts now expose `addInitializer`; queued callbacks run after member and class decorator evaluation during module initialization. Test: `decorator_add_initializer_basic`.
 - Erased generic class getter and setter accessors now have focused coverage for typed coercion at property read/write boundaries. Test: `generic_class_accessors`.
 - Negative literal discriminant checks such as `kind !== "circle"` now have focused coverage for narrowing interface-shaped dynamic unions. Test: `discriminated_union_negative`.
