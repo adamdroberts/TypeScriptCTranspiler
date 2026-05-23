@@ -19379,18 +19379,18 @@ class Emitter {
                 ], ([path]) => `${options.recursive ? "tsc_fs_readdir_recursive_sync" : "tsc_fs_readdir_sync"}(${path!})`);
             }
             case "statSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.statSync needs path and optional { bigint: false, throwIfNoEntry: true } options");
-                this.validateFsStatsOptions(args[1], "fs.statSync");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.statSync needs path and optional { bigint: false, throwIfNoEntry } options");
+                const options = this.validateFsStatsOptions(args[1], "fs.statSync");
                 const p = this.emitExpr(args[0]!);
-                return this.emitSequencedCall("tsc_fs_stat_sync", T_FS_STATS, [
+                return this.emitSequencedCall(options.throwIfNoEntry ? "tsc_fs_stat_sync" : "tsc_fs_stat_sync_no_throw", T_FS_STATS, [
                     this.fsPathSpec(p, args[0]!, "fs.statSync path"),
                 ]);
             }
             case "lstatSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.lstatSync needs path and optional { bigint: false, throwIfNoEntry: true } options");
-                this.validateFsStatsOptions(args[1], "fs.lstatSync");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.lstatSync needs path and optional { bigint: false, throwIfNoEntry } options");
+                const options = this.validateFsStatsOptions(args[1], "fs.lstatSync");
                 const p = this.emitExpr(args[0]!);
-                return this.emitSequencedCall("tsc_fs_lstat_sync", T_FS_STATS, [
+                return this.emitSequencedCall(options.throwIfNoEntry ? "tsc_fs_lstat_sync" : "tsc_fs_lstat_sync_no_throw", T_FS_STATS, [
                     this.fsPathSpec(p, args[0]!, "fs.lstatSync path"),
                 ]);
             }
@@ -19914,8 +19914,9 @@ class Emitter {
         return { withFileTypes, recursive, encoding };
     }
 
-    private validateFsStatsOptions(options: ts.Expression | undefined, label: string): void {
-        if (!options) return;
+    private validateFsStatsOptions(options: ts.Expression | undefined, label: string): { throwIfNoEntry: boolean } {
+        let throwIfNoEntry = true;
+        if (!options) return { throwIfNoEntry };
         if (!ts.isObjectLiteralExpression(options)) {
             unsupported(options, `${label} options must be an object literal in this subset`);
         }
@@ -19931,13 +19932,16 @@ class Emitter {
                 continue;
             }
             if (key === "throwIfNoEntry") {
-                if (prop.initializer.kind !== ts.SyntaxKind.TrueKeyword && !this.isUndefinedExpression(prop.initializer)) {
-                    unsupported(prop.initializer, `${label} only supports throwIfNoEntry: true in this subset`);
+                if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) {
+                    throwIfNoEntry = false;
+                } else if (prop.initializer.kind !== ts.SyntaxKind.TrueKeyword && !this.isUndefinedExpression(prop.initializer)) {
+                    unsupported(prop.initializer, `${label}.throwIfNoEntry must be a boolean literal in this subset`);
                 }
                 continue;
             }
             unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
         }
+        return { throwIfNoEntry };
     }
 
     private validateFsSymlinkType(type: ts.Expression | undefined, label: string): void {
@@ -20045,22 +20049,24 @@ class Emitter {
                 });
             }
             case "stat": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.stat needs path and optional { bigint: false, throwIfNoEntry: true } options");
-                this.validateFsStatsOptions(args[1], "fs.promises.stat");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.stat needs path and optional { bigint: false, throwIfNoEntry } options");
+                const options = this.validateFsStatsOptions(args[1], "fs.promises.stat");
                 if (mapped.elem?.kind !== "fsstats") unsupported(call, "fs.promises.stat result must be Promise<FSStats>");
                 const p = this.emitExpr(args[0]!);
+                const fn = options.throwIfNoEntry ? "tsc_fs_stat_sync" : "tsc_fs_stat_sync_no_throw";
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.stat path"),
-                ], ([path]) => settle(`tsc_promise_resolve_fs_stats(tsc_fs_stat_sync(${path!}))`));
+                ], ([path]) => settle(`tsc_promise_resolve_fs_stats(${fn}(${path!}))`));
             }
             case "lstat": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.lstat needs path and optional { bigint: false, throwIfNoEntry: true } options");
-                this.validateFsStatsOptions(args[1], "fs.promises.lstat");
+                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.lstat needs path and optional { bigint: false, throwIfNoEntry } options");
+                const options = this.validateFsStatsOptions(args[1], "fs.promises.lstat");
                 if (mapped.elem?.kind !== "fsstats") unsupported(call, "fs.promises.lstat result must be Promise<FSStats>");
                 const p = this.emitExpr(args[0]!);
+                const fn = options.throwIfNoEntry ? "tsc_fs_lstat_sync" : "tsc_fs_lstat_sync_no_throw";
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.lstat path"),
-                ], ([path]) => settle(`tsc_promise_resolve_fs_stats(tsc_fs_lstat_sync(${path!}))`));
+                ], ([path]) => settle(`tsc_promise_resolve_fs_stats(${fn}(${path!}))`));
             }
             case "realpath": {
                 if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.realpath needs a path and optional UTF-8/buffer encoding options");

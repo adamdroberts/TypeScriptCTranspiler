@@ -1785,12 +1785,44 @@ tsc_fs_stats_t* tsc_fs_stat_sync(const tsc_str_t* path) {
     return out;
 }
 
+tsc_fs_stats_t* tsc_fs_stat_sync_no_throw(const tsc_str_t* path) {
+    char* p = cstr_dup(path);
+    struct stat st;
+    int r = stat(p, &st);
+    int err = errno;
+    free(p);
+    if (r != 0) {
+        if (err == ENOENT || err == ENOTDIR) return NULL;
+        tsc_throw_str(tsc_str_from_cstr("fs.statSync: could not stat path"));
+        return NULL;
+    }
+    tsc_fs_stats_t* out = (tsc_fs_stats_t*)TSC_GC_MALLOC(sizeof(tsc_fs_stats_t));
+    fs_stats_fill(out, &st);
+    return out;
+}
+
 tsc_fs_stats_t* tsc_fs_lstat_sync(const tsc_str_t* path) {
     char* p = cstr_dup(path);
     struct stat st;
     int r = lstat(p, &st);
     free(p);
     if (r != 0) {
+        tsc_throw_str(tsc_str_from_cstr("fs.lstatSync: could not stat path"));
+        return NULL;
+    }
+    tsc_fs_stats_t* out = (tsc_fs_stats_t*)TSC_GC_MALLOC(sizeof(tsc_fs_stats_t));
+    fs_stats_fill(out, &st);
+    return out;
+}
+
+tsc_fs_stats_t* tsc_fs_lstat_sync_no_throw(const tsc_str_t* path) {
+    char* p = cstr_dup(path);
+    struct stat st;
+    int r = lstat(p, &st);
+    int err = errno;
+    free(p);
+    if (r != 0) {
+        if (err == ENOENT || err == ENOTDIR) return NULL;
         tsc_throw_str(tsc_str_from_cstr("fs.lstatSync: could not stat path"));
         return NULL;
     }

@@ -925,7 +925,11 @@ interface FSDirent {
 }
 interface FSStatsOptions {
     bigint?: false;
-    throwIfNoEntry?: true;
+    throwIfNoEntry?: boolean;
+}
+interface FSStatsNoEntryOptions {
+    bigint?: false;
+    throwIfNoEntry: false;
 }
 interface FSMkdirOptions {
     recursive?: boolean;
@@ -1015,7 +1019,9 @@ interface FS {
     readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions): Buffer[];
     readdirSync(path: FSPathLike, options: FSReaddirDirentOptions): FSDirent[];
     readdirSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReaddirOptions): string[];
+    statSync(path: FSPathLike, options: FSStatsNoEntryOptions): FSStats | undefined;
     statSync(path: FSPathLike, options?: FSStatsOptions): FSStats;
+    lstatSync(path: FSPathLike, options: FSStatsNoEntryOptions): FSStats | undefined;
     lstatSync(path: FSPathLike, options?: FSStatsOptions): FSStats;
     realpathSync(path: FSPathLike, options: FSFileBufferEncodingOptions): Buffer;
     realpathSync(path: FSPathLike, options?: FSFileEncodingOptions): string;
@@ -1048,7 +1054,9 @@ interface FSPromises {
     readdir(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions): Promise<Buffer[]>;
     readdir(path: FSPathLike, options: FSReaddirDirentOptions): Promise<FSDirent[]>;
     readdir(path: FSPathLike, options?: FSFileEncodingOptions | FSReaddirOptions): Promise<string[]>;
+    stat(path: FSPathLike, options: FSStatsNoEntryOptions): Promise<FSStats | undefined>;
     stat(path: FSPathLike, options?: FSStatsOptions): Promise<FSStats>;
+    lstat(path: FSPathLike, options: FSStatsNoEntryOptions): Promise<FSStats | undefined>;
     lstat(path: FSPathLike, options?: FSStatsOptions): Promise<FSStats>;
     realpath(path: FSPathLike, options: FSFileBufferEncodingOptions): Promise<Buffer>;
     realpath(path: FSPathLike, options?: FSFileEncodingOptions): Promise<string>;
@@ -1086,7 +1094,9 @@ declare module "fs" {
     export function readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions): Buffer[];
     export function readdirSync(path: FSPathLike, options: FSReaddirDirentOptions): FSDirent[];
     export function readdirSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReaddirOptions): string[];
+    export function statSync(path: FSPathLike, options: FSStatsNoEntryOptions): FSStats | undefined;
     export function statSync(path: FSPathLike, options?: FSStatsOptions): FSStats;
+    export function lstatSync(path: FSPathLike, options: FSStatsNoEntryOptions): FSStats | undefined;
     export function lstatSync(path: FSPathLike, options?: FSStatsOptions): FSStats;
     export function realpathSync(path: FSPathLike, options: FSFileBufferEncodingOptions): Buffer;
     export function realpathSync(path: FSPathLike, options?: FSFileEncodingOptions): string;
@@ -1122,7 +1132,9 @@ declare module "node:fs" {
     export function readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions): Buffer[];
     export function readdirSync(path: FSPathLike, options: FSReaddirDirentOptions): FSDirent[];
     export function readdirSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReaddirOptions): string[];
+    export function statSync(path: FSPathLike, options: FSStatsNoEntryOptions): FSStats | undefined;
     export function statSync(path: FSPathLike, options?: FSStatsOptions): FSStats;
+    export function lstatSync(path: FSPathLike, options: FSStatsNoEntryOptions): FSStats | undefined;
     export function lstatSync(path: FSPathLike, options?: FSStatsOptions): FSStats;
     export function realpathSync(path: FSPathLike, options: FSFileBufferEncodingOptions): Buffer;
     export function realpathSync(path: FSPathLike, options?: FSFileEncodingOptions): string;
