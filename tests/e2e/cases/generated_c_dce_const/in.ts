@@ -163,6 +163,18 @@ function switchExit(value: "a" | "b"): number {
     return switch_after_exit;
 }
 
+function exhaustiveSwitchExit(value: "x" | "y"): number {
+    switch (value) {
+        case "x":
+            return 44;
+        case "y":
+            return 45;
+    }
+    const exhaustive_switch_after_exit = 46;
+    console.log(exhaustive_switch_after_exit);
+    return exhaustive_switch_after_exit;
+}
+
 function whileExit(): number {
     while (true) {
         return 50;
@@ -197,6 +209,7 @@ console.log(
     tryExit(false),
     tryCatchExit(false),
     switchExit("a"),
+    exhaustiveSwitchExit("y"),
     whileExit(),
     forExit(),
     doExit(false),

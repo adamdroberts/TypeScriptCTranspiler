@@ -9136,7 +9136,19 @@ class Emitter {
             if (clause.statements.some((s) => this.statementContainsBreak(s))) return false;
             if (!this.statementListAlwaysExits(clause.statements)) return false;
         }
-        return hasDefault;
+        return hasDefault || this.switchCoversFiniteDomain(stmt);
+    }
+
+    private switchCoversFiniteDomain(stmt: ts.SwitchStatement): boolean {
+        const domain = this.finiteSwitchDomain(stmt.expression);
+        if (!domain) return false;
+        const seen = new Set<string>();
+        for (const clause of stmt.caseBlock.clauses) {
+            if (!ts.isCaseClause(clause)) continue;
+            const key = this.switchCaseKey(clause.expression);
+            if (key) seen.add(key);
+        }
+        return [...domain.keys()].every((key) => seen.has(key));
     }
 
     private statementContainsBreak(stmt: ts.Statement): boolean {
