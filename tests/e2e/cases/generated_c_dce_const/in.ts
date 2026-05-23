@@ -84,4 +84,39 @@ function nestedBlockExit(): number {
     return nested_after_block;
 }
 
-console.log(usedLocal(used_count), branchExit(true), nestedBlockExit(), DceNamespace.kept);
+function tryExit(value: boolean): number {
+    try {
+        if (value) {
+            return 20;
+        } else {
+            return 21;
+        }
+    } finally {
+    }
+    const try_after_exit = 22;
+    console.log(try_after_exit);
+    return try_after_exit;
+}
+
+function tryCatchExit(value: boolean): number {
+    try {
+        if (value) {
+            throw "try_catch_dead";
+        }
+        return 30;
+    } catch (err) {
+        return 31;
+    }
+    const try_catch_after_exit = 32;
+    console.log(try_catch_after_exit);
+    return try_catch_after_exit;
+}
+
+console.log(
+    usedLocal(used_count),
+    branchExit(true),
+    nestedBlockExit(),
+    tryExit(false),
+    tryCatchExit(false),
+    DceNamespace.kept,
+);

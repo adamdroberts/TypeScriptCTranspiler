@@ -51,3 +51,5 @@ unreachable_local
 branch_only_dead
 branch_after_exit
 nested_after_block
+try_after_exit
+try_catch_after_exit

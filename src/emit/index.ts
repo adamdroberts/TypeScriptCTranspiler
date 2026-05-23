@@ -8840,6 +8840,16 @@ class Emitter {
                 !!stmt.elseStatement &&
                 this.statementAlwaysExits(stmt.elseStatement);
         }
+        if (ts.isTryStatement(stmt)) {
+            if (stmt.finallyBlock && this.statementListAlwaysExits(stmt.finallyBlock.statements)) {
+                return true;
+            }
+            if (!this.statementListAlwaysExits(stmt.tryBlock.statements)) {
+                return false;
+            }
+            return !stmt.catchClause ||
+                this.statementListAlwaysExits(stmt.catchClause.block.statements);
+        }
         return false;
     }
 
