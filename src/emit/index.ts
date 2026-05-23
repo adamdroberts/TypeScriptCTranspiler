@@ -19789,20 +19789,22 @@ class Emitter {
                 ], ([path]) => `${options.recursive ? "tsc_fs_readdir_recursive_sync" : "tsc_fs_readdir_sync"}(${path!})`);
             }
             case "statSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.statSync needs path and optional { bigint: false, throwIfNoEntry } options");
+                if (args.length < 1) unsupported(call, "fs.statSync needs path and optional { bigint: false, throwIfNoEntry } options");
                 const options = this.validateFsStatsOptions(args[1], "fs.statSync");
                 const p = this.emitExpr(args[0]!);
-                return this.emitSequencedCall(options.throwIfNoEntry ? "tsc_fs_stat_sync" : "tsc_fs_stat_sync_no_throw", T_FS_STATS, [
+                return this.emitSequencedExpr(T_FS_STATS, [
                     this.fsPathSpec(p, args[0]!, "fs.statSync path"),
-                ]);
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
+                ], ([path]) => `${options.throwIfNoEntry ? "tsc_fs_stat_sync" : "tsc_fs_stat_sync_no_throw"}(${path!})`);
             }
             case "lstatSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.lstatSync needs path and optional { bigint: false, throwIfNoEntry } options");
+                if (args.length < 1) unsupported(call, "fs.lstatSync needs path and optional { bigint: false, throwIfNoEntry } options");
                 const options = this.validateFsStatsOptions(args[1], "fs.lstatSync");
                 const p = this.emitExpr(args[0]!);
-                return this.emitSequencedCall(options.throwIfNoEntry ? "tsc_fs_lstat_sync" : "tsc_fs_lstat_sync_no_throw", T_FS_STATS, [
+                return this.emitSequencedExpr(T_FS_STATS, [
                     this.fsPathSpec(p, args[0]!, "fs.lstatSync path"),
-                ]);
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
+                ], ([path]) => `${options.throwIfNoEntry ? "tsc_fs_lstat_sync" : "tsc_fs_lstat_sync_no_throw"}(${path!})`);
             }
             case "realpathSync": {
                 if (args.length < 1 || args.length > 2) unsupported(call, "fs.realpathSync needs path and optional UTF-8/buffer encoding options");
@@ -20326,6 +20328,7 @@ class Emitter {
     private validateFsStatsOptions(options: ts.Expression | undefined, label: string): { throwIfNoEntry: boolean } {
         let throwIfNoEntry = true;
         if (!options) return { throwIfNoEntry };
+        if (this.isUndefinedExpression(options)) return { throwIfNoEntry };
         if (!ts.isObjectLiteralExpression(options)) {
             unsupported(options, `${label} options must be an object literal in this subset`);
         }

@@ -1,0 +1,2 @@
+stats: true true 5 true
+events: stat|lstat|missing
