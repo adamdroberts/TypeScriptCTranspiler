@@ -706,7 +706,7 @@ bool tsc_object_is_extensible(const tsc_object_t* o) {
             if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
                 return tsc_object_is_extensible((tsc_object_t*)value_ptr(o->proxy_target));
             }
-            return true;
+            return tsc_value_is_extensible(o->proxy_target);
         }
         tsc_proxy_require_callable_trap(trap, "Proxy isExtensible trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
@@ -733,7 +733,7 @@ bool tsc_object_prevent_extensions(tsc_object_t* o) {
             if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
                 return tsc_object_prevent_extensions((tsc_object_t*)value_ptr(o->proxy_target));
             }
-            return true;
+            return tsc_value_prevent_extensions(o->proxy_target);
         }
         tsc_proxy_require_callable_trap(trap, "Proxy preventExtensions trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
