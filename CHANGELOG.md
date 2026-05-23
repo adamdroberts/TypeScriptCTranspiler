@@ -12,9 +12,10 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Instance standard setter decorator replacement functions can now call the original setter value with `Reflect.apply(value, this, [next])`, with the boxed receiver bridged back to the typed class instance. Test: `instance_setter_decorator_original`.
 - Instance standard getter decorator replacement functions can now call the original getter value with `Reflect.apply(value, this, [])`, with the boxed receiver bridged back to the typed class instance. Test: `instance_getter_decorator_original`.
 - Instance standard method decorator replacement functions can now call the original method value with `Reflect.apply(value, this, args)`, with the boxed receiver bridged back to the typed class instance. Test: `instance_method_decorator_original`.
-- Instance standard setter decorator replacements can now declare a typed class `this` receiver; the emitted write passes the actual instance into the replacement. Original-setter calls from replacements remain deferred. Test: `instance_setter_decorator_this_receiver`.
+- Instance standard setter decorator replacements can now declare a typed class `this` receiver; the emitted write passes the actual instance into the replacement. Test: `instance_setter_decorator_this_receiver`.
 - Instance standard getter decorator replacements can now declare a typed class `this` receiver; the emitted read passes the actual instance into the replacement. Test: `instance_getter_decorator_this_receiver`.
 - Instance standard method decorator replacements can now declare a typed class `this` receiver; the emitted call passes the actual instance into the replacement. Test: `instance_method_decorator_this_receiver`.
 - Multiple standard field decorators now apply returned initializer functions in standard top-down order after bottom-up decorator invocation. Test: `field_decorator_initializer_order`.
