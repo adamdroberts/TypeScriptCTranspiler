@@ -15954,6 +15954,9 @@ class Emitter {
             if (key !== "once" && key !== "capture" && key !== "passive") {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
+            if (this.isUndefinedExpression(prop.initializer)) {
+                continue;
+            }
             if (
                 prop.initializer.kind !== ts.SyntaxKind.TrueKeyword &&
                 prop.initializer.kind !== ts.SyntaxKind.FalseKeyword
@@ -16843,7 +16846,7 @@ class Emitter {
     }
 
     private eventInitCancelable(options: ts.Expression | undefined): string {
-        if (!options) return "false";
+        if (!options || this.isUndefinedExpression(options)) return "false";
         let cur = options;
         while (
             ts.isParenthesizedExpression(cur) ||
@@ -16864,6 +16867,9 @@ class Emitter {
             }
             if (prop.name.text !== "cancelable") {
                 unsupported(prop.name, "Event options only support cancelable");
+            }
+            if (this.isUndefinedExpression(prop.initializer)) {
+                continue;
             }
             if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
                 cancelable = "true";
