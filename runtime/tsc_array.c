@@ -134,10 +134,10 @@ tsc_array_t* tsc_array_to_reversed(const tsc_array_t* a) {
 
 int64_t array_strict_index(double value, int64_t len) {
     if (isnan(value)) value = 0.0;
-    if (isinf(value)) tsc_panic("Array.with index out of range");
+    if (isinf(value)) tsc_throw_str(tsc_str_from_cstr("Array.with index out of range"));
     if (value < 0) value = (double)len + value;
     if (value < 0 || value >= (double)len) {
-        tsc_panic("Array.with index out of range");
+        tsc_throw_str(tsc_str_from_cstr("Array.with index out of range"));
     }
     return (int64_t)value;
 }
@@ -257,4 +257,3 @@ tsc_array_t* tsc_array_flat_once(const tsc_array_t* outer, size_t elem_size) {
 double tsc_array_length(const tsc_array_t* a) { return (double)a->len; }
 
 void tsc_array_oob(const tsc_array_t* a, double i) { (void)a; (void)i; }
-
