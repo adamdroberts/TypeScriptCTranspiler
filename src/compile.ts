@@ -77,6 +77,12 @@ const RUNTIME_HEADERS = ["tsc_runtime.h", "tsc_internal.h"];
 const execFileAsync = promisify(execFile);
 const DYNAMIC_REQUIRE_AOT_MESSAGE =
     "dynamic require(variable) needs a finite AOT specifier proof or --dynamic-require-manifest allow-list";
+const UNKNOWN_EVAL_AOT_MESSAGE =
+    "unknown eval() source requires --runtime-code-manifest allow-list or gated --unsafe-eval embedded Node bridge";
+const UNKNOWN_FUNCTION_AOT_MESSAGE =
+    "unknown Function() source requires --runtime-code-manifest allow-list or gated --unsafe-eval embedded Node bridge";
+const UNKNOWN_NEW_FUNCTION_AOT_MESSAGE =
+    "unknown new Function() source requires --runtime-code-manifest allow-list or gated --unsafe-eval embedded Node bridge";
 
 interface Pcre2Flags {
     compileFlags: string[];
@@ -193,8 +199,7 @@ function permanentLimitDiagnostics(
                         ) {
                             diagnostics.push({
                                 node,
-                                message:
-                                    "runtime code compilation via eval() cannot be AOT-compiled without --unsafe-eval",
+                                message: UNKNOWN_EVAL_AOT_MESSAGE,
                             });
                         }
                     } else if (expr.text === "Function") {
@@ -205,8 +210,7 @@ function permanentLimitDiagnostics(
                         ) {
                             diagnostics.push({
                                 node,
-                                message:
-                                    "runtime code compilation via Function() cannot be AOT-compiled without --unsafe-eval",
+                                message: UNKNOWN_FUNCTION_AOT_MESSAGE,
                             });
                         }
                     } else if (expr.text === "require") {
@@ -264,8 +268,7 @@ function permanentLimitDiagnostics(
                 ) {
                     diagnostics.push({
                         node,
-                        message:
-                            "runtime code compilation via new Function() cannot be AOT-compiled without --unsafe-eval",
+                        message: UNKNOWN_NEW_FUNCTION_AOT_MESSAGE,
                     });
                 }
             }

@@ -3281,6 +3281,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Fixed
+- Unknown-source `eval` / `Function` diagnostics now describe the available AOT manifest and gated embedded-Node paths instead of implying an impossible runtime-code blocker.
 - Documentation and agent indexes now describe native addons, runtime code compilation, and dynamic `require(...)` as AOT closure requirements rather than impossible blockers; README and LLM indexes no longer list Proxy or load-on-demand require execution as remaining targets.
 - Inferred locals whose TypeScript type is erased to `tsc_value_t` now use boxed storage even when their initializer emits a narrower primitive, fixing nullish coalescing over `Map.get(...)` results and optional numeric field reads. Dynamic and typed string Reflect helpers again treat boxed strings as valid string-object targets. Tests: `nullish`, `wordcount`, `weak_ref`, `collection_object_methods`, `string_object_enumeration`, `dynamic_string_object_enumeration`.
 
