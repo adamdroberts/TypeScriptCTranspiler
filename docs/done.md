@@ -418,7 +418,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Test: `fs_roundtrip`
 
 ### `os`
-- `os.platform(...ignored)` / `type(...ignored)` / `release(...ignored)` / `version(...ignored)` / `endianness(...ignored)` / `machine(...ignored)` / `arch(...ignored)` / `hostname(...ignored)` / `tmpdir(...ignored)` / `homedir(...ignored)` / `cpus(...ignored)` / `availableParallelism(...ignored)` / `totalmem(...ignored)` / `freemem(...ignored)` / `uptime(...ignored)` / `loadavg(...ignored)` / `userInfo()`, `os.EOL`, and `os.devNull`, with namespace and named imports from `"os"` / `"node:os"` for the supported subset.
+- `os.platform(...ignored)` / `type(...ignored)` / `release(...ignored)` / `version(...ignored)` / `endianness(...ignored)` / `machine(...ignored)` / `arch(...ignored)` / `hostname(...ignored)` / `tmpdir(...ignored)` / `homedir(...ignored)` / `cpus(...ignored)` / `availableParallelism(...ignored)` / `totalmem(...ignored)` / `freemem(...ignored)` / `uptime(...ignored)` / `loadavg(...ignored)` / `userInfo({ encoding: "utf8" | "utf-8" }?)`, `os.EOL`, and `os.devNull`, with namespace and named imports from `"os"` / `"node:os"` for the supported subset.
 - Runtime: `tsc_os_*`. Tests: `stdlib_os`, `os_more`, `os_dev_null`, `os_host_more`, `os_system_stats`, `os_user_info`
 
 ### `crypto`
@@ -775,7 +775,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `os_host_more` | os.availableParallelism/machine/version through global, namespace, and named imports |
 | `os_dev_null` | os.devNull constant for global, namespace, and named import forms |
 | `os_system_stats` | os.totalmem/freemem/uptime/loadavg through global, namespace, and named imports |
-| `os_user_info` | os.userInfo dynamic object through global, namespace, and named imports |
+| `os_user_info` | os.userInfo dynamic object plus UTF-8 options through global, namespace, and named imports |
 | `path_constants` | path sep and delimiter constants for global, named import, and namespace import forms |
 | `path_basename_suffix` | path.basename optional suffix for global, namespace, named, and posix forms |
 | `path_import` | path named and namespace imports from node:path/path |
