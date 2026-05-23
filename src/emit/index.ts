@@ -1170,6 +1170,10 @@ class Emitter {
                     this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
                 );
         }
+        if (name === "String" || name === "Number" || name === "Boolean") {
+            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+                this.isSideEffectFreePrimitiveCallableConstructorArgs(call.arguments, seenConsts);
+        }
         return false;
     }
 
@@ -1187,6 +1191,17 @@ class Emitter {
         return Array.from(args).slice(expected).every((arg) =>
             this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
         );
+    }
+
+    private isSideEffectFreePrimitiveCallableConstructorArgs(
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (args.length === 0) return true;
+        return this.isSideEffectFreePrimitiveNumberCoercion(args[0]!, seenConsts) &&
+            Array.from(args).slice(1).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
     }
 
     private isSideEffectFreePrimitiveNumberCoercion(
