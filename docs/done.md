@@ -81,7 +81,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - Top-level generic function references are specialized in typed array callback contexts such as `map(identity)`, `flatMap(wrap)`, `filter`, `reduce`, `forEach`, `find`/`some`/`every`, and `sort` comparators. Test: `generic_callbacks`
 - Top-level generic function references are specialized when assigned to concrete function-typed values, using generated adapter closures. Test: `generic_function_values`
 - `Reflect.apply(fn, thisArg, args)` works for statically known function values with array-literal, array-literal-spread, typed-array, and dynamic-array argument lists; function values that declare `this: any` receive the supplied `thisArg`. Test: `reflect_apply`
-- Generic classes are supported with erased `tsc_value_t` type-parameter storage and typed coercion at construction/method boundaries, including fixed-arity spread calls through erased generic class methods. Test: `generic_classes`
+- Generic classes are supported with erased `tsc_value_t` type-parameter storage and typed coercion at construction, method, and accessor property boundaries, including fixed-arity spread calls through erased generic class methods. Tests: `generic_classes`, `generic_class_accessors`
 - Generic instance and static class methods are monomorphized per concrete call signature, including inherited generic method calls with base self-casts, literal/const-literal computed method names, and fixed-arity spread argument lists. Test: `generic_methods`
 - Left-to-right argument evaluation for function, method, constructor, console, math, path, fs write, regex, and supported string calls with side effects. Test: `call_arg_order`
 - Rest parameters lower to typed arrays, spread arguments append arrays into rest parameters in evaluation order, and direct fixed-arity function plus namespace/class/static method/constructor calls accept typed-array/dynamic-array/string spread argument lists with runtime arity checks. Tests: `rest_spread`, `namespaces`, `classes`, `generic_functions`, `generic_methods`
@@ -825,6 +825,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `function_closures` | returned closures with function-scope captures and mutable captured state |
 | `function_value_spread` | spread calls through first-class function values |
 | `generator_functions` | synchronous function* materialized Iterator/IterableIterator lowering with yield, bounded yield*, next, return, and throw |
+| `generic_class_accessors` | erased generic class getter/setter accessors |
 | `generic_classes` | erased generic class fields/methods using dynamic value storage and spread method calls |
 | `generic_function_values` | generic top-level functions assigned to concrete function-typed values |
 | `global_number_predicates` | global isNaN/isFinite coercion for typed and dynamic values |
