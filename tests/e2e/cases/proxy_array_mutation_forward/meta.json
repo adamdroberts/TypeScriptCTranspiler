@@ -1,0 +1,3 @@
+{
+  "description": "Array Proxy values without set or defineProperty traps forward array writes, definitions, length updates, and deletes to the target"
+}

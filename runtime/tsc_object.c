@@ -292,10 +292,11 @@ bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value,
         if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'set' on a proxy that has been revoked"));
         tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("set", 3));
         if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
-            // Note: proxy_target could be anything, so we use tsc_value_set_prop_receiver
-            // However, tsc2c doesn't have tsc_value_set_prop_receiver, so we emulate it.
             if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
                 return tsc_object_set_receiver((tsc_object_t*)value_ptr(o->proxy_target), key, value, receiver);
+            }
+            if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_ARRAY) {
+                return tsc_value_set_prop(o->proxy_target, key, value);
             }
             return false;
         }
@@ -336,10 +337,7 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
         if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'defineProperty' on a proxy that has been revoked"));
         tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("defineProperty", 14));
         if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
-            if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
-                return tsc_object_define_desc((tsc_object_t*)value_ptr(o->proxy_target), key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
-            }
-            return false;
+            return tsc_value_define_property_desc(o->proxy_target, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
         }
         tsc_proxy_require_callable_trap(trap, "Proxy defineProperty trap must be callable");
         tsc_object_t* desc = tsc_object_new();
