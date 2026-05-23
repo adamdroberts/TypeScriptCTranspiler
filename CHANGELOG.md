@@ -12,7 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
-- Typed `Array.prototype.find()` and `findLast()` now return boxed `undefined` when no element matches for element types that can flow through `tsc_value_t`, instead of returning the element type's zero value. Tests: `array_hof`, `array_find_last`.
+- Typed `Array.prototype.find()` and `findLast()` now return boxed `undefined` when no element matches for element types that can flow through `tsc_value_t`, and inferred numeric/boolean nullish locals keep boxed storage so assigned misses preserve `undefined` instead of collapsing to `NaN` or `false`. Tests: `array_hof`, `array_find_last`.
 - Standard class decorator replacements now apply when decorated class bindings are read as dynamic constructor values and used through dynamic `new` or dynamic `Reflect.construct`. Test: `class_decorator_dynamic_value_replacement`.
 - Standard class decorator replacements now apply to parenthesized constructor targets such as `new (Box)(...)` and parenthesized fixed-arity spread constructor calls. Test: `class_decorator_parenthesized_replacement`.
 - Standard class decorator replacements now apply to static `Reflect.construct(Class, args)` targets for ordinary and erased generic classes across array-literal, array-literal-spread, typed-array, and dynamic-array argument lists. Tests: `class_decorator_reflect_construct`, `generic_class_decorator_reflect_construct`.
