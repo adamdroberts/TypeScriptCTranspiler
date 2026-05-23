@@ -19393,7 +19393,7 @@ class Emitter {
                 if (options.withFileTypes) {
                     return this.emitSequencedExpr(arrayType(T_FS_DIRENT), [
                         this.fsPathSpec(p, args[0]!, "fs.readdirSync path"),
-                    ], ([path]) => `tsc_fs_readdir_dirents_sync(${path!})`);
+                    ], ([path]) => `${options.recursive ? "tsc_fs_readdir_recursive_dirents_sync" : "tsc_fs_readdir_dirents_sync"}(${path!})`);
                 }
                 if (options.encoding === "buffer") {
                     return this.emitSequencedExpr(arrayType(T_BUFFER), [
@@ -19935,7 +19935,6 @@ class Emitter {
             }
             unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
         }
-        if (withFileTypes && recursive) unsupported(options, `${label} does not support combining withFileTypes and recursive yet`);
         if (withFileTypes && encoding === "buffer") unsupported(options, `${label} does not support combining withFileTypes and buffer encoding yet`);
         return { withFileTypes, recursive, encoding };
     }
@@ -20060,7 +20059,9 @@ class Emitter {
                     this.fsPathSpec(p, args[0]!, "fs.promises.readdir path"),
                 ], ([path]) => {
                     const fn = options.withFileTypes
-                        ? "tsc_fs_readdir_dirents_sync"
+                        ? options.recursive
+                            ? "tsc_fs_readdir_recursive_dirents_sync"
+                            : "tsc_fs_readdir_dirents_sync"
                         : options.encoding === "buffer"
                             ? options.recursive
                                 ? "tsc_fs_readdir_recursive_buffer_sync"

@@ -2557,6 +2557,32 @@ void fs_readdir_recursive_buffer_into(const char* root, const char* rel, tsc_arr
     free(dir_path);
 }
 
+void fs_readdir_recursive_dirents_into(const char* root, const char* rel, tsc_array_t* out) {
+    char* dir_path = rel[0] == '\0' ? strdup(root) : fs_join_path(root, rel);
+    DIR* d = opendir(dir_path);
+    if (!d) {
+        free(dir_path);
+        tsc_throw_str(tsc_str_from_cstr("fs.readdirSync: could not open dir"));
+        return;
+    }
+    struct dirent* ent;
+    while ((ent = readdir(d))) {
+        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
+        tsc_fs_dirent_t* dirent = fs_dirent_from_path(dir_path, ent->d_name);
+        tsc_array_push_raw(out, &dirent);
+
+        char* child_rel = rel[0] == '\0' ? strdup(ent->d_name) : fs_join_path(rel, ent->d_name);
+        char* child_path = fs_join_path(root, child_rel);
+        struct stat st;
+        bool descend = lstat(child_path, &st) == 0 && S_ISDIR(st.st_mode);
+        free(child_path);
+        if (descend) fs_readdir_recursive_dirents_into(root, child_rel, out);
+        free(child_rel);
+    }
+    closedir(d);
+    free(dir_path);
+}
+
 tsc_array_t* tsc_fs_readdir_recursive_sync(const tsc_str_t* path) {
     char* p = cstr_dup(path);
     DIR* d = opendir(p);
@@ -2583,6 +2609,21 @@ tsc_array_t* tsc_fs_readdir_recursive_buffer_sync(const tsc_str_t* path) {
     closedir(d);
     tsc_array_t* a = tsc_array_new(sizeof(tsc_buffer_t*), 16);
     fs_readdir_recursive_buffer_into(p, "", a);
+    free(p);
+    return a;
+}
+
+tsc_array_t* tsc_fs_readdir_recursive_dirents_sync(const tsc_str_t* path) {
+    char* p = cstr_dup(path);
+    DIR* d = opendir(p);
+    if (!d) {
+        free(p);
+        tsc_throw_str(tsc_str_from_cstr("fs.readdirSync: could not open dir"));
+        return NULL;
+    }
+    closedir(d);
+    tsc_array_t* a = tsc_array_new(sizeof(tsc_fs_dirent_t*), 16);
+    fs_readdir_recursive_dirents_into(p, "", a);
     free(p);
     return a;
 }

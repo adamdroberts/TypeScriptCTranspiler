@@ -847,6 +847,7 @@ tsc_array_t* tsc_fs_readdir_buffer_sync(const tsc_str_t* path);
 tsc_array_t* tsc_fs_readdir_recursive_sync(const tsc_str_t* path);
 tsc_array_t* tsc_fs_readdir_recursive_buffer_sync(const tsc_str_t* path);
 tsc_array_t* tsc_fs_readdir_dirents_sync(const tsc_str_t* path);
+tsc_array_t* tsc_fs_readdir_recursive_dirents_sync(const tsc_str_t* path);
 tsc_fs_stats_t* tsc_fs_stat_sync(const tsc_str_t* path);
 tsc_fs_stats_t* tsc_fs_stat_sync_no_throw(const tsc_str_t* path);
 tsc_fs_stats_t* tsc_fs_lstat_sync(const tsc_str_t* path);

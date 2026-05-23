@@ -992,6 +992,7 @@ interface FSReaddirBufferOptions extends FSBufferEncodingOptions {
     withFileTypes?: false;
 }
 interface FSReaddirDirentOptions extends FSEncodingOptions {
+    recursive?: boolean;
     withFileTypes: true;
 }
 type FSFileEncodingOptions = FSEncoding | FSEncodingOptions;
