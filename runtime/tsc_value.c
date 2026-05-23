@@ -69,6 +69,27 @@ static bool value_is_constructable_function(tsc_value_t v) {
     return o && o->is_proxy && value_is_constructable_function(o->proxy_target);
 }
 
+static tsc_array_t* value_to_argument_list(tsc_value_t args, const char* message) {
+    if (value_is_box(args) && value_tag(args) == TSC_VALUE_TAG_ARRAY) {
+        return (tsc_array_t*)value_ptr(args);
+    }
+    if (!value_is_box(args) || value_tag(args) != TSC_VALUE_TAG_OBJECT) {
+        tsc_throw_str(tsc_str_from_cstr(message));
+    }
+    tsc_value_t length_value = tsc_value_get_prop(args, tsc_str_from_lit("length", 6));
+    double length_num = tsc_value_as_num(length_value);
+    size_t length = 0;
+    if (isfinite(length_num) && length_num > 0.0) {
+        length = (size_t)floor(length_num);
+    }
+    tsc_array_t* list = tsc_array_new(sizeof(tsc_value_t), length ? length : 1);
+    for (size_t i = 0; i < length; i++) {
+        tsc_value_t item = tsc_value_get_index(args, (double)i);
+        tsc_array_push_value(list, item);
+    }
+    return list;
+}
+
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args) {
     if (value_is_box(fn) && value_tag(fn) == TSC_VALUE_TAG_OBJECT) {
         tsc_object_t* o = (tsc_object_t*)value_ptr(fn);
@@ -77,12 +98,10 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
             if (!value_is_callable_function(o->proxy_target)) {
                 tsc_throw_str(tsc_str_from_cstr("Proxy apply target must be callable"));
             }
-            if (!value_is_box(args) || value_tag(args) != TSC_VALUE_TAG_ARRAY) {
-                tsc_throw_str(tsc_str_from_cstr("Reflect.apply argumentsList must be an array"));
-            }
+            tsc_array_t* list = value_to_argument_list(args, "Reflect.apply argumentsList must be an array or array-like object");
             tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("apply", 5));
             if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
-                return tsc_value_apply_function(o->proxy_target, this_arg, args);
+                return tsc_value_apply_function(o->proxy_target, this_arg, tsc_value_array(list));
             }
             if (!value_is_callable_function(trap)) {
                 tsc_throw_str(tsc_str_from_cstr("Proxy apply trap must be callable"));
@@ -90,18 +109,15 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
             tsc_array_t* trap_args = tsc_array_new(sizeof(tsc_value_t), 4);
             tsc_array_push_value(trap_args, o->proxy_target);
             tsc_array_push_value(trap_args, this_arg);
-            tsc_array_push_value(trap_args, args);
+            tsc_array_push_value(trap_args, tsc_value_array(list));
             return tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(trap_args));
         }
     }
     if (!value_is_box(fn) || value_tag(fn) != TSC_VALUE_TAG_FUNCTION) {
         tsc_throw_str(tsc_str_from_cstr("Reflect.apply target is not a function"));
     }
-    if (!value_is_box(args) || value_tag(args) != TSC_VALUE_TAG_ARRAY) {
-        tsc_throw_str(tsc_str_from_cstr("Reflect.apply argumentsList must be an array"));
-    }
+    tsc_array_t* list = value_to_argument_list(args, "Reflect.apply argumentsList must be an array or array-like object");
     tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(fn);
-    tsc_array_t* list = (tsc_array_t*)value_ptr(args);
     if (ident->kind == TSC_FUNCTION_IDENTITY_GETTER) {
         return ident->code.getter(ident->env, this_arg);
     }
@@ -127,11 +143,9 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
             if (!value_is_constructable_function(new_target)) {
                 tsc_throw_str(tsc_str_from_cstr("Reflect.construct newTarget is not a constructor"));
             }
-            if (!value_is_box(args) || value_tag(args) != TSC_VALUE_TAG_ARRAY) {
-                tsc_throw_str(tsc_str_from_cstr("Reflect.construct argumentsList must be an array"));
-            }
+            tsc_array_t* list = value_to_argument_list(args, "Reflect.construct argumentsList must be an array or array-like object");
             tsc_value_t receiver = tsc_value_object(tsc_object_new());
-            tsc_value_t result = ident->code.generic(ident->env, receiver, (tsc_array_t*)value_ptr(args));
+            tsc_value_t result = ident->code.generic(ident->env, receiver, list);
             if (
                 value_is_box(result) &&
                 (
@@ -155,19 +169,17 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
             if (!value_is_constructable_function(new_target)) {
                 tsc_throw_str(tsc_str_from_cstr("Reflect.construct newTarget is not a constructor"));
             }
-            if (!value_is_box(args) || value_tag(args) != TSC_VALUE_TAG_ARRAY) {
-                tsc_throw_str(tsc_str_from_cstr("Reflect.construct argumentsList must be an array"));
-            }
+            tsc_array_t* list = value_to_argument_list(args, "Reflect.construct argumentsList must be an array or array-like object");
             tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("construct", 9));
             if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
-                return tsc_value_construct_with_new_target(o->proxy_target, args, new_target);
+                return tsc_value_construct_with_new_target(o->proxy_target, tsc_value_array(list), new_target);
             }
             if (!value_is_callable_function(trap)) {
                 tsc_throw_str(tsc_str_from_cstr("Proxy construct trap must be callable"));
             }
             tsc_array_t* trap_args = tsc_array_new(sizeof(tsc_value_t), 4);
             tsc_array_push_value(trap_args, o->proxy_target);
-            tsc_array_push_value(trap_args, args);
+            tsc_array_push_value(trap_args, tsc_value_array(list));
             tsc_array_push_value(trap_args, new_target);
             tsc_value_t result = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(trap_args));
             if (
@@ -238,6 +250,14 @@ tsc_value_t tsc_value_get_index(tsc_value_t v, double index) {
             return tsc_value_undefined();
         }
         return tsc_value_string(tsc_str_char_at(s, index));
+    }
+    if (value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        if (isnan(index) || isinf(index) || index < 0 || floor(index) != index) {
+            return tsc_value_undefined();
+        }
+        char key_buf[32];
+        snprintf(key_buf, sizeof key_buf, "%zu", (size_t)index);
+        return tsc_object_get((tsc_object_t*)value_ptr(v), tsc_str_from_cstr(key_buf));
     }
     if (value_tag(v) != TSC_VALUE_TAG_ARRAY) return tsc_value_undefined();
     tsc_array_t* a = (tsc_array_t*)value_ptr(v);

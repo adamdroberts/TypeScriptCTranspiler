@@ -1,0 +1,7 @@
+apply object: 5
+apply trap args: true 2 2 3
+proxy apply object: 5
+construct object: ab
+construct trap args: true 2 a b
+proxy construct object: ab
+negative length: NaN

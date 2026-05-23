@@ -1,5 +1,5 @@
 bad target: Reflect.construct target is not a supported constructor
-bad args: Reflect.construct argumentsList must be an array
-proxy bad args: Reflect.construct argumentsList must be an array false
+bad args: Reflect.construct argumentsList must be an array or array-like object
+proxy bad args: Reflect.construct argumentsList must be an array or array-like object false
 bad newTarget before args: Reflect.construct newTarget is not a constructor
 valid: ok
