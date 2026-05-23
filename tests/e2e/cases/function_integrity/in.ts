@@ -9,6 +9,8 @@ function TypedPrevent(this: any): void {}
 function TypedSeal(this: any): void {}
 function TypedFreeze(this: any): void {}
 function TypedReflect(this: any, value: number): void {}
+function TypedDefine(this: any, value: number): void {}
+function TypedDelete(this: any): void {}
 
 const first: any = Stable as any;
 const second: any = Stable as any;
@@ -46,6 +48,10 @@ Reflect.setPrototypeOf(TypedReflect, { marker: "reflect" });
 console.log("typed reflect own:", reflectKeys.length, reflectKeys[0], reflectKeys[1], Reflect.get(TypedReflect, "name"), Reflect.has(TypedReflect, "length"), reflectDesc.value);
 console.log("typed reflect proto:", Reflect.getPrototypeOf(TypedReflect).marker);
 console.log("typed reflect prevent:", Reflect.isExtensible(TypedReflect), Reflect.preventExtensions(TypedReflect), Reflect.isExtensible(TypedReflect));
+
+const defineResult = Object.defineProperty(TypedDefine, "name", { value: "TypedDefine", writable: false, enumerable: false, configurable: false });
+console.log("typed function define:", defineResult === TypedDefine, Reflect.defineProperty(TypedDefine, "length", { value: 1, writable: false, enumerable: false, configurable: false }), Reflect.defineProperty(TypedDefine, "length", { value: 9 }), Reflect.get(TypedDefine, "length"));
+console.log("typed function delete:", Reflect.deleteProperty(TypedDelete, "length"), Reflect.deleteProperty(TypedDelete, "name"), Reflect.deleteProperty(TypedDelete, "missing"), Reflect.has(TypedDelete, "length"), Reflect.has(TypedDelete, "name"));
 
 const sealed: any = Sealed as any;
 console.log("seal before:", Object.isSealed(sealed), Object.isFrozen(sealed));

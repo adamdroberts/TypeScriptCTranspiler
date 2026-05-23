@@ -383,9 +383,29 @@ tsc_value_t tsc_value_define_property(tsc_value_t v, tsc_str_t* key, tsc_value_t
 
 static void require_reflect_object_target(tsc_value_t v, const char* message);
 
+static bool tsc_value_define_function_metadata_desc(const tsc_function_identity_t* fn, tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
+    if (!fn) return false;
+    tsc_value_t current = tsc_value_undefined();
+    if (tsc_str_is_length_key(key)) {
+        current = tsc_value_num(fn->length);
+    } else if (str_lit_eq(key, "name")) {
+        current = tsc_value_string(fn->name ? fn->name : tsc_str_from_lit("", 0));
+    } else {
+        return false;
+    }
+    if (has_configurable && configurable) return false;
+    if (has_enumerable && enumerable) return false;
+    if (has_writable && writable) return false;
+    if (has_value && !tsc_value_same_value_zero(value, current)) return false;
+    return true;
+}
+
 bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_define_desc((tsc_object_t*)value_ptr(v), key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
+    }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+        return tsc_value_define_function_metadata_desc((const tsc_function_identity_t*)value_ptr(v), key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(v);
@@ -657,6 +677,9 @@ bool tsc_value_delete_prop(tsc_value_t v, tsc_str_t* key) {
         }
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
+        return !tsc_value_has_own_prop(v, key);
+    }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         return !tsc_value_has_own_prop(v, key);
     }
     return true;

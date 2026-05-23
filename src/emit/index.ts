@@ -22759,15 +22759,16 @@ class Emitter {
                 const desc = this.descriptorData(args[2]!);
                 return this.emitTypedArrayDefineProperty(arg, obj, args[1]!, desc, true);
             }
-            if (mapped.kind !== "value") {
-                unsupported(arg, "Object.defineProperty currently supports dynamic objects and arrays only");
+            if (mapped.kind !== "value" && mapped.kind !== "function") {
+                unsupported(arg, "Object.defineProperty currently supports dynamic objects, arrays, and functions only");
             }
             const key = this.emitExpr(args[1]!);
             const desc = this.descriptorData(args[2]!);
             const obj = this.emitExpr(arg);
+            const objectDefineReturnType = mapped.kind === "function" ? mapped : T_VALUE;
             if (desc.kind === "accessor") {
                 const specs: SequencedCallArg[] = [
-                    { value: obj, target: T_VALUE, node: arg },
+                    { value: obj, node: arg },
                     { value: key, target: T_STRING, node: args[1]! },
                 ];
                 const getterEnvPos = desc.getter?.env ? specs.length : -1;
@@ -22786,7 +22787,7 @@ class Emitter {
                         const k = vals[1]!;
                         const getterEnv = getterEnvPos >= 0 ? vals[getterEnvPos]! : "NULL";
                         const setterEnv = setterEnvPos >= 0 ? vals[setterEnvPos]! : "NULL";
-                        return `({ tsc_value_define_accessor_desc(${o}, ${k}, ${desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${desc.hasGetter}, ${desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${desc.hasSetter}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable}); ${o}; })`;
+                        return `({ tsc_value_define_accessor_desc(${dynamicObjectArg(o)}, ${k}, ${desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${desc.hasGetter}, ${desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${desc.hasSetter}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable}); ${o}; })`;
                     },
                 );
             }
@@ -22794,13 +22795,13 @@ class Emitter {
                 ? this.emitExpr(desc.value)
                 : { c: "tsc_value_undefined()", ty: T_VALUE };
             return this.emitSequencedExpr(
-                T_VALUE,
+                objectDefineReturnType,
                 [
-                    { value: obj, target: T_VALUE, node: arg },
+                    { value: obj, node: arg },
                     { value: key, target: T_STRING, node: args[1]! },
                     { value, target: T_VALUE, node: desc.value ?? args[2]! },
                 ],
-                ([o, k, v]) => `({ tsc_value_define_property_desc(${o}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable}); ${o}; })`,
+                ([o, k, v]) => `({ tsc_value_define_property_desc(${dynamicObjectArg(o!)}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable}); ${o}; })`,
             );
         }
         if (name === "defineProperties") {
