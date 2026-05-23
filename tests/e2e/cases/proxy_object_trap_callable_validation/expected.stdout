@@ -1,0 +1,12 @@
+callable proxy trap: callable-proxy:x
+bad get: Proxy get trap must be callable
+bad set: Proxy set trap must be callable
+bad has: Proxy has trap must be callable
+bad delete: Proxy deleteProperty trap must be callable
+bad define: Proxy defineProperty trap must be callable
+bad descriptor: Proxy getOwnPropertyDescriptor trap must be callable
+bad ownKeys: Proxy ownKeys trap must be callable
+bad getProto: Proxy getPrototypeOf trap must be callable
+bad setProto: Proxy setPrototypeOf trap must be callable
+bad isExtensible: Proxy isExtensible trap must be callable
+bad preventExtensions: Proxy preventExtensions trap must be callable

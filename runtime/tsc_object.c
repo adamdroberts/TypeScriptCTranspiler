@@ -34,6 +34,20 @@ ssize_t object_find(const tsc_object_t* o, const tsc_str_t* key) {
     return -1;
 }
 
+bool tsc_proxy_trap_is_callable(tsc_value_t trap) {
+    if (!value_is_box(trap)) return false;
+    if (value_tag(trap) == TSC_VALUE_TAG_FUNCTION) return true;
+    if (value_tag(trap) != TSC_VALUE_TAG_OBJECT) return false;
+    tsc_object_t* o = (tsc_object_t*)value_ptr(trap);
+    return o && o->is_proxy && tsc_proxy_trap_is_callable(o->proxy_target);
+}
+
+void tsc_proxy_require_callable_trap(tsc_value_t trap, const char* message) {
+    if (!tsc_proxy_trap_is_callable(trap)) {
+        tsc_throw_str(tsc_str_from_cstr(message));
+    }
+}
+
 static void validate_proxy_get_result(const tsc_object_t* proxy, const tsc_str_t* key, tsc_value_t result) {
     if (!proxy || !value_is_box(proxy->proxy_target) || value_tag(proxy->proxy_target) != TSC_VALUE_TAG_OBJECT) return;
     const tsc_object_t* target = (const tsc_object_t*)value_ptr(proxy->proxy_target);
@@ -254,6 +268,7 @@ bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value,
             }
             return false;
         }
+        tsc_proxy_require_callable_trap(trap, "Proxy set trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
         tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
@@ -295,6 +310,7 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
             }
             return false;
         }
+        tsc_proxy_require_callable_trap(trap, "Proxy defineProperty trap must be callable");
         tsc_object_t* desc = tsc_object_new();
         if (has_value) tsc_object_set(desc, tsc_str_from_lit("value", 5), value);
         if (has_writable) tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(writable));
@@ -421,6 +437,7 @@ tsc_value_t tsc_object_get_prototype_of(const tsc_object_t* o) {
             }
             return tsc_value_undefined();
         }
+        tsc_proxy_require_callable_trap(trap, "Proxy getPrototypeOf trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
         tsc_value_t proto = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
@@ -449,6 +466,7 @@ bool tsc_object_set_prototype_of(tsc_object_t* o, tsc_value_t prototype) {
             }
             return false;
         }
+        tsc_proxy_require_callable_trap(trap, "Proxy setPrototypeOf trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
         tsc_array_push_value(args, prototype);
@@ -478,6 +496,7 @@ tsc_value_t tsc_object_get_receiver(const tsc_object_t* o, const tsc_str_t* key,
         if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
             return tsc_value_get_prop_receiver(o->proxy_target, key, receiver);
         }
+        tsc_proxy_require_callable_trap(trap, "Proxy get trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
         tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
@@ -514,6 +533,7 @@ bool tsc_object_has_own(const tsc_object_t* o, const tsc_str_t* key) {
             }
             return false;
         }
+        tsc_proxy_require_callable_trap(trap, "Proxy getOwnPropertyDescriptor trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
         tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
@@ -535,6 +555,7 @@ bool tsc_object_property_is_enumerable(const tsc_object_t* o, const tsc_str_t* k
             }
             return false;
         }
+        tsc_proxy_require_callable_trap(trap, "Proxy getOwnPropertyDescriptor trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
         tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
@@ -559,6 +580,7 @@ bool tsc_object_has(const tsc_object_t* o, const tsc_str_t* key) {
             }
             return false;
         }
+        tsc_proxy_require_callable_trap(trap, "Proxy has trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
         tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
@@ -598,6 +620,7 @@ bool tsc_object_delete(tsc_object_t* o, const tsc_str_t* key) {
             }
             return true;
         }
+        tsc_proxy_require_callable_trap(trap, "Proxy deleteProperty trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
         tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
@@ -640,6 +663,7 @@ bool tsc_object_is_extensible(const tsc_object_t* o) {
             }
             return true;
         }
+        tsc_proxy_require_callable_trap(trap, "Proxy isExtensible trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
@@ -666,6 +690,7 @@ bool tsc_object_prevent_extensions(tsc_object_t* o) {
             }
             return true;
         }
+        tsc_proxy_require_callable_trap(trap, "Proxy preventExtensions trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
@@ -773,6 +798,7 @@ tsc_array_t* tsc_object_keys_dyn(const tsc_object_t* o) {
             }
             return tsc_array_new(sizeof(tsc_str_t*), 1);
         }
+        tsc_proxy_require_callable_trap(trap, "Proxy ownKeys trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
         tsc_array_push_value(args, o->proxy_target);
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
@@ -819,6 +845,7 @@ tsc_array_t* tsc_object_own_keys_dyn(const tsc_object_t* o) {
             }
             return tsc_array_new(sizeof(tsc_str_t*), 1);
         }
+        tsc_proxy_require_callable_trap(trap, "Proxy ownKeys trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
         tsc_array_push_value(args, o->proxy_target);
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));

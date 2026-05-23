@@ -846,6 +846,7 @@ tsc_value_t tsc_value_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key)
         if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
             return tsc_value_get_own_property_descriptor(o->proxy_target, key);
         }
+        tsc_proxy_require_callable_trap(trap, "Proxy getOwnPropertyDescriptor trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 2);
         tsc_array_push_value(args, o->proxy_target);
         tsc_array_push_value(args, tsc_value_string(key));
