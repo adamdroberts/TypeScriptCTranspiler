@@ -1003,6 +1003,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_commonjs_wrapper_globals` | `__filename` / `__dirname` string constants in CommonJS package sources |
 | `node_modules_js_package` | basic pure-JS package import through allowJs |
 | `node_modules_js_package_relative_import` | pure-JS package entry importing a package-local JS module |
+| `node_modules_js_package_re_exports` | pure-JS package re-export barrel with named, default-alias, and export-star bindings |
 | `node_modules_package_exports` | TypeScript package source imports through package exports |
 | `node_modules_package_conditional_exports` | TypeScript package source imports through package exports/imports condition maps selecting import branches |
 | `node_modules_package_import_node_addons_conditions` | TypeScript package source imports through package exports/imports node-addons condition maps before node/import/default fallbacks |
