@@ -9468,7 +9468,10 @@ class Emitter {
         if (!setter.parent || !ts.isClassDeclaration(setter.parent)) {
             unsupported(setter, "decorated instance setter requires a containing class");
         }
-        const replacement = this.classInstanceSetterDecoratorReplacementName(setter.parent, setter);
+        const classDecl = setter.parent;
+        if (!classDecl.name) unsupported(setter, "decorated instance setter requires a named class");
+        const replacement = this.classInstanceSetterDecoratorReplacementName(classDecl, setter);
+        const thisArg = this.coerce({ c: obj, ty: classType(classDecl.name.text) }, T_VALUE, node);
         const fn = this.freshTemp("_setter_replacement");
         const av = this.freshTemp("_setter_args");
         return (
@@ -9476,7 +9479,7 @@ class Emitter {
             `if (tsc_value_is_undefined(${fn})) { ${callee}(${obj}, ${assigned}); } ` +
             `else { tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), 1); ` +
             `tsc_array_push_value(${av}, ${this.coerce({ c: assigned, ty: paramType }, T_VALUE, node)}); ` +
-            `(void)tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av})); } })`
+            `(void)tsc_value_apply_function(${fn}, ${thisArg}, tsc_value_array(${av})); } })`
         );
     }
 
