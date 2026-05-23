@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Fixed
+- `fs.accessSync(...)` now treats an explicit `undefined` mode as the default and evaluates ignored extra arguments for global, namespace, and named import calls. Test: `fs_access_ignored_arguments`.
 - `fs.existsSync(...)` now evaluates and ignores extra arguments for global, namespace, and named import calls. Test: `fs_exists_ignored_arguments`.
 - Immediate dynamic thenable assimilation now rejects repeated thenable identities in the recursive resolution chain instead of recursing indefinitely. Test: `promise_thenable_self_resolution`.
 - Immediate dynamic thenables that resolve to themselves now reject instead of recursing indefinitely. Test: `promise_thenable_self_resolution`.
