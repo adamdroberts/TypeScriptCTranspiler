@@ -102,7 +102,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - `new Foo(args)` / `new Foo(...args)` → `Foo_new(args)`. Test: `classes`
 - `Reflect.construct(Foo, args)` works for statically known class constructors with array-literal, array-literal-spread, typed-array, and dynamic-array argument lists. Test: `reflect_construct`
 - Field access `obj.x`, field assignment `obj.x = v`. Test: `classes`
-- Named class getter and setter accessors lower to C calls for instance and static property reads/writes. Plain setter assignments return the assigned value. Test: `class_accessors_basic`
+- Named class getter and setter accessors lower to C calls for instance and static property reads/writes. Plain setter assignments and numeric/string compound setter assignments return the assigned value. Tests: `class_accessors_basic`, `class_accessors_compound`
 - **Single inheritance** via `extends` — base fields laid out at struct head for safe up-cast. Test: `inheritance`
 - `super(...)` call in subclass constructor → `Base_init((Base_t*)self, ...)`. Test: `inheritance`
 - **Static fields** — emitted as file-scope `ClassName_field` storage and initialized in module init, including computed names. Tests: `inheritance`, `class_computed_members`
@@ -593,6 +593,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `buffer_write` | Buffer.write UTF-8/hex string bytes with offset/length clipping |
 | `accessor_decorator_basic` | standard getter/setter decorators with dynamic accessor context |
 | `class_accessors_basic` | typed class getter and setter accessors |
+| `class_accessors_compound` | typed class getter/setter compound assignments |
 | `class_computed_members` | literal and const-literal computed class fields/methods |
 | `class_decorator_basic` | standard class decorators with dynamic class context |
 | `class_decorator_factory` | class decorator factory expressions returning closure decorators |
