@@ -9,3 +9,6 @@ unused_conditional
 unused_namespace_value
 unused_let
 unused_empty
+unused_local_const
+unused_local_let
+unused_local_empty

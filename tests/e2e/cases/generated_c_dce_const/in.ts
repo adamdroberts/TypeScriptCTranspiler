@@ -15,4 +15,12 @@ namespace DceNamespace {
     export const kept = 7;
 }
 
-console.log(used_count + 3, DceNamespace.kept);
+function usedLocal(value: number): number {
+    const unused_local_const = { label: "dead", count: 9 };
+    let unused_local_let = `dead-${1 + 2}`;
+    let unused_local_empty: string;
+    const kept_local = value + 3;
+    return kept_local;
+}
+
+console.log(usedLocal(used_count), DceNamespace.kept);

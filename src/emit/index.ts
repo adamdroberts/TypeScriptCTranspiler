@@ -247,6 +247,7 @@ class Emitter {
     private referencedTopLevelLiftedArrows = new WeakSet<ts.VariableDeclaration>();
     private referencedTopLevelClasses = new WeakSet<ts.ClassDeclaration>();
     private referencedTopLevelVariables = new WeakSet<ts.VariableDeclaration>();
+    private referencedVariables = new WeakSet<ts.VariableDeclaration>();
     /**
      * Symbols whose value is provably integer-shape at every read site.
      * Populated per source file by analyzeIntegerSymbols(); consulted by
@@ -341,6 +342,9 @@ class Emitter {
                     this.isPrunableTopLevelLiftedArrow(decl)
                 ) {
                     this.referencedTopLevelLiftedArrows.add(decl);
+                }
+                if (decl && ts.isVariableDeclaration(decl)) {
+                    this.referencedVariables.add(decl);
                 }
                 if (
                     decl &&
@@ -586,6 +590,21 @@ class Emitter {
 
     private shouldEmitTopLevelVariable(decl: ts.VariableDeclaration): boolean {
         return !this.isPrunableTopLevelVariable(decl) || this.referencedTopLevelVariables.has(decl);
+    }
+
+    private isPrunableLocalVariable(decl: ts.VariableDeclaration): boolean {
+        if (!ts.isIdentifier(decl.name)) return false;
+        if (!ts.isVariableStatement(decl.parent.parent)) return false;
+        if (this.isTopLevelValueDeclaration(decl)) return false;
+        const isConst = (decl.parent.flags & ts.NodeFlags.Const) !== 0;
+        const isLet = (decl.parent.flags & ts.NodeFlags.Let) !== 0;
+        if (!isConst && !isLet) return false;
+        if (!decl.initializer) return true;
+        return this.isSideEffectFreeTopLevelConstInitializer(decl.initializer);
+    }
+
+    private shouldEmitLocalVariable(decl: ts.VariableDeclaration): boolean {
+        return !this.isPrunableLocalVariable(decl) || this.referencedVariables.has(decl);
     }
 
     run(): EmittedProgram {
@@ -7554,6 +7573,7 @@ class Emitter {
             ) {
                 continue;
             }
+            if (!this.shouldEmitLocalVariable(d)) continue;
             const sym = this.symbolForIdentifier(d.name);
             const stackObject = this.nonEscapingLocalObjectLiteral(d);
             if (stackObject) {
