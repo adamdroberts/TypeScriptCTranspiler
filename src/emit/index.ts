@@ -15150,7 +15150,7 @@ class Emitter {
                         ([resolved]) => `tsc_promise_resolve_fs_stats(${resolved})`,
                     );
                 }
-                return this.emitSequencedExpr(mapped, specs, ([resolved]) => `tsc_promise_resolve(${resolved})`);
+                return this.emitSequencedExpr(mapped, specs, ([resolved]) => `tsc_promise_resolve_thenable(${resolved})`);
             }
             case "reject": {
                 const arg = call.arguments[0];
@@ -15542,7 +15542,7 @@ class Emitter {
         if (stored.kind === "array") {
             return `tsc_promise_resolve_array(${result.c})`;
         }
-        return `tsc_promise_resolve(${this.coerce(result, T_VALUE, node)})`;
+        return `tsc_promise_resolve_thenable(${this.coerce(result, T_VALUE, node)})`;
     }
 
     private emitEventEmitterMethod(

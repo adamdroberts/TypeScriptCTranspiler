@@ -1,0 +1,7 @@
+fulfilled: ready
+rejected: bad
+recovered: handled
+plain: 7
+throwing: boom
+callback: start:next
+events: ignored:f|fulfilled then:function:function|rejected then|throwing then|callback then:start

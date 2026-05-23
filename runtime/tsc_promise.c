@@ -32,6 +32,56 @@ tsc_promise_t* tsc_promise_resolve_array(tsc_array_t* value) {
     return p;
 }
 
+typedef struct {
+    tsc_promise_t* promise;
+} tsc_promise_thenable_state_t;
+
+static tsc_value_t promise_thenable_resolve(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_promise_thenable_state_t* state = (tsc_promise_thenable_state_t*)env;
+    tsc_value_t value = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    if (state && state->promise) tsc_promise_fulfill_in_place(state->promise, value);
+    return tsc_value_undefined();
+}
+
+static tsc_value_t promise_thenable_reject(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_promise_thenable_state_t* state = (tsc_promise_thenable_state_t*)env;
+    tsc_value_t reason = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    if (state && state->promise) tsc_promise_reject_in_place(state->promise, reason);
+    return tsc_value_undefined();
+}
+
+tsc_promise_t* tsc_promise_resolve_thenable(tsc_value_t value) {
+    tsc_promise_t* out = NULL;
+    tsc_try_frame_t eh;
+    tsc_try_push(&eh);
+    if (setjmp(eh.jb) == 0) {
+        tsc_value_t then = tsc_value_get_prop(value, tsc_str_from_lit("then", 4));
+        if (tsc_value_is_nullish(then) || !tsc_value_is_callable(then)) {
+            tsc_try_pop();
+            return tsc_promise_resolve(value);
+        }
+        out = tsc_promise_pending();
+        tsc_promise_thenable_state_t* state = (tsc_promise_thenable_state_t*)TSC_GC_MALLOC(sizeof(tsc_promise_thenable_state_t));
+        state->promise = out;
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 2);
+        tsc_value_t resolve = tsc_value_function_generic_arity(promise_thenable_resolve, state, 1.0);
+        tsc_value_t reject = tsc_value_function_generic_arity(promise_thenable_reject, state, 1.0);
+        tsc_array_push_value(args, resolve);
+        tsc_array_push_value(args, reject);
+        (void)tsc_value_apply_function(then, value, tsc_value_array(args));
+        tsc_try_pop();
+        return out;
+    }
+    if (out && tsc_promise_is_pending(out)) {
+        tsc_promise_reject_in_place(out, tsc_value_string(tsc_current_error()));
+        return out;
+    }
+    if (out) return out;
+    return tsc_promise_reject(tsc_value_string(tsc_current_error()));
+}
+
 tsc_promise_t* tsc_promise_reject(tsc_value_t reason) {
     tsc_promise_t* p = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(tsc_promise_t));
     p->state = TSC_PROMISE_REJECTED;

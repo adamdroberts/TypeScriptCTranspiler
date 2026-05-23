@@ -500,6 +500,7 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
 tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args);
 tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t args, tsc_value_t new_target);
 bool tsc_value_is_array(tsc_value_t v);
+bool tsc_value_is_callable(tsc_value_t v);
 bool tsc_value_is_nullish(tsc_value_t v);
 bool tsc_value_is_undefined(tsc_value_t v);
 tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key);
@@ -555,6 +556,7 @@ tsc_promise_t* tsc_promise_resolve(tsc_value_t value);
 tsc_promise_t* tsc_promise_resolve_fs_stats(tsc_fs_stats_t* value);
 tsc_promise_t* tsc_promise_resolve_buffer(tsc_buffer_t* value);
 tsc_promise_t* tsc_promise_resolve_array(tsc_array_t* value);
+tsc_promise_t* tsc_promise_resolve_thenable(tsc_value_t value);
 tsc_promise_t* tsc_promise_reject(tsc_value_t reason);
 tsc_promise_t* tsc_promise_pending(void);
 tsc_promise_t* tsc_promise_adopt(tsc_promise_t* promise);

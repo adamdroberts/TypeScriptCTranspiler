@@ -122,6 +122,10 @@ static bool value_is_callable_function(tsc_value_t v) {
     return o && o->is_proxy && value_is_callable_function(o->proxy_target);
 }
 
+bool tsc_value_is_callable(tsc_value_t v) {
+    return value_is_callable_function(v);
+}
+
 static bool value_is_constructable_function(tsc_value_t v) {
     if (!value_is_box(v)) return false;
     if (value_tag(v) == TSC_VALUE_TAG_FUNCTION) return true;
