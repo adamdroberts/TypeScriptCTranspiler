@@ -35,8 +35,19 @@ tsc_promise_t* tsc_promise_resolve_array(tsc_array_t* value) {
 typedef struct {
     tsc_promise_t* promise;
     tsc_value_t thenable;
+    tsc_array_t* seen;
     bool done;
 } tsc_promise_thenable_state_t;
+
+static tsc_promise_t* tsc_promise_resolve_thenable_seen(tsc_value_t value, tsc_array_t* seen);
+
+static bool promise_seen_contains(tsc_array_t* seen, tsc_value_t value) {
+    if (!seen) return false;
+    for (size_t i = 0; i < seen->len; i++) {
+        if (tsc_value_eq(TSC_ARR(tsc_value_t, seen, i), value)) return true;
+    }
+    return false;
+}
 
 static void promise_adopt_into(tsc_promise_t* dest, tsc_promise_t* source) {
     if (!dest || dest->state != TSC_PROMISE_PENDING || !source) return;
@@ -58,7 +69,7 @@ static tsc_value_t promise_thenable_resolve(void* env, tsc_value_t this_arg, tsc
             tsc_promise_reject_in_place(state->promise, tsc_value_string(tsc_str_from_cstr("TypeError: Promise resolved with itself")));
             return tsc_value_undefined();
         }
-        promise_adopt_into(state->promise, tsc_promise_resolve_thenable(value));
+        promise_adopt_into(state->promise, tsc_promise_resolve_thenable_seen(value, state->seen));
     }
     return tsc_value_undefined();
 }
@@ -75,20 +86,27 @@ static tsc_value_t promise_thenable_reject(void* env, tsc_value_t this_arg, tsc_
     return tsc_value_undefined();
 }
 
-tsc_promise_t* tsc_promise_resolve_thenable(tsc_value_t value) {
+static tsc_promise_t* tsc_promise_resolve_thenable_seen(tsc_value_t value, tsc_array_t* seen) {
     tsc_promise_t* out = NULL;
     tsc_try_frame_t eh;
     tsc_try_push(&eh);
     if (setjmp(eh.jb) == 0) {
+        if (promise_seen_contains(seen, value)) {
+            tsc_try_pop();
+            return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("TypeError: Promise resolution cycle")));
+        }
         tsc_value_t then = tsc_value_get_prop(value, tsc_str_from_lit("then", 4));
         if (tsc_value_is_nullish(then) || !tsc_value_is_callable(then)) {
             tsc_try_pop();
             return tsc_promise_resolve(value);
         }
+        if (!seen) seen = tsc_array_new(sizeof(tsc_value_t), 4);
+        tsc_array_push_value(seen, value);
         out = tsc_promise_pending();
         tsc_promise_thenable_state_t* state = (tsc_promise_thenable_state_t*)TSC_GC_MALLOC(sizeof(tsc_promise_thenable_state_t));
         state->promise = out;
         state->thenable = value;
+        state->seen = seen;
         state->done = false;
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 2);
         tsc_value_t resolve = tsc_value_function_generic_arity(promise_thenable_resolve, state, 1.0);
@@ -105,6 +123,10 @@ tsc_promise_t* tsc_promise_resolve_thenable(tsc_value_t value) {
     }
     if (out) return out;
     return tsc_promise_reject(tsc_value_string(tsc_current_error()));
+}
+
+tsc_promise_t* tsc_promise_resolve_thenable(tsc_value_t value) {
+    return tsc_promise_resolve_thenable_seen(value, NULL);
 }
 
 tsc_promise_t* tsc_promise_reject(tsc_value_t reason) {

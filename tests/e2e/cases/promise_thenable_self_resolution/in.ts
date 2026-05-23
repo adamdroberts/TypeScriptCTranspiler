@@ -29,4 +29,21 @@ Promise.resolve(outer)
         return "handled";
     });
 
+const first: any = {};
+const second: any = {};
+first.then = function(resolve: any): void {
+    events.push("first");
+    resolve(second);
+};
+second.then = function(resolve: any): void {
+    events.push("second");
+    resolve(first);
+};
+
+Promise.resolve(first)
+    .catch((reason: any) => {
+        console.log("cycle:", reason);
+        return "handled";
+    });
+
 console.log("events:", events.join("|"));
