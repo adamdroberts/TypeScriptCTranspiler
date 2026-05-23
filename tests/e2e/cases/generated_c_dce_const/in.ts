@@ -15,6 +15,9 @@ const unused_spread_source_array = [5, 6];
 const unused_spread_source_object = { extra: "dead" };
 const unused_const_spread_array = [0, ...unused_spread_source_array];
 const unused_const_spread_object = { ok: true, ...unused_spread_source_object };
+const unused_string_length = "dead".length;
+const unused_array_length = [1, 2, 3].length;
+const unused_const_array_length = unused_spread_source_array.length;
 const unused_chain_seed = "dead";
 const unused_chain_mid = unused_chain_seed;
 const unused_chain_object = { label: unused_chain_mid };
@@ -26,6 +29,7 @@ let unused_let = 42;
 let unused_empty: number;
 "top_level_dead_expr";
 (1 + 2) * 3;
+"top_level_dead_length".length;
 // @ts-ignore: intentional pure comma expression for generated-C DCE coverage.
 (1, "top_level_dead_comma");
 
@@ -39,6 +43,7 @@ function usedLocal(value: number): number {
     let unused_local_let = `dead-${1 + 2}`;
     let unused_local_empty: string;
     "local_dead_expr";
+    "local_dead_length".length;
     // @ts-ignore: intentional pure comma expression for generated-C DCE coverage.
     (1, "local_dead_comma");
     const unused_local_seed = "dead";

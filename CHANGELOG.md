@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes side-effect-free `.length` reads on string/array literals and earlier pure const string/array literals. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes side-effect-free comma expressions in pure initializers and expression statements. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes array/object literal spreads through earlier pure const array/string/object literal operands. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused static object literals with side-effect-free computed keys when those keys resolve statically. Test: `generated_c_dce_const`.

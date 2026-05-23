@@ -14,6 +14,9 @@ unused_spread_source_array
 unused_spread_source_object
 unused_const_spread_array
 unused_const_spread_object
+unused_string_length
+unused_array_length
+unused_const_array_length
 unused_chain_seed
 unused_chain_mid
 unused_chain_object
@@ -24,11 +27,13 @@ unused_namespace_value
 unused_let
 unused_empty
 top_level_dead_expr
+top_level_dead_length
 top_level_dead_comma
 unused_local_const
 unused_local_let
 unused_local_empty
 local_dead_expr
+local_dead_length
 local_dead_comma
 unused_local_seed
 unused_local_chain
