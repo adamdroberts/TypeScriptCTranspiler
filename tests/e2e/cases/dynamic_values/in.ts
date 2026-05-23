@@ -15,6 +15,11 @@ console.log("typeof score1:", typeof scores[1]);
 console.log("typeof missing:", typeof data["missing"]);
 console.log("is string:", typeof data["name"] === "string");
 
+const escaped: any = JSON.parse("{\"letter\":\"\\u0041\",\"accent\":\"\\u00e9\",\"face\":\"\\uD83D\\uDE00\"}");
+const accent = String(escaped["accent"]);
+const face = String(escaped["face"]);
+console.log("unicode escapes:", escaped["letter"], accent.codePointAt(0), face.codePointAt(0));
+
 const values = Object.values(data);
 console.log("values len:", values.length);
 values.forEach((v) => console.log(" value:", v));

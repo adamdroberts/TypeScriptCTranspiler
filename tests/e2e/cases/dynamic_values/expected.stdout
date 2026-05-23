@@ -10,6 +10,7 @@ typeof score0: number
 typeof score1: boolean
 typeof missing: undefined
 is string: true
+unicode escapes: A 233 128512
 values len: 3
  value: Ada
  value: 1,true,x
