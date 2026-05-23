@@ -774,6 +774,7 @@ class Emitter {
             return this.classExpressionHasNoDefinitionSideEffects(expr);
         }
         if (ts.isIdentifier(expr)) {
+            if (this.isUnshadowedGlobalIdentifier(expr, "undefined")) return true;
             return this.isSideEffectFreeConstIdentifier(expr, seenConsts);
         }
         if (
@@ -824,6 +825,15 @@ class Emitter {
                     return this.isSideEffectFreeTopLevelConstInitializer(expr.left, seenConsts) &&
                         this.isSideEffectFreeTopLevelConstInitializer(expr.right, seenConsts);
                 }
+                case ts.SyntaxKind.QuestionQuestionToken: {
+                    const left = this.staticNullishState(expr.left, seenConsts);
+                    if (left === "nonNullish") return true;
+                    if (left === "nullish") {
+                        return this.isSideEffectFreeTopLevelConstInitializer(expr.right, seenConsts);
+                    }
+                    return this.isSideEffectFreeTopLevelConstInitializer(expr.left, seenConsts) &&
+                        this.isSideEffectFreeTopLevelConstInitializer(expr.right, seenConsts);
+                }
                 case ts.SyntaxKind.PlusToken:
                 case ts.SyntaxKind.MinusToken:
                 case ts.SyntaxKind.AsteriskToken:
@@ -838,7 +848,6 @@ class Emitter {
                 case ts.SyntaxKind.EqualsEqualsEqualsToken:
                 case ts.SyntaxKind.ExclamationEqualsToken:
                 case ts.SyntaxKind.ExclamationEqualsEqualsToken:
-                case ts.SyntaxKind.QuestionQuestionToken:
                 case ts.SyntaxKind.AmpersandToken:
                 case ts.SyntaxKind.BarToken:
                 case ts.SyntaxKind.CaretToken:
@@ -9920,6 +9929,51 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.staticBooleanValue(init, seenConsts) : null;
+    }
+
+    private staticNullishState(
+        expr: ts.Expression,
+        seenConsts = new Set<ts.Symbol>(),
+    ): "nullish" | "nonNullish" | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            unwrapped.kind === ts.SyntaxKind.NullKeyword ||
+            unwrapped.kind === ts.SyntaxKind.UndefinedKeyword
+        ) {
+            return "nullish";
+        }
+        if (
+            ts.isIdentifier(unwrapped) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped, "undefined")
+        ) {
+            return "nullish";
+        }
+        if (
+            unwrapped.kind === ts.SyntaxKind.TrueKeyword ||
+            unwrapped.kind === ts.SyntaxKind.FalseKeyword ||
+            ts.isNumericLiteral(unwrapped) ||
+            ts.isBigIntLiteral(unwrapped) ||
+            ts.isStringLiteral(unwrapped) ||
+            ts.isNoSubstitutionTemplateLiteral(unwrapped) ||
+            ts.isRegularExpressionLiteral(unwrapped) ||
+            ts.isArrowFunction(unwrapped) ||
+            ts.isFunctionExpression(unwrapped)
+        ) {
+            return "nonNullish";
+        }
+        if (ts.isClassExpression(unwrapped) && this.classExpressionHasNoDefinitionSideEffects(unwrapped)) {
+            return "nonNullish";
+        }
+        if (
+            ts.isArrayLiteralExpression(unwrapped) ||
+            ts.isObjectLiteralExpression(unwrapped)
+        ) {
+            return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts)
+                ? "nonNullish"
+                : null;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.staticNullishState(init, seenConsts) : null;
     }
 
     private emitReturn(buf: CBuf, r: ts.ReturnStatement): void {

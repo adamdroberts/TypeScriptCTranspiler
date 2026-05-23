@@ -134,6 +134,9 @@ const top_level_static_false = false;
 const unused_static_conditional_dead_call = top_level_static_false ? console.log("dead_static_conditional_call") : "dead_static_conditional_value";
 const unused_static_and_dead_call = top_level_static_false && console.log("dead_static_and_call");
 const unused_static_or_dead_call = !top_level_static_false || console.log("dead_static_or_call");
+const top_level_static_non_nullish = "alive";
+const unused_static_nullish_dead_call = top_level_static_non_nullish ?? console.log("dead_static_nullish_call");
+const unused_static_nullish_fallback = (undefined as string | undefined) ?? "dead_static_nullish_fallback_value";
 let unused_let = 42;
 let unused_empty: number;
 "top_level_dead_expr";
@@ -228,6 +231,8 @@ while (false) {
 top_level_static_false ? console.log("top_level_dead_static_conditional_call") : "top_level_dead_static_conditional_value";
 top_level_static_false && console.log("top_level_dead_static_and_call");
 !top_level_static_false || console.log("top_level_dead_static_or_call");
+top_level_static_non_nullish ?? console.log("top_level_dead_static_nullish_call");
+(undefined as string | undefined) ?? "top_level_dead_static_nullish_fallback";
 
 namespace DceNamespace {
     const unused_namespace_value = { label: "dead", count: 4 };
@@ -321,6 +326,11 @@ function usedLocal(value: number): number {
     const unused_local_static_or = true || console.log("local_dead_static_or_call");
     false && console.log("local_dead_static_and_expr_call");
     true || console.log("local_dead_static_or_expr_call");
+    const local_static_non_nullish = { ok: true };
+    const unused_local_static_nullish = local_static_non_nullish ?? console.log("local_dead_static_nullish_call");
+    const unused_local_static_nullish_fallback = (undefined as string | undefined) ?? "local_dead_static_nullish_fallback";
+    local_static_non_nullish ?? console.log("local_dead_static_nullish_expr_call");
+    (undefined as string | undefined) ?? "local_dead_static_nullish_expr_fallback";
     const unused_local_seed = "dead";
     const unused_local_chain = unused_local_seed;
     const kept_local = value + 3;

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes static nullish coalescing expressions whose unreachable side may contain effects. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes static boolean short-circuit expressions whose unreachable RHS may contain effects. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes static conditional expressions by checking only the reachable branch when the condition is a pure statically-known boolean. Test: `generated_c_dce_const`.
 - Generated-C DCE now stops emitting unreachable trailing statements inside block statement bodies after unconditional exits. Test: `generated_c_dce_const`.
