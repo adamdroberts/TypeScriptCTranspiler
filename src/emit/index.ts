@@ -5373,7 +5373,8 @@ class Emitter {
         if (!cd.name || !ts.canHaveDecorators(cd)) return;
         const decorators = ts.getDecorators(cd) ?? [];
         if (decorators.length === 0) return;
-        for (const decorator of decorators) {
+        for (let i = decorators.length - 1; i >= 0; i--) {
+            const decorator = decorators[i]!;
             const call = this.emitDecoratorFunctionCall(
                 decorator.expression,
                 [
@@ -5417,7 +5418,8 @@ class Emitter {
                         ? "getter"
                         : "setter";
             const label = `${kind} decorator`;
-            for (const decorator of decorators) {
+            for (let i = decorators.length - 1; i >= 0; i--) {
+                const decorator = decorators[i]!;
                 const valueArg = ts.isMethodDeclaration(member) && isStatic(member)
                     ? this.classStaticMethodDecoratorValue(cd, member)
                     : ts.isMethodDeclaration(member) && !isStatic(member)
