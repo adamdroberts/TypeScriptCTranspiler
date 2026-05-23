@@ -812,8 +812,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `process_stdin_metadata` | process stdin fd and isTTY metadata |
 | `process_stdio_metadata` | process stdout/stderr fd and isTTY metadata |
 | `process_stdio_readable_writable` | process stdio readable and writable stream flags |
-| `process_stdio_write` | process.stdout.write and process.stderr.write string subset |
-| `process_stdio_write_buffer` | process.stdout.write and process.stderr.write Buffer subset |
+| `process_stdio_write` | process.stdout.write and process.stderr.write string subset, including optional encoding/callback forms |
+| `process_stdio_write_buffer` | process.stdout.write and process.stderr.write Buffer subset, including optional encoding/callback forms |
 | `process_stdio_write_callback` | process stdout/stderr write optional encoding and callback subset |
 | `process_title` | process.title readonly argv0-backed metadata |
 | `process_umask` | process.umask read/update/restore behavior |
