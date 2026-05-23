@@ -1,0 +1,3 @@
+{
+  "functions": ["return 17;", "return 'manifest-params';"]
+}

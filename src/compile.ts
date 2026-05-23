@@ -201,7 +201,7 @@ function permanentLimitDiagnostics(
                         if (
                             !opts.unsafeEval &&
                             !canAotCompileFunctionConstructor(node) &&
-                            !(opts.runtimeCode && runtimeCodeManifestHasFunctions(opts.runtimeCode))
+                            !(opts.runtimeCode && runtimeCodeManifestHasFunctions(opts.runtimeCode) && canAotDispatchFunctionManifest(node))
                         ) {
                             diagnostics.push({
                                 node,
@@ -260,7 +260,7 @@ function permanentLimitDiagnostics(
                 if (
                     !opts.unsafeEval &&
                     !canAotCompileFunctionConstructor(node) &&
-                    !(opts.runtimeCode && runtimeCodeManifestHasFunctions(opts.runtimeCode))
+                    !(opts.runtimeCode && runtimeCodeManifestHasFunctions(opts.runtimeCode) && canAotDispatchFunctionManifest(node))
                 ) {
                     diagnostics.push({
                         node,
@@ -333,10 +333,26 @@ function canAotCompileEvalCall(call: ts.CallExpression): boolean {
 }
 
 function canAotCompileFunctionConstructor(call: ts.CallExpression | ts.NewExpression): boolean {
-    const args = call.arguments ?? [];
-    if (args.length !== 1) return false;
-    const body = stringSpecifierText(args[0]!);
+    const body = functionConstructorBodyText(call);
     return body !== null && parseAotFunctionBodyConstant(body) !== null;
+}
+
+function canAotDispatchFunctionManifest(call: ts.CallExpression | ts.NewExpression): boolean {
+    return functionConstructorBodyArg(call) !== null;
+}
+
+function functionConstructorBodyText(call: ts.CallExpression | ts.NewExpression): string | null {
+    const bodyArg = functionConstructorBodyArg(call);
+    return bodyArg ? stringSpecifierText(bodyArg) : null;
+}
+
+function functionConstructorBodyArg(call: ts.CallExpression | ts.NewExpression): ts.Expression | null {
+    const args = call.arguments ?? [];
+    if (args.length < 1) return null;
+    for (let i = 0; i < args.length - 1; i++) {
+        if (stringSpecifierText(args[i]!) === null) return null;
+    }
+    return args[args.length - 1]!;
 }
 
 function addNativeAddonDiagnostics(

@@ -10958,21 +10958,23 @@ class Emitter {
     private emitUnsafeFunctionConstructor(call: ts.CallExpression | ts.NewExpression): EmitResult {
         const args = call.arguments ?? [];
         if (args.length < 1) unsupported(call, "Function constructor expects source text");
-        if (args.length === 1) {
-            const bodyText = staticStringExpressionText(args[0]!);
-            if (bodyText !== null) {
-                const constant = parseAotFunctionBodyConstant(bodyText);
-                if (constant) return this.emitAotFunctionConstructor(call, constant);
-            }
+        const bodyNode = this.functionConstructorBodyArg(call);
+        const bodyText = bodyNode ? staticStringExpressionText(bodyNode) : null;
+        if (bodyText !== null) {
+            const constant = parseAotFunctionBodyConstant(bodyText);
+            if (constant) return this.emitAotFunctionConstructor(call, constant);
         }
         const runtimeCode = this.options.runtimeCode ?? emptyRuntimeCodeManifest();
         if (runtimeCodeManifestHasFunctions(runtimeCode)) {
-            return this.emitAotFunctionManifestDispatch(call, args[0]!, runtimeCode.functions);
+            if (!bodyNode) {
+                unsupported(call, "runtime-code manifest Function dispatch requires static parameter-name strings");
+            }
+            return this.emitAotFunctionManifestDispatch(call, bodyNode, runtimeCode.functions);
         }
         if (args.length > 1) {
             unsupported(call, "unsafe Function bridge currently expects a single function body string");
         }
-        const bodyNode = args[0]!;
+        if (!bodyNode) unsupported(call, "Function constructor expects source text");
         const body = this.emitExpr(bodyNode);
         const type = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
         if (type.kind !== "function" || !type.closureName) {
@@ -10992,6 +10994,15 @@ class Emitter {
                 `${fn}->fn = ${adapter}; ${fn}->env = ${env}; ${fn}; })`
             );
         });
+    }
+
+    private functionConstructorBodyArg(call: ts.CallExpression | ts.NewExpression): ts.Expression | null {
+        const args = call.arguments ?? [];
+        if (args.length < 1) return null;
+        for (let i = 0; i < args.length - 1; i++) {
+            if (staticStringExpressionText(args[i]!) === null) return null;
+        }
+        return args[args.length - 1]!;
     }
 
     private emitAotEvalManifestDispatch(
