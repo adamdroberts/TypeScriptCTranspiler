@@ -33,6 +33,14 @@ unused_delete_array
 unused_delete_const_object
 unused_array_is_array
 unused_const_array_is_array
+unused_array_of_call
+unused_array_from_array_call
+unused_array_from_string_call
+unused_const_array_from_call
+dead_array_of
+dead_array_of_tail
+dead_array_from_array
+dead_array_from_string
 unused_number_is_finite
 unused_number_is_integer
 unused_number_is_safe_integer
@@ -99,6 +107,10 @@ top_level_dead_regex
 top_level_dead_in
 top_level_dead_delete
 top_level_dead_array_is_array
+top_level_dead_array_of
+top_level_dead_array_of_tail
+top_level_dead_array_from_array
+top_level_dead_array_from_string
 top_level_dead_number_is_finite
 top_level_dead_object_is
 top_level_dead_math_call
@@ -132,6 +144,10 @@ local_dead_regex
 local_dead_in
 local_dead_delete
 local_dead_array_is_array
+local_dead_array_of
+local_dead_array_of_tail
+local_dead_array_from_array
+local_dead_array_from_string
 local_dead_number_is_integer
 local_dead_object_is
 local_dead_math_call

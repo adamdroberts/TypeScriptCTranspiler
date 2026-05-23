@@ -966,6 +966,23 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            method === "of" &&
+            this.isUnshadowedGlobalIdentifier(recv, "Array")
+        ) {
+            return call.arguments.every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+        }
+        if (
+            ts.isIdentifier(recv) &&
+            method === "from" &&
+            call.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Array")
+        ) {
+            return this.isSideEffectFreeArraySpreadOperand(call.arguments[0]!, seenConsts);
+        }
+        if (
+            ts.isIdentifier(recv) &&
             (
                 method === "isFinite" ||
                 method === "isInteger" ||

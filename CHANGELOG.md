@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unshadowed `Array.of(...)` calls with side-effect-free arguments and one-argument `Array.from(...)` calls over pure array/string operands as side-effect-free when their result is unused. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unshadowed `Object.preventExtensions(...)`, `Object.seal(...)`, `Object.freeze(...)`, and `Reflect.preventExtensions(...)` calls over fresh pure object/array literals as side-effect-free when their result is unused. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unshadowed `Object.getPrototypeOf(...)`, `Object.isExtensible(...)`, `Object.isSealed(...)`, `Object.isFrozen(...)`, `Reflect.getPrototypeOf(...)`, and `Reflect.isExtensible(...)` calls over fresh or earlier pure const object/array literals as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unshadowed `Reflect.has(...)`, `Reflect.ownKeys(...)`, and `Reflect.getOwnPropertyDescriptor(...)` calls over fresh or earlier pure const object/array literals as side-effect-free. Test: `generated_c_dce_const`.
