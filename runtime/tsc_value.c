@@ -98,7 +98,19 @@ tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args) {
     if (value_is_box(target) && value_tag(target) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(target);
         if (ident->kind == TSC_FUNCTION_IDENTITY_GENERIC) {
-            return ident->code.generic(ident->env, tsc_value_undefined(), (tsc_array_t*)value_ptr(args));
+            tsc_value_t receiver = tsc_value_object(tsc_object_new());
+            tsc_value_t result = ident->code.generic(ident->env, receiver, (tsc_array_t*)value_ptr(args));
+            if (
+                value_is_box(result) &&
+                (
+                    value_tag(result) == TSC_VALUE_TAG_OBJECT ||
+                    value_tag(result) == TSC_VALUE_TAG_ARRAY ||
+                    value_tag(result) == TSC_VALUE_TAG_FUNCTION
+                )
+            ) {
+                return result;
+            }
+            return receiver;
         }
     }
     if (value_is_box(target) && value_tag(target) == TSC_VALUE_TAG_OBJECT) {
