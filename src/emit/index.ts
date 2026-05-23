@@ -20492,23 +20492,25 @@ class Emitter {
                 });
             }
             case "stat": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.stat needs path and optional { bigint: false, throwIfNoEntry } options");
+                if (args.length < 1) unsupported(call, "fs.promises.stat needs path and optional { bigint: false, throwIfNoEntry } options");
                 const options = this.validateFsStatsOptions(args[1], "fs.promises.stat");
                 if (mapped.elem?.kind !== "fsstats") unsupported(call, "fs.promises.stat result must be Promise<FSStats>");
                 const p = this.emitExpr(args[0]!);
                 const fn = options.throwIfNoEntry ? "tsc_fs_stat_sync" : "tsc_fs_stat_sync_no_throw";
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.stat path"),
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => settle(`tsc_promise_resolve_fs_stats(${fn}(${path!}))`));
             }
             case "lstat": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.lstat needs path and optional { bigint: false, throwIfNoEntry } options");
+                if (args.length < 1) unsupported(call, "fs.promises.lstat needs path and optional { bigint: false, throwIfNoEntry } options");
                 const options = this.validateFsStatsOptions(args[1], "fs.promises.lstat");
                 if (mapped.elem?.kind !== "fsstats") unsupported(call, "fs.promises.lstat result must be Promise<FSStats>");
                 const p = this.emitExpr(args[0]!);
                 const fn = options.throwIfNoEntry ? "tsc_fs_lstat_sync" : "tsc_fs_lstat_sync_no_throw";
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.lstat path"),
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => settle(`tsc_promise_resolve_fs_stats(${fn}(${path!}))`));
             }
             case "realpath": {
@@ -20653,13 +20655,16 @@ class Emitter {
                 );
             }
             case "access": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.access needs path and optional mode");
+                if (args.length < 1) unsupported(call, "fs.promises.access needs path and optional mode");
                 const p = this.emitExpr(args[0]!);
                 const specs: SequencedCallArg[] = [
                     this.fsPathSpec(p, args[0]!, "fs.promises.access path"),
                 ];
-                if (args[1]) {
+                if (args[1] && !this.isUndefinedExpression(args[1])) {
                     specs.push({ value: this.emitExpr(args[1]), target: T_NUMBER, node: args[1] });
+                    specs.push(...this.ignoredArgumentSpecs(args, 2));
+                } else {
+                    specs.push(...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1));
                 }
                 return this.emitSequencedExpr(mapped, specs, ([path, mode]) =>
                     settle(`({ ${mode ? `tsc_fs_access_sync_mode(${path!}, ${mode})` : `tsc_fs_access_sync(${path!})`}; tsc_promise_resolve(tsc_value_undefined()); })`),

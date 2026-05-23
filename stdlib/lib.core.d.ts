@@ -1060,10 +1060,10 @@ interface FSPromises {
     readdir(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Promise<Buffer[]>;
     readdir(path: FSPathLike, options: FSReaddirDirentOptions, ...ignored: any[]): Promise<FSDirent[]>;
     readdir(path: FSPathLike, options?: FSFileEncodingOptions | FSReaddirOptions, ...ignored: any[]): Promise<string[]>;
-    stat(path: FSPathLike, options: FSStatsNoEntryOptions): Promise<FSStats | undefined>;
-    stat(path: FSPathLike, options?: FSStatsOptions): Promise<FSStats>;
-    lstat(path: FSPathLike, options: FSStatsNoEntryOptions): Promise<FSStats | undefined>;
-    lstat(path: FSPathLike, options?: FSStatsOptions): Promise<FSStats>;
+    stat(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): Promise<FSStats | undefined>;
+    stat(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): Promise<FSStats>;
+    lstat(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): Promise<FSStats | undefined>;
+    lstat(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): Promise<FSStats>;
     realpath(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Promise<Buffer>;
     realpath(path: FSPathLike, options?: FSFileEncodingOptions, ...ignored: any[]): Promise<string>;
     readlink(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Promise<Buffer>;
@@ -1078,7 +1078,7 @@ interface FSPromises {
     chown(path: FSPathLike, uid: number, gid: number): Promise<void>;
     lchown(path: FSPathLike, uid: number, gid: number): Promise<void>;
     chmod(path: FSPathLike, mode: number, ...ignored: any[]): Promise<void>;
-    access(path: FSPathLike, mode?: number): Promise<void>;
+    access(path: FSPathLike, mode?: number, ...ignored: any[]): Promise<void>;
     mkdir(path: FSPathLike, options?: number | FSMkdirOptions, ...ignored: any[]): Promise<void>;
     unlink(path: FSPathLike, ...ignored: any[]): Promise<void>;
     rm(path: FSPathLike, options?: FSRmOptions, ...ignored: any[]): Promise<void>;
