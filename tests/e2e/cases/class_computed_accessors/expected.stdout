@@ -1,0 +1,5 @@
+initial: 3
+set: 4 9
+compound: 10 21
+static: A
+static updated: AB
