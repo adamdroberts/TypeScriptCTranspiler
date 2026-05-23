@@ -10912,7 +10912,12 @@ class Emitter {
         const methodAccess = call.expression.expression;
         if (!ts.isPropertyAccessExpression(methodAccess)) return null;
         const method = methodAccess.name.text;
-        if (method !== "hasOwnProperty" && method !== "propertyIsEnumerable" && method !== "toString") return null;
+        if (
+            method !== "hasOwnProperty" &&
+            method !== "propertyIsEnumerable" &&
+            method !== "toLocaleString" &&
+            method !== "toString"
+        ) return null;
         const prototypeAccess = methodAccess.expression;
         if (
             !ts.isPropertyAccessExpression(prototypeAccess) ||
@@ -10922,9 +10927,10 @@ class Emitter {
         ) {
             return null;
         }
-        const minArgs = method === "toString" ? 1 : 2;
+        const isStringTagCall = method === "toString" || method === "toLocaleString";
+        const minArgs = isStringTagCall ? 1 : 2;
         if (call.arguments.length < minArgs) {
-            if (method === "toString") unsupported(call, "Object.prototype.toString.call expects target");
+            if (isStringTagCall) unsupported(call, `Object.prototype.${method}.call expects target`);
             unsupported(call, `Object.prototype.${method}.call expects target and key`);
         }
         const targetNode = call.arguments[0]!;
@@ -10944,6 +10950,28 @@ class Emitter {
                 { value: target, node: targetNode },
                 ...this.ignoredArgumentSpecs(call.arguments, 1),
             ], ([value]) => `({ (void)${value}; tsc_str_from_lit("${escapeCString(text)}", ${utf8ByteLen(text)}); })`);
+        }
+        if (method === "toLocaleString") {
+            if (target.ty.kind === "array") {
+                return this.emitSequencedExpr(T_STRING, [
+                    { value: target, node: targetNode },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ], ([arr]) => this.emitArrayJoinStringExpr(arr!, target.ty.elem ?? T_VALUE, `tsc_str_from_lit(",", 1)`));
+            }
+            if (mapped.kind === "class") {
+                const text = "[object Object]";
+                return this.emitSequencedExpr(T_STRING, [
+                    { value: target, node: targetNode },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ], ([value]) => `({ (void)${value}; tsc_str_from_lit("${escapeCString(text)}", ${utf8ByteLen(text)}); })`);
+            }
+            return this.emitSequencedExpr(T_STRING, [
+                { value: target, node: targetNode },
+                ...this.ignoredArgumentSpecs(call.arguments, 1),
+            ], ([value]) => {
+                const stringified = this.coerceToString({ c: value!, ty: target.ty }, targetNode);
+                return stringified;
+            });
         }
         const keyNode = call.arguments[1]!;
         const ignored = this.ignoredArgumentSpecs(call.arguments, 2);
@@ -11016,6 +11044,23 @@ class Emitter {
             case "weakset": return "WeakSet";
             default: return "Object";
         }
+    }
+
+    private emitArrayJoinStringExpr(arr: string, elemType: CType, sep: string): string {
+        const av = this.freshTemp("_arr");
+        const iv = this.freshTemp("_i");
+        const stringify = (exprC: string): string => {
+            if (elemType.kind === "string") return exprC;
+            if (elemType.kind === "number") return `tsc_str_from_num(${exprC})`;
+            if (elemType.kind === "boolean") return `tsc_str_from_bool(${exprC})`;
+            if (elemType.kind === "value") return `tsc_value_to_string(${exprC})`;
+            return `tsc_str_from_lit("[obj]", 5)`;
+        };
+        return (
+            `({ tsc_array_t* const ${av} = ${arr}; tsc_str_t* _r = tsc_str_from_lit("", 0); ` +
+            `tsc_str_t* _s = ${sep}; for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
+            `{ if (${iv} > 0) _r = tsc_str_concat(_r, _s); _r = tsc_str_concat(_r, ${stringify(`TSC_ARR(${elemType.c}, ${av}, ${iv})`)}); } _r; })`
+        );
     }
 
     private emitDynamicValueCall(call: ts.CallExpression, callee: EmitResult): EmitResult {

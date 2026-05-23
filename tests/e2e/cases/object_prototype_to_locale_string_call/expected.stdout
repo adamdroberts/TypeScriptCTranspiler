@@ -1,0 +1,4 @@
+typed: [object Object]
+dynamic: [object Object] 1,two
+primitives: hi 12.5 true
+static: 1,2 ok false
