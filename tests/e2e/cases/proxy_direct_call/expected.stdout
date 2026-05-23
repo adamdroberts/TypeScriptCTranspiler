@@ -1,0 +1,7 @@
+type: function
+call: 15
+events: trap:undefined:2,3
+forward: 9
+rev before: 13
+rev after: Cannot perform 'apply' on a proxy that has been revoked
+object call: Proxy apply target must be callable

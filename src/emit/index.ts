@@ -10516,6 +10516,9 @@ class Emitter {
             if (callee.ty.kind === "function") {
                 return this.emitClosureCall(call, callee);
             }
+            if (callee.ty.kind === "value") {
+                return this.emitDynamicValueCall(call, callee);
+            }
             unsupported(call, `call target kind ${ts.SyntaxKind[call.expression.kind]}`);
         }
         const calleeId = call.expression;
@@ -10733,6 +10736,9 @@ class Emitter {
             if (callee.ty.kind === "function") {
                 return this.emitClosureCall(call, callee);
             }
+            if (callee.ty.kind === "value") {
+                return this.emitDynamicValueCall(call, callee);
+            }
         }
 
         const fnName = this.identifierName(call.expression);
@@ -10756,6 +10762,34 @@ class Emitter {
         }
         const specs = this.callSpecsFromSignature(call, call.arguments, params);
         return this.emitSequencedCall(fnName, retType, specs, fixedArgs);
+    }
+
+    private emitDynamicValueCall(call: ts.CallExpression, callee: EmitResult): EmitResult {
+        if (call.arguments.some((arg) => ts.isSpreadElement(arg))) {
+            const list = this.emitSpreadCallArgumentList(call.arguments);
+            return this.emitSequencedCall("tsc_value_apply_function", T_VALUE, [
+                { value: callee, target: T_VALUE, node: call.expression },
+                { value: { c: "tsc_value_undefined()", ty: T_VALUE }, target: T_VALUE, node: call.expression },
+                { value: list, target: T_VALUE, node: call },
+            ]);
+        }
+        const args = Array.from(call.arguments, (arg) => this.emitExpr(arg));
+        return this.emitSequencedExpr(
+            T_VALUE,
+            [
+                { value: callee, target: T_VALUE, node: call.expression },
+                ...args.map((value, index) => ({ value, target: T_VALUE, node: call.arguments[index]! })),
+            ],
+            ([fn, ...vals]) => {
+                const av = this.freshTemp("_dyn_call_args");
+                const pieces = [`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, vals.length)})`];
+                for (const value of vals) {
+                    pieces.push(`tsc_array_push_value(${av}, ${value})`);
+                }
+                pieces.push(`tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}))`);
+                return `({ ${pieces.join("; ")}; })`;
+            },
+        );
     }
 
     private signatureHasRestParameter(params: readonly ts.Symbol[]): boolean {
