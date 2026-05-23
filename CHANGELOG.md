@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- `process.stdin.fd` and `process.stdin.isTTY` now expose bounded readable-stream metadata alongside the existing stdout/stderr stream subset. Test: `process_stdin_metadata`.
 - `process.stdout.fd`, `process.stderr.fd`, `process.stdout.isTTY`, and `process.stderr.isTTY` now expose bounded writable-stream metadata for the existing stdio subset. Test: `process_stdio_metadata`.
 - `process.stdout.write(...)` and `process.stderr.write(...)` now accept optional encoding and zero-argument callback arguments in the existing synchronous stdio subset, evaluating encoding arguments before writing and invoking callbacks after the write. Test: `process_stdio_write_callback`.
 - Typed `Array.prototype.find()` and `findLast()` now return boxed `undefined` when no element matches for element types that can flow through `tsc_value_t`, and inferred numeric/boolean nullish locals keep boxed storage so assigned misses preserve `undefined` instead of collapsing to `NaN` or `false`. Tests: `array_hof`, `array_find_last`.
