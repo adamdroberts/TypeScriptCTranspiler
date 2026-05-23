@@ -467,8 +467,14 @@ class Emitter {
                 if (ts.isFunctionDeclaration(inner)) continue;
                 if (ts.isClassDeclaration(inner)) {
                     this.emitClassStaticInitializers(initBuf, inner);
-                    this.emitClassMemberDecorators(initBuf, inner);
-                    this.emitClassDecorators(initBuf, inner);
+                    const metadata = this.classHasDecorators(inner)
+                        ? this.freshTemp("_decorator_metadata")
+                        : null;
+                    if (metadata) {
+                        initBuf.line(`tsc_object_t* ${metadata} = tsc_object_new();`);
+                    }
+                    this.emitClassMemberDecorators(initBuf, inner, metadata);
+                    this.emitClassDecorators(initBuf, inner, metadata);
                     continue;
                 }
                 if (ts.isInterfaceDeclaration(inner)) continue;
@@ -5194,7 +5200,20 @@ class Emitter {
         }
     }
 
-    private emitClassDecorators(buf: CBuf, cd: ts.ClassDeclaration): void {
+    private classHasDecorators(cd: ts.ClassDeclaration): boolean {
+        if (ts.canHaveDecorators(cd) && (ts.getDecorators(cd) ?? []).length > 0) {
+            return true;
+        }
+        return cd.members.some((member) =>
+            ts.canHaveDecorators(member) && (ts.getDecorators(member) ?? []).length > 0,
+        );
+    }
+
+    private emitClassDecorators(
+        buf: CBuf,
+        cd: ts.ClassDeclaration,
+        metadata: string | null,
+    ): void {
         if (!cd.name || !ts.canHaveDecorators(cd)) return;
         const decorators = ts.getDecorators(cd) ?? [];
         if (decorators.length === 0) return;
@@ -5203,7 +5222,7 @@ class Emitter {
                 decorator.expression,
                 [
                     { c: "tsc_value_undefined()", ty: T_VALUE },
-                    this.classDecoratorContext(cd),
+                    this.classDecoratorContext(cd, metadata),
                 ],
                 "class decorator",
             );
@@ -5211,7 +5230,11 @@ class Emitter {
         }
     }
 
-    private emitClassMemberDecorators(buf: CBuf, cd: ts.ClassDeclaration): void {
+    private emitClassMemberDecorators(
+        buf: CBuf,
+        cd: ts.ClassDeclaration,
+        metadata: string | null,
+    ): void {
         if (!cd.name) return;
         for (const member of cd.members) {
             if (
@@ -5242,7 +5265,7 @@ class Emitter {
                     decorator.expression,
                     [
                         { c: "tsc_value_undefined()", ty: T_VALUE },
-                        this.classMemberDecoratorContext(member, kind, memberName),
+                        this.classMemberDecoratorContext(member, kind, memberName, metadata),
                     ],
                     label,
                 );
@@ -5251,14 +5274,18 @@ class Emitter {
         }
     }
 
-    private classDecoratorContext(cd: ts.ClassDeclaration): EmitResult {
+    private classDecoratorContext(cd: ts.ClassDeclaration, metadata: string | null): EmitResult {
         const name = cd.name?.text ?? "";
         const obj = this.freshTemp("_class_decorator_ctx");
+        const metadataValue = metadata
+            ? `tsc_value_object(${metadata})`
+            : "tsc_value_object(tsc_object_new())";
         return {
             c:
                 `({ tsc_object_t* ${obj} = tsc_object_new(); ` +
                 `tsc_object_set(${obj}, tsc_str_from_lit("kind", 4), tsc_value_string(tsc_str_from_lit("class", 5))); ` +
                 `tsc_object_set(${obj}, tsc_str_from_lit("name", 4), tsc_value_string(tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))); ` +
+                `tsc_object_set(${obj}, tsc_str_from_lit("metadata", 8), ${metadataValue}); ` +
                 `tsc_value_object(${obj}); })`,
             ty: T_VALUE,
         };
@@ -5268,9 +5295,13 @@ class Emitter {
         member: ts.ClassElement,
         kind: "method" | "field" | "getter" | "setter",
         name: string,
+        metadata: string | null,
     ): EmitResult {
         const obj = this.freshTemp("_member_decorator_ctx");
         const isStaticMember = isStatic(member) ? "true" : "false";
+        const metadataValue = metadata
+            ? `tsc_value_object(${metadata})`
+            : "tsc_value_object(tsc_object_new())";
         return {
             c:
                 `({ tsc_object_t* ${obj} = tsc_object_new(); ` +
@@ -5278,6 +5309,7 @@ class Emitter {
                 `tsc_object_set(${obj}, tsc_str_from_lit("name", 4), tsc_value_string(tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))); ` +
                 `tsc_object_set(${obj}, tsc_str_from_lit("static", 6), tsc_value_bool(${isStaticMember})); ` +
                 `tsc_object_set(${obj}, tsc_str_from_lit("private", 7), tsc_value_bool(false)); ` +
+                `tsc_object_set(${obj}, tsc_str_from_lit("metadata", 8), ${metadataValue}); ` +
                 `tsc_value_object(${obj}); })`,
             ty: T_VALUE,
         };
