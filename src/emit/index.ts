@@ -10346,6 +10346,18 @@ class Emitter {
         right: EmitResult,
         negate: boolean,
     ): EmitResult {
+        if (left.ty.kind === "value" && (this.isUndefinedExpression(bin.right) || bin.right.kind === ts.SyntaxKind.NullKeyword)) {
+            const literal = this.isUndefinedExpression(bin.right) ? "tsc_value_undefined()" : "tsc_value_null()";
+            const value = this.coerce(left, T_VALUE, bin.left);
+            const c = `tsc_value_eq(${value}, ${literal})`;
+            return { c: negate ? `(!${c})` : c, ty: T_BOOLEAN };
+        }
+        if (right.ty.kind === "value" && (this.isUndefinedExpression(bin.left) || bin.left.kind === ts.SyntaxKind.NullKeyword)) {
+            const literal = this.isUndefinedExpression(bin.left) ? "tsc_value_undefined()" : "tsc_value_null()";
+            const value = this.coerce(right, T_VALUE, bin.right);
+            const c = `tsc_value_eq(${literal}, ${value})`;
+            return { c: negate ? `(!${c})` : c, ty: T_BOOLEAN };
+        }
         if (left.ty.kind === "value" || right.ty.kind === "value") {
             const r = this.emitDynamicBinary("tsc_value_eq", T_BOOLEAN, bin, left, right);
             return { c: negate ? `(!${r.c})` : r.c, ty: T_BOOLEAN };
@@ -25923,7 +25935,9 @@ class Emitter {
                 case "class":
                     return `tsc_value_class(${r.c})`;
                 case "void":
-                    return `tsc_value_null()`;
+                    if (node.kind === ts.SyntaxKind.NullKeyword) return `tsc_value_null()`;
+                    if (ts.isExpression(node) && this.isUndefinedLikeExpression(node)) return `tsc_value_undefined()`;
+                    return `tsc_value_undefined()`;
                 case "value":
                     return r.c;
                 default:
