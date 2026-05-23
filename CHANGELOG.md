@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Fixed
+- Dynamic `Reflect.get` and `Reflect.set` receiver arguments now flow through Proxy `get`/`set` traps and into receiver-bound accessor dispatch. Test: `reflect_proxy_receiver`.
 - Nested constructable Proxy values now preserve newable identity through direct `new`, property-access constructors, parenthesized constructors, spread constructor arguments, and revoked inner proxy construct errors. Test: `proxy_newable_identity`.
 - Erased generic class decorator replacement constructors now apply when a decorated generic class is assigned to inferred constructor aliases, chained through another alias, or used via static `Reflect.construct(...)` through those aliases. Test: `generic_class_decorator_alias_replacement`.
 - Standard class decorator replacement constructors now apply when a decorated class is assigned to an inferred constructor alias and used through direct `new`, parenthesized `new`, or static `Reflect.construct(...)`. Test: `class_decorator_alias_replacement`.
