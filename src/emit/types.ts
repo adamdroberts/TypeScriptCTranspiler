@@ -427,6 +427,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         if (sym?.getName() === "ProxyHandler") return T_VALUE;
         if (sym?.getName() === "ClassDecoratorContext") return T_VALUE;
         if (sym?.getName() === "ClassMethodDecoratorContext") return T_VALUE;
+        if (sym?.getName() === "ClassFieldDecoratorContext") return T_VALUE;
     }
 
     // User-defined class or interface?

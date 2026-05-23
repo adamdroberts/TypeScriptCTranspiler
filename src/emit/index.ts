@@ -5156,21 +5156,29 @@ class Emitter {
     private emitClassMemberDecorators(buf: CBuf, cd: ts.ClassDeclaration): void {
         if (!cd.name) return;
         for (const member of cd.members) {
-            if (!ts.isMethodDeclaration(member) || !ts.canHaveDecorators(member)) continue;
+            if (
+                !ts.isMethodDeclaration(member) &&
+                !ts.isPropertyDeclaration(member)
+            ) {
+                continue;
+            }
+            if (!ts.canHaveDecorators(member)) continue;
             const decorators = ts.getDecorators(member) ?? [];
             if (decorators.length === 0) continue;
             const memberName = this.staticPropertyName(member.name);
             if (!memberName) {
-                unsupported(member.name, "decorated method names must resolve to a string or number literal");
+                unsupported(member.name, "decorated member names must resolve to a string or number literal");
             }
+            const kind = ts.isMethodDeclaration(member) ? "method" : "field";
+            const label = `${kind} decorator`;
             for (const decorator of decorators) {
                 const call = this.emitDecoratorFunctionCall(
                     decorator.expression,
                     [
                         { c: "tsc_value_undefined()", ty: T_VALUE },
-                        this.classMemberDecoratorContext(member, "method", memberName),
+                        this.classMemberDecoratorContext(member, kind, memberName),
                     ],
-                    "method decorator",
+                    label,
                 );
                 buf.line(`(void)(${call});`);
             }
@@ -5192,7 +5200,7 @@ class Emitter {
 
     private classMemberDecoratorContext(
         member: ts.ClassElement,
-        kind: "method",
+        kind: "method" | "field",
         name: string,
     ): EmitResult {
         const obj = this.freshTemp("_member_decorator_ctx");
