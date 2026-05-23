@@ -1361,6 +1361,19 @@ class Emitter {
             return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
                 this.isSideEffectFreePrimitiveCallableConstructorArgs(call.arguments, seenConsts);
         }
+        if (
+            name === "encodeURI" ||
+            name === "encodeURIComponent" ||
+            name === "decodeURI" ||
+            name === "decodeURIComponent"
+        ) {
+            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+                call.arguments.length >= 1 &&
+                this.isSideEffectFreeUriStringCoercion(call.arguments[0]!, seenConsts) &&
+                Array.from(call.arguments).slice(1).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+        }
         return false;
     }
 
@@ -1415,6 +1428,18 @@ class Emitter {
             Array.from(args).slice(1).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
             );
+    }
+
+    private isSideEffectFreeUriStringCoercion(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
+            return /^[\x20-\x7e]*$/.test(unwrapped.text) && !unwrapped.text.includes("%");
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeUriStringCoercion(init, seenConsts);
     }
 
     private isSideEffectFreePrimitiveNumberCoercion(

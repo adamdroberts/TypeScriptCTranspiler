@@ -58,6 +58,11 @@ unused_number_constructor_call
 unused_boolean_constructor_call
 unused_date_parse_call
 unused_date_utc_call
+unused_uri_source
+unused_encode_uri_call
+unused_encode_uri_component_call
+unused_decode_uri_call
+unused_decode_uri_component_call
 unused_string_char_at_call
 unused_string_index_of_call
 unused_string_slice_call
@@ -82,6 +87,10 @@ dead_number_parse_float
 dead_string_constructor
 dead_boolean_constructor
 2020-01-02T03:04:05Z
+dead_uri_source
+dead encode uri
+dead-decode-uri
+dead-decode-uri-component
 dead_string_method_source
 dead_string_char_at
 dead_string_index_of
@@ -192,6 +201,10 @@ top_level_dead_number_parse_float
 top_level_dead_string_constructor
 top_level_dead_boolean_constructor
 2020-02-03T04:05:06Z
+top level dead encode uri
+top-level-dead-encode-uri-component
+top-level-dead-decode-uri
+top-level-dead-decode-uri-component
 top_level_dead_string_char_at
 top_level_dead_string_includes
 top_level_dead_string_slice
@@ -258,6 +271,10 @@ local_dead_number_parse_float
 local_dead_string_constructor
 local_dead_boolean_constructor
 2020-03-04T05:06:07Z
+local dead encode uri
+local-dead-encode-uri-component
+local-dead-decode-uri
+local-dead-decode-uri-component
 local_dead_string_char_at
 local_dead_string_starts_with
 local_dead_string_substring
