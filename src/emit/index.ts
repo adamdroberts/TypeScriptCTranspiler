@@ -21457,6 +21457,9 @@ class Emitter {
     private staticComputedPropertyExpression(expr: ts.Expression): string | null {
         let cur = expr;
         while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isAsExpression(cur) || ts.isTypeAssertionExpression(cur) || ts.isSatisfiesExpression(cur)) {
+            return this.staticComputedPropertyExpression(cur.expression);
+        }
         if (ts.isStringLiteralLike(cur) || ts.isNumericLiteral(cur)) {
             return cur.text;
         }
@@ -21478,6 +21481,9 @@ class Emitter {
     private staticComputedStringExpression(expr: ts.Expression): string | null {
         let cur = expr;
         while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isAsExpression(cur) || ts.isTypeAssertionExpression(cur) || ts.isSatisfiesExpression(cur)) {
+            return this.staticComputedStringExpression(cur.expression);
+        }
         if (ts.isStringLiteralLike(cur)) return cur.text;
         if (
             ts.isBinaryExpression(cur) &&
