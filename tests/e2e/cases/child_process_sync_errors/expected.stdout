@@ -1,0 +1,5 @@
+exec: child_process.execFileSync command failed
+file: child_process.execFileSync command failed
+maxBuffer: child_process.execFileSync maxBuffer exceeded
+timeout: child_process.execFileSync command timed out
+valid: ok

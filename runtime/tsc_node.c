@@ -118,7 +118,7 @@ tsc_str_t* tsc_hash_digest(tsc_hash_t* h, const tsc_str_t* encoding) {
 }
 
 tsc_buffer_t* tsc_child_process_exec_sync(const tsc_str_t* command, const tsc_str_t* cwd, const tsc_str_t* input, const tsc_array_t* env, const tsc_str_t* shell, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal) {
-    if (!command) tsc_panic("child_process.execSync command required");
+    if (!command) tsc_throw_str(tsc_str_from_cstr("child_process.execSync command required"));
     tsc_array_t* args = tsc_array_new(sizeof(tsc_str_t*), 2);
     tsc_str_t* flag = tsc_str_from_lit("-c", 2);
     tsc_str_t* cmd = (tsc_str_t*)command;
@@ -164,7 +164,7 @@ size_t child_max_buffer_limit(double max_buffer) {
 }
 
 tsc_buffer_t* tsc_child_process_exec_file_sync(const tsc_str_t* file, const tsc_array_t* args, const tsc_str_t* cwd, const tsc_str_t* input, const tsc_array_t* env, const tsc_str_t* shell, const tsc_str_t* argv0, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal) {
-    if (!file) tsc_panic("child_process.execFileSync file required");
+    if (!file) tsc_throw_str(tsc_str_from_cstr("child_process.execFileSync file required"));
     const tsc_str_t* actual_file = file;
     const tsc_array_t* actual_args = args;
     if (shell) {
@@ -336,17 +336,17 @@ tsc_buffer_t* tsc_child_process_exec_file_sync(const tsc_str_t* file, const tsc_
     if (timed_out) {
         free(data);
         free(stderr_data);
-        tsc_panic("child_process.execFileSync command timed out");
+        tsc_throw_str(tsc_str_from_cstr("child_process.execFileSync command timed out"));
     }
     if (max_buffer_exceeded) {
         free(data);
         free(stderr_data);
-        tsc_panic("child_process.execFileSync maxBuffer exceeded");
+        tsc_throw_str(tsc_str_from_cstr("child_process.execFileSync maxBuffer exceeded"));
     }
     if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
         free(data);
         free(stderr_data);
-        tsc_panic("child_process.execFileSync command failed");
+        tsc_throw_str(tsc_str_from_cstr("child_process.execFileSync command failed"));
     }
 
     tsc_buffer_t* out = tsc_buffer_alloc((double)len, 0);
