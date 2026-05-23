@@ -9,6 +9,8 @@ const unused_template = `dead-${1 + 2}`;
 const unused_conditional = true ? "dead" : "live";
 let unused_let = 42;
 let unused_empty: number;
+"top_level_dead_expr";
+(1 + 2) * 3;
 
 namespace DceNamespace {
     const unused_namespace_value = { label: "dead", count: 4 };
@@ -19,6 +21,7 @@ function usedLocal(value: number): number {
     const unused_local_const = { label: "dead", count: 9 };
     let unused_local_let = `dead-${1 + 2}`;
     let unused_local_empty: string;
+    "local_dead_expr";
     const kept_local = value + 3;
     return kept_local;
     const unreachable_local = "dead";

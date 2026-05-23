@@ -9,9 +9,11 @@ unused_conditional
 unused_namespace_value
 unused_let
 unused_empty
+top_level_dead_expr
 unused_local_const
 unused_local_let
 unused_local_empty
+local_dead_expr
 unreachable_local
 branch_only_dead
 branch_after_exit

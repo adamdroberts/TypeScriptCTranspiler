@@ -6914,6 +6914,7 @@ class Emitter {
             this.emitYieldStmt(buf, es.expression);
             return;
         }
+        if (this.isSideEffectFreeTopLevelConstInitializer(es.expression)) return;
         const r = this.emitExpr(es.expression);
         buf.line(r.c + ";");
     }
