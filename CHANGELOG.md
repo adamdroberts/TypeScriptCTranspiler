@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Fixed
+- `fs.writeFileSync(...)`, `fs.appendFileSync(...)`, and their immediate `fs.promises` counterparts now treat explicit `undefined` options as defaults and evaluate ignored extra arguments. Test: `fs_write_append_ignored_arguments`.
 - `fs.readFileSync(...)` and immediate `fs.promises.readFile(...)` now treat explicit `undefined` options as defaults and evaluate ignored extra arguments. Test: `fs_read_file_ignored_arguments`.
 - `fs.readdirSync(...)` and immediate `fs.promises.readdir(...)` now treat explicit `undefined` options as defaults and evaluate ignored extra arguments. Test: `fs_readdir_ignored_arguments`.
 - `fs.realpathSync(...)`, `fs.readlinkSync(...)`, `fs.mkdtempSync(...)`, and their immediate `fs.promises` counterparts now treat explicit `undefined` options as defaults and evaluate ignored extra arguments. Test: `fs_link_mkdtemp_ignored_arguments`.
