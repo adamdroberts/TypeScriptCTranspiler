@@ -48,6 +48,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `Number.prototype.toFixed`, `toExponential`, and `toPrecision` validation failures now throw catchable runtime exceptions for typed and dynamic receivers instead of aborting the process. Test: `number_format_errors`.
 - `Number.prototype.toString(radix)` radix and bounded magnitude validation failures now throw catchable runtime exceptions for typed and dynamic receivers instead of aborting the process. Test: `number_to_string_errors`.
 - `Array.prototype.with(...)` out-of-range failures now throw catchable runtime exceptions for typed and dynamic receivers instead of aborting the process. Test: `array_with_errors`.
+- `String.fromCodePoint(...)` invalid-code-point failures now throw catchable runtime exceptions instead of aborting the process. Test: `string_from_code_point_errors`.
 - Unknown-source `eval` / `Function` diagnostics now describe the available AOT manifest and gated embedded-Node paths instead of implying an impossible runtime-code blocker.
 - Documentation and agent indexes now describe native addons, runtime code compilation, and dynamic `require(...)` as AOT closure requirements rather than impossible blockers; README and LLM indexes no longer list Proxy or load-on-demand require execution as remaining targets.
 - Inferred locals whose TypeScript type is erased to `tsc_value_t` now use boxed storage even when their initializer emits a narrower primitive, fixing nullish coalescing over `Map.get(...)` results and optional numeric field reads. Dynamic and typed string Reflect helpers again treat boxed strings as valid string-object targets. Tests: `nullish`, `wordcount`, `weak_ref`, `collection_object_methods`, `string_object_enumeration`, `dynamic_string_object_enumeration`.
@@ -672,7 +673,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Typed interface/class `Reflect.ownKeys(...)` support using compile-time field-list expansion.
 - Typed interface/class `Object.getOwnPropertyNames(...)` support using the same compile-time field lists as typed object key enumeration.
 - Typed `Math.SQRT1_2` support, with direct `Math.trunc()` / `Math.sign()` e2e coverage.
-- Typed `String.fromCodePoint(...)` support for constructing UTF-8 strings from Unicode scalar values.
+- Typed `String.fromCodePoint(...)` support for constructing UTF-8 strings from Unicode scalar values, with catchable invalid-code-point validation.
 - Typed `Math.imul()`, `Math.clz32()`, and `Math.fround()` support with JS-style int32/uint32 coercion helpers in the runtime.
 - Additional typed `Math` methods backed by libm: `cbrt`, variadic `hypot(...)`, `log1p`, `log2`, `log10`, `expm1`, inverse-trig, and hyperbolic/inverse-hyperbolic functions.
 - Typed `Number` static constants (`EPSILON`, safe integer bounds, infinities, `NaN`, min/max values).

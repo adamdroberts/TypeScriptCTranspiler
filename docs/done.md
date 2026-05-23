@@ -212,7 +212,7 @@ All methods on the `String` interface map to `tsc_str_*` runtime calls:
 - `.at(i?, ...ignored)` → `tsc_str_at`, including negative-index lookup after evaluating ignored extra arguments. Tests: `string_at`, `string_char_code_at`
 - `.codePointAt(i?, ...ignored)` → `tsc_str_code_point_at` after evaluating ignored extra arguments. Tests: `string_codepoints`, `string_char_code_at`
 - `String.fromCharCode(...)` → `tsc_str_from_char_code_n`. Test: `string_codepoints`
-- `String.fromCodePoint(...)` → `tsc_str_from_code_point_n`. Test: `string_from_code_point`
+- `String.fromCodePoint(...)` → `tsc_str_from_code_point_n`, with catchable invalid-code-point validation. Tests: `string_from_code_point`, `string_from_code_point_errors`
 - `String.raw` tagged templates concatenate raw segments with stringified substitutions. Test: `string_raw`
 - `.indexOf(needle, position?, ...ignored)` / `.lastIndexOf(needle, position?, ...ignored)` → `tsc_str_index_of`, `tsc_str_last_index_of` after evaluating ignored extra arguments. Tests: `string_last_index_of`, `string_search_positions`
 - `.localeCompare(other, ...ignored)` → `tsc_str_locale_compare` using deterministic runtime string ordering after evaluating ignored extra arguments. Test: `string_locale_compare`
@@ -1308,6 +1308,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `string_concat` | String.concat |
 | `string_codepoints` | String.fromCharCode + codePointAt |
 | `string_from_code_point` | String.fromCodePoint Unicode scalar construction |
+| `string_from_code_point_errors` | String.fromCodePoint invalid-code-point failures are catchable |
 | `string_raw` | String.raw tagged templates preserving raw escape text |
 | `string_for_of` | Unicode string `for...of` iteration |
 | `string_last_index_of` | String.lastIndexOf |
