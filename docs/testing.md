@@ -245,6 +245,7 @@ e2e: proxy_array_seal_freeze_forward … OK
 e2e: proxy_array_extensibility_trap_invariants … OK
 e2e: proxy_array_ownkeys_invariants … OK
 e2e: proxy_array_descriptor_invariants … OK
+e2e: proxy_array_define_invariants … OK
 e2e: proxy_array_object_helpers … OK
 e2e: proxy_array_is_array … OK
 e2e: proxy_array_to_string_tag … OK
@@ -276,7 +277,7 @@ e2e: url_parse … OK
 e2e: void_operator … OK
 e2e: wordcount … OK
 
-813 passed, 0 failed
+814 passed, 0 failed
 ```
 
 Non-zero exit if any case fails.
