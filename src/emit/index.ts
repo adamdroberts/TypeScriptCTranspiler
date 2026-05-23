@@ -8344,7 +8344,9 @@ class Emitter {
         if (gen) {
             if (r.expression) {
                 const expr = this.emitExpr(r.expression);
-                buf.line(`(void)(${expr.c});`);
+                buf.line(`${gen.arrayVar}->iter_return = ${this.coerce(expr, T_VALUE, r.expression)};`);
+                buf.line(`${gen.arrayVar}->iter_has_return = true;`);
+                buf.line(`${gen.arrayVar}->iter_return_consumed = false;`);
             }
             buf.line(`return ${gen.arrayVar};`);
             return;
@@ -17923,7 +17925,10 @@ class Emitter {
                         `tsc_object_set(${out}, tsc_str_from_lit("value", 5), ${boxed}); ` +
                         `} else { ` +
                         `tsc_object_set(${out}, tsc_str_from_lit("done", 4), tsc_value_bool(true)); ` +
-                        `tsc_object_set(${out}, tsc_str_from_lit("value", 5), tsc_value_undefined()); ` +
+                        `if (${av}->iter_has_return && !${av}->iter_return_consumed) { ` +
+                        `tsc_object_set(${out}, tsc_str_from_lit("value", 5), ${av}->iter_return); ` +
+                        `${av}->iter_return_consumed = true; ` +
+                        `} else { tsc_object_set(${out}, tsc_str_from_lit("value", 5), tsc_value_undefined()); } ` +
                         `} tsc_value_object(${out}); })`,
                 );
             }
@@ -17937,6 +17942,7 @@ class Emitter {
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ${av}->iter_pos = ${av}->len; ` +
+                        `${av}->iter_return_consumed = true; ` +
                         `tsc_object_t* ${out} = tsc_object_new(); ` +
                         `tsc_object_set(${out}, tsc_str_from_lit("done", 4), tsc_value_bool(true)); ` +
                         `tsc_object_set(${out}, tsc_str_from_lit("value", 5), ${value}); ` +

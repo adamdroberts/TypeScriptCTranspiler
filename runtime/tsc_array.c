@@ -22,6 +22,9 @@ tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap) {
     a->frozen = false;
     a->prototype = tsc_array_default_prototype();
     a->iter_pos = 0;
+    a->iter_has_return = false;
+    a->iter_return_consumed = false;
+    a->iter_return = tsc_value_undefined();
     a->data = initial_cap ? TSC_GC_MALLOC(initial_cap * elem_size) : NULL;
     return a;
 }
@@ -36,6 +39,9 @@ tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap) {
     a->frozen = false;
     a->prototype = tsc_array_default_prototype();
     a->iter_pos = 0;
+    a->iter_has_return = false;
+    a->iter_return_consumed = false;
+    a->iter_return = tsc_value_undefined();
     a->data = initial_cap ? TSC_GC_MALLOC_ATOMIC(initial_cap * elem_size) : NULL;
     return a;
 }

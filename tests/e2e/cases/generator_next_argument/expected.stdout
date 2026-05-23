@@ -1,2 +1,2 @@
-steps: false 1 false 2 true undefined
+steps: false 1 false 2 true done
 events: body|first|second|third

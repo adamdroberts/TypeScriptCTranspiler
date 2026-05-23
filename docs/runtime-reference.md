@@ -106,6 +106,8 @@ typedef struct tsc_array {
     size_t len, cap, es;  // element size in bytes
     bool extensible, sealed, frozen;  // dynamic Object/Reflect state
     size_t iter_pos;  // materialized generator .next() cursor
+    bool iter_has_return, iter_return_consumed;
+    tsc_value_t iter_return;  // explicit generator return value, exposed once
     void* data;
 } tsc_array_t;
 ```

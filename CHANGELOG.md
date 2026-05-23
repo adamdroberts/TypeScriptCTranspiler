@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Materialized synchronous generators now expose explicit `return value` results once through the first completed `.next()`. Test: `generator_return_value`.
 - Generated-C DCE now also omits provably unreferenced non-exported lifted top-level arrow/function-expression constants. Test: `generated_c_dce_lifted_arrow`.
 - The compiler driver now honors `TSC2C_CC` / `TSC2C_CXX`, and GitHub Actions runs Linux gcc and clang lanes for build, no-GC e2e, and benchmark smoke.
 - Non-escaping local typed object literals now use stack storage when they only flow through same-block property reads/writes. Test: `object_literal_stack_alloc`.

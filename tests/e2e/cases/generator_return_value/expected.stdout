@@ -1,0 +1,5 @@
+next: false alpha
+done: true omega
+after: true undefined
+return first: alpha
+return: true forced true undefined

@@ -427,6 +427,9 @@ typedef struct tsc_array {
     bool frozen;
     tsc_value_t prototype;
     size_t iter_pos;
+    bool iter_has_return;
+    bool iter_return_consumed;
+    tsc_value_t iter_return;
     void* data;
 } tsc_array_t;
 
