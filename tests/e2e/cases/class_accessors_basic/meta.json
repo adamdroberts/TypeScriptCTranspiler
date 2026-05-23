@@ -1,0 +1,3 @@
+{
+  "description": "typed class getter and setter accessors lower to C calls"
+}

@@ -4889,6 +4889,25 @@ class Emitter {
                 this.protos.line(
                     `static inline ${ret.c} ${name}_${methodName}(${params.length ? params.join(", ") : "void"});`,
                 );
+            } else if (ts.isGetAccessorDeclaration(m)) {
+                const accessorName = this.classAccessorCName(m.name, "get");
+                if (!accessorName) unsupported(m, "computed accessor names");
+                const sig = this.checker.getSignatureFromDeclaration(m);
+                if (!sig) unsupported(m, "could not resolve getter signature");
+                const ret = mapTsType(m, sig.getReturnType(), this.checker);
+                const params = isStatic(m) ? [] : [`${name}_t* self`];
+                this.protos.line(
+                    `static inline ${ret.c} ${name}_${accessorName}(${params.length ? params.join(", ") : "void"});`,
+                );
+            } else if (ts.isSetAccessorDeclaration(m)) {
+                const accessorName = this.classAccessorCName(m.name, "set");
+                if (!accessorName) unsupported(m, "computed accessor names");
+                const params = isStatic(m)
+                    ? this.collectParams(m.parameters)
+                    : [`${name}_t* self`, ...this.collectParams(m.parameters)];
+                this.protos.line(
+                    `static inline void ${name}_${accessorName}(${params.length ? params.join(", ") : "void"});`,
+                );
             }
         }
     }
@@ -5105,6 +5124,45 @@ class Emitter {
                     if (isAsync) this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
                 } finally {
                     if (isAsync) this.asyncFunctionStack.pop();
+                    this.returnStack.pop();
+                    this.currentClass = null;
+                }
+                this.defs.close();
+                this.defs.line();
+            } else if (ts.isGetAccessorDeclaration(m) && m.body) {
+                const accessorName = this.classAccessorCName(m.name, "get");
+                if (!accessorName) unsupported(m, "computed accessor names");
+                const sig = this.checker.getSignatureFromDeclaration(m);
+                if (!sig) unsupported(m, "could not resolve getter signature");
+                const ret = mapTsType(m, sig.getReturnType(), this.checker);
+                const params = isStatic(m) ? [] : [`${name}_t* self`];
+                this.defs.open(
+                    `static inline ${ret.c} ${name}_${accessorName}(${params.length ? params.join(", ") : "void"})`,
+                );
+                if (!isStatic(m)) this.currentClass = name;
+                this.returnStack.push(ret);
+                try {
+                    for (const s of m.body.statements) this.emitStmt(this.defs, s);
+                } finally {
+                    this.returnStack.pop();
+                    this.currentClass = null;
+                }
+                this.defs.close();
+                this.defs.line();
+            } else if (ts.isSetAccessorDeclaration(m) && m.body) {
+                const accessorName = this.classAccessorCName(m.name, "set");
+                if (!accessorName) unsupported(m, "computed accessor names");
+                const params = isStatic(m)
+                    ? this.collectParams(m.parameters)
+                    : [`${name}_t* self`, ...this.collectParams(m.parameters)];
+                this.defs.open(
+                    `static inline void ${name}_${accessorName}(${params.length ? params.join(", ") : "void"})`,
+                );
+                if (!isStatic(m)) this.currentClass = name;
+                this.returnStack.push(T_VOID);
+                try {
+                    for (const s of m.body.statements) this.emitStmt(this.defs, s);
+                } finally {
                     this.returnStack.pop();
                     this.currentClass = null;
                 }
@@ -8536,6 +8594,111 @@ class Emitter {
         return null;
     }
 
+    private staticClassReceiver(expr: ts.Expression): ts.ClassDeclaration | null {
+        if (!ts.isIdentifier(expr)) return null;
+        const sym = this.checker.getSymbolAtLocation(expr);
+        return sym?.getDeclarations()?.find(ts.isClassDeclaration) ?? null;
+    }
+
+    private classAccessorForPropertyAccess(
+        pa: ts.PropertyAccessExpression,
+        kind: "get",
+    ): { owner: string; decl: ts.GetAccessorDeclaration } | null;
+    private classAccessorForPropertyAccess(
+        pa: ts.PropertyAccessExpression,
+        kind: "set",
+    ): { owner: string; decl: ts.SetAccessorDeclaration } | null;
+    private classAccessorForPropertyAccess(
+        pa: ts.PropertyAccessExpression,
+        kind: "get" | "set",
+    ): { owner: string; decl: ts.GetAccessorDeclaration | ts.SetAccessorDeclaration } | null {
+        const sym = this.checker.getSymbolAtLocation(pa.name);
+        let decl: ts.GetAccessorDeclaration | ts.SetAccessorDeclaration | undefined;
+        for (const candidate of sym?.declarations ?? []) {
+            if (kind === "get" && ts.isGetAccessorDeclaration(candidate)) {
+                decl = candidate;
+                break;
+            }
+            if (kind === "set" && ts.isSetAccessorDeclaration(candidate)) {
+                decl = candidate;
+                break;
+            }
+        }
+        if (!decl || !decl.parent || !ts.isClassDeclaration(decl.parent) || !decl.parent.name) {
+            return null;
+        }
+        return { owner: decl.parent.name.text, decl };
+    }
+
+    private emitClassAccessorGet(
+        pa: ts.PropertyAccessExpression,
+        accessor: { owner: string; decl: ts.GetAccessorDeclaration },
+        recv: EmitResult | null,
+    ): EmitResult {
+        const name = this.classAccessorCName(accessor.decl.name, "get");
+        if (!name) unsupported(accessor.decl, "computed accessor names");
+        const sig = this.checker.getSignatureFromDeclaration(accessor.decl);
+        if (!sig) unsupported(accessor.decl, "could not resolve getter signature");
+        const ret = mapTsType(accessor.decl, sig.getReturnType(), this.checker);
+        const callee = `${accessor.owner}_${name}`;
+        if (isStatic(accessor.decl)) {
+            return this.emitSequencedCall(callee, ret, []);
+        }
+        if (!recv || recv.ty.kind !== "class" || !recv.ty.className) {
+            unsupported(pa.expression, "class getter receiver must be a class instance");
+        }
+        const pass = (tmp: string): string =>
+            accessor.owner === recv.ty.className ? tmp : `((${accessor.owner}_t*)${tmp})`;
+        if (pa.questionDotToken) {
+            return this.emitSequencedExpr(
+                ret,
+                [{ value: recv }],
+                ([obj]) => `${obj} != NULL ? ${callee}(${pass(obj!)}) : ${this.zeroValue(ret)}`,
+            );
+        }
+        return this.emitSequencedCall(callee, ret, [{ value: recv, pass }]);
+    }
+
+    private emitClassAccessorAssignment(
+        bin: ts.BinaryExpression,
+        op: ts.SyntaxKind,
+    ): EmitResult | null {
+        if (op !== ts.SyntaxKind.EqualsToken || !ts.isPropertyAccessExpression(bin.left)) {
+            return null;
+        }
+        const left = bin.left;
+        const accessor = this.classAccessorForPropertyAccess(left, "set");
+        if (!accessor) return null;
+        const param = accessor.decl.parameters[0];
+        if (!param) unsupported(accessor.decl, "setter must have a value parameter");
+        const paramType = this.prepareType(mapType(param, this.checker));
+        const rhs = this.emitExpr(bin.right);
+        const name = this.classAccessorCName(accessor.decl.name, "set");
+        if (!name) unsupported(accessor.decl, "computed accessor names");
+        const callee = `${accessor.owner}_${name}`;
+        if (isStatic(accessor.decl)) {
+            return this.emitSequencedExpr(
+                paramType,
+                [{ value: rhs, target: paramType, node: bin.right }],
+                ([value]) => `({ ${callee}(${value}); ${value}; })`,
+            );
+        }
+        const recv = this.emitExpr(left.expression);
+        if (recv.ty.kind !== "class" || !recv.ty.className) {
+            return null;
+        }
+        const pass = (tmp: string): string =>
+            accessor.owner === recv.ty.className ? tmp : `((${accessor.owner}_t*)${tmp})`;
+        return this.emitSequencedExpr(
+            paramType,
+            [
+                { value: recv, pass },
+                { value: rhs, target: paramType, node: bin.right },
+            ],
+            ([obj, value]) => `({ ${callee}(${obj}, ${value}); ${value}; })`,
+        );
+    }
+
     private emitAssignment(
         bin: ts.BinaryExpression,
         op: ts.SyntaxKind,
@@ -8545,6 +8708,9 @@ class Emitter {
 
         const processEnvAssignment = this.emitProcessEnvAssignment(bin, op);
         if (processEnvAssignment) return processEnvAssignment;
+
+        const classAccessorAssignment = this.emitClassAccessorAssignment(bin, op);
+        if (classAccessorAssignment) return classAccessorAssignment;
 
         const dynamicPropertyAssignment = this.emitDynamicPropertyAssignment(bin, op);
         if (dynamicPropertyAssignment) return dynamicPropertyAssignment;
@@ -20097,6 +20263,11 @@ class Emitter {
         return staticName == null ? null : mangleIdent(staticName);
     }
 
+    private classAccessorCName(name: ts.PropertyName, kind: "get" | "set"): string | null {
+        const memberName = this.classMethodCName(name);
+        return memberName == null ? null : `${kind}_${memberName}`;
+    }
+
     private isSymbolIteratorExpression(expr: ts.Expression): boolean {
         return ts.isPropertyAccessExpression(expr) &&
             ts.isIdentifier(expr.expression) &&
@@ -23406,11 +23577,12 @@ class Emitter {
             // Static class property access: MyClass.staticField.
             // Must come BEFORE emitting pa.expression since a class used as a
             // value (rather than an instance) has no runtime representation.
-            const sym = this.checker.getSymbolAtLocation(pa.expression);
-            const classDecl = sym
-                ?.getDeclarations()
-                ?.find(ts.isClassDeclaration);
+            const classDecl = this.staticClassReceiver(pa.expression);
             if (classDecl && classDecl.name) {
+                const getter = this.classAccessorForPropertyAccess(pa, "get");
+                if (getter && isStatic(getter.decl)) {
+                    return this.emitClassAccessorGet(pa, getter, null);
+                }
                 const field = classDecl.members.find(
                     (m) =>
                         ts.isPropertyDeclaration(m) &&
@@ -23602,11 +23774,14 @@ class Emitter {
                 }
                 return value;
             }
+            const getter = this.classAccessorForPropertyAccess(pa, "get");
+            if (getter && !isStatic(getter.decl)) {
+                return this.emitClassAccessorGet(pa, getter, recv);
+            }
             if (isOpt) {
                 const tv = this.freshTemp("_oc");
-                const zero = ty.kind === "number" ? "0.0" : ty.kind === "boolean" ? "false" : `(${ty.c})0`;
                 return {
-                    c: `({ ${recv.ty.c} ${tv} = ${recv.c}; ${tv} != NULL ? ${tv}->${mangleIdent(pa.name.text)} : ${zero}; })`,
+                    c: `({ ${recv.ty.c} ${tv} = ${recv.c}; ${tv} != NULL ? ${tv}->${mangleIdent(pa.name.text)} : ${this.zeroValue(ty)}; })`,
                     ty,
                 };
             }
