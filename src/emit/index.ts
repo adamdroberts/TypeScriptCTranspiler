@@ -778,6 +778,9 @@ class Emitter {
             return this.isSideEffectFreeStaticCall(expr, seenConsts) ||
                 this.isSideEffectFreeGlobalCall(expr, seenConsts);
         }
+        if (ts.isNewExpression(expr)) {
+            return this.isSideEffectFreeNewExpression(expr, seenConsts);
+        }
         if (ts.isBinaryExpression(expr)) {
             switch (expr.operatorToken.kind) {
                 case ts.SyntaxKind.InKeyword:
@@ -1322,6 +1325,32 @@ class Emitter {
                 this.isSideEffectFreePrimitiveCallableConstructorArgs(call.arguments, seenConsts);
         }
         return false;
+    }
+
+    private isSideEffectFreeNewExpression(
+        expr: ts.NewExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!ts.isIdentifier(expr.expression)) return false;
+        const name = expr.expression.text;
+        const pureErrorConstructors = new Set([
+            "Error",
+            "TypeError",
+            "RangeError",
+            "SyntaxError",
+            "ReferenceError",
+            "EvalError",
+            "URIError",
+        ]);
+        if (!pureErrorConstructors.has(name) || !this.isUnshadowedGlobalIdentifier(expr.expression, name)) {
+            return false;
+        }
+        const args = Array.from(expr.arguments ?? []);
+        if (args.length === 0) return true;
+        return this.isSideEffectFreePrimitiveNumberCoercion(args[0]!, seenConsts) &&
+            args.slice(1).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
     }
 
     private isSideEffectFreeNumericParserArgs(

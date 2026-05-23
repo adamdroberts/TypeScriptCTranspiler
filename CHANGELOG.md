@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused `new Error(...)`-family allocations with primitive message arguments as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes supported non-mutating array literal and pure const array method calls such as `slice(...)`, `at(...)`, search methods, iterator materializers, `toReversed(...)`, and `valueOf(...)` as side-effect-free when their result is unused. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes supported string literal and pure const string method calls such as `charAt(...)`, search/slice methods, case conversion, and trim methods as side-effect-free when their result is unused. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unshadowed callable `String(...)`, `Number(...)`, and `Boolean(...)` coercions with primitive-only inputs as side-effect-free when their result is unused. Test: `generated_c_dce_const`.

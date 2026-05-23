@@ -69,6 +69,8 @@ unused_array_values_method_call
 unused_array_entries_method_call
 unused_array_to_reversed_call
 unused_array_value_of_call
+unused_error_constructor
+unused_type_error_constructor
 dead_global_parse_int
 dead_global_parse_float
 dead_global_is_nan
@@ -89,6 +91,8 @@ dead_array_keys_method
 dead_array_values_method
 dead_array_entries_method
 dead_array_to_reversed
+dead_error_constructor
+dead_type_error_constructor
 unused_object_is
 unused_math_abs_call
 unused_math_max_call
@@ -192,6 +196,8 @@ top_level_dead_array_at
 top_level_dead_array_includes
 top_level_dead_array_keys_method
 top_level_dead_array_to_reversed
+top_level_dead_error_constructor
+top_level_dead_range_error_constructor
 top_level_dead_object_is
 top_level_dead_math_call
 top_level_dead_from_char_code
@@ -254,6 +260,8 @@ local_dead_array_at
 local_dead_array_includes
 local_dead_array_values_method
 local_dead_array_entries_method
+local_dead_error_constructor
+local_dead_syntax_error_constructor
 local_dead_object_is
 local_dead_math_call
 local_dead_from_char_code
