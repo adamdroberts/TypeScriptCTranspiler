@@ -33,6 +33,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Typed function metadata now respects non-configurable `length`/`name` descriptors for compatible `Object.defineProperty` / `Reflect.defineProperty` redefinitions and `Reflect.deleteProperty` refusal; direct `Object.defineProperty` works on typed function operands without `as any`. Test: `function_integrity`.
 - Function-target Proxy `defineProperty` and `deleteProperty` traps now enforce non-configurable `length`/`name` metadata invariants. Test: `function_integrity`.
 - Function-target Proxy `has` traps now enforce non-configurable `length`/`name` metadata invariants. Test: `function_integrity`.
+- Function-target Proxy `ownKeys` coverage now includes extra-key rejection on non-extensible function targets. Test: `function_integrity`.
 - Function-target Proxy `get`, `set`, `getOwnPropertyDescriptor`, and `ownKeys` traps now enforce non-configurable `length`/`name` metadata invariants. Test: `function_integrity`.
 - Function-target Proxy `isExtensible` and `preventExtensions` traps now enforce target extensibility invariants. Test: `proxy_function_prototype_invariants`.
 - Function-target Proxy `getPrototypeOf` and `setPrototypeOf` traps now forward to function targets and enforce non-extensible prototype invariants. Test: `proxy_function_prototype_invariants`.
