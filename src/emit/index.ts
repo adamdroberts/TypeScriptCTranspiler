@@ -10636,6 +10636,9 @@ class Emitter {
             ]);
         }
 
+        const objectPrototypeCall = this.emitObjectPrototypeCall(call);
+        if (objectPrototypeCall) return objectPrototypeCall;
+
         if (ts.isPropertyAccessExpression(call.expression)) {
             return this.emitMethodCall(call, call.expression);
         }
@@ -10900,6 +10903,75 @@ class Emitter {
         }
         const specs = this.callSpecsFromSignature(call, call.arguments, params);
         return this.emitSequencedCall(fnName, retType, specs, fixedArgs);
+    }
+
+    private emitObjectPrototypeCall(call: ts.CallExpression): EmitResult | null {
+        if (!ts.isPropertyAccessExpression(call.expression) || call.expression.name.text !== "call") {
+            return null;
+        }
+        const methodAccess = call.expression.expression;
+        if (!ts.isPropertyAccessExpression(methodAccess)) return null;
+        const method = methodAccess.name.text;
+        if (method !== "hasOwnProperty" && method !== "propertyIsEnumerable") return null;
+        const prototypeAccess = methodAccess.expression;
+        if (
+            !ts.isPropertyAccessExpression(prototypeAccess) ||
+            prototypeAccess.name.text !== "prototype" ||
+            !ts.isIdentifier(prototypeAccess.expression) ||
+            prototypeAccess.expression.text !== "Object"
+        ) {
+            return null;
+        }
+        if (call.arguments.length < 2) {
+            unsupported(call, `Object.prototype.${method}.call expects target and key`);
+        }
+        const targetNode = call.arguments[0]!;
+        const keyNode = call.arguments[1]!;
+        const target = this.emitExpr(targetNode);
+        const targetType = this.checker.getTypeAtLocation(targetNode);
+        const mapped = this.prepareType(mapTsType(targetNode, targetType, this.checker));
+        const ignored = this.ignoredArgumentSpecs(call.arguments, 2);
+        if (mapped.kind === "class") {
+            return this.emitTypedObjectHasOwn(
+                targetNode,
+                target,
+                keyNode,
+                targetType,
+                `Object.prototype.${method}.call`,
+                ignored,
+            );
+        }
+        if (mapped.kind === "array") {
+            const key = this.emitExpr(keyNode);
+            const fn = method === "hasOwnProperty"
+                ? "tsc_array_has_own_key"
+                : "tsc_array_property_is_enumerable_key";
+            return this.emitSequencedCall(fn, T_BOOLEAN, [
+                { value: target, node: targetNode },
+                { value: key, target: T_STRING, node: keyNode },
+                ...ignored,
+            ]);
+        }
+        if (mapped.kind === "buffer") {
+            return this.emitBufferOwnKeyCheck(targetNode, target, keyNode);
+        }
+        if (mapped.kind === "value" || mapped.kind === "string") {
+            const key = this.emitExpr(keyNode);
+            const fn = method === "hasOwnProperty"
+                ? "tsc_value_has_own_prop"
+                : "tsc_value_property_is_enumerable";
+            return this.emitSequencedExpr(T_BOOLEAN, [
+                { value: target, target: T_VALUE, node: targetNode },
+                { value: key, target: T_STRING, node: keyNode },
+                ...ignored,
+            ], ([value, keyC]) => `${fn}(${value}, ${keyC})`);
+        }
+        const key = this.emitExpr(keyNode);
+        return this.emitSequencedExpr(T_BOOLEAN, [
+            { value: target, node: targetNode },
+            { value: key, target: T_STRING, node: keyNode },
+            ...ignored,
+        ], ([value, keyC]) => `({ (void)${value}; (void)${keyC}; false; })`);
     }
 
     private emitDynamicValueCall(call: ts.CallExpression, callee: EmitResult): EmitResult {

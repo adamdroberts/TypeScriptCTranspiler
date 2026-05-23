@@ -1,0 +1,3 @@
+{
+  "description": "Object.prototype hasOwnProperty/propertyIsEnumerable call-form dispatch for typed, dynamic, array, string, buffer, and primitive targets"
+}

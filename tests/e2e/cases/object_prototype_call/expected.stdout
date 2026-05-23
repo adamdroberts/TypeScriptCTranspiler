@@ -1,0 +1,6 @@
+typed: true true false
+dynamic: true true
+array: true false
+string: true false
+buffer: true false
+primitive: false false

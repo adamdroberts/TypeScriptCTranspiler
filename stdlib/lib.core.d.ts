@@ -250,6 +250,7 @@ interface Object {
 }
 type ObjectEntry<T> = [string, T];
 interface ObjectConstructor {
+    readonly prototype: Object;
     assign<T, U>(target: T, source: U): T & U;
     assign<T, U, V>(target: T, source1: U, source2: V): T & U & V;
     assign(target: any, ...sources: any[]): any;
@@ -457,6 +458,7 @@ interface FinalizationRegistryConstructor {
 declare var FinalizationRegistry: FinalizationRegistryConstructor;
 interface Function {
     (...args: any[]): any;
+    call(thisArg: any, ...args: any[]): any;
 }
 interface FunctionConstructor {
     new (...args: string[]): Function;
