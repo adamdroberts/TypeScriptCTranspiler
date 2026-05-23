@@ -244,6 +244,7 @@ class Emitter {
     private closureEnvScopes: Map<ts.Symbol, ClosureEnvBinding>[] = [];
     private catchStringSymbols = new Set<ts.Symbol>();
     private referencedTopLevelFunctions = new WeakSet<ts.FunctionDeclaration>();
+    private referencedTopLevelLiftedArrows = new WeakSet<ts.VariableDeclaration>();
     /**
      * Symbols whose value is provably integer-shape at every read site.
      * Populated per source file by analyzeIntegerSymbols(); consulted by
@@ -332,6 +333,13 @@ class Emitter {
                 ) {
                     this.referencedTopLevelFunctions.add(decl);
                 }
+                if (
+                    decl &&
+                    ts.isVariableDeclaration(decl) &&
+                    this.isPrunableTopLevelLiftedArrow(decl)
+                ) {
+                    this.referencedTopLevelLiftedArrows.add(decl);
+                }
             }
             ts.forEachChild(node, visit);
         };
@@ -382,6 +390,36 @@ class Emitter {
 
     private shouldEmitFunctionDeclaration(fd: ts.FunctionDeclaration): boolean {
         return !this.isPrunableTopLevelFunction(fd) || this.referencedTopLevelFunctions.has(fd);
+    }
+
+    private isPrunableTopLevelLiftedArrow(decl: ts.VariableDeclaration): boolean {
+        if (!decl.initializer) return false;
+        if (!ts.isArrowFunction(decl.initializer) && !ts.isFunctionExpression(decl.initializer)) {
+            return false;
+        }
+        if (!ts.isIdentifier(decl.name)) return false;
+        if (!ts.isVariableStatement(decl.parent.parent)) return false;
+        if (!this.isTopLevelValueDeclaration(decl)) return false;
+        const modifiers = ts.canHaveModifiers(decl.parent.parent)
+            ? ts.getModifiers(decl.parent.parent)
+            : undefined;
+        if (modifiers?.some((m) =>
+            m.kind === ts.SyntaxKind.ExportKeyword ||
+            m.kind === ts.SyntaxKind.DefaultKeyword ||
+            m.kind === ts.SyntaxKind.DeclareKeyword
+        )) {
+            return false;
+        }
+        return true;
+    }
+
+    private shouldEmitLiftedArrow(
+        info: { name: ts.Identifier; fn: ts.ArrowFunction | ts.FunctionExpression },
+    ): boolean {
+        const decl = ts.isVariableDeclaration(info.name.parent) ? info.name.parent : null;
+        return !decl ||
+            !this.isPrunableTopLevelLiftedArrow(decl) ||
+            this.referencedTopLevelLiftedArrows.has(decl);
     }
 
     run(): EmittedProgram {
@@ -509,7 +547,7 @@ class Emitter {
                 if (inner && ts.isClassDeclaration(inner)) this.emitClassPrototypes(inner);
                 if (inner) {
                     const lift = this.getLiftableArrow(inner);
-                    if (lift) this.emitLiftedArrowPrototype(lift);
+                    if (lift && this.shouldEmitLiftedArrow(lift)) this.emitLiftedArrowPrototype(lift);
                 }
             }
             // Pass D: function + class-method + lifted-arrow bodies.
@@ -527,7 +565,7 @@ class Emitter {
                 if (inner && ts.isClassDeclaration(inner)) this.emitClassBodies(inner);
                 if (inner) {
                     const lift = this.getLiftableArrow(inner);
-                    if (lift) this.emitLiftedArrowBody(lift);
+                    if (lift && this.shouldEmitLiftedArrow(lift)) this.emitLiftedArrowBody(lift);
                 }
             }
             // Pass E: top-level statements. VariableStatements are split into
