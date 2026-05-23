@@ -1,0 +1,3 @@
+function bad: Reflect.construct newTarget is not a constructor
+proxy bad: Reflect.construct newTarget is not a constructor
+valid: object target

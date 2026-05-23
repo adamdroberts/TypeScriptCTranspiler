@@ -1,0 +1,3 @@
+{
+  "description": "Dynamic Reflect.construct validates explicit newTarget constructor values"
+}
