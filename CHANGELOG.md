@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unshadowed `Date.parse(...)` with pure string arguments and `Date.UTC(...)` with primitive numeric arguments as side-effect-free when their result is unused. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unshadowed `RegExp.escape(...)` calls with pure string arguments as side-effect-free when their result is unused. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused `new Error(...)`-family allocations with primitive message arguments as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes supported non-mutating array literal and pure const array method calls such as `slice(...)`, `at(...)`, search methods, iterator materializers, `toReversed(...)`, and `valueOf(...)` as side-effect-free when their result is unused. Test: `generated_c_dce_const`.

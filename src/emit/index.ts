@@ -1011,6 +1011,13 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            this.isUnshadowedGlobalIdentifier(recv, "Date") &&
+            this.isSideEffectFreeDateStaticCall(method, call.arguments, seenConsts)
+        ) {
+            return true;
+        }
+        if (
+            ts.isIdentifier(recv) &&
             method === "is" &&
             call.arguments.length === 2 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
@@ -1165,6 +1172,28 @@ class Emitter {
             this.isUnshadowedGlobalIdentifier(recv, "Reflect")
         ) {
             return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts);
+        }
+        return false;
+    }
+
+    private isSideEffectFreeDateStaticCall(
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (method === "parse") {
+            if (args.length === 0) return true;
+            return this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
+                Array.from(args).slice(1).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+        }
+        if (method === "UTC") {
+            return Array.from(args).every((arg, index) =>
+                index < 7
+                    ? this.isSideEffectFreePrimitiveNumberCoercion(arg, seenConsts)
+                    : this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
         }
         return false;
     }
