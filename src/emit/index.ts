@@ -24291,11 +24291,16 @@ class Emitter {
                 const key = this.emitExpr(args[1]!);
                 if (args.length === 3) {
                     const receiver = this.emitExpr(args[2]!);
-                    return this.emitSequencedCall("tsc_reflect_get_prop_receiver", T_VALUE, [
-                        { value: target, target: T_VALUE, node: args[0]! },
-                        { value: key, target: T_STRING, node: args[1]! },
-                        { value: receiver, target: T_VALUE, node: args[2]! },
-                    ]);
+                    const cache = this.freshTemp("_prop_cache");
+                    return this.emitSequencedExpr(
+                        T_VALUE,
+                        [
+                            { value: target, target: T_VALUE, node: args[0]! },
+                            { value: key, target: T_STRING, node: args[1]! },
+                            { value: receiver, target: T_VALUE, node: args[2]! },
+                        ],
+                        ([t, k, r]) => `({ static tsc_prop_cache_t ${cache}; tsc_reflect_get_prop_receiver_cached(${t}, ${k}, ${r}, &${cache}); })`,
+                    );
                 }
                 return this.emitSequencedCall("tsc_reflect_get_prop", T_VALUE, [
                     { value: target, target: T_VALUE, node: args[0]! },

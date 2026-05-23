@@ -7,6 +7,10 @@ for (let i = 0; i < 2; i++) {
 for (let i = 0; i < 2; i++) {
     console.log("elem:", obj[key]);
 }
+const receiver: any = {};
+for (let i = 0; i < 2; i++) {
+    console.log("reflect:", Reflect.get(obj, key, receiver));
+}
 obj.y = 2;
 console.log("has:", "y" in obj);
 delete obj.y;
