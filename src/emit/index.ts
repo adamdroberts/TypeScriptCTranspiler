@@ -7266,7 +7266,22 @@ class Emitter {
             }
             const decl = this.commonJsExportedMemberDeclaration(info.sf, exportName);
             if (!decl) {
-                unsupported(element, `CommonJS require destructuring could not resolve export "${exportName}"`);
+                if (!element.initializer) {
+                    unsupported(element, `CommonJS require destructuring could not resolve export "${exportName}"`);
+                }
+                const fallback = this.emitExpr(element.initializer);
+                const localName = mangleIdent(element.name.text);
+                const sym = this.symbolForIdentifier(element.name);
+                if (sym) this.requireDestructureTypes.set(sym, fallback.ty);
+                const cell = this.currentFunctionCellForSymbol(sym);
+                if (cell) {
+                    buf.line(`${fallback.ty.c}* ${cell.cellName} = (${fallback.ty.c}*)TSC_GC_MALLOC(sizeof(${fallback.ty.c}));`);
+                    buf.line(`*${cell.cellName} = ${fallback.c};`);
+                    continue;
+                }
+                const qual = isConst ? " const" : "";
+                buf.line(`${fallback.ty.c}${qual} ${localName} = ${fallback.c};`);
+                continue;
             }
             const cName = this.declarationCName(decl);
             if (!cName) {
