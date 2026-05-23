@@ -1317,8 +1317,8 @@ interface EventConstructor {
 declare var Event: EventConstructor;
 
 interface EventTarget {
-    addEventListener(type: string, listener: (event: Event) => void, options?: boolean | AddEventListenerOptions): void;
-    removeEventListener(type: string, listener: (event: Event) => void, options?: boolean | EventListenerOptions): void;
+    addEventListener(type: string, listener: (this: EventTarget, event: Event) => void, options?: boolean | AddEventListenerOptions): void;
+    removeEventListener(type: string, listener: (this: EventTarget, event: Event) => void, options?: boolean | EventListenerOptions): void;
     dispatchEvent(event: Event): boolean;
 }
 interface EventTargetConstructor {

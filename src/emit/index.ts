@@ -6248,8 +6248,8 @@ class Emitter {
             }
         }
         if (!ty) return null;
-        if (ty.kind !== "value" && ty.kind !== "class" && ty.kind !== "eventemitter") {
-            unsupported(node, "function this parameters are currently supported only as any/unknown, class instances, or EventEmitter");
+        if (ty.kind !== "value" && ty.kind !== "class" && ty.kind !== "eventemitter" && ty.kind !== "eventtarget") {
+            unsupported(node, "function this parameters are currently supported only as any/unknown, class instances, EventEmitter, or EventTarget");
         }
         return ty;
     }
@@ -16439,7 +16439,9 @@ class Emitter {
         if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
             unsupported(expr, "EventTarget listener must be a function");
         }
-        if (prepared.thisParam) unsupported(expr, "EventTarget listener this parameters are not supported yet");
+        if (prepared.thisParam && prepared.thisParam.kind !== "eventtarget") {
+            unsupported(expr, "EventTarget listener this parameter must be EventTarget");
+        }
         const params = prepared.params ?? [];
         if (params.length > 1) unsupported(expr, "EventTarget listener expects at most one Event parameter");
         const key = `eventtarget:${this.typeKey(prepared)}`;
@@ -16447,11 +16449,12 @@ class Emitter {
         if (existing) return existing;
         const name = `tsc_event_target_listener_${this.eventTargetListenerAdapters.size}`;
         this.eventTargetListenerAdapters.set(key, name);
-        this.protos.line(`void ${name}(void* env, tsc_event_t* event);`);
+        this.protos.line(`void ${name}(void* env, tsc_event_target_t* target, tsc_event_t* event);`);
         const buf = new CBuf();
-        buf.open(`void ${name}(void* env, tsc_event_t* event)`);
+        buf.open(`void ${name}(void* env, tsc_event_target_t* target, tsc_event_t* event)`);
         buf.line(`${prepared.c} fn = (${prepared.c})env;`);
         const callArgs: string[] = ["fn->env"];
+        if (prepared.thisParam) callArgs.push("target");
         if (params.length === 1) {
             callArgs.push(this.coerce({ c: "event", ty: T_EVENT }, params[0]!, expr));
         }

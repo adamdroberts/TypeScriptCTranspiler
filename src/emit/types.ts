@@ -323,15 +323,15 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
                 checker.getTypeOfSymbolAtLocation(callSig.thisParameter, decl),
                 checker,
             );
-            if (thisParamType.kind !== "value" && thisParamType.kind !== "class" && thisParamType.kind !== "eventemitter") {
-                unsupported(decl, "function this parameters are currently supported only as any/unknown, class instances, or EventEmitter");
+            if (thisParamType.kind !== "value" && thisParamType.kind !== "class" && thisParamType.kind !== "eventemitter" && thisParamType.kind !== "eventtarget") {
+                unsupported(decl, "function this parameters are currently supported only as any/unknown, class instances, EventEmitter, or EventTarget");
             }
         } else {
             const decl = explicitThisParameter(callSig.getDeclaration() ?? node);
             if (decl) {
                 thisParamType = mapTsType(decl, checker.getTypeAtLocation(decl), checker);
-                if (thisParamType.kind !== "value" && thisParamType.kind !== "class" && thisParamType.kind !== "eventemitter") {
-                    unsupported(decl, "function this parameters are currently supported only as any/unknown, class instances, or EventEmitter");
+                if (thisParamType.kind !== "value" && thisParamType.kind !== "class" && thisParamType.kind !== "eventemitter" && thisParamType.kind !== "eventtarget") {
+                    unsupported(decl, "function this parameters are currently supported only as any/unknown, class instances, EventEmitter, or EventTarget");
                 }
             }
         }

@@ -1258,7 +1258,7 @@ bool tsc_event_target_dispatch(tsc_event_target_t* target, tsc_event_t* event) {
             if (snapshot[i].once) {
                 tsc_event_target_remove(target, snapshot[i].type, snapshot[i].fn, snapshot[i].identity);
             }
-            snapshot[i].fn(snapshot[i].env, event);
+            snapshot[i].fn(snapshot[i].env, target, event);
         }
     }
     event->current_target = NULL;
