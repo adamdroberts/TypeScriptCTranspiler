@@ -929,7 +929,7 @@ tsc_buffer_t* buffer_from_base64(const tsc_str_t* input) {
         unsigned char ch = (unsigned char)input->data[i];
         if (isspace(ch)) continue;
         int v = ch == '=' ? -2 : base64_value(ch);
-        if (v < 0 && v != -2) tsc_panic("Buffer.from base64 input contains non-base64 digit");
+        if (v < 0 && v != -2) tsc_throw_str(tsc_str_from_cstr("Buffer.from base64 input contains non-base64 digit"));
         q[qlen++] = v;
         if (qlen == 4) {
             base64_decode_group(out, &pos, q, qlen);
@@ -965,12 +965,12 @@ tsc_buffer_t* tsc_buffer_from_str(const tsc_str_t* input, const tsc_str_t* encod
         return b;
     }
     if (str_lit_eq(encoding, "hex")) {
-        if ((input->len % 2) != 0) tsc_panic("Buffer.from hex input must have even length");
+        if ((input->len % 2) != 0) tsc_throw_str(tsc_str_from_cstr("Buffer.from hex input must have even length"));
         tsc_buffer_t* b = buffer_alloc_len(input->len / 2);
         for (size_t i = 0; i < b->len; i++) {
             int hi = hex_value((unsigned char)input->data[i * 2]);
             int lo = hex_value((unsigned char)input->data[i * 2 + 1]);
-            if (hi < 0 || lo < 0) tsc_panic("Buffer.from hex input contains non-hex digit");
+            if (hi < 0 || lo < 0) tsc_throw_str(tsc_str_from_cstr("Buffer.from hex input contains non-hex digit"));
             b->data[i] = (uint8_t)((hi << 4) | lo);
         }
         return b;
@@ -978,7 +978,7 @@ tsc_buffer_t* tsc_buffer_from_str(const tsc_str_t* input, const tsc_str_t* encod
     if (buffer_encoding_is_base64(encoding)) {
         return buffer_from_base64(input);
     }
-    tsc_panic("Buffer.from: only utf8, hex, and base64 encodings are supported");
+    tsc_throw_str(tsc_str_from_cstr("Buffer.from: only utf8, hex, and base64 encodings are supported"));
     return NULL;
 }
 
@@ -999,7 +999,7 @@ tsc_buffer_t* tsc_buffer_from_buffer(const tsc_buffer_t* input) {
 
 tsc_buffer_t* tsc_buffer_alloc(double size, double fill) {
     if (isnan(size) || isinf(size) || size < 0) {
-        tsc_panic("Buffer.alloc size must be a non-negative finite number");
+        tsc_throw_str(tsc_str_from_cstr("Buffer.alloc size must be a non-negative finite number"));
     }
     size_t len = (size_t)size;
     uint8_t byte = byte_from_double(fill);
@@ -1027,7 +1027,7 @@ tsc_buffer_t* tsc_buffer_concat(const tsc_array_t* list) {
 
 tsc_buffer_t* tsc_buffer_concat_len(const tsc_array_t* list, double total_length) {
     if (isnan(total_length) || isinf(total_length) || total_length < 0) {
-        tsc_panic("Buffer.concat totalLength must be a non-negative finite number");
+        tsc_throw_str(tsc_str_from_cstr("Buffer.concat totalLength must be a non-negative finite number"));
     }
     size_t total = (size_t)total_length;
     tsc_buffer_t* out = buffer_alloc_len(total);
@@ -1063,7 +1063,7 @@ tsc_str_t* tsc_buffer_to_string(const tsc_buffer_t* b, const tsc_str_t* encoding
     if (buffer_encoding_is_base64(encoding)) {
         return str_from_base64_bytes(b->data, b->len);
     }
-    tsc_panic("Buffer.toString: only utf8, hex, and base64 encodings are supported");
+    tsc_throw_str(tsc_str_from_cstr("Buffer.toString: only utf8, hex, and base64 encodings are supported"));
     return NULL;
 }
 
@@ -1238,7 +1238,7 @@ double tsc_buffer_byte_length_str(const tsc_str_t* input, const tsc_str_t* encod
     if (buffer_encoding_is_utf8(encoding)) return (double)input->len;
     if (str_lit_eq(encoding, "hex")) return floor((double)input->len / 2.0);
     if (buffer_encoding_is_base64(encoding)) return (double)buffer_from_base64(input)->len;
-    tsc_panic("Buffer.byteLength: only utf8, hex, and base64 encodings are supported");
+    tsc_throw_str(tsc_str_from_cstr("Buffer.byteLength: only utf8, hex, and base64 encodings are supported"));
     return 0.0;
 }
 
@@ -1255,14 +1255,14 @@ double tsc_buffer_get(const tsc_buffer_t* b, double idx) {
 
 double tsc_buffer_read_uint8(const tsc_buffer_t* b, double offset) {
     if (isnan(offset) || isinf(offset) || offset < 0 || (size_t)offset >= b->len) {
-        tsc_panic("Buffer.readUInt8 offset out of range");
+        tsc_throw_str(tsc_str_from_cstr("Buffer.readUInt8 offset out of range"));
     }
     return (double)b->data[(size_t)offset];
 }
 
 double tsc_buffer_write_uint8(tsc_buffer_t* b, double value, double offset) {
     if (isnan(offset) || isinf(offset) || offset < 0 || (size_t)offset >= b->len) {
-        tsc_panic("Buffer.writeUInt8 offset out of range");
+        tsc_throw_str(tsc_str_from_cstr("Buffer.writeUInt8 offset out of range"));
     }
     size_t i = (size_t)offset;
     b->data[i] = byte_from_double(value);
@@ -1271,7 +1271,7 @@ double tsc_buffer_write_uint8(tsc_buffer_t* b, double value, double offset) {
 
 double tsc_buffer_read_int8(const tsc_buffer_t* b, double offset) {
     if (isnan(offset) || isinf(offset) || offset < 0 || (size_t)offset >= b->len) {
-        tsc_panic("Buffer.readInt8 offset out of range");
+        tsc_throw_str(tsc_str_from_cstr("Buffer.readInt8 offset out of range"));
     }
     uint8_t n = b->data[(size_t)offset];
     return n >= 0x80u ? (double)n - 256.0 : (double)n;
@@ -1279,7 +1279,7 @@ double tsc_buffer_read_int8(const tsc_buffer_t* b, double offset) {
 
 double tsc_buffer_write_int8(tsc_buffer_t* b, double value, double offset) {
     if (isnan(offset) || isinf(offset) || offset < 0 || (size_t)offset >= b->len) {
-        tsc_panic("Buffer.writeInt8 offset out of range");
+        tsc_throw_str(tsc_str_from_cstr("Buffer.writeInt8 offset out of range"));
     }
     size_t i = (size_t)offset;
     b->data[i] = byte_from_double(value);
@@ -1288,7 +1288,7 @@ double tsc_buffer_write_int8(tsc_buffer_t* b, double value, double offset) {
 
 size_t buffer_checked_offset(const tsc_buffer_t* b, double offset, size_t width, const char* label) {
     if (isnan(offset) || isinf(offset) || offset < 0 || (size_t)offset > b->len || width > b->len - (size_t)offset) {
-        tsc_panic(label);
+        tsc_throw_str(tsc_str_from_cstr(label));
     }
     return (size_t)offset;
 }
@@ -1537,7 +1537,7 @@ double tsc_buffer_write_double_be(tsc_buffer_t* b, double value, double offset) 
 
 tsc_buffer_t* tsc_buffer_swap(tsc_buffer_t* b, size_t width) {
     if (width == 0 || (b->len % width) != 0) {
-        tsc_panic("Buffer.swap length must be a multiple of the element size");
+        tsc_throw_str(tsc_str_from_cstr("Buffer.swap length must be a multiple of the element size"));
     }
     for (size_t i = 0; i < b->len; i += width) {
         for (size_t j = 0; j < width / 2; j++) {
