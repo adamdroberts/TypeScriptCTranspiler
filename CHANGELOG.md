@@ -6,12 +6,13 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Changed
 - The e2e harness now materializes its small `node_modules` package fixtures before case discovery, so normal dependency installs no longer remove the ignored package-source fixtures needed by Phase 14 tests.
-- Documentation drift sync: top-level `README.md` and `llms.txt` were rewritten to reflect the current 545-passing test suite, ~31,900 LOC inventory, and full phase status — the previous claims of "319 passing tests / ~10,500 LOC" were stale by many sessions. The README's phase table now lists Phase 6 (immediate Promise + `async`/`await`), Phase 7 (eager generators + custom iterables + `FinalizationRegistry`), Phase 11 (immediate `fs.promises` + `dns.lookup` + `net.isIP` + `EventEmitter`), Phase 13 (sync + immediate-callback `child_process`), and Phase 14 (TS/JS package source transpilation + narrow CommonJS subset) as implemented; the previous "still deferred" list now matches the real remaining work. `docs/done.md` tally bumped from 544 → 545 to include the new `node_modules_commonjs_object_spread_default` case. `llms-full.txt` regenerated from the updated source pages.
+- Documentation drift sync: top-level `README.md` and `llms.txt` now reflect the current 791-passing test suite, ~43,100 LOC inventory, and full phase status including the implemented Proxy/Reflect surface, native-addon bridge path, AOT runtime-code compilation, dynamic-require manifests, and current Phase 14/decorator polish remaining work. `llms-full.txt` was regenerated from the updated source pages.
 - The benchmark harness can now run the manual suite, generated operation-loop benchmarks for stdout-producing e2e cases via `--full` / `BENCH_SOURCE=e2e`, or both, records ops/sec in JSON/table output, and writes selectable JSON result files.
 - Runtime and emitter hot paths for classes, typed object literals, string/number concatenation, JSON stringification, Map/Set, regex matching, arrays, and no-GC allocation were optimized for the benchmark suite.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Fixed
+- Documentation and agent indexes now describe native addons, runtime code compilation, and dynamic `require(...)` as AOT closure requirements rather than impossible blockers; README and LLM indexes no longer list Proxy or load-on-demand require execution as remaining targets.
 - Inferred locals whose TypeScript type is erased to `tsc_value_t` now use boxed storage even when their initializer emits a narrower primitive, fixing nullish coalescing over `Map.get(...)` results and optional numeric field reads. Dynamic and typed string Reflect helpers again treat boxed strings as valid string-object targets. Tests: `nullish`, `wordcount`, `weak_ref`, `collection_object_methods`, `string_object_enumeration`, `dynamic_string_object_enumeration`.
 
 ### Added
@@ -737,7 +738,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Generated C `#line` directives for emitted TypeScript statements, with an e2e generated-C assertion.
 - `for...of` over strings, yielding UTF-8 code point strings, plus fixed-width C escapes for non-BMP string literals.
 - Pre-emit hard-error diagnostics for literal native addon imports/requires ending in `.node`.
-- Pre-emit hard-error diagnostics for permanent AOT limits: `eval`, `Function` / `new Function`, and non-literal `require(variable)`.
+- Pre-emit hard-error diagnostics for then-current AOT closure gaps: `eval`, `Function` / `new Function`, and non-literal `require(variable)`.
 - Typed `WeakRef<T>` construction and `.deref()` support.
 - `symbol` values with `Symbol(description?)`, `Symbol.for`, `Symbol.keyFor`, `Symbol.iterator`, `Symbol.asyncIterator`, `.description`, `.toString()`, equality, and `typeof`.
 - Typed `WeakMap<K, V>` and `WeakSet<T>` with object keys and the non-iterable weak-collection method surface.

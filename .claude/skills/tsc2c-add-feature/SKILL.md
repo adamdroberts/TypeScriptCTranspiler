@@ -11,11 +11,11 @@ This is the standard flow. Follow it instead of improvising.
 
 Before writing code, read:
 
-1. [docs/architecture.md](../../../docs/architecture.md) — the 5-pass emitter structure.
+1. [docs/architecture.md](../../../docs/architecture.md) — the six-pass emitter structure and AOT module graph.
 2. [docs/done.md](../../../docs/done.md) — check the feature isn't already there.
 3. [docs/todo.md](../../../docs/todo.md) — check the feature isn't blocked by a bigger item (e.g. anything requiring dynamic values is blocked on Phase 3).
 
-## The 5-file checklist
+## The core-file checklist
 
 Every feature addition touches most or all of these:
 
@@ -114,9 +114,15 @@ Example — `Date` as a real class with methods (not just `Date.now`).
 - ❌ "Quick fix" — running gcc manually and patching the generated C. If you need to change the output, change the emitter.
 - ❌ Not checking whether the feature is blocked on Phase 3 (dynamic values). Features that need `any` / `unknown` / heterogeneous collections / `JSON.parse` can't be cleanly added before that phase. Surface the block in `docs/todo.md` instead.
 
-## When to push back on the user
+## AOT closure requirements
 
-If the feature requires any of the three [permanent limits](../../../docs/todo.md#5-permanent-limits-will-never-be-done) — native C++ addons, runtime code compilation, or dynamic `require(variable)` — it can't be implemented at any engineering cost. Tell the user directly, point at the plan's documentation, and suggest workarounds.
+Native C++ addons, runtime code compilation, and dynamic `require(variable)` are not permanent product limits. They are AOT closure requirements:
+
+- Native addons must be known at compile time through the native-addon manifest and lowered through the embedded Node bridge linked with `libnode`.
+- Constant and allow-listed `eval(...)` / `Function(...)` sources compile AOT. Truly unknown runtime source strings require the explicit `--unsafe-eval` gate and the embedded Node bridge.
+- Dynamic `require(...)` needs a finite static proof or a `--dynamic-require-manifest` allow list so every reachable module is in the AOT graph.
+
+Push back only when the requested shape cannot be proven or allow-listed at build time, or when it would require enabling unsafe eval without the compile-time gate.
 
 ## Verify after your change
 
