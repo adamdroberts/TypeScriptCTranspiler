@@ -130,6 +130,7 @@ const unused_other_key = "gone";
 const unused_computed_key_object = { ["dead"]: 1, [unused_other_key]: 2 };
 // @ts-ignore: intentional pure comma expression for generated-C DCE coverage.
 const unused_comma_expr = (1, "dead");
+const top_level_static_false = false;
 let unused_let = 42;
 let unused_empty: number;
 "top_level_dead_expr";
@@ -210,6 +211,17 @@ Reflect.preventExtensions({ top_level_dead_reflect_prevent_extensions: 1 });
 ({ label: "top_level_dead_prop" }).label;
 // @ts-ignore: intentional pure comma expression for generated-C DCE coverage.
 (1, "top_level_dead_comma");
+if (top_level_static_false) {
+    console.log("top_level_dead_static_if");
+}
+if (!top_level_static_false) {
+    "top_level_dead_static_true_branch";
+} else {
+    console.log("top_level_dead_static_else");
+}
+while (false) {
+    console.log("top_level_dead_while_false");
+}
 
 namespace DceNamespace {
     const unused_namespace_value = { label: "dead", count: 4 };
@@ -303,6 +315,24 @@ function usedLocal(value: number): number {
     return kept_local;
     const unreachable_local = "dead";
     console.log(unreachable_local);
+}
+
+function constantBranch(value: number): number {
+    const local_static_false = false;
+    if (local_static_false) {
+        const local_dead_static_if_value = "local_dead_static_if";
+        console.log(local_dead_static_if_value);
+        return 900;
+    }
+    if (!local_static_false) {
+        return value + 80;
+    } else {
+        console.log("local_dead_static_else");
+        return 901;
+    }
+    const static_branch_after_exit = 902;
+    console.log(static_branch_after_exit);
+    return static_branch_after_exit;
 }
 
 function branchExit(value: boolean): number {
@@ -419,6 +449,7 @@ function doExit(value: boolean): number {
 
 console.log(
     usedLocal(used_count),
+    constantBranch(used_count),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),

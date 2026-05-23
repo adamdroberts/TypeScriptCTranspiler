@@ -194,6 +194,7 @@ unused_chain_object
 unused_other_key
 unused_computed_key_object
 unused_comma_expr
+top_level_static_false
 unused_namespace_value
 unused_let
 unused_empty
@@ -269,6 +270,10 @@ top_level_dead_length
 top_level_dead_index
 top_level_dead_prop
 top_level_dead_comma
+top_level_dead_static_if
+top_level_dead_static_true_branch
+top_level_dead_static_else
+top_level_dead_while_false
 unused_local_const
 unused_local_let
 unused_local_empty
@@ -347,6 +352,11 @@ local_dead_comma
 unused_local_seed
 unused_local_chain
 unreachable_local
+local_static_false
+local_dead_static_if_value
+local_dead_static_if
+local_dead_static_else
+static_branch_after_exit
 branch_only_dead
 branch_after_exit
 nested_after_block

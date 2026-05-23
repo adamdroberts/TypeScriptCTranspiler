@@ -433,6 +433,20 @@ class Emitter {
                 visitStatementList(node.body.statements);
                 return;
             }
+            if (ts.isIfStatement(node)) {
+                const staticCondition = this.staticBooleanValue(node.expression);
+                if (staticCondition === true) {
+                    visit(node.thenStatement);
+                    return;
+                }
+                if (staticCondition === false) {
+                    if (node.elseStatement) visit(node.elseStatement);
+                    return;
+                }
+            }
+            if (ts.isWhileStatement(node) && this.staticBooleanValue(node.expression) === false) {
+                return;
+            }
             if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node)) {
                 const sym = this.symbolForIdentifier(node);
                 const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
@@ -8961,6 +8975,15 @@ class Emitter {
     }
 
     private emitIf(buf: CBuf, is: ts.IfStatement): void {
+        const staticCondition = this.staticBooleanValue(is.expression);
+        if (staticCondition === true) {
+            this.emitStmtInBlock(buf, is.thenStatement);
+            return;
+        }
+        if (staticCondition === false) {
+            if (is.elseStatement) this.emitStmtInBlock(buf, is.elseStatement);
+            return;
+        }
         const cond = this.emitBoolExpr(is.expression);
         buf.open(`if (${cond})`);
         this.emitStmtInBlock(buf, is.thenStatement);
@@ -9032,6 +9055,7 @@ class Emitter {
     }
 
     private emitWhile(buf: CBuf, ws: ts.WhileStatement): void {
+        if (this.staticBooleanValue(ws.expression) === false) return;
         buf.open(`while (${this.emitBoolExpr(ws.expression)})`);
         this.emitStmtInBlock(buf, ws.statement);
         buf.close();
@@ -9752,6 +9776,11 @@ class Emitter {
         }
         if (ts.isBlock(stmt)) return this.statementListAlwaysExits(stmt.statements);
         if (ts.isIfStatement(stmt)) {
+            const staticCondition = this.staticBooleanValue(stmt.expression);
+            if (staticCondition === true) return this.statementAlwaysExits(stmt.thenStatement);
+            if (staticCondition === false) {
+                return !!stmt.elseStatement && this.statementAlwaysExits(stmt.elseStatement);
+            }
             return this.statementAlwaysExits(stmt.thenStatement) &&
                 !!stmt.elseStatement &&
                 this.statementAlwaysExits(stmt.elseStatement);
@@ -9841,8 +9870,25 @@ class Emitter {
     }
 
     private isTrueExpression(expr: ts.Expression): boolean {
+        return this.staticBooleanValue(expr) === true;
+    }
+
+    private staticBooleanValue(
+        expr: ts.Expression,
+        seenConsts = new Set<ts.Symbol>(),
+    ): boolean | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        return unwrapped.kind === ts.SyntaxKind.TrueKeyword;
+        if (unwrapped.kind === ts.SyntaxKind.TrueKeyword) return true;
+        if (unwrapped.kind === ts.SyntaxKind.FalseKeyword) return false;
+        if (
+            ts.isPrefixUnaryExpression(unwrapped) &&
+            unwrapped.operator === ts.SyntaxKind.ExclamationToken
+        ) {
+            const inner = this.staticBooleanValue(unwrapped.operand, seenConsts);
+            return inner === null ? null : !inner;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.staticBooleanValue(init, seenConsts) : null;
     }
 
     private emitReturn(buf: CBuf, r: ts.ReturnStatement): void {
