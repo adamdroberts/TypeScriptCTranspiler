@@ -1,0 +1,4 @@
+seen: class:Box|
+direct: 2 3
+spread: 4 5
+seen2: class:Box|replacement:1:2|original:2:3|replacement:3:4|original:4:5|

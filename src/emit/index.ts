@@ -24395,14 +24395,15 @@ class Emitter {
                 () => "tsc_event_emitter_new()",
             );
         }
-        if (!ts.isIdentifier(n.expression)) {
+        const ctorExpr = this.unwrapTransparentExpression(n.expression);
+        if (!ts.isIdentifier(ctorExpr)) {
             const ctor = this.emitExpr(n.expression);
             if (ctor.ty.kind === "value") {
                 return this.emitDynamicValueConstruct(n, ctor);
             }
             unsupported(n, "new expression must use a class identifier or dynamic constructor value");
         }
-        if (n.expression.text === "Proxy") {
+        if (ctorExpr.text === "Proxy") {
             const args = n.arguments ?? [];
             if (args.length !== 2) unsupported(n, "new Proxy expects target and handler");
             const target = this.emitExpr(args[0]!);
@@ -24412,7 +24413,7 @@ class Emitter {
                 { value: handler, target: T_VALUE, node: args[1]! },
             ]);
         }
-        const cls = this.identifierName(n.expression);
+        const cls = this.identifierName(ctorExpr);
         if (cls === "Function") {
             return this.emitUnsafeFunctionConstructor(n);
         }
