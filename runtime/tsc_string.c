@@ -516,7 +516,7 @@ tsc_str_t* tsc_str_from_char_code_n(size_t n, ...) {
 
 uint32_t to_valid_code_point(double n) {
     if (!isfinite(n) || floor(n) != n || n < 0.0 || n > 0x10ffff) {
-        tsc_panic("String.fromCodePoint: invalid code point");
+        tsc_throw_str(tsc_str_from_cstr("String.fromCodePoint: invalid code point"));
     }
     return (uint32_t)n;
 }
