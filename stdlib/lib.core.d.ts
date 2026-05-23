@@ -611,6 +611,8 @@ interface ProcessHrtime {
     bigint(...ignored: any[]): bigint;
 }
 interface ProcessWritableStream {
+    readonly fd: number;
+    readonly isTTY: boolean;
     write(chunk: string | Buffer, callback?: () => void): boolean;
     write(chunk: string | Buffer, encoding?: string, callback?: () => void): boolean;
 }

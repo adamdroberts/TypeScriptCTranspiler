@@ -818,6 +818,7 @@ bool tsc_process_stdout_write(const tsc_str_t* data);
 bool tsc_process_stderr_write(const tsc_str_t* data);
 bool tsc_process_stdout_write_buffer(const tsc_buffer_t* data);
 bool tsc_process_stderr_write_buffer(const tsc_buffer_t* data);
+bool tsc_process_stdio_is_tty(int fd);
 void tsc_process_next_tick(tsc_next_tick_fn_t fn, void* env);
 void tsc_process_drain_next_ticks(void);
 void tsc_queue_microtask(tsc_microtask_fn_t fn, void* env);

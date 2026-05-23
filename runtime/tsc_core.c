@@ -465,6 +465,10 @@ bool tsc_process_stderr_write_buffer(const tsc_buffer_t* data) {
     return data ? process_stream_write_bytes(stderr, data->data, data->len) : process_stream_write_bytes(stderr, NULL, 0);
 }
 
+bool tsc_process_stdio_is_tty(int fd) {
+    return isatty(fd) == 1;
+}
+
 void tsc_process_next_tick(tsc_next_tick_fn_t fn, void* env) {
     if (!fn) return;
     if (g_next_tick_len == g_next_tick_cap) {
@@ -609,5 +613,4 @@ void tsc_rethrow(void) {
 tsc_str_t* tsc_current_error(void) {
     return g_current_error ? g_current_error : tsc_str_from_lit("(unknown error)", 15);
 }
-
 

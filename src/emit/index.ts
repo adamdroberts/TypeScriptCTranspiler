@@ -24905,6 +24905,19 @@ class Emitter {
             }
         }
 
+        if (
+            ts.isPropertyAccessExpression(pa.expression) &&
+            ts.isIdentifier(pa.expression.expression) &&
+            pa.expression.expression.text === "process" &&
+            (pa.expression.name.text === "stdout" || pa.expression.name.text === "stderr")
+        ) {
+            const fd = pa.expression.name.text === "stdout" ? "1" : "2";
+            switch (pa.name.text) {
+                case "fd": return { c: `${fd}.0`, ty: T_NUMBER };
+                case "isTTY": return { c: `tsc_process_stdio_is_tty(${fd})`, ty: T_BOOLEAN };
+            }
+        }
+
         if (ts.isIdentifier(pa.expression)) {
             if (pa.expression.text === "Math") {
                 const name = pa.name.text;
