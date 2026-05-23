@@ -52,7 +52,15 @@ tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v) {
 }
 
 bool tsc_value_is_array(tsc_value_t v) {
-    return value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY;
+    if (!value_is_box(v)) return false;
+    if (value_tag(v) == TSC_VALUE_TAG_ARRAY) return true;
+    if (value_tag(v) != TSC_VALUE_TAG_OBJECT) return false;
+    tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+    if (!o || !o->is_proxy) return false;
+    if (o->proxy_revoked) {
+        tsc_throw_str(tsc_str_from_cstr("Array.isArray cannot be called on a Proxy that has been revoked"));
+    }
+    return tsc_value_is_array(o->proxy_target);
 }
 
 void* tsc_value_as_class(tsc_value_t v) {
@@ -948,6 +956,15 @@ double tsc_value_length(tsc_value_t v) {
     if (!value_is_box(v)) return 0.0;
     if (value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         return (double)((tsc_array_t*)value_ptr(v))->len;
+    }
+    if (value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+        if (o && o->is_proxy) {
+            if (o->proxy_revoked) {
+                tsc_throw_str(tsc_str_from_cstr("Cannot perform 'get' on a proxy that has been revoked"));
+            }
+            return tsc_value_length(o->proxy_target);
+        }
     }
     if (value_tag(v) == TSC_VALUE_TAG_STRING) {
         return (double)((tsc_str_t*)value_ptr(v))->len;
