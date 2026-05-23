@@ -789,7 +789,22 @@ bool tsc_object_has(const tsc_object_t* o, const tsc_str_t* key) {
         tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
         bool found = tsc_value_is_truthy(res);
-        if (!found && value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+        if (!found && value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_ARRAY) {
+            const tsc_array_t* target = (const tsc_array_t*)value_ptr(o->proxy_target);
+            tsc_value_t target_desc_value = value_descriptor_from_array_key(target, key);
+            if (value_is_box(target_desc_value) && value_tag(target_desc_value) == TSC_VALUE_TAG_OBJECT) {
+                const tsc_object_t* target_desc = (const tsc_object_t*)value_ptr(target_desc_value);
+                tsc_value_t configurable_value = tsc_value_undefined();
+                bool has_configurable = descriptor_has_prop(target_desc, "configurable", 12, &configurable_value);
+                bool configurable = has_configurable ? tsc_value_is_truthy(configurable_value) : false;
+                if (!configurable) {
+                    tsc_throw_str(tsc_str_from_cstr("Proxy has trap cannot report false for non-configurable key"));
+                }
+                if (!target->extensible) {
+                    tsc_throw_str(tsc_str_from_cstr("Proxy has trap cannot report false for key on non-extensible target"));
+                }
+            }
+        } else if (!found && value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
             const tsc_object_t* target = (const tsc_object_t*)value_ptr(o->proxy_target);
             ssize_t idx = object_find(target, key);
             if (idx >= 0) {
@@ -826,7 +841,22 @@ bool tsc_object_delete(tsc_object_t* o, const tsc_str_t* key) {
         tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
         bool deleted = tsc_value_is_truthy(res);
-        if (deleted && value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+        if (deleted && value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_ARRAY) {
+            const tsc_array_t* target = (const tsc_array_t*)value_ptr(o->proxy_target);
+            tsc_value_t target_desc_value = value_descriptor_from_array_key(target, key);
+            if (value_is_box(target_desc_value) && value_tag(target_desc_value) == TSC_VALUE_TAG_OBJECT) {
+                const tsc_object_t* target_desc = (const tsc_object_t*)value_ptr(target_desc_value);
+                tsc_value_t configurable_value = tsc_value_undefined();
+                bool has_configurable = descriptor_has_prop(target_desc, "configurable", 12, &configurable_value);
+                bool configurable = has_configurable ? tsc_value_is_truthy(configurable_value) : false;
+                if (!configurable) {
+                    tsc_throw_str(tsc_str_from_cstr("Proxy deleteProperty trap cannot report deletion of non-configurable key"));
+                }
+                if (!target->extensible) {
+                    tsc_throw_str(tsc_str_from_cstr("Proxy deleteProperty trap cannot report deletion of key on non-extensible target"));
+                }
+            }
+        } else if (deleted && value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
             const tsc_object_t* target = (const tsc_object_t*)value_ptr(o->proxy_target);
             ssize_t idx = object_find(target, key);
             if (idx >= 0) {
