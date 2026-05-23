@@ -1,0 +1,3 @@
+{
+  "description": "fs.accessSync treats undefined mode as default and evaluates ignored extra arguments"
+}

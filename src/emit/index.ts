@@ -19755,16 +19755,20 @@ class Emitter {
                 ], ([path]) => `tsc_fs_exists_sync(${path!})`);
             }
             case "accessSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.accessSync needs path and optional mode");
+                if (args.length < 1) unsupported(call, "fs.accessSync needs path and optional mode");
                 const p = this.emitExpr(args[0]!);
                 const specs: SequencedCallArg[] = [
                     this.fsPathSpec(p, args[0]!, "fs.accessSync path"),
                 ];
-                if (args[1]) {
+                if (args[1] && !this.isUndefinedExpression(args[1])) {
                     specs.push({ value: this.emitExpr(args[1]), target: T_NUMBER, node: args[1] });
-                    return this.emitSequencedCall("tsc_fs_access_sync_mode", T_VOID, specs);
+                    specs.push(...this.ignoredArgumentSpecs(args, 2));
+                    return this.emitSequencedExpr(T_VOID, specs, ([path, mode]) =>
+                        `tsc_fs_access_sync_mode(${path!}, ${mode!})`,
+                    );
                 }
-                return this.emitSequencedCall("tsc_fs_access_sync", T_VOID, specs);
+                specs.push(...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1));
+                return this.emitSequencedExpr(T_VOID, specs, ([path]) => `tsc_fs_access_sync(${path!})`);
             }
             case "readdirSync": {
                 if (args.length < 1 || args.length > 2) unsupported(call, "fs.readdirSync needs path and optional UTF-8/buffer encoding or withFileTypes options");
