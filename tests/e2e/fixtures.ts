@@ -172,6 +172,43 @@ const packages: Record<string, PackageFixture> = {
             "src/flavor-require.cjs": 'exports.label = "require-imports";\n',
         },
     },
+    "tsc2c-require-node-addons-conditions-package": {
+        packageJson: {
+            name: "tsc2c-require-node-addons-conditions-package",
+            version: "1.0.0",
+            type: "module",
+            exports: {
+                ".": {
+                    "node-addons": "./src/addons-entry.cjs",
+                    require: "./src/require-entry.cjs",
+                    default: "./src/default-entry.ts",
+                },
+                "./tool": {
+                    "node-addons": "./src/tool-addons.cjs",
+                    require: "./src/tool-require.cjs",
+                    default: "./src/tool-default.ts",
+                },
+            },
+            imports: {
+                "#flavor": {
+                    "node-addons": "./src/flavor-addons.cjs",
+                    require: "./src/flavor-require.cjs",
+                    default: "./src/flavor-default.ts",
+                },
+            },
+        },
+        files: {
+            "src/default-entry.ts": 'export const label = "wrong-default-entry";\nexport function pick(value: number): string {\n    return "wrong-default:" + value;\n}\n',
+            "src/require-entry.cjs": 'exports.label = "wrong-require-entry";\nexports.pick = function pick(value) { return "wrong-require:" + value; };\n',
+            "src/addons-entry.cjs": 'const flavor = require("#flavor");\nexports.label = "addons:" + flavor.label;\nexports.pick = function pick(value) { return "addons-entry:" + value; };\n',
+            "src/tool-default.ts": 'export const tool = "wrong-tool-default";\nexport function scale(value: number): number {\n    return value * 100;\n}\n',
+            "src/tool-require.cjs": 'exports.tool = "wrong-tool-require";\nexports.scale = function scale(value) { return value * 99; };\n',
+            "src/tool-addons.cjs": 'exports.tool = "addons-tool";\nexports.scale = function scale(value) { return value * 7; };\n',
+            "src/flavor-default.ts": 'export const label = "wrong-flavor-default";\n',
+            "src/flavor-require.cjs": 'exports.label = "wrong-flavor-require";\n',
+            "src/flavor-addons.cjs": 'exports.label = "node-addons-imports";\n',
+        },
+    },
     "tsc2c-main-package": esmPackage("tsc2c-main-package", {
         "index.js": 'export const label = "main-pkg";\nexport function square(value) { return value * value; }\n',
     }),
