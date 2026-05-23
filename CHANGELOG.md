@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Bounded scheduler callbacks for `process.nextTick`, `queueMicrotask`, zero-delay `setTimeout`, and `setImmediate` now accept explicit `this: any` callback parameters and pass the runtime `undefined` value. Test: `scheduler_callback_this`.
 - EventTarget listener adapters now support explicit `this: EventTarget` listener parameters, passing the dispatch target while preserving duplicate suppression, removal, and once-listener behavior. Test: `event_target_this`.
 - EventEmitter listener adapters now support explicit `this: EventEmitter` listener parameters, passing the emitting instance for `on`/`once`/prepend variants while preserving listener identity filtering and removal. Test: `event_emitter_this`.
 - Top-level and function-scoped static CommonJS `require("pkg")` destructuring now supports rest bindings by materializing the remaining known named exports into a dynamic object. Tests: `node_modules_commonjs_require_destructure`, `node_modules_commonjs_function_scope_require`.
