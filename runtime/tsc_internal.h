@@ -322,6 +322,7 @@ tsc_value_t value_descriptor_from_array_key(const tsc_array_t* src, const tsc_st
 tsc_value_t value_descriptor_from_string_index(const tsc_str_t* src, size_t idx);
 tsc_value_t value_descriptor_from_string_length(const tsc_str_t* src);
 tsc_value_t value_descriptor_from_string_key(const tsc_str_t* src, const tsc_str_t* key);
+tsc_value_t value_descriptor_from_function_key(const tsc_function_identity_t* fn, const tsc_str_t* key);
 tsc_value_t value_descriptors_from_array(const tsc_array_t* src);
 tsc_value_t value_descriptors_from_string(const tsc_str_t* src);
 tsc_value_t value_descriptor_from_prop(const tsc_object_prop_t* prop);

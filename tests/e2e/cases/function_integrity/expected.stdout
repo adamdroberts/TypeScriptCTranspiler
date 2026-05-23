@@ -24,3 +24,7 @@ proxy length: 0 0
 proxy name: Proxied Proxied
 proxy seal: true true true
 proxy freeze: true true true
+proxy function define same: true
+proxy function define changed: Proxy defineProperty trap cannot change non-configurable non-writable key
+proxy function delete length: Proxy deleteProperty trap cannot report deletion of non-configurable key
+proxy function delete missing: true

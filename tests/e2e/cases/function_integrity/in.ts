@@ -3,6 +3,8 @@ function Sealed(this: any): void {}
 function Frozen(this: any): void {}
 function Proxied(this: any): void {}
 function FrozenProxy(this: any): void {}
+function ProxyDefine(this: any, value: number): void {}
+function ProxyDelete(this: any): void {}
 function TypedDirect(this: any, value: number): void {}
 function TypedProto(this: any): void {}
 function TypedPrevent(this: any): void {}
@@ -69,3 +71,29 @@ console.log("proxy seal:", Object.seal(proxied) === proxied, Object.isSealed(pro
 const frozenProxyTarget: any = FrozenProxy as any;
 const frozenProxy: any = new Proxy(frozenProxyTarget, {});
 console.log("proxy freeze:", Object.freeze(frozenProxy) === frozenProxy, Object.isFrozen(frozenProxyTarget), Object.isFrozen(frozenProxy));
+
+function trueDefine(target: any, prop: any, desc: any): boolean {
+    return true;
+}
+
+function trueDelete(target: any, prop: any): boolean {
+    return true;
+}
+
+const proxyDefineTarget: any = ProxyDefine as any;
+const proxyDefine: any = new Proxy(proxyDefineTarget, { defineProperty: trueDefine as any });
+console.log("proxy function define same:", Reflect.defineProperty(proxyDefine, "length", { value: 1, writable: false, enumerable: false, configurable: false }));
+try {
+    console.log("proxy function define changed:", Reflect.defineProperty(proxyDefine, "length", { value: 9 }));
+} catch (err: any) {
+    console.log("proxy function define changed:", err);
+}
+
+const proxyDeleteTarget: any = ProxyDelete as any;
+const proxyDelete: any = new Proxy(proxyDeleteTarget, { deleteProperty: trueDelete as any });
+try {
+    console.log("proxy function delete length:", Reflect.deleteProperty(proxyDelete, "length"));
+} catch (err: any) {
+    console.log("proxy function delete length:", err);
+}
+console.log("proxy function delete missing:", Reflect.deleteProperty(proxyDelete, "missing"));
