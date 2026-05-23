@@ -135,6 +135,48 @@ const packages: Record<string, PackageFixture> = {
             "src/flavor-default.ts": 'export const flavor = "wrong-flavor";\n',
         },
     },
+    "tsc2c-import-node-conditions-package": {
+        packageJson: {
+            name: "tsc2c-import-node-conditions-package",
+            version: "1.0.0",
+            type: "module",
+            exports: {
+                ".": [
+                    "./src/missing-entry.ts",
+                    {
+                        node: [
+                            "./src/missing-node-entry.ts",
+                            "./src/node-entry.ts",
+                        ],
+                        default: "./src/default-entry.ts",
+                    },
+                ],
+                "./features/*": {
+                    node: "./src/features/*.ts",
+                    default: "./src/wrong/*.ts",
+                },
+            },
+            imports: {
+                "#flavors/*": [
+                    {
+                        node: [
+                            "./src/missing-flavors/*.ts",
+                            "./src/flavors/*.ts",
+                        ],
+                        default: "./src/wrong-flavors/*.ts",
+                    },
+                ],
+            },
+        },
+        files: {
+            "src/node-entry.ts": 'import { flavor } from "#flavors/main";\nexport const label = "node:" + flavor;\nexport function pick(value: number): string {\n    return "node-entry:" + value;\n}\n',
+            "src/default-entry.ts": 'export const label = "wrong-default-entry";\nexport function pick(value: number): string {\n    return "wrong-default:" + value;\n}\n',
+            "src/features/math.ts": 'export const feature = "node-feature";\nexport function scale(value: number): number {\n    return value * 6;\n}\n',
+            "src/wrong/math.ts": 'export const feature = "wrong-feature";\nexport function scale(value: number): number {\n    return value * 99;\n}\n',
+            "src/flavors/main.ts": 'export const flavor = "imports-node";\n',
+            "src/wrong-flavors/main.ts": 'export const flavor = "wrong-imports-default";\n',
+        },
+    },
     "tsc2c-require-conditions-package": {
         packageJson: {
             name: "tsc2c-require-conditions-package",
