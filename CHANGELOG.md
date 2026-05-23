@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- EventEmitter listener adapters now support explicit `this: EventEmitter` listener parameters, passing the emitting instance for `on`/`once`/prepend variants while preserving listener identity filtering and removal. Test: `event_emitter_this`.
 - Top-level and function-scoped static CommonJS `require("pkg")` destructuring now supports rest bindings by materializing the remaining known named exports into a dynamic object. Tests: `node_modules_commonjs_require_destructure`, `node_modules_commonjs_function_scope_require`.
 - `os.userInfo(...)` now accepts literal UTF-8 option objects such as `{ encoding: "utf8" }` / `{ encoding: "utf-8" }` for the existing string-valued dynamic result subset. Test: `os_user_info`.
 - `fs.readdirSync` and immediate `fs.promises.readdir` now accept literal `{ withFileTypes: true, recursive: true }` options and return recursive bounded `Dirent` results. Test: `fs_readdir_dirents`.
