@@ -5067,6 +5067,10 @@ class Emitter {
                 this.defs.line(`static tsc_value_t ${this.classStaticSetterDecoratorReplacementName(cd, m)};`);
                 this.ensureClassStaticSetterDecoratorAdapter(cd, m);
             }
+            if (ts.isSetAccessorDeclaration(m) && !isStatic(m) && this.classMemberHasDecorators(m)) {
+                this.defs.line(`static tsc_value_t ${this.classInstanceSetterDecoratorReplacementName(cd, m)};`);
+                this.ensureClassInstanceSetterDecoratorAdapter(cd, m);
+            }
         }
         this.defs.line();
 
@@ -5327,6 +5331,18 @@ class Emitter {
         return `${cd.name.text}_static_set_${mangleIdent(setterName)}_decorator_replacement`;
     }
 
+    private classInstanceSetterDecoratorReplacementName(
+        cd: ts.ClassDeclaration,
+        member: ts.SetAccessorDeclaration,
+    ): string {
+        if (!cd.name) unsupported(cd, "decorated instance setters require a named class");
+        const setterName = this.staticPropertyName(member.name);
+        if (!setterName) {
+            unsupported(member.name, "decorated instance setter names must resolve to a string or number literal");
+        }
+        return `${cd.name.text}_instance_set_${mangleIdent(setterName)}_decorator_replacement`;
+    }
+
     private emitClassFieldDecoratorInitializerSetup(buf: CBuf, cd: ts.ClassDeclaration): void {
         for (const member of cd.members) {
             if (!this.classMemberHasDecorators(member)) continue;
@@ -5342,6 +5358,8 @@ class Emitter {
                 buf.line(`${this.classInstanceGetterDecoratorReplacementName(cd, member)} = tsc_value_undefined();`);
             } else if (ts.isSetAccessorDeclaration(member) && isStatic(member)) {
                 buf.line(`${this.classStaticSetterDecoratorReplacementName(cd, member)} = tsc_value_undefined();`);
+            } else if (ts.isSetAccessorDeclaration(member) && !isStatic(member)) {
+                buf.line(`${this.classInstanceSetterDecoratorReplacementName(cd, member)} = tsc_value_undefined();`);
             }
         }
     }
@@ -5410,6 +5428,8 @@ class Emitter {
                             ? this.classInstanceGetterDecoratorValue(cd, member)
                         : ts.isSetAccessorDeclaration(member) && isStatic(member)
                             ? this.classStaticSetterDecoratorValue(cd, member)
+                        : ts.isSetAccessorDeclaration(member) && !isStatic(member)
+                            ? this.classInstanceSetterDecoratorValue(cd, member)
                             : { c: "tsc_value_undefined()", ty: T_VALUE };
                 const args = [
                     valueArg,
@@ -5446,6 +5466,10 @@ class Emitter {
                 } else if (ts.isSetAccessorDeclaration(member) && isStatic(member)) {
                     const out = this.freshTemp("_setter_decorator_result");
                     const replacement = this.classStaticSetterDecoratorReplacementName(cd, member);
+                    buf.line(`{ tsc_value_t ${out} = ${result}; if (!tsc_value_is_undefined(${out})) ${replacement} = ${out}; }`);
+                } else if (ts.isSetAccessorDeclaration(member) && !isStatic(member)) {
+                    const out = this.freshTemp("_setter_decorator_result");
+                    const replacement = this.classInstanceSetterDecoratorReplacementName(cd, member);
                     buf.line(`{ tsc_value_t ${out} = ${result}; if (!tsc_value_is_undefined(${out})) ${replacement} = ${out}; }`);
                 } else {
                     buf.line(`(void)(${result});`);
@@ -5690,6 +5714,44 @@ class Emitter {
         buf.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
         const raw = "(0 < args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined())";
         buf.line(`${cd.name.text}_${accessorName}(${this.coerce({ c: raw, ty: T_VALUE }, paramType, member)});`);
+        buf.line("return tsc_value_undefined();");
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
+    private classInstanceSetterDecoratorValue(
+        cd: ts.ClassDeclaration,
+        member: ts.SetAccessorDeclaration,
+    ): EmitResult {
+        const replacement = this.classInstanceSetterDecoratorReplacementName(cd, member);
+        const adapter = this.ensureClassInstanceSetterDecoratorAdapter(cd, member);
+        return {
+            c: `({ tsc_value_t _decorator_current = ${replacement}; tsc_value_is_undefined(_decorator_current) ? tsc_value_function_generic(${adapter}, NULL) : _decorator_current; })`,
+            ty: T_VALUE,
+        };
+    }
+
+    private ensureClassInstanceSetterDecoratorAdapter(
+        cd: ts.ClassDeclaration,
+        member: ts.SetAccessorDeclaration,
+    ): string {
+        if (!cd.name) unsupported(cd, "decorated instance setters require a named class");
+        if (isStatic(member)) unsupported(member, "instance setter decorator adapter requires an instance setter");
+        const accessorName = this.classAccessorCName(member.name, "set");
+        if (!accessorName) unsupported(member, "computed instance setter names");
+        const name = `${cd.name.text}_${accessorName}_decorator_original`;
+        if (this.nodeFunctionAdapters.has(name)) return name;
+        this.nodeFunctionAdapters.add(name);
+        const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
+        this.protos.line(signature + ";");
+        const buf = new CBuf();
+        buf.open(signature);
+        buf.line("(void)env;");
+        buf.line("(void)this_arg;");
+        buf.line("(void)args;");
+        buf.line("tsc_panic(\"decorated instance setter original calls require a typed receiver bridge\");");
         buf.line("return tsc_value_undefined();");
         buf.close();
         buf.line();
@@ -9245,24 +9307,37 @@ class Emitter {
         if (!getter.parent || !ts.isClassDeclaration(getter.parent)) {
             unsupported(getter, "decorated instance getter requires a containing class");
         }
+        return this.emitSequencedExpr(ret, [{ value: recv, pass }], ([obj]) =>
+            this.decoratedInstanceGetterReadExpr(pa, getter, obj!, callee, ret),
+        );
+    }
+
+    private decoratedInstanceGetterReadExpr(
+        node: ts.Expression,
+        getter: ts.GetAccessorDeclaration,
+        obj: string,
+        callee: string,
+        ret: CType,
+    ): string {
+        if (!getter.parent || !ts.isClassDeclaration(getter.parent)) {
+            unsupported(getter, "decorated instance getter requires a containing class");
+        }
         const replacement = this.classInstanceGetterDecoratorReplacementName(getter.parent, getter);
-        return this.emitSequencedExpr(ret, [{ value: recv, pass }], ([obj]) => {
-            const fn = this.freshTemp("_getter_replacement");
-            const out = this.freshTemp("_getter_result");
-            const av = this.freshTemp("_getter_args");
-            const applied = {
-                c: `tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}))`,
-                ty: T_VALUE,
-            };
-            return (
-                `({ tsc_value_t ${fn} = ${replacement}; ` +
-                `${ret.c} ${out} = ${this.zeroValue(ret)}; ` +
-                `if (tsc_value_is_undefined(${fn})) { ${out} = ${callee}(${obj}); } ` +
-                `else { tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), 1); ` +
-                `${out} = ${this.coerce(applied, ret, pa)}; } ` +
-                `${out}; })`
-            );
-        });
+        const fn = this.freshTemp("_getter_replacement");
+        const out = this.freshTemp("_getter_result");
+        const av = this.freshTemp("_getter_args");
+        const applied = {
+            c: `tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}))`,
+            ty: T_VALUE,
+        };
+        return (
+            `({ tsc_value_t ${fn} = ${replacement}; ` +
+            `${ret.c} ${out} = ${this.zeroValue(ret)}; ` +
+            `if (tsc_value_is_undefined(${fn})) { ${out} = ${callee}(${obj}); } ` +
+            `else { tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), 1); ` +
+            `${out} = ${this.coerce(applied, ret, node)}; } ` +
+            `${out}; })`
+        );
     }
 
     private emitDecoratedStaticGetterAccess(
@@ -9322,6 +9397,29 @@ class Emitter {
         return (
             `({ tsc_value_t ${fn} = ${replacement}; ` +
             `if (tsc_value_is_undefined(${fn})) { ${callee}(${assigned}); } ` +
+            `else { tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), 1); ` +
+            `tsc_array_push_value(${av}, ${this.coerce({ c: assigned, ty: paramType }, T_VALUE, node)}); ` +
+            `(void)tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av})); } })`
+        );
+    }
+
+    private decoratedInstanceSetterCallExpr(
+        node: ts.Expression,
+        setter: ts.SetAccessorDeclaration,
+        callee: string,
+        obj: string,
+        paramType: CType,
+        assigned: string,
+    ): string {
+        if (!setter.parent || !ts.isClassDeclaration(setter.parent)) {
+            unsupported(setter, "decorated instance setter requires a containing class");
+        }
+        const replacement = this.classInstanceSetterDecoratorReplacementName(setter.parent, setter);
+        const fn = this.freshTemp("_setter_replacement");
+        const av = this.freshTemp("_setter_args");
+        return (
+            `({ tsc_value_t ${fn} = ${replacement}; ` +
+            `if (tsc_value_is_undefined(${fn})) { ${callee}(${obj}, ${assigned}); } ` +
             `else { tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), 1); ` +
             `tsc_array_push_value(${av}, ${this.coerce({ c: assigned, ty: paramType }, T_VALUE, node)}); ` +
             `(void)tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av})); } })`
@@ -9408,12 +9506,19 @@ class Emitter {
                 { value: rhs, target: paramType, node: bin.right },
             ],
             ([obj, value]) => {
+                const setCall = (assigned: string): string =>
+                    this.classMemberHasDecorators(accessor.decl)
+                        ? this.decoratedInstanceSetterCallExpr(left, accessor.decl, callee, obj!, paramType, assigned)
+                        : `${callee}(${obj}, ${assigned})`;
                 if (!getter || !getterName || !getterType) {
-                    return `({ ${callee}(${obj}, ${value}); ${value}; })`;
+                    return `({ ${setCall(value!)}; ${value}; })`;
                 }
                 const cur = this.freshTemp("_accessor_cur");
                 const next = this.freshTemp("_accessor_next");
-                const getCall = `${getter.owner}_${getterName}(${obj})`;
+                const getCallee = `${getter.owner}_${getterName}`;
+                const getCall = !isStatic(getter.decl) && this.classMemberHasDecorators(getter.decl)
+                    ? this.decoratedInstanceGetterReadExpr(left, getter.decl, obj!, getCallee, getterType)
+                    : `${getCallee}(${obj})`;
                 const current = this.coerce({ c: getCall, ty: getterType }, paramType, left);
                 if (this.isLogicalAssignmentOperator(op)) {
                     return `({ ${paramType.c} ${cur} = ${current}; ` +
@@ -9423,13 +9528,13 @@ class Emitter {
                             cur,
                             value!,
                             next,
-                            (assigned) => `${callee}(${obj}, ${assigned})`,
+                            setCall,
                             left,
                         ) +
                         `; })`;
                 }
                 const assigned = this.classAccessorCompoundValue(op, paramType, cur, value!);
-                return `({ ${paramType.c} ${cur} = ${current}; ${paramType.c} ${next} = ${assigned}; ${callee}(${obj}, ${next}); ${next}; })`;
+                return `({ ${paramType.c} ${cur} = ${current}; ${paramType.c} ${next} = ${assigned}; ${setCall(next)}; ${next}; })`;
             },
         );
     }
