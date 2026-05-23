@@ -1,0 +1,6 @@
+hide length: Proxy getOwnPropertyDescriptor trap cannot hide non-configurable key
+hide sealed: Proxy getOwnPropertyDescriptor trap cannot hide non-configurable key
+new closed: Proxy getOwnPropertyDescriptor trap cannot report new key on non-extensible target
+length configurable: Proxy getOwnPropertyDescriptor trap cannot report non-configurable key as configurable
+frozen length writable: Proxy getOwnPropertyDescriptor trap cannot report non-configurable non-writable key as writable
+real frozen: f false false
