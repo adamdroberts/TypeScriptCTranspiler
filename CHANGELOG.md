@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Stacked standard class decorator replacements now compose in bottom-up invocation order while forwarding constructor arguments through AOT replacement constructors. Test: `class_decorator_replacement_order`.
 - Literal and const-literal computed standard class member names now have focused decorator coverage across field initializer replacements, method replacements, and getter/setter replacements. Test: `decorator_computed_members`.
 - Standard class decorator replacements can now return AOT constructor functions used by direct `new Class(...)` calls; the original class value passed to decorators is constructible through `Reflect.construct(value, args)`. Broader replacement edge cases remain deferred. Test: `class_decorator_replacement`.
 - Instance standard setter decorator replacement functions can now call the original setter value with `Reflect.apply(value, this, [next])`, with the boxed receiver bridged back to the typed class instance. Test: `instance_setter_decorator_original`.
