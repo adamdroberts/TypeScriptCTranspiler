@@ -1,0 +1,3 @@
+{
+  "description": "Array Proxy values without traps forward object helper and Reflect own-key operations to the array target"
+}
