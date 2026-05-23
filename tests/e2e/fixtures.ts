@@ -542,7 +542,7 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'module.exports.base = "assign-module-target-base";\nconst api = {\n  default: "assign-module-target-default",\n  label: "assign-module-target",\n  count: 130,\n  enabled: true\n};\nconst entries = Object.entries(api);\nmodule.exports = Object.assign(module.exports, Object.freeze(Object.fromEntries(entries)));\n',
     }),
     "tsc2c-cjs-function-scope-named": cjsPackage("tsc2c-cjs-function-scope-named", {
-        "index.js": "exports.add = function add(left, right) { return left + right; };\n",
+        "index.js": "exports.add = function add(left, right) { return left + right; };\nexports.label = \"function-scope-rest\";\n",
     }),
     "tsc2c-cjs-function-scope-default": cjsPackage("tsc2c-cjs-function-scope-default", {
         "index.js": "module.exports = function multiply(left, right) { return left * right; };\n",
@@ -931,7 +931,7 @@ const packages: Record<string, PackageFixture> = {
         "local.js": "exports.quadruple = function quadruple(value) { return value * 4; };\n",
     }),
     "tsc2c-cjs-destructure-package": cjsPackage("tsc2c-cjs-destructure-package", {
-        "index.js": 'exports.label = "destructure-cjs";\nexports["item-count"] = 6;\nexports.enabled = true;\nexports.add = function add(left, right) { return left + right; };\n',
+        "index.js": 'exports.label = "destructure-cjs";\nexports["item-count"] = 6;\nexports.enabled = true;\nexports.add = function add(left, right) { return left + right; };\nexports.extra = "rest-extra";\n',
     }),
     "tsc2c-cjs-direct-function-package": cjsPackage("tsc2c-cjs-direct-function-package", {
         "index.js": "module.exports = function add(left, right) { return left + right; };\n",

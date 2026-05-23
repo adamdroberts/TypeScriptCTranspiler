@@ -3707,6 +3707,46 @@ class Emitter {
         return name;
     }
 
+    private requireDestructureRestIdentifier(element: ts.BindingElement): ts.Identifier | null {
+        if (!element.dotDotDotToken) return null;
+        if (!ts.isIdentifier(element.name)) {
+            unsupported(element.name, "require destructuring rest requires identifier bindings");
+        }
+        if (element.propertyName || element.initializer) {
+            unsupported(element, "require destructuring rest does not support property names or defaults");
+        }
+        return element.name;
+    }
+
+    private requireDestructureExcludedExportNames(pattern: ts.ObjectBindingPattern): Set<string> {
+        const excluded = new Set<string>();
+        for (const element of pattern.elements) {
+            if (element.dotDotDotToken) continue;
+            excluded.add(this.requireDestructureExportName(element));
+        }
+        return excluded;
+    }
+
+    private emitCommonJsRequireRestObject(
+        node: ts.Node,
+        info: ModuleInfo,
+        excluded: Set<string>,
+    ): EmitResult {
+        const obj = this.freshTemp("_reqrest");
+        const pieces = [`tsc_object_t* ${obj} = tsc_object_new()`];
+        for (const exported of this.commonJsExportedMemberDeclarations(info.sf)) {
+            if (excluded.has(exported.name)) continue;
+            const cName = this.declarationCName(exported.decl);
+            if (!cName) unsupported(exported.decl, `unsupported CommonJS export "${exported.name}" for require rest binding`);
+            const ty = this.commonJsExportedCType(exported.decl);
+            pieces.push(
+                `tsc_object_set(${obj}, tsc_str_from_lit("${escapeCString(exported.name)}", ${utf8ByteLen(exported.name)}), ${this.coerce({ c: cName, ty }, T_VALUE, node)})`,
+            );
+        }
+        pieces.push(`tsc_value_object(${obj})`);
+        return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
+    }
+
     private emitTopLevelRequireDestructuring(
         initBuf: CBuf,
         d: ts.VariableDeclaration,
@@ -3718,6 +3758,9 @@ class Emitter {
         const nativeAddon = this.emitNativeAddonValue(spec, d.getSourceFile().fileName);
         if (nativeAddon) {
             for (const element of d.name.elements) {
+                if (element.dotDotDotToken) {
+                    unsupported(element, "native addon require destructuring does not support rest bindings");
+                }
                 const exportName = this.requireDestructureExportName(element);
                 if (!ts.isIdentifier(element.name)) {
                     unsupported(element.name, "top-level require destructuring requires identifier bindings");
@@ -3735,7 +3778,18 @@ class Emitter {
         if (!info) {
             unsupported(d.initializer ?? d, `unresolved require("${spec}")`);
         }
+        const excluded = this.requireDestructureExcludedExportNames(d.name);
         for (const element of d.name.elements) {
+            const rest = this.requireDestructureRestIdentifier(element);
+            if (rest) {
+                const localName = this.declaredName(rest);
+                const value = this.emitCommonJsRequireRestObject(element, info, excluded);
+                this.globalDecls.line(`static tsc_value_t ${localName};`);
+                initBuf.line(`${localName} = ${value.c};`);
+                const sym = this.symbolForIdentifier(rest);
+                if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
+                continue;
+            }
             const exportName = this.requireDestructureExportName(element);
             if (!ts.isIdentifier(element.name)) {
                 unsupported(element.name, "top-level require destructuring requires identifier bindings");
@@ -3778,6 +3832,10 @@ class Emitter {
                     ? decl.parent
                     : null;
         if (!element || !ts.isObjectBindingPattern(element.parent)) return null;
+        if (element.dotDotDotToken) {
+            if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
+            return T_VALUE;
+        }
         const varDecl = element.parent.parent;
         if (
             !ts.isVariableDeclaration(varDecl) ||
@@ -7259,7 +7317,24 @@ class Emitter {
         if (!info) {
             unsupported(d.initializer ?? d, `unresolved require("${spec}")`);
         }
+        const excluded = this.requireDestructureExcludedExportNames(d.name);
         for (const element of d.name.elements) {
+            const rest = this.requireDestructureRestIdentifier(element);
+            if (rest) {
+                const value = this.emitCommonJsRequireRestObject(element, info, excluded);
+                const localName = mangleIdent(rest.text);
+                const sym = this.symbolForIdentifier(rest);
+                if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
+                const cell = this.currentFunctionCellForSymbol(sym);
+                if (cell) {
+                    buf.line(`tsc_value_t* ${cell.cellName} = (tsc_value_t*)TSC_GC_MALLOC(sizeof(tsc_value_t));`);
+                    buf.line(`*${cell.cellName} = ${value.c};`);
+                    continue;
+                }
+                const qual = isConst ? " const" : "";
+                buf.line(`tsc_value_t${qual} ${localName} = ${value.c};`);
+                continue;
+            }
             const exportName = this.requireDestructureExportName(element);
             if (!ts.isIdentifier(element.name)) {
                 unsupported(element.name, "require destructuring requires identifier bindings");
