@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Fixed
+- `crypto.randomUUID(...)` now accepts a bounded `{ disableEntropyCache }` options object plus ignored extra arguments for global, namespace, and named import forms. Test: `crypto_random_uuid`.
 - Global `btoa(...)` and `atob(...)` now evaluate ignored extra arguments after the input string. Test: `base64_globals`.
 - `net.isIP(...)`, `net.isIPv4(...)`, and `net.isIPv6(...)` now evaluate ignored extra arguments for global, namespace, and named import forms. Test: `net_is_ip`.
 - `fs.chownSync(...)`, `fs.lchownSync(...)`, and their immediate `fs.promises` counterparts now evaluate ignored extra arguments after uid/gid. Test: `fs_chown_ignored_arguments`.
