@@ -198,24 +198,24 @@ tsc_str_t* tsc_str_from_num_radix(double n, double radix) {
 
 int number_fraction_digits(double value) {
     if (isnan(value)) return 0;
-    if (isinf(value)) tsc_panic("Number.toFixed: digits must be finite");
+    if (isinf(value)) tsc_throw_str(tsc_str_from_cstr("Number.toFixed: digits must be finite"));
     int digits = (int)(value < 0 ? ceil(value) : floor(value));
-    if (digits < 0 || digits > 100) tsc_panic("Number.toFixed: digits must be 0..100");
+    if (digits < 0 || digits > 100) tsc_throw_str(tsc_str_from_cstr("Number.toFixed: digits must be 0..100"));
     return digits;
 }
 
 int number_exponential_fraction_digits(double value) {
     if (isnan(value)) return 0;
-    if (isinf(value)) tsc_panic("Number.toExponential: digits must be finite");
+    if (isinf(value)) tsc_throw_str(tsc_str_from_cstr("Number.toExponential: digits must be finite"));
     int digits = (int)(value < 0 ? ceil(value) : floor(value));
-    if (digits < 0 || digits > 100) tsc_panic("Number.toExponential: digits must be 0..100");
+    if (digits < 0 || digits > 100) tsc_throw_str(tsc_str_from_cstr("Number.toExponential: digits must be 0..100"));
     return digits;
 }
 
 int number_precision_digits(double value) {
-    if (isnan(value) || isinf(value)) tsc_panic("Number.toPrecision: precision must be finite");
+    if (isnan(value) || isinf(value)) tsc_throw_str(tsc_str_from_cstr("Number.toPrecision: precision must be finite"));
     int digits = (int)(value < 0 ? ceil(value) : floor(value));
-    if (digits < 1 || digits > 100) tsc_panic("Number.toPrecision: precision must be 1..100");
+    if (digits < 1 || digits > 100) tsc_throw_str(tsc_str_from_cstr("Number.toPrecision: precision must be 1..100"));
     return digits;
 }
 

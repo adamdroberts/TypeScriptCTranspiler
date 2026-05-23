@@ -1,0 +1,8 @@
+fixed range: Number.toFixed: digits must be 0..100
+fixed finite: Number.toFixed: digits must be finite
+exponential range: Number.toExponential: digits must be 0..100
+exponential finite: Number.toExponential: digits must be finite
+precision range: Number.toPrecision: precision must be 1..100
+precision finite: Number.toPrecision: precision must be finite
+dynamic range: Number.toFixed: digits must be 0..100
+after: 1.2 1.3e+1 13

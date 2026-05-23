@@ -1837,20 +1837,20 @@ tsc_str_t* tsc_value_method_to_string(tsc_value_t recv, tsc_value_t radix) {
 }
 
 tsc_str_t* tsc_value_method_to_fixed(tsc_value_t recv, tsc_value_t fraction_digits) {
-    if (value_is_box(recv)) tsc_panic("Number.toFixed: receiver must be a number");
+    if (value_is_box(recv)) tsc_throw_str(tsc_str_from_cstr("Number.toFixed: receiver must be a number"));
     double digits = tsc_value_is_nullish(fraction_digits) ? 0.0 : tsc_value_as_num(fraction_digits);
     return tsc_str_from_num_fixed(value_as_num(recv), digits);
 }
 
 tsc_str_t* tsc_value_method_to_exponential(tsc_value_t recv, tsc_value_t fraction_digits) {
-    if (value_is_box(recv)) tsc_panic("Number.toExponential: receiver must be a number");
+    if (value_is_box(recv)) tsc_throw_str(tsc_str_from_cstr("Number.toExponential: receiver must be a number"));
     bool omitted = value_is_box(fraction_digits) && value_tag(fraction_digits) == TSC_VALUE_TAG_UNDEFINED;
     double digits = omitted ? 0.0 : tsc_value_as_num(fraction_digits);
     return tsc_str_from_num_exponential(value_as_num(recv), digits, !omitted);
 }
 
 tsc_str_t* tsc_value_method_to_precision(tsc_value_t recv, tsc_value_t precision) {
-    if (value_is_box(recv)) tsc_panic("Number.toPrecision: receiver must be a number");
+    if (value_is_box(recv)) tsc_throw_str(tsc_str_from_cstr("Number.toPrecision: receiver must be a number"));
     bool omitted = value_is_box(precision) && value_tag(precision) == TSC_VALUE_TAG_UNDEFINED;
     double digits = omitted ? 0.0 : tsc_value_as_num(precision);
     return tsc_str_from_num_precision(value_as_num(recv), digits, !omitted);
