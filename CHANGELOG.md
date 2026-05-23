@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Added opt-in dynamic property-operation runtime diagnostics via `TSC_DYNAMIC_STATS=1`, with e2e support for per-case runtime env files and stderr substring assertions. Test: `dynamic_runtime_stats`.
 - The manual benchmark harness now records `tsc2c` output binary size in JSON, console tables, and Markdown reports, so Phase 15 size/perf tracking has a concrete measurement path.
 - Added `bun run bench:check -- <results.json>` for benchmark threshold checks over binary size, `tsc2c` time, and speed ratios.
 - Added `bun run bench:smoke` as a short local/CI benchmark threshold smoke using the `arith` benchmark and default thresholds.

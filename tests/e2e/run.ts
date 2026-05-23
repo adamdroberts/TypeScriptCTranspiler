@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 /**
  * E2E runner: compile each case in tests/e2e/cases/<name>/in.ts, run the
- * resulting binary, diff stdout vs expected.stdout.
+ * resulting binary, diff stdout vs expected.stdout, and optionally assert a
+ * stderr substring for opt-in diagnostics.
  */
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
@@ -15,6 +16,7 @@ interface Case {
     name: string;
     entry: string;
     expected?: string;
+    expectedStderrContains?: string;
     expectedExitCode?: number;
     expectedMainCContains?: string;
     emitCOnly?: boolean;
@@ -23,6 +25,7 @@ interface Case {
     runtimeCodeManifest?: string;
     unsafeEval?: boolean;
     release?: boolean;
+    runEnv?: Record<string, string>;
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -44,6 +47,7 @@ async function discoverCases(): Promise<Case[]> {
         if (filterStr && !d.includes(filterStr)) continue;
         const entry = path.join(casesDir, d, "in.ts");
         const expectedPath = path.join(casesDir, d, "expected.stdout");
+        const expectedStderrContainsPath = path.join(casesDir, d, "expected.stderr.contains");
         const expectedExitPath = path.join(casesDir, d, "expected.exitcode");
         const expectedMainCContainsPath = path.join(casesDir, d, "expected.mainc.contains");
         const emitCOnlyPath = path.join(casesDir, d, "compile.emit_c_only");
@@ -52,6 +56,7 @@ async function discoverCases(): Promise<Case[]> {
         const runtimeCodeManifestPath = path.join(casesDir, d, "runtime-code-manifest.json");
         const unsafeEvalPath = path.join(casesDir, d, "compile.unsafe_eval");
         const releasePath = path.join(casesDir, d, "compile.release");
+        const runEnvPath = path.join(casesDir, d, "run.env");
         if (!(await exists(entry))) continue;
 
         const release = await exists(releasePath);
@@ -69,6 +74,12 @@ async function discoverCases(): Promise<Case[]> {
         const expectedMainCContains = await exists(expectedMainCContainsPath)
             ? (await fs.readFile(expectedMainCContainsPath, "utf8")).trimEnd()
             : undefined;
+        const expectedStderrContains = await exists(expectedStderrContainsPath)
+            ? (await fs.readFile(expectedStderrContainsPath, "utf8")).trimEnd()
+            : undefined;
+        const runEnv = await exists(runEnvPath)
+            ? parseRunEnv(await fs.readFile(runEnvPath, "utf8"), runEnvPath)
+            : undefined;
 
         if (await exists(expectedExitPath)) {
             const raw = await fs.readFile(expectedExitPath, "utf8");
@@ -80,6 +91,7 @@ async function discoverCases(): Promise<Case[]> {
                 name: d,
                 entry,
                 expectedExitCode,
+                expectedStderrContains,
                 expectedMainCContains,
                 emitCOnly,
                 nativeAddonManifest,
@@ -87,6 +99,7 @@ async function discoverCases(): Promise<Case[]> {
                 runtimeCodeManifest,
                 unsafeEval,
                 release,
+                runEnv,
             });
             continue;
         }
@@ -101,6 +114,7 @@ async function discoverCases(): Promise<Case[]> {
             name: d,
             entry,
             expected,
+            expectedStderrContains,
             expectedMainCContains,
             emitCOnly,
             nativeAddonManifest,
@@ -108,14 +122,29 @@ async function discoverCases(): Promise<Case[]> {
             runtimeCodeManifest,
             unsafeEval,
             release,
+            runEnv,
         });
     }
     return cases.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function runBinary(bin: string): Promise<{ code: number; stdout: string; stderr: string }> {
+function parseRunEnv(raw: string, filename: string): Record<string, string> {
+    const env: Record<string, string> = {};
+    for (const [idx, rawLine] of raw.split(/\r?\n/).entries()) {
+        const line = rawLine.trim();
+        if (line.length === 0 || line.startsWith("#")) continue;
+        const eq = line.indexOf("=");
+        if (eq <= 0) {
+            throw new Error(`invalid run.env line ${idx + 1} in ${filename}`);
+        }
+        env[line.slice(0, eq)] = line.slice(eq + 1);
+    }
+    return env;
+}
+
+function runBinary(bin: string, runEnv?: Record<string, string>): Promise<{ code: number; stdout: string; stderr: string }> {
     return new Promise((resolve) => {
-        const p = spawn(bin, [], { stdio: ["ignore", "pipe", "pipe"] });
+        const p = spawn(bin, [], { env: { ...process.env, ...runEnv }, stdio: ["ignore", "pipe", "pipe"] });
         let stdout = "";
         let stderr = "";
         p.stdout.on("data", (d) => (stdout += d.toString()));
@@ -184,10 +213,20 @@ async function main(): Promise<void> {
             passed++;
             continue;
         }
-        const run = await runBinary(bin);
+        const run = await runBinary(bin, c.runEnv);
         if (run.code !== 0) {
             console.log(`RUN FAIL (exit ${run.code})`);
             if (run.stderr) console.log(run.stderr);
+            failed++;
+            continue;
+        }
+        if (c.expectedStderrContains !== undefined && !run.stderr.includes(c.expectedStderrContains)) {
+            console.log("STDERR MISSING EXPECTED SUBSTRING");
+            console.log("---expected substring---");
+            process.stdout.write(c.expectedStderrContains);
+            console.log("---actual---");
+            process.stdout.write(run.stderr);
+            console.log("---end---");
             failed++;
             continue;
         }

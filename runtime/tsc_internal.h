@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <arpa/inet.h>
 #include <libgen.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <netdb.h>
 #include <openssl/evp.h>
@@ -181,6 +182,20 @@ typedef struct tsc_event_once_promise_env {
 
 extern tsc_function_identity_t* g_function_identities;
 extern double g_event_emitter_default_max_listeners;
+
+typedef enum {
+    TSC_DYNAMIC_STAT_GET_PROP,
+    TSC_DYNAMIC_STAT_GET_PROP_RECEIVER,
+    TSC_DYNAMIC_STAT_SET_PROP,
+    TSC_DYNAMIC_STAT_SET_PROP_RECEIVER,
+    TSC_DYNAMIC_STAT_HAS_PROP,
+    TSC_DYNAMIC_STAT_DELETE_PROP,
+    TSC_DYNAMIC_STAT_OWN_KEYS,
+    TSC_DYNAMIC_STAT_GET_OWN_PROPERTY_DESCRIPTOR,
+    TSC_DYNAMIC_STAT_COUNT,
+} tsc_dynamic_stat_kind_t;
+
+void tsc_dynamic_stat_hit(tsc_dynamic_stat_kind_t kind);
 
 // --- Inline Boxing ---
 static inline tsc_value_t value_box(tsc_value_tag_t tag, uintptr_t payload) {

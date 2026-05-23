@@ -1,6 +1,6 @@
 # Testing
 
-`tsc2c` uses a single end-to-end test harness: **compile each TS case, execute the resulting binary, diff stdout against an expected file**. Expected compile-failure cases use `expected.exitcode` instead. No separate unit test layer yet — by design. Every feature has at least one black-box test proving it produces correct output or the intended diagnostic.
+`tsc2c` uses a single end-to-end test harness: **compile each TS case, execute the resulting binary, diff stdout against an expected file**. Expected compile-failure cases use `expected.exitcode` instead, and opt-in runtime diagnostics can assert a stderr substring. No separate unit test layer yet — by design. Every feature has at least one black-box test proving it produces correct output or the intended diagnostic.
 
 The harness recreates its tiny `node_modules` package fixtures before case discovery, so running `bun install` does not remove the package-source cases needed by the Phase 14 tests.
 
@@ -309,7 +309,7 @@ tests/e2e/
         └── expected.stdout
 ```
 
-Each subdirectory under `tests/e2e/cases/` is one test. The harness auto-discovers every directory with `in.ts` plus either `expected.stdout` or `expected.exitcode`. A case may also include `expected.mainc.contains` to assert that generated `main.c` contains a substring; `{{ENTRY}}` expands to the case entry path. A `compile.release` marker compiles that case with `--release`.
+Each subdirectory under `tests/e2e/cases/` is one test. The harness auto-discovers every directory with `in.ts` plus either `expected.stdout` or `expected.exitcode`. A case may also include `expected.mainc.contains` to assert that generated `main.c` contains a substring; `{{ENTRY}}` expands to the case entry path. `run.env` adds `KEY=VALUE` pairs to the binary execution environment, and `expected.stderr.contains` asserts that the captured stderr includes a diagnostic substring. A `compile.release` marker compiles that case with `--release`.
 
 ## How the harness works
 
@@ -321,9 +321,10 @@ Each subdirectory under `tests/e2e/cases/` is one test. The harness auto-discove
    - If `expected.exitcode` exists, compare the compile exit code and skip binary execution.
    - If compile exits non-zero unexpectedly → print the error → mark **COMPILE FAIL**.
    - If `expected.mainc.contains` exists, check the generated C before running the binary.
-   - Run the binary with no stdin.
+   - Run the binary with no stdin, plus any environment entries from `run.env`.
    - If the binary exits non-zero → **RUN FAIL**.
-   - Else diff captured stdout against `expected.stdout`.
+   - If `expected.stderr.contains` exists, assert that captured stderr includes it.
+   - Diff captured stdout against `expected.stdout`.
    - If they differ → **STDOUT MISMATCH** with both blocks printed.
    - Else → **OK**.
 3. Print the tally. Exit 0 if everything OK, else 1.
@@ -375,6 +376,7 @@ If your test imports other files, add them to the same directory. They're auto-p
 - **Error paths at the emit level** — expected-failure coverage exists for emitter diagnostics, but broader exit-code coverage is still thin.
 - **Multi-config matrix** — `--no-gc`, default, and one `--release` case are covered. macOS / Windows / clang paths aren't exercised yet.
 - **Binary size / perf regressions** — the manual benchmark harness records `tsc2c` output binary bytes and timing/ops data; `bun run bench:check -- <results.json> [policy.json]` can enforce thresholds from a JSON policy, with `MAX_BINARY_BYTES`, `MAX_TSC2C_MS`, `MIN_VS_BUN`, and `MIN_VS_NODE` as local overrides. `bun run bench:smoke` uses `manual-tests/benchmarks/thresholds-smoke.json` for the default local/CI smoke. A full shared CI matrix and long-run threshold policy still remain.
+- **Inline-cache baselines** — `TSC_DYNAMIC_STATS=1` makes compiled binaries print dynamic property-operation counters to stderr at process exit. `dynamic_runtime_stats` covers the opt-in path, but actual inline caches and shape hit/miss accounting remain Phase 15 work.
 - **Stdlib edge cases** at scale — we test "happy path" for each feature. Fuzz / property-based testing would improve coverage.
 
 These are candidate Phase 15 work. See [`todo.md`](todo.md).

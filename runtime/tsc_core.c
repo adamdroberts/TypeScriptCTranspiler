@@ -100,6 +100,8 @@ static tsc_try_frame_t* g_try_top = NULL;
 static tsc_str_t* g_current_error = NULL;
 static struct timespec g_boot_time;
 static bool g_boot_time_set = false;
+static bool g_dynamic_stats_enabled = false;
+static uint64_t g_dynamic_stats[TSC_DYNAMIC_STAT_COUNT];
 typedef struct {
     tsc_next_tick_fn_t fn;
     void* env;
@@ -148,10 +150,36 @@ bool str_lit_eq(const tsc_str_t* s, const char* lit) {
     return s && s->len == n && memcmp(s->data, lit, n) == 0;
 }
 
+static void tsc_dynamic_stats_report(void) {
+    if (!g_dynamic_stats_enabled) return;
+    fprintf(
+        stderr,
+        "tsc dynamic stats: get_prop=%" PRIu64 " get_prop_receiver=%" PRIu64 " set_prop=%" PRIu64 " set_prop_receiver=%" PRIu64 " has_prop=%" PRIu64 " delete_prop=%" PRIu64 " own_keys=%" PRIu64 " get_own_property_descriptor=%" PRIu64 "\n",
+        g_dynamic_stats[TSC_DYNAMIC_STAT_GET_PROP],
+        g_dynamic_stats[TSC_DYNAMIC_STAT_GET_PROP_RECEIVER],
+        g_dynamic_stats[TSC_DYNAMIC_STAT_SET_PROP],
+        g_dynamic_stats[TSC_DYNAMIC_STAT_SET_PROP_RECEIVER],
+        g_dynamic_stats[TSC_DYNAMIC_STAT_HAS_PROP],
+        g_dynamic_stats[TSC_DYNAMIC_STAT_DELETE_PROP],
+        g_dynamic_stats[TSC_DYNAMIC_STAT_OWN_KEYS],
+        g_dynamic_stats[TSC_DYNAMIC_STAT_GET_OWN_PROPERTY_DESCRIPTOR]
+    );
+}
+
+void tsc_dynamic_stat_hit(tsc_dynamic_stat_kind_t kind) {
+    if (!g_dynamic_stats_enabled || kind < 0 || kind >= TSC_DYNAMIC_STAT_COUNT) return;
+    g_dynamic_stats[kind]++;
+}
+
 void tsc_bootstrap(int argc, char** argv) {
     TSC_GC_INIT();
     tsc_argc = argc;
     tsc_argv = argv;
+    const char* dynamic_stats = getenv("TSC_DYNAMIC_STATS");
+    if (dynamic_stats && dynamic_stats[0] != '\0' && strcmp(dynamic_stats, "0") != 0) {
+        g_dynamic_stats_enabled = true;
+        atexit(tsc_dynamic_stats_report);
+    }
     srand((unsigned)time(NULL));
     if (clock_gettime(CLOCK_MONOTONIC, &g_boot_time) == 0) {
         g_boot_time_set = true;

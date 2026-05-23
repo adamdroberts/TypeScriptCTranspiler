@@ -266,6 +266,7 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
 
 
 tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_GET_PROP);
     if (!value_is_box(v)) return tsc_value_undefined();
     if (value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(v);
@@ -299,6 +300,7 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
 }
 
 tsc_value_t tsc_value_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc_value_t receiver) {
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_GET_PROP_RECEIVER);
     if (!value_is_box(v)) return tsc_value_undefined();
     if (value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_get_receiver((tsc_object_t*)value_ptr(v), key, receiver);
@@ -577,6 +579,7 @@ tsc_value_t tsc_reflect_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, t
 }
 
 bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_SET_PROP);
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_set((tsc_object_t*)value_ptr(v), key, value);
     }
@@ -590,6 +593,7 @@ bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
 }
 
 bool tsc_value_set_prop_receiver(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver) {
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_SET_PROP_RECEIVER);
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_set_receiver((tsc_object_t*)value_ptr(v), key, value, receiver);
     }
@@ -647,6 +651,7 @@ bool tsc_value_property_is_enumerable(tsc_value_t v, const tsc_str_t* key) {
 }
 
 bool tsc_value_has_prop(tsc_value_t v, const tsc_str_t* key) {
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_HAS_PROP);
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_has((tsc_object_t*)value_ptr(v), key);
     }
@@ -668,6 +673,7 @@ bool tsc_reflect_has_prop(tsc_value_t v, const tsc_str_t* key) {
 }
 
 bool tsc_value_delete_prop(tsc_value_t v, tsc_str_t* key) {
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_DELETE_PROP);
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_delete((tsc_object_t*)value_ptr(v), key);
     }
@@ -989,6 +995,7 @@ tsc_value_t value_descriptors_from_function(const tsc_function_identity_t* fn) {
 }
 
 tsc_array_t* tsc_value_own_keys(tsc_value_t v) {
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_OWN_KEYS);
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_own_keys_dyn((tsc_object_t*)value_ptr(v));
     }
@@ -1029,6 +1036,7 @@ tsc_value_t value_descriptor_from_prop(const tsc_object_prop_t* prop) {
 }
 
 tsc_value_t tsc_value_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key) {
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_GET_OWN_PROPERTY_DESCRIPTOR);
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         return value_descriptor_from_array_key((const tsc_array_t*)value_ptr(v), key);
     }
