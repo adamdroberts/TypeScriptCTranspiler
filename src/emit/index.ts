@@ -6647,6 +6647,8 @@ class Emitter {
             const name = this.declaredName(d.name);
             const baseCt = d.initializer && this.requireCallSpecifier(d.initializer)
                 ? T_VALUE
+                : this.decoratedClassConstructorAliasTarget(d)
+                ? T_VALUE
                 : d.initializer &&
                     ts.isObjectLiteralExpression(d.initializer) &&
                     this.isUntypedJsObjectLiteral(d.initializer)
@@ -7277,7 +7279,9 @@ class Emitter {
             let r: EmitResult | null = null;
             if (d.initializer) {
                 r = this.emitExpr(d.initializer);
-                if (d.type) {
+                if (this.decoratedClassConstructorAliasTarget(d)) {
+                    ct = T_VALUE;
+                } else if (d.type) {
                     ct = this.prepareType(mapType(d, this.checker));
                 } else {
                     const inferred = this.prepareType(mapType(d, this.checker));
@@ -7861,6 +7865,50 @@ class Emitter {
         const ty = this.checker.getTypeAtLocation(expr);
         const sym = ty.getSymbol();
         return sym?.getDeclarations()?.find(ts.isClassDeclaration) ?? null;
+    }
+
+    private classDeclForConstructorIdentifier(
+        id: ts.Identifier,
+        seen = new Set<ts.Symbol>(),
+    ): ts.ClassDeclaration | null {
+        const imported = this.importAliasTargetDeclaration(id);
+        if (imported && ts.isClassDeclaration(imported)) return imported;
+
+        const sym = this.symbolForIdentifier(id);
+        if (sym && seen.has(sym)) return null;
+        if (sym) seen.add(sym);
+        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        if (decl && ts.isClassDeclaration(decl)) return decl;
+        if (decl && ts.isVariableDeclaration(decl) && decl.initializer) {
+            const declared = this.checker.getTypeAtLocation(decl.name);
+            if (declared.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return null;
+            const init = this.unwrapTransparentExpression(decl.initializer);
+            if (ts.isIdentifier(init)) {
+                return this.classDeclForConstructorIdentifier(init, seen);
+            }
+        }
+        return this.findClassDecl(id.text);
+    }
+
+    private decoratedClassConstructorAliasTarget(decl: ts.VariableDeclaration): ts.ClassDeclaration | null {
+        if (!decl.initializer) return null;
+        const declared = this.checker.getTypeAtLocation(decl.name);
+        if (declared.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return null;
+        const init = this.unwrapTransparentExpression(decl.initializer);
+        if (!ts.isIdentifier(init)) return null;
+        const target = this.classDeclForConstructorIdentifier(init);
+        if (!target || !ts.canHaveDecorators(target) || (ts.getDecorators(target) ?? []).length === 0) {
+            return null;
+        }
+        return target;
+    }
+
+    private decoratedClassConstructorAliasIdentifier(id: ts.Identifier): ts.ClassDeclaration | null {
+        const sym = this.symbolForIdentifier(id);
+        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        return decl && ts.isVariableDeclaration(decl)
+            ? this.decoratedClassConstructorAliasTarget(decl)
+            : null;
     }
 
     private findSymbolIteratorMethod(
@@ -8474,6 +8522,9 @@ class Emitter {
                         ty: T_VALUE,
                     };
                 }
+            }
+            if (this.decoratedClassConstructorAliasIdentifier(expr)) {
+                return { c: this.identifierRead(expr), ty: T_VALUE };
             }
             const classDecl = this.findClassDecl(expr.text);
             if (
@@ -23890,7 +23941,10 @@ class Emitter {
     private emitReflectConstruct(call: ts.CallExpression): EmitResult {
         const args = call.arguments;
         if (args.length < 2 || args.length > 3) unsupported(call, "Reflect.construct expects target and argumentsList");
-        if (!(ts.isIdentifier(args[0]!) && this.findClassDecl(args[0]!.text))) {
+        const targetDecl = ts.isIdentifier(args[0]!)
+            ? this.classDeclForConstructorIdentifier(args[0]!)
+            : null;
+        if (!targetDecl) {
             const target = this.emitExpr(args[0]!);
             if (target.ty.kind === "value") {
                 const list = this.emitReflectArgumentsListExpr(args[1]!);
@@ -23907,14 +23961,15 @@ class Emitter {
                 }
                 return this.emitSequencedCall("tsc_value_construct", T_VALUE, specs);
             }
+            if (!ts.isIdentifier(args[0]!)) {
+                unsupported(args[0]!, "Reflect.construct target must be a class identifier");
+            }
+            unsupported(args[0]!, "Reflect.construct target must be a supported class");
         }
         if (args.length === 3) unsupported(args[2]!, "Reflect.construct newTarget is supported only for dynamic targets");
-        if (!ts.isIdentifier(args[0]!)) {
-            unsupported(args[0]!, "Reflect.construct target must be a class identifier");
-        }
-        const cls = args[0]!.text;
-        const decl = this.findClassDecl(cls);
-        if (!decl) unsupported(args[0]!, "Reflect.construct target must be a supported class");
+        const decl = targetDecl;
+        const cls = decl.name?.text;
+        if (!cls) unsupported(args[0]!, "Reflect.construct target must be a supported class");
         let argList: ts.Expression = args[1]!;
         while (
             ts.isParenthesizedExpression(argList) ||
@@ -24893,7 +24948,8 @@ class Emitter {
                 { value: handler, target: T_VALUE, node: args[1]! },
             ]);
         }
-        const cls = this.identifierName(ctorExpr);
+        const targetClassDecl = this.classDeclForConstructorIdentifier(ctorExpr);
+        const cls = targetClassDecl?.name?.text ?? this.identifierName(ctorExpr);
         if (cls === "Function") {
             return this.emitUnsafeFunctionConstructor(n);
         }
@@ -25191,7 +25247,7 @@ class Emitter {
                 [{ value: r, target: T_STRING, node: input }],
             );
         }
-        const classDecl = this.findClassDecl(cls);
+        const classDecl = targetClassDecl ?? this.findClassDecl(cls);
         if (!classDecl) {
             const ctor = this.emitExpr(n.expression);
             if (ctor.ty.kind === "value") {

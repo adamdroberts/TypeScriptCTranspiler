@@ -1,0 +1,4 @@
+direct: direct:decorated
+parenthesized: parenthesized:decorated
+reflected: reflected:decorated
+seen: class:Box|replacement:direct|original:direct:decorated|replacement:parenthesized|original:parenthesized:decorated|replacement:reflected|original:reflected:decorated|
