@@ -175,6 +175,17 @@ function exhaustiveSwitchExit(value: "x" | "y"): number {
     return exhaustive_switch_after_exit;
 }
 
+function fallthroughSwitchExit(value: "p" | "q"): number {
+    switch (value) {
+        case "p":
+        case "q":
+            return 47;
+    }
+    const fallthrough_switch_after_exit = 48;
+    console.log(fallthrough_switch_after_exit);
+    return fallthrough_switch_after_exit;
+}
+
 function whileExit(): number {
     while (true) {
         return 50;
@@ -210,6 +221,7 @@ console.log(
     tryCatchExit(false),
     switchExit("a"),
     exhaustiveSwitchExit("y"),
+    fallthroughSwitchExit("p"),
     whileExit(),
     forExit(),
     doExit(false),

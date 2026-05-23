@@ -9131,11 +9131,16 @@ class Emitter {
 
     private switchStatementAlwaysExits(stmt: ts.SwitchStatement): boolean {
         let hasDefault = false;
+        let hasExitingBody = false;
         for (const clause of stmt.caseBlock.clauses) {
             if (ts.isDefaultClause(clause)) hasDefault = true;
             if (clause.statements.some((s) => this.statementContainsBreak(s))) return false;
+            if (clause.statements.length === 0) continue;
             if (!this.statementListAlwaysExits(clause.statements)) return false;
+            hasExitingBody = true;
         }
+        const lastClause = stmt.caseBlock.clauses[stmt.caseBlock.clauses.length - 1];
+        if (!hasExitingBody || !lastClause || lastClause.statements.length === 0) return false;
         return hasDefault || this.switchCoversFiniteDomain(stmt);
     }
 
