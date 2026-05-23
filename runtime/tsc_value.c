@@ -405,6 +405,22 @@ bool tsc_value_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
     return false;
 }
 
+bool tsc_value_object_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
+    if (tsc_value_is_nullish(v)) {
+        tsc_throw_str(tsc_str_from_cstr("Object.setPrototypeOf target must not be null or undefined"));
+    }
+    if (!value_is_valid_prototype(prototype)) {
+        tsc_throw_str(tsc_str_from_cstr("Object.setPrototypeOf prototype must be an object or null"));
+    }
+    if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) {
+        return true;
+    }
+    if (!tsc_object_set_prototype_of((tsc_object_t*)value_ptr(v), prototype)) {
+        tsc_throw_str(tsc_str_from_cstr("Object.setPrototypeOf failed"));
+    }
+    return true;
+}
+
 static bool value_is_reflect_object_target(tsc_value_t v) {
     if (!value_is_box(v)) return false;
     tsc_value_tag_t tag = value_tag(v);

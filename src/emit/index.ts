@@ -22244,7 +22244,7 @@ class Emitter {
             return this.emitSequencedExpr(T_VALUE, [
                 { value: obj, target: T_VALUE, node: arg },
                 { value: proto, target: T_VALUE, node: args[1]! },
-            ], ([o, p]) => `({ tsc_value_set_prototype_of(${o}, ${p}); ${o}; })`);
+            ], ([o, p]) => `({ tsc_value_object_set_prototype_of(${o}, ${p}); ${o}; })`);
         }
         if (name === "freeze") {
             if (args.length !== 1) unsupported(call, "Object.freeze expects object");

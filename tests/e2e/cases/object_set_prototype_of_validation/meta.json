@@ -1,0 +1,3 @@
+{
+  "description": "Object.setPrototypeOf validates targets, prototypes, and failed proxy traps"
+}

@@ -1,0 +1,8 @@
+null target: Object.setPrototypeOf target must not be null or undefined
+bad proto primitive: Object.setPrototypeOf prototype must be an object or null
+primitive target: 1
+locked change: Object.setPrototypeOf failed
+locked same: true
+proxy bad proto: Object.setPrototypeOf prototype must be an object or null no
+proxy false: Object.setPrototypeOf failed
+reflect false: false
