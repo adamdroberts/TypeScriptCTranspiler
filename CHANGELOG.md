@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unshadowed `Object.hasOwn(...)` calls over fresh or earlier pure const object/array literals with side-effect-free keys as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unshadowed `Object.keys(...)`, `Object.values(...)`, and `Object.entries(...)` calls over fresh or earlier pure const object/array literals as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats grouped fallthrough `switch` labels as exiting when the eventual case body exits and the finite-domain switch is exhaustive. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes statements after exhaustive no-break `switch` forms over finite literal domains when every case exits, even without a `default`. Test: `generated_c_dce_const`.

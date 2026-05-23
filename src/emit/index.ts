@@ -1000,6 +1000,15 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            method === "hasOwn" &&
+            call.arguments.length === 2 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Object")
+        ) {
+            return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts) &&
+                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts);
+        }
+        if (
+            ts.isIdentifier(recv) &&
             this.isSideEffectFreeMathCall(method, call.arguments, seenConsts) &&
             this.isUnshadowedGlobalIdentifier(recv, "Math")
         ) {
