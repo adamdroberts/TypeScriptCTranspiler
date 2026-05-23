@@ -250,7 +250,7 @@ tsc_bigint_t* tsc_bigint_from_lit(const char* lit) {
     int base = 10;
     const char* digits = bigint_digits_for(lit, &base);
     if (mpz_set_str(b->value, digits, base) != 0) {
-        tsc_panic("BigInt: invalid literal");
+        tsc_throw_str(tsc_str_from_cstr("BigInt: invalid literal"));
     }
     return b;
 }
@@ -261,14 +261,14 @@ tsc_bigint_t* tsc_bigint_from_str(const tsc_str_t* s) {
     int base = 10;
     const char* digits = bigint_digits_for(c, &base);
     if (mpz_set_str(b->value, digits, base) != 0) {
-        tsc_panic("BigInt: invalid string");
+        tsc_throw_str(tsc_str_from_cstr("BigInt: invalid string"));
     }
     return b;
 }
 
 tsc_bigint_t* tsc_bigint_from_num(double n) {
     if (isnan(n) || isinf(n) || floor(n) != n) {
-        tsc_panic("BigInt: number must be a finite integer");
+        tsc_throw_str(tsc_str_from_cstr("BigInt: number must be a finite integer"));
     }
     tsc_bigint_t* b = bigint_alloc();
     mpz_set_d(b->value, n);
@@ -306,22 +306,22 @@ tsc_bigint_t* tsc_bigint_mul(const tsc_bigint_t* a, const tsc_bigint_t* b) {
 }
 
 tsc_bigint_t* tsc_bigint_div(const tsc_bigint_t* a, const tsc_bigint_t* b) {
-    if (mpz_sgn(b->value) == 0) tsc_panic("BigInt: division by zero");
+    if (mpz_sgn(b->value) == 0) tsc_throw_str(tsc_str_from_cstr("BigInt: division by zero"));
     tsc_bigint_t* r = bigint_alloc();
     mpz_tdiv_q(r->value, a->value, b->value);
     return r;
 }
 
 tsc_bigint_t* tsc_bigint_mod(const tsc_bigint_t* a, const tsc_bigint_t* b) {
-    if (mpz_sgn(b->value) == 0) tsc_panic("BigInt: modulo by zero");
+    if (mpz_sgn(b->value) == 0) tsc_throw_str(tsc_str_from_cstr("BigInt: modulo by zero"));
     tsc_bigint_t* r = bigint_alloc();
     mpz_tdiv_r(r->value, a->value, b->value);
     return r;
 }
 
 tsc_bigint_t* tsc_bigint_pow(const tsc_bigint_t* a, const tsc_bigint_t* b) {
-    if (mpz_sgn(b->value) < 0) tsc_panic("BigInt: negative exponent");
-    if (!mpz_fits_ulong_p(b->value)) tsc_panic("BigInt: exponent too large");
+    if (mpz_sgn(b->value) < 0) tsc_throw_str(tsc_str_from_cstr("BigInt: negative exponent"));
+    if (!mpz_fits_ulong_p(b->value)) tsc_throw_str(tsc_str_from_cstr("BigInt: exponent too large"));
     tsc_bigint_t* r = bigint_alloc();
     mpz_pow_ui(r->value, a->value, mpz_get_ui(b->value));
     return r;
@@ -337,7 +337,7 @@ bool tsc_bigint_eq(const tsc_bigint_t* a, const tsc_bigint_t* b) {
 
 tsc_str_t* tsc_bigint_to_string(const tsc_bigint_t* a, double radix) {
     int base = isnan(radix) || radix == 0.0 ? 10 : (int)radix;
-    if (base < 2 || base > 36) tsc_panic("BigInt.toString: radix must be 2..36");
+    if (base < 2 || base > 36) tsc_throw_str(tsc_str_from_cstr("BigInt.toString: radix must be 2..36"));
     char* raw = mpz_get_str(NULL, base, a->value);
     tsc_str_t* out = tsc_str_from_cstr(raw);
     free(raw);

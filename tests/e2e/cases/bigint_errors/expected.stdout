@@ -1,0 +1,10 @@
+string: BigInt: invalid string
+fraction: BigInt: number must be a finite integer
+infinity: BigInt: number must be a finite integer
+div: BigInt: division by zero
+mod: BigInt: modulo by zero
+negative pow: BigInt: negative exponent
+huge pow: BigInt: exponent too large
+radix low: BigInt.toString: radix must be 2..36
+radix high: BigInt.toString: radix must be 2..36
+valid: 255 256 ff
