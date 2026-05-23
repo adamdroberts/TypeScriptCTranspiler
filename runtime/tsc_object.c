@@ -861,8 +861,23 @@ tsc_array_t* tsc_object_entries_dyn(const tsc_object_t* o) {
     return a;
 }
 
+static bool value_is_callable_proxy(tsc_value_t v) {
+    if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) return false;
+    tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+    return (
+        o &&
+        o->is_proxy &&
+        value_is_box(o->proxy_target) &&
+        value_tag(o->proxy_target) == TSC_VALUE_TAG_FUNCTION
+    );
+}
+
 bool value_json_omits_object_property(tsc_value_t v) {
-    return value_is_box(v) && (value_tag(v) == TSC_VALUE_TAG_UNDEFINED || value_tag(v) == TSC_VALUE_TAG_FUNCTION);
+    return value_is_box(v) && (
+        value_tag(v) == TSC_VALUE_TAG_UNDEFINED ||
+        value_tag(v) == TSC_VALUE_TAG_FUNCTION ||
+        value_is_callable_proxy(v)
+    );
 }
 
 tsc_str_t* tsc_value_json_stringify(tsc_value_t v) {
@@ -888,6 +903,7 @@ tsc_str_t* tsc_value_json_stringify(tsc_value_t v) {
             return tsc_str_concat(out, tsc_str_from_lit("]", 1));
         }
         case TSC_VALUE_TAG_OBJECT: {
+            if (value_is_callable_proxy(v)) return tsc_str_from_lit("null", 4);
             tsc_object_t* o = (tsc_object_t*)value_ptr(v);
             tsc_str_t* out = tsc_str_from_lit("{", 1);
             bool first = true;
