@@ -5059,6 +5059,10 @@ class Emitter {
                 this.defs.line(`static tsc_value_t ${this.classStaticGetterDecoratorReplacementName(cd, m)};`);
                 this.ensureClassStaticGetterDecoratorAdapter(cd, m);
             }
+            if (ts.isGetAccessorDeclaration(m) && !isStatic(m) && this.classMemberHasDecorators(m)) {
+                this.defs.line(`static tsc_value_t ${this.classInstanceGetterDecoratorReplacementName(cd, m)};`);
+                this.ensureClassInstanceGetterDecoratorAdapter(cd, m);
+            }
             if (ts.isSetAccessorDeclaration(m) && isStatic(m) && this.classMemberHasDecorators(m)) {
                 this.defs.line(`static tsc_value_t ${this.classStaticSetterDecoratorReplacementName(cd, m)};`);
                 this.ensureClassStaticSetterDecoratorAdapter(cd, m);
@@ -5299,6 +5303,18 @@ class Emitter {
         return `${cd.name.text}_static_get_${mangleIdent(getterName)}_decorator_replacement`;
     }
 
+    private classInstanceGetterDecoratorReplacementName(
+        cd: ts.ClassDeclaration,
+        member: ts.GetAccessorDeclaration,
+    ): string {
+        if (!cd.name) unsupported(cd, "decorated instance getters require a named class");
+        const getterName = this.staticPropertyName(member.name);
+        if (!getterName) {
+            unsupported(member.name, "decorated instance getter names must resolve to a string or number literal");
+        }
+        return `${cd.name.text}_instance_get_${mangleIdent(getterName)}_decorator_replacement`;
+    }
+
     private classStaticSetterDecoratorReplacementName(
         cd: ts.ClassDeclaration,
         member: ts.SetAccessorDeclaration,
@@ -5322,6 +5338,8 @@ class Emitter {
                 buf.line(`${this.classInstanceMethodDecoratorReplacementName(cd, member)} = tsc_value_undefined();`);
             } else if (ts.isGetAccessorDeclaration(member) && isStatic(member)) {
                 buf.line(`${this.classStaticGetterDecoratorReplacementName(cd, member)} = tsc_value_undefined();`);
+            } else if (ts.isGetAccessorDeclaration(member) && !isStatic(member)) {
+                buf.line(`${this.classInstanceGetterDecoratorReplacementName(cd, member)} = tsc_value_undefined();`);
             } else if (ts.isSetAccessorDeclaration(member) && isStatic(member)) {
                 buf.line(`${this.classStaticSetterDecoratorReplacementName(cd, member)} = tsc_value_undefined();`);
             }
@@ -5388,6 +5406,8 @@ class Emitter {
                         ? this.classInstanceMethodDecoratorValue(cd, member)
                     : ts.isGetAccessorDeclaration(member) && isStatic(member)
                         ? this.classStaticGetterDecoratorValue(cd, member)
+                        : ts.isGetAccessorDeclaration(member) && !isStatic(member)
+                            ? this.classInstanceGetterDecoratorValue(cd, member)
                         : ts.isSetAccessorDeclaration(member) && isStatic(member)
                             ? this.classStaticSetterDecoratorValue(cd, member)
                             : { c: "tsc_value_undefined()", ty: T_VALUE };
@@ -5418,6 +5438,10 @@ class Emitter {
                 } else if (ts.isGetAccessorDeclaration(member) && isStatic(member)) {
                     const out = this.freshTemp("_getter_decorator_result");
                     const replacement = this.classStaticGetterDecoratorReplacementName(cd, member);
+                    buf.line(`{ tsc_value_t ${out} = ${result}; if (!tsc_value_is_undefined(${out})) ${replacement} = ${out}; }`);
+                } else if (ts.isGetAccessorDeclaration(member) && !isStatic(member)) {
+                    const out = this.freshTemp("_getter_decorator_result");
+                    const replacement = this.classInstanceGetterDecoratorReplacementName(cd, member);
                     buf.line(`{ tsc_value_t ${out} = ${result}; if (!tsc_value_is_undefined(${out})) ${replacement} = ${out}; }`);
                 } else if (ts.isSetAccessorDeclaration(member) && isStatic(member)) {
                     const out = this.freshTemp("_setter_decorator_result");
@@ -5587,6 +5611,44 @@ class Emitter {
             buf.line(`${ret.c} result = ${call};`);
             buf.line(`return ${this.coerce({ c: "result", ty: ret }, T_VALUE, member)};`);
         }
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
+    private classInstanceGetterDecoratorValue(
+        cd: ts.ClassDeclaration,
+        member: ts.GetAccessorDeclaration,
+    ): EmitResult {
+        const replacement = this.classInstanceGetterDecoratorReplacementName(cd, member);
+        const adapter = this.ensureClassInstanceGetterDecoratorAdapter(cd, member);
+        return {
+            c: `({ tsc_value_t _decorator_current = ${replacement}; tsc_value_is_undefined(_decorator_current) ? tsc_value_function_generic(${adapter}, NULL) : _decorator_current; })`,
+            ty: T_VALUE,
+        };
+    }
+
+    private ensureClassInstanceGetterDecoratorAdapter(
+        cd: ts.ClassDeclaration,
+        member: ts.GetAccessorDeclaration,
+    ): string {
+        if (!cd.name) unsupported(cd, "decorated instance getters require a named class");
+        if (isStatic(member)) unsupported(member, "instance getter decorator adapter requires an instance getter");
+        const accessorName = this.classAccessorCName(member.name, "get");
+        if (!accessorName) unsupported(member, "computed instance getter names");
+        const name = `${cd.name.text}_${accessorName}_decorator_original`;
+        if (this.nodeFunctionAdapters.has(name)) return name;
+        this.nodeFunctionAdapters.add(name);
+        const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
+        this.protos.line(signature + ";");
+        const buf = new CBuf();
+        buf.open(signature);
+        buf.line("(void)env;");
+        buf.line("(void)this_arg;");
+        buf.line("(void)args;");
+        buf.line("tsc_panic(\"decorated instance getter original calls require a typed receiver bridge\");");
+        buf.line("return tsc_value_undefined();");
         buf.close();
         buf.line();
         this.closureDefs.write(buf.toString());
@@ -9166,7 +9228,41 @@ class Emitter {
                 ([obj]) => `${obj} != NULL ? ${callee}(${pass(obj!)}) : ${this.zeroValue(ret)}`,
             );
         }
+        if (this.classMemberHasDecorators(accessor.decl)) {
+            return this.emitDecoratedInstanceGetterAccess(pa, accessor.decl, recv, callee, ret, pass);
+        }
         return this.emitSequencedCall(callee, ret, [{ value: recv, pass }]);
+    }
+
+    private emitDecoratedInstanceGetterAccess(
+        pa: ts.PropertyAccessExpression,
+        getter: ts.GetAccessorDeclaration,
+        recv: EmitResult,
+        callee: string,
+        ret: CType,
+        pass: (tmp: string) => string,
+    ): EmitResult {
+        if (!getter.parent || !ts.isClassDeclaration(getter.parent)) {
+            unsupported(getter, "decorated instance getter requires a containing class");
+        }
+        const replacement = this.classInstanceGetterDecoratorReplacementName(getter.parent, getter);
+        return this.emitSequencedExpr(ret, [{ value: recv, pass }], ([obj]) => {
+            const fn = this.freshTemp("_getter_replacement");
+            const out = this.freshTemp("_getter_result");
+            const av = this.freshTemp("_getter_args");
+            const applied = {
+                c: `tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}))`,
+                ty: T_VALUE,
+            };
+            return (
+                `({ tsc_value_t ${fn} = ${replacement}; ` +
+                `${ret.c} ${out} = ${this.zeroValue(ret)}; ` +
+                `if (tsc_value_is_undefined(${fn})) { ${out} = ${callee}(${obj}); } ` +
+                `else { tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), 1); ` +
+                `${out} = ${this.coerce(applied, ret, pa)}; } ` +
+                `${out}; })`
+            );
+        });
     }
 
     private emitDecoratedStaticGetterAccess(
