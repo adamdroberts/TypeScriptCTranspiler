@@ -293,5 +293,8 @@ function staticPropertyName(name: ts.PropertyName): string | null {
     if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
         return name.text;
     }
+    if (ts.isComputedPropertyName(name)) {
+        return staticStringExpressionText(name.expression);
+    }
     return null;
 }
