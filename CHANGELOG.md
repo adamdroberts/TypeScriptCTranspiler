@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Dynamic `any` call expressions now dispatch through boxed callable identities, including callable Proxy values with `apply` traps, trapless forwarding, revoked-callable errors, and non-callable proxy target validation. Test: `proxy_direct_call`.
 - Dynamic `Reflect.get`, `Reflect.set`, `Reflect.has`, `Reflect.deleteProperty`, `Reflect.ownKeys`, `Reflect.defineProperty`, and `Reflect.getOwnPropertyDescriptor` now reject non-object dynamic targets through catchable runtime errors. Test: `reflect_property_target_validation`.
 - Dynamic `Reflect.getPrototypeOf`, `Reflect.setPrototypeOf`, `Reflect.isExtensible`, and `Reflect.preventExtensions` now reject non-object dynamic targets through catchable runtime errors; `Reflect.setPrototypeOf` also rejects non-object/non-null prototypes. Test: `reflect_object_target_validation`.
 - Dynamic `Reflect.apply` and `Reflect.construct` now accept object `ArrayLike` `argumentsList` values, normalizing them before function or proxy trap dispatch. Test: `reflect_arguments_array_like`.
