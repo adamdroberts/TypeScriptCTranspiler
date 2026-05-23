@@ -12809,17 +12809,23 @@ class Emitter {
             let callback: { value: EmitResult; node: ts.Expression } | null = null;
             if (call.arguments.length === 2) {
                 const secondNode = call.arguments[1]!;
-                const second = this.emitExpr(secondNode);
-                if (second.ty.kind === "function") {
-                    callback = { value: second, node: secondNode };
-                } else {
-                    encoding = { value: second, node: secondNode };
+                if (!this.isUndefinedExpression(secondNode)) {
+                    const second = this.emitExpr(secondNode);
+                    if (second.ty.kind === "function") {
+                        callback = { value: second, node: secondNode };
+                    } else {
+                        encoding = { value: second, node: secondNode };
+                    }
                 }
             } else if (call.arguments.length === 3) {
                 const encodingNode = call.arguments[1]!;
                 const callbackNode = call.arguments[2]!;
-                encoding = { value: this.emitExpr(encodingNode), node: encodingNode };
-                callback = { value: this.emitExpr(callbackNode), node: callbackNode };
+                if (!this.isUndefinedExpression(encodingNode)) {
+                    encoding = { value: this.emitExpr(encodingNode), node: encodingNode };
+                }
+                if (!this.isUndefinedExpression(callbackNode)) {
+                    callback = { value: this.emitExpr(callbackNode), node: callbackNode };
+                }
             }
             if (callback && callback.value.ty.kind !== "function") {
                 unsupported(callback.node, `process.${recvExpr.name.text}.write callback must be a function`);

@@ -1,0 +1,3 @@
+{
+  "description": "process stdout/stderr write treats explicit undefined optional encoding and callback slots as defaults"
+}
