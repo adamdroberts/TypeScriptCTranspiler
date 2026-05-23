@@ -3,6 +3,10 @@ function Sealed(this: any): void {}
 function Frozen(this: any): void {}
 function Proxied(this: any): void {}
 function FrozenProxy(this: any): void {}
+function ProxyGet(this: any): void {}
+function ProxySet(this: any): void {}
+function ProxyDescriptor(this: any): void {}
+function ProxyKeys(this: any): void {}
 function ProxyDefine(this: any, value: number): void {}
 function ProxyDelete(this: any): void {}
 function TypedDirect(this: any, value: number): void {}
@@ -79,6 +83,63 @@ function trueDefine(target: any, prop: any, desc: any): boolean {
 function trueDelete(target: any, prop: any): boolean {
     return true;
 }
+
+function badGet(target: any, prop: any, receiver: any): any {
+    if (prop === "length") return 9;
+    return Reflect.get(target, prop, receiver);
+}
+
+function trueSet(target: any, prop: any, value: any, receiver: any): boolean {
+    return true;
+}
+
+function badDescriptor(target: any, prop: any): any {
+    if (prop === "name") return { value: "Wrong", writable: false, enumerable: false, configurable: false };
+    return Reflect.getOwnPropertyDescriptor(target, prop);
+}
+
+function missingKeys(target: any): any {
+    return ["name"];
+}
+
+function completeKeys(target: any): any {
+    return ["length", "name"];
+}
+
+const proxyGetTarget: any = ProxyGet as any;
+const proxyGet: any = new Proxy(proxyGetTarget, { get: badGet as any });
+try {
+    console.log("proxy function get length:", Reflect.get(proxyGet, "length"));
+} catch (err: any) {
+    console.log("proxy function get length:", err);
+}
+
+const proxySetTarget: any = ProxySet as any;
+const proxySet: any = new Proxy(proxySetTarget, { set: trueSet as any });
+try {
+    console.log("proxy function set length:", Reflect.set(proxySet, "length", 9));
+} catch (err: any) {
+    console.log("proxy function set length:", err);
+}
+
+const proxyDescriptorTarget: any = ProxyDescriptor as any;
+const proxyDescriptor: any = new Proxy(proxyDescriptorTarget, { getOwnPropertyDescriptor: badDescriptor as any });
+try {
+    const badNameDesc: any = Reflect.getOwnPropertyDescriptor(proxyDescriptor, "name");
+    console.log("proxy function desc name:", badNameDesc.value);
+} catch (err: any) {
+    console.log("proxy function desc name:", err);
+}
+
+const proxyMissingKeysTarget: any = ProxyKeys as any;
+const proxyMissingKeys: any = new Proxy(proxyMissingKeysTarget, { ownKeys: missingKeys as any });
+try {
+    console.log("proxy function keys missing:", Reflect.ownKeys(proxyMissingKeys).length);
+} catch (err: any) {
+    console.log("proxy function keys missing:", err);
+}
+const proxyCompleteKeys: any = new Proxy(proxyMissingKeysTarget, { ownKeys: completeKeys as any });
+console.log("proxy function keys complete:", Reflect.ownKeys(proxyCompleteKeys).length);
 
 const proxyDefineTarget: any = ProxyDefine as any;
 const proxyDefine: any = new Proxy(proxyDefineTarget, { defineProperty: trueDefine as any });

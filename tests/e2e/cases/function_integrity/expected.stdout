@@ -24,6 +24,11 @@ proxy length: 0 0
 proxy name: Proxied Proxied
 proxy seal: true true true
 proxy freeze: true true true
+proxy function get length: Proxy get trap cannot report different value for non-configurable non-writable key
+proxy function set length: Proxy set trap cannot report success changing non-configurable non-writable key
+proxy function desc name: Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key
+proxy function keys missing: Proxy ownKeys trap result missing non-configurable key
+proxy function keys complete: 2
 proxy function define same: true
 proxy function define changed: Proxy defineProperty trap cannot change non-configurable non-writable key
 proxy function delete length: Proxy deleteProperty trap cannot report deletion of non-configurable key
