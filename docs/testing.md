@@ -220,6 +220,7 @@ e2e: object_is … OK
 e2e: object_is_prototype_of … OK
 e2e: object_property_is_enumerable … OK
 e2e: object_prototype_call … OK
+e2e: object_prototype_to_locale_string_call … OK
 e2e: object_prototype_to_string_call … OK
 e2e: object_prototypes … OK
 e2e: object_seal_freeze … OK
