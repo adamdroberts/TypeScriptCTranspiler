@@ -1,0 +1,5 @@
+promise real: true
+promise read: true
+promise mkd: true true
+sync: true true true true
+events: real|read|mkd|preal|pread|pmkd

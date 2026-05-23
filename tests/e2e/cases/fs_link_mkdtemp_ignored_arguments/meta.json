@@ -1,0 +1,3 @@
+{
+  "description": "fs realpath/readlink/mkdtemp sync and promise calls treat undefined options as defaults and evaluate ignored extra arguments"
+}

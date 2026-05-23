@@ -19807,22 +19807,24 @@ class Emitter {
                 ], ([path]) => `${options.throwIfNoEntry ? "tsc_fs_lstat_sync" : "tsc_fs_lstat_sync_no_throw"}(${path!})`);
             }
             case "realpathSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.realpathSync needs path and optional UTF-8/buffer encoding options");
+                if (args.length < 1) unsupported(call, "fs.realpathSync needs path and optional UTF-8/buffer encoding options");
                 const result = this.validateFsEncodingOptions(args[1], "fs.realpathSync");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(result === "buffer" ? T_BUFFER : T_STRING, [
                     this.fsPathSpec(p, args[0]!, "fs.realpathSync path"),
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => {
                     const value = `tsc_fs_realpath_sync(${path!})`;
                     return result === "buffer" ? `tsc_buffer_from_str(${value}, NULL)` : value;
                 });
             }
             case "readlinkSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.readlinkSync needs path and optional UTF-8/buffer encoding options");
+                if (args.length < 1) unsupported(call, "fs.readlinkSync needs path and optional UTF-8/buffer encoding options");
                 const result = this.validateFsEncodingOptions(args[1], "fs.readlinkSync");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(result === "buffer" ? T_BUFFER : T_STRING, [
                     this.fsPathSpec(p, args[0]!, "fs.readlinkSync path"),
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => {
                     const value = `tsc_fs_readlink_sync(${path!})`;
                     return result === "buffer" ? `tsc_buffer_from_str(${value}, NULL)` : value;
@@ -19848,11 +19850,12 @@ class Emitter {
                 ]);
             }
             case "mkdtempSync": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.mkdtempSync needs prefix and optional UTF-8/buffer encoding options");
+                if (args.length < 1) unsupported(call, "fs.mkdtempSync needs prefix and optional UTF-8/buffer encoding options");
                 const result = this.validateFsEncodingOptions(args[1], "fs.mkdtempSync");
                 const prefix = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(result === "buffer" ? T_BUFFER : T_STRING, [
                     this.fsPathSpec(prefix, args[0]!, "fs.mkdtempSync prefix"),
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([value]) => {
                     const dir = `tsc_fs_mkdtemp_sync(${value!})`;
                     return result === "buffer" ? `tsc_buffer_from_str(${dir}, NULL)` : dir;
@@ -20483,11 +20486,12 @@ class Emitter {
                 ], ([path]) => settle(`tsc_promise_resolve_fs_stats(${fn}(${path!}))`));
             }
             case "realpath": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.realpath needs a path and optional UTF-8/buffer encoding options");
+                if (args.length < 1) unsupported(call, "fs.promises.realpath needs a path and optional UTF-8/buffer encoding options");
                 const result = this.validateFsEncodingOptions(args[1], "fs.promises.realpath");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.realpath path"),
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => {
                     const value = `tsc_fs_realpath_sync(${path!})`;
                     const resolve = result === "buffer"
@@ -20497,11 +20501,12 @@ class Emitter {
                 });
             }
             case "readlink": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.readlink needs a path and optional UTF-8/buffer encoding options");
+                if (args.length < 1) unsupported(call, "fs.promises.readlink needs a path and optional UTF-8/buffer encoding options");
                 const result = this.validateFsEncodingOptions(args[1], "fs.promises.readlink");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.readlink path"),
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => {
                     const value = `tsc_fs_readlink_sync(${path!})`;
                     const resolve = result === "buffer"
@@ -20534,11 +20539,12 @@ class Emitter {
                 );
             }
             case "mkdtemp": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "fs.promises.mkdtemp needs prefix and optional UTF-8/buffer encoding options");
+                if (args.length < 1) unsupported(call, "fs.promises.mkdtemp needs prefix and optional UTF-8/buffer encoding options");
                 const result = this.validateFsEncodingOptions(args[1], "fs.promises.mkdtemp");
                 const prefix = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(prefix, args[0]!, "fs.promises.mkdtemp prefix"),
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => {
                     const value = `tsc_fs_mkdtemp_sync(${path!})`;
                     const resolve = result === "buffer"
