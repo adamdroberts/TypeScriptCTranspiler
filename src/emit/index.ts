@@ -24909,9 +24909,13 @@ class Emitter {
             ts.isPropertyAccessExpression(pa.expression) &&
             ts.isIdentifier(pa.expression.expression) &&
             pa.expression.expression.text === "process" &&
-            (pa.expression.name.text === "stdout" || pa.expression.name.text === "stderr")
+            (pa.expression.name.text === "stdin" || pa.expression.name.text === "stdout" || pa.expression.name.text === "stderr")
         ) {
-            const fd = pa.expression.name.text === "stdout" ? "1" : "2";
+            const fd = pa.expression.name.text === "stdin"
+                ? "0"
+                : pa.expression.name.text === "stdout"
+                    ? "1"
+                    : "2";
             switch (pa.name.text) {
                 case "fd": return { c: `${fd}.0`, ty: T_NUMBER };
                 case "isTTY": return { c: `tsc_process_stdio_is_tty(${fd})`, ty: T_BOOLEAN };

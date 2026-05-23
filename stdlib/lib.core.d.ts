@@ -616,6 +616,10 @@ interface ProcessWritableStream {
     write(chunk: string | Buffer, callback?: () => void): boolean;
     write(chunk: string | Buffer, encoding?: string, callback?: () => void): boolean;
 }
+interface ProcessReadableStream {
+    readonly fd: number;
+    readonly isTTY: boolean;
+}
 interface Process {
     readonly platform: string;
     readonly arch: string;
@@ -631,6 +635,7 @@ interface Process {
     execPath: string;
     execArgv: string[];
     env: ProcessEnv;
+    readonly stdin: ProcessReadableStream;
     readonly stdout: ProcessWritableStream;
     readonly stderr: ProcessWritableStream;
     exit(code?: number): never;
