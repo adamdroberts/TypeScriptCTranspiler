@@ -1,0 +1,3 @@
+{
+  "description": "standard getter and setter decorators evaluate with dynamic context objects"
+}

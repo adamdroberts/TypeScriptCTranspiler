@@ -5158,7 +5158,9 @@ class Emitter {
         for (const member of cd.members) {
             if (
                 !ts.isMethodDeclaration(member) &&
-                !ts.isPropertyDeclaration(member)
+                !ts.isPropertyDeclaration(member) &&
+                !ts.isGetAccessorDeclaration(member) &&
+                !ts.isSetAccessorDeclaration(member)
             ) {
                 continue;
             }
@@ -5169,7 +5171,13 @@ class Emitter {
             if (!memberName) {
                 unsupported(member.name, "decorated member names must resolve to a string or number literal");
             }
-            const kind = ts.isMethodDeclaration(member) ? "method" : "field";
+            const kind = ts.isMethodDeclaration(member)
+                ? "method"
+                : ts.isPropertyDeclaration(member)
+                    ? "field"
+                    : ts.isGetAccessorDeclaration(member)
+                        ? "getter"
+                        : "setter";
             const label = `${kind} decorator`;
             for (const decorator of decorators) {
                 const call = this.emitDecoratorFunctionCall(
@@ -5200,7 +5208,7 @@ class Emitter {
 
     private classMemberDecoratorContext(
         member: ts.ClassElement,
-        kind: "method" | "field",
+        kind: "method" | "field" | "getter" | "setter",
         name: string,
     ): EmitResult {
         const obj = this.freshTemp("_member_decorator_ctx");
