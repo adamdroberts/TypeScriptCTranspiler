@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Literal and const-literal computed class getter and setter accessors are now covered alongside computed fields and methods. Test: `class_computed_accessors`.
 - Standard decorator contexts now expose a shared dynamic `metadata` object for all decorators on a named class during module initialization. Test: `decorator_metadata_basic`.
 - Typed class getter/setter accessor assignments now support logical assignment operators by reading through the getter, conditionally writing through the setter, and returning the JavaScript assignment result. Test: `class_accessors_logical`.
 - Typed class getter/setter accessor assignments now support numeric and string compound assignment operators by reading through the getter, writing through the setter, and returning the assigned value. Test: `class_accessors_compound`.
