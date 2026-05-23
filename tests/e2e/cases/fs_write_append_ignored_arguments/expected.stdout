@@ -1,0 +1,4 @@
+promise write: promise
+promise append: promise+append
+sync: sync+append
+events: write|append|pwrite|pappend

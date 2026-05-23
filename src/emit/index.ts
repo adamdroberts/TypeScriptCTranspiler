@@ -19709,42 +19709,42 @@ class Emitter {
                 ], ([path]) => `${result === "buffer" ? "tsc_fs_read_file_buffer_sync" : "tsc_fs_read_file_sync"}(${path!})`);
             }
             case "writeFileSync": {
-                if (args.length < 2 || args.length > 3)
+                if (args.length < 2)
                     unsupported(call, "fs.writeFileSync needs path, data, and optional UTF-8 encoding/flag options");
                 const options = this.validateFsWriteFileOptions(args[2], "fs.writeFileSync");
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.writeFileSync data must be string or Buffer");
-                return this.emitSequencedCall(
-                    d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync_opts_mode" : "tsc_fs_write_file_sync_opts_mode",
-                    T_VOID,
-                    [
-                        this.fsPathSpec(p, args[0]!, "fs.writeFileSync path"),
-                        { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
-                        { value: { c: options.append ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
-                        { value: { c: options.exclusive ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
-                        { value: { c: options.update ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
-                        options.mode,
-                    ],
+                const fn = d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync_opts_mode" : "tsc_fs_write_file_sync_opts_mode";
+                return this.emitSequencedExpr(T_VOID, [
+                    this.fsPathSpec(p, args[0]!, "fs.writeFileSync path"),
+                    { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
+                    { value: { c: options.append ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
+                    { value: { c: options.exclusive ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
+                    { value: { c: options.update ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
+                    options.mode,
+                    ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
+                ], ([path, data, append, exclusive, update, mode]) =>
+                    `({ ${fn}(${path!}, ${data!}, ${append!}, ${exclusive!}, ${update!}, ${mode!}); })`,
                 );
             }
             case "appendFileSync": {
-                if (args.length < 2 || args.length > 3) unsupported(call, "fs.appendFileSync needs path, data, and optional UTF-8 encoding/flag options");
+                if (args.length < 2) unsupported(call, "fs.appendFileSync needs path, data, and optional UTF-8 encoding/flag options");
                 const options = this.validateFsAppendFileOptions(args[2], "fs.appendFileSync");
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.appendFileSync data must be string or Buffer");
-                return this.emitSequencedCall(
-                    d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync_opts_mode" : "tsc_fs_write_file_sync_opts_mode",
-                    T_VOID,
-                    [
-                        this.fsPathSpec(p, args[0]!, "fs.appendFileSync path"),
-                        { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
-                        { value: { c: "true", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
-                        { value: { c: options.exclusive ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
-                        { value: { c: "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
-                        options.mode,
-                    ],
+                const fn = d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync_opts_mode" : "tsc_fs_write_file_sync_opts_mode";
+                return this.emitSequencedExpr(T_VOID, [
+                    this.fsPathSpec(p, args[0]!, "fs.appendFileSync path"),
+                    { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
+                    { value: { c: "true", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
+                    { value: { c: options.exclusive ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
+                    { value: { c: "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
+                    options.mode,
+                    ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
+                ], ([path, data, append, exclusive, update, mode]) =>
+                    `({ ${fn}(${path!}, ${data!}, ${append!}, ${exclusive!}, ${update!}, ${mode!}); })`,
                 );
             }
             case "existsSync": {
@@ -20417,7 +20417,7 @@ class Emitter {
                 });
             }
             case "writeFile": {
-                if (args.length < 2 || args.length > 3) unsupported(call, "fs.promises.writeFile needs path, data, and optional UTF-8 encoding/flag options");
+                if (args.length < 2) unsupported(call, "fs.promises.writeFile needs path, data, and optional UTF-8 encoding/flag options");
                 const options = this.validateFsWriteFileOptions(args[2], "fs.promises.writeFile");
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
@@ -20427,12 +20427,13 @@ class Emitter {
                     this.fsPathSpec(p, args[0]!, "fs.promises.writeFile path"),
                     { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
                     options.mode,
+                    ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
                 ], ([path, data, mode]) =>
                     settle(`({ ${fn}(${path!}, ${data!}, ${options.append ? "true" : "false"}, ${options.exclusive ? "true" : "false"}, ${options.update ? "true" : "false"}, ${mode!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "appendFile": {
-                if (args.length < 2 || args.length > 3) unsupported(call, "fs.promises.appendFile needs path, data, and optional UTF-8 encoding/flag options");
+                if (args.length < 2) unsupported(call, "fs.promises.appendFile needs path, data, and optional UTF-8 encoding/flag options");
                 const options = this.validateFsAppendFileOptions(args[2], "fs.promises.appendFile");
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
@@ -20442,6 +20443,7 @@ class Emitter {
                     this.fsPathSpec(p, args[0]!, "fs.promises.appendFile path"),
                     { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
                     options.mode,
+                    ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
                 ], ([path, data, mode]) =>
                     settle(`({ ${fn}(${path!}, ${data!}, true, ${options.exclusive ? "true" : "false"}, false, ${mode!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );

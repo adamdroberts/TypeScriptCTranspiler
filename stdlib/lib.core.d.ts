@@ -1018,8 +1018,8 @@ interface FS {
     readonly constants: FSConstants;
     readFileSync(path: FSPathLike, options: FSReadFileBufferOptions, ...ignored: any[]): Buffer;
     readFileSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReadFileOptions, ...ignored: any[]): string;
-    writeFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions): void;
-    appendFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSAppendFileOptions): void;
+    writeFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions, ...ignored: any[]): void;
+    appendFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSAppendFileOptions, ...ignored: any[]): void;
     existsSync(path: FSPathLike, ...ignored: any[]): boolean;
     accessSync(path: FSPathLike, mode?: number, ...ignored: any[]): void;
     readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Buffer[];
@@ -1055,8 +1055,8 @@ interface FS {
 interface FSPromises {
     readFile(path: FSPathLike, options: FSReadFileBufferOptions, ...ignored: any[]): Promise<Buffer>;
     readFile(path: FSPathLike, options?: FSFileEncodingOptions | FSReadFileOptions, ...ignored: any[]): Promise<string>;
-    writeFile(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions): Promise<void>;
-    appendFile(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSAppendFileOptions): Promise<void>;
+    writeFile(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions, ...ignored: any[]): Promise<void>;
+    appendFile(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSAppendFileOptions, ...ignored: any[]): Promise<void>;
     readdir(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Promise<Buffer[]>;
     readdir(path: FSPathLike, options: FSReaddirDirentOptions, ...ignored: any[]): Promise<FSDirent[]>;
     readdir(path: FSPathLike, options?: FSFileEncodingOptions | FSReaddirOptions, ...ignored: any[]): Promise<string[]>;
@@ -1093,8 +1093,8 @@ declare module "fs" {
     export const promises: FSPromises;
     export function readFileSync(path: FSPathLike, options: FSReadFileBufferOptions, ...ignored: any[]): Buffer;
     export function readFileSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReadFileOptions, ...ignored: any[]): string;
-    export function writeFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions): void;
-    export function appendFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSAppendFileOptions): void;
+    export function writeFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions, ...ignored: any[]): void;
+    export function appendFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSAppendFileOptions, ...ignored: any[]): void;
     export function existsSync(path: FSPathLike, ...ignored: any[]): boolean;
     export function accessSync(path: FSPathLike, mode?: number, ...ignored: any[]): void;
     export function readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Buffer[];
@@ -1131,8 +1131,8 @@ declare module "node:fs" {
     export const promises: FSPromises;
     export function readFileSync(path: FSPathLike, options: FSReadFileBufferOptions, ...ignored: any[]): Buffer;
     export function readFileSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReadFileOptions, ...ignored: any[]): string;
-    export function writeFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions): void;
-    export function appendFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSAppendFileOptions): void;
+    export function writeFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSWriteFileOptions, ...ignored: any[]): void;
+    export function appendFileSync(path: FSPathLike, data: string | Buffer, options?: FSFileEncodingOptions | FSAppendFileOptions, ...ignored: any[]): void;
     export function existsSync(path: FSPathLike, ...ignored: any[]): boolean;
     export function accessSync(path: FSPathLike, mode?: number, ...ignored: any[]): void;
     export function readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Buffer[];
