@@ -1,0 +1,3 @@
+{
+  "description": "constructable Proxy values can be invoked through direct dynamic new expressions"
+}

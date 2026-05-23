@@ -1,0 +1,5 @@
+construct: 15 function function
+forward: 6 target
+rev before: 7 target
+rev after: Cannot perform 'construct' on a proxy that has been revoked
+object construct: Proxy construct target must be constructor

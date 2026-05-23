@@ -24602,6 +24602,12 @@ class Emitter {
             );
         }
         const classDecl = this.findClassDecl(cls);
+        if (!classDecl) {
+            const ctor = this.emitExpr(n.expression);
+            if (ctor.ty.kind === "value") {
+                return this.emitDynamicValueConstruct(n, ctor);
+            }
+        }
         const ctorDecl = classDecl?.members.find(ts.isConstructorDeclaration);
         if (classDecl?.typeParameters?.length && ctorDecl) {
             const paramTypes = ctorDecl.parameters.map((param) =>
@@ -24649,6 +24655,34 @@ class Emitter {
             return this.emitDecoratedClassNew(n, classDecl, cls, specs);
         }
         return this.emitSequencedCall(`${cls}_new`, classType(cls), specs);
+    }
+
+    private emitDynamicValueConstruct(n: ts.NewExpression, ctor: EmitResult): EmitResult {
+        const argList = n.arguments ?? [];
+        if (argList.some((arg) => ts.isSpreadElement(arg))) {
+            const list = this.emitSpreadCallArgumentList(argList);
+            return this.emitSequencedCall("tsc_value_construct", T_VALUE, [
+                { value: ctor, target: T_VALUE, node: n.expression },
+                { value: list, target: T_VALUE, node: n },
+            ]);
+        }
+        const args = Array.from(argList, (arg) => this.emitExpr(arg));
+        return this.emitSequencedExpr(
+            T_VALUE,
+            [
+                { value: ctor, target: T_VALUE, node: n.expression },
+                ...args.map((value, index) => ({ value, target: T_VALUE, node: argList[index]! })),
+            ],
+            ([target, ...vals]) => {
+                const av = this.freshTemp("_dyn_construct_args");
+                const pieces = [`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, vals.length)})`];
+                for (const value of vals) {
+                    pieces.push(`tsc_array_push_value(${av}, ${value})`);
+                }
+                pieces.push(`tsc_value_construct(${target}, tsc_value_array(${av}))`);
+                return `({ ${pieces.join("; ")}; })`;
+            },
+        );
     }
 
     private emitPropertyAccess(pa: ts.PropertyAccessExpression): EmitResult {
