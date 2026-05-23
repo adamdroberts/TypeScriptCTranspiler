@@ -131,6 +131,7 @@ const unused_computed_key_object = { ["dead"]: 1, [unused_other_key]: 2 };
 // @ts-ignore: intentional pure comma expression for generated-C DCE coverage.
 const unused_comma_expr = (1, "dead");
 const top_level_static_false = false;
+const unused_static_conditional_dead_call = top_level_static_false ? console.log("dead_static_conditional_call") : "dead_static_conditional_value";
 let unused_let = 42;
 let unused_empty: number;
 "top_level_dead_expr";
@@ -222,6 +223,7 @@ if (!top_level_static_false) {
 while (false) {
     console.log("top_level_dead_while_false");
 }
+top_level_static_false ? console.log("top_level_dead_static_conditional_call") : "top_level_dead_static_conditional_value";
 
 namespace DceNamespace {
     const unused_namespace_value = { label: "dead", count: 4 };
@@ -309,6 +311,8 @@ function usedLocal(value: number): number {
     ({ label: "local_dead_prop" }).label;
     // @ts-ignore: intentional pure comma expression for generated-C DCE coverage.
     (1, "local_dead_comma");
+    const unused_local_static_conditional = false ? console.log("local_dead_static_conditional_call") : "local_dead_static_conditional_value";
+    false ? console.log("local_dead_static_conditional_expr_call") : "local_dead_static_conditional_expr_value";
     const unused_local_seed = "dead";
     const unused_local_chain = unused_local_seed;
     const kept_local = value + 3;

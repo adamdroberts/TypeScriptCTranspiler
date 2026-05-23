@@ -433,6 +433,12 @@ class Emitter {
                 visitStatementList(node.body.statements);
                 return;
             }
+            if (
+                ts.isExpressionStatement(node) &&
+                this.isSideEffectFreeTopLevelConstInitializer(node.expression)
+            ) {
+                return;
+            }
             if (ts.isIfStatement(node)) {
                 const staticCondition = this.staticBooleanValue(node.expression);
                 if (staticCondition === true) {
@@ -831,6 +837,13 @@ class Emitter {
             }
         }
         if (ts.isConditionalExpression(expr)) {
+            const staticCondition = this.staticBooleanValue(expr.condition, seenConsts);
+            if (staticCondition === true) {
+                return this.isSideEffectFreeTopLevelConstInitializer(expr.whenTrue, seenConsts);
+            }
+            if (staticCondition === false) {
+                return this.isSideEffectFreeTopLevelConstInitializer(expr.whenFalse, seenConsts);
+            }
             return this.isSideEffectFreeTopLevelConstInitializer(expr.condition, seenConsts) &&
                 this.isSideEffectFreeTopLevelConstInitializer(expr.whenTrue, seenConsts) &&
                 this.isSideEffectFreeTopLevelConstInitializer(expr.whenFalse, seenConsts);

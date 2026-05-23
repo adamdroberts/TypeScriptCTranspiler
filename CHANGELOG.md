@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes static conditional expressions by checking only the reachable branch when the condition is a pure statically-known boolean. Test: `generated_c_dce_const`.
 - Generated-C DCE now stops emitting unreachable trailing statements inside block statement bodies after unconditional exits. Test: `generated_c_dce_const`.
 - Generated-C DCE now folds pure statically-known boolean `if` conditions, drops unreachable static branches, and removes `while (false)` bodies before C emission. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused `new Date(...)` allocations with pure string, numeric, or numeric component arguments as side-effect-free. Test: `generated_c_dce_const`.
