@@ -5373,15 +5373,16 @@ class Emitter {
         if (!cd.name || !ts.canHaveDecorators(cd)) return;
         const decorators = ts.getDecorators(cd) ?? [];
         if (decorators.length === 0) return;
+        const decoratorFns = this.emitDecoratorFunctionValues(buf, decorators, "class decorator");
         for (let i = decorators.length - 1; i >= 0; i--) {
             const decorator = decorators[i]!;
             const call = this.emitDecoratorFunctionCall(
-                decorator.expression,
+                { c: decoratorFns[i]!, ty: T_VALUE },
                 [
                     { c: "tsc_value_undefined()", ty: T_VALUE },
                     this.classDecoratorContext(cd, metadata, initializers),
                 ],
-                "class decorator",
+                decorator.expression,
             );
             buf.line(`(void)(${call});`);
         }
@@ -5418,6 +5419,7 @@ class Emitter {
                         ? "getter"
                         : "setter";
             const label = `${kind} decorator`;
+            const decoratorFns = this.emitDecoratorFunctionValues(buf, decorators, label);
             for (let i = decorators.length - 1; i >= 0; i--) {
                 const decorator = decorators[i]!;
                 const valueArg = ts.isMethodDeclaration(member) && isStatic(member)
@@ -5439,16 +5441,20 @@ class Emitter {
                 ];
                 if (ts.isPropertyDeclaration(member)) {
                     const result = this.emitDecoratorFunctionCallValue(
-                        decorator.expression,
+                        { c: decoratorFns[i]!, ty: T_VALUE },
                         args,
-                        label,
+                        decorator.expression,
                     );
                     const out = this.freshTemp("_field_decorator_result");
                     const list = this.classFieldDecoratorInitializersName(cd, member);
                     buf.line(`{ tsc_value_t ${out} = ${result}; if (!tsc_value_is_undefined(${out})) tsc_array_push_value(${list}, ${out}); }`);
                     continue;
                 }
-                const result = this.emitDecoratorFunctionCallValue(decorator.expression, args, label);
+                const result = this.emitDecoratorFunctionCallValue(
+                    { c: decoratorFns[i]!, ty: T_VALUE },
+                    args,
+                    decorator.expression,
+                );
                 if (ts.isMethodDeclaration(member) && isStatic(member)) {
                     const out = this.freshTemp("_method_decorator_result");
                     const replacement = this.classStaticMethodDecoratorReplacementName(cd, member);
@@ -5863,19 +5869,52 @@ class Emitter {
         this.closureDefs.write(buf.toString());
     }
 
-    private emitDecoratorFunctionCall(
-        expr: ts.Expression,
-        args: EmitResult[],
+    private emitDecoratorFunctionValues(
+        buf: CBuf,
+        decorators: readonly ts.Decorator[],
         label: string,
+    ): string[] {
+        const names: string[] = [];
+        for (const decorator of decorators) {
+            const name = this.freshTemp("_decorator_fn");
+            const value = this.emitDecoratorFunctionValue(decorator.expression, label);
+            buf.line(`tsc_value_t ${name} = ${value};`);
+            names.push(name);
+        }
+        return names;
+    }
+
+    private emitDecoratorFunctionValue(expr: ts.Expression, label: string): string {
+        const callee = this.emitExpr(expr);
+        if (callee.ty.kind === "value") return callee.c;
+        if (callee.ty.kind !== "function" || !callee.ty.ret) {
+            unsupported(expr, `${label} expression must be callable`);
+        }
+        return this.coerce(callee, T_VALUE, expr);
+    }
+
+    private emitDecoratorFunctionCall(
+        expr: ts.Expression | EmitResult,
+        args: EmitResult[],
+        label: string | ts.Expression,
     ): string {
         return this.emitDecoratorFunctionCallValue(expr, args, label);
     }
 
     private emitDecoratorFunctionCallValue(
-        expr: ts.Expression,
+        expr: ts.Expression | EmitResult,
         args: EmitResult[],
-        label: string,
+        label: string | ts.Expression,
     ): string {
+        if ("ty" in expr) {
+            if (typeof label === "string") {
+                unsupported(this.currentSf!, "prepared decorator call requires a source expression");
+            }
+            return this.emitDynamicDecoratorFunctionCall(expr, args, label);
+        }
+        if (typeof label !== "string") {
+            unsupported(expr, "decorator expression must be callable");
+        }
         if (ts.isIdentifier(expr) && this.isDirectCallableIdentifier(expr)) {
             const sym = this.symbolForIdentifier(expr);
             const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
