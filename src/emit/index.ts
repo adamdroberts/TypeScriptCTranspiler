@@ -723,7 +723,13 @@ class Emitter {
             case ts.SyntaxKind.UndefinedKeyword:
                 return true;
         }
-        if (ts.isNumericLiteral(expr) || ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) {
+        if (
+            ts.isNumericLiteral(expr) ||
+            ts.isBigIntLiteral(expr) ||
+            ts.isStringLiteral(expr) ||
+            ts.isNoSubstitutionTemplateLiteral(expr) ||
+            ts.isRegularExpressionLiteral(expr)
+        ) {
             return true;
         }
         if (ts.isArrowFunction(expr) || ts.isFunctionExpression(expr)) {

@@ -1,6 +1,8 @@
 unused_count
 unused_label
 unused_flag
+unused_bigint_literal
+unused_regexp_literal
 unused_array
 unused_object
 unused_math
@@ -33,6 +35,7 @@ unused_namespace_value
 unused_let
 unused_empty
 top_level_dead_expr
+top_level_dead_regex
 top_level_dead_length
 top_level_dead_index
 top_level_dead_prop
@@ -41,6 +44,7 @@ unused_local_const
 unused_local_let
 unused_local_empty
 local_dead_expr
+local_dead_regex
 local_dead_length
 local_dead_index
 local_dead_prop
