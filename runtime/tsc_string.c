@@ -779,7 +779,7 @@ tsc_str_t* tsc_str_normalize(const tsc_str_t* s, const tsc_str_t* form) {
     } else if (str_lit_eq(form, "NFKD")) {
         normalizer = unorm2_getNFKDInstance(&status);
     } else {
-        tsc_panic("String.normalize: form must be NFC, NFD, NFKC, or NFKD");
+        tsc_throw_str(tsc_str_from_cstr("String.normalize: form must be NFC, NFD, NFKC, or NFKD"));
     }
     if (U_FAILURE(status) || !normalizer) {
         tsc_panic("String.normalize: ICU normalizer unavailable");

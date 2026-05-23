@@ -1,0 +1,4 @@
+typed invalid: String.normalize: form must be NFC, NFD, NFKC, or NFKD
+dynamic invalid: String.normalize: form must be NFC, NFD, NFKC, or NFKD
+typed valid: true
+dynamic valid: true
