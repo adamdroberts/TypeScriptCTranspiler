@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unshadowed `Array.isArray(...)` calls with side-effect-free arguments as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes `delete` operations against fresh object/array literals and earlier pure const object/array literals as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes `in` checks against fresh object/array literals and earlier pure const object/array literals as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats unused class-expression constants as side-effect-free when their definitions pass the same conservative checks as pruned class declarations. Test: `generated_c_dce_class`.

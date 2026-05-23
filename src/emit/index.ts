@@ -774,6 +774,9 @@ class Emitter {
         if (ts.isDeleteExpression(expr)) {
             return this.isSideEffectFreeDeleteExpression(expr, seenConsts);
         }
+        if (ts.isCallExpression(expr)) {
+            return this.isSideEffectFreeStaticCall(expr, seenConsts);
+        }
         if (ts.isBinaryExpression(expr)) {
             switch (expr.operatorToken.kind) {
                 case ts.SyntaxKind.InKeyword:
@@ -944,6 +947,32 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeDeleteTargetOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeStaticCall(
+        call: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!ts.isPropertyAccessExpression(call.expression)) return false;
+        const recv = call.expression.expression;
+        const method = call.expression.name.text;
+        if (
+            ts.isIdentifier(recv) &&
+            method === "isArray" &&
+            call.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Array")
+        ) {
+            return this.isSideEffectFreeTopLevelConstInitializer(call.arguments[0]!, seenConsts);
+        }
+        return false;
+    }
+
+    private isUnshadowedGlobalIdentifier(id: ts.Identifier, name: string): boolean {
+        if (id.text !== name) return false;
+        const sym = this.symbolForIdentifier(id);
+        if (!sym) return true;
+        const source = id.getSourceFile();
+        return !(sym.declarations ?? []).some((decl) => decl.getSourceFile() === source);
     }
 
     private objectLiteralPropertyNameHasNoDefinitionSideEffects(
