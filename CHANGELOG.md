@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes callable `BigInt(...)` with statically non-throwing primitive inputs as side-effect-free when its result is unused. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes global URI encode/decode helpers with safe pure ASCII string arguments as side-effect-free when their result is unused. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unshadowed `Date.parse(...)` with pure string arguments and `Date.UTC(...)` with primitive numeric arguments as side-effect-free when their result is unused. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unshadowed `RegExp.escape(...)` calls with pure string arguments as side-effect-free when their result is unused. Test: `generated_c_dce_const`.

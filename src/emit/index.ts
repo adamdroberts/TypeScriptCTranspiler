@@ -1361,6 +1361,14 @@ class Emitter {
             return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
                 this.isSideEffectFreePrimitiveCallableConstructorArgs(call.arguments, seenConsts);
         }
+        if (name === "BigInt") {
+            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+                call.arguments.length >= 1 &&
+                this.isSideEffectFreeBigIntCoercion(call.arguments[0]!, seenConsts) &&
+                Array.from(call.arguments).slice(1).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+        }
         if (
             name === "encodeURI" ||
             name === "encodeURIComponent" ||
@@ -1440,6 +1448,37 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeUriStringCoercion(init, seenConsts);
+    }
+
+    private isSideEffectFreeBigIntCoercion(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        switch (unwrapped.kind) {
+            case ts.SyntaxKind.TrueKeyword:
+            case ts.SyntaxKind.FalseKeyword:
+                return true;
+        }
+        if (ts.isBigIntLiteral(unwrapped)) return true;
+        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
+            return /^[+-]?(?:0|[1-9][0-9]*)$/.test(unwrapped.text);
+        }
+        if (ts.isNumericLiteral(unwrapped)) {
+            const value = Number(unwrapped.text);
+            return Number.isFinite(value) && Number.isInteger(value);
+        }
+        if (
+            ts.isPrefixUnaryExpression(unwrapped) &&
+            (
+                unwrapped.operator === ts.SyntaxKind.PlusToken ||
+                unwrapped.operator === ts.SyntaxKind.MinusToken
+            )
+        ) {
+            return this.isSideEffectFreeBigIntCoercion(unwrapped.operand, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeBigIntCoercion(init, seenConsts);
     }
 
     private isSideEffectFreePrimitiveNumberCoercion(
