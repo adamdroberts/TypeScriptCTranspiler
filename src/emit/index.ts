@@ -8663,7 +8663,7 @@ class Emitter {
         bin: ts.BinaryExpression,
         op: ts.SyntaxKind,
     ): EmitResult | null {
-        if (op !== ts.SyntaxKind.EqualsToken || !ts.isPropertyAccessExpression(bin.left)) {
+        if (!ts.isPropertyAccessExpression(bin.left)) {
             return null;
         }
         const left = bin.left;
@@ -8676,11 +8676,34 @@ class Emitter {
         const name = this.classAccessorCName(accessor.decl.name, "set");
         if (!name) unsupported(accessor.decl, "computed accessor names");
         const callee = `${accessor.owner}_${name}`;
+        const getter = op === ts.SyntaxKind.EqualsToken
+            ? null
+            : this.classAccessorForPropertyAccess(left, "get");
+        if (op !== ts.SyntaxKind.EqualsToken && !getter) {
+            unsupported(left, "compound accessor assignment requires a matching getter");
+        }
+        const getterName = getter ? this.classAccessorCName(getter.decl.name, "get") : null;
+        if (getter && !getterName) unsupported(getter.decl, "computed accessor names");
+        const getterSig = getter ? this.checker.getSignatureFromDeclaration(getter.decl) : null;
+        if (getter && !getterSig) unsupported(getter.decl, "could not resolve getter signature");
+        const getterType = getter && getterSig
+            ? mapTsType(getter.decl, getterSig.getReturnType(), this.checker)
+            : null;
         if (isStatic(accessor.decl)) {
             return this.emitSequencedExpr(
                 paramType,
                 [{ value: rhs, target: paramType, node: bin.right }],
-                ([value]) => `({ ${callee}(${value}); ${value}; })`,
+                ([value]) => {
+                    if (!getter || !getterName || !getterType) {
+                        return `({ ${callee}(${value}); ${value}; })`;
+                    }
+                    const cur = this.freshTemp("_accessor_cur");
+                    const next = this.freshTemp("_accessor_next");
+                    const getCall = `${getter.owner}_${getterName}()`;
+                    const current = this.coerce({ c: getCall, ty: getterType }, paramType, left);
+                    const assigned = this.classAccessorCompoundValue(op, paramType, cur, value!);
+                    return `({ ${paramType.c} ${cur} = ${current}; ${paramType.c} ${next} = ${assigned}; ${callee}(${next}); ${next}; })`;
+                },
             );
         }
         const recv = this.emitExpr(left.expression);
@@ -8695,8 +8718,60 @@ class Emitter {
                 { value: recv, pass },
                 { value: rhs, target: paramType, node: bin.right },
             ],
-            ([obj, value]) => `({ ${callee}(${obj}, ${value}); ${value}; })`,
+            ([obj, value]) => {
+                if (!getter || !getterName || !getterType) {
+                    return `({ ${callee}(${obj}, ${value}); ${value}; })`;
+                }
+                const cur = this.freshTemp("_accessor_cur");
+                const next = this.freshTemp("_accessor_next");
+                const getCall = `${getter.owner}_${getterName}(${obj})`;
+                const current = this.coerce({ c: getCall, ty: getterType }, paramType, left);
+                const assigned = this.classAccessorCompoundValue(op, paramType, cur, value!);
+                return `({ ${paramType.c} ${cur} = ${current}; ${paramType.c} ${next} = ${assigned}; ${callee}(${obj}, ${next}); ${next}; })`;
+            },
         );
+    }
+
+    private classAccessorCompoundValue(
+        op: ts.SyntaxKind,
+        lhsType: CType,
+        current: string,
+        rhs: string,
+    ): string {
+        if (lhsType.kind === "string" && op === ts.SyntaxKind.PlusEqualsToken) {
+            return `tsc_str_concat(${current}, ${rhs})`;
+        }
+        if (lhsType.kind !== "number") {
+            unsupported(this.currentSf!, `compound accessor assignment on ${lhsType.c}`);
+        }
+        switch (op) {
+            case ts.SyntaxKind.PlusEqualsToken:
+                return `(${current} + ${rhs})`;
+            case ts.SyntaxKind.MinusEqualsToken:
+                return `(${current} - ${rhs})`;
+            case ts.SyntaxKind.AsteriskEqualsToken:
+                return `(${current} * ${rhs})`;
+            case ts.SyntaxKind.SlashEqualsToken:
+                return `(${current} / ${rhs})`;
+            case ts.SyntaxKind.PercentEqualsToken:
+                return `tsc_num_mod(${current}, ${rhs})`;
+            case ts.SyntaxKind.AsteriskAsteriskEqualsToken:
+                return `pow(${current}, ${rhs})`;
+            case ts.SyntaxKind.AmpersandEqualsToken:
+                return `((double)((int32_t)(${current}) & (int32_t)(${rhs})))`;
+            case ts.SyntaxKind.BarEqualsToken:
+                return `((double)((int32_t)(${current}) | (int32_t)(${rhs})))`;
+            case ts.SyntaxKind.CaretEqualsToken:
+                return `((double)((int32_t)(${current}) ^ (int32_t)(${rhs})))`;
+            case ts.SyntaxKind.LessThanLessThanEqualsToken:
+                return `((double)((int32_t)(${current}) << (int32_t)(${rhs})))`;
+            case ts.SyntaxKind.GreaterThanGreaterThanEqualsToken:
+                return `((double)((int32_t)(${current}) >> (int32_t)(${rhs})))`;
+            case ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken:
+                return `((double)((uint32_t)(${current}) >> (uint32_t)(${rhs})))`;
+            default:
+                unsupported(this.currentSf!, `unsupported compound accessor assignment ${ts.SyntaxKind[op]}`);
+        }
     }
 
     private emitAssignment(
