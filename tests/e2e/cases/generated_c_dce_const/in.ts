@@ -84,6 +84,7 @@ const unused_array_entries_method_call = ["dead_array_entries_method"].entries()
 const unused_array_concat_call = ["dead_array_concat"].concat(["dead_array_concat_tail"]);
 const unused_array_flat_call = [["dead_array_flat"]].flat();
 const unused_array_to_sorted_call = ["dead_array_to_sorted"].toSorted();
+const unused_array_to_spliced_call = ["dead_array_to_spliced"].toSpliced(0, 0, "dead_array_to_spliced_insert");
 const unused_array_to_reversed_call = ["dead_array_to_reversed"].toReversed();
 const unused_array_value_of_call = unused_spread_source_array.valueOf();
 const unused_error_constructor = new Error("dead_error_constructor");
@@ -191,6 +192,7 @@ Symbol("top_level_dead_symbol_constructor");
 ["top_level_dead_array_concat"].concat(["top_level_dead_array_concat_tail"]);
 [["top_level_dead_array_flat", "top_level_dead_array_flat_tail"]].flat();
 ["top_level_dead_array_to_sorted"].toSorted();
+["top_level_dead_array_to_spliced"].toSpliced(0, 0, "top_level_dead_array_to_spliced_insert");
 ["top_level_dead_array_to_reversed"].toReversed();
 new Error("top_level_dead_error_constructor");
 new RangeError("top_level_dead_range_error_constructor");
@@ -312,6 +314,7 @@ function usedLocal(value: number): number {
     ["local_dead_array_concat"].concat(["local_dead_array_concat_tail"]);
     [["local_dead_array_flat"]].flat();
     ["local_dead_array_to_sorted"].toSorted();
+    ["local_dead_array_to_spliced"].toSpliced(0, 0, "local_dead_array_to_spliced_insert");
     new Error("local_dead_error_constructor");
     new SyntaxError("local_dead_syntax_error_constructor");
     Object.is("local_dead_object_is", "dead");

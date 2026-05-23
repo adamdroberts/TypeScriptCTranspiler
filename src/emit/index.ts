@@ -1320,6 +1320,13 @@ class Emitter {
                 return numberArgs(1);
             case "toSorted":
                 return args.length === 0;
+            case "toSpliced":
+                return args.length <= 1
+                    ? numberArgs(1)
+                    : args.length >= 2 &&
+                        this.isSideEffectFreePrimitiveNumberCoercion(args[0]!, seenConsts) &&
+                        this.isSideEffectFreePrimitiveNumberCoercion(args[1]!, seenConsts) &&
+                        allArgsPure(2);
             case "keys":
             case "values":
             case "entries":
