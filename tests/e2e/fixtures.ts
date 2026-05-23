@@ -238,6 +238,54 @@ const packages: Record<string, PackageFixture> = {
             "src/wrong-labels/words.ts": 'export const name = "wrong-words-label";\n',
         },
     },
+    "tsc2c-require-array-conditions-package": {
+        packageJson: {
+            name: "tsc2c-require-array-conditions-package",
+            version: "1.0.0",
+            type: "module",
+            exports: {
+                ".": [
+                    "./src/missing-entry.cjs",
+                    {
+                        require: [
+                            "./src/missing-require.cjs",
+                            "./src/require-entry.cjs",
+                        ],
+                        default: "./src/default-entry.ts",
+                    },
+                ],
+                "./tool": [
+                    {
+                        require: [
+                            "./src/missing-tool.cjs",
+                            "./src/tool-require.cjs",
+                        ],
+                        default: "./src/tool-default.ts",
+                    },
+                ],
+            },
+            imports: {
+                "#flavor": [
+                    "./src/missing-flavor.cjs",
+                    {
+                        require: [
+                            "./src/missing-flavor-require.cjs",
+                            "./src/flavor-require.cjs",
+                        ],
+                        default: "./src/flavor-default.ts",
+                    },
+                ],
+            },
+        },
+        files: {
+            "src/default-entry.ts": 'export const label = "wrong-default-entry";\nexport function pick(value: number): string {\n    return "wrong-default:" + value;\n}\n',
+            "src/require-entry.cjs": 'const flavor = require("#flavor");\nexports.label = "array:" + flavor.label;\nexports.pick = function pick(value) { return "array-entry:" + value; };\n',
+            "src/tool-default.ts": 'export const tool = "wrong-tool-default";\nexport function scale(value: number): number {\n    return value * 100;\n}\n',
+            "src/tool-require.cjs": 'exports.tool = "array-tool";\nexports.scale = function scale(value) { return value * 9; };\n',
+            "src/flavor-default.ts": 'export const label = "wrong-flavor-default";\n',
+            "src/flavor-require.cjs": 'exports.label = "array-imports";\n',
+        },
+    },
     "tsc2c-main-package": esmPackage("tsc2c-main-package", {
         "index.js": 'export const label = "main-pkg";\nexport function square(value) { return value * value; }\n',
     }),
