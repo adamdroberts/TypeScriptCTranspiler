@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes `in` checks against fresh object/array literals and earlier pure const object/array literals as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats unused class-expression constants as side-effect-free when their definitions pass the same conservative checks as pruned class declarations. Test: `generated_c_dce_class`.
 - Generated-C DCE now recognizes BigInt and RegExp literals as side-effect-free unused values. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats unused local arrow and function-expression constants as side-effect-free declarations. Test: `generated_c_dce_lifted_arrow`.

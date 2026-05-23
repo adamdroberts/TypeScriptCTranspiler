@@ -773,6 +773,9 @@ class Emitter {
         }
         if (ts.isBinaryExpression(expr)) {
             switch (expr.operatorToken.kind) {
+                case ts.SyntaxKind.InKeyword:
+                    return this.isSideEffectFreeTopLevelConstInitializer(expr.left, seenConsts) &&
+                        this.isSideEffectFreeInRightOperand(expr.right, seenConsts);
                 case ts.SyntaxKind.PlusToken:
                 case ts.SyntaxKind.MinusToken:
                 case ts.SyntaxKind.AsteriskToken:
@@ -899,6 +902,18 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeObjectReadOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeInRightOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isObjectLiteralExpression(unwrapped) || ts.isArrayLiteralExpression(unwrapped)) {
+            return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeInRightOperand(init, seenConsts);
     }
 
     private objectLiteralPropertyNameHasNoDefinitionSideEffects(
