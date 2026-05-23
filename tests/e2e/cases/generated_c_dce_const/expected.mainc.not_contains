@@ -13,6 +13,8 @@ unused_spread_object
 unused_chain_seed
 unused_chain_mid
 unused_chain_object
+unused_other_key
+unused_computed_key_object
 unused_namespace_value
 unused_let
 unused_empty

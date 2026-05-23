@@ -14,6 +14,8 @@ const unused_spread_object = { ok: true, ...{ label: "dead" } };
 const unused_chain_seed = "dead";
 const unused_chain_mid = unused_chain_seed;
 const unused_chain_object = { label: unused_chain_mid };
+const unused_other_key = "gone";
+const unused_computed_key_object = { ["dead"]: 1, [unused_other_key]: 2 };
 let unused_let = 42;
 let unused_empty: number;
 "top_level_dead_expr";

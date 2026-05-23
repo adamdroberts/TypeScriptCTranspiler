@@ -712,17 +712,23 @@ class Emitter {
                     return this.isSideEffectFreeObjectSpreadOperand(prop.expression);
                 }
                 if (!ts.isPropertyAssignment(prop)) return false;
-                if (
-                    !ts.isIdentifier(prop.name) &&
-                    !ts.isStringLiteral(prop.name) &&
-                    !ts.isNumericLiteral(prop.name)
-                ) {
-                    return false;
-                }
+                if (!this.objectLiteralPropertyNameHasNoDefinitionSideEffects(prop.name, seenConsts)) return false;
                 return this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts);
             });
         }
         return false;
+    }
+
+    private objectLiteralPropertyNameHasNoDefinitionSideEffects(
+        name: ts.PropertyName,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
+            return true;
+        }
+        if (!ts.isComputedPropertyName(name)) return false;
+        return this.staticPropertyName(name) !== null &&
+            this.isSideEffectFreeTopLevelConstInitializer(name.expression, seenConsts);
     }
 
     private isSideEffectFreeConstIdentifier(
