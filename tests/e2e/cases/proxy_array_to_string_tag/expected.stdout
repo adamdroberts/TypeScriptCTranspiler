@@ -1,0 +1,3 @@
+tags: [object Array] [object Array] [object Object]
+revocable before: [object Array]
+revocable after: Cannot perform 'get' on a proxy that has been revoked

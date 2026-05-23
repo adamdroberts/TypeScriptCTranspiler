@@ -29,6 +29,14 @@ bool tsc_value_is_undefined(tsc_value_t v) {
     return value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_UNDEFINED;
 }
 
+static bool value_proxy_chain_is_array(tsc_value_t v) {
+    if (!value_is_box(v)) return false;
+    if (value_tag(v) == TSC_VALUE_TAG_ARRAY) return true;
+    if (value_tag(v) != TSC_VALUE_TAG_OBJECT) return false;
+    tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+    return o && o->is_proxy && value_proxy_chain_is_array(o->proxy_target);
+}
+
 tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v) {
     if (!value_is_box(v)) return tsc_str_from_lit("[object Number]", 15);
     switch (value_tag(v)) {
@@ -45,6 +53,7 @@ tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v) {
                 tsc_throw_str(tsc_str_from_cstr("Cannot perform 'get' on a proxy that has been revoked"));
             }
             if (tsc_proxy_trap_is_callable(v)) return tsc_str_from_lit("[object Function]", 17);
+            if (value_proxy_chain_is_array(v)) return tsc_str_from_lit("[object Array]", 14);
             return tsc_str_from_lit("[object Object]", 15);
         }
     }
