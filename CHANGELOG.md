@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Constant-body `Function(...)` / `new Function(...)` calls now stay on the AOT path when they include static parameter-name strings, and runtime-code manifest dispatch uses the final function-body argument while requiring static parameter names. Tests: `runtime_function_params_aot`, `runtime_function_manifest_params`.
 - Dynamic strict equality now preserves `null` and `undefined` literal identity when boxing values into `tsc_value_t`, including missing dynamic object properties compared with `undefined`. Test: `dynamic_nullish_equality`.
 - Bounded scheduler callbacks for `process.nextTick`, `queueMicrotask`, zero-delay `setTimeout`, and `setImmediate` now accept explicit `this: any` callback parameters and pass the runtime `undefined` value. Test: `scheduler_callback_this`.
 - EventTarget listener adapters now support explicit `this: EventTarget` listener parameters, passing the dispatch target while preserving duplicate suppression, removal, and once-listener behavior. Test: `event_target_this`.

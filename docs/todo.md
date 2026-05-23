@@ -189,6 +189,7 @@ Within-phase gaps that can be picked off individually without the big phase-leve
 
 These are not permanent product limits, but every reachable module, native bridge, and runtime-compiled source must be closed over at build time. `tsc2c` should keep rejecting cases it cannot prove or list ahead of time.
 
+- **Runtime code compilation.** Constant `eval(...)` expressions and constant-body `Function(...)` / `new Function(...)` calls compile AOT without `--unsafe-eval`, including forms with static parameter-name strings before the final body argument. Manifest-listed non-constant function bodies dispatch over the compile-time allow-list and use the final body argument when earlier parameter-name strings are static. Unknown source strings still require the gated embedded-Node bridge behind `--unsafe-eval`.
 - **Native C++ addons under `node_modules/*/build/Release/*.node`.** Literal native addon specifiers and native-addon packages can now be security allow-listed through a compile-time native-addon manifest, which lowers known `require(...)`/import bindings to `runtime/tsc_node_embed.cc` via `tsc_node_native_addon(<manifest path>)` and links `libnode`. Package `exports` / `imports` condition maps and package-private `#...` imports are included in the native-addon closure checks, direct `.node` default imports are typed as `any` for manifest-backed bridge imports, and `bun run test:native-addon-smoke` validates a real N-API addon path when `libnode` is available. Unlisted native addons still reject.
 
 ---
