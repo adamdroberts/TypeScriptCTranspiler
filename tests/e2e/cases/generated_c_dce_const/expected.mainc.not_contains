@@ -42,6 +42,14 @@ unused_math_abs_call
 unused_math_max_call
 unused_math_hypot_call
 unused_string_from_char_code
+unused_object_keys_call
+unused_object_values_call
+unused_object_entries_call
+unused_const_object_keys_call
+unused_array_keys_call
+dead_object_keys
+dead_object_values
+dead_object_entries
 unused_chain_seed
 unused_chain_mid
 unused_chain_object
@@ -60,6 +68,8 @@ top_level_dead_number_is_finite
 top_level_dead_object_is
 top_level_dead_math_call
 top_level_dead_from_char_code
+top_level_dead_object_keys
+top_level_dead_object_values
 top_level_dead_length
 top_level_dead_index
 top_level_dead_prop
@@ -76,6 +86,8 @@ local_dead_number_is_integer
 local_dead_object_is
 local_dead_math_call
 local_dead_from_char_code
+local_dead_object_entries
+local_dead_array_keys
 local_dead_length
 local_dead_index
 local_dead_prop

@@ -988,6 +988,18 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            (
+                method === "keys" ||
+                method === "values" ||
+                method === "entries"
+            ) &&
+            call.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Object")
+        ) {
+            return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts);
+        }
+        if (
+            ts.isIdentifier(recv) &&
             this.isSideEffectFreeMathCall(method, call.arguments, seenConsts) &&
             this.isUnshadowedGlobalIdentifier(recv, "Math")
         ) {
@@ -1003,6 +1015,18 @@ class Emitter {
             );
         }
         return false;
+    }
+
+    private isSideEffectFreeObjectEnumerationOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isObjectLiteralExpression(unwrapped) || ts.isArrayLiteralExpression(unwrapped)) {
+            return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeObjectEnumerationOperand(init, seenConsts);
     }
 
     private isSideEffectFreeMathCall(
