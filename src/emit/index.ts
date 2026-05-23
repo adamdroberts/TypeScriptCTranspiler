@@ -453,6 +453,14 @@ class Emitter {
             if (ts.isWhileStatement(node) && this.staticBooleanValue(node.expression) === false) {
                 return;
             }
+            if (
+                ts.isForStatement(node) &&
+                node.condition &&
+                this.staticBooleanValue(node.condition) === false
+            ) {
+                if (node.initializer) visit(node.initializer);
+                return;
+            }
             if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node)) {
                 const sym = this.symbolForIdentifier(node);
                 const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
@@ -9152,6 +9160,10 @@ class Emitter {
                 buf.line(r.c + ";");
             }
         }
+        if (fs.condition && this.staticBooleanValue(fs.condition) === false) {
+            buf.close();
+            return;
+        }
         const cond = fs.condition ? this.emitBoolExpr(fs.condition) : "1";
         const upd = fs.incrementor ? this.emitExpr(fs.incrementor).c : "";
         buf.open(`while (${cond})`);
@@ -9844,6 +9856,9 @@ class Emitter {
                 this.statementAlwaysExits(stmt.statement);
         }
         if (ts.isForStatement(stmt)) {
+            if (stmt.condition && this.staticBooleanValue(stmt.condition) === false) {
+                return false;
+            }
             return (!stmt.condition || this.isTrueExpression(stmt.condition)) &&
                 !this.statementContainsBreak(stmt.statement) &&
                 this.statementAlwaysExits(stmt.statement);

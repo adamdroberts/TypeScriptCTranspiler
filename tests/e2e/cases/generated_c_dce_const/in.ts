@@ -228,6 +228,9 @@ if (!top_level_static_false) {
 while (false) {
     console.log("top_level_dead_while_false");
 }
+for (; false; console.log("top_level_dead_for_false_increment")) {
+    console.log("top_level_dead_for_false_body");
+}
 top_level_static_false ? console.log("top_level_dead_static_conditional_call") : "top_level_dead_static_conditional_value";
 top_level_static_false && console.log("top_level_dead_static_and_call");
 !top_level_static_false || console.log("top_level_dead_static_or_call");
@@ -331,6 +334,9 @@ function usedLocal(value: number): number {
     const unused_local_static_nullish_fallback = (undefined as string | undefined) ?? "local_dead_static_nullish_fallback";
     local_static_non_nullish ?? console.log("local_dead_static_nullish_expr_call");
     (undefined as string | undefined) ?? "local_dead_static_nullish_expr_fallback";
+    for (; false; console.log("local_dead_for_false_increment")) {
+        console.log("local_dead_for_false_body");
+    }
     const unused_local_seed = "dead";
     const unused_local_chain = unused_local_seed;
     const kept_local = value + 3;
