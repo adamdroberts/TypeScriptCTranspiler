@@ -1,0 +1,3 @@
+{
+  "description": "Object.prototype.valueOf.call preserves typed, dynamic, array, and primitive receivers while evaluating ignored extras"
+}

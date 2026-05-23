@@ -10916,7 +10916,8 @@ class Emitter {
             method !== "hasOwnProperty" &&
             method !== "propertyIsEnumerable" &&
             method !== "toLocaleString" &&
-            method !== "toString"
+            method !== "toString" &&
+            method !== "valueOf"
         ) return null;
         const prototypeAccess = methodAccess.expression;
         if (
@@ -10927,10 +10928,10 @@ class Emitter {
         ) {
             return null;
         }
-        const isStringTagCall = method === "toString" || method === "toLocaleString";
-        const minArgs = isStringTagCall ? 1 : 2;
+        const isTargetOnlyCall = method === "toString" || method === "toLocaleString" || method === "valueOf";
+        const minArgs = isTargetOnlyCall ? 1 : 2;
         if (call.arguments.length < minArgs) {
-            if (isStringTagCall) unsupported(call, `Object.prototype.${method}.call expects target`);
+            if (isTargetOnlyCall) unsupported(call, `Object.prototype.${method}.call expects target`);
             unsupported(call, `Object.prototype.${method}.call expects target and key`);
         }
         const targetNode = call.arguments[0]!;
@@ -10972,6 +10973,12 @@ class Emitter {
                 const stringified = this.coerceToString({ c: value!, ty: target.ty }, targetNode);
                 return stringified;
             });
+        }
+        if (method === "valueOf") {
+            return this.emitSequencedExpr(target.ty, [
+                { value: target, node: targetNode },
+                ...this.ignoredArgumentSpecs(call.arguments, 1),
+            ], ([value]) => value!);
         }
         const keyNode = call.arguments[1]!;
         const ignored = this.ignoredArgumentSpecs(call.arguments, 2);

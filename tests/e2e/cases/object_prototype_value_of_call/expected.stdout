@@ -1,0 +1,7 @@
+ignored: typed
+ignored: dynamic
+typed: Ada 2
+dynamic: dyn 7
+dynamic-array: 3 7
+typed-array: 3 3
+primitives: hi! 42 yes
