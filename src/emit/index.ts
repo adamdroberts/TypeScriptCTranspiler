@@ -25810,8 +25810,9 @@ class Emitter {
                 return { c: `tsc_value_length(${recv.c})`, ty: T_NUMBER };
             }
             const key = pa.name.text;
+            const cache = this.freshTemp("_prop_cache");
             const value: EmitResult = {
-                c: `tsc_value_get_prop(${recv.c}, tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}))`,
+                c: `({ static tsc_prop_cache_t ${cache}; tsc_value_get_prop_cached(${recv.c}, tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}), &${cache}); })`,
                 ty: T_VALUE,
             };
             const narrowed = this.prepareType(mapType(pa, this.checker));
@@ -25874,8 +25875,9 @@ class Emitter {
             const storageTy = this.expressionStorageType(pa.expression);
             if (storageTy?.kind === "value") {
                 const key = pa.name.text;
+                const cache = this.freshTemp("_prop_cache");
                 const value: EmitResult = {
-                    c: `tsc_value_get_prop(${recv.c}, tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}))`,
+                    c: `({ static tsc_prop_cache_t ${cache}; tsc_value_get_prop_cached(${recv.c}, tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}), &${cache}); })`,
                     ty: T_VALUE,
                 };
                 const narrowed = this.prepareType(ty);

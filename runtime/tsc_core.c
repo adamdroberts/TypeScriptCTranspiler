@@ -154,7 +154,7 @@ static void tsc_dynamic_stats_report(void) {
     if (!g_dynamic_stats_enabled) return;
     fprintf(
         stderr,
-        "tsc dynamic stats: get_prop=%" PRIu64 " get_prop_receiver=%" PRIu64 " set_prop=%" PRIu64 " set_prop_receiver=%" PRIu64 " has_prop=%" PRIu64 " delete_prop=%" PRIu64 " own_keys=%" PRIu64 " get_own_property_descriptor=%" PRIu64 " object_shape_updates=%" PRIu64 "\n",
+        "tsc dynamic stats: get_prop=%" PRIu64 " get_prop_receiver=%" PRIu64 " set_prop=%" PRIu64 " set_prop_receiver=%" PRIu64 " has_prop=%" PRIu64 " delete_prop=%" PRIu64 " own_keys=%" PRIu64 " get_own_property_descriptor=%" PRIu64 " object_shape_updates=%" PRIu64 " prop_cache_hits=%" PRIu64 " prop_cache_misses=%" PRIu64 "\n",
         g_dynamic_stats[TSC_DYNAMIC_STAT_GET_PROP],
         g_dynamic_stats[TSC_DYNAMIC_STAT_GET_PROP_RECEIVER],
         g_dynamic_stats[TSC_DYNAMIC_STAT_SET_PROP],
@@ -163,7 +163,9 @@ static void tsc_dynamic_stats_report(void) {
         g_dynamic_stats[TSC_DYNAMIC_STAT_DELETE_PROP],
         g_dynamic_stats[TSC_DYNAMIC_STAT_OWN_KEYS],
         g_dynamic_stats[TSC_DYNAMIC_STAT_GET_OWN_PROPERTY_DESCRIPTOR],
-        g_dynamic_stats[TSC_DYNAMIC_STAT_OBJECT_SHAPE_UPDATE]
+        g_dynamic_stats[TSC_DYNAMIC_STAT_OBJECT_SHAPE_UPDATE],
+        g_dynamic_stats[TSC_DYNAMIC_STAT_PROP_CACHE_HIT],
+        g_dynamic_stats[TSC_DYNAMIC_STAT_PROP_CACHE_MISS]
     );
 }
 

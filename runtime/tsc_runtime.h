@@ -456,6 +456,11 @@ void tsc_array_oob(const tsc_array_t* a, double i);
 
 /* ------------- dynamic values (NaN-boxed) ------------- */
 typedef struct tsc_object tsc_object_t;
+typedef struct {
+    const tsc_object_t* object;
+    uint64_t shape_version;
+    size_t index;
+} tsc_prop_cache_t;
 typedef struct tsc_promise tsc_promise_t;
 typedef struct tsc_event_emitter tsc_event_emitter_t;
 typedef struct tsc_event tsc_event_t;
@@ -504,6 +509,7 @@ bool tsc_value_is_callable(tsc_value_t v);
 bool tsc_value_is_nullish(tsc_value_t v);
 bool tsc_value_is_undefined(tsc_value_t v);
 tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key);
+tsc_value_t tsc_value_get_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_cache_t* cache);
 tsc_value_t tsc_value_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc_value_t receiver);
 tsc_value_t tsc_value_get_index(tsc_value_t v, double index);
 bool tsc_value_set_index(tsc_value_t v, double index, tsc_value_t value);
