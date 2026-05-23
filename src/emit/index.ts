@@ -26180,7 +26180,7 @@ class Emitter {
                     return `tsc_value_array(${r.c})`;
                 }
                 case "function":
-                    return `tsc_value_function_generic_arity(${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${r.c}, ${(r.ty.params ?? []).length}.0)`;
+                    return `tsc_value_function_generic_named(${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${r.c}, ${(r.ty.params ?? []).length}.0, ${this.functionValueNameLiteral(node)})`;
                 case "class":
                     return `tsc_value_class(${r.c})`;
                 case "void":
@@ -26196,6 +26196,31 @@ class Emitter {
         if (target.kind === "string") return this.coerceToString(r, node);
         if (target.kind === "void") return r.c;
         unsupported(node, `cannot coerce ${r.ty.c} to ${target.c}`);
+    }
+
+    private functionValueNameLiteral(node: ts.Node): string {
+        let current: ts.Node = node;
+        while (true) {
+            if (ts.isParenthesizedExpression(current)) {
+                current = current.expression;
+                continue;
+            }
+            if (ts.isAsExpression(current) || ts.isTypeAssertionExpression(current) || ts.isSatisfiesExpression(current)) {
+                current = current.expression;
+                continue;
+            }
+            if (ts.isNonNullExpression(current)) {
+                current = current.expression;
+                continue;
+            }
+            break;
+        }
+        const name = ts.isIdentifier(current)
+            ? current.text
+            : (ts.isFunctionExpression(current) && current.name)
+                ? current.name.text
+                : "";
+        return `tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)})`;
     }
 
     private ensureDynamicFunctionAdapter(node: ts.Node, type: CType): string {

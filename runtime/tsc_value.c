@@ -87,9 +87,15 @@ tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env) {
 }
 
 tsc_value_t tsc_value_function_generic_arity(tsc_generic_function_t fn, void* env, double length) {
+    return tsc_value_function_generic_named(fn, env, length, tsc_str_from_lit("", 0));
+}
+
+tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name) {
+    if (!name) name = tsc_str_from_lit("", 0);
     for (tsc_function_identity_t* cur = g_function_identities; cur; cur = cur->next) {
         if (cur->kind == TSC_FUNCTION_IDENTITY_GENERIC && cur->code.generic == fn && cur->env == env) {
             if (length > cur->length) cur->length = length;
+            if ((!cur->name || cur->name->len == 0) && name->len > 0) cur->name = name;
             return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cur);
         }
     }
@@ -99,6 +105,7 @@ tsc_value_t tsc_value_function_generic_arity(tsc_generic_function_t fn, void* en
     id->sealed = false;
     id->frozen = false;
     id->length = length;
+    id->name = name;
     id->prototype = tsc_function_default_prototype();
     id->code.generic = fn;
     id->env = env;
@@ -259,6 +266,7 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
     if (value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(v);
         if (tsc_str_is_length_key(key)) return tsc_value_num(ident->length);
+        if (str_lit_eq(key, "name")) return tsc_value_string(ident->name ? ident->name : tsc_str_from_lit("", 0));
         if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER && str_lit_eq(key, "listener")) {
             return value_event_listener_identity(ident->code.event_raw_identity.identity);
         }
@@ -591,7 +599,7 @@ bool tsc_value_has_own_prop(tsc_value_t v, const tsc_str_t* key) {
         return tsc_str_array_index(key, &idx) && idx < s->len;
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        return tsc_str_is_length_key(key);
+        return tsc_str_is_length_key(key) || str_lit_eq(key, "name");
     }
     return false;
 }
@@ -906,8 +914,18 @@ tsc_value_t value_descriptor_from_function_length(const tsc_function_identity_t*
     return tsc_value_object(desc);
 }
 
+tsc_value_t value_descriptor_from_function_name(const tsc_function_identity_t* fn) {
+    tsc_object_t* desc = tsc_object_new();
+    tsc_object_set(desc, tsc_str_from_lit("value", 5), tsc_value_string((fn && fn->name) ? fn->name : tsc_str_from_lit("", 0)));
+    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(false));
+    tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(false));
+    tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(false));
+    return tsc_value_object(desc);
+}
+
 tsc_value_t value_descriptor_from_function_key(const tsc_function_identity_t* fn, const tsc_str_t* key) {
     if (tsc_str_is_length_key(key)) return value_descriptor_from_function_length(fn);
+    if (str_lit_eq(key, "name")) return value_descriptor_from_function_name(fn);
     return tsc_value_undefined();
 }
 
@@ -936,6 +954,7 @@ tsc_value_t value_descriptors_from_string(const tsc_str_t* src) {
 tsc_value_t value_descriptors_from_function(const tsc_function_identity_t* fn) {
     tsc_object_t* out = tsc_object_new();
     tsc_object_set(out, tsc_str_from_lit("length", 6), value_descriptor_from_function_length(fn));
+    tsc_object_set(out, tsc_str_from_lit("name", 4), value_descriptor_from_function_name(fn));
     return tsc_value_object(out);
 }
 
@@ -950,9 +969,11 @@ tsc_array_t* tsc_value_own_keys(tsc_value_t v) {
         return value_string_keys((const tsc_str_t*)value_ptr(v), true);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        tsc_array_t* out = tsc_array_new(sizeof(tsc_str_t*), 1);
+        tsc_array_t* out = tsc_array_new(sizeof(tsc_str_t*), 2);
         tsc_str_t* length = tsc_str_from_lit("length", 6);
         tsc_array_push_raw(out, &length);
+        tsc_str_t* name = tsc_str_from_lit("name", 4);
+        tsc_array_push_raw(out, &name);
         return out;
     }
     return tsc_array_new(sizeof(tsc_str_t*), 1);

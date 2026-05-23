@@ -10,11 +10,14 @@ const stableProto: any = { marker: "stable" };
 
 console.log("same boxed:", Object.is(first, second), first === second);
 const lengthDesc: any = Object.getOwnPropertyDescriptor(first, "length");
+const nameDesc: any = Object.getOwnPropertyDescriptor(first, "name");
 const names: any = Object.getOwnPropertyNames(first);
 const ownKeys: any = Reflect.ownKeys(first);
 console.log("function length:", first.length, Reflect.get(first, "length"));
-console.log("length own:", Object.hasOwn(first, "length"), Object.keys(first).length, names.length, names[0], ownKeys.length, ownKeys[0]);
+console.log("function name:", first.name, Reflect.get(first, "name"));
+console.log("function own:", Object.hasOwn(first, "length"), Object.hasOwn(first, "name"), Object.keys(first).length, names.length, names[0], names[1], ownKeys.length, ownKeys[0], ownKeys[1]);
 console.log("length desc:", lengthDesc.value, lengthDesc.writable, lengthDesc.enumerable, lengthDesc.configurable);
+console.log("name desc:", nameDesc.value, nameDesc.writable, nameDesc.enumerable, nameDesc.configurable);
 Object.setPrototypeOf(first, stableProto);
 console.log("shared proto:", Object.getPrototypeOf(second).marker);
 Object.preventExtensions(first);
@@ -30,6 +33,7 @@ console.log("freeze:", Object.freeze(frozen) === frozen, Reflect.isExtensible(fr
 const proxiedTarget: any = Proxied as any;
 const proxied: any = new Proxy(proxiedTarget, {});
 console.log("proxy length:", proxied.length, Reflect.get(proxied, "length"));
+console.log("proxy name:", proxied.name, Reflect.get(proxied, "name"));
 console.log("proxy seal:", Object.seal(proxied) === proxied, Object.isSealed(proxiedTarget), Object.isSealed(proxied));
 
 const frozenProxyTarget: any = FrozenProxy as any;
