@@ -5055,6 +5055,10 @@ class Emitter {
                 this.defs.line(`static tsc_value_t ${this.classStaticGetterDecoratorReplacementName(cd, m)};`);
                 this.ensureClassStaticGetterDecoratorAdapter(cd, m);
             }
+            if (ts.isSetAccessorDeclaration(m) && isStatic(m) && this.classMemberHasDecorators(m)) {
+                this.defs.line(`static tsc_value_t ${this.classStaticSetterDecoratorReplacementName(cd, m)};`);
+                this.ensureClassStaticSetterDecoratorAdapter(cd, m);
+            }
         }
         this.defs.line();
 
@@ -5279,6 +5283,18 @@ class Emitter {
         return `${cd.name.text}_static_get_${mangleIdent(getterName)}_decorator_replacement`;
     }
 
+    private classStaticSetterDecoratorReplacementName(
+        cd: ts.ClassDeclaration,
+        member: ts.SetAccessorDeclaration,
+    ): string {
+        if (!cd.name) unsupported(cd, "decorated static setters require a named class");
+        const setterName = this.staticPropertyName(member.name);
+        if (!setterName) {
+            unsupported(member.name, "decorated static setter names must resolve to a string or number literal");
+        }
+        return `${cd.name.text}_static_set_${mangleIdent(setterName)}_decorator_replacement`;
+    }
+
     private emitClassFieldDecoratorInitializerSetup(buf: CBuf, cd: ts.ClassDeclaration): void {
         for (const member of cd.members) {
             if (!this.classMemberHasDecorators(member)) continue;
@@ -5288,6 +5304,8 @@ class Emitter {
                 buf.line(`${this.classStaticMethodDecoratorReplacementName(cd, member)} = tsc_value_undefined();`);
             } else if (ts.isGetAccessorDeclaration(member) && isStatic(member)) {
                 buf.line(`${this.classStaticGetterDecoratorReplacementName(cd, member)} = tsc_value_undefined();`);
+            } else if (ts.isSetAccessorDeclaration(member) && isStatic(member)) {
+                buf.line(`${this.classStaticSetterDecoratorReplacementName(cd, member)} = tsc_value_undefined();`);
             }
         }
     }
@@ -5350,7 +5368,9 @@ class Emitter {
                     ? this.classStaticMethodDecoratorValue(cd, member)
                     : ts.isGetAccessorDeclaration(member) && isStatic(member)
                         ? this.classStaticGetterDecoratorValue(cd, member)
-                    : { c: "tsc_value_undefined()", ty: T_VALUE };
+                        : ts.isSetAccessorDeclaration(member) && isStatic(member)
+                            ? this.classStaticSetterDecoratorValue(cd, member)
+                            : { c: "tsc_value_undefined()", ty: T_VALUE };
                 const args = [
                     valueArg,
                     this.classMemberDecoratorContext(member, kind, memberName, metadata, initializers),
@@ -5374,6 +5394,10 @@ class Emitter {
                 } else if (ts.isGetAccessorDeclaration(member) && isStatic(member)) {
                     const out = this.freshTemp("_getter_decorator_result");
                     const replacement = this.classStaticGetterDecoratorReplacementName(cd, member);
+                    buf.line(`{ tsc_value_t ${out} = ${result}; if (!tsc_value_is_undefined(${out})) ${replacement} = ${out}; }`);
+                } else if (ts.isSetAccessorDeclaration(member) && isStatic(member)) {
+                    const out = this.freshTemp("_setter_decorator_result");
+                    const replacement = this.classStaticSetterDecoratorReplacementName(cd, member);
                     buf.line(`{ tsc_value_t ${out} = ${result}; if (!tsc_value_is_undefined(${out})) ${replacement} = ${out}; }`);
                 } else {
                     buf.line(`(void)(${result});`);
@@ -5501,6 +5525,48 @@ class Emitter {
             buf.line(`${ret.c} result = ${call};`);
             buf.line(`return ${this.coerce({ c: "result", ty: ret }, T_VALUE, member)};`);
         }
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
+    private classStaticSetterDecoratorValue(
+        cd: ts.ClassDeclaration,
+        member: ts.SetAccessorDeclaration,
+    ): EmitResult {
+        const replacement = this.classStaticSetterDecoratorReplacementName(cd, member);
+        const adapter = this.ensureClassStaticSetterDecoratorAdapter(cd, member);
+        return {
+            c: `({ tsc_value_t _decorator_current = ${replacement}; tsc_value_is_undefined(_decorator_current) ? tsc_value_function_generic(${adapter}, NULL) : _decorator_current; })`,
+            ty: T_VALUE,
+        };
+    }
+
+    private ensureClassStaticSetterDecoratorAdapter(
+        cd: ts.ClassDeclaration,
+        member: ts.SetAccessorDeclaration,
+    ): string {
+        if (!cd.name) unsupported(cd, "decorated static setters require a named class");
+        if (!isStatic(member)) unsupported(member, "static setter decorator adapter requires a static setter");
+        const accessorName = this.classAccessorCName(member.name, "set");
+        if (!accessorName) unsupported(member, "computed static setter names");
+        const name = `${cd.name.text}_${accessorName}_decorator_original`;
+        if (this.nodeFunctionAdapters.has(name)) return name;
+        this.nodeFunctionAdapters.add(name);
+        const param = member.parameters[0];
+        if (!param) unsupported(member, "setter must have a value parameter");
+        const paramType = this.prepareType(mapType(param, this.checker));
+        const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
+        this.protos.line(signature + ";");
+        const buf = new CBuf();
+        buf.open(signature);
+        buf.line("(void)env;");
+        buf.line("(void)this_arg;");
+        buf.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
+        const raw = "(0 < args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined())";
+        buf.line(`${cd.name.text}_${accessorName}(${this.coerce({ c: raw, ty: T_VALUE }, paramType, member)});`);
+        buf.line("return tsc_value_undefined();");
         buf.close();
         buf.line();
         this.closureDefs.write(buf.toString());
@@ -9050,24 +9116,58 @@ class Emitter {
         if (!getter.parent || !ts.isClassDeclaration(getter.parent)) {
             unsupported(getter, "decorated static getter requires a containing class");
         }
+        return this.emitSequencedExpr(ret, [], () =>
+            this.decoratedStaticGetterReadExpr(pa, getter, callee, ret),
+        );
+    }
+
+    private decoratedStaticGetterReadExpr(
+        node: ts.Expression,
+        getter: ts.GetAccessorDeclaration,
+        callee: string,
+        ret: CType,
+    ): string {
+        if (!getter.parent || !ts.isClassDeclaration(getter.parent)) {
+            unsupported(getter, "decorated static getter requires a containing class");
+        }
         const replacement = this.classStaticGetterDecoratorReplacementName(getter.parent, getter);
-        return this.emitSequencedExpr(ret, [], () => {
-            const fn = this.freshTemp("_getter_replacement");
-            const out = this.freshTemp("_getter_result");
-            const av = this.freshTemp("_getter_args");
-            const applied = {
-                c: `tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}))`,
-                ty: T_VALUE,
-            };
-            return (
-                `({ tsc_value_t ${fn} = ${replacement}; ` +
-                `${ret.c} ${out} = ${this.zeroValue(ret)}; ` +
-                `if (tsc_value_is_undefined(${fn})) { ${out} = ${callee}(); } ` +
-                `else { tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), 1); ` +
-                `${out} = ${this.coerce(applied, ret, pa)}; } ` +
-                `${out}; })`
-            );
-        });
+        const fn = this.freshTemp("_getter_replacement");
+        const out = this.freshTemp("_getter_result");
+        const av = this.freshTemp("_getter_args");
+        const applied = {
+            c: `tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}))`,
+            ty: T_VALUE,
+        };
+        return (
+            `({ tsc_value_t ${fn} = ${replacement}; ` +
+            `${ret.c} ${out} = ${this.zeroValue(ret)}; ` +
+            `if (tsc_value_is_undefined(${fn})) { ${out} = ${callee}(); } ` +
+            `else { tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), 1); ` +
+            `${out} = ${this.coerce(applied, ret, node)}; } ` +
+            `${out}; })`
+        );
+    }
+
+    private decoratedStaticSetterCallExpr(
+        node: ts.Expression,
+        setter: ts.SetAccessorDeclaration,
+        callee: string,
+        paramType: CType,
+        assigned: string,
+    ): string {
+        if (!setter.parent || !ts.isClassDeclaration(setter.parent)) {
+            unsupported(setter, "decorated static setter requires a containing class");
+        }
+        const replacement = this.classStaticSetterDecoratorReplacementName(setter.parent, setter);
+        const fn = this.freshTemp("_setter_replacement");
+        const av = this.freshTemp("_setter_args");
+        return (
+            `({ tsc_value_t ${fn} = ${replacement}; ` +
+            `if (tsc_value_is_undefined(${fn})) { ${callee}(${assigned}); } ` +
+            `else { tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), 1); ` +
+            `tsc_array_push_value(${av}, ${this.coerce({ c: assigned, ty: paramType }, T_VALUE, node)}); ` +
+            `(void)tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av})); } })`
+        );
     }
 
     private emitClassAccessorAssignment(
@@ -9101,16 +9201,23 @@ class Emitter {
             ? mapTsType(getter.decl, getterSig.getReturnType(), this.checker)
             : null;
         if (isStatic(accessor.decl)) {
+            const setCall = (assigned: string): string =>
+                this.classMemberHasDecorators(accessor.decl)
+                    ? this.decoratedStaticSetterCallExpr(left, accessor.decl, callee, paramType, assigned)
+                    : `${callee}(${assigned})`;
             return this.emitSequencedExpr(
                 paramType,
                 [{ value: rhs, target: paramType, node: bin.right }],
                 ([value]) => {
                     if (!getter || !getterName || !getterType) {
-                        return `({ ${callee}(${value}); ${value}; })`;
+                        return `({ ${setCall(value!)}; ${value}; })`;
                     }
                     const cur = this.freshTemp("_accessor_cur");
                     const next = this.freshTemp("_accessor_next");
-                    const getCall = `${getter.owner}_${getterName}()`;
+                    const getCallee = `${getter.owner}_${getterName}`;
+                    const getCall = isStatic(getter.decl) && this.classMemberHasDecorators(getter.decl)
+                        ? this.decoratedStaticGetterReadExpr(left, getter.decl, getCallee, getterType)
+                        : `${getCallee}()`;
                     const current = this.coerce({ c: getCall, ty: getterType }, paramType, left);
                     if (this.isLogicalAssignmentOperator(op)) {
                         return `({ ${paramType.c} ${cur} = ${current}; ` +
@@ -9120,13 +9227,13 @@ class Emitter {
                                 cur,
                                 value!,
                                 next,
-                                (assigned) => `${callee}(${assigned})`,
+                                setCall,
                                 left,
                             ) +
                             `; })`;
                     }
                     const assigned = this.classAccessorCompoundValue(op, paramType, cur, value!);
-                    return `({ ${paramType.c} ${cur} = ${current}; ${paramType.c} ${next} = ${assigned}; ${callee}(${next}); ${next}; })`;
+                    return `({ ${paramType.c} ${cur} = ${current}; ${paramType.c} ${next} = ${assigned}; ${setCall(next)}; ${next}; })`;
                 },
             );
         }
