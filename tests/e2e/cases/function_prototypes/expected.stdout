@@ -1,0 +1,9 @@
+default: object true
+set object: true fn
+reflect get: fn
+reflect set null: true null
+ext before: true
+prevent: true false
+locked same: true
+locked change: false
+object locked change: Object.setPrototypeOf failed

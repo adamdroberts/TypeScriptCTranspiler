@@ -5,6 +5,16 @@ tsc_function_identity_t* g_function_identities = NULL;
 tsc_value_t tsc_value_array(tsc_array_t* a) { return value_box(TSC_VALUE_TAG_ARRAY, (uintptr_t)a); }
 tsc_value_t tsc_value_object(tsc_object_t* o) { return value_box(TSC_VALUE_TAG_OBJECT, (uintptr_t)o); }
 
+tsc_value_t tsc_function_default_prototype(void) {
+    static bool initialized = false;
+    static tsc_value_t prototype;
+    if (!initialized) {
+        prototype = tsc_value_object(tsc_object_new());
+        initialized = true;
+    }
+    return prototype;
+}
+
 tsc_value_t value_event_listener_identity(void* identity) {
     if (!identity) return tsc_value_undefined();
     for (tsc_function_identity_t* cur = g_function_identities; cur; cur = cur->next) {
@@ -14,6 +24,8 @@ tsc_value_t value_event_listener_identity(void* identity) {
     }
     tsc_function_identity_t* entry = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
     entry->kind = TSC_FUNCTION_IDENTITY_EVENT_LISTENER;
+    entry->extensible = true;
+    entry->prototype = tsc_function_default_prototype();
     entry->code.event_identity = identity;
     entry->env = NULL;
     entry->next = g_function_identities;
@@ -35,6 +47,8 @@ tsc_value_t value_event_raw_listener_identity(void* identity, uint64_t order, bo
     }
     tsc_function_identity_t* entry = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
     entry->kind = TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER;
+    entry->extensible = true;
+    entry->prototype = tsc_function_default_prototype();
     entry->code.event_raw_identity.identity = identity;
     entry->code.event_raw_identity.order = order;
     entry->env = NULL;
@@ -613,4 +627,3 @@ void tsc_rethrow(void) {
 tsc_str_t* tsc_current_error(void) {
     return g_current_error ? g_current_error : tsc_str_from_lit("(unknown error)", 15);
 }
-

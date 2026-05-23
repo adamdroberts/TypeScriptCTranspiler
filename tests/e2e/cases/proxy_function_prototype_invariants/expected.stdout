@@ -1,0 +1,7 @@
+forward default: object
+forward set: true next
+forward ext: true true false
+get closed: Proxy getPrototypeOf trap cannot report different prototype for non-extensible target
+get exact: base
+set closed: Proxy setPrototypeOf trap cannot change prototype of non-extensible target
+set same: true
