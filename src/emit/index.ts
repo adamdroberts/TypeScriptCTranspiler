@@ -5457,7 +5457,7 @@ class Emitter {
                     );
                     const out = this.freshTemp("_field_decorator_result");
                     const list = this.classFieldDecoratorInitializersName(cd, member);
-                    buf.line(`{ tsc_value_t ${out} = ${result}; if (!tsc_value_is_undefined(${out})) tsc_array_push_value(${list}, ${out}); }`);
+                    buf.line(`{ tsc_value_t ${out} = ${result}; if (!tsc_value_is_undefined(${out})) tsc_array_unshift_raw(${list}, &${out}); }`);
                     continue;
                 }
                 const result = this.emitDecoratorFunctionCallValue(
