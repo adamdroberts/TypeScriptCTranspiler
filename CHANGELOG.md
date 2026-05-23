@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now computes top-level declaration references as a reachability closure, so functions only referenced by other pruned top-level functions are also omitted. Test: `generated_c_dce`.
 - Generated-C DCE recognizes more side-effect-free static initializers, including `satisfies` / non-null wrappers and conservative literal array/object spreads. Test: `generated_c_dce_const`.
 - Generated-C DCE now omits side-effect-free pure expression statements instead of emitting throwaway runtime work. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats blocks and `if`/`else` statements as unconditional exits when every reachable path exits, and its reference walk ignores statements proven unreachable by that analysis. Test: `generated_c_dce_const`.

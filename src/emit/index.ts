@@ -325,6 +325,33 @@ class Emitter {
     }
 
     private analyzeReferencedTopLevelFunctions(emitOrder: readonly string[]): void {
+        let changed = false;
+        const markTopLevelFunction = (decl: ts.FunctionDeclaration): void => {
+            if (this.referencedTopLevelFunctions.has(decl)) return;
+            this.referencedTopLevelFunctions.add(decl);
+            changed = true;
+        };
+        const markTopLevelLiftedArrow = (decl: ts.VariableDeclaration): void => {
+            if (this.referencedTopLevelLiftedArrows.has(decl)) return;
+            this.referencedTopLevelLiftedArrows.add(decl);
+            changed = true;
+        };
+        const markTopLevelClass = (decl: ts.ClassDeclaration): void => {
+            if (this.referencedTopLevelClasses.has(decl)) return;
+            this.referencedTopLevelClasses.add(decl);
+            changed = true;
+        };
+        const markTopLevelVariable = (decl: ts.VariableDeclaration): void => {
+            if (this.referencedTopLevelVariables.has(decl)) return;
+            this.referencedTopLevelVariables.add(decl);
+            changed = true;
+        };
+        const markVariable = (decl: ts.VariableDeclaration): void => {
+            if (this.referencedVariables.has(decl)) return;
+            this.referencedVariables.add(decl);
+            changed = true;
+        };
+
         const visitStatementList = (statements: readonly ts.Statement[]): void => {
             for (const stmt of statements) {
                 visit(stmt);
@@ -333,6 +360,34 @@ class Emitter {
         };
 
         const visit = (node: ts.Node): void => {
+            if (
+                ts.isFunctionDeclaration(node) &&
+                this.isPrunableTopLevelFunction(node) &&
+                !this.referencedTopLevelFunctions.has(node)
+            ) {
+                return;
+            }
+            if (
+                ts.isVariableDeclaration(node) &&
+                this.isPrunableTopLevelLiftedArrow(node) &&
+                !this.referencedTopLevelLiftedArrows.has(node)
+            ) {
+                return;
+            }
+            if (
+                ts.isVariableDeclaration(node) &&
+                this.isPrunableTopLevelVariable(node) &&
+                !this.referencedTopLevelVariables.has(node)
+            ) {
+                return;
+            }
+            if (
+                ts.isClassDeclaration(node) &&
+                this.isPrunableTopLevelClass(node) &&
+                !this.referencedTopLevelClasses.has(node)
+            ) {
+                return;
+            }
             if (ts.isSourceFile(node) || ts.isBlock(node)) {
                 visitStatementList(node.statements);
                 return;
@@ -353,40 +408,44 @@ class Emitter {
                     ts.isFunctionDeclaration(decl) &&
                     this.isPrunableTopLevelFunction(decl)
                 ) {
-                    this.referencedTopLevelFunctions.add(decl);
+                    markTopLevelFunction(decl);
                 }
                 if (
                     decl &&
                     ts.isVariableDeclaration(decl) &&
                     this.isPrunableTopLevelLiftedArrow(decl)
                 ) {
-                    this.referencedTopLevelLiftedArrows.add(decl);
+                    markTopLevelLiftedArrow(decl);
                 }
                 if (decl && ts.isVariableDeclaration(decl)) {
-                    this.referencedVariables.add(decl);
+                    markVariable(decl);
                 }
                 if (
                     decl &&
                     ts.isClassDeclaration(decl) &&
                     this.isPrunableTopLevelClass(decl)
                 ) {
-                    this.referencedTopLevelClasses.add(decl);
+                    markTopLevelClass(decl);
                 }
                 if (
                     decl &&
                     ts.isVariableDeclaration(decl) &&
                     this.isPrunableTopLevelVariable(decl)
                 ) {
-                    this.referencedTopLevelVariables.add(decl);
+                    markTopLevelVariable(decl);
                 }
             }
             ts.forEachChild(node, visit);
         };
 
-        for (const modId of emitOrder) {
-            const info = this.graph.modules.get(modId);
-            if (info) visit(info.sf);
-        }
+        let safety = 0;
+        do {
+            changed = false;
+            for (const modId of emitOrder) {
+                const info = this.graph.modules.get(modId);
+                if (info) visit(info.sf);
+            }
+        } while (changed && safety++ < 64);
     }
 
     private isValueReferenceIdentifier(id: ts.Identifier): boolean {
