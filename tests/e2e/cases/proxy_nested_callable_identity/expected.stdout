@@ -1,0 +1,7 @@
+types: function function object function
+string: [function] [object Object]
+apply: 15
+construct: ok
+json object: {"objectProxy":{},"value":"kept"}
+json list: [null,{}]
+json top: null {}

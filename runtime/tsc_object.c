@@ -928,13 +928,7 @@ tsc_array_t* tsc_object_entries_dyn(const tsc_object_t* o) {
 
 static bool value_is_callable_proxy(tsc_value_t v) {
     if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) return false;
-    tsc_object_t* o = (tsc_object_t*)value_ptr(v);
-    return (
-        o &&
-        o->is_proxy &&
-        value_is_box(o->proxy_target) &&
-        value_tag(o->proxy_target) == TSC_VALUE_TAG_FUNCTION
-    );
+    return tsc_proxy_trap_is_callable(v);
 }
 
 bool value_json_omits_object_property(tsc_value_t v) {
