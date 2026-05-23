@@ -71,7 +71,27 @@ static bool proxy_has_no_integrity_traps(const tsc_object_t* o, bool for_mutatio
 static bool descriptor_has_prop(const tsc_object_t* desc, const char* name, size_t len, tsc_value_t* out);
 
 static void validate_proxy_get_result(const tsc_object_t* proxy, const tsc_str_t* key, tsc_value_t result) {
-    if (!proxy || !value_is_box(proxy->proxy_target) || value_tag(proxy->proxy_target) != TSC_VALUE_TAG_OBJECT) return;
+    if (!proxy || !value_is_box(proxy->proxy_target)) return;
+    if (value_tag(proxy->proxy_target) == TSC_VALUE_TAG_ARRAY) {
+        const tsc_array_t* target = (const tsc_array_t*)value_ptr(proxy->proxy_target);
+        tsc_value_t target_desc_value = value_descriptor_from_array_key(target, key);
+        if (!value_is_box(target_desc_value) || value_tag(target_desc_value) != TSC_VALUE_TAG_OBJECT) return;
+        const tsc_object_t* target_desc = (const tsc_object_t*)value_ptr(target_desc_value);
+        tsc_value_t configurable_value = tsc_value_undefined();
+        bool has_configurable = descriptor_has_prop(target_desc, "configurable", 12, &configurable_value);
+        bool configurable = has_configurable ? tsc_value_is_truthy(configurable_value) : false;
+        if (configurable) return;
+        tsc_value_t writable_value = tsc_value_undefined();
+        bool has_writable = descriptor_has_prop(target_desc, "writable", 8, &writable_value);
+        bool writable = has_writable ? tsc_value_is_truthy(writable_value) : false;
+        tsc_value_t target_value = tsc_value_undefined();
+        bool has_value = descriptor_has_prop(target_desc, "value", 5, &target_value);
+        if (has_value && !writable && !tsc_value_same_value_zero(result, target_value)) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy get trap cannot report different value for non-configurable non-writable key"));
+        }
+        return;
+    }
+    if (value_tag(proxy->proxy_target) != TSC_VALUE_TAG_OBJECT) return;
     const tsc_object_t* target = (const tsc_object_t*)value_ptr(proxy->proxy_target);
     ssize_t found = object_find(target, key);
     if (found < 0) return;
@@ -86,7 +106,27 @@ static void validate_proxy_get_result(const tsc_object_t* proxy, const tsc_str_t
 }
 
 static void validate_proxy_set_result(const tsc_object_t* proxy, const tsc_str_t* key, tsc_value_t value, bool success) {
-    if (!success || !proxy || !value_is_box(proxy->proxy_target) || value_tag(proxy->proxy_target) != TSC_VALUE_TAG_OBJECT) return;
+    if (!success || !proxy || !value_is_box(proxy->proxy_target)) return;
+    if (value_tag(proxy->proxy_target) == TSC_VALUE_TAG_ARRAY) {
+        const tsc_array_t* target = (const tsc_array_t*)value_ptr(proxy->proxy_target);
+        tsc_value_t target_desc_value = value_descriptor_from_array_key(target, key);
+        if (!value_is_box(target_desc_value) || value_tag(target_desc_value) != TSC_VALUE_TAG_OBJECT) return;
+        const tsc_object_t* target_desc = (const tsc_object_t*)value_ptr(target_desc_value);
+        tsc_value_t configurable_value = tsc_value_undefined();
+        bool has_configurable = descriptor_has_prop(target_desc, "configurable", 12, &configurable_value);
+        bool configurable = has_configurable ? tsc_value_is_truthy(configurable_value) : false;
+        if (configurable) return;
+        tsc_value_t writable_value = tsc_value_undefined();
+        bool has_writable = descriptor_has_prop(target_desc, "writable", 8, &writable_value);
+        bool writable = has_writable ? tsc_value_is_truthy(writable_value) : false;
+        tsc_value_t target_value = tsc_value_undefined();
+        bool has_value = descriptor_has_prop(target_desc, "value", 5, &target_value);
+        if (has_value && !writable && !tsc_value_same_value_zero(value, target_value)) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy set trap cannot report success changing non-configurable non-writable key"));
+        }
+        return;
+    }
+    if (value_tag(proxy->proxy_target) != TSC_VALUE_TAG_OBJECT) return;
     const tsc_object_t* target = (const tsc_object_t*)value_ptr(proxy->proxy_target);
     ssize_t found = object_find(target, key);
     if (found < 0) return;

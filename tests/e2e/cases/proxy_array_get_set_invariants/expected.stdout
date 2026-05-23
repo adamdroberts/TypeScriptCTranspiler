@@ -1,0 +1,8 @@
+get frozen index: Proxy get trap cannot report different value for non-configurable non-writable key
+get frozen length: Proxy get trap cannot report different value for non-configurable non-writable key
+get sealed writable: wrong
+set frozen index: Proxy set trap cannot report success changing non-configurable non-writable key
+set frozen same: true
+set frozen length: Proxy set trap cannot report success changing non-configurable non-writable key
+set frozen length same: true
+set sealed writable: true
