@@ -1,0 +1,3 @@
+{
+  "description": "child_process option objects treat explicit undefined property values as defaults"
+}

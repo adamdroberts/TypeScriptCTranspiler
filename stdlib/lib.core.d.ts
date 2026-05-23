@@ -1490,6 +1490,7 @@ interface ChildProcessSpawnSyncUtf8Options {
 interface ChildProcessExecFileSyncOptions {
     cwd?: string;
     input?: string;
+    encoding?: "utf8" | "utf-8" | "buffer";
     env?: any;
     shell?: boolean | string;
     argv0?: string;
@@ -1510,6 +1511,7 @@ interface ChildProcessExecFileSyncBufferOptions extends ChildProcessExecFileSync
 interface ChildProcessExecSyncOptions {
     cwd?: string;
     input?: string;
+    encoding?: "utf8" | "utf-8" | "buffer";
     env?: any;
     shell?: string;
     windowsHide?: boolean;

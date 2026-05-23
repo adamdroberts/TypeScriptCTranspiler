@@ -1,0 +1,5 @@
+sync: sync
+file-sync: file-sync
+spawn: 0 spawn 0 true
+exec: true cb-exec 0
+file-cb: true file-cb 0

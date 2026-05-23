@@ -16591,7 +16591,7 @@ class Emitter {
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === key,
         );
         if (!prop) return null;
-        if (prop.initializer.kind === ts.SyntaxKind.UndefinedKeyword) return null;
+        if (this.isUndefinedExpression(prop.initializer)) return null;
         const value = this.emitExpr(prop.initializer);
         if (value.ty.kind !== "string") unsupported(prop.initializer, `child_process ${key} must be a string`);
         return { ...value, node: prop.initializer };
@@ -16601,7 +16601,7 @@ class Emitter {
         const prop = options.properties.find((entry): entry is ts.PropertyAssignment =>
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === key,
         );
-        if (!prop || prop.initializer.kind === ts.SyntaxKind.UndefinedKeyword) return null;
+        if (!prop || this.isUndefinedExpression(prop.initializer)) return null;
         const value = this.emitExpr(prop.initializer);
         if (value.ty.kind !== "number") unsupported(prop.initializer, `child_process ${key} must be a number`);
         return { ...value, node: prop.initializer };
@@ -16611,7 +16611,7 @@ class Emitter {
         const prop = options.properties.find((entry): entry is ts.PropertyAssignment =>
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === key,
         );
-        if (!prop || prop.initializer.kind === ts.SyntaxKind.UndefinedKeyword) return "false";
+        if (!prop || this.isUndefinedExpression(prop.initializer)) return "false";
         if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) return "true";
         if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) return "false";
         unsupported(prop.initializer, `child_process ${key} must be a literal boolean`);
@@ -16621,7 +16621,7 @@ class Emitter {
         const prop = options.properties.find((entry): entry is ts.PropertyAssignment =>
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === "killSignal",
         );
-        if (!prop || prop.initializer.kind === ts.SyntaxKind.UndefinedKeyword) return "15.0";
+        if (!prop || this.isUndefinedExpression(prop.initializer)) return "15.0";
         if (ts.isNumericLiteral(prop.initializer)) {
             const signal = Number(prop.initializer.text);
             if (signal === 9 || signal === 15) return `${signal}.0`;
@@ -16639,7 +16639,7 @@ class Emitter {
     }
 
     private processSignalArgument(signal: ts.Expression | undefined): string {
-        if (!signal || signal.kind === ts.SyntaxKind.UndefinedKeyword) return "15.0";
+        if (!signal || this.isUndefinedExpression(signal)) return "15.0";
         if (ts.isNumericLiteral(signal)) {
             const numeric = Number(signal.text);
             if (numeric === 0 || numeric === 9 || numeric === 15) return `${numeric}.0`;
@@ -16660,7 +16660,7 @@ class Emitter {
         const prop = options.properties.find((entry): entry is ts.PropertyAssignment =>
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === "stdio",
         );
-        if (!prop || prop.initializer.kind === ts.SyntaxKind.UndefinedKeyword) {
+        if (!prop || this.isUndefinedExpression(prop.initializer)) {
             return { pipeStdin: "true", ignoreStdin: "false", captureStdout: "true", captureStderr: "true", inheritStdout: "false", inheritStderr: "false" };
         }
         const value = prop.initializer;
@@ -16725,7 +16725,7 @@ class Emitter {
         const prop = options.properties.find((entry): entry is ts.PropertyAssignment =>
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === "encoding",
         );
-        if (!prop || prop.initializer.kind === ts.SyntaxKind.UndefinedKeyword) return null;
+        if (!prop || this.isUndefinedExpression(prop.initializer)) return null;
         if (!ts.isStringLiteral(prop.initializer)) {
             unsupported(prop.initializer, `child_process.${method} requires literal encoding: "utf8"`);
         }
@@ -16739,7 +16739,7 @@ class Emitter {
         const prop = options.properties.find((entry): entry is ts.PropertyAssignment =>
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === "env",
         );
-        if (!prop || prop.initializer.kind === ts.SyntaxKind.UndefinedKeyword) return null;
+        if (!prop || this.isUndefinedExpression(prop.initializer)) return null;
         const env = prop.initializer;
         if (!ts.isObjectLiteralExpression(env)) {
             unsupported(env, "child_process env must be an object literal in this subset");
@@ -16754,7 +16754,7 @@ class Emitter {
             if (name == null) {
                 unsupported(entry.name, "child_process env keys must be statically known strings");
             }
-            if (entry.initializer.kind === ts.SyntaxKind.UndefinedKeyword) continue;
+            if (this.isUndefinedExpression(entry.initializer)) continue;
             const value = this.emitExpr(entry.initializer);
             if (value.ty.kind !== "string") {
                 unsupported(entry.initializer, "child_process env values must be strings");
@@ -16776,7 +16776,7 @@ class Emitter {
         const prop = options.properties.find((entry): entry is ts.PropertyAssignment =>
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === "shell",
         );
-        if (!prop || prop.initializer.kind === ts.SyntaxKind.UndefinedKeyword) return null;
+        if (!prop || this.isUndefinedExpression(prop.initializer)) return null;
         if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
             return { c: `tsc_str_from_lit("/bin/sh", 7)`, ty: T_STRING, node: prop.initializer };
         }
@@ -16800,7 +16800,7 @@ class Emitter {
         timeout: (EmitResult & { node: ts.Expression }) | null;
         killSignal: string;
     } {
-        if (!options) return this.emptyChildProcessFileOptions();
+        if (!options || this.isUndefinedExpression(options)) return this.emptyChildProcessFileOptions();
         if (!ts.isObjectLiteralExpression(options)) {
             unsupported(options, "child_process options must be an object literal in this subset");
         }
