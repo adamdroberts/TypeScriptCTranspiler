@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Proxy construction now reports invalid non-object targets or handlers through the catchable runtime exception path instead of aborting, covering `new Proxy(...)` and `Proxy.revocable(...)`. Test: `proxy_constructor_validation`.
 - Callable Proxy values without an `apply` trap now have focused coverage for forwarding `Reflect.apply(proxy, thisArg, args)` to function targets while preserving the supplied receiver and argument list. Test: `proxy_apply_forward`.
 - Revocable callable and constructable Proxy values now have focused coverage for throwing on `Reflect.apply` and `Reflect.construct` after revocation. Test: `proxy_revocable_callable`.
 - Constructable Proxy values without a `construct` trap now have focused coverage for forwarding `Reflect.construct(proxy, args)` to function targets, including dynamic receiver initialization and explicit object returns. Test: `proxy_construct_forward`.
