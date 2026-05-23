@@ -10368,6 +10368,11 @@ class Emitter {
                 : spec.target
                     ? this.coerce(spec.value, spec.target, node)
                     : spec.value.c;
+            if (target.kind === "void") {
+                pieces.push(`(void)(${init})`);
+                args.push(spec.pass ? spec.pass("NULL") : "NULL");
+                continue;
+            }
             const tmp = this.freshTemp("_arg");
             pieces.push(`${target.c} ${tmp} = ${init}`);
             args.push(spec.pass ? spec.pass(tmp) : tmp);
@@ -17321,9 +17326,11 @@ class Emitter {
                 const out = this.freshTemp("_step");
                 const current = this.freshTemp("_current");
                 const boxed = this.coerce({ c: current, ty: et }, T_VALUE, call.expression);
-                return {
-                    c:
-                        `({ tsc_array_t* const ${av} = ${recv.c}; ` +
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([arr]) =>
+                        `({ tsc_array_t* const ${av} = ${arr}; ` +
                         `tsc_object_t* ${out} = tsc_object_new(); ` +
                         `if (${av}->iter_pos < ${av}->len) { ` +
                         `${et.c} ${current} = TSC_ARR(${et.c}, ${av}, ${av}->iter_pos++); ` +
@@ -17333,8 +17340,7 @@ class Emitter {
                         `tsc_object_set(${out}, tsc_str_from_lit("done", 4), tsc_value_bool(true)); ` +
                         `tsc_object_set(${out}, tsc_str_from_lit("value", 5), tsc_value_undefined()); ` +
                         `} tsc_value_object(${out}); })`,
-                    ty: T_VALUE,
-                };
+                );
             }
             case "return": {
                 if (args.length > 1) unsupported(call, "return expects 0 or 1 args");
