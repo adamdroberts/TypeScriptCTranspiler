@@ -10778,11 +10778,13 @@ class Emitter {
             return this.emitGlobalNumberPredicate(call, "isFinite");
         }
         if (name === "btoa" || name === "atob") {
-            if (call.arguments.length !== 1) unsupported(call, `${name} expects 1 arg`);
+            if (call.arguments.length < 1) unsupported(call, `${name} expects at least 1 arg`);
             const value = this.emitExpr(call.arguments[0]!);
-            return this.emitSequencedCall(name === "btoa" ? "tsc_btoa" : "tsc_atob", T_STRING, [
+            const fn = name === "btoa" ? "tsc_btoa" : "tsc_atob";
+            return this.emitSequencedExpr(T_STRING, [
                 { value, target: T_STRING, node: call.arguments[0]! },
-            ]);
+                ...this.ignoredArgumentSpecs(call.arguments, 1),
+            ], ([input]) => `${fn}(${input!})`);
         }
         if (name === "queueMicrotask") {
             if (call.arguments.length !== 1) unsupported(call, "queueMicrotask expects a callback");
