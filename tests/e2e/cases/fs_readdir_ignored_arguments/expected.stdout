@@ -1,0 +1,3 @@
+promise: a.txt|b.txt
+sync: a.txt|b.txt a.txt|b.txt
+events: global|named|promise
