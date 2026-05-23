@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Fixed
+- The embedded Node `Function` bridge now forwards `tsc_value_t` invocation arguments into V8 instead of always calling unsafe bridge functions with an empty argument list.
 - Trapless array Proxy values now forward direct dynamic writes, `Reflect.set`, `Object.defineProperty`, `Reflect.defineProperty`, length updates, and deletes to their array targets. Test: `proxy_array_mutation_forward`.
 - Trapless array Proxy values now forward `Object.isExtensible`, `Reflect.isExtensible`, and `Reflect.preventExtensions` to their array targets so prevented targets reject new index writes and definitions. Test: `proxy_array_extensibility_forward`.
 - Trapless array Proxy values now forward `Object.seal`, `Object.freeze`, `Object.isSealed`, and `Object.isFrozen` to their array targets; matching sealed existing-index descriptor updates now succeed while frozen updates still fail. Test: `proxy_array_seal_freeze_forward`.
