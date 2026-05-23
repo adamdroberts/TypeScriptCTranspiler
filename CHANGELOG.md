@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes unused classes with side-effect-free computed member names when those names resolve statically. Test: `generated_c_dce_class`.
 - Generated-C DCE now also prunes unused subclasses with simple earlier class bases when the subclass definition has no observable side effects. Test: `generated_c_dce_class`.
 - Generated-C DCE now prunes unused classes with side-effect-free static fields and static method/accessor definitions while keeping unused classes whose static initializers can run effects. Test: `generated_c_dce_class`.
 - Generated-C DCE recognizes pure `const` dependency chains and ignores references that only occur inside other pruned local declarations. Test: `generated_c_dce_const`.

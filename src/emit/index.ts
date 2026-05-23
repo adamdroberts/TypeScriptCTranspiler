@@ -542,12 +542,7 @@ class Emitter {
         }
         for (const member of cd.members) {
             if (ts.isClassStaticBlockDeclaration(member)) return false;
-            if (
-                member.name &&
-                !ts.isIdentifier(member.name) &&
-                !ts.isStringLiteral(member.name) &&
-                !ts.isNumericLiteral(member.name)
-            ) {
+            if (member.name && !this.classMemberNameHasNoDefinitionSideEffects(member.name)) {
                 return false;
             }
             if (isStatic(member) && !this.staticClassMemberHasNoDefinitionSideEffects(member)) {
@@ -555,6 +550,15 @@ class Emitter {
             }
         }
         return true;
+    }
+
+    private classMemberNameHasNoDefinitionSideEffects(name: ts.PropertyName): boolean {
+        if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
+            return true;
+        }
+        if (!ts.isComputedPropertyName(name)) return false;
+        return this.staticPropertyName(name) !== null &&
+            this.isSideEffectFreeTopLevelConstInitializer(name.expression);
     }
 
     private classHeritageHasNoDefinitionSideEffects(cd: ts.ClassDeclaration): boolean {

@@ -40,6 +40,14 @@ class DeadDerived extends DeadBase {
     }
 }
 
+const dead_method_name = "read";
+
+class DeadComputedBox {
+    [dead_method_name](): number {
+        return 1;
+    }
+}
+
 class DeadStaticBox {
     static label = "dead";
     static count = 3 + 4;

@@ -4,6 +4,9 @@ DeadBox_read(
 DeadBase_t
 DeadDerived_t
 DeadDerived_extra(
+dead_method_name
+DeadComputedBox_t
+DeadComputedBox_read(
 DeadStaticBox_t
 DeadStaticBox_read(
 DeadStaticBox_count
