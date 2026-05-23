@@ -1,0 +1,5 @@
+seen: method:label:true|getter:title:true|setter:title:true|
+label: box:call:method-original:method-replacement
+title: title-original:getter-replacement
+stored: set:call:setter-original:setter-replacement
+seen2: method:label:true|getter:title:true|setter:title:true|method-wrap:box|method-original:box:call|getter-wrap|getter-original|setter-wrap:set|setter-original:set:call|
