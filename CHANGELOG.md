@@ -11,6 +11,9 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Runtime and emitter hot paths for classes, typed object literals, string/number concatenation, JSON stringification, Map/Set, regex matching, arrays, and no-GC allocation were optimized for the benchmark suite.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
+### Fixed
+- Inferred locals whose TypeScript type is erased to `tsc_value_t` now use boxed storage even when their initializer emits a narrower primitive, fixing nullish coalescing over `Map.get(...)` results and optional numeric field reads. Dynamic and typed string Reflect helpers again treat boxed strings as valid string-object targets. Tests: `nullish`, `wordcount`, `weak_ref`, `collection_object_methods`, `string_object_enumeration`, `dynamic_string_object_enumeration`.
+
 ### Added
 - Constant-body `Function(...)` / `new Function(...)` calls now stay on the AOT path when they include static parameter-name strings, and runtime-code manifest dispatch uses the final function-body argument while requiring static parameter names. Tests: `runtime_function_params_aot`, `runtime_function_manifest_params`.
 - Dynamic strict equality now preserves `null` and `undefined` literal identity when boxing values into `tsc_value_t`, including missing dynamic object properties compared with `undefined`. Test: `dynamic_nullish_equality`.
