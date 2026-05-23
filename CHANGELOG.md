@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unshadowed `String.fromCharCode(...)` calls with side-effect-free arguments as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes supported unshadowed pure `Math.*(...)` calls with side-effect-free arguments as side-effect-free, excluding `Math.random(...)`. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unshadowed `Object.is(...)` calls with side-effect-free arguments as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unshadowed `Number.isFinite(...)`, `Number.isInteger(...)`, `Number.isNaN(...)`, and `Number.isSafeInteger(...)` calls with side-effect-free arguments as side-effect-free. Test: `generated_c_dce_const`.

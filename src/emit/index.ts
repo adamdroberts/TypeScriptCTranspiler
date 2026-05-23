@@ -993,6 +993,15 @@ class Emitter {
         ) {
             return true;
         }
+        if (
+            ts.isIdentifier(recv) &&
+            method === "fromCharCode" &&
+            this.isUnshadowedGlobalIdentifier(recv, "String")
+        ) {
+            return call.arguments.every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+        }
         return false;
     }
 
