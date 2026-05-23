@@ -173,6 +173,7 @@ NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JS
 | `tsc_promise_fs_stats_value(p)` | `tsc_fs_stats_t*` | Reads the typed `FSStats` fulfilled value side-channel |
 | `tsc_promise_buffer_value(p)` | `tsc_buffer_t*` | Reads the typed `Buffer` fulfilled value side-channel |
 | `tsc_value_get_prop(v, key)` | `tsc_value_t` | Dynamic object property read through the prototype chain plus array/string own-property reads, returning `undefined` when absent |
+| `tsc_value_get_prop_cached(v, key, cache)` | `tsc_value_t` | Shape-validated dynamic own-property read cache helper used by generated literal property and string-key element read sites; falls back to `tsc_value_get_prop` semantics for proxies, arrays, strings, functions, prototype lookups, and absent keys |
 | `tsc_value_get_prop_receiver(v, key, receiver)` | `tsc_value_t` | Dynamic `Reflect.get` read with an explicit receiver argument for accessor dispatch |
 | `tsc_value_get_index(v, index)` | `tsc_value_t` | Dynamic array or string index read, returning `undefined` when absent |
 | `tsc_value_set_index(v, index, value)` | `bool` | Dynamic array index write, extending with `undefined` for skipped slots |

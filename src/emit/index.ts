@@ -26041,7 +26041,11 @@ class Emitter {
                 return { c: `tsc_value_get_index(${recv.c}, ${idx.c})`, ty: T_VALUE };
             }
             if (idx.ty.kind === "string") {
-                return { c: `tsc_value_get_prop(${recv.c}, ${idx.c})`, ty: T_VALUE };
+                const cache = this.freshTemp("_prop_cache");
+                return {
+                    c: `({ static tsc_prop_cache_t ${cache}; tsc_value_get_prop_cached(${recv.c}, ${idx.c}, &${cache}); })`,
+                    ty: T_VALUE,
+                };
             }
             unsupported(ea.argumentExpression, "dynamic index must be number or string");
         }
