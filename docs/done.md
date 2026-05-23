@@ -138,7 +138,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - `.fill(value, start?, end?)` — in-place via `tsc_array_fill`. Test: `array_fill`
 - `.copyWithin(target, start, end?)` — in-place via `tsc_array_copy_within`. Test: `array_copy_within`
 - `.at(index)` — positive and negative index lookup. Test: `array_at`
-- `.with(index, value)` — copy via `tsc_array_with`; original array remains unchanged and negative indices count from the end. Test: `array_with`
+- `.with(index, value)` — copy via `tsc_array_with`; original array remains unchanged, negative indices count from the end, and out-of-range failures are catchable. Tests: `array_with`, `array_with_errors`
 - `.toSpliced(start?, deleteCount?, ...items)` — copy via `tsc_array_to_spliced`; original array remains unchanged. Test: `array_to_spliced`
 - `.slice(start?, end?)` — `tsc_array_slice`
 - `.concat(...items)` — copy plus `tsc_array_append`/`tsc_array_push_raw`; accepts array arguments, single element arguments, and spread elements inside array-literal arguments. Test: `array_concat_values`
@@ -335,7 +335,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Dynamic array `at(index)` returns the element at a positive or negative index, or `undefined` when out of bounds. Test: `dynamic_array_at`
 - Dynamic array `toReversed()` returns a reversed copy without mutating the receiver. Test: `dynamic_array_to_reversed`
 - Dynamic array `toSorted()` returns a sorted copy without mutating the receiver, using default string-conversion ordering or an inline expression-body/single-return block-body/named comparator. Tests: `dynamic_array_to_sorted`, `dynamic_array_to_sorted_comparator`
-- Dynamic array `with(index, value)` returns a copy with one replaced element and leaves the receiver unchanged. Test: `dynamic_array_with`
+- Dynamic array `with(index, value)` returns a copy with one replaced element, leaves the receiver unchanged, and throws catchable out-of-range errors. Tests: `dynamic_array_with`, `array_with_errors`
 - Dynamic array `toSpliced(start?, deleteCount?, ...items)` returns a spliced copy and leaves the receiver unchanged. Test: `dynamic_array_to_spliced`
 - Dynamic array `splice(start, deleteCount?, ...items)` mutates `tsc_value_t` arrays and returns removed elements as a dynamic array. Test: `dynamic_array_splice`
 - Dynamic array-literal spread boxes elements from dynamic arrays, dynamic/typed strings, and typed arrays into the produced dynamic array. Test: `dynamic_array_spread`
@@ -581,6 +581,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_to_string` | Array.toString/toLocaleString typed comma-join conversion |
 | `array_value_of` | Array.valueOf typed receiver identity |
 | `array_with` | Array.with non-mutating replacement |
+| `array_with_errors` | Array.with range failures throw catchable runtime exceptions |
 | `aggregate_error_constructor` | AggregateError constructor/callable form with stored errors, ignored extra args, and Error stringification |
 | `base64_globals` | global btoa/atob byte-string base64 helpers |
 | `bigint` | GMP-backed BigInt literals, arithmetic, comparison, and toString |
