@@ -152,7 +152,7 @@ tsc_str_t* tsc_str_from_int(int64_t n) {
 tsc_str_t* tsc_str_from_num_radix(double n, double radix) {
     static const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
     int base = (int)radix;
-    if (base < 2 || base > 36) tsc_panic("Number.toString: radix must be 2..36");
+    if (base < 2 || base > 36) tsc_throw_str(tsc_str_from_cstr("Number.toString: radix must be 2..36"));
     if (base == 10 || isnan(n) || isinf(n)) return tsc_str_from_num(n);
     if (n == 0.0) return tsc_str_from_lit("0", 1);
 
@@ -167,7 +167,7 @@ tsc_str_t* tsc_str_from_num_radix(double n, double radix) {
         rev[rev_len++] = digits[digit];
         whole = floor(whole / (double)base);
     }
-    if (whole >= 1.0) tsc_panic("Number.toString: magnitude too large for radix conversion");
+    if (whole >= 1.0) tsc_throw_str(tsc_str_from_cstr("Number.toString: magnitude too large for radix conversion"));
 
     char out[512];
     size_t pos = 0;
