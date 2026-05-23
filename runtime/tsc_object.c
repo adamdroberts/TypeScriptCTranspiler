@@ -987,6 +987,18 @@ bool tsc_object_has(const tsc_object_t* o, const tsc_str_t* key) {
                     tsc_throw_str(tsc_str_from_cstr("Proxy has trap cannot report false for key on non-extensible target"));
                 }
             }
+        } else if (!found && value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_FUNCTION) {
+            const tsc_function_identity_t* target = (const tsc_function_identity_t*)value_ptr(o->proxy_target);
+            tsc_value_t target_desc_value = value_descriptor_from_function_key(target, key);
+            if (value_is_box(target_desc_value) && value_tag(target_desc_value) == TSC_VALUE_TAG_OBJECT) {
+                const tsc_object_t* target_desc = (const tsc_object_t*)value_ptr(target_desc_value);
+                tsc_value_t configurable_value = tsc_value_undefined();
+                bool has_configurable = descriptor_has_prop(target_desc, "configurable", 12, &configurable_value);
+                bool configurable = has_configurable ? tsc_value_is_truthy(configurable_value) : false;
+                if (!configurable) {
+                    tsc_throw_str(tsc_str_from_cstr("Proxy has trap cannot report false for non-configurable key"));
+                }
+            }
         } else if (!found && value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
             const tsc_object_t* target = (const tsc_object_t*)value_ptr(o->proxy_target);
             ssize_t idx = object_find(target, key);

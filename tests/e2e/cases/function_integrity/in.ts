@@ -7,6 +7,7 @@ function ProxyGet(this: any): void {}
 function ProxySet(this: any): void {}
 function ProxyDescriptor(this: any): void {}
 function ProxyKeys(this: any): void {}
+function ProxyHas(this: any): void {}
 function ProxyDefine(this: any, value: number): void {}
 function ProxyDelete(this: any): void {}
 function TypedDirect(this: any, value: number): void {}
@@ -106,6 +107,10 @@ function completeKeys(target: any): any {
     return ["length", "name"];
 }
 
+function falseHas(target: any, prop: any): boolean {
+    return false;
+}
+
 const proxyGetTarget: any = ProxyGet as any;
 const proxyGet: any = new Proxy(proxyGetTarget, { get: badGet as any });
 try {
@@ -140,6 +145,15 @@ try {
 }
 const proxyCompleteKeys: any = new Proxy(proxyMissingKeysTarget, { ownKeys: completeKeys as any });
 console.log("proxy function keys complete:", Reflect.ownKeys(proxyCompleteKeys).length);
+
+const proxyHasTarget: any = ProxyHas as any;
+const proxyHas: any = new Proxy(proxyHasTarget, { has: falseHas as any });
+try {
+    console.log("proxy function has length:", Reflect.has(proxyHas, "length"));
+} catch (err: any) {
+    console.log("proxy function has length:", err);
+}
+console.log("proxy function has missing:", Reflect.has(proxyHas, "missing"));
 
 const proxyDefineTarget: any = ProxyDefine as any;
 const proxyDefine: any = new Proxy(proxyDefineTarget, { defineProperty: trueDefine as any });
