@@ -42,6 +42,8 @@ The three failure codes are distinct so CI / test harnesses can categorize failu
 
 | Variable | Read by | Effect |
 |----------|---------|--------|
+| `TSC2C_CC` | compiler driver | C compiler command for generated C and C runtime sources. Defaults to `gcc`; CI also exercises `clang`. |
+| `TSC2C_CXX` | compiler driver | C++ compiler/linker command when embedded-Node bridge sources are present. Defaults to `g++`; CI also exercises `clang++`. |
 | `TSC2C_NO_GC` | `tests/e2e/run.ts` | If `=1`, the harness passes `--no-gc` to every compile. Lets you run the suite without `libgc-dev` installed. |
 | `TMPDIR` | runtime (inside produced binaries) | Used by `os.tmpdir()`. Falls back to `/tmp`. |
 | `HOME` | runtime | Used by `os.homedir()`. Falls back to `/`. |

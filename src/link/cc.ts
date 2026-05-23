@@ -26,6 +26,14 @@ function releaseSectionGcLinkFlags(release?: boolean): string[] {
     return ["-Wl,--gc-sections"];
 }
 
+function ccCommand(): string {
+    return process.env.TSC2C_CC || "gcc";
+}
+
+function cxxCommand(): string {
+    return process.env.TSC2C_CXX || "g++";
+}
+
 export async function invokeCc(opts: CcOptions): Promise<CcResult> {
     const hasCxx = opts.sources.some((source) => /\.(cc|cpp|cxx)$/i.test(source));
     if (hasCxx) return invokeCcWithCxx(opts);
@@ -58,11 +66,11 @@ export async function invokeCc(opts: CcOptions): Promise<CcResult> {
     args.push("-o", opts.output);
 
     if (opts.verbose) {
-        console.error("[tsc2c] gcc " + args.join(" "));
+        console.error(`[tsc2c] ${ccCommand()} ` + args.join(" "));
     }
 
     return new Promise((resolve) => {
-        const proc = spawn("gcc", args, { stdio: ["ignore", "inherit", "pipe"] });
+        const proc = spawn(ccCommand(), args, { stdio: ["ignore", "inherit", "pipe"] });
         let stderr = "";
         proc.stderr.on("data", (d) => (stderr += d.toString()));
         proc.on("close", (code) => {
@@ -103,7 +111,7 @@ async function invokeCcWithCxx(opts: CcOptions): Promise<CcResult> {
         const source = opts.sources[i]!;
         const object = objects[i]!;
         const isCxx = /\.(cc|cpp|cxx)$/i.test(source);
-        const compiler = isCxx ? "g++" : "gcc";
+        const compiler = isCxx ? cxxCommand() : ccCommand();
         const args = [
             isCxx ? "-std=c++17" : "-std=c11",
             ...commonFlags,
@@ -126,7 +134,7 @@ async function invokeCcWithCxx(opts: CcOptions): Promise<CcResult> {
     linkArgs.push(...(opts.linkFlags ?? []));
     for (const lib of opts.libs) linkArgs.push("-l" + lib);
     linkArgs.push("-o", opts.output);
-    return spawnCompiler("g++", linkArgs, opts.verbose);
+    return spawnCompiler(cxxCommand(), linkArgs, opts.verbose);
 }
 
 function spawnCompiler(

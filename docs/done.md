@@ -534,6 +534,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `--verbose` — print compile steps + the full gcc command line.
 - `--no-gc` — link without Boehm GC (leaking `calloc` fallback) for environments where `libgc-dev` isn't installed.
 - `--release` — link a smaller release binary using gcc `-Os -s` instead of the default `-O2`; on Linux, release builds also compile with `-ffunction-sections` / `-fdata-sections` and link with `-Wl,--gc-sections`. Test: `release_build`
+- `TSC2C_CC` / `TSC2C_CXX` — override the C and C++ compiler commands used by the linker driver; Linux CI runs both gcc and clang lanes.
 - `--unsafe-eval` — opt into runtime code compilation through the embedded Node bridge. Linking requires `libnode`; set `TSC2C_LIBNODE` and optionally `TSC2C_NODE_INCLUDE` when Node headers/libs are not in the active Node prefix.
 - `--native-addon-manifest <path>` — opt specific native addon specifiers into the embedded Node bridge without enabling unsafe eval. The JSON shape is `{ "addons": { "specifier": "relative/or/absolute/addon.node" } }`; paths are resolved relative to the manifest and must point to existing `.node` files.
 - `--dynamic-require-manifest <path>` — opt non-finite dynamic require sites into finite AOT dispatch. The JSON shape is `{ "requires": ["./specifier"] }` or a named object map such as `{ "requires": { "primary": "./specifier" } }`; each listed specifier is resolved from the dynamic call's containing file and compiled into the module graph.
