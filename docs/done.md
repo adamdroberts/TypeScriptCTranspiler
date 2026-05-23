@@ -471,7 +471,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `process.env.VAR` → `tsc_process_env_get(VAR)` (getenv)
 - `process.env["VAR"]` — same as above via element access
 - `process.env.VAR = value`, `process.env["VAR"] = value`, and `delete process.env[...]` mutate the local process environment through `setenv` / `unsetenv`.
-- `process.stdout.write(string | Buffer)` and `process.stderr.write(string | Buffer)` write directly to stdout/stderr and return a boolean write-success flag.
+- `process.stdout.write(string | Buffer, encodingOrCallback?, callback?)` and `process.stderr.write(string | Buffer, encodingOrCallback?, callback?)` write directly to stdout/stderr, evaluate optional encoding arguments, invoke optional zero-argument callbacks after the write, and return a boolean write-success flag. Tests: `process_stdio_write`, `process_stdio_write_buffer`, `process_stdio_write_callback`
 - `process.cwd()` → `tsc_process_cwd`
 - `process.chdir(directory)` → `tsc_process_chdir`
 - `process.platform`, `process.arch`, `process.pid`, `process.ppid`, `process.version`, `process.versions`, `process.release`, `process.features`, and `process.uptime(...ignored)` expose synchronous process metadata, with ignored extra-argument evaluation where Node ignores extras.
@@ -801,6 +801,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `process_resource_usage` | process.resourceUsage numeric getrusage fields |
 | `process_stdio_write` | process.stdout.write and process.stderr.write string subset |
 | `process_stdio_write_buffer` | process.stdout.write and process.stderr.write Buffer subset |
+| `process_stdio_write_callback` | process stdout/stderr write optional encoding and callback subset |
 | `process_title` | process.title readonly argv0-backed metadata |
 | `process_umask` | process.umask read/update/restore behavior |
 | `process_versions` | process.version and process.versions metadata |
