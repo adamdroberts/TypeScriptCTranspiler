@@ -38,6 +38,24 @@ function getterValue(): any {
     return 1;
 }
 
+function getterOther(): any {
+    return 2;
+}
+
+function setterValue(value: any): void {
+}
+
+function setterOther(value: any): void {
+}
+
+function wrongAccessorGetterDescriptor(target: any, prop: any): any {
+    return { get: getterOther as any, enumerable: true, configurable: false };
+}
+
+function wrongAccessorSetterDescriptor(target: any, prop: any): any {
+    return { set: setterOther as any, enumerable: true, configurable: false };
+}
+
 function ownFixed(target: any): string[] {
     return ["fixed"];
 }
@@ -117,6 +135,7 @@ try {
 const accessorTarget: any = {};
 Object.defineProperty(accessorTarget, "x", {
     get: getterValue as any,
+    set: setterValue as any,
     enumerable: true,
     configurable: false,
 });
@@ -125,6 +144,20 @@ try {
     console.log("accessor as data:", Object.getOwnPropertyDescriptor(accessorProxy, "x")?.value);
 } catch (e: any) {
     console.log("accessor as data:", e);
+}
+
+const wrongAccessorGetterProxy: any = new Proxy(accessorTarget, { getOwnPropertyDescriptor: wrongAccessorGetterDescriptor as any });
+try {
+    console.log("accessor wrong getter:", Object.getOwnPropertyDescriptor(wrongAccessorGetterProxy, "x")?.get);
+} catch (e: any) {
+    console.log("accessor wrong getter:", e);
+}
+
+const wrongAccessorSetterProxy: any = new Proxy(accessorTarget, { getOwnPropertyDescriptor: wrongAccessorSetterDescriptor as any });
+try {
+    console.log("accessor wrong setter:", Object.getOwnPropertyDescriptor(wrongAccessorSetterProxy, "x")?.set);
+} catch (e: any) {
+    console.log("accessor wrong setter:", e);
 }
 
 const realProxy: any = new Proxy(fixedTarget, { getOwnPropertyDescriptor: realDescriptor as any });

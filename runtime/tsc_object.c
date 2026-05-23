@@ -166,8 +166,10 @@ void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* p
     bool writable = has_writable ? tsc_value_is_truthy(writable_value) : false;
     tsc_value_t value = tsc_value_undefined();
     bool has_value = descriptor_has_prop(desc, "value", 5, &value);
-    bool has_get = descriptor_has_prop(desc, "get", 3, NULL);
-    bool has_set = descriptor_has_prop(desc, "set", 3, NULL);
+    tsc_value_t get_value = tsc_value_undefined();
+    bool has_get = descriptor_has_prop(desc, "get", 3, &get_value);
+    tsc_value_t set_value = tsc_value_undefined();
+    bool has_set = descriptor_has_prop(desc, "set", 3, &set_value);
 
     if (!prop) {
         if (!target->extensible) {
@@ -188,6 +190,12 @@ void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* p
     if (prop->accessor) {
         if (has_value || has_writable) {
             tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report data descriptor for non-configurable accessor key"));
+        }
+        if (has_get && !tsc_value_same_value_zero(get_value, prop->getter_value)) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report different getter for non-configurable accessor key"));
+        }
+        if (has_set && !tsc_value_same_value_zero(set_value, prop->setter_value)) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report different setter for non-configurable accessor key"));
         }
         return;
     }
