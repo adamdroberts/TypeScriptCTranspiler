@@ -1,0 +1,6 @@
+{
+  "requires": {
+    "primary": "./allow_map_a",
+    "secondary": "./allow_map_b"
+  }
+}

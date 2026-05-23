@@ -18,13 +18,14 @@ export async function loadDynamicRequireManifest(
     if (!manifestPath) return emptyDynamicRequireManifest();
     const raw = await fs.readFile(manifestPath, "utf8");
     const parsed = JSON.parse(raw) as { requires?: unknown };
-    if (!Array.isArray(parsed.requires)) {
-        throw new Error("dynamic require manifest must contain an array-valued 'requires' field");
+    const rawSpecifiers = manifestRequireSpecifiers(parsed.requires);
+    if (!rawSpecifiers) {
+        throw new Error("dynamic require manifest must contain 'requires' as an array or object map");
     }
 
     const seen = new Set<string>();
     const specifiers: string[] = [];
-    for (const rawSpecifier of parsed.requires) {
+    for (const rawSpecifier of rawSpecifiers) {
         if (typeof rawSpecifier !== "string" || rawSpecifier.length === 0) {
             throw new Error("dynamic require manifest entries must be non-empty strings");
         }
@@ -36,4 +37,10 @@ export async function loadDynamicRequireManifest(
         throw new Error("dynamic require manifest requires at least one specifier");
     }
     return { specifiers };
+}
+
+function manifestRequireSpecifiers(requires: unknown): unknown[] | null {
+    if (Array.isArray(requires)) return requires;
+    if (requires && typeof requires === "object") return Object.values(requires);
+    return null;
 }

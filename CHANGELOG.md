@@ -6,7 +6,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Changed
 - The e2e harness now materializes its small `node_modules` package fixtures before case discovery, so normal dependency installs no longer remove the ignored package-source fixtures needed by Phase 14 tests.
-- Documentation drift sync: top-level `README.md` and `llms.txt` now reflect the current 791-passing test suite, ~43,100 LOC inventory, and full phase status including the implemented Proxy/Reflect surface, native-addon bridge path, AOT runtime-code compilation, dynamic-require manifests, and current Phase 14/decorator polish remaining work. `llms-full.txt` was regenerated from the updated source pages.
+- Documentation drift sync: top-level `README.md` and `llms.txt` now reflect the current 792-passing test suite, ~43,100 LOC inventory, and full phase status including the implemented Proxy/Reflect surface, native-addon bridge path, AOT runtime-code compilation, dynamic-require manifests, and current Phase 14/decorator polish remaining work. `llms-full.txt` was regenerated from the updated source pages.
 - The benchmark harness can now run the manual suite, generated operation-loop benchmarks for stdout-producing e2e cases via `--full` / `BENCH_SOURCE=e2e`, or both, records ops/sec in JSON/table output, and writes selectable JSON result files.
 - Runtime and emitter hot paths for classes, typed object literals, string/number concatenation, JSON stringification, Map/Set, regex matching, arrays, and no-GC allocation were optimized for the benchmark suite.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
@@ -16,6 +16,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Inferred locals whose TypeScript type is erased to `tsc_value_t` now use boxed storage even when their initializer emits a narrower primitive, fixing nullish coalescing over `Map.get(...)` results and optional numeric field reads. Dynamic and typed string Reflect helpers again treat boxed strings as valid string-object targets. Tests: `nullish`, `wordcount`, `weak_ref`, `collection_object_methods`, `string_object_enumeration`, `dynamic_string_object_enumeration`.
 
 ### Added
+- `--dynamic-require-manifest` now accepts named object-map allow lists in addition to array allow lists, compiling the mapped specifiers into the AOT module graph and runtime dispatch. Test: `dynamic_require_manifest_object`.
 - Constant-body `Function(...)` / `new Function(...)` calls now stay on the AOT path when they include static parameter-name strings, and runtime-code manifest dispatch uses the final function-body argument while requiring static parameter names. Tests: `runtime_function_params_aot`, `runtime_function_manifest_params`.
 - Dynamic strict equality now preserves `null` and `undefined` literal identity when boxing values into `tsc_value_t`, including missing dynamic object properties compared with `undefined`. Test: `dynamic_nullish_equality`.
 - Bounded scheduler callbacks for `process.nextTick`, `queueMicrotask`, zero-delay `setTimeout`, and `setImmediate` now accept explicit `this: any` callback parameters and pass the runtime `undefined` value. Test: `scheduler_callback_this`.
