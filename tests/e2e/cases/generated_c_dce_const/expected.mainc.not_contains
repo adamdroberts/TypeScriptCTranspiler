@@ -19,14 +19,17 @@ unused_chain_mid
 unused_chain_object
 unused_other_key
 unused_computed_key_object
+unused_comma_expr
 unused_namespace_value
 unused_let
 unused_empty
 top_level_dead_expr
+top_level_dead_comma
 unused_local_const
 unused_local_let
 unused_local_empty
 local_dead_expr
+local_dead_comma
 unused_local_seed
 unused_local_chain
 unreachable_local

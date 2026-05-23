@@ -20,10 +20,14 @@ const unused_chain_mid = unused_chain_seed;
 const unused_chain_object = { label: unused_chain_mid };
 const unused_other_key = "gone";
 const unused_computed_key_object = { ["dead"]: 1, [unused_other_key]: 2 };
+// @ts-ignore: intentional pure comma expression for generated-C DCE coverage.
+const unused_comma_expr = (1, "dead");
 let unused_let = 42;
 let unused_empty: number;
 "top_level_dead_expr";
 (1 + 2) * 3;
+// @ts-ignore: intentional pure comma expression for generated-C DCE coverage.
+(1, "top_level_dead_comma");
 
 namespace DceNamespace {
     const unused_namespace_value = { label: "dead", count: 4 };
@@ -35,6 +39,8 @@ function usedLocal(value: number): number {
     let unused_local_let = `dead-${1 + 2}`;
     let unused_local_empty: string;
     "local_dead_expr";
+    // @ts-ignore: intentional pure comma expression for generated-C DCE coverage.
+    (1, "local_dead_comma");
     const unused_local_seed = "dead";
     const unused_local_chain = unused_local_seed;
     const kept_local = value + 3;

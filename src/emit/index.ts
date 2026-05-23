@@ -681,6 +681,7 @@ class Emitter {
                 case ts.SyntaxKind.LessThanLessThanToken:
                 case ts.SyntaxKind.GreaterThanGreaterThanToken:
                 case ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken:
+                case ts.SyntaxKind.CommaToken:
                     return this.isSideEffectFreeTopLevelConstInitializer(expr.left, seenConsts) &&
                         this.isSideEffectFreeTopLevelConstInitializer(expr.right, seenConsts);
                 default:
