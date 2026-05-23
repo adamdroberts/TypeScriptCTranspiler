@@ -6,7 +6,7 @@ Goal: take a Node.js-style TypeScript app and get back a standalone executable t
 
 ## Status
 
-Substantial working subset, verified by **804 passing end-to-end tests** including a real word-count CLI that tokenizes via regex, counts via `Map`, sorts by a user comparator, and reads `process.env`. ~43,100 LOC across the TypeScript compiler (~28,800 LOC), C/C++ runtime (~12,750 LOC), and `@types/node` replacement shim (~1,580 LOC).
+Substantial working subset, verified by **805 passing end-to-end tests** including a real word-count CLI that tokenizes via regex, counts via `Map`, sorts by a user comparator, and reads `process.env`. ~43,100 LOC across the TypeScript compiler (~28,800 LOC), C/C++ runtime (~12,750 LOC), and `@types/node` replacement shim (~1,580 LOC).
 
 **Phases complete:**
 
@@ -94,7 +94,7 @@ See [`docs/cli.md`](docs/cli.md) for exit codes and environment variables.
 
 ## Feature tour
 
-Each of the following compiles and runs end-to-end. See [`tests/e2e/cases/`](tests/e2e/cases/) for the full 804-case suite and [`docs/done.md`](docs/done.md) for the complete capability inventory.
+Each of the following compiles and runs end-to-end. See [`tests/e2e/cases/`](tests/e2e/cases/) for the full 805-case suite and [`docs/done.md`](docs/done.md) for the complete capability inventory.
 
 ### Classes with inheritance + static
 
@@ -356,7 +356,7 @@ Some TS/JS features require build-time proof, an explicit security allow list, o
 TSC2C_NO_GC=1 bun tests/e2e/run.ts
 ```
 
-804 e2e cases under [`tests/e2e/cases/`](tests/e2e/cases/), each a directory containing `in.ts` (and any support files) plus `expected.stdout` / `expected.exitcode`. The harness compiles each case, executes the binary, and diffs the output. See [`docs/testing.md`](docs/testing.md) for how to add a case and [`docs/done.md`](docs/done.md) for what each one exercises.
+805 e2e cases under [`tests/e2e/cases/`](tests/e2e/cases/), each a directory containing `in.ts` (and any support files) plus `expected.stdout` / `expected.exitcode`. The harness compiles each case, executes the binary, and diffs the output. See [`docs/testing.md`](docs/testing.md) for how to add a case and [`docs/done.md`](docs/done.md) for what each one exercises.
 
 Drop `TSC2C_NO_GC=1` after `sudo apt-get install libgc-dev`; OpenSSL, ICU, GMP, and PCRE2 are still required for crypto, Unicode normalization, BigInt, and regex.
 
@@ -378,7 +378,7 @@ Drop `TSC2C_NO_GC=1` after `sudo apt-get install libgc-dev`; OpenSSL, ICU, GMP, 
 | `runtime/` | Full C/C++ runtime (~12,750 LOC): strings, arrays, maps/sets/weak collections, regex, BigInt, exceptions, JSON, console, process, fs + fs.promises, path, Math, os, Date, Number, Buffer, URL, EventEmitter, Event/EventTarget, Error hierarchy, Promise (immediate), generators (eager), dns, net, child_process, and embedded Node bridge |
 | `stdlib/lib.core.d.ts` | Type shim (~1,580 LOC; replaces `@types/node`) |
 | `examples/` | 7 runnable demo programs |
-| `tests/e2e/cases/` | 804 test dirs — `in.ts` + optional support files + `expected.stdout` or `expected.exitcode` |
+| `tests/e2e/cases/` | 805 test dirs — `in.ts` + optional support files + `expected.stdout` or `expected.exitcode` |
 | `tests/e2e/run.ts` | E2E harness: compile, execute, diff |
 | `manual-tests/` | Manual smoke + benchmark sources |
 | `docs/` | Browsable documentation set |
