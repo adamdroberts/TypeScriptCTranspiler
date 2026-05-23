@@ -9373,12 +9373,15 @@ class Emitter {
         if (!getter.parent || !ts.isClassDeclaration(getter.parent)) {
             unsupported(getter, "decorated instance getter requires a containing class");
         }
-        const replacement = this.classInstanceGetterDecoratorReplacementName(getter.parent, getter);
+        const classDecl = getter.parent;
+        if (!classDecl.name) unsupported(getter, "decorated instance getter requires a named class");
+        const replacement = this.classInstanceGetterDecoratorReplacementName(classDecl, getter);
+        const thisArg = this.coerce({ c: obj, ty: classType(classDecl.name.text) }, T_VALUE, node);
         const fn = this.freshTemp("_getter_replacement");
         const out = this.freshTemp("_getter_result");
         const av = this.freshTemp("_getter_args");
         const applied = {
-            c: `tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}))`,
+            c: `tsc_value_apply_function(${fn}, ${thisArg}, tsc_value_array(${av}))`,
             ty: T_VALUE,
         };
         return (
