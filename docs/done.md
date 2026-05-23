@@ -307,7 +307,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
   - Arrays → `[...]`
   - Class/interface values → `{"field":value,...}` using the declared property list from the TypeScript checker
 - Runtime: `tsc_json_escape_string`, `tsc_json_num`. Test: `json`
-- `JSON.parse(text)` returns a NaN-boxed dynamic `tsc_value_t`, with recursive parsing for objects, arrays, strings, numbers, booleans, and null. Test: `dynamic_values`
+- `JSON.parse(text)` returns a NaN-boxed dynamic `tsc_value_t`, with recursive parsing for objects, arrays, strings, numbers, booleans, and null, including `\uXXXX` string escapes and surrogate-pair decoding to UTF-8. Test: `dynamic_values`
 
 ## 9.5 Dynamic values
 
@@ -1276,7 +1276,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_property_ops` | dynamic `in` and `delete` property operations |
 | `dynamic_unary_ops` | dynamic unary numeric and bitwise-not operators |
 | `dynamic_update_ops` | dynamic pre/post update operators over local, property, and index lvalues |
-| `dynamic_values` | NaN-boxed `any`/`unknown`, JSON.parse, heterogeneous arrays/objects |
+| `dynamic_values` | NaN-boxed `any`/`unknown`, JSON.parse including Unicode escapes, heterogeneous arrays/objects |
 | `stdlib_os` | os module + Date.now + Number.* statics |
 | `runtime_eval` | constant expression eval compiles AOT |
 | `runtime_eval_manifest` | manifest-listed non-constant eval source dispatches to generated AOT constants |

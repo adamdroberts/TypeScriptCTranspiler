@@ -107,6 +107,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Constructable Proxy values without a `construct` trap now have focused coverage for forwarding `Reflect.construct(proxy, args)` to function targets, including dynamic receiver initialization and explicit object returns. Test: `proxy_construct_forward`.
 - Dynamic `Reflect.construct(functionValue, args)` now constructs boxed generic function identities with a dynamic `this` receiver, returning explicit object results or the initialized receiver when the constructor returns a primitive. Test: `reflect_construct_dynamic_function`.
 - Callable Proxy values over function targets now follow dynamic function JSON behavior: object properties are omitted and array/top-level slots stringify as `null` in the existing runtime model. Test: `proxy_callable_json`.
+- `JSON.parse(...)` now decodes `\uXXXX` string escapes, including surrogate pairs emitted as UTF-8 runtime strings. Test: `dynamic_values`.
 - Callable Proxy values over function targets now preserve function stringification through dynamic `String(proxy)` / `toString` coercion while ordinary object proxies still stringify as objects. Test: `proxy_callable_string`.
 - Callable and constructable Proxy values now preserve JavaScript `typeof proxy === "function"` identity when the proxy target is a function. Test: `proxy_callable_identity`.
 - Negative user-defined type predicate branches now have focused coverage for narrowing interface-shaped dynamic unions. Test: `custom_predicates_negative`.
