@@ -10967,6 +10967,12 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(call.arguments, 1),
                 ], ([value]) => `({ (void)${value}; tsc_str_from_lit("${escapeCString(text)}", ${utf8ByteLen(text)}); })`);
             }
+            if (mapped.kind === "value") {
+                return this.emitSequencedExpr(T_STRING, [
+                    { value: target, target: T_VALUE, node: targetNode },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ], ([value]) => this.objectPrototypeRequireObjectCoercible(method, value!, `tsc_value_to_string(${value})`));
+            }
             return this.emitSequencedExpr(T_STRING, [
                 { value: target, node: targetNode },
                 ...this.ignoredArgumentSpecs(call.arguments, 1),
@@ -10976,6 +10982,12 @@ class Emitter {
             });
         }
         if (method === "valueOf") {
+            if (mapped.kind === "value") {
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: target, target: T_VALUE, node: targetNode },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ], ([value]) => this.objectPrototypeRequireObjectCoercible(method, value!, value!));
+            }
             return this.emitSequencedExpr(target.ty, [
                 { value: target, node: targetNode },
                 ...this.ignoredArgumentSpecs(call.arguments, 1),
@@ -10988,7 +11000,11 @@ class Emitter {
                 { value: target, target: T_VALUE, node: targetNode },
                 { value: objectValue, target: T_VALUE, node: objectNode },
                 ...this.ignoredArgumentSpecs(call.arguments, 2),
-            ], ([prototype, object]) => `tsc_value_is_prototype_of(${prototype}, ${object})`);
+            ], ([prototype, object]) => this.objectPrototypeRequireObjectCoercible(
+                method,
+                prototype!,
+                `tsc_value_is_prototype_of(${prototype}, ${object})`,
+            ));
         }
         const keyNode = call.arguments[1]!;
         const ignored = this.ignoredArgumentSpecs(call.arguments, 2);
@@ -11025,7 +11041,7 @@ class Emitter {
                 { value: target, target: T_VALUE, node: targetNode },
                 { value: key, target: T_STRING, node: keyNode },
                 ...ignored,
-            ], ([value, keyC]) => `${fn}(${value}, ${keyC})`);
+            ], ([value, keyC]) => this.objectPrototypeRequireObjectCoercible(method, value!, `${fn}(${value}, ${keyC})`));
         }
         const key = this.emitExpr(keyNode);
         return this.emitSequencedExpr(T_BOOLEAN, [
@@ -11033,6 +11049,10 @@ class Emitter {
             { value: key, target: T_STRING, node: keyNode },
             ...ignored,
         ], ([value, keyC]) => `({ (void)${value}; (void)${keyC}; false; })`);
+    }
+
+    private objectPrototypeRequireObjectCoercible(method: string, receiver: string, result: string): string {
+        return `({ if (tsc_value_is_nullish(${receiver})) tsc_throw_str(tsc_str_from_cstr("Object.prototype.${method}.call receiver is null or undefined")); ${result}; })`;
     }
 
     private objectPrototypeToStringTag(mapped: CType): string {

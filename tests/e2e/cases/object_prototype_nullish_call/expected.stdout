@@ -1,0 +1,16 @@
+target: has-null
+ignored: has-key
+has-error: Object.prototype.hasOwnProperty.call receiver is null or undefined
+target: enum-undefined
+ignored: enum-key
+enum-error: Object.prototype.propertyIsEnumerable.call receiver is null or undefined
+target: proto-null
+ignored: proto-extra
+proto-error: Object.prototype.isPrototypeOf.call receiver is null or undefined
+target: locale-undefined
+ignored: locale-extra
+locale-error: Object.prototype.toLocaleString.call receiver is null or undefined
+target: value-null
+ignored: value-extra
+value-error: Object.prototype.valueOf.call receiver is null or undefined
+toString-nullish: [object Null] [object Undefined]
