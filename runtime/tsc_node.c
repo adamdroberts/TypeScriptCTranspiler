@@ -836,7 +836,7 @@ tsc_url_t* tsc_url_new(const tsc_str_t* input) {
 
     size_t scheme_colon = find_byte(d, 0, n, ':');
     if (!tsc_url_can_parse(input)) {
-        tsc_panic("URL: only absolute URLs with // authority are supported");
+        tsc_throw_str(tsc_str_from_cstr("URL: only absolute URLs with // authority are supported"));
     }
     u->protocol = str_from_range(d, 0, scheme_colon + 1);
 
@@ -875,17 +875,17 @@ tsc_url_t* tsc_url_new(const tsc_str_t* input) {
 tsc_url_t* tsc_url_new_base(const tsc_str_t* input, const tsc_str_t* base) {
     tsc_str_t* resolved = tsc_url_resolve_base(input, base);
     if (!resolved) {
-        tsc_panic("URL: base URL must be absolute when resolving relative input");
+        tsc_throw_str(tsc_str_from_cstr("URL: base URL must be absolute when resolving relative input"));
     }
     return tsc_url_new(resolved);
 }
 
 tsc_str_t* tsc_url_file_path(const tsc_url_t* url) {
     if (!url || !tsc_str_eq(url->protocol, tsc_str_from_lit("file:", 5))) {
-        tsc_panic("URL: filesystem paths only support file: URLs");
+        tsc_throw_str(tsc_str_from_cstr("URL: filesystem paths only support file: URLs"));
     }
     if (url->host->len != 0 && !tsc_str_eq(url->host, tsc_str_from_lit("localhost", 9))) {
-        tsc_panic("URL: filesystem file: URLs must not have a remote host");
+        tsc_throw_str(tsc_str_from_cstr("URL: filesystem file: URLs must not have a remote host"));
     }
     return url->pathname;
 }

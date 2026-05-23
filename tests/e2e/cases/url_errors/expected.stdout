@@ -1,0 +1,5 @@
+absolute: URL: only absolute URLs with // authority are supported
+base: URL: base URL must be absolute when resolving relative input
+non-file: URL: filesystem paths only support file: URLs
+remote-file: URL: filesystem file: URLs must not have a remote host
+valid: https://example.com/root true false
