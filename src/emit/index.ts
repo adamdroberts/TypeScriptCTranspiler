@@ -5708,15 +5708,24 @@ class Emitter {
         const name = `${cd.name.text}_${accessorName}_decorator_original`;
         if (this.nodeFunctionAdapters.has(name)) return name;
         this.nodeFunctionAdapters.add(name);
+        const sig = this.checker.getSignatureFromDeclaration(member);
+        if (!sig) unsupported(member, "could not resolve instance getter signature");
+        const ret = this.prepareType(mapTsType(member, sig.getReturnType(), this.checker));
         const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
         this.protos.line(signature + ";");
         const buf = new CBuf();
         buf.open(signature);
         buf.line("(void)env;");
-        buf.line("(void)this_arg;");
         buf.line("(void)args;");
-        buf.line("tsc_panic(\"decorated instance getter original calls require a typed receiver bridge\");");
-        buf.line("return tsc_value_undefined();");
+        buf.line(`${cd.name.text}_t* self = ${this.coerce({ c: "this_arg", ty: T_VALUE }, classType(cd.name.text), member)};`);
+        const call = `${cd.name.text}_${accessorName}(self)`;
+        if (ret.kind === "void" || ret.kind === "never") {
+            buf.line(`${call};`);
+            buf.line("return tsc_value_undefined();");
+        } else {
+            buf.line(`${ret.c} result = ${call};`);
+            buf.line(`return ${this.coerce({ c: "result", ty: ret }, T_VALUE, member)};`);
+        }
         buf.close();
         buf.line();
         this.closureDefs.write(buf.toString());

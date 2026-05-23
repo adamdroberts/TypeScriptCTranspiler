@@ -1,0 +1,3 @@
+seen: getter:label:false|
+label: box:original:replacement
+seen2: getter:label:false|this:box|original:box|
