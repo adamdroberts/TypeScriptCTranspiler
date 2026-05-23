@@ -26180,7 +26180,7 @@ class Emitter {
                     return `tsc_value_array(${r.c})`;
                 }
                 case "function":
-                    return `tsc_value_function_generic(${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${r.c})`;
+                    return `tsc_value_function_generic_arity(${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${r.c}, ${(r.ty.params ?? []).length}.0)`;
                 case "class":
                     return `tsc_value_class(${r.c})`;
                 case "void":

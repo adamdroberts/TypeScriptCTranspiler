@@ -1,8 +1,12 @@
 same boxed: true true
+function length: 2 2
+length own: true 0 1 length 1 length
+length desc: 2 false false false
 shared proto: stable
 shared extensible: false false
 seal before: false false
 seal: true false true false
 freeze: true false true true
+proxy length: 0 0
 proxy seal: true true true
 proxy freeze: true true true

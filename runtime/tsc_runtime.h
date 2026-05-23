@@ -479,6 +479,7 @@ tsc_value_t tsc_value_array(tsc_array_t* a);
 tsc_value_t tsc_value_object(tsc_object_t* o);
 tsc_value_t tsc_value_class(void* ptr);
 tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env);
+tsc_value_t tsc_value_function_generic_arity(tsc_generic_function_t fn, void* env, double length);
 
 bool tsc_value_is_truthy(tsc_value_t v);
 bool tsc_value_number_is_integer(tsc_value_t v);

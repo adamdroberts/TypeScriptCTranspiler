@@ -83,8 +83,13 @@ void* tsc_value_as_class(tsc_value_t v) {
 }
 
 tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env) {
+    return tsc_value_function_generic_arity(fn, env, 0.0);
+}
+
+tsc_value_t tsc_value_function_generic_arity(tsc_generic_function_t fn, void* env, double length) {
     for (tsc_function_identity_t* cur = g_function_identities; cur; cur = cur->next) {
         if (cur->kind == TSC_FUNCTION_IDENTITY_GENERIC && cur->code.generic == fn && cur->env == env) {
+            if (length > cur->length) cur->length = length;
             return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cur);
         }
     }
@@ -93,6 +98,7 @@ tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env) {
     id->extensible = true;
     id->sealed = false;
     id->frozen = false;
+    id->length = length;
     id->prototype = tsc_function_default_prototype();
     id->code.generic = fn;
     id->env = env;
@@ -252,6 +258,7 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
     if (!value_is_box(v)) return tsc_value_undefined();
     if (value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(v);
+        if (tsc_str_is_length_key(key)) return tsc_value_num(ident->length);
         if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER && str_lit_eq(key, "listener")) {
             return value_event_listener_identity(ident->code.event_raw_identity.identity);
         }
@@ -288,6 +295,9 @@ tsc_value_t tsc_value_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc
         return tsc_value_get_prop(v, key);
     }
     if (value_tag(v) == TSC_VALUE_TAG_STRING) {
+        return tsc_value_get_prop(v, key);
+    }
+    if (value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         return tsc_value_get_prop(v, key);
     }
     return tsc_value_undefined();
@@ -580,6 +590,9 @@ bool tsc_value_has_own_prop(tsc_value_t v, const tsc_str_t* key) {
         size_t idx = 0;
         return tsc_str_array_index(key, &idx) && idx < s->len;
     }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+        return tsc_str_is_length_key(key);
+    }
     return false;
 }
 
@@ -594,6 +607,9 @@ bool tsc_value_property_is_enumerable(tsc_value_t v, const tsc_str_t* key) {
         const tsc_str_t* s = (const tsc_str_t*)value_ptr(v);
         size_t idx = 0;
         return tsc_str_array_index(key, &idx) && idx < s->len;
+    }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+        return false;
     }
     return false;
 }
@@ -881,6 +897,20 @@ tsc_value_t value_descriptor_from_string_key(const tsc_str_t* src, const tsc_str
     return tsc_value_undefined();
 }
 
+tsc_value_t value_descriptor_from_function_length(const tsc_function_identity_t* fn) {
+    tsc_object_t* desc = tsc_object_new();
+    tsc_object_set(desc, tsc_str_from_lit("value", 5), tsc_value_num(fn ? fn->length : 0.0));
+    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(false));
+    tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(false));
+    tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(false));
+    return tsc_value_object(desc);
+}
+
+tsc_value_t value_descriptor_from_function_key(const tsc_function_identity_t* fn, const tsc_str_t* key) {
+    if (tsc_str_is_length_key(key)) return value_descriptor_from_function_length(fn);
+    return tsc_value_undefined();
+}
+
 tsc_value_t value_descriptors_from_array(const tsc_array_t* src) {
     tsc_object_t* out = tsc_object_new();
     if (!src) return tsc_value_object(out);
@@ -903,6 +933,12 @@ tsc_value_t value_descriptors_from_string(const tsc_str_t* src) {
     return tsc_value_object(out);
 }
 
+tsc_value_t value_descriptors_from_function(const tsc_function_identity_t* fn) {
+    tsc_object_t* out = tsc_object_new();
+    tsc_object_set(out, tsc_str_from_lit("length", 6), value_descriptor_from_function_length(fn));
+    return tsc_value_object(out);
+}
+
 tsc_array_t* tsc_value_own_keys(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_own_keys_dyn((tsc_object_t*)value_ptr(v));
@@ -912,6 +948,12 @@ tsc_array_t* tsc_value_own_keys(tsc_value_t v) {
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
         return value_string_keys((const tsc_str_t*)value_ptr(v), true);
+    }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+        tsc_array_t* out = tsc_array_new(sizeof(tsc_str_t*), 1);
+        tsc_str_t* length = tsc_str_from_lit("length", 6);
+        tsc_array_push_raw(out, &length);
+        return out;
     }
     return tsc_array_new(sizeof(tsc_str_t*), 1);
 }
@@ -941,6 +983,9 @@ tsc_value_t tsc_value_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key)
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
         return value_descriptor_from_string_key((const tsc_str_t*)value_ptr(v), key);
+    }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+        return value_descriptor_from_function_key((const tsc_function_identity_t*)value_ptr(v), key);
     }
     if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) return tsc_value_undefined();
     tsc_object_t* o = (tsc_object_t*)value_ptr(v);
@@ -977,6 +1022,9 @@ tsc_value_t tsc_value_get_own_property_descriptors(tsc_value_t v) {
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
         return value_descriptors_from_string((const tsc_str_t*)value_ptr(v));
+    }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+        return value_descriptors_from_function((const tsc_function_identity_t*)value_ptr(v));
     }
     if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) return tsc_value_undefined();
     tsc_object_t* o = (tsc_object_t*)value_ptr(v);
@@ -1040,6 +1088,9 @@ double tsc_value_length(tsc_value_t v) {
     if (value_tag(v) == TSC_VALUE_TAG_STRING) {
         return (double)((tsc_str_t*)value_ptr(v))->len;
     }
+    if (value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+        return ((tsc_function_identity_t*)value_ptr(v))->length;
+    }
     return 0.0;
 }
 
@@ -1063,6 +1114,9 @@ tsc_array_t* tsc_value_object_keys(tsc_value_t v) {
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
         return value_string_keys((const tsc_str_t*)value_ptr(v), false);
+    }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+        return tsc_array_new(sizeof(tsc_str_t*), 1);
     }
     return tsc_array_new(sizeof(tsc_str_t*), 1);
 }

@@ -1,4 +1,4 @@
-function Stable(this: any): void {}
+function Stable(this: any, count: number, label: string): void {}
 function Sealed(this: any): void {}
 function Frozen(this: any): void {}
 function Proxied(this: any): void {}
@@ -9,6 +9,12 @@ const second: any = Stable as any;
 const stableProto: any = { marker: "stable" };
 
 console.log("same boxed:", Object.is(first, second), first === second);
+const lengthDesc: any = Object.getOwnPropertyDescriptor(first, "length");
+const names: any = Object.getOwnPropertyNames(first);
+const ownKeys: any = Reflect.ownKeys(first);
+console.log("function length:", first.length, Reflect.get(first, "length"));
+console.log("length own:", Object.hasOwn(first, "length"), Object.keys(first).length, names.length, names[0], ownKeys.length, ownKeys[0]);
+console.log("length desc:", lengthDesc.value, lengthDesc.writable, lengthDesc.enumerable, lengthDesc.configurable);
 Object.setPrototypeOf(first, stableProto);
 console.log("shared proto:", Object.getPrototypeOf(second).marker);
 Object.preventExtensions(first);
@@ -23,6 +29,7 @@ console.log("freeze:", Object.freeze(frozen) === frozen, Reflect.isExtensible(fr
 
 const proxiedTarget: any = Proxied as any;
 const proxied: any = new Proxy(proxiedTarget, {});
+console.log("proxy length:", proxied.length, Reflect.get(proxied, "length"));
 console.log("proxy seal:", Object.seal(proxied) === proxied, Object.isSealed(proxiedTarget), Object.isSealed(proxied));
 
 const frozenProxyTarget: any = FrozenProxy as any;
