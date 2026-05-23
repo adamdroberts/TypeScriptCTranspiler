@@ -124,6 +124,7 @@ e2e: dynamic_unary_ops … OK
 e2e: dynamic_update_ops … OK
 e2e: exponent_assign … OK
 e2e: dynamic_require … OK
+e2e: function_prototypes … OK
 e2e: function_value_spread … OK
 e2e: generic_classes … OK
 e2e: generic_function_values … OK
@@ -254,6 +255,7 @@ e2e: proxy_array_is_array … OK
 e2e: proxy_array_prototype_invariants … OK
 e2e: proxy_array_to_string_tag … OK
 e2e: proxy_callable_to_string_tag … OK
+e2e: proxy_function_prototype_invariants … OK
 e2e: reflect_apply … OK
 e2e: reflect_construct … OK
 e2e: reflect_dynamic … OK
@@ -281,7 +283,7 @@ e2e: url_parse … OK
 e2e: void_operator … OK
 e2e: wordcount … OK
 
-819 passed, 0 failed
+821 passed, 0 failed
 ```
 
 Non-zero exit if any case fails.
