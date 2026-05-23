@@ -1053,6 +1053,14 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            method === "create" &&
+            call.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Object")
+        ) {
+            return this.isSideEffectFreeObjectCreatePrototypeOperand(call.arguments[0]!, seenConsts);
+        }
+        if (
+            ts.isIdentifier(recv) &&
             method === "hasOwn" &&
             call.arguments.length === 2 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
@@ -1125,6 +1133,19 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         return (ts.isObjectLiteralExpression(unwrapped) || ts.isArrayLiteralExpression(unwrapped)) &&
             this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+    }
+
+    private isSideEffectFreeObjectCreatePrototypeOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (unwrapped.kind === ts.SyntaxKind.NullKeyword) return true;
+        if (ts.isObjectLiteralExpression(unwrapped) || ts.isArrayLiteralExpression(unwrapped)) {
+            return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeObjectCreatePrototypeOperand(init, seenConsts);
     }
 
     private isSideEffectFreeObjectEnumerationOperand(

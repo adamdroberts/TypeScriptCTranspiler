@@ -65,6 +65,9 @@ const unused_object_is_frozen_call = Object.isFrozen(unused_spread_source_object
 const unused_object_prevent_extensions_call = Object.preventExtensions({ dead_object_prevent_extensions: 1 });
 const unused_object_seal_call = Object.seal({ dead_object_seal: 1 });
 const unused_object_freeze_call = Object.freeze(["dead_object_freeze"]);
+const unused_object_create_null_call = Object.create(null);
+const unused_object_create_object_call = Object.create({ dead_object_create_object: 1 });
+const unused_object_create_const_call = Object.create(unused_spread_source_object);
 const unused_reflect_has_call = Reflect.has({ dead_reflect_has: 1 }, "dead_reflect_has");
 const unused_reflect_own_keys_call = Reflect.ownKeys({ dead_reflect_own_keys: 1 });
 const unused_reflect_descriptor_call = Reflect.getOwnPropertyDescriptor({ dead_reflect_descriptor: 1 }, "dead_reflect_descriptor");
@@ -105,6 +108,8 @@ Object.isFrozen({ top_level_dead_is_frozen: 1 });
 Object.preventExtensions({ top_level_dead_prevent_extensions: 1 });
 Object.seal({ top_level_dead_seal: 1 });
 Object.freeze(["top_level_dead_freeze"]);
+Object.create(null);
+Object.create({ top_level_dead_create_object: 1 });
 Reflect.has({ top_level_dead_reflect_has: 1 }, "top_level_dead_reflect_has");
 Reflect.ownKeys({ top_level_dead_reflect_own_keys: 1 });
 Reflect.getPrototypeOf({ top_level_dead_reflect_get_prototype: 1 });
@@ -151,6 +156,8 @@ function usedLocal(value: number): number {
     Object.preventExtensions({ local_dead_prevent_extensions: 1 });
     Object.seal({ local_dead_seal: 1 });
     Object.freeze(["local_dead_freeze"]);
+    Object.create(null);
+    Object.create({ local_dead_create_object: 1 });
     Reflect.getOwnPropertyDescriptor({ local_dead_reflect_descriptor: 1 }, "local_dead_reflect_descriptor");
     Reflect.ownKeys(["local_dead_reflect_array_keys"]);
     Reflect.getPrototypeOf({ local_dead_reflect_get_prototype: 1 });

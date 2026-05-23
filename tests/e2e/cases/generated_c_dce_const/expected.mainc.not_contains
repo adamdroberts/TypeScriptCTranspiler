@@ -68,6 +68,9 @@ unused_object_is_frozen_call
 unused_object_prevent_extensions_call
 unused_object_seal_call
 unused_object_freeze_call
+unused_object_create_null_call
+unused_object_create_object_call
+unused_object_create_const_call
 unused_reflect_has_call
 unused_reflect_own_keys_call
 unused_reflect_descriptor_call
@@ -87,6 +90,7 @@ dead_object_is_sealed
 dead_object_prevent_extensions
 dead_object_seal
 dead_object_freeze
+dead_object_create_object
 dead_reflect_has
 dead_reflect_own_keys
 dead_reflect_descriptor
@@ -127,6 +131,7 @@ top_level_dead_is_frozen
 top_level_dead_prevent_extensions
 top_level_dead_seal
 top_level_dead_freeze
+top_level_dead_create_object
 top_level_dead_reflect_has
 top_level_dead_reflect_own_keys
 top_level_dead_reflect_get_prototype
@@ -164,6 +169,7 @@ local_dead_is_frozen
 local_dead_prevent_extensions
 local_dead_seal
 local_dead_freeze
+local_dead_create_object
 local_dead_reflect_descriptor
 local_dead_reflect_array_keys
 local_dead_reflect_get_prototype
