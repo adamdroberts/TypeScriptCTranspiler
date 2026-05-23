@@ -84,6 +84,8 @@ typedef enum {
 typedef struct tsc_function_identity {
     tsc_function_identity_kind_t kind;
     bool extensible;
+    bool sealed;
+    bool frozen;
     tsc_value_t prototype;
     union {
         tsc_accessor_getter_t getter;

@@ -1,0 +1,7 @@
+function proto: stable
+function extensible: false false
+seal before: false false
+seal: true false true false
+freeze: true false true true
+proxy seal: true true true
+proxy freeze: true true true

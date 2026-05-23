@@ -1275,6 +1275,8 @@ tsc_value_t value_accessor_getter_identity(tsc_accessor_getter_t getter, void* e
     tsc_function_identity_t* entry = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
     entry->kind = TSC_FUNCTION_IDENTITY_GETTER;
     entry->extensible = true;
+    entry->sealed = false;
+    entry->frozen = false;
     entry->prototype = tsc_function_default_prototype();
     entry->code.getter = getter;
     entry->env = env;
@@ -1293,6 +1295,8 @@ tsc_value_t value_accessor_setter_identity(tsc_accessor_setter_t setter, void* e
     tsc_function_identity_t* entry = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
     entry->kind = TSC_FUNCTION_IDENTITY_SETTER;
     entry->extensible = true;
+    entry->sealed = false;
+    entry->frozen = false;
     entry->prototype = tsc_function_default_prototype();
     entry->code.setter = setter;
     entry->env = env;

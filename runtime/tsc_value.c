@@ -83,9 +83,16 @@ void* tsc_value_as_class(tsc_value_t v) {
 }
 
 tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env) {
+    for (tsc_function_identity_t* cur = g_function_identities; cur; cur = cur->next) {
+        if (cur->kind == TSC_FUNCTION_IDENTITY_GENERIC && cur->code.generic == fn && cur->env == env) {
+            return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cur);
+        }
+    }
     tsc_function_identity_t* id = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
     id->kind = TSC_FUNCTION_IDENTITY_GENERIC;
     id->extensible = true;
+    id->sealed = false;
+    id->frozen = false;
     id->prototype = tsc_function_default_prototype();
     id->code.generic = fn;
     id->env = env;
@@ -681,6 +688,12 @@ bool tsc_value_seal(tsc_value_t v) {
         a->sealed = true;
         return true;
     }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+        tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(v);
+        fn->extensible = false;
+        fn->sealed = true;
+        return true;
+    }
     return false;
 }
 
@@ -695,6 +708,13 @@ bool tsc_value_freeze(tsc_value_t v) {
         a->frozen = true;
         return true;
     }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+        tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(v);
+        fn->extensible = false;
+        fn->sealed = true;
+        fn->frozen = true;
+        return true;
+    }
     return false;
 }
 
@@ -705,6 +725,9 @@ bool tsc_value_is_sealed(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         return ((tsc_array_t*)value_ptr(v))->sealed;
     }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+        return ((tsc_function_identity_t*)value_ptr(v))->sealed;
+    }
     return false;
 }
 
@@ -714,6 +737,9 @@ bool tsc_value_is_frozen(tsc_value_t v) {
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         return ((tsc_array_t*)value_ptr(v))->frozen;
+    }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+        return ((tsc_function_identity_t*)value_ptr(v))->frozen;
     }
     return false;
 }
