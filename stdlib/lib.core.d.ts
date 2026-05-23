@@ -1040,8 +1040,8 @@ interface FS {
     truncateSync(path: FSPathLike, len?: number, ...ignored: any[]): void;
     utimesSync(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): void;
     lutimesSync(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): void;
-    chownSync(path: FSPathLike, uid: number, gid: number): void;
-    lchownSync(path: FSPathLike, uid: number, gid: number): void;
+    chownSync(path: FSPathLike, uid: number, gid: number, ...ignored: any[]): void;
+    lchownSync(path: FSPathLike, uid: number, gid: number, ...ignored: any[]): void;
     chmodSync(path: FSPathLike, mode: number, ...ignored: any[]): void;
     mkdirSync(path: FSPathLike, options?: number | FSMkdirOptions, ...ignored: any[]): void;
     unlinkSync(path: FSPathLike, ...ignored: any[]): void;
@@ -1075,8 +1075,8 @@ interface FSPromises {
     truncate(path: FSPathLike, len?: number, ...ignored: any[]): Promise<void>;
     utimes(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): Promise<void>;
     lutimes(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): Promise<void>;
-    chown(path: FSPathLike, uid: number, gid: number): Promise<void>;
-    lchown(path: FSPathLike, uid: number, gid: number): Promise<void>;
+    chown(path: FSPathLike, uid: number, gid: number, ...ignored: any[]): Promise<void>;
+    lchown(path: FSPathLike, uid: number, gid: number, ...ignored: any[]): Promise<void>;
     chmod(path: FSPathLike, mode: number, ...ignored: any[]): Promise<void>;
     access(path: FSPathLike, mode?: number, ...ignored: any[]): Promise<void>;
     mkdir(path: FSPathLike, options?: number | FSMkdirOptions, ...ignored: any[]): Promise<void>;
@@ -1115,8 +1115,8 @@ declare module "fs" {
     export function truncateSync(path: FSPathLike, len?: number, ...ignored: any[]): void;
     export function utimesSync(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): void;
     export function lutimesSync(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): void;
-    export function chownSync(path: FSPathLike, uid: number, gid: number): void;
-    export function lchownSync(path: FSPathLike, uid: number, gid: number): void;
+    export function chownSync(path: FSPathLike, uid: number, gid: number, ...ignored: any[]): void;
+    export function lchownSync(path: FSPathLike, uid: number, gid: number, ...ignored: any[]): void;
     export function chmodSync(path: FSPathLike, mode: number, ...ignored: any[]): void;
     export function mkdirSync(path: FSPathLike, options?: number | FSMkdirOptions, ...ignored: any[]): void;
     export function unlinkSync(path: FSPathLike, ...ignored: any[]): void;
@@ -1153,8 +1153,8 @@ declare module "node:fs" {
     export function truncateSync(path: FSPathLike, len?: number, ...ignored: any[]): void;
     export function utimesSync(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): void;
     export function lutimesSync(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): void;
-    export function chownSync(path: FSPathLike, uid: number, gid: number): void;
-    export function lchownSync(path: FSPathLike, uid: number, gid: number): void;
+    export function chownSync(path: FSPathLike, uid: number, gid: number, ...ignored: any[]): void;
+    export function lchownSync(path: FSPathLike, uid: number, gid: number, ...ignored: any[]): void;
     export function chmodSync(path: FSPathLike, mode: number, ...ignored: any[]): void;
     export function mkdirSync(path: FSPathLike, options?: number | FSMkdirOptions, ...ignored: any[]): void;
     export function unlinkSync(path: FSPathLike, ...ignored: any[]): void;

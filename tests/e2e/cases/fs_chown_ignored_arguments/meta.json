@@ -1,0 +1,3 @@
+{
+  "description": "fs chown/lchown sync and promise calls evaluate ignored extra arguments"
+}

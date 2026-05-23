@@ -19901,26 +19901,32 @@ class Emitter {
                 );
             }
             case "chownSync": {
-                if (args.length !== 3) unsupported(call, "fs.chownSync needs path, uid, and gid");
+                if (args.length < 3) unsupported(call, "fs.chownSync needs path, uid, and gid");
                 const p = this.emitExpr(args[0]!);
                 const uid = this.emitExpr(args[1]!);
                 const gid = this.emitExpr(args[2]!);
-                return this.emitSequencedCall("tsc_fs_chown_sync", T_VOID, [
+                return this.emitSequencedExpr(T_VOID, [
                     this.fsPathSpec(p, args[0]!, "fs.chownSync path"),
                     { value: uid, target: T_NUMBER, node: args[1]! },
                     { value: gid, target: T_NUMBER, node: args[2]! },
-                ]);
+                    ...this.ignoredArgumentSpecs(args, 3),
+                ], ([path, uidValue, gidValue]) =>
+                    `tsc_fs_chown_sync(${path!}, ${uidValue!}, ${gidValue!})`,
+                );
             }
             case "lchownSync": {
-                if (args.length !== 3) unsupported(call, "fs.lchownSync needs path, uid, and gid");
+                if (args.length < 3) unsupported(call, "fs.lchownSync needs path, uid, and gid");
                 const p = this.emitExpr(args[0]!);
                 const uid = this.emitExpr(args[1]!);
                 const gid = this.emitExpr(args[2]!);
-                return this.emitSequencedCall("tsc_fs_lchown_sync", T_VOID, [
+                return this.emitSequencedExpr(T_VOID, [
                     this.fsPathSpec(p, args[0]!, "fs.lchownSync path"),
                     { value: uid, target: T_NUMBER, node: args[1]! },
                     { value: gid, target: T_NUMBER, node: args[2]! },
-                ]);
+                    ...this.ignoredArgumentSpecs(args, 3),
+                ], ([path, uidValue, gidValue]) =>
+                    `tsc_fs_lchown_sync(${path!}, ${uidValue!}, ${gidValue!})`,
+                );
             }
             case "chmodSync": {
                 if (args.length < 2) unsupported(call, "fs.chmodSync needs path and numeric mode");
@@ -20617,7 +20623,7 @@ class Emitter {
                 );
             }
             case "chown": {
-                if (args.length !== 3) unsupported(call, "fs.promises.chown needs path, uid, and gid");
+                if (args.length < 3) unsupported(call, "fs.promises.chown needs path, uid, and gid");
                 const p = this.emitExpr(args[0]!);
                 const uid = this.emitExpr(args[1]!);
                 const gid = this.emitExpr(args[2]!);
@@ -20625,12 +20631,13 @@ class Emitter {
                     this.fsPathSpec(p, args[0]!, "fs.promises.chown path"),
                     { value: uid, target: T_NUMBER, node: args[1]! },
                     { value: gid, target: T_NUMBER, node: args[2]! },
+                    ...this.ignoredArgumentSpecs(args, 3),
                 ], ([path, uidValue, gidValue]) =>
                     settle(`({ tsc_fs_chown_sync(${path!}, ${uidValue!}, ${gidValue!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "lchown": {
-                if (args.length !== 3) unsupported(call, "fs.promises.lchown needs path, uid, and gid");
+                if (args.length < 3) unsupported(call, "fs.promises.lchown needs path, uid, and gid");
                 const p = this.emitExpr(args[0]!);
                 const uid = this.emitExpr(args[1]!);
                 const gid = this.emitExpr(args[2]!);
@@ -20638,6 +20645,7 @@ class Emitter {
                     this.fsPathSpec(p, args[0]!, "fs.promises.lchown path"),
                     { value: uid, target: T_NUMBER, node: args[1]! },
                     { value: gid, target: T_NUMBER, node: args[2]! },
+                    ...this.ignoredArgumentSpecs(args, 3),
                 ], ([path, uidValue, gidValue]) =>
                     settle(`({ tsc_fs_lchown_sync(${path!}, ${uidValue!}, ${gidValue!}); tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
