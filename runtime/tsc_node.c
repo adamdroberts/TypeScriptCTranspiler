@@ -19,7 +19,7 @@ tsc_hash_t* tsc_crypto_create_hash(const tsc_str_t* algorithm) {
     } else if (str_lit_eq(algorithm, "sha512")) {
         md = EVP_sha512();
     } else {
-        tsc_panic("crypto.createHash: only sha1, sha256, and sha512 are supported");
+        tsc_throw_str(tsc_str_from_cstr("crypto.createHash: only sha1, sha256, and sha512 are supported"));
     }
 
     tsc_hash_t* h = (tsc_hash_t*)TSC_GC_MALLOC(sizeof(tsc_hash_t));
@@ -42,7 +42,7 @@ tsc_hash_t* tsc_crypto_create_hash(const tsc_str_t* algorithm) {
 
 tsc_buffer_t* tsc_crypto_random_bytes(double size) {
     if (isnan(size) || isinf(size) || size < 0) {
-        tsc_panic("crypto.randomBytes size must be a non-negative finite number");
+        tsc_throw_str(tsc_str_from_cstr("crypto.randomBytes size must be a non-negative finite number"));
     }
     tsc_buffer_t* out = tsc_buffer_alloc(size, 0);
     if (out->len == 0) return out;
@@ -92,7 +92,7 @@ tsc_str_t* tsc_hash_digest(tsc_hash_t* h, const tsc_str_t* encoding) {
     bool use_hex = str_lit_eq(encoding, "hex");
     bool use_base64 = str_lit_eq(encoding, "base64");
     if (!use_hex && !use_base64) {
-        tsc_panic("Hash.digest: only hex and base64 encodings are supported");
+        tsc_throw_str(tsc_str_from_cstr("Hash.digest: only hex and base64 encodings are supported"));
     }
     if (!h->finalized) {
         unsigned int digest_len = 0;
