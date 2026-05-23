@@ -12,6 +12,9 @@ typed function proto: typed
 typed function prevent: true true false
 typed function seal: true true false
 typed function freeze: true true true
+typed reflect own: 2 length name TypedReflect true TypedReflect
+typed reflect proto: reflect
+typed reflect prevent: true true false
 seal before: false false
 seal: true false true false
 freeze: true false true true

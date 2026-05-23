@@ -8,6 +8,7 @@ function TypedProto(this: any): void {}
 function TypedPrevent(this: any): void {}
 function TypedSeal(this: any): void {}
 function TypedFreeze(this: any): void {}
+function TypedReflect(this: any, value: number): void {}
 
 const first: any = Stable as any;
 const second: any = Stable as any;
@@ -38,6 +39,13 @@ console.log("typed function proto:", Object.getPrototypeOf(TypedProto).marker);
 console.log("typed function prevent:", Object.isExtensible(TypedPrevent), Object.preventExtensions(TypedPrevent) === TypedPrevent, Object.isExtensible(TypedPrevent));
 console.log("typed function seal:", Object.seal(TypedSeal) === TypedSeal, Object.isSealed(TypedSeal), Object.isFrozen(TypedSeal));
 console.log("typed function freeze:", Object.freeze(TypedFreeze) === TypedFreeze, Object.isSealed(TypedFreeze), Object.isFrozen(TypedFreeze));
+
+const reflectKeys: any = Reflect.ownKeys(TypedReflect);
+const reflectDesc: any = Reflect.getOwnPropertyDescriptor(TypedReflect, "name");
+Reflect.setPrototypeOf(TypedReflect, { marker: "reflect" });
+console.log("typed reflect own:", reflectKeys.length, reflectKeys[0], reflectKeys[1], Reflect.get(TypedReflect, "name"), Reflect.has(TypedReflect, "length"), reflectDesc.value);
+console.log("typed reflect proto:", Reflect.getPrototypeOf(TypedReflect).marker);
+console.log("typed reflect prevent:", Reflect.isExtensible(TypedReflect), Reflect.preventExtensions(TypedReflect), Reflect.isExtensible(TypedReflect));
 
 const sealed: any = Sealed as any;
 console.log("seal before:", Object.isSealed(sealed), Object.isFrozen(sealed));

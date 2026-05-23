@@ -632,6 +632,9 @@ bool tsc_value_has_prop(tsc_value_t v, const tsc_str_t* key) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
         return tsc_value_has_own_prop(v, key);
     }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+        return tsc_value_has_own_prop(v, key);
+    }
     return false;
 }
 

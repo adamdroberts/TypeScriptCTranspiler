@@ -24228,7 +24228,7 @@ class Emitter {
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, target: mapped.kind === "value" ? T_VALUE : undefined, node: args[0]! },
+                    { value: target, target: (mapped.kind === "value" || mapped.kind === "function") ? T_VALUE : undefined, node: args[0]! },
                 ], ([t]) => `tsc_reflect_is_extensible(${mapped.kind === "array" ? `tsc_value_array(${t})` : t})`);
             }
             case "ownKeys": {
@@ -24284,7 +24284,7 @@ class Emitter {
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, target: mapped.kind === "value" ? T_VALUE : undefined, node: args[0]! },
+                    { value: target, target: (mapped.kind === "value" || mapped.kind === "function") ? T_VALUE : undefined, node: args[0]! },
                 ], ([t]) => `tsc_reflect_prevent_extensions(${mapped.kind === "array" ? `tsc_value_array(${t})` : t})`);
             }
             case "set": {
