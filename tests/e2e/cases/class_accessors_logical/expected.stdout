@@ -1,0 +1,5 @@
+or: true true
+and: false false
+nullish: false false
+static and: false false
+static or: true true

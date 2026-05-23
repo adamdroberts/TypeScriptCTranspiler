@@ -1,0 +1,3 @@
+{
+  "description": "typed class accessor logical assignments read through getters and conditionally write through setters"
+}

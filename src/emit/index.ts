@@ -8701,6 +8701,19 @@ class Emitter {
                     const next = this.freshTemp("_accessor_next");
                     const getCall = `${getter.owner}_${getterName}()`;
                     const current = this.coerce({ c: getCall, ty: getterType }, paramType, left);
+                    if (this.isLogicalAssignmentOperator(op)) {
+                        return `({ ${paramType.c} ${cur} = ${current}; ` +
+                            this.classAccessorLogicalAssignmentValue(
+                                op,
+                                paramType,
+                                cur,
+                                value!,
+                                next,
+                                (assigned) => `${callee}(${assigned})`,
+                                left,
+                            ) +
+                            `; })`;
+                    }
                     const assigned = this.classAccessorCompoundValue(op, paramType, cur, value!);
                     return `({ ${paramType.c} ${cur} = ${current}; ${paramType.c} ${next} = ${assigned}; ${callee}(${next}); ${next}; })`;
                 },
@@ -8726,10 +8739,55 @@ class Emitter {
                 const next = this.freshTemp("_accessor_next");
                 const getCall = `${getter.owner}_${getterName}(${obj})`;
                 const current = this.coerce({ c: getCall, ty: getterType }, paramType, left);
+                if (this.isLogicalAssignmentOperator(op)) {
+                    return `({ ${paramType.c} ${cur} = ${current}; ` +
+                        this.classAccessorLogicalAssignmentValue(
+                            op,
+                            paramType,
+                            cur,
+                            value!,
+                            next,
+                            (assigned) => `${callee}(${obj}, ${assigned})`,
+                            left,
+                        ) +
+                        `; })`;
+                }
                 const assigned = this.classAccessorCompoundValue(op, paramType, cur, value!);
                 return `({ ${paramType.c} ${cur} = ${current}; ${paramType.c} ${next} = ${assigned}; ${callee}(${obj}, ${next}); ${next}; })`;
             },
         );
+    }
+
+    private isLogicalAssignmentOperator(op: ts.SyntaxKind): boolean {
+        return op === ts.SyntaxKind.AmpersandAmpersandEqualsToken ||
+            op === ts.SyntaxKind.BarBarEqualsToken ||
+            op === ts.SyntaxKind.QuestionQuestionEqualsToken;
+    }
+
+    private classAccessorLogicalAssignmentValue(
+        op: ts.SyntaxKind,
+        lhsType: CType,
+        current: string,
+        rhs: string,
+        next: string,
+        setCall: (assigned: string) => string,
+        node: ts.Expression,
+    ): string {
+        const assign = `({ ${lhsType.c} ${next} = ${rhs}; ${setCall(next)}; ${next}; })`;
+        if (op === ts.SyntaxKind.QuestionQuestionEqualsToken) {
+            if (lhsType.kind === "value") {
+                return `tsc_value_is_nullish(${current}) ? ${assign} : ${current}`;
+            }
+            if (isPointerKind(lhsType)) {
+                return `${current} == NULL ? ${assign} : ${current}`;
+            }
+            return current;
+        }
+        const cond = this.truthyC({ c: current, ty: lhsType }, node);
+        if (op === ts.SyntaxKind.AmpersandAmpersandEqualsToken) {
+            return `${cond} ? ${assign} : ${current}`;
+        }
+        return `${cond} ? ${current} : ${assign}`;
     }
 
     private classAccessorCompoundValue(
