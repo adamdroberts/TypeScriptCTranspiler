@@ -17,10 +17,21 @@ export interface CcResult {
     stderr: string;
 }
 
+function releaseSectionFlags(release?: boolean): string[] {
+    return release ? ["-ffunction-sections", "-fdata-sections"] : [];
+}
+
+function releaseSectionGcLinkFlags(release?: boolean): string[] {
+    if (!release || process.platform !== "linux") return [];
+    return ["-Wl,--gc-sections"];
+}
+
 export async function invokeCc(opts: CcOptions): Promise<CcResult> {
     const hasCxx = opts.sources.some((source) => /\.(cc|cpp|cxx)$/i.test(source));
     if (hasCxx) return invokeCcWithCxx(opts);
 
+    const sectionFlags = releaseSectionFlags(opts.release);
+    const sectionGcLinkFlags = releaseSectionGcLinkFlags(opts.release);
     const args: string[] = [
         "-std=c11",
         opts.release ? "-Os" : "-O2",
@@ -29,6 +40,7 @@ export async function invokeCc(opts: CcOptions): Promise<CcResult> {
         "-fno-semantic-interposition",
         "-fno-math-errno",
         "-fno-trapping-math",
+        ...sectionFlags,
         "-Wall",
         "-Wno-unused-variable",
         "-Wno-unused-parameter",
@@ -40,6 +52,7 @@ export async function invokeCc(opts: CcOptions): Promise<CcResult> {
     for (const dir of opts.includeDirs) args.push("-I", dir);
     args.push(...(opts.extraFlags ?? []));
     args.push(...opts.sources);
+    args.push(...sectionGcLinkFlags);
     args.push(...(opts.linkFlags ?? []));
     for (const lib of opts.libs) args.push("-l" + lib);
     args.push("-o", opts.output);
@@ -60,13 +73,19 @@ export async function invokeCc(opts: CcOptions): Promise<CcResult> {
 }
 
 async function invokeCcWithCxx(opts: CcOptions): Promise<CcResult> {
-    const commonFlags = [
+    const sectionFlags = releaseSectionFlags(opts.release);
+    const sectionGcLinkFlags = releaseSectionGcLinkFlags(opts.release);
+    const optimizationFlags = [
         opts.release ? "-Os" : "-O2",
         "-flto",
         "-fno-plt",
         "-fno-semantic-interposition",
         "-fno-math-errno",
         "-fno-trapping-math",
+    ];
+    const commonFlags = [
+        ...optimizationFlags,
+        ...sectionFlags,
         "-Wall",
         "-Wno-unused-variable",
         "-Wno-unused-parameter",
@@ -101,8 +120,9 @@ async function invokeCcWithCxx(opts: CcOptions): Promise<CcResult> {
 
     const linkArgs: string[] = [];
     if (opts.release) linkArgs.push("-s");
-    linkArgs.push(...commonFlags.filter((flag) => flag !== "-Wall" && !flag.startsWith("-Wno-")));
+    linkArgs.push(...optimizationFlags);
     linkArgs.push(...objects);
+    linkArgs.push(...sectionGcLinkFlags);
     linkArgs.push(...(opts.linkFlags ?? []));
     for (const lib of opts.libs) linkArgs.push("-l" + lib);
     linkArgs.push("-o", opts.output);

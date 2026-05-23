@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Release builds on Linux now compile with function/data sections and link with section garbage collection, shrinking binaries by letting the linker discard unused sections. Test: `release_build`.
 - Added Linux GitHub Actions CI wiring for build, no-GC e2e, benchmark smoke, and scheduled/manual long benchmark policy checks.
 - Added `bun run bench:long` with `manual-tests/benchmarks/thresholds-long.json` for broader scheduled/manual benchmark threshold runs.
 - Added per-site cached literal dynamic property reads, dynamic string-key element reads, receiver-aware dynamic `Reflect.get(...)` reads, direct dynamic property/string-key writes, and three-/four-argument dynamic `Reflect.set(...)` writes, plus opt-in dynamic property-operation, object shape-update, and property-cache hit/miss runtime diagnostics via `TSC_DYNAMIC_STATS=1`. The e2e harness now supports per-case runtime env files and stderr substring assertions. Test: `dynamic_runtime_stats`.
