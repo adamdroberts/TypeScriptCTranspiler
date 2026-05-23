@@ -458,8 +458,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Buffer instances expose `.toLocaleString(...ignored)` as UTF-8 text, `.toJSON(...ignored)` as `{ type: "Buffer", data: number[] }`, `.toString(encoding?, ...ignored)`, `.valueOf(...ignored)` identity, and numeric byte indexes through `Object.keys`, `Object.values`, `Object.entries`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, `Reflect.ownKeys`, `Reflect.getOwnPropertyDescriptor`, `Reflect.get`, `Reflect.has`, and the `in` operator; `length` remains non-own but is visible to `Reflect.get` / `Reflect.has` / `in`. Tests: `buffer_to_json`, `buffer_object_methods`
 
 ### `URL`
-- `new URL(input)` parses absolute URLs with `href`, `protocol`, `host`, `hostname`, `port`, `pathname`, `search`, `hash`, and `origin` fields. Test: `url_parse`
-- `new URL(input, base)` resolves root-relative, scheme-relative, query/hash-only, and simple relative-path inputs against an absolute base URL. Test: `url_base`
+- `new URL(input)` parses absolute URLs with `href`, `protocol`, `host`, `hostname`, `port`, `pathname`, `search`, `hash`, and `origin` fields, with catchable validation failures for unsupported URL shapes. Tests: `url_parse`, `url_errors`
+- `new URL(input, base)` resolves root-relative, scheme-relative, query/hash-only, and simple relative-path inputs against an absolute base URL, with catchable invalid-base validation. Tests: `url_base`, `url_errors`
 - `URL.canParse(input)` / `URL.canParse(input, base)` checks whether the supported absolute or base-resolved URL subset can be constructed without throwing. Tests: `url_can_parse`, `url_base`
 - URL instances expose `.toString(...ignored)`, `.toJSON(...ignored)`, `.toLocaleString(...ignored)`, `.valueOf(...ignored)`, and empty own-property results through `Object.keys`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, `Reflect.ownKeys`, and `Reflect.getOwnPropertyDescriptor`. Test: `url_object_methods`
 
@@ -1337,6 +1337,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `void_operator` | `void expr` side-effect preservation and undefined result |
 | `url_base` | URL constructor and URL.canParse support for bounded base URL resolution |
 | `url_can_parse` | URL.canParse support for the bounded absolute URL subset |
+| `url_errors` | URL constructor/base/file-path validation failures are catchable |
 | `url_object_methods` | URL toString/toJSON/toLocaleString/valueOf |
 | `url_parse` | URL parsing fields |
 | `weak_collections` | typed WeakMap/WeakSet with object keys |
