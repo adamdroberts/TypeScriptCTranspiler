@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- `process.stdin.readable`, `process.stdout.writable`, and `process.stderr.writable` now expose stable boolean stream-state flags for the bounded stdio stream subset. Test: `process_stdio_readable_writable`.
 - `process.stdin.fd` and `process.stdin.isTTY` now expose bounded readable-stream metadata alongside the existing stdout/stderr stream subset. Test: `process_stdin_metadata`.
 - `process.stdout.fd`, `process.stderr.fd`, `process.stdout.isTTY`, and `process.stderr.isTTY` now expose bounded writable-stream metadata for the existing stdio subset. Test: `process_stdio_metadata`.
 - `process.stdout.write(...)` and `process.stderr.write(...)` now accept optional encoding and zero-argument callback arguments in the existing synchronous stdio subset, evaluating encoding arguments before writing and invoking callbacks after the write. Test: `process_stdio_write_callback`.

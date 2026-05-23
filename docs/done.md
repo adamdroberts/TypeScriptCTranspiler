@@ -471,8 +471,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `process.env.VAR` → `tsc_process_env_get(VAR)` (getenv)
 - `process.env["VAR"]` — same as above via element access
 - `process.env.VAR = value`, `process.env["VAR"] = value`, and `delete process.env[...]` mutate the local process environment through `setenv` / `unsetenv`.
-- `process.stdin.fd` exposes `0`, and `process.stdin.isTTY` uses `isatty(0)`. Test: `process_stdin_metadata`
-- `process.stdout.fd` / `process.stderr.fd` expose `1` / `2`, and `process.stdout.isTTY` / `process.stderr.isTTY` use `isatty` for the corresponding descriptor. Test: `process_stdio_metadata`
+- `process.stdin.fd` exposes `0`, `process.stdin.isTTY` uses `isatty(0)`, and `process.stdin.readable` returns `true` in the bounded stdio subset. Tests: `process_stdin_metadata`, `process_stdio_readable_writable`
+- `process.stdout.fd` / `process.stderr.fd` expose `1` / `2`, `process.stdout.isTTY` / `process.stderr.isTTY` use `isatty` for the corresponding descriptor, and `process.stdout.writable` / `process.stderr.writable` return `true` in the bounded stdio subset. Tests: `process_stdio_metadata`, `process_stdio_readable_writable`
 - `process.stdout.write(string | Buffer, encodingOrCallback?, callback?)` and `process.stderr.write(string | Buffer, encodingOrCallback?, callback?)` write directly to stdout/stderr, evaluate optional encoding arguments, invoke optional zero-argument callbacks after the write, and return a boolean write-success flag. Tests: `process_stdio_write`, `process_stdio_write_buffer`, `process_stdio_write_callback`
 - `process.cwd()` → `tsc_process_cwd`
 - `process.chdir(directory)` → `tsc_process_chdir`
@@ -488,7 +488,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `process.resourceUsage(...ignored)` returns a Node-shaped dynamic object with numeric `getrusage` counters for CPU time, RSS, page faults, filesystem I/O, IPC, signals, and context switches.
 - `process.kill(pid, signal?)` supports a narrow POSIX signal subset: omitted signal / `SIGTERM` / `15`, `SIGKILL` / `9`, and numeric signal `0` existence probes.
 - `process.exit(code)` → `tsc_process_exit`
-- Tests: `wordcount`, `stdlib_os`, `process_argv_meta`, `process_chdir`, `process_cpu_usage`, `process_env_mutation`, `process_features`, `process_metadata`, `process_ppid`, `process_getgroups`, `process_hrtime`, `process_hrtime_bigint`, `process_kill_signal_zero`, `process_memory_usage`, `process_next_tick`, `process_next_tick_args`, `set_immediate`, `timers_clear`, `process_posix_ids`, `process_release`, `process_resource_usage`, `process_stdin_metadata`, `process_stdio_metadata`, `process_stdio_write`, `process_stdio_write_buffer`, `process_stdio_write_callback`, `process_title`, `process_umask`, `process_versions`
+- Tests: `wordcount`, `stdlib_os`, `process_argv_meta`, `process_chdir`, `process_cpu_usage`, `process_env_mutation`, `process_features`, `process_metadata`, `process_ppid`, `process_getgroups`, `process_hrtime`, `process_hrtime_bigint`, `process_kill_signal_zero`, `process_memory_usage`, `process_next_tick`, `process_next_tick_args`, `set_immediate`, `timers_clear`, `process_posix_ids`, `process_release`, `process_resource_usage`, `process_stdin_metadata`, `process_stdio_metadata`, `process_stdio_readable_writable`, `process_stdio_write`, `process_stdio_write_buffer`, `process_stdio_write_callback`, `process_title`, `process_umask`, `process_versions`
 
 ### `console`
 - `console.log` / `.error` / `.warn` / `.info` — variadic, auto-stringifies each arg
@@ -803,6 +803,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `process_resource_usage` | process.resourceUsage numeric getrusage fields |
 | `process_stdin_metadata` | process stdin fd and isTTY metadata |
 | `process_stdio_metadata` | process stdout/stderr fd and isTTY metadata |
+| `process_stdio_readable_writable` | process stdio readable and writable stream flags |
 | `process_stdio_write` | process.stdout.write and process.stderr.write string subset |
 | `process_stdio_write_buffer` | process.stdout.write and process.stderr.write Buffer subset |
 | `process_stdio_write_callback` | process stdout/stderr write optional encoding and callback subset |
