@@ -39,7 +39,14 @@ tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v) {
         case TSC_VALUE_TAG_TRUE: return tsc_str_from_lit("[object Boolean]", 16);
         case TSC_VALUE_TAG_STRING: return tsc_str_from_lit("[object String]", 15);
         case TSC_VALUE_TAG_ARRAY: return tsc_str_from_lit("[object Array]", 14);
-        case TSC_VALUE_TAG_OBJECT: return tsc_str_from_lit("[object Object]", 15);
+        case TSC_VALUE_TAG_OBJECT: {
+            tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+            if (o && o->is_proxy && tsc_proxy_chain_has_revoked(v)) {
+                tsc_throw_str(tsc_str_from_cstr("Cannot perform 'get' on a proxy that has been revoked"));
+            }
+            if (tsc_proxy_trap_is_callable(v)) return tsc_str_from_lit("[object Function]", 17);
+            return tsc_str_from_lit("[object Object]", 15);
+        }
     }
     return tsc_str_from_lit("[object Object]", 15);
 }
