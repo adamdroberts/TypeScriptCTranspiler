@@ -121,14 +121,14 @@ tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args) {
 }
 
 tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t args, tsc_value_t new_target) {
-    if (!value_is_box(args) || value_tag(args) != TSC_VALUE_TAG_ARRAY) {
-        tsc_panic("Reflect.construct argumentsList must be an array");
-    }
     if (value_is_box(target) && value_tag(target) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(target);
         if (ident->kind == TSC_FUNCTION_IDENTITY_GENERIC) {
             if (!value_is_constructable_function(new_target)) {
                 tsc_throw_str(tsc_str_from_cstr("Reflect.construct newTarget is not a constructor"));
+            }
+            if (!value_is_box(args) || value_tag(args) != TSC_VALUE_TAG_ARRAY) {
+                tsc_throw_str(tsc_str_from_cstr("Reflect.construct argumentsList must be an array"));
             }
             tsc_value_t receiver = tsc_value_object(tsc_object_new());
             tsc_value_t result = ident->code.generic(ident->env, receiver, (tsc_array_t*)value_ptr(args));
@@ -155,6 +155,9 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
             if (!value_is_constructable_function(new_target)) {
                 tsc_throw_str(tsc_str_from_cstr("Reflect.construct newTarget is not a constructor"));
             }
+            if (!value_is_box(args) || value_tag(args) != TSC_VALUE_TAG_ARRAY) {
+                tsc_throw_str(tsc_str_from_cstr("Reflect.construct argumentsList must be an array"));
+            }
             tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("construct", 9));
             if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
                 return tsc_value_construct_with_new_target(o->proxy_target, args, new_target);
@@ -180,7 +183,7 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
             return result;
         }
     }
-    tsc_panic("Reflect.construct target is not a supported constructor");
+    tsc_throw_str(tsc_str_from_cstr("Reflect.construct target is not a supported constructor"));
     return tsc_value_undefined();
 }
 
