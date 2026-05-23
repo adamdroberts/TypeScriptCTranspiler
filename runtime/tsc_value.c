@@ -439,12 +439,23 @@ tsc_value_t tsc_value_get_prototype_of(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_get_prototype_of((tsc_object_t*)value_ptr(v));
     }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
+        return ((tsc_array_t*)value_ptr(v))->prototype;
+    }
     return tsc_value_undefined();
 }
 
 bool tsc_value_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_set_prototype_of((tsc_object_t*)value_ptr(v), prototype);
+    }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
+        tsc_array_t* a = (tsc_array_t*)value_ptr(v);
+        if (!value_is_valid_prototype(prototype)) return false;
+        if (a->prototype == prototype) return true;
+        if (!a->extensible) return false;
+        a->prototype = prototype;
+        return true;
     }
     return false;
 }
@@ -456,10 +467,10 @@ bool tsc_value_object_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
     if (!value_is_valid_prototype(prototype)) {
         tsc_throw_str(tsc_str_from_cstr("Object.setPrototypeOf prototype must be an object or null"));
     }
-    if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) {
+    if (!value_is_box(v) || (value_tag(v) != TSC_VALUE_TAG_OBJECT && value_tag(v) != TSC_VALUE_TAG_ARRAY)) {
         return true;
     }
-    if (!tsc_object_set_prototype_of((tsc_object_t*)value_ptr(v), prototype)) {
+    if (!tsc_value_set_prototype_of(v, prototype)) {
         tsc_throw_str(tsc_str_from_cstr("Object.setPrototypeOf failed"));
     }
     return true;

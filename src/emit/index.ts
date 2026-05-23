@@ -22533,13 +22533,13 @@ class Emitter {
         }
         if (name === "getPrototypeOf") {
             if (args.length !== 1) unsupported(call, "Object.getPrototypeOf expects object");
-            if (mapped.kind !== "value") {
-                unsupported(arg, "Object.getPrototypeOf currently supports dynamic objects only");
+            if (mapped.kind !== "value" && mapped.kind !== "array") {
+                unsupported(arg, "Object.getPrototypeOf currently supports dynamic objects and arrays only");
             }
             const obj = this.emitExpr(arg);
-            return this.emitSequencedCall("tsc_value_get_prototype_of", T_VALUE, [
-                { value: obj, target: T_VALUE, node: arg },
-            ]);
+            return this.emitSequencedExpr(T_VALUE, [
+                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
+            ], ([o]) => `tsc_value_get_prototype_of(${mapped.kind === "array" ? `tsc_value_array(${o})` : o})`);
         }
         if (name === "hasOwn") {
             if (args.length !== 2) unsupported(call, "Object.hasOwn expects object and key");
@@ -22669,15 +22669,15 @@ class Emitter {
         }
         if (name === "setPrototypeOf") {
             if (args.length !== 2) unsupported(call, "Object.setPrototypeOf expects object and prototype");
-            if (mapped.kind !== "value") {
-                unsupported(arg, "Object.setPrototypeOf currently supports dynamic objects only");
+            if (mapped.kind !== "value" && mapped.kind !== "array") {
+                unsupported(arg, "Object.setPrototypeOf currently supports dynamic objects and arrays only");
             }
             const obj = this.emitExpr(arg);
             const proto = this.emitExpr(args[1]!);
-            return this.emitSequencedExpr(T_VALUE, [
-                { value: obj, target: T_VALUE, node: arg },
+            return this.emitSequencedExpr(mapped.kind === "array" ? mapped : T_VALUE, [
+                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
                 { value: proto, target: T_VALUE, node: args[1]! },
-            ], ([o, p]) => `({ tsc_value_object_set_prototype_of(${o}, ${p}); ${o}; })`);
+            ], ([o, p]) => `({ tsc_value_object_set_prototype_of(${mapped.kind === "array" ? `tsc_value_array(${o})` : o}, ${p}); ${o}; })`);
         }
         if (name === "freeze") {
             if (args.length !== 1) unsupported(call, "Object.freeze expects object");

@@ -425,6 +425,7 @@ typedef struct tsc_array {
     bool extensible;
     bool sealed;
     bool frozen;
+    tsc_value_t prototype;
     size_t iter_pos;
     void* data;
 } tsc_array_t;

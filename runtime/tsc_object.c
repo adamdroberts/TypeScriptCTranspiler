@@ -686,7 +686,7 @@ tsc_value_t tsc_object_get_prototype_of(const tsc_object_t* o) {
             if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
                 return tsc_object_get_prototype_of((tsc_object_t*)value_ptr(o->proxy_target));
             }
-            return tsc_value_undefined();
+            return tsc_value_get_prototype_of(o->proxy_target);
         }
         tsc_proxy_require_callable_trap(trap, "Proxy getPrototypeOf trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
@@ -697,6 +697,11 @@ tsc_value_t tsc_object_get_prototype_of(const tsc_object_t* o) {
         }
         if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
             const tsc_object_t* target = (const tsc_object_t*)value_ptr(o->proxy_target);
+            if (!target->extensible && proto != target->prototype) {
+                tsc_throw_str(tsc_str_from_cstr("Proxy getPrototypeOf trap cannot report different prototype for non-extensible target"));
+            }
+        } else if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_ARRAY) {
+            const tsc_array_t* target = (const tsc_array_t*)value_ptr(o->proxy_target);
             if (!target->extensible && proto != target->prototype) {
                 tsc_throw_str(tsc_str_from_cstr("Proxy getPrototypeOf trap cannot report different prototype for non-extensible target"));
             }
@@ -715,7 +720,7 @@ bool tsc_object_set_prototype_of(tsc_object_t* o, tsc_value_t prototype) {
             if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
                 return tsc_object_set_prototype_of((tsc_object_t*)value_ptr(o->proxy_target), prototype);
             }
-            return false;
+            return tsc_value_set_prototype_of(o->proxy_target, prototype);
         }
         tsc_proxy_require_callable_trap(trap, "Proxy setPrototypeOf trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
@@ -725,6 +730,11 @@ bool tsc_object_set_prototype_of(tsc_object_t* o, tsc_value_t prototype) {
         bool changed = tsc_value_is_truthy(res);
         if (changed && value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
             const tsc_object_t* target = (const tsc_object_t*)value_ptr(o->proxy_target);
+            if (!target->extensible && prototype != target->prototype) {
+                tsc_throw_str(tsc_str_from_cstr("Proxy setPrototypeOf trap cannot change prototype of non-extensible target"));
+            }
+        } else if (changed && value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_ARRAY) {
+            const tsc_array_t* target = (const tsc_array_t*)value_ptr(o->proxy_target);
             if (!target->extensible && prototype != target->prototype) {
                 tsc_throw_str(tsc_str_from_cstr("Proxy setPrototypeOf trap cannot change prototype of non-extensible target"));
             }

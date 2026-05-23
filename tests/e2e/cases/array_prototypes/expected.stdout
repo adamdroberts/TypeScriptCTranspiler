@@ -1,0 +1,8 @@
+default: object true
+set object: true custom
+reflect get: custom
+second unchanged: true
+set null: true null
+locked same: true
+locked change: false
+object locked change: Object.setPrototypeOf failed

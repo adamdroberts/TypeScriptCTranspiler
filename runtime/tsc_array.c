@@ -2,6 +2,16 @@
 
 /* ---------------- arrays ---------------- */
 
+static tsc_value_t tsc_array_default_prototype(void) {
+    static bool initialized = false;
+    static tsc_value_t prototype;
+    if (!initialized) {
+        prototype = tsc_value_object(tsc_object_new());
+        initialized = true;
+    }
+    return prototype;
+}
+
 tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap) {
     tsc_array_t* a = (tsc_array_t*)TSC_GC_MALLOC(sizeof(tsc_array_t));
     a->len = 0;
@@ -10,6 +20,7 @@ tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap) {
     a->extensible = true;
     a->sealed = false;
     a->frozen = false;
+    a->prototype = tsc_array_default_prototype();
     a->iter_pos = 0;
     a->data = initial_cap ? TSC_GC_MALLOC(initial_cap * elem_size) : NULL;
     return a;
@@ -23,6 +34,7 @@ tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap) {
     a->extensible = true;
     a->sealed = false;
     a->frozen = false;
+    a->prototype = tsc_array_default_prototype();
     a->iter_pos = 0;
     a->data = initial_cap ? TSC_GC_MALLOC_ATOMIC(initial_cap * elem_size) : NULL;
     return a;
@@ -245,5 +257,4 @@ tsc_array_t* tsc_array_flat_once(const tsc_array_t* outer, size_t elem_size) {
 double tsc_array_length(const tsc_array_t* a) { return (double)a->len; }
 
 void tsc_array_oob(const tsc_array_t* a, double i) { (void)a; (void)i; }
-
 
