@@ -1,12 +1,28 @@
 function Target(this: any): void {}
 function Base(this: any): void {}
 function SetterTarget(this: any): void {}
+function OpenExtensible(this: any): void {}
+function ClosedExtensible(this: any): void {}
+function FakePrevent(this: any): void {}
+function RealPrevent(this: any): void {}
 
 function otherPrototype(target: any): any {
   return { marker: "other" };
 }
 
 function trueSetPrototype(target: any, proto: any): boolean {
+  return true;
+}
+
+function falseIsExtensible(target: any): boolean {
+  return false;
+}
+
+function trueIsExtensible(target: any): boolean {
+  return true;
+}
+
+function truePreventExtensions(target: any): boolean {
   return true;
 }
 
@@ -58,3 +74,38 @@ try {
 }
 
 console.log("set same:", Reflect.setPrototypeOf(closedSetProxy, baseProto));
+
+const openExtensibleTarget: any = OpenExtensible as any;
+const openExtensibleProxy: any = new Proxy(openExtensibleTarget, { isExtensible: falseIsExtensible as any });
+try {
+  console.log("open ext false:", Object.isExtensible(openExtensibleProxy));
+} catch (err: any) {
+  console.log("open ext false:", err);
+}
+
+const closedExtensibleTarget: any = ClosedExtensible as any;
+Object.preventExtensions(closedExtensibleTarget);
+const closedExtensibleProxy: any = new Proxy(closedExtensibleTarget, { isExtensible: trueIsExtensible as any });
+try {
+  console.log("closed ext true:", Reflect.isExtensible(closedExtensibleProxy));
+} catch (err: any) {
+  console.log("closed ext true:", err);
+}
+
+const fakePreventTarget: any = FakePrevent as any;
+const fakePreventProxy: any = new Proxy(fakePreventTarget, { preventExtensions: truePreventExtensions as any });
+try {
+  console.log("fake prevent:", Reflect.preventExtensions(fakePreventProxy));
+} catch (err: any) {
+  console.log("fake prevent:", err);
+}
+console.log("fake still extensible:", Object.isExtensible(fakePreventTarget));
+
+const realPreventTarget: any = RealPrevent as any;
+Object.preventExtensions(realPreventTarget);
+const realPreventProxy: any = new Proxy(realPreventTarget, { preventExtensions: truePreventExtensions as any });
+try {
+  console.log("real prevent:", Reflect.preventExtensions(realPreventProxy));
+} catch (err: any) {
+  console.log("real prevent:", err);
+}

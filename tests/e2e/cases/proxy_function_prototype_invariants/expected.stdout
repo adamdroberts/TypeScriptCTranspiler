@@ -5,3 +5,8 @@ get closed: Proxy getPrototypeOf trap cannot report different prototype for non-
 get exact: base
 set closed: Proxy setPrototypeOf trap cannot change prototype of non-extensible target
 set same: true
+open ext false: Proxy isExtensible trap result does not match target
+closed ext true: Proxy isExtensible trap result does not match target
+fake prevent: Proxy preventExtensions trap cannot report success for extensible target
+fake still extensible: true
+real prevent: true
