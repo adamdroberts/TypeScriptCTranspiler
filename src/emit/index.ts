@@ -6249,6 +6249,7 @@ class Emitter {
             }
         }
         if (!ty) return null;
+        if (ty.kind === "void") return null;
         if (ty.kind !== "value" && ty.kind !== "class" && ty.kind !== "eventemitter" && ty.kind !== "eventtarget") {
             unsupported(node, "function this parameters are currently supported only as any/unknown, class instances, EventEmitter, or EventTarget");
         }
