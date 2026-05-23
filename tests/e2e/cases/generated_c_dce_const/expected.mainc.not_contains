@@ -198,6 +198,10 @@ top_level_static_false
 unused_static_conditional_dead_call
 dead_static_conditional_call
 dead_static_conditional_value
+unused_static_and_dead_call
+dead_static_and_call
+unused_static_or_dead_call
+dead_static_or_call
 unused_namespace_value
 unused_let
 unused_empty
@@ -279,6 +283,8 @@ top_level_dead_static_else
 top_level_dead_while_false
 top_level_dead_static_conditional_call
 top_level_dead_static_conditional_value
+top_level_dead_static_and_call
+top_level_dead_static_or_call
 unused_local_const
 unused_local_let
 unused_local_empty
@@ -359,6 +365,12 @@ local_dead_static_conditional_call
 local_dead_static_conditional_value
 local_dead_static_conditional_expr_call
 local_dead_static_conditional_expr_value
+unused_local_static_and
+local_dead_static_and_call
+unused_local_static_or
+local_dead_static_or_call
+local_dead_static_and_expr_call
+local_dead_static_or_expr_call
 unused_local_seed
 unused_local_chain
 unreachable_local

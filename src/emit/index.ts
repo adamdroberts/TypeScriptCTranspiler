@@ -806,6 +806,24 @@ class Emitter {
                 case ts.SyntaxKind.InKeyword:
                     return this.isSideEffectFreeTopLevelConstInitializer(expr.left, seenConsts) &&
                         this.isSideEffectFreeInRightOperand(expr.right, seenConsts);
+                case ts.SyntaxKind.AmpersandAmpersandToken: {
+                    const left = this.staticBooleanValue(expr.left, seenConsts);
+                    if (left === false) return true;
+                    if (left === true) {
+                        return this.isSideEffectFreeTopLevelConstInitializer(expr.right, seenConsts);
+                    }
+                    return this.isSideEffectFreeTopLevelConstInitializer(expr.left, seenConsts) &&
+                        this.isSideEffectFreeTopLevelConstInitializer(expr.right, seenConsts);
+                }
+                case ts.SyntaxKind.BarBarToken: {
+                    const left = this.staticBooleanValue(expr.left, seenConsts);
+                    if (left === true) return true;
+                    if (left === false) {
+                        return this.isSideEffectFreeTopLevelConstInitializer(expr.right, seenConsts);
+                    }
+                    return this.isSideEffectFreeTopLevelConstInitializer(expr.left, seenConsts) &&
+                        this.isSideEffectFreeTopLevelConstInitializer(expr.right, seenConsts);
+                }
                 case ts.SyntaxKind.PlusToken:
                 case ts.SyntaxKind.MinusToken:
                 case ts.SyntaxKind.AsteriskToken:
@@ -820,8 +838,6 @@ class Emitter {
                 case ts.SyntaxKind.EqualsEqualsEqualsToken:
                 case ts.SyntaxKind.ExclamationEqualsToken:
                 case ts.SyntaxKind.ExclamationEqualsEqualsToken:
-                case ts.SyntaxKind.AmpersandAmpersandToken:
-                case ts.SyntaxKind.BarBarToken:
                 case ts.SyntaxKind.QuestionQuestionToken:
                 case ts.SyntaxKind.AmpersandToken:
                 case ts.SyntaxKind.BarToken:
