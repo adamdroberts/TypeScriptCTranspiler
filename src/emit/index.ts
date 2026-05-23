@@ -10912,7 +10912,7 @@ class Emitter {
         const methodAccess = call.expression.expression;
         if (!ts.isPropertyAccessExpression(methodAccess)) return null;
         const method = methodAccess.name.text;
-        if (method !== "hasOwnProperty" && method !== "propertyIsEnumerable") return null;
+        if (method !== "hasOwnProperty" && method !== "propertyIsEnumerable" && method !== "toString") return null;
         const prototypeAccess = methodAccess.expression;
         if (
             !ts.isPropertyAccessExpression(prototypeAccess) ||
@@ -10922,14 +10922,30 @@ class Emitter {
         ) {
             return null;
         }
-        if (call.arguments.length < 2) {
+        const minArgs = method === "toString" ? 1 : 2;
+        if (call.arguments.length < minArgs) {
+            if (method === "toString") unsupported(call, "Object.prototype.toString.call expects target");
             unsupported(call, `Object.prototype.${method}.call expects target and key`);
         }
         const targetNode = call.arguments[0]!;
-        const keyNode = call.arguments[1]!;
         const target = this.emitExpr(targetNode);
         const targetType = this.checker.getTypeAtLocation(targetNode);
         const mapped = this.prepareType(mapTsType(targetNode, targetType, this.checker));
+        if (method === "toString") {
+            if (mapped.kind === "value") {
+                return this.emitSequencedExpr(T_STRING, [
+                    { value: target, target: T_VALUE, node: targetNode },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ], ([value]) => `tsc_value_object_to_string_tag(${value})`);
+            }
+            const tag = this.objectPrototypeToStringTag(mapped);
+            const text = `[object ${tag}]`;
+            return this.emitSequencedExpr(T_STRING, [
+                { value: target, node: targetNode },
+                ...this.ignoredArgumentSpecs(call.arguments, 1),
+            ], ([value]) => `({ (void)${value}; tsc_str_from_lit("${escapeCString(text)}", ${utf8ByteLen(text)}); })`);
+        }
+        const keyNode = call.arguments[1]!;
         const ignored = this.ignoredArgumentSpecs(call.arguments, 2);
         if (mapped.kind === "class") {
             return this.emitTypedObjectHasOwn(
@@ -10972,6 +10988,34 @@ class Emitter {
             { value: key, target: T_STRING, node: keyNode },
             ...ignored,
         ], ([value, keyC]) => `({ (void)${value}; (void)${keyC}; false; })`);
+    }
+
+    private objectPrototypeToStringTag(mapped: CType): string {
+        switch (mapped.kind) {
+            case "array": return "Array";
+            case "bigint": return "BigInt";
+            case "boolean": return "Boolean";
+            case "buffer": return "Uint8Array";
+            case "date": return "Date";
+            case "error": return "Error";
+            case "event": return "Event";
+            case "eventemitter": return "EventEmitter";
+            case "eventtarget": return "EventTarget";
+            case "finregistry": return "FinalizationRegistry";
+            case "function": return "Function";
+            case "map": return "Map";
+            case "number": return "Number";
+            case "promise": return "Promise";
+            case "regexp": return "RegExp";
+            case "set": return "Set";
+            case "string": return "String";
+            case "symbol": return "Symbol";
+            case "url": return "URL";
+            case "weakmap": return "WeakMap";
+            case "weakref": return "WeakRef";
+            case "weakset": return "WeakSet";
+            default: return "Object";
+        }
     }
 
     private emitDynamicValueCall(call: ts.CallExpression, callee: EmitResult): EmitResult {

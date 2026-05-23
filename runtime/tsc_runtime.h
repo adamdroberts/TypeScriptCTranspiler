@@ -490,6 +490,7 @@ tsc_str_t* tsc_value_as_string(tsc_value_t v);
 tsc_array_t* tsc_value_as_array(tsc_value_t v);
 void* tsc_value_as_class(tsc_value_t v);
 tsc_str_t* tsc_value_to_string(tsc_value_t v);
+tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v);
 tsc_str_t* tsc_value_typeof(tsc_value_t v);
 tsc_str_t* tsc_value_json_stringify(tsc_value_t v);
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args);

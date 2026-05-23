@@ -1,0 +1,5 @@
+typed: [object Object]
+dynamic: [object Object] [object Array]
+primitives: [object String] [object Number] [object Boolean]
+nullish: [object Null] [object Undefined]
+static: [object Array] [object String] [object Number] [object Boolean]

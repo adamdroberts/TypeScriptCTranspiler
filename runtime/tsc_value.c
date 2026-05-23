@@ -29,6 +29,21 @@ bool tsc_value_is_undefined(tsc_value_t v) {
     return value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_UNDEFINED;
 }
 
+tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v) {
+    if (!value_is_box(v)) return tsc_str_from_lit("[object Number]", 15);
+    switch (value_tag(v)) {
+        case TSC_VALUE_TAG_FUNCTION: return tsc_str_from_lit("[object Function]", 17);
+        case TSC_VALUE_TAG_UNDEFINED: return tsc_str_from_lit("[object Undefined]", 18);
+        case TSC_VALUE_TAG_NULL: return tsc_str_from_lit("[object Null]", 13);
+        case TSC_VALUE_TAG_FALSE:
+        case TSC_VALUE_TAG_TRUE: return tsc_str_from_lit("[object Boolean]", 16);
+        case TSC_VALUE_TAG_STRING: return tsc_str_from_lit("[object String]", 15);
+        case TSC_VALUE_TAG_ARRAY: return tsc_str_from_lit("[object Array]", 14);
+        case TSC_VALUE_TAG_OBJECT: return tsc_str_from_lit("[object Object]", 15);
+    }
+    return tsc_str_from_lit("[object Object]", 15);
+}
+
 bool tsc_value_is_array(tsc_value_t v) {
     return value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY;
 }
