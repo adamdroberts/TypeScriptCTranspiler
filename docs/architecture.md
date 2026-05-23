@@ -169,7 +169,7 @@ Symbol-level reference: [`runtime-reference.md`](runtime-reference.md).
 - Boehm GC (`libgc-dev`) by default. All user-visible allocations go through `TSC_GC_MALLOC` (tracked) or `TSC_GC_MALLOC_ATOMIC` (raw bytes, no scan).
 - Fallback: `--no-gc` compile flag swaps the macros for `calloc`. The binary leaks everything but runs — useful in environments without libgc.
 - Exception path: `setjmp`/`longjmp` with a single global error string (`g_current_error`). No stack traces yet.
-- Classes and interfaces are heap-allocated; there's no value type for them.
+- Classes and interfaces are pointer-backed; most values are heap-allocated, with narrow escape-analysis paths stack-allocating same-block non-escaping `new Class(...)` locals and typed object literal locals.
 - Strings are immutable — every mutation returns a fresh allocation.
 
 ## Diagnostics flow

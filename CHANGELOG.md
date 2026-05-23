@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Non-escaping local typed object literals now use stack storage when they only flow through same-block property reads/writes. Test: `object_literal_stack_alloc`.
 - Generated C now omits provably unreferenced non-exported top-level function declarations, and the e2e harness can assert forbidden generated-C substrings. Test: `generated_c_dce`.
 - Release builds on Linux now compile with function/data sections and link with section garbage collection, shrinking binaries by letting the linker discard unused sections. Test: `release_build`.
 - Added Linux GitHub Actions CI wiring for build, no-GC e2e, benchmark smoke, and scheduled/manual long benchmark policy checks.

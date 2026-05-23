@@ -5169,6 +5169,45 @@ class Emitter {
         return escapes ? null : { cls, init, decl };
     }
 
+    private nonEscapingLocalObjectLiteral(
+        d: ts.VariableDeclaration,
+    ): { cls: string; init: ts.ObjectLiteralExpression; targetType: ts.Type } | null {
+        if (!ts.isIdentifier(d.name) || !d.initializer || !ts.isObjectLiteralExpression(d.initializer)) {
+            return null;
+        }
+        const init = d.initializer;
+        if (this.isUntypedJsObjectLiteral(init)) return null;
+        const targetType = d.type
+            ? this.checker.getTypeAtLocation(d)
+            : this.checker.getContextualType(init) ?? this.checker.getTypeAtLocation(init);
+        const mapped = this.prepareType(mapTsType(init, targetType, this.checker));
+        if (mapped.kind !== "class" || !mapped.className) return null;
+        if (!this.objectLiteralInitializesAllFields(init, targetType)) return null;
+        const sym = this.symbolForIdentifier(d.name);
+        if (!sym) return null;
+        const stmt = d.parent.parent;
+        const scope = stmt?.parent;
+        if (!scope || !ts.isBlock(scope)) return null;
+
+        let escapes = false;
+        const visit = (n: ts.Node): void => {
+            if (escapes) return;
+            if (n !== scope && ts.isFunctionLike(n)) return;
+            if (ts.isIdentifier(n) && this.checker.getSymbolAtLocation(n) === sym) {
+                if (n === d.name) return;
+                const parent = n.parent;
+                if (ts.isPropertyAccessExpression(parent) && parent.expression === n) {
+                    return;
+                }
+                escapes = true;
+                return;
+            }
+            ts.forEachChild(n, visit);
+        };
+        visit(scope);
+        return escapes ? null : { cls: mapped.className, init, targetType };
+    }
+
     private emitClassBodies(cd: ts.ClassDeclaration): void {
         if (!cd.name) return;
         const name = cd.name.text;
@@ -7304,6 +7343,37 @@ class Emitter {
                 continue;
             }
             const sym = this.symbolForIdentifier(d.name);
+            const stackObject = this.nonEscapingLocalObjectLiteral(d);
+            if (stackObject) {
+                const storage = this.freshTemp(`_${name}_stack`);
+                const qual = isConst ? " const" : "";
+                buf.line(`${stackObject.cls}_t ${storage};`);
+                for (const prop of stackObject.init.properties) {
+                    if (ts.isPropertyAssignment(prop)) {
+                        const fieldName = this.staticPropertyName(prop.name);
+                        if (!fieldName) {
+                            unsupported(
+                                prop.name,
+                                "computed property name must resolve to a string or number literal",
+                            );
+                        }
+                        const val = this.emitExpr(prop.initializer);
+                        const fieldType = this.objectFieldType(stackObject.init, stackObject.targetType, fieldName, prop.name);
+                        buf.line(`${storage}.${mangleIdent(fieldName)} = ${this.coerce(val, fieldType, prop.initializer)};`);
+                    } else if (ts.isShorthandPropertyAssignment(prop)) {
+                        const val = this.emitExpr(prop.name);
+                        const fieldType = this.objectFieldType(stackObject.init, stackObject.targetType, prop.name.text, prop.name);
+                        buf.line(`${storage}.${mangleIdent(prop.name.text)} = ${this.coerce(val, fieldType, prop.name)};`);
+                    } else {
+                        unsupported(
+                            prop,
+                            `object literal property kind ${ts.SyntaxKind[prop.kind]}`,
+                        );
+                    }
+                }
+                buf.line(`${stackObject.cls}_t*${qual} ${name} = &${storage};`);
+                continue;
+            }
             const stackNew = this.nonEscapingLocalNewClass(d);
             if (stackNew) {
                 const sig = this.checker.getResolvedSignature(stackNew.init);
