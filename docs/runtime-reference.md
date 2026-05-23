@@ -194,7 +194,7 @@ NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JS
 | `tsc_value_get_own_property_descriptors(v)` | `tsc_value_t` | Dynamic object containing descriptor objects for all own dynamic object/array/string properties, including accessor `get`/`set` identities or own `undefined` absent-hook fields and array seal/freeze-aware flags |
 | `tsc_value_object_assign(target, source)` | `tsc_value_t` | Dynamic enumerable-property copy used by `Object.assign`; supports dynamic object/array targets, invokes object source getters, and copies array/string index properties |
 | `tsc_value_length(v)` | `double` | `.length` for dynamic arrays/strings |
-| `tsc_value_iter_values(v)` | `tsc_array_t*` | Dynamic `for...of` value list for boxed arrays and strings; non-iterable values panic |
+| `tsc_value_iter_values(v)` | `tsc_array_t*` | Dynamic `for...of` value list for boxed arrays and strings; non-iterable values throw catchable runtime exceptions |
 | `tsc_value_method_entries(v)` | `tsc_value_t` | Dynamic `Array.prototype.entries()`, returning dynamic `[key, value]` arrays with string index keys |
 | `tsc_object_new/set/define/define_accessor/get(...)` | varies | Runtime backing store for dynamic objects, data descriptors, and accessor descriptors with optional callback environments |
 | `tsc_value_object_keys/values(v)` | `tsc_array_t*` | Enumerable `Object.keys` / `Object.values` for dynamic objects, arrays, and strings |
