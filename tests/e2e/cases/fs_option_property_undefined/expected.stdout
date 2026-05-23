@@ -1,0 +1,6 @@
+sync read: alpha-beta
+sync stat: true
+sync copy: alpha-beta
+sync readdir: copy.txt|sync.txt
+promise read: promise-done
+promise readdir: copy.txt|promise.txt|sync.txt

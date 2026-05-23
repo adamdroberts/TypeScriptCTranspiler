@@ -20221,6 +20221,10 @@ class Emitter {
             }
             const key = this.staticPropertyName(prop.name);
             if (key === "recursive") {
+                if (this.isUndefinedExpression(prop.initializer)) {
+                    recursive = false;
+                    continue;
+                }
                 if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
                     recursive = true;
                 } else if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) {
@@ -20231,6 +20235,10 @@ class Emitter {
                 continue;
             }
             if (key === "mode") {
+                if (this.isUndefinedExpression(prop.initializer)) {
+                    modeArg = defaultMode;
+                    continue;
+                }
                 const mode = this.emitExpr(prop.initializer);
                 if (mode.ty.kind !== "number") unsupported(prop.initializer, `${label}.mode must be numeric in this subset`);
                 modeArg = { value: mode, target: T_NUMBER, node: prop.initializer };
@@ -20254,6 +20262,10 @@ class Emitter {
             }
             const key = this.staticPropertyName(prop.name);
             if (key === "mode") {
+                if (this.isUndefinedExpression(prop.initializer)) {
+                    mode = { value: { c: "0.0", ty: T_NUMBER }, target: T_NUMBER, node: prop.initializer };
+                    continue;
+                }
                 const value = this.emitExpr(prop.initializer);
                 if (value.ty.kind !== "number") unsupported(prop.initializer, `${label}.mode must be numeric in this subset`);
                 mode = { value, target: T_NUMBER, node: prop.initializer };
@@ -20261,6 +20273,9 @@ class Emitter {
             }
             if (key !== "recursive" && key !== "force" && key !== "errorOnExist" && key !== "dereference" && key !== "verbatimSymlinks" && key !== "preserveTimestamps") {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+            }
+            if (this.isUndefinedExpression(prop.initializer)) {
+                continue;
             }
             let value: boolean;
             if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
@@ -20298,6 +20313,9 @@ class Emitter {
             }
             const key = this.staticPropertyName(prop.name);
             if (key && ignoredNumberKeys.includes(key)) {
+                if (this.isUndefinedExpression(prop.initializer)) {
+                    continue;
+                }
                 if (this.tryFoldNumericLiteral(prop.initializer) === null) {
                     unsupported(prop.initializer, `${label}.${key} must be a numeric literal in this subset`);
                 }
@@ -20305,6 +20323,10 @@ class Emitter {
             }
             if (!key || !allowed.includes(key)) {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+            }
+            if (this.isUndefinedExpression(prop.initializer)) {
+                out[key] = false;
+                continue;
             }
             if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
                 out[key] = true;
@@ -20320,6 +20342,7 @@ class Emitter {
     private validateFsEncodingOptions(options: ts.Expression | undefined, label: string): "string" | "buffer" {
         if (!options || this.isUndefinedExpression(options)) return "string";
         const checkEncoding = (node: ts.Expression): "string" | "buffer" => {
+            if (this.isUndefinedExpression(node)) return "string";
             if (ts.isStringLiteralLike(node)) {
                 if (node.text === "utf8" || node.text === "utf-8") return "string";
                 if (node.text === "buffer") return "buffer";
@@ -20350,6 +20373,7 @@ class Emitter {
     private validateFsReadFileOptions(options: ts.Expression | undefined, label: string): "string" | "buffer" {
         if (!options || this.isUndefinedExpression(options)) return "string";
         const checkEncoding = (node: ts.Expression): "string" | "buffer" => {
+            if (this.isUndefinedExpression(node)) return "string";
             if (ts.isStringLiteralLike(node)) {
                 if (node.text === "utf8" || node.text === "utf-8") return "string";
                 if (node.text === "buffer") return "buffer";
@@ -20358,6 +20382,7 @@ class Emitter {
             unsupported(node, `${label} only supports UTF-8, buffer, or null encoding options in this subset`);
         };
         const checkFlag = (node: ts.Expression): void => {
+            if (this.isUndefinedExpression(node)) return;
             if (!ts.isStringLiteralLike(node) || !["r", "rs", "r+", "rs+"].includes(node.text)) {
                 unsupported(node, `${label} only supports literal "r", "rs", "r+", or "rs+" flags in this subset`);
             }
@@ -20395,11 +20420,13 @@ class Emitter {
         let mode: SequencedCallArg = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
         if (!options || this.isUndefinedExpression(options)) return { ...out, mode };
         const checkEncoding = (node: ts.Expression): void => {
+            if (this.isUndefinedExpression(node)) return;
             if (!ts.isStringLiteralLike(node) || (node.text !== "utf8" && node.text !== "utf-8")) {
                 unsupported(node, `${label} only supports UTF-8 encoding options in this subset`);
             }
         };
         const checkFlag = (node: ts.Expression): void => {
+            if (this.isUndefinedExpression(node)) return;
             const supportedFlags = ["w", "wx", "w+", "wx+", "a", "ax", "a+", "ax+", "as", "as+", "r+", "rs+"];
             if (!ts.isStringLiteralLike(node) || !supportedFlags.includes(node.text)) {
                 unsupported(node, `${label} only supports literal "w", "wx", "w+", "wx+", "a", "ax", "a+", "ax+", "as", "as+", "r+", or "rs+" flags in this subset`);
@@ -20425,10 +20452,17 @@ class Emitter {
             } else if (key === "flag") {
                 checkFlag(prop.initializer);
             } else if (key === "mode") {
+                if (this.isUndefinedExpression(prop.initializer)) {
+                    mode = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: prop.initializer };
+                    continue;
+                }
                 const value = this.emitExpr(prop.initializer);
                 if (value.ty.kind !== "number") unsupported(prop.initializer, `${label}.mode must be numeric in this subset`);
                 mode = { value, target: T_NUMBER, node: prop.initializer };
             } else if (key === "flush") {
+                if (this.isUndefinedExpression(prop.initializer)) {
+                    continue;
+                }
                 if (prop.initializer.kind !== ts.SyntaxKind.TrueKeyword && prop.initializer.kind !== ts.SyntaxKind.FalseKeyword) {
                     unsupported(prop.initializer, `${label}.flush must be a boolean literal in this subset`);
                 }
@@ -20444,11 +20478,13 @@ class Emitter {
         let mode: SequencedCallArg = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
         if (!options || this.isUndefinedExpression(options)) return { ...out, mode };
         const checkEncoding = (node: ts.Expression): void => {
+            if (this.isUndefinedExpression(node)) return;
             if (!ts.isStringLiteralLike(node) || (node.text !== "utf8" && node.text !== "utf-8")) {
                 unsupported(node, `${label} only supports UTF-8 encoding options in this subset`);
             }
         };
         const checkFlag = (node: ts.Expression): void => {
+            if (this.isUndefinedExpression(node)) return;
             const supportedFlags = ["a", "ax", "a+", "ax+", "as", "as+"];
             if (!ts.isStringLiteralLike(node) || !supportedFlags.includes(node.text)) {
                 unsupported(node, `${label} only supports literal "a", "ax", "a+", "ax+", "as", or "as+" flags in this subset`);
@@ -20472,10 +20508,17 @@ class Emitter {
             } else if (key === "flag") {
                 checkFlag(prop.initializer);
             } else if (key === "mode") {
+                if (this.isUndefinedExpression(prop.initializer)) {
+                    mode = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: prop.initializer };
+                    continue;
+                }
                 const value = this.emitExpr(prop.initializer);
                 if (value.ty.kind !== "number") unsupported(prop.initializer, `${label}.mode must be numeric in this subset`);
                 mode = { value, target: T_NUMBER, node: prop.initializer };
             } else if (key === "flush") {
+                if (this.isUndefinedExpression(prop.initializer)) {
+                    continue;
+                }
                 if (prop.initializer.kind !== ts.SyntaxKind.TrueKeyword && prop.initializer.kind !== ts.SyntaxKind.FalseKeyword) {
                     unsupported(prop.initializer, `${label}.flush must be a boolean literal in this subset`);
                 }
@@ -20492,6 +20535,7 @@ class Emitter {
     ): { withFileTypes: boolean; recursive: boolean; encoding: "string" | "buffer" } {
         if (!options || this.isUndefinedExpression(options)) return { withFileTypes: false, recursive: false, encoding: "string" };
         const checkEncoding = (node: ts.Expression): "string" | "buffer" => {
+            if (this.isUndefinedExpression(node)) return "string";
             if (ts.isStringLiteralLike(node)) {
                 if (node.text === "utf8" || node.text === "utf-8") return "string";
                 if (node.text === "buffer") return "buffer";
@@ -20517,6 +20561,10 @@ class Emitter {
                 continue;
             }
             if (key === "withFileTypes") {
+                if (this.isUndefinedExpression(prop.initializer)) {
+                    withFileTypes = false;
+                    continue;
+                }
                 if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
                     withFileTypes = true;
                 } else if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) {
@@ -20527,6 +20575,10 @@ class Emitter {
                 continue;
             }
             if (key === "recursive") {
+                if (this.isUndefinedExpression(prop.initializer)) {
+                    recursive = false;
+                    continue;
+                }
                 if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
                     recursive = true;
                 } else if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) {

@@ -1,0 +1,3 @@
+{
+  "description": "fs option objects treat explicit undefined property values as defaults for sync and immediate promise calls"
+}
