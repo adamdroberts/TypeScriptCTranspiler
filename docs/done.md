@@ -359,6 +359,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `dynamicObj.hasOwnProperty(key)` checks the dynamic object's own property table without walking prototypes. Test: `object_has_own_property`
 - `dynamicObj.isPrototypeOf(value)` checks whether the dynamic receiver appears in another dynamic object's prototype chain. Test: `object_is_prototype_of`
 - `dynamicObj.propertyIsEnumerable(key)` checks that a dynamic property is both own and enumerable, returning false for hidden, inherited, or missing keys. Test: `object_property_is_enumerable`
+- `Object.prototype.isPrototypeOf.call(proto, value)` dispatches AOT over dynamic prototype chains, returns false for non-object receivers/values, and preserves ignored argument side effects. Test: `object_prototype_is_prototype_of_call`
 - `Object.prototype.hasOwnProperty.call(value, key)` and `Object.prototype.propertyIsEnumerable.call(value, key)` dispatch AOT over typed interface/class objects, dynamic objects, arrays, strings, Buffers, and primitive receivers while preserving ignored argument side effects. Test: `object_prototype_call`
 - `Object.prototype.toLocaleString.call(value)` dispatches AOT over typed interface/class objects, dynamic values, arrays, strings, numbers, and booleans while preserving ignored argument side effects. Test: `object_prototype_to_locale_string_call`
 - `Object.prototype.toString.call(value)` emits ECMAScript object tags through AOT dispatch for typed receivers and dynamic value-tag inspection for `any` / `unknown` receivers, including object, array, primitive, null, and undefined cases. Test: `object_prototype_to_string_call`
@@ -1086,6 +1087,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `object_is_prototype_of` | dynamic Object.prototype.isPrototypeOf over prototype chains |
 | `object_property_is_enumerable` | dynamic Object.prototype.propertyIsEnumerable over descriptor enumerable flags |
 | `object_prototype_call` | Object.prototype hasOwnProperty/propertyIsEnumerable call-form dispatch |
+| `object_prototype_is_prototype_of_call` | Object.prototype.isPrototypeOf.call prototype-chain dispatch |
 | `object_prototype_to_locale_string_call` | Object.prototype.toLocaleString.call dispatch over typed, dynamic, array, and primitive receivers |
 | `object_prototype_to_string_call` | Object.prototype.toString.call tag dispatch over typed and dynamic receivers |
 | `object_prototype_value_of_call` | Object.prototype.valueOf.call receiver-preserving dispatch |

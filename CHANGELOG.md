@@ -6,7 +6,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Changed
 - The e2e harness now materializes its small `node_modules` package fixtures before case discovery, so normal dependency installs no longer remove the ignored package-source fixtures needed by Phase 14 tests.
-- Documentation drift sync: top-level `README.md` and `llms.txt` now reflect the current 801-passing test suite, ~43,100 LOC inventory, and full phase status including the implemented Proxy/Reflect surface, native-addon bridge path, AOT runtime-code compilation, dynamic-require manifests, and current Phase 14/decorator polish remaining work. `llms-full.txt` was regenerated from the updated source pages.
+- Documentation drift sync: top-level `README.md` and `llms.txt` now reflect the current 802-passing test suite, ~43,100 LOC inventory, and full phase status including the implemented Proxy/Reflect surface, native-addon bridge path, AOT runtime-code compilation, dynamic-require manifests, and current Phase 14/decorator polish remaining work. `llms-full.txt` was regenerated from the updated source pages.
 - The benchmark harness can now run the manual suite, generated operation-loop benchmarks for stdout-producing e2e cases via `--full` / `BENCH_SOURCE=e2e`, or both, records ops/sec in JSON/table output, and writes selectable JSON result files.
 - Runtime and emitter hot paths for classes, typed object literals, string/number concatenation, JSON stringification, Map/Set, regex matching, arrays, and no-GC allocation were optimized for the benchmark suite.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
@@ -17,6 +17,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Inferred locals whose TypeScript type is erased to `tsc_value_t` now use boxed storage even when their initializer emits a narrower primitive, fixing nullish coalescing over `Map.get(...)` results and optional numeric field reads. Dynamic and typed string Reflect helpers again treat boxed strings as valid string-object targets. Tests: `nullish`, `wordcount`, `weak_ref`, `collection_object_methods`, `string_object_enumeration`, `dynamic_string_object_enumeration`.
 
 ### Added
+- `Object.prototype.isPrototypeOf.call(...)` now compiles through the AOT call-form dispatch path for dynamic prototype chains and non-object false results while preserving ignored argument side effects. Test: `object_prototype_is_prototype_of_call`.
 - `Object.prototype.valueOf.call(...)` now compiles through the AOT receiver-preserving dispatch path for typed objects, dynamic objects/arrays, typed arrays in typed contexts, and primitive receivers. Test: `object_prototype_value_of_call`.
 - `Object.prototype.toLocaleString.call(...)` now compiles through an AOT dispatch path for typed objects, dynamic values, arrays, and primitive receivers. Test: `object_prototype_to_locale_string_call`.
 - `Object.prototype.toString.call(...)` now compiles through an AOT tag dispatch path for typed receivers and a dynamic value tag helper for `any`/`unknown` receivers. Test: `object_prototype_to_string_call`.
