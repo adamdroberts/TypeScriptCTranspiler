@@ -239,6 +239,9 @@ tsc_value_t tsc_value_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc
     if (value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         return tsc_value_get_prop(v, key);
     }
+    if (value_tag(v) == TSC_VALUE_TAG_STRING) {
+        return tsc_value_get_prop(v, key);
+    }
     return tsc_value_undefined();
 }
 
@@ -424,7 +427,7 @@ bool tsc_value_object_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
 static bool value_is_reflect_object_target(tsc_value_t v) {
     if (!value_is_box(v)) return false;
     tsc_value_tag_t tag = value_tag(v);
-    return tag == TSC_VALUE_TAG_OBJECT || tag == TSC_VALUE_TAG_ARRAY || tag == TSC_VALUE_TAG_FUNCTION;
+    return tag == TSC_VALUE_TAG_OBJECT || tag == TSC_VALUE_TAG_ARRAY || tag == TSC_VALUE_TAG_STRING || tag == TSC_VALUE_TAG_FUNCTION;
 }
 
 static void require_reflect_object_target(tsc_value_t v, const char* message) {

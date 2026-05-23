@@ -7275,7 +7275,12 @@ class Emitter {
             let r: EmitResult | null = null;
             if (d.initializer) {
                 r = this.emitExpr(d.initializer);
-                ct = this.prepareType(d.type ? mapType(d, this.checker) : r.ty);
+                if (d.type) {
+                    ct = this.prepareType(mapType(d, this.checker));
+                } else {
+                    const inferred = this.prepareType(mapType(d, this.checker));
+                    ct = inferred.kind === "value" ? inferred : r.ty;
+                }
             } else {
                 ct = this.prepareType(mapType(d, this.checker));
             }
@@ -25476,6 +25481,22 @@ class Emitter {
             }
             if (isOpt) {
                 const tv = this.freshTemp("_oc");
+                if (ty.kind === "value") {
+                    const fieldTy = this.propertyDeclaredType(pa);
+                    if (!fieldTy) unsupported(pa, "optional dynamic class property requires a declared field type");
+                    const present = this.coerce(
+                        { c: `${tv}->${mangleIdent(pa.name.text)}`, ty: fieldTy },
+                        T_VALUE,
+                        pa,
+                    );
+                    const missing = fieldTy.kind === "number" || fieldTy.kind === "boolean"
+                        ? this.coerce({ c: this.zeroValue(fieldTy), ty: fieldTy }, T_VALUE, pa)
+                        : "tsc_value_undefined()";
+                    return {
+                        c: `({ ${recv.ty.c} ${tv} = ${recv.c}; ${tv} != NULL ? ${present} : ${missing}; })`,
+                        ty,
+                    };
+                }
                 return {
                     c: `({ ${recv.ty.c} ${tv} = ${recv.c}; ${tv} != NULL ? ${tv}->${mangleIdent(pa.name.text)} : ${this.zeroValue(ty)}; })`,
                     ty,
@@ -25484,6 +25505,13 @@ class Emitter {
             return { c: `${recv.c}->${mangleIdent(pa.name.text)}`, ty };
         }
         unsupported(pa, `property .${pa.name.text} on ${recv.ty.c}`);
+    }
+
+    private propertyDeclaredType(pa: ts.PropertyAccessExpression): CType | null {
+        const sym = this.checker.getSymbolAtLocation(pa.name);
+        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        if (!sym || !decl) return null;
+        return this.prepareType(mapTsType(pa.name, this.checker.getTypeOfSymbolAtLocation(sym, decl), this.checker));
     }
 
     private expressionStorageType(expr: ts.Expression): CType | null {
