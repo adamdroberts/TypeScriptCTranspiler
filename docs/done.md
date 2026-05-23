@@ -1005,6 +1005,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_js_package_relative_import` | pure-JS package entry importing a package-local JS module |
 | `node_modules_package_exports` | TypeScript package source imports through package exports |
 | `node_modules_package_conditional_exports` | TypeScript package source imports through package exports/imports condition maps selecting import branches |
+| `node_modules_package_import_node_addons_conditions` | TypeScript package source imports through package exports/imports node-addons condition maps before node/import/default fallbacks |
 | `node_modules_package_import_node_conditions` | TypeScript package source imports through package exports/imports node condition maps with array fallback and wildcard targets |
 | `node_modules_package_dual_cjs_esm_resolution` | package source AOT graph keeps import and CommonJS require condition branches distinct for the same specifier |
 | `node_modules_package_require_conditions` | CommonJS require package edges through package exports/imports condition maps selecting require branches |
