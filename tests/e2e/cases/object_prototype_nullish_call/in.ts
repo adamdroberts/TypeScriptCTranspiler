@@ -47,3 +47,4 @@ console.log(
     Object.prototype.toString.call(nullValue),
     Object.prototype.toString.call(undefinedValue),
 );
+console.log("toString-asserted-null:", Object.prototype.toString.call(null as any));

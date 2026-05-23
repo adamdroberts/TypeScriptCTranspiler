@@ -1,3 +1,4 @@
 undef: true true false
 null: true true false
 cross: false false true
+asserted: true true true

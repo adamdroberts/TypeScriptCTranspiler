@@ -10351,13 +10351,13 @@ class Emitter {
         right: EmitResult,
         negate: boolean,
     ): EmitResult {
-        if (left.ty.kind === "value" && (this.isUndefinedExpression(bin.right) || bin.right.kind === ts.SyntaxKind.NullKeyword)) {
+        if (left.ty.kind === "value" && (this.isUndefinedExpression(bin.right) || this.isNullExpression(bin.right))) {
             const literal = this.isUndefinedExpression(bin.right) ? "tsc_value_undefined()" : "tsc_value_null()";
             const value = this.coerce(left, T_VALUE, bin.left);
             const c = `tsc_value_eq(${value}, ${literal})`;
             return { c: negate ? `(!${c})` : c, ty: T_BOOLEAN };
         }
-        if (right.ty.kind === "value" && (this.isUndefinedExpression(bin.left) || bin.left.kind === ts.SyntaxKind.NullKeyword)) {
+        if (right.ty.kind === "value" && (this.isUndefinedExpression(bin.left) || this.isNullExpression(bin.left))) {
             const literal = this.isUndefinedExpression(bin.left) ? "tsc_value_undefined()" : "tsc_value_null()";
             const value = this.coerce(right, T_VALUE, bin.right);
             const c = `tsc_value_eq(${literal}, ${value})`;
@@ -16861,6 +16861,10 @@ class Emitter {
     private isUndefinedLikeExpression(expr: ts.Expression): boolean {
         const cur = this.unwrapTransparentExpression(expr);
         return (ts.isIdentifier(cur) && cur.text === "undefined") || ts.isVoidExpression(cur);
+    }
+
+    private isNullExpression(expr: ts.Expression): boolean {
+        return this.unwrapTransparentExpression(expr).kind === ts.SyntaxKind.NullKeyword;
     }
 
     private isZeroDelayLiteral(expr: ts.Expression): boolean {
@@ -26172,7 +26176,7 @@ class Emitter {
                 case "class":
                     return `tsc_value_class(${r.c})`;
                 case "void":
-                    if (node.kind === ts.SyntaxKind.NullKeyword) return `tsc_value_null()`;
+                    if (ts.isExpression(node) && this.isNullExpression(node)) return `tsc_value_null()`;
                     if (ts.isExpression(node) && this.isUndefinedLikeExpression(node)) return `tsc_value_undefined()`;
                     return `tsc_value_undefined()`;
                 case "value":

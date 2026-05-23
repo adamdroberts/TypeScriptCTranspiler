@@ -14,3 +14,4 @@ target: value-null
 ignored: value-extra
 value-error: Object.prototype.valueOf.call receiver is null or undefined
 toString-nullish: [object Null] [object Undefined]
+toString-asserted-null: [object Null]
