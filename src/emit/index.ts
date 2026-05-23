@@ -6051,8 +6051,8 @@ class Emitter {
             }
         }
         if (!ty) return null;
-        if (ty.kind !== "value") {
-            unsupported(node, "function this parameters are currently supported only as any/unknown");
+        if (ty.kind !== "value" && ty.kind !== "class") {
+            unsupported(node, "function this parameters are currently supported only as any/unknown or class instances");
         }
         return ty;
     }
@@ -18860,7 +18860,10 @@ class Emitter {
         if (!method.parent || !ts.isClassDeclaration(method.parent)) {
             unsupported(method, "decorated instance method requires a containing class");
         }
-        const replacement = this.classInstanceMethodDecoratorReplacementName(method.parent, method);
+        const classDecl = method.parent;
+        if (!classDecl.name) unsupported(method, "decorated instance method requires a named class");
+        const receiverType = classType(classDecl.name.text);
+        const replacement = this.classInstanceMethodDecoratorReplacementName(classDecl, method);
         return this.emitSequencedExpr(ret, specs, (args) => {
             const fn = this.freshTemp("_method_replacement");
             const av = this.freshTemp("_method_args");
@@ -18869,6 +18872,7 @@ class Emitter {
                 `if (tsc_value_is_undefined(${fn})) {`,
             ];
             const originalCall = `${callee}(${args.join(", ")})`;
+            const thisArg = this.coerce({ c: args[0]!, ty: receiverType }, T_VALUE, call.expression);
             const methodArgs = args.slice(1);
             const methodSpecs = specs.slice(1);
             if (ret.kind === "void" || ret.kind === "never") {
@@ -18880,7 +18884,7 @@ class Emitter {
                     const argType = spec.target ?? spec.value.ty;
                     pieces.push(`tsc_array_push_value(${av}, ${this.coerce({ c: arg, ty: argType }, T_VALUE, spec.node ?? call)});`);
                 });
-                pieces.push(`(void)tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}));`);
+                pieces.push(`(void)tsc_value_apply_function(${fn}, ${thisArg}, tsc_value_array(${av}));`);
                 pieces.push(`}`);
                 return `({ ${pieces.join(" ")} })`;
             }
@@ -18895,7 +18899,7 @@ class Emitter {
                 pieces.push(`tsc_array_push_value(${av}, ${this.coerce({ c: arg, ty: argType }, T_VALUE, spec.node ?? call)});`);
             });
             const applied = {
-                c: `tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}))`,
+                c: `tsc_value_apply_function(${fn}, ${thisArg}, tsc_value_array(${av}))`,
                 ty: T_VALUE,
             };
             pieces.push(`${out} = ${this.coerce(applied, ret, call)};`);
@@ -25312,6 +25316,8 @@ class Emitter {
                     }
                     return `tsc_value_as_array(${r.c})`;
                 }
+                case "class":
+                    return `((${target.c})tsc_value_as_class(${r.c}))`;
             }
         }
         if (target.kind === "value") {
@@ -25335,6 +25341,8 @@ class Emitter {
                 }
                 case "function":
                     return `tsc_value_function_generic(${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${r.c})`;
+                case "class":
+                    return `tsc_value_class(${r.c})`;
                 case "void":
                     return `tsc_value_null()`;
                 case "value":

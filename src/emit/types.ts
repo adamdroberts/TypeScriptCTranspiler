@@ -314,15 +314,15 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
                 checker.getTypeOfSymbolAtLocation(callSig.thisParameter, decl),
                 checker,
             );
-            if (thisParamType.kind !== "value") {
-                unsupported(decl, "function this parameters are currently supported only as any/unknown");
+            if (thisParamType.kind !== "value" && thisParamType.kind !== "class") {
+                unsupported(decl, "function this parameters are currently supported only as any/unknown or class instances");
             }
         } else {
             const decl = explicitThisParameter(callSig.getDeclaration() ?? node);
             if (decl) {
                 thisParamType = mapTsType(decl, checker.getTypeAtLocation(decl), checker);
-                if (thisParamType.kind !== "value") {
-                    unsupported(decl, "function this parameters are currently supported only as any/unknown");
+                if (thisParamType.kind !== "value" && thisParamType.kind !== "class") {
+                    unsupported(decl, "function this parameters are currently supported only as any/unknown or class instances");
                 }
             }
         }

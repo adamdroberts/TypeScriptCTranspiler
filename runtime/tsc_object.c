@@ -6,6 +6,7 @@ tsc_object_t* tsc_object_new(void) {
     o->len = 0;
     o->cap = 4;
     o->extensible = true;
+    o->class_ptr = NULL;
     o->is_proxy = false;
     o->proxy_revoked = false;
     o->proxy_target = tsc_value_undefined();

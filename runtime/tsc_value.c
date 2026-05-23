@@ -12,6 +12,13 @@ tsc_value_t tsc_value_num(double n) {
 }
 
 tsc_value_t tsc_value_string(tsc_str_t* s) { return value_box(TSC_VALUE_TAG_STRING, (uintptr_t)s); }
+tsc_value_t tsc_value_class(void* ptr) {
+    if (!ptr) return tsc_value_null();
+    tsc_object_t* o = tsc_object_new();
+    o->class_ptr = ptr;
+    return tsc_value_object(o);
+}
+
 bool tsc_value_is_nullish(tsc_value_t v) {
     if (!value_is_box(v)) return false;
     tsc_value_tag_t tag = value_tag(v);
@@ -24,6 +31,16 @@ bool tsc_value_is_undefined(tsc_value_t v) {
 
 bool tsc_value_is_array(tsc_value_t v) {
     return value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY;
+}
+
+void* tsc_value_as_class(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_NULL) return NULL;
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+        if (o->class_ptr) return o->class_ptr;
+    }
+    tsc_panic("value is not a class instance");
+    return NULL;
 }
 
 tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env) {

@@ -476,6 +476,7 @@ tsc_value_t tsc_value_num(double n);
 tsc_value_t tsc_value_string(tsc_str_t* s);
 tsc_value_t tsc_value_array(tsc_array_t* a);
 tsc_value_t tsc_value_object(tsc_object_t* o);
+tsc_value_t tsc_value_class(void* ptr);
 tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env);
 
 bool tsc_value_is_truthy(tsc_value_t v);
@@ -487,6 +488,7 @@ double tsc_value_as_num(tsc_value_t v);
 bool tsc_value_as_bool(tsc_value_t v);
 tsc_str_t* tsc_value_as_string(tsc_value_t v);
 tsc_array_t* tsc_value_as_array(tsc_value_t v);
+void* tsc_value_as_class(tsc_value_t v);
 tsc_str_t* tsc_value_to_string(tsc_value_t v);
 tsc_str_t* tsc_value_typeof(tsc_value_t v);
 tsc_str_t* tsc_value_json_stringify(tsc_value_t v);

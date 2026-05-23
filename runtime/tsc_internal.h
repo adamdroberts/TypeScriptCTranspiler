@@ -103,6 +103,7 @@ struct tsc_object {
     size_t len;
     size_t cap;
     bool extensible;
+    void* class_ptr;
     bool is_proxy;
     bool proxy_revoked;
     tsc_value_t proxy_target;
