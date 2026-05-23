@@ -1,0 +1,6 @@
+{
+  "max_binary_bytes": 20000,
+  "max_tsc2c_ms": 1000,
+  "min_vs_bun": 0.1,
+  "min_vs_node": 0.1
+}

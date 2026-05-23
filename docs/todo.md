@@ -163,7 +163,7 @@ This is the next item that most directly expands what programs can be written ag
   - Inline-caching stats and diagnostics
   - Basic escape analysis to stack-allocate objects that don't outlive their frame
   - Dead-code elimination on the generated C
-  - Benchmark output now records `tsc2c` binary size together with timing/ops data, `bench:check` can enforce per-run thresholds for size, `tsc2c` time, and speed ratios, and `bench:smoke` provides a default local/CI smoke. Remaining work is long-run threshold policy, full CI wiring, further binary-size optimization, and CI matrix expansion (Linux ✓, macOS, Windows later)
+  - Benchmark output now records `tsc2c` binary size together with timing/ops data, `bench:check` can enforce per-run JSON threshold policies for size, `tsc2c` time, and speed ratios, and `bench:smoke` provides a default local/CI smoke policy. Remaining work is long-run threshold policy, full CI wiring, further binary-size optimization, and CI matrix expansion (Linux ✓, macOS, Windows later)
 
 ---
 

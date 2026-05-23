@@ -10,6 +10,7 @@ const HERE = import.meta.dir;
 const ROOT = join(HERE, "..", "..");
 const tempDir = mkdtempSync(join(tmpdir(), "tsc2c-bench-ci-"));
 const resultsFile = join(tempDir, "results.json");
+const policyFile = process.env.BENCH_POLICY ?? join(HERE, "thresholds-smoke.json");
 
 function run(cmd: string, args: string[], env: Record<string, string>): void {
     const result = spawnSync(cmd, args, {
@@ -29,12 +30,7 @@ try {
         FORCE: "1",
         TSC2C_FLAGS: process.env.TSC2C_FLAGS ?? "--no-gc",
     });
-    run("bun", ["manual-tests/benchmarks/check-thresholds.ts", resultsFile], {
-        MAX_BINARY_BYTES: process.env.MAX_BINARY_BYTES ?? "20000",
-        MAX_TSC2C_MS: process.env.MAX_TSC2C_MS ?? "1000",
-        MIN_VS_BUN: process.env.MIN_VS_BUN ?? "0.1",
-        MIN_VS_NODE: process.env.MIN_VS_NODE ?? "0.1",
-    });
+    run("bun", ["manual-tests/benchmarks/check-thresholds.ts", resultsFile, policyFile], {});
 } finally {
     rmSync(tempDir, { recursive: true, force: true });
 }
