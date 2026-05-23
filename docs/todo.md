@@ -167,9 +167,9 @@ This is the next item that most directly expands what programs can be written ag
 
 ---
 
-## 4. Smaller missing pieces
+## 4. Completed bounded pieces
 
-Within-phase gaps that can be picked off individually without the big phase-level investments:
+The old smaller-piece queue has been worked down. The bullets below are retained as completion evidence with test names, not as active TODO candidates. New standalone gaps should be added above as explicit `Still missing` bullets under the relevant phase.
 
 - Broader type guards / narrowing for deeper discriminated-union patterns. Basic user-defined type predicates over interface-shaped dynamic unions including negative predicate branches, basic literal-discriminant unions over interface-shaped dynamic objects including negative and compound literal checks, switch-based literal-discriminant narrowing over interface-shaped dynamic unions, nested dotted discriminants over dynamic interface fields, nullable pointer `typeof` guards such as `string | null` / `string | undefined`, dynamic `string | number | boolean` `typeof` guards, `in`-operator narrowing over interface-shaped unions, and `Array.isArray` type-predicate narrowing over unknown dynamic values are implemented. Tests include `discriminated_unions`, `discriminated_union_negative`, `discriminated_union_compound`, `discriminated_union_switch`, `discriminated_union_nested`, `custom_predicates`, `custom_predicates_negative`, `typeof_guards`, `typeof_boolean_union`, `in_operator_narrowing`, and `array_is_array_narrowing`.
 - More complex generic type relationships. Direct top-level generic function calls, typed array callback references, concrete generic function-value adapters, erased generic classes, and generic instance/static method calls with concrete `T` / `T[]` specializations are implemented, including literal/const-literal computed generic method names, fixed-arity spread calls for generic functions/methods, erased generic class methods, erased generic class getter/setter accessors, and standard class decorator replacement constructors for erased generic classes including constructor aliases, chained constructor aliases, spread constructor calls, and static `Reflect.construct` class targets. Tests: `generic_functions`, `generic_methods`, `generic_classes`, `generic_class_accessors`, `generic_class_decorator_replacement`, `generic_class_decorator_alias_replacement`, `generic_class_decorator_spread_replacement`, `generic_class_decorator_reflect_construct`.
@@ -217,10 +217,10 @@ These are not permanent product limits, but every reachable module, native bridg
 
 ## How to pick
 
-If the next session has **hours**, pick from section 4 (smaller pieces).
+If the next session has **hours**, pick a concrete `Still missing` bullet from sections 1-3 or a Phase 15 perf/polish item. Section 4 is completion evidence, not the active queue.
 
 If it has **a few days to a week**, pick a bounded item from section 2, such as generator-backed iterables, unless the session is large enough to start Phase 3.
 
-If it has **a week or more** to invest in one thing, do **Phase 3 (NaN-boxing)** from section 1. That one item unblocks about half of what's in sections 2–4.
+If it has **a week or more** to invest in one thing, do **Phase 3 (NaN-boxing)** from section 1. That one item unblocks about half of the remaining medium- and long-term work.
 
 If the goal is **"run a real npm package"**, the sequential chain is: Phase 3 → Closures → Phase 6 → Phase 14. Expect roughly two months of focused work for that end-to-end.

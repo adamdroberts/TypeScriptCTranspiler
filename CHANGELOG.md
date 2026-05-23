@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `docs/todo.md` now labels the worked-down smaller-piece list as completed bounded-piece evidence and points short follow-up sessions at explicit `Still missing` bullets or Phase 15 work.
 - The e2e harness now materializes its small `node_modules` package fixtures before case discovery, so normal dependency installs no longer remove the ignored package-source fixtures needed by Phase 14 tests.
 - Documentation drift sync: top-level `README.md` and `llms.txt` now reflect the current 822-passing test suite, ~43,100 LOC inventory, and full phase status including the implemented Proxy/Reflect surface, native-addon bridge path, AOT runtime-code compilation, dynamic-require manifests, and current Phase 14/decorator polish remaining work. `llms-full.txt` was regenerated from the updated source pages.
 - The benchmark harness can now run the manual suite, generated operation-loop benchmarks for stdout-producing e2e cases via `--full` / `BENCH_SOURCE=e2e`, or both, records ops/sec in JSON/table output, and writes selectable JSON result files.
