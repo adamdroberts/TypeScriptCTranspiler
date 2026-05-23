@@ -1106,7 +1106,7 @@ class Emitter {
             }
             const requireSpec = this.requireCallSpecifier(source);
             if (requireSpec) {
-                const info = this.resolvedModuleInfoForSpecifier(requireSpec, call.getSourceFile().fileName);
+                const info = this.resolvedModuleInfoForSpecifier(requireSpec, call.getSourceFile().fileName, "require");
                 if (!info) {
                     unsupported(source, `unresolved require("${requireSpec}")`);
                 }
@@ -3734,7 +3734,7 @@ class Emitter {
             }
             return;
         }
-        const info = this.resolvedModuleInfoForSpecifier(spec, d.getSourceFile().fileName);
+        const info = this.resolvedModuleInfoForSpecifier(spec, d.getSourceFile().fileName, "require");
         if (!info) {
             unsupported(d.initializer ?? d, `unresolved require("${spec}")`);
         }
@@ -3782,7 +3782,7 @@ class Emitter {
         }
         const spec = this.requireCallSpecifier(varDecl.initializer);
         if (!spec) return null;
-        const info = this.resolvedModuleInfoForSpecifier(spec, varDecl.getSourceFile().fileName);
+        const info = this.resolvedModuleInfoForSpecifier(spec, varDecl.getSourceFile().fileName, "require");
         if (!info) {
             unsupported(varDecl.initializer, `unresolved require("${spec}")`);
         }
@@ -3867,9 +3867,16 @@ class Emitter {
         return null;
     }
 
-    private resolvedModuleInfoForSpecifier(spec: string, containingFile: string): ModuleInfo | null {
+    private resolvedModuleInfoForSpecifier(
+        spec: string,
+        containingFile: string,
+        edgeKind: "import" | "require" = "import",
+    ): ModuleInfo | null {
         const modId = this.graph.fileToModuleId.get(containingFile);
-        const depId = modId ? this.graph.modules.get(modId)?.resolvedSpecifiers.get(spec) : undefined;
+        const info = modId ? this.graph.modules.get(modId) : undefined;
+        const depId = edgeKind === "require"
+            ? info?.resolvedRequireSpecifiers.get(spec)
+            : info?.resolvedSpecifiers.get(spec);
         return depId ? this.graph.modules.get(depId) ?? null : null;
     }
 
@@ -4059,7 +4066,7 @@ class Emitter {
         if (!assignment || !ts.isIdentifier(assignment.right)) return null;
         const spec = this.requireBindingSpecifier(assignment.right);
         if (!spec) return null;
-        const info = this.resolvedModuleInfoForSpecifier(spec, assignment.right.getSourceFile().fileName);
+        const info = this.resolvedModuleInfoForSpecifier(spec, assignment.right.getSourceFile().fileName, "require");
         if (!info) unsupported(assignment.right, `unresolved require("${spec}")`);
         const members = this.commonJsExportedMemberDeclarations(info.sf)
             .filter((member) => member.name !== "__esModule");
@@ -4101,7 +4108,7 @@ class Emitter {
             ? this.requireBindingSpecifier(pa.expression)
             : this.requireCallSpecifier(pa.expression);
         if (!spec) return null;
-        const info = this.resolvedModuleInfoForSpecifier(spec, pa.getSourceFile().fileName);
+        const info = this.resolvedModuleInfoForSpecifier(spec, pa.getSourceFile().fileName, "require");
         return info ? this.commonJsExportedMemberDeclaration(info.sf, pa.name.text) : null;
     }
 
@@ -4113,21 +4120,21 @@ class Emitter {
     private requireBindingModuleExportsDeclaration(id: ts.Identifier): ts.Node | null {
         const spec = this.requireBindingSpecifier(id);
         if (!spec) return null;
-        const info = this.resolvedModuleInfoForSpecifier(spec, id.getSourceFile().fileName);
+        const info = this.resolvedModuleInfoForSpecifier(spec, id.getSourceFile().fileName, "require");
         return info ? this.commonJsModuleExportsValueDeclaration(info.sf) : null;
     }
 
     private requireCallModuleExportsDeclaration(expr: ts.Expression): ts.Node | null {
         const spec = this.requireCallSpecifier(expr);
         if (!spec) return null;
-        const info = this.resolvedModuleInfoForSpecifier(spec, expr.getSourceFile().fileName);
+        const info = this.resolvedModuleInfoForSpecifier(spec, expr.getSourceFile().fileName, "require");
         return info ? this.commonJsModuleExportsValueDeclaration(info.sf) : null;
     }
 
     private commonJsRequireSpreadMemberDeclarations(expr: ts.Expression): Array<{ name: string; decl: ts.Node }> | null {
         const spec = this.requireCallSpecifier(expr);
         if (!spec) return null;
-        const info = this.resolvedModuleInfoForSpecifier(spec, expr.getSourceFile().fileName);
+        const info = this.resolvedModuleInfoForSpecifier(spec, expr.getSourceFile().fileName, "require");
         if (!info) unsupported(expr, `unresolved require("${spec}")`);
         const members = this.commonJsExportedMemberDeclarations(info.sf)
             .filter((member) => member.name !== "__esModule");
@@ -7237,7 +7244,7 @@ class Emitter {
         if (!ts.isObjectBindingPattern(d.name)) {
             unsupported(d.name, "require destructuring requires an object binding pattern");
         }
-        const info = this.resolvedModuleInfoForSpecifier(spec, d.getSourceFile().fileName);
+        const info = this.resolvedModuleInfoForSpecifier(spec, d.getSourceFile().fileName, "require");
         if (!info) {
             unsupported(d.initializer ?? d, `unresolved require("${spec}")`);
         }
@@ -10403,7 +10410,7 @@ class Emitter {
     private emitCommonJsRequireModuleValue(call: ts.CallExpression, spec: string): EmitResult {
         const nativeAddon = this.emitNativeAddonValue(spec, call.getSourceFile().fileName);
         if (nativeAddon) return nativeAddon;
-        const info = this.resolvedModuleInfoForSpecifier(spec, call.getSourceFile().fileName);
+        const info = this.resolvedModuleInfoForSpecifier(spec, call.getSourceFile().fileName, "require");
         if (!info) unsupported(call, `unresolved require("${spec}")`);
         const exportDecl = this.commonJsModuleExportsValueDeclaration(info.sf);
         if (exportDecl) {

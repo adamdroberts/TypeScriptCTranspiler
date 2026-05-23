@@ -286,6 +286,25 @@ const packages: Record<string, PackageFixture> = {
             "src/flavor-require.cjs": 'exports.label = "array-imports";\n',
         },
     },
+    "tsc2c-dual-cjs-esm-package": {
+        packageJson: {
+            name: "tsc2c-dual-cjs-esm-package",
+            version: "1.0.0",
+            type: "module",
+            exports: {
+                ".": {
+                    import: "./src/import-entry.ts",
+                    require: "./src/require-entry.cjs",
+                    default: "./src/default-entry.ts",
+                },
+            },
+        },
+        files: {
+            "src/import-entry.ts": 'export const mode = "import";\nexport function pick(value: number): string {\n    return "import-entry:" + value;\n}\n',
+            "src/require-entry.cjs": 'exports.mode = "require";\nexports.pick = function pick(value) { return "require-entry:" + value; };\n',
+            "src/default-entry.ts": 'export const mode = "wrong-default";\nexport function pick(value: number): string {\n    return "wrong-default:" + value;\n}\n',
+        },
+    },
     "tsc2c-main-package": esmPackage("tsc2c-main-package", {
         "index.js": 'export const label = "main-pkg";\nexport function square(value) { return value * value; }\n',
     }),

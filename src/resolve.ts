@@ -16,8 +16,10 @@ export interface ModuleInfo {
     moduleId: string;
     /** moduleIds this module imports from (direct deps). */
     imports: string[];
-    /** Literal module specifier to resolved module id for import/export/require edges. */
+    /** Literal module specifier to resolved module id for import/export edges. */
     resolvedSpecifiers: Map<string, string>;
+    /** Literal module specifier to resolved module id for CommonJS require edges. */
+    resolvedRequireSpecifiers: Map<string, string>;
     /** absolute filename (same as sf.fileName, cached for readability). */
     fileName: string;
 }
@@ -75,6 +77,7 @@ export function buildModuleGraph(
             moduleId: id,
             imports: [],
             resolvedSpecifiers: new Map(),
+            resolvedRequireSpecifiers: new Map(),
             fileName: sf.fileName,
         });
         fileToModuleId.set(sf.fileName, id);
@@ -117,7 +120,7 @@ export function buildModuleGraph(
                 );
                 const depId = resolvedFile ? fileToModuleId.get(resolvedFile) : undefined;
                 if (depId) {
-                    info.resolvedSpecifiers.set(spec, depId);
+                    info.resolvedRequireSpecifiers.set(spec, depId);
                     if (depId !== id && !info.imports.includes(depId)) {
                         info.imports.push(depId);
                     }
