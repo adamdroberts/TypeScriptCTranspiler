@@ -23452,6 +23452,10 @@ class Emitter {
             if (list.ty.kind !== "array" && list.ty.kind !== "value") {
                 unsupported(args[1]!, "Reflect.construct argumentsList must be an array literal, typed array, or dynamic array");
             }
+            if (ts.canHaveDecorators(decl) && (ts.getDecorators(decl) ?? []).length > 0) {
+                const paramTypes = params.map((param) => mapType(param, this.checker));
+                return this.emitDecoratedClassReflectListNew(call, args[1]!, decl, cls, list, paramTypes);
+            }
             return this.emitSequencedExpr(classType(cls), [
                 { value: list, node: args[1]! },
             ], ([listC]) => {
@@ -23476,6 +23480,10 @@ class Emitter {
         const params = ctor?.parameters ?? [];
         if (argList.elements.some((element) => ts.isSpreadElement(element))) {
             const list = this.emitReflectArgumentArrayLiteral(argList);
+            if (ts.canHaveDecorators(decl) && (ts.getDecorators(decl) ?? []).length > 0) {
+                const paramTypes = params.map((param) => mapType(param, this.checker));
+                return this.emitDecoratedClassReflectListNew(call, args[1]!, decl, cls, list, paramTypes);
+            }
             return this.emitSequencedExpr(classType(cls), [
                 { value: list, node: args[1]! },
             ], ([listC]) => {
@@ -23503,6 +23511,9 @@ class Emitter {
                 target: mapType(param, this.checker),
                 node: element,
             });
+        }
+        if (ts.canHaveDecorators(decl) && (ts.getDecorators(decl) ?? []).length > 0) {
+            return this.emitDecoratedClassNew(call, decl, cls, specs);
         }
         return this.emitSequencedCall(`${cls}_new`, classType(cls), specs);
     }
@@ -24260,7 +24271,7 @@ class Emitter {
     }
 
     private emitDecoratedClassNew(
-        node: ts.NewExpression,
+        node: ts.Node,
         cd: ts.ClassDeclaration,
         className: string,
         specs: readonly SequencedCallArg[],
@@ -24318,6 +24329,55 @@ class Emitter {
                 `if (tsc_value_is_undefined(${fn})) { ${out} = ${className}_new(${originalArgs.join(", ")}); } else { ${out} = ${this.coerce(constructed, ret, node)}; }`,
                 out,
             ];
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
+    private emitDecoratedClassReflectListNew(
+        node: ts.CallExpression,
+        argsNode: ts.Expression,
+        cd: ts.ClassDeclaration,
+        className: string,
+        listValue: EmitResult,
+        paramTypes: readonly CType[],
+    ): EmitResult {
+        const replacement = this.classDecoratorReplacementName(cd);
+        const ret = classType(className);
+        return this.emitSequencedExpr(ret, [{ value: listValue, node: argsNode }], ([list]) => {
+            const fn = this.freshTemp("_class_replacement");
+            const out = this.freshTemp("_class_result");
+            const pieces: string[] = [
+                `tsc_value_t ${fn} = ${replacement}`,
+                `${ret.c} ${out} = NULL`,
+            ];
+            const originalArgs: string[] = [];
+            let constructArgs: string;
+            if (listValue.ty.kind === "array") {
+                const elem = listValue.ty.elem ?? T_VALUE;
+                pieces.push(`if (${list}->len != ${paramTypes.length}) tsc_panic("Reflect.construct argumentsList length mismatch")`);
+                const av = this.freshTemp("_reflect_construct_args");
+                pieces.push(`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, paramTypes.length)})`);
+                for (let i = 0; i < paramTypes.length; i++) {
+                    const current = { c: `TSC_ARR(${elem.c}, ${list}, ${i})`, ty: elem };
+                    originalArgs.push(this.coerce(current, paramTypes[i]!, argsNode));
+                    const value = this.freshTemp("_reflect_construct_arg");
+                    pieces.push(`tsc_value_t ${value} = ${this.coerce(current, T_VALUE, argsNode)}`);
+                    pieces.push(`tsc_array_push_raw(${av}, &${value})`);
+                }
+                constructArgs = `tsc_value_array(${av})`;
+            } else {
+                pieces.push(`if (!tsc_value_is_array(${list}) || (size_t)tsc_value_length(${list}) != ${paramTypes.length}) tsc_panic("Reflect.construct argumentsList length mismatch")`);
+                for (let i = 0; i < paramTypes.length; i++) {
+                    originalArgs.push(this.coerce({ c: `tsc_value_get_index(${list}, ${i}.0)`, ty: T_VALUE }, paramTypes[i]!, argsNode));
+                }
+                constructArgs = list;
+            }
+            const constructed = {
+                c: `tsc_value_construct(${fn}, ${constructArgs})`,
+                ty: T_VALUE,
+            };
+            pieces.push(`if (tsc_value_is_undefined(${fn})) { ${out} = ${className}_new(${originalArgs.join(", ")}); } else { ${out} = ${this.coerce(constructed, ret, node)}; }`);
+            pieces.push(out);
             return `({ ${pieces.join("; ")}; })`;
         });
     }
