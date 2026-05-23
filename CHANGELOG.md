@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Proxy `defineProperty` result validation now rejects successful trap reports that would replace the getter or setter identity of a non-configurable accessor property. Test: `proxy_define_accessor`.
 - Revoked callable Proxy values nested behind another proxy now preserve `typeof` identity while `String(...)` and `JSON.stringify(...)` report revoked-get errors through the proxy chain. Test: `proxy_nested_callable_identity`.
 - Nested callable Proxy values now preserve callable identity through `typeof`, `String(...)`, `JSON.stringify(...)`, dynamic `Reflect.apply`, and dynamic `Reflect.construct`, including object-property omission and top-level/array `null` behavior for JSON. Test: `proxy_nested_callable_identity`.
 - Proxy `defineProperty` handling now routes accessor descriptors through the proxy trap, validates non-callable accessor `defineProperty` traps, falls back to target accessor definition when the trap is absent, and rejects accessor additions/redefinitions that violate non-extensible or fixed-data target invariants. Test: `proxy_define_accessor`.
