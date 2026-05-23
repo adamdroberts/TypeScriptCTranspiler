@@ -1011,6 +1011,19 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            (
+                method === "getPrototypeOf" ||
+                method === "isExtensible" ||
+                method === "isSealed" ||
+                method === "isFrozen"
+            ) &&
+            call.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Object")
+        ) {
+            return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts);
+        }
+        if (
+            ts.isIdentifier(recv) &&
             method === "hasOwn" &&
             call.arguments.length === 2 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
@@ -1053,6 +1066,17 @@ class Emitter {
         ) {
             return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts) &&
                 this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts);
+        }
+        if (
+            ts.isIdentifier(recv) &&
+            (
+                method === "getPrototypeOf" ||
+                method === "isExtensible"
+            ) &&
+            call.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Reflect")
+        ) {
+            return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts);
         }
         return false;
     }
