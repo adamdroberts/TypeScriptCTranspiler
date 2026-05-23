@@ -24292,6 +24292,36 @@ class Emitter {
         });
     }
 
+    private emitDecoratedClassSpreadNew(
+        node: ts.NewExpression,
+        cd: ts.ClassDeclaration,
+        className: string,
+        paramTypes: readonly CType[],
+    ): EmitResult {
+        const argList = this.emitSpreadCallArgumentList(node.arguments ?? []);
+        const replacement = this.classDecoratorReplacementName(cd);
+        const ret = classType(className);
+        return this.emitSequencedExpr(ret, [{ value: argList, node }], ([list]) => {
+            const fn = this.freshTemp("_class_replacement");
+            const out = this.freshTemp("_class_result");
+            const originalArgs = paramTypes.map((paramType, index) =>
+                this.coerce({ c: `TSC_ARR(tsc_value_t, ${list}, ${index})`, ty: T_VALUE }, paramType, node),
+            );
+            const constructed = {
+                c: `tsc_value_construct(${fn}, tsc_value_array(${list}))`,
+                ty: T_VALUE,
+            };
+            const pieces: string[] = [
+                `tsc_value_t ${fn} = ${replacement}`,
+                `${ret.c} ${out} = NULL`,
+                `if (${list}->len != ${paramTypes.length}) tsc_panic("spread call argument length mismatch")`,
+                `if (tsc_value_is_undefined(${fn})) { ${out} = ${className}_new(${originalArgs.join(", ")}); } else { ${out} = ${this.coerce(constructed, ret, node)}; }`,
+                out,
+            ];
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
     private emitNew(n: ts.NewExpression): EmitResult {
         if (
             ts.isPropertyAccessExpression(n.expression) &&
@@ -24637,6 +24667,9 @@ class Emitter {
                 if (ctorDecl.parameters.some((param) => !!param.dotDotDotToken)) {
                     unsupported(n, "spread call into generic class rest constructor");
                 }
+                if (ts.canHaveDecorators(classDecl) && (ts.getDecorators(classDecl) ?? []).length > 0) {
+                    return this.emitDecoratedClassSpreadNew(n, classDecl, cls, paramTypes);
+                }
                 return this.emitSpreadCallWithParamTypes(n, `${cls}_new`, classType(cls), paramTypes);
             }
             if (argList.length > paramTypes.length) {
@@ -24670,6 +24703,20 @@ class Emitter {
             argList.some((arg) => ts.isSpreadElement(arg)) &&
             !this.signatureHasRestParameter(params)
         ) {
+            if (classDecl && ts.canHaveDecorators(classDecl) && (ts.getDecorators(classDecl) ?? []).length > 0) {
+                const paramTypes = params.map((param) => {
+                    const decl = param.valueDeclaration;
+                    if (!decl || !ts.isParameter(decl)) {
+                        unsupported(n, "spread call parameter declaration unavailable");
+                    }
+                    return this.prepareType(mapTsType(
+                        decl,
+                        this.checker.getTypeOfSymbolAtLocation(param, n),
+                        this.checker,
+                    ));
+                });
+                return this.emitDecoratedClassSpreadNew(n, classDecl, cls, paramTypes);
+            }
             return this.emitStaticSpreadCall(n, `${cls}_new`, classType(cls), params);
         }
         const specs = this.callSpecsFromSignature(n, argList, params);

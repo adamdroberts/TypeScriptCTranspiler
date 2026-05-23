@@ -1,0 +1,3 @@
+seen: class:Box|
+value: 3 4
+seen2: class:Box|replacement:2:3|original:3:4|
