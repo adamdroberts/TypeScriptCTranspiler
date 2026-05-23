@@ -1,0 +1,2 @@
+object apply: Proxy apply target must be callable
+object construct: Proxy construct target must be constructor

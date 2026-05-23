@@ -61,11 +61,22 @@ static bool value_is_callable_function(tsc_value_t v) {
     return o && o->is_proxy && value_is_callable_function(o->proxy_target);
 }
 
+static bool value_is_constructable_function(tsc_value_t v) {
+    if (!value_is_box(v)) return false;
+    if (value_tag(v) == TSC_VALUE_TAG_FUNCTION) return true;
+    if (value_tag(v) != TSC_VALUE_TAG_OBJECT) return false;
+    tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+    return o && o->is_proxy && value_is_constructable_function(o->proxy_target);
+}
+
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args) {
     if (value_is_box(fn) && value_tag(fn) == TSC_VALUE_TAG_OBJECT) {
         tsc_object_t* o = (tsc_object_t*)value_ptr(fn);
         if (o->is_proxy) {
             if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'apply' on a proxy that has been revoked"));
+            if (!value_is_callable_function(o->proxy_target)) {
+                tsc_throw_str(tsc_str_from_cstr("Proxy apply target must be callable"));
+            }
             tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("apply", 5));
             if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
                 return tsc_value_apply_function(o->proxy_target, this_arg, args);
@@ -132,6 +143,9 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
         tsc_object_t* o = (tsc_object_t*)value_ptr(target);
         if (o->is_proxy) {
             if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'construct' on a proxy that has been revoked"));
+            if (!value_is_constructable_function(o->proxy_target)) {
+                tsc_throw_str(tsc_str_from_cstr("Proxy construct target must be constructor"));
+            }
             tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("construct", 9));
             if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
                 return tsc_value_construct_with_new_target(o->proxy_target, args, new_target);
