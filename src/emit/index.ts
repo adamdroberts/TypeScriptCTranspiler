@@ -382,6 +382,13 @@ class Emitter {
                 return;
             }
             if (
+                ts.isVariableDeclaration(node) &&
+                this.isPrunableLocalVariable(node) &&
+                !this.referencedVariables.has(node)
+            ) {
+                return;
+            }
+            if (
                 ts.isClassDeclaration(node) &&
                 this.isPrunableTopLevelClass(node) &&
                 !this.referencedTopLevelClasses.has(node)
@@ -574,7 +581,10 @@ class Emitter {
         return this.isSideEffectFreeTopLevelConstInitializer(decl.initializer);
     }
 
-    private isSideEffectFreeTopLevelConstInitializer(expr: ts.Expression): boolean {
+    private isSideEffectFreeTopLevelConstInitializer(
+        expr: ts.Expression,
+        seenConsts = new Set<ts.Symbol>(),
+    ): boolean {
         while (
             ts.isParenthesizedExpression(expr) ||
             ts.isAsExpression(expr) ||
@@ -594,6 +604,9 @@ class Emitter {
         if (ts.isNumericLiteral(expr) || ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) {
             return true;
         }
+        if (ts.isIdentifier(expr)) {
+            return this.isSideEffectFreeConstIdentifier(expr, seenConsts);
+        }
         if (
             ts.isPrefixUnaryExpression(expr) &&
             (
@@ -602,12 +615,12 @@ class Emitter {
                 expr.operator === ts.SyntaxKind.ExclamationToken ||
                 expr.operator === ts.SyntaxKind.TildeToken
             ) &&
-            this.isSideEffectFreeTopLevelConstInitializer(expr.operand)
+            this.isSideEffectFreeTopLevelConstInitializer(expr.operand, seenConsts)
         ) {
             return true;
         }
         if (ts.isTypeOfExpression(expr) || ts.isVoidExpression(expr)) {
-            return this.isSideEffectFreeTopLevelConstInitializer(expr.expression);
+            return this.isSideEffectFreeTopLevelConstInitializer(expr.expression, seenConsts);
         }
         if (ts.isBinaryExpression(expr)) {
             switch (expr.operatorToken.kind) {
@@ -634,20 +647,20 @@ class Emitter {
                 case ts.SyntaxKind.LessThanLessThanToken:
                 case ts.SyntaxKind.GreaterThanGreaterThanToken:
                 case ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken:
-                    return this.isSideEffectFreeTopLevelConstInitializer(expr.left) &&
-                        this.isSideEffectFreeTopLevelConstInitializer(expr.right);
+                    return this.isSideEffectFreeTopLevelConstInitializer(expr.left, seenConsts) &&
+                        this.isSideEffectFreeTopLevelConstInitializer(expr.right, seenConsts);
                 default:
                     return false;
             }
         }
         if (ts.isConditionalExpression(expr)) {
-            return this.isSideEffectFreeTopLevelConstInitializer(expr.condition) &&
-                this.isSideEffectFreeTopLevelConstInitializer(expr.whenTrue) &&
-                this.isSideEffectFreeTopLevelConstInitializer(expr.whenFalse);
+            return this.isSideEffectFreeTopLevelConstInitializer(expr.condition, seenConsts) &&
+                this.isSideEffectFreeTopLevelConstInitializer(expr.whenTrue, seenConsts) &&
+                this.isSideEffectFreeTopLevelConstInitializer(expr.whenFalse, seenConsts);
         }
         if (ts.isTemplateExpression(expr)) {
             return expr.templateSpans.every((span) =>
-                this.isSideEffectFreeTopLevelConstInitializer(span.expression)
+                this.isSideEffectFreeTopLevelConstInitializer(span.expression, seenConsts)
             );
         }
         if (ts.isArrayLiteralExpression(expr)) {
@@ -656,7 +669,7 @@ class Emitter {
                 if (ts.isSpreadElement(element)) {
                     return this.isSideEffectFreeArraySpreadOperand(element.expression);
                 }
-                return this.isSideEffectFreeTopLevelConstInitializer(element);
+                return this.isSideEffectFreeTopLevelConstInitializer(element, seenConsts);
             });
         }
         if (ts.isObjectLiteralExpression(expr)) {
@@ -672,10 +685,29 @@ class Emitter {
                 ) {
                     return false;
                 }
-                return this.isSideEffectFreeTopLevelConstInitializer(prop.initializer);
+                return this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts);
             });
         }
         return false;
+    }
+
+    private isSideEffectFreeConstIdentifier(
+        id: ts.Identifier,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const sym = this.symbolForIdentifier(id);
+        if (!sym || seenConsts.has(sym)) return false;
+        const decl = sym.valueDeclaration ?? sym.declarations?.[0];
+        if (!decl || !ts.isVariableDeclaration(decl) || !decl.initializer) return false;
+        if (!ts.isIdentifier(decl.name)) return false;
+        if ((decl.parent.flags & ts.NodeFlags.Const) === 0) return false;
+        const source = id.getSourceFile();
+        if (decl.getSourceFile() !== source) return false;
+        if (decl.getStart(source) >= id.getStart(source)) return false;
+        seenConsts.add(sym);
+        const result = this.isSideEffectFreeTopLevelConstInitializer(decl.initializer, seenConsts);
+        seenConsts.delete(sym);
+        return result;
     }
 
     private unwrapSideEffectFreeStaticExpression(expr: ts.Expression): ts.Expression {

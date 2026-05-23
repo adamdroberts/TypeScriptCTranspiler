@@ -10,6 +10,9 @@ unused_satisfies
 unused_non_null
 unused_spread_array
 unused_spread_object
+unused_chain_seed
+unused_chain_mid
+unused_chain_object
 unused_namespace_value
 unused_let
 unused_empty
@@ -18,6 +21,8 @@ unused_local_const
 unused_local_let
 unused_local_empty
 local_dead_expr
+unused_local_seed
+unused_local_chain
 unreachable_local
 branch_only_dead
 branch_after_exit
