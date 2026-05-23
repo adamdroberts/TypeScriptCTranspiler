@@ -3,6 +3,11 @@ function Sealed(this: any): void {}
 function Frozen(this: any): void {}
 function Proxied(this: any): void {}
 function FrozenProxy(this: any): void {}
+function TypedDirect(this: any, value: number): void {}
+function TypedProto(this: any): void {}
+function TypedPrevent(this: any): void {}
+function TypedSeal(this: any): void {}
+function TypedFreeze(this: any): void {}
 
 const first: any = Stable as any;
 const second: any = Stable as any;
@@ -22,6 +27,17 @@ Object.setPrototypeOf(first, stableProto);
 console.log("shared proto:", Object.getPrototypeOf(second).marker);
 Object.preventExtensions(first);
 console.log("shared extensible:", Reflect.isExtensible(second), Reflect.setPrototypeOf(second, { marker: "blocked" }));
+
+const typedNames: any = Object.getOwnPropertyNames(TypedDirect);
+const typedDesc: any = Object.getOwnPropertyDescriptor(TypedDirect, "name");
+const typedDescs: any = Object.getOwnPropertyDescriptors(TypedDirect);
+console.log("typed function enum:", Object.keys(TypedDirect).length, Object.values(TypedDirect).length, Object.entries(TypedDirect).length);
+console.log("typed function own:", typedNames.length, typedNames[0], typedNames[1], Object.hasOwn(TypedDirect, "name"), typedDesc.value, typedDescs.name.value);
+Object.setPrototypeOf(TypedProto, { marker: "typed" });
+console.log("typed function proto:", Object.getPrototypeOf(TypedProto).marker);
+console.log("typed function prevent:", Object.isExtensible(TypedPrevent), Object.preventExtensions(TypedPrevent) === TypedPrevent, Object.isExtensible(TypedPrevent));
+console.log("typed function seal:", Object.seal(TypedSeal) === TypedSeal, Object.isSealed(TypedSeal), Object.isFrozen(TypedSeal));
+console.log("typed function freeze:", Object.freeze(TypedFreeze) === TypedFreeze, Object.isSealed(TypedFreeze), Object.isFrozen(TypedFreeze));
 
 const sealed: any = Sealed as any;
 console.log("seal before:", Object.isSealed(sealed), Object.isFrozen(sealed));

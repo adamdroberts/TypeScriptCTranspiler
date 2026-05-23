@@ -22138,6 +22138,11 @@ class Emitter {
             mapped.kind === "weakref" ||
             mapped.kind === "finregistry" ||
             mapped.kind === "url";
+        const dynamicObjectArg = (value: string): string => {
+            if (mapped.kind === "array") return `tsc_value_array(${value})`;
+            if (mapped.kind === "function") return this.coerce({ c: value, ty: mapped }, T_VALUE, arg);
+            return value;
+        };
         if (name === "assign") {
             if (mapped.kind === "array") {
                 const target = this.emitExpr(arg);
@@ -22186,6 +22191,12 @@ class Emitter {
                 );
             }
             if (emptyOwnBuiltinObjectArg) {
+                const value = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value, node: arg }], ([v]) =>
+                    `({ (void)${v}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
+                );
+            }
+            if (mapped.kind === "function") {
                 const value = this.emitExpr(arg);
                 return this.emitSequencedExpr(arrayType(T_STRING), [{ value, node: arg }], ([v]) =>
                     `({ (void)${v}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
@@ -22253,6 +22264,12 @@ class Emitter {
                     `({ (void)${v}; tsc_array_new(sizeof(tsc_value_t), 1); })`,
                 );
             }
+            if (mapped.kind === "function") {
+                const value = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, node: arg }], ([v]) =>
+                    `({ (void)${v}; tsc_array_new(sizeof(tsc_value_t), 1); })`,
+                );
+            }
             if (mapped.kind === "buffer") {
                 const value = this.emitExpr(arg);
                 return this.emitBufferObjectValues(arg, value);
@@ -22313,6 +22330,12 @@ class Emitter {
                 );
             }
             if (emptyOwnBuiltinObjectArg) {
+                const value = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, node: arg }], ([v]) =>
+                    `({ (void)${v}; tsc_array_new(sizeof(tsc_value_t), 1); })`,
+                );
+            }
+            if (mapped.kind === "function") {
                 const value = this.emitExpr(arg);
                 return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, node: arg }], ([v]) =>
                     `({ (void)${v}; tsc_array_new(sizeof(tsc_value_t), 1); })`,
@@ -22423,6 +22446,12 @@ class Emitter {
                     return `({ tsc_array_t* const ${source} = ${arr}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), ${source}->len + 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { tsc_str_t* ${key} = tsc_str_from_int((int64_t)${idx}); tsc_array_push_raw(${out}, &${key}); } tsc_str_t* ${lenKey} = tsc_str_from_lit("length", 6); tsc_array_push_raw(${out}, &${lenKey}); ${out}; })`;
                 });
             }
+            if (mapped.kind === "function") {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedCall("tsc_value_own_keys", arrayType(T_STRING), [
+                    { value: obj, target: T_VALUE, node: arg },
+                ]);
+            }
             if (mapped.kind === "class") {
                 const obj = this.emitExpr(arg);
                 const props = this.objectProperties(tsType);
@@ -22485,6 +22514,14 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 return this.emitTypedArrayGetOwnPropertyDescriptor(arg, obj, args[1]!);
             }
+            if (mapped.kind === "function") {
+                const obj = this.emitExpr(arg);
+                const key = this.emitExpr(args[1]!);
+                return this.emitSequencedCall("tsc_value_get_own_property_descriptor", T_VALUE, [
+                    { value: obj, target: T_VALUE, node: arg },
+                    { value: key, target: T_STRING, node: args[1]! },
+                ]);
+            }
             if (mapped.kind === "class") {
                 const obj = this.emitExpr(arg);
                 return this.emitTypedGetOwnPropertyDescriptor(arg, obj, args[1]!, tsType);
@@ -22527,6 +22564,12 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 return this.emitTypedArrayGetOwnPropertyDescriptors(arg, obj);
             }
+            if (mapped.kind === "function") {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedCall("tsc_value_get_own_property_descriptors", T_VALUE, [
+                    { value: obj, target: T_VALUE, node: arg },
+                ]);
+            }
             if (mapped.kind === "class") {
                 const obj = this.emitExpr(arg);
                 return this.emitTypedGetOwnPropertyDescriptors(arg, obj, tsType);
@@ -22541,13 +22584,13 @@ class Emitter {
         }
         if (name === "getPrototypeOf") {
             if (args.length !== 1) unsupported(call, "Object.getPrototypeOf expects object");
-            if (mapped.kind !== "value" && mapped.kind !== "array") {
-                unsupported(arg, "Object.getPrototypeOf currently supports dynamic objects and arrays only");
+            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
+                unsupported(arg, "Object.getPrototypeOf currently supports dynamic objects, arrays, and functions only");
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(T_VALUE, [
                 { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
-            ], ([o]) => `tsc_value_get_prototype_of(${mapped.kind === "array" ? `tsc_value_array(${o})` : o})`);
+            ], ([o]) => `tsc_value_get_prototype_of(${dynamicObjectArg(o!)})`);
         }
         if (name === "hasOwn") {
             if (args.length !== 2) unsupported(call, "Object.hasOwn expects object and key");
@@ -22587,6 +22630,14 @@ class Emitter {
                     { value: key, target: T_STRING, node: args[1]! },
                 ]);
             }
+            if (mapped.kind === "function") {
+                const obj = this.emitExpr(arg);
+                const key = this.emitExpr(args[1]!);
+                return this.emitSequencedCall("tsc_value_has_own_prop", T_BOOLEAN, [
+                    { value: obj, target: T_VALUE, node: arg },
+                    { value: key, target: T_STRING, node: args[1]! },
+                ]);
+            }
             if (mapped.kind === "class") {
                 const obj = this.emitExpr(arg);
                 return this.emitTypedObjectHasOwn(
@@ -22611,13 +22662,13 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }], ([o]) => `((void)${o}, false)`);
             }
-            if (mapped.kind !== "value" && mapped.kind !== "array") {
-                unsupported(arg, "Object.isExtensible currently supports dynamic objects, arrays, and primitives only");
+            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
+                unsupported(arg, "Object.isExtensible currently supports dynamic objects, arrays, functions, and primitives only");
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(T_BOOLEAN, [
                 { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
-            ], ([o]) => `tsc_value_is_extensible(${mapped.kind === "array" ? `tsc_value_array(${o})` : o})`);
+            ], ([o]) => `tsc_value_is_extensible(${dynamicObjectArg(o!)})`);
         }
         if (name === "isSealed") {
             if (args.length !== 1) unsupported(call, "Object.isSealed expects object");
@@ -22625,13 +22676,13 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }], ([o]) => `((void)${o}, true)`);
             }
-            if (mapped.kind !== "value" && mapped.kind !== "array") {
-                unsupported(arg, "Object.isSealed currently supports dynamic objects, arrays, and primitives only");
+            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
+                unsupported(arg, "Object.isSealed currently supports dynamic objects, arrays, functions, and primitives only");
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(T_BOOLEAN, [
                 { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
-            ], ([o]) => `tsc_value_is_sealed(${mapped.kind === "array" ? `tsc_value_array(${o})` : o})`);
+            ], ([o]) => `tsc_value_is_sealed(${dynamicObjectArg(o!)})`);
         }
         if (name === "isFrozen") {
             if (args.length !== 1) unsupported(call, "Object.isFrozen expects object");
@@ -22639,13 +22690,13 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }], ([o]) => `((void)${o}, true)`);
             }
-            if (mapped.kind !== "value" && mapped.kind !== "array") {
-                unsupported(arg, "Object.isFrozen currently supports dynamic objects, arrays, and primitives only");
+            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
+                unsupported(arg, "Object.isFrozen currently supports dynamic objects, arrays, functions, and primitives only");
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(T_BOOLEAN, [
                 { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
-            ], ([o]) => `tsc_value_is_frozen(${mapped.kind === "array" ? `tsc_value_array(${o})` : o})`);
+            ], ([o]) => `tsc_value_is_frozen(${dynamicObjectArg(o!)})`);
         }
         if (name === "preventExtensions") {
             if (args.length !== 1) unsupported(call, "Object.preventExtensions expects object");
@@ -22653,13 +22704,13 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(mapped, [{ value: obj, node: arg }], ([o]) => o);
             }
-            if (mapped.kind !== "value" && mapped.kind !== "array") {
-                unsupported(arg, "Object.preventExtensions currently supports dynamic objects, arrays, and primitives only");
+            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
+                unsupported(arg, "Object.preventExtensions currently supports dynamic objects, arrays, functions, and primitives only");
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(mapped, [
                 { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
-            ], ([o]) => `({ tsc_value_prevent_extensions(${mapped.kind === "array" ? `tsc_value_array(${o})` : o}); ${o}; })`);
+            ], ([o]) => `({ tsc_value_prevent_extensions(${dynamicObjectArg(o!)}); ${o}; })`);
         }
         if (name === "seal") {
             if (args.length !== 1) unsupported(call, "Object.seal expects object");
@@ -22667,25 +22718,25 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(mapped, [{ value: obj, node: arg }], ([o]) => o);
             }
-            if (mapped.kind !== "value" && mapped.kind !== "array") {
-                unsupported(arg, "Object.seal currently supports dynamic objects, arrays, and primitives only");
+            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
+                unsupported(arg, "Object.seal currently supports dynamic objects, arrays, functions, and primitives only");
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(mapped, [
                 { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
-            ], ([o]) => `({ tsc_value_seal(${mapped.kind === "array" ? `tsc_value_array(${o})` : o}); ${o}; })`);
+            ], ([o]) => `({ tsc_value_seal(${dynamicObjectArg(o!)}); ${o}; })`);
         }
         if (name === "setPrototypeOf") {
             if (args.length !== 2) unsupported(call, "Object.setPrototypeOf expects object and prototype");
-            if (mapped.kind !== "value" && mapped.kind !== "array") {
-                unsupported(arg, "Object.setPrototypeOf currently supports dynamic objects and arrays only");
+            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
+                unsupported(arg, "Object.setPrototypeOf currently supports dynamic objects, arrays, and functions only");
             }
             const obj = this.emitExpr(arg);
             const proto = this.emitExpr(args[1]!);
-            return this.emitSequencedExpr(mapped.kind === "array" ? mapped : T_VALUE, [
+            return this.emitSequencedExpr(mapped.kind === "value" ? T_VALUE : mapped, [
                 { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
                 { value: proto, target: T_VALUE, node: args[1]! },
-            ], ([o, p]) => `({ tsc_value_object_set_prototype_of(${mapped.kind === "array" ? `tsc_value_array(${o})` : o}, ${p}); ${o}; })`);
+            ], ([o, p]) => `({ tsc_value_object_set_prototype_of(${dynamicObjectArg(o!)}, ${p}); ${o}; })`);
         }
         if (name === "freeze") {
             if (args.length !== 1) unsupported(call, "Object.freeze expects object");
@@ -22693,13 +22744,13 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(mapped, [{ value: obj, node: arg }], ([o]) => o);
             }
-            if (mapped.kind !== "value" && mapped.kind !== "array") {
-                unsupported(arg, "Object.freeze currently supports dynamic objects, arrays, and primitives only");
+            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
+                unsupported(arg, "Object.freeze currently supports dynamic objects, arrays, functions, and primitives only");
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(mapped, [
                 { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
-            ], ([o]) => `({ tsc_value_freeze(${mapped.kind === "array" ? `tsc_value_array(${o})` : o}); ${o}; })`);
+            ], ([o]) => `({ tsc_value_freeze(${dynamicObjectArg(o!)}); ${o}; })`);
         }
         if (name === "defineProperty") {
             if (args.length !== 3) unsupported(call, "Object.defineProperty expects object, key, descriptor");

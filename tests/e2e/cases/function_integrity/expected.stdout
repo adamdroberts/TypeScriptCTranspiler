@@ -6,6 +6,12 @@ length desc: 2 false false false
 name desc: Stable false false false
 shared proto: stable
 shared extensible: false false
+typed function enum: 0 0 0
+typed function own: 2 length name true TypedDirect TypedDirect
+typed function proto: typed
+typed function prevent: true true false
+typed function seal: true true false
+typed function freeze: true true true
 seal before: false false
 seal: true false true false
 freeze: true false true true
