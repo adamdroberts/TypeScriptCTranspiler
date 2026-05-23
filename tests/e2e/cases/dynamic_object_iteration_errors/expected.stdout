@@ -1,0 +1,3 @@
+create: Object.create prototype must be an object or null
+for-of: for-of value is not iterable
+valid: proto ab

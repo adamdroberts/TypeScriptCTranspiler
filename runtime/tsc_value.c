@@ -460,7 +460,7 @@ bool tsc_reflect_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accesso
 
 tsc_value_t tsc_value_object_create(tsc_value_t prototype) {
     if (!value_is_valid_prototype(prototype)) {
-        tsc_panic("Object.create prototype must be an object or null");
+        tsc_throw_str(tsc_str_from_cstr("Object.create prototype must be an object or null"));
     }
     tsc_object_t* o = tsc_object_new();
     o->prototype = prototype;
@@ -1148,7 +1148,7 @@ tsc_array_t* tsc_value_iter_values(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
         return value_string_values((const tsc_str_t*)value_ptr(v));
     }
-    tsc_panic("for-of value is not iterable");
+    tsc_throw_str(tsc_str_from_cstr("for-of value is not iterable"));
     return tsc_array_new(sizeof(tsc_value_t), 1);
 }
 
