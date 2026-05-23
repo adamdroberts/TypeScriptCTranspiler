@@ -1,3 +1,4 @@
 global: string string string true true
 namespace: string true
 named: string true
+options: string string string

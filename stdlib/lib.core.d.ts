@@ -760,7 +760,10 @@ interface OS {
     freemem(...ignored: any[]): number;
     uptime(...ignored: any[]): number;
     loadavg(...ignored: any[]): number[];
-    userInfo(): any;
+    userInfo(options?: OSUserInfoOptions): any;
+}
+interface OSUserInfoOptions {
+    encoding?: FSEncoding;
 }
 declare const os: OS;
 declare module "os" {
@@ -782,7 +785,7 @@ declare module "os" {
     export function freemem(...ignored: any[]): number;
     export function uptime(...ignored: any[]): number;
     export function loadavg(...ignored: any[]): number[];
-    export function userInfo(): any;
+    export function userInfo(options?: OSUserInfoOptions): any;
 }
 declare module "node:os" {
     export const EOL: string;
@@ -803,7 +806,7 @@ declare module "node:os" {
     export function freemem(...ignored: any[]): number;
     export function uptime(...ignored: any[]): number;
     export function loadavg(...ignored: any[]): number[];
-    export function userInfo(): any;
+    export function userInfo(options?: OSUserInfoOptions): any;
 }
 
 interface Date {

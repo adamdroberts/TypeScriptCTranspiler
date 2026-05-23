@@ -21469,7 +21469,8 @@ class Emitter {
             case "uptime": return ret(T_NUMBER, `tsc_os_uptime()`);
             case "loadavg": return ret(arrayType(T_NUMBER), `tsc_os_loadavg()`);
             case "userInfo":
-                if (call.arguments.length !== 0) unsupported(call, "os.userInfo options are not supported yet");
+                if (call.arguments.length > 1) unsupported(call, "os.userInfo expects at most one options argument");
+                this.validateOsUserInfoOptions(call.arguments[0]);
                 return { c: `tsc_os_user_info()`, ty: T_VALUE };
             case "cpus": {
                 // Minimal: return an array-of-empty-objects of length cpu_count.
@@ -21481,6 +21482,25 @@ class Emitter {
             }
         }
         unsupported(call, `os.${name}`);
+    }
+
+    private validateOsUserInfoOptions(options: ts.Expression | undefined): void {
+        if (!options || this.isUndefinedExpression(options)) return;
+        if (!ts.isObjectLiteralExpression(options)) {
+            unsupported(options, "os.userInfo options must be an object literal in this subset");
+        }
+        for (const prop of options.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, "os.userInfo options only support encoding property assignments");
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (key !== "encoding") {
+                unsupported(prop.name, `os.userInfo unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+            }
+            if (!ts.isStringLiteralLike(prop.initializer) || (prop.initializer.text !== "utf8" && prop.initializer.text !== "utf-8")) {
+                unsupported(prop.initializer, "os.userInfo currently supports UTF-8 encoding options only");
+            }
+        }
     }
 
     private objectProperties(tsType: ts.Type): ts.Symbol[] {
