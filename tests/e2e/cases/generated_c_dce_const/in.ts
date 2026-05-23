@@ -377,6 +377,20 @@ function branchInnerExit(value: boolean): number {
     }
 }
 
+function elseIfStatic(value: number): number {
+    if (value < 0) {
+        return 88;
+    } else if (false) {
+        console.log("else_if_static_dead");
+        return 89;
+    } else if (true) {
+        return 90;
+    } else {
+        console.log("else_if_static_dead_tail");
+        return 91;
+    }
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -493,6 +507,7 @@ console.log(
     usedLocal(used_count),
     constantBranch(used_count),
     branchInnerExit(true),
+    elseIfStatic(used_count),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),

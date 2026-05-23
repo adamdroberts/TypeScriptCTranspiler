@@ -9046,6 +9046,25 @@ class Emitter {
     }
 
     private emitElseIf(buf: CBuf, is: ts.IfStatement): void {
+        const staticCondition = this.staticBooleanValue(is.expression);
+        if (staticCondition === true) {
+            buf.open("else");
+            this.emitStmtInBlock(buf, is.thenStatement);
+            buf.close();
+            return;
+        }
+        if (staticCondition === false) {
+            if (is.elseStatement) {
+                if (ts.isIfStatement(is.elseStatement)) {
+                    this.emitElseIf(buf, is.elseStatement);
+                } else {
+                    buf.open("else");
+                    this.emitStmtInBlock(buf, is.elseStatement);
+                    buf.close();
+                }
+            }
+            return;
+        }
         const cond = this.emitBoolExpr(is.expression);
         buf.open(`else if (${cond})`);
         this.emitStmtInBlock(buf, is.thenStatement);

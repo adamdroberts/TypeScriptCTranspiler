@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now folds static `else if` branches in emitted C instead of preserving unreachable `else if (false)` bodies. Test: `generated_c_dce_const`.
 - Generated-C DCE now removes `for (...; false; ...)` bodies and increment expressions while preserving initializer evaluation. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes static nullish coalescing expressions whose unreachable side may contain effects. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes static boolean short-circuit expressions whose unreachable RHS may contain effects. Test: `generated_c_dce_const`.

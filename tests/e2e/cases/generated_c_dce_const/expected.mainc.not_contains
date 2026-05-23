@@ -399,6 +399,8 @@ local_dead_static_else
 static_branch_after_exit
 branch_inner_after_return
 nested_branch_inner_after_return
+else_if_static_dead
+else_if_static_dead_tail
 branch_only_dead
 branch_after_exit
 nested_after_block
