@@ -10,7 +10,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 
 ### Literals
 - Numeric literals — decimal, `0x`/`0o`/`0b`, underscore separators → `formatNumericLiteral` in `src/emit/index.ts`. Test: `arith`
-- BigInt literals (`0n`, `0xfn`, `0o77n`, `0b101n`), `BigInt(value, ...ignored)`, arithmetic/comparison/equality, unary minus, compound arithmetic assignment, `typeof`, `.toString(radix?, ...ignored)`, `.toLocaleString(...ignored)`, `.valueOf(...ignored)`, and inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)` backed by GMP. Tests: `bigint`, `symbol_bigint_object_methods`
+- BigInt literals (`0n`, `0xfn`, `0o77n`, `0b101n`), `BigInt(value, ...ignored)`, arithmetic/comparison/equality, unary minus, compound arithmetic assignment, `typeof`, `.toString(radix?, ...ignored)`, `.toLocaleString(...ignored)`, `.valueOf(...ignored)`, and inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)` backed by GMP, with catchable constructor/operator/radix validation failures. Tests: `bigint`, `bigint_errors`, `symbol_bigint_object_methods`
 - Symbol values via `Symbol(description?, ...ignored)`, `Symbol.for(key, ...ignored)`, `Symbol.keyFor(sym, ...ignored)`, `Symbol.iterator`, `Symbol.asyncIterator`, `.description`, `.toString(...ignored)`, `.toLocaleString(...ignored)`, `.valueOf(...ignored)`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, equality, and `typeof`. Tests: `symbols`, `symbol_bigint_object_methods`
 - String literals with full C escape handling for UTF-8 and non-BMP code points → `escapeCString` in `src/emit/cbuf.ts`. Test: `hello`, `strings`, `string_for_of`
 - Template literals with `${expr}` interpolation → `emitTemplate`. Test: `greet`, `fizzbuzz`
@@ -585,6 +585,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `aggregate_error_constructor` | AggregateError constructor/callable form with stored errors, ignored extra args, and Error stringification |
 | `base64_globals` | global btoa/atob byte-string base64 helpers |
 | `bigint` | GMP-backed BigInt literals, arithmetic, comparison, and toString |
+| `bigint_errors` | BigInt constructor/operator/radix validation failures are catchable |
 | `bitwise_assign` | typed numeric bitwise compound assignments |
 | `classes` | class + ctor/method + `this` + `new`, including spread constructor calls |
 | `buffer` | binary-safe Buffer construction, indexing, slicing, hex/utf8 conversion |

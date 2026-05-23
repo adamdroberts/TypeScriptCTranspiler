@@ -50,6 +50,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `Array.prototype.with(...)` out-of-range failures now throw catchable runtime exceptions for typed and dynamic receivers instead of aborting the process. Test: `array_with_errors`.
 - `String.fromCodePoint(...)` invalid-code-point failures now throw catchable runtime exceptions instead of aborting the process. Test: `string_from_code_point_errors`.
 - `String.prototype.normalize(form)` invalid-form failures now throw catchable runtime exceptions for typed and dynamic receivers instead of aborting the process. Test: `string_normalize_errors`.
+- BigInt constructor, division/modulo, exponentiation, and `toString(radix)` validation failures now throw catchable runtime exceptions instead of aborting the process. Test: `bigint_errors`.
 - Unknown-source `eval` / `Function` diagnostics now describe the available AOT manifest and gated embedded-Node paths instead of implying an impossible runtime-code blocker.
 - Documentation and agent indexes now describe native addons, runtime code compilation, and dynamic `require(...)` as AOT closure requirements rather than impossible blockers; README and LLM indexes no longer list Proxy or load-on-demand require execution as remaining targets.
 - Inferred locals whose TypeScript type is erased to `tsc_value_t` now use boxed storage even when their initializer emits a narrower primitive, fixing nullish coalescing over `Map.get(...)` results and optional numeric field reads. Dynamic and typed string Reflect helpers again treat boxed strings as valid string-object targets. Tests: `nullish`, `wordcount`, `weak_ref`, `collection_object_methods`, `string_object_enumeration`, `dynamic_string_object_enumeration`.
@@ -796,7 +797,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Tagged template calls for tags with a `TemplateStringsArray` first parameter and fixed substitution parameters.
 - Computed property names in typed object literals when the key resolves to a string or number literal.
 - PCRE2-backed RegExp runtime with lookahead/lookbehind, named capture syntax, Unicode property escapes, `s`/`u` flags, and existing regex string APIs preserved.
-- GMP-backed `bigint` support for literals, `BigInt(...)`, arithmetic/comparison/equality, `typeof`, and `.toString(radix?)`.
+- GMP-backed `bigint` support for literals, `BigInt(...)`, arithmetic/comparison/equality, `typeof`, and `.toString(radix?)`, with catchable validation failures.
 - Runtime-correct `typeof` equality/inequality guards for nullable pointer unions such as `string | null` and `string | undefined`.
 - `Object.entries(obj)` / `Object.fromEntries(entries)` for homogeneous typed object fields using `[string, T]` entry arrays.
 - `String.prototype.normalize()` for NFC/NFD/NFKC/NFKD using ICU.
