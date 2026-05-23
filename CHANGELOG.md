@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes statements after conservative always-exiting loops. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes statements after `switch` forms whose defaulted clauses conservatively always exit without switch breaks. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes statements after `try` forms that conservatively always exit. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes side-effect-free property reads on object literals and earlier pure const object literals. Test: `generated_c_dce_const`.

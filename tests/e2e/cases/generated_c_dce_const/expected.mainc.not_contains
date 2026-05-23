@@ -54,3 +54,6 @@ nested_after_block
 try_after_exit
 try_catch_after_exit
 switch_after_exit
+while_after_exit
+for_after_exit
+do_after_exit

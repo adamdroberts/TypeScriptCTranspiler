@@ -8853,6 +8853,20 @@ class Emitter {
         if (ts.isSwitchStatement(stmt)) {
             return this.switchStatementAlwaysExits(stmt);
         }
+        if (ts.isWhileStatement(stmt)) {
+            return this.isTrueExpression(stmt.expression) &&
+                !this.statementContainsBreak(stmt.statement) &&
+                this.statementAlwaysExits(stmt.statement);
+        }
+        if (ts.isForStatement(stmt)) {
+            return (!stmt.condition || this.isTrueExpression(stmt.condition)) &&
+                !this.statementContainsBreak(stmt.statement) &&
+                this.statementAlwaysExits(stmt.statement);
+        }
+        if (ts.isDoStatement(stmt)) {
+            return !this.statementContainsBreak(stmt.statement) &&
+                this.statementAlwaysExits(stmt.statement);
+        }
         return false;
     }
 
@@ -8891,6 +8905,11 @@ class Emitter {
         };
         visit(stmt);
         return found;
+    }
+
+    private isTrueExpression(expr: ts.Expression): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        return unwrapped.kind === ts.SyntaxKind.TrueKeyword;
     }
 
     private emitReturn(buf: CBuf, r: ts.ReturnStatement): void {

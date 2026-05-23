@@ -126,6 +126,33 @@ function switchExit(value: "a" | "b"): number {
     return switch_after_exit;
 }
 
+function whileExit(): number {
+    while (true) {
+        return 50;
+    }
+    const while_after_exit = 51;
+    console.log(while_after_exit);
+    return while_after_exit;
+}
+
+function forExit(): number {
+    for (;;) {
+        return 60;
+    }
+    const for_after_exit = 61;
+    console.log(for_after_exit);
+    return for_after_exit;
+}
+
+function doExit(value: boolean): number {
+    do {
+        return 70;
+    } while (value);
+    const do_after_exit = 71;
+    console.log(do_after_exit);
+    return do_after_exit;
+}
+
 console.log(
     usedLocal(used_count),
     branchExit(true),
@@ -133,5 +160,8 @@ console.log(
     tryExit(false),
     tryCatchExit(false),
     switchExit("a"),
+    whileExit(),
+    forExit(),
+    doExit(false),
     DceNamespace.kept,
 );
