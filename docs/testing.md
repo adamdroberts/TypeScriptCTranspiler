@@ -374,7 +374,7 @@ If your test imports other files, add them to the same directory. They're auto-p
 
 - **Error paths at the emit level** — expected-failure coverage exists for emitter diagnostics, but broader exit-code coverage is still thin.
 - **Multi-config matrix** — `--no-gc`, default, and one `--release` case are covered. macOS / Windows / clang paths aren't exercised yet.
-- **Binary size / perf regressions** — the manual benchmark harness records `tsc2c` output binary bytes and timing/ops data, but no CI threshold gate exists yet.
+- **Binary size / perf regressions** — the manual benchmark harness records `tsc2c` output binary bytes and timing/ops data; `bun run bench:check -- <results.json>` can enforce local/CI thresholds via `MAX_BINARY_BYTES`, `MAX_TSC2C_MS`, `MIN_VS_BUN`, and `MIN_VS_NODE`, but no shared CI threshold policy exists yet.
 - **Stdlib edge cases** at scale — we test "happy path" for each feature. Fuzz / property-based testing would improve coverage.
 
 These are candidate Phase 15 work. See [`todo.md`](todo.md).

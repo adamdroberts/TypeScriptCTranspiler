@@ -10,6 +10,7 @@
     "build": "tsc -p .",
     "test": "bun tests/e2e/run.ts",
     "test:native-addon-smoke": "bun tests/native-addon-smoke/run.ts",
+    "bench:check": "bun manual-tests/benchmarks/check-thresholds.ts",
     "cli": "bun src/cli.ts"
   },
   "dependencies": {
