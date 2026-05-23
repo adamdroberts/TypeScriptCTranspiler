@@ -22,6 +22,24 @@ class DeadBox {
     }
 }
 
+class DeadBase {
+    value: number;
+
+    constructor(value: number) {
+        this.value = value;
+    }
+
+    read(): number {
+        return this.value;
+    }
+}
+
+class DeadDerived extends DeadBase {
+    extra(): number {
+        return this.read() + 1;
+    }
+}
+
 class DeadStaticBox {
     static label = "dead";
     static count = 3 + 4;

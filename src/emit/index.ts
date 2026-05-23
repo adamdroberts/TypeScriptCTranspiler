@@ -530,7 +530,7 @@ class Emitter {
     private isPrunableTopLevelClass(cd: ts.ClassDeclaration): boolean {
         if (!cd.name) return false;
         if (!ts.isSourceFile(cd.parent)) return false;
-        if (cd.heritageClauses?.length) return false;
+        if (!this.classHeritageHasNoDefinitionSideEffects(cd)) return false;
         if (this.classHasDecorators(cd)) return false;
         const modifiers = ts.canHaveModifiers(cd) ? ts.getModifiers(cd) : undefined;
         if (modifiers?.some((m) =>
@@ -552,6 +552,24 @@ class Emitter {
             }
             if (isStatic(member) && !this.staticClassMemberHasNoDefinitionSideEffects(member)) {
                 return false;
+            }
+        }
+        return true;
+    }
+
+    private classHeritageHasNoDefinitionSideEffects(cd: ts.ClassDeclaration): boolean {
+        if (!cd.heritageClauses?.length) return true;
+        for (const clause of cd.heritageClauses) {
+            if (clause.token !== ts.SyntaxKind.ExtendsKeyword) return false;
+            for (const type of clause.types) {
+                const expr = type.expression;
+                if (!ts.isIdentifier(expr)) return false;
+                const sym = this.symbolForIdentifier(expr);
+                const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+                if (!decl || !ts.isClassDeclaration(decl)) return false;
+                const source = cd.getSourceFile();
+                if (decl.getSourceFile() !== source) return false;
+                if (decl.getStart(source) >= cd.getStart(source)) return false;
             }
         }
         return true;
