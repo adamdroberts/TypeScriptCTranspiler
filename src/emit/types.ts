@@ -271,13 +271,22 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
             (p) => p.flags & (ts.TypeFlags.NumberLiteral | ts.TypeFlags.Number),
         );
         if (allNumber) return T_NUMBER;
-        // Treat `T | undefined` (and `T | null`) as just `T` for typed
-        // contexts. Phase 3 will model this properly via boxed values.
+        // Treat pointer-like `T | undefined` (and `T | null`) as just `T`
+        // for typed contexts. Numeric/boolean nullish unions need boxed
+        // storage so the nullish arm does not collapse to NaN/false.
         const concrete = parts.filter(
             (p) => !(p.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null | ts.TypeFlags.Void)),
         );
         if (concrete.length === 1) {
-            return mapTsType(node, concrete[0]!, checker);
+            const concreteType = mapTsType(node, concrete[0]!, checker);
+            const hasNullish = concrete.length !== parts.length;
+            if (
+                hasNullish &&
+                (concreteType.kind === "number" || concreteType.kind === "boolean")
+            ) {
+                return T_VALUE;
+            }
+            return concreteType;
         }
         if (concrete.length > 1) {
             return T_VALUE;

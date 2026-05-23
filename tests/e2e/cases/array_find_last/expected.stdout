@@ -2,4 +2,5 @@ last even: 6
 last even index: 5
 last below 4: 3
 missing: undefined
+missing local: undefined
 missing index: -1
