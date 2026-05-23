@@ -5985,12 +5985,43 @@ class Emitter {
     }
 
     private emitDecoratorFunctionValue(expr: ts.Expression, label: string): string {
+        if (ts.isIdentifier(expr) && this.isDirectCallableIdentifier(expr)) {
+            return this.emitDirectDecoratorFunctionValue(expr, label);
+        }
         const callee = this.emitExpr(expr);
         if (callee.ty.kind === "value") return callee.c;
         if (callee.ty.kind !== "function" || !callee.ty.ret) {
             unsupported(expr, `${label} expression must be callable`);
         }
         return this.coerce(callee, T_VALUE, expr);
+    }
+
+    private emitDirectDecoratorFunctionValue(expr: ts.Identifier, label: string): string {
+        const sym = this.symbolForIdentifier(expr);
+        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        const fnDecl = decl && ts.isVariableDeclaration(decl) && decl.initializer
+            ? decl.initializer
+            : decl;
+        const sig = fnDecl && (
+            ts.isFunctionDeclaration(fnDecl) ||
+            ts.isFunctionExpression(fnDecl) ||
+            ts.isArrowFunction(fnDecl)
+        )
+            ? this.checker.getSignatureFromDeclaration(fnDecl)
+            : null;
+        if (!sig) unsupported(expr, `${label} expression must be callable`);
+        const params = sig.getParameters().map((param) => {
+            const paramDecl = param.valueDeclaration ?? expr;
+            return this.prepareType(mapTsType(
+                paramDecl,
+                this.checker.getTypeOfSymbolAtLocation(param, paramDecl),
+                this.checker,
+            ));
+        });
+        const ret = this.prepareType(mapTsType(expr, sig.getReturnType(), this.checker));
+        const thisType = this.directCallableThisType(expr);
+        const type = this.prepareType(functionType(params, ret, thisType ?? undefined));
+        return this.coerce(this.emitFunctionReferenceClosure(expr, type), T_VALUE, expr);
     }
 
     private emitDecoratorFunctionCall(
