@@ -5,6 +5,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Added Linux GitHub Actions CI wiring for build, no-GC e2e, benchmark smoke, and scheduled/manual long benchmark policy checks.
+- Added `bun run bench:long` with `manual-tests/benchmarks/thresholds-long.json` for broader scheduled/manual benchmark threshold runs.
 - Added per-site cached literal dynamic property reads, dynamic string-key element reads, receiver-aware dynamic `Reflect.get(...)` reads, direct dynamic property/string-key writes, and three-/four-argument dynamic `Reflect.set(...)` writes, plus opt-in dynamic property-operation, object shape-update, and property-cache hit/miss runtime diagnostics via `TSC_DYNAMIC_STATS=1`. The e2e harness now supports per-case runtime env files and stderr substring assertions. Test: `dynamic_runtime_stats`.
 - The manual benchmark harness now records `tsc2c` output binary size in JSON, console tables, and Markdown reports, so Phase 15 size/perf tracking has a concrete measurement path.
 - Added `bun run bench:check -- <results.json>` for benchmark threshold checks over binary size, `tsc2c` time, and speed ratios.

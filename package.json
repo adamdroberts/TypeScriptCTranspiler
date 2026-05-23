@@ -12,6 +12,7 @@
     "test:native-addon-smoke": "bun tests/native-addon-smoke/run.ts",
     "bench:check": "bun manual-tests/benchmarks/check-thresholds.ts",
     "bench:smoke": "bun manual-tests/benchmarks/ci-smoke.ts",
+    "bench:long": "bun manual-tests/benchmarks/ci-long.ts",
     "cli": "bun src/cli.ts"
   },
   "dependencies": {

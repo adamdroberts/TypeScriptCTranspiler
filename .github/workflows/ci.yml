@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
+
+jobs:
+  linux:
+    name: Linux build and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y gcc make libpcre2-dev libgmp-dev
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run build
+
+      - name: E2E no-GC suite
+        run: TSC2C_NO_GC=1 bun tests/e2e/run.ts
+
+      - name: Benchmark smoke
+        run: bun run bench:smoke
+
+  benchmark-long:
+    name: Long benchmark policy
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y gcc make libpcre2-dev libgmp-dev
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Long benchmark threshold policy
+        run: bun run bench:long
