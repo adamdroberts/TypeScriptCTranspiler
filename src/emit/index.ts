@@ -693,11 +693,18 @@ class Emitter {
                 this.isSideEffectFreeTopLevelConstInitializer(expr.whenTrue, seenConsts) &&
                 this.isSideEffectFreeTopLevelConstInitializer(expr.whenFalse, seenConsts);
         }
-        if (ts.isPropertyAccessExpression(expr) && expr.name.text === "length") {
-            return this.isSideEffectFreeLengthOperand(expr.expression, seenConsts);
+        if (ts.isPropertyAccessExpression(expr)) {
+            if (expr.name.text === "length") {
+                return this.isSideEffectFreeLengthOperand(expr.expression, seenConsts);
+            }
+            return this.isSideEffectFreeObjectReadOperand(expr.expression, seenConsts);
         }
         if (ts.isElementAccessExpression(expr) && expr.argumentExpression) {
-            return this.isSideEffectFreeElementAccess(expr, seenConsts);
+            return this.isSideEffectFreeElementAccess(expr, seenConsts) ||
+                (
+                    this.isSideEffectFreeObjectReadOperand(expr.expression, seenConsts) &&
+                    this.isSideEffectFreeTopLevelConstInitializer(expr.argumentExpression, seenConsts)
+                );
         }
         if (ts.isTemplateExpression(expr)) {
             return expr.templateSpans.every((span) =>
@@ -765,6 +772,18 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeIndexableOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeObjectReadOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeObjectReadOperand(init, seenConsts);
     }
 
     private objectLiteralPropertyNameHasNoDefinitionSideEffects(

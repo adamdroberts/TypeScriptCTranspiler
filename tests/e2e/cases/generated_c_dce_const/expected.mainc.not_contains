@@ -20,6 +20,9 @@ unused_const_array_length
 unused_string_index
 unused_array_index
 unused_const_array_index
+unused_object_prop
+unused_const_object_prop
+unused_object_key_index
 unused_chain_seed
 unused_chain_mid
 unused_chain_object
@@ -32,6 +35,7 @@ unused_empty
 top_level_dead_expr
 top_level_dead_length
 top_level_dead_index
+top_level_dead_prop
 top_level_dead_comma
 unused_local_const
 unused_local_let
@@ -39,6 +43,7 @@ unused_local_empty
 local_dead_expr
 local_dead_length
 local_dead_index
+local_dead_prop
 local_dead_comma
 unused_local_seed
 unused_local_chain
