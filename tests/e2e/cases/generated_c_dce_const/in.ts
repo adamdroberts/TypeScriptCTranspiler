@@ -54,6 +54,9 @@ const unused_object_property_names_call = Object.getOwnPropertyNames({ dead_obje
 const unused_object_property_descriptor_call = Object.getOwnPropertyDescriptor({ dead_object_property_descriptor: 1 }, "dead_object_property_descriptor");
 const unused_object_property_descriptors_call = Object.getOwnPropertyDescriptors({ dead_object_property_descriptors: 1 });
 const unused_array_property_names_call = Object.getOwnPropertyNames([1, 2, 3]);
+const unused_reflect_has_call = Reflect.has({ dead_reflect_has: 1 }, "dead_reflect_has");
+const unused_reflect_own_keys_call = Reflect.ownKeys({ dead_reflect_own_keys: 1 });
+const unused_reflect_descriptor_call = Reflect.getOwnPropertyDescriptor({ dead_reflect_descriptor: 1 }, "dead_reflect_descriptor");
 const unused_chain_seed = "dead";
 const unused_chain_mid = unused_chain_seed;
 const unused_chain_object = { label: unused_chain_mid };
@@ -78,6 +81,8 @@ Object.values({ top_level_dead_object_values: 2 });
 Object.hasOwn({ top_level_dead_object_has_own: 1 }, "top_level_dead_object_has_own");
 Object.getOwnPropertyNames({ top_level_dead_property_names: 1 });
 Object.getOwnPropertyDescriptor({ top_level_dead_property_descriptor: 1 }, "top_level_dead_property_descriptor");
+Reflect.has({ top_level_dead_reflect_has: 1 }, "top_level_dead_reflect_has");
+Reflect.ownKeys({ top_level_dead_reflect_own_keys: 1 });
 (1 + 2) * 3;
 "top_level_dead_length".length;
 "top_level_dead_index"[0];
@@ -109,6 +114,8 @@ function usedLocal(value: number): number {
     Object.hasOwn({ local_dead_object_has_own: 1 }, "local_dead_object_has_own");
     Object.getOwnPropertyDescriptors({ local_dead_property_descriptors: 1 });
     Object.getOwnPropertyNames(["local_dead_array_property_names"]);
+    Reflect.getOwnPropertyDescriptor({ local_dead_reflect_descriptor: 1 }, "local_dead_reflect_descriptor");
+    Reflect.ownKeys(["local_dead_reflect_array_keys"]);
     "local_dead_length".length;
     "local_dead_index"[0];
     ({ label: "local_dead_prop" }).label;

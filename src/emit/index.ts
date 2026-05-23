@@ -1034,6 +1034,26 @@ class Emitter {
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
             );
         }
+        if (
+            ts.isIdentifier(recv) &&
+            method === "ownKeys" &&
+            call.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Reflect")
+        ) {
+            return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts);
+        }
+        if (
+            ts.isIdentifier(recv) &&
+            (
+                method === "has" ||
+                method === "getOwnPropertyDescriptor"
+            ) &&
+            call.arguments.length === 2 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Reflect")
+        ) {
+            return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts) &&
+                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts);
+        }
         return false;
     }
 
