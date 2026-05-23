@@ -1,3 +1,6 @@
 DeadBox_t
 DeadBox_new(
 DeadBox_read(
+DeadStaticBox_t
+DeadStaticBox_read(
+DeadStaticBox_count

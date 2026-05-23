@@ -542,7 +542,6 @@ class Emitter {
         }
         for (const member of cd.members) {
             if (ts.isClassStaticBlockDeclaration(member)) return false;
-            if (isStatic(member)) return false;
             if (
                 member.name &&
                 !ts.isIdentifier(member.name) &&
@@ -551,8 +550,21 @@ class Emitter {
             ) {
                 return false;
             }
+            if (isStatic(member) && !this.staticClassMemberHasNoDefinitionSideEffects(member)) {
+                return false;
+            }
         }
         return true;
+    }
+
+    private staticClassMemberHasNoDefinitionSideEffects(member: ts.ClassElement): boolean {
+        if (ts.isPropertyDeclaration(member)) {
+            return !member.initializer ||
+                this.isSideEffectFreeTopLevelConstInitializer(member.initializer);
+        }
+        return ts.isMethodDeclaration(member) ||
+            ts.isGetAccessorDeclaration(member) ||
+            ts.isSetAccessorDeclaration(member);
     }
 
     private shouldEmitClassDeclaration(cd: ts.ClassDeclaration): boolean {

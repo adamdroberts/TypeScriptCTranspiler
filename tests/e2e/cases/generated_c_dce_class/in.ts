@@ -22,4 +22,22 @@ class DeadBox {
     }
 }
 
+class DeadStaticBox {
+    static label = "dead";
+    static count = 3 + 4;
+
+    static read(): number {
+        return DeadStaticBox.count;
+    }
+}
+
+function keepStaticEffect(): number {
+    console.log("static effect");
+    return 1;
+}
+
+class StaticEffectBox {
+    static value = keepStaticEffect();
+}
+
 console.log(new UsedBox(5).read());
