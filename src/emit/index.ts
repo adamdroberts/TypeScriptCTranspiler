@@ -506,10 +506,59 @@ class Emitter {
         }
         if (
             ts.isPrefixUnaryExpression(expr) &&
-            (expr.operator === ts.SyntaxKind.PlusToken || expr.operator === ts.SyntaxKind.MinusToken) &&
-            ts.isNumericLiteral(expr.operand)
+            (
+                expr.operator === ts.SyntaxKind.PlusToken ||
+                expr.operator === ts.SyntaxKind.MinusToken ||
+                expr.operator === ts.SyntaxKind.ExclamationToken ||
+                expr.operator === ts.SyntaxKind.TildeToken
+            ) &&
+            this.isSideEffectFreeTopLevelConstInitializer(expr.operand)
         ) {
             return true;
+        }
+        if (ts.isTypeOfExpression(expr) || ts.isVoidExpression(expr)) {
+            return this.isSideEffectFreeTopLevelConstInitializer(expr.expression);
+        }
+        if (ts.isBinaryExpression(expr)) {
+            switch (expr.operatorToken.kind) {
+                case ts.SyntaxKind.PlusToken:
+                case ts.SyntaxKind.MinusToken:
+                case ts.SyntaxKind.AsteriskToken:
+                case ts.SyntaxKind.SlashToken:
+                case ts.SyntaxKind.PercentToken:
+                case ts.SyntaxKind.AsteriskAsteriskToken:
+                case ts.SyntaxKind.LessThanToken:
+                case ts.SyntaxKind.LessThanEqualsToken:
+                case ts.SyntaxKind.GreaterThanToken:
+                case ts.SyntaxKind.GreaterThanEqualsToken:
+                case ts.SyntaxKind.EqualsEqualsToken:
+                case ts.SyntaxKind.EqualsEqualsEqualsToken:
+                case ts.SyntaxKind.ExclamationEqualsToken:
+                case ts.SyntaxKind.ExclamationEqualsEqualsToken:
+                case ts.SyntaxKind.AmpersandAmpersandToken:
+                case ts.SyntaxKind.BarBarToken:
+                case ts.SyntaxKind.QuestionQuestionToken:
+                case ts.SyntaxKind.AmpersandToken:
+                case ts.SyntaxKind.BarToken:
+                case ts.SyntaxKind.CaretToken:
+                case ts.SyntaxKind.LessThanLessThanToken:
+                case ts.SyntaxKind.GreaterThanGreaterThanToken:
+                case ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken:
+                    return this.isSideEffectFreeTopLevelConstInitializer(expr.left) &&
+                        this.isSideEffectFreeTopLevelConstInitializer(expr.right);
+                default:
+                    return false;
+            }
+        }
+        if (ts.isConditionalExpression(expr)) {
+            return this.isSideEffectFreeTopLevelConstInitializer(expr.condition) &&
+                this.isSideEffectFreeTopLevelConstInitializer(expr.whenTrue) &&
+                this.isSideEffectFreeTopLevelConstInitializer(expr.whenFalse);
+        }
+        if (ts.isTemplateExpression(expr)) {
+            return expr.templateSpans.every((span) =>
+                this.isSideEffectFreeTopLevelConstInitializer(span.expression)
+            );
         }
         if (ts.isArrayLiteralExpression(expr)) {
             return expr.elements.every((element) =>
