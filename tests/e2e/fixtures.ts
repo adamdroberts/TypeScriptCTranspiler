@@ -177,6 +177,49 @@ const packages: Record<string, PackageFixture> = {
             "src/wrong-flavors/main.ts": 'export const flavor = "wrong-imports-default";\n',
         },
     },
+    "tsc2c-import-node-addons-conditions-package": {
+        packageJson: {
+            name: "tsc2c-import-node-addons-conditions-package",
+            version: "1.0.0",
+            type: "module",
+            exports: {
+                ".": {
+                    "node-addons": "./src/addons-entry.ts",
+                    node: "./src/node-entry.ts",
+                    import: "./src/import-entry.ts",
+                    default: "./src/default-entry.ts",
+                },
+                "./tool": {
+                    "node-addons": "./src/tool-addons.ts",
+                    node: "./src/tool-node.ts",
+                    import: "./src/tool-import.ts",
+                    default: "./src/tool-default.ts",
+                },
+            },
+            imports: {
+                "#flavor": {
+                    "node-addons": "./src/flavor-addons.ts",
+                    node: "./src/flavor-node.ts",
+                    import: "./src/flavor-import.ts",
+                    default: "./src/flavor-default.ts",
+                },
+            },
+        },
+        files: {
+            "src/addons-entry.ts": 'import { flavor } from "#flavor";\nexport const label = "addons:" + flavor;\nexport function pick(value: number): string {\n    return "addons-entry:" + value;\n}\n',
+            "src/node-entry.ts": 'export const label = "wrong-node-entry";\nexport function pick(value: number): string {\n    return "wrong-node:" + value;\n}\n',
+            "src/import-entry.ts": 'export const label = "wrong-import-entry";\nexport function pick(value: number): string {\n    return "wrong-import:" + value;\n}\n',
+            "src/default-entry.ts": 'export const label = "wrong-default-entry";\nexport function pick(value: number): string {\n    return "wrong-default:" + value;\n}\n',
+            "src/tool-addons.ts": 'export const tool = "addons-tool";\nexport function scale(value: number): number {\n    return value * 7;\n}\n',
+            "src/tool-node.ts": 'export const tool = "wrong-tool-node";\nexport function scale(value: number): number {\n    return value * 77;\n}\n',
+            "src/tool-import.ts": 'export const tool = "wrong-tool-import";\nexport function scale(value: number): number {\n    return value * 88;\n}\n',
+            "src/tool-default.ts": 'export const tool = "wrong-tool-default";\nexport function scale(value: number): number {\n    return value * 99;\n}\n',
+            "src/flavor-addons.ts": 'export const flavor = "imports-node-addons";\n',
+            "src/flavor-node.ts": 'export const flavor = "wrong-flavor-node";\n',
+            "src/flavor-import.ts": 'export const flavor = "wrong-flavor-import";\n',
+            "src/flavor-default.ts": 'export const flavor = "wrong-flavor-default";\n',
+        },
+    },
     "tsc2c-require-conditions-package": {
         packageJson: {
             name: "tsc2c-require-conditions-package",

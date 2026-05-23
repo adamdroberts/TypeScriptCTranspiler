@@ -49,7 +49,7 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
         types: [],
         esModuleInterop: true,
         allowSyntheticDefaultImports: true,
-        customConditions: ["node"],
+        customConditions: ["node-addons", "node"],
         allowJs: true,
         checkJs: false,
         maxNodeModuleJsDepth: 5,
