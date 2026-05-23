@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Added
+- Standard decorator factory expressions now evaluate top-down before decorators invoke bottom-up, preserving standard side-effect ordering for multiple decorators. Test: `decorator_factory_order`.
 - Multiple standard decorators on the same class or member now invoke bottom-up, so replacement functions compose in standard decorator order. Test: `decorator_replacement_order`.
 - Instance standard setter decorators can now return replacement setter functions used by direct `obj.property = value` writes when the replacement does not declare a typed `this` receiver. Test: `instance_setter_decorator_replacement`.
 - Instance standard getter decorators can now return replacement getter functions used by direct `obj.property` reads when the replacement does not declare a typed `this` receiver. Test: `instance_getter_decorator_replacement`.
