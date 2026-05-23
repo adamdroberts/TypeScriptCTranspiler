@@ -1061,6 +1061,18 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            method === "assign" &&
+            call.arguments.length >= 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Object")
+        ) {
+            const [target, ...sources] = Array.from(call.arguments);
+            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(target!, seenConsts) &&
+                sources.every((source) =>
+                    this.isSideEffectFreeObjectEnumerationOperand(source, seenConsts)
+                );
+        }
+        if (
+            ts.isIdentifier(recv) &&
             method === "hasOwn" &&
             call.arguments.length === 2 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
