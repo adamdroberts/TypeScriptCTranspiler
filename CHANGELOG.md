@@ -34,6 +34,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Function-target Proxy `defineProperty` and `deleteProperty` traps now enforce non-configurable `length`/`name` metadata invariants. Test: `function_integrity`.
 - Function-target Proxy `has` traps now enforce non-configurable `length`/`name` metadata invariants. Test: `function_integrity`.
 - Function-target Proxy `get`, `set`, `getOwnPropertyDescriptor`, and `ownKeys` traps now enforce non-configurable `length`/`name` metadata invariants. Test: `function_integrity`.
+- Function-target Proxy `isExtensible` and `preventExtensions` traps now enforce target extensibility invariants. Test: `proxy_function_prototype_invariants`.
 - Function-target Proxy `getPrototypeOf` and `setPrototypeOf` traps now forward to function targets and enforce non-extensible prototype invariants. Test: `proxy_function_prototype_invariants`.
 - Proxy construct traps now have explicit coverage for returning arrays, functions, ordinary objects, and rejected primitive results. Test: `proxy_construct_return_objects`.
 - Trapless array Proxy values now forward `Object.keys`, `Object.values`, `Object.entries`, `Reflect.ownKeys`, descriptor lookup, `Object.hasOwn`, `in`, and `propertyIsEnumerable` object-helper operations to their array targets. Test: `proxy_array_object_helpers`.
