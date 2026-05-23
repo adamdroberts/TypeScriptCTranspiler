@@ -5043,6 +5043,10 @@ class Emitter {
                 this.defs.line(`${ft.c} ${name}_${mangleIdent(fieldName)};`);
             }
         }
+        if (ts.canHaveDecorators(cd) && (ts.getDecorators(cd) ?? []).length > 0) {
+            this.defs.line(`static tsc_value_t ${this.classDecoratorReplacementName(cd)};`);
+            this.ensureClassDecoratorAdapter(cd);
+        }
         for (const m of cd.members) {
             if (ts.isPropertyDeclaration(m) && this.classMemberHasDecorators(m)) {
                 this.defs.line(`static tsc_array_t* ${this.classFieldDecoratorInitializersName(cd, m)};`);
@@ -5258,6 +5262,11 @@ class Emitter {
         return ts.canHaveDecorators(member) && (ts.getDecorators(member) ?? []).length > 0;
     }
 
+    private classDecoratorReplacementName(cd: ts.ClassDeclaration): string {
+        if (!cd.name) unsupported(cd, "decorated classes require a named class");
+        return `${cd.name.text}_class_decorator_replacement`;
+    }
+
     private classFieldDecoratorInitializersName(
         cd: ts.ClassDeclaration,
         member: ts.PropertyDeclaration,
@@ -5344,6 +5353,9 @@ class Emitter {
     }
 
     private emitClassFieldDecoratorInitializerSetup(buf: CBuf, cd: ts.ClassDeclaration): void {
+        if (ts.canHaveDecorators(cd) && (ts.getDecorators(cd) ?? []).length > 0) {
+            buf.line(`${this.classDecoratorReplacementName(cd)} = tsc_value_undefined();`);
+        }
         for (const member of cd.members) {
             if (!this.classMemberHasDecorators(member)) continue;
             if (ts.isPropertyDeclaration(member)) {
@@ -5384,12 +5396,14 @@ class Emitter {
             const call = this.emitDecoratorFunctionCall(
                 callee,
                 [
-                    { c: "tsc_value_undefined()", ty: T_VALUE },
+                    this.classDecoratorValue(cd),
                     this.classDecoratorContext(cd, metadata, initializers),
                 ],
                 decoratorFns ? decorator.expression : "class decorator",
             );
-            buf.line(`(void)(${call});`);
+            const out = this.freshTemp("_class_decorator_result");
+            const replacement = this.classDecoratorReplacementName(cd);
+            buf.line(`{ tsc_value_t ${out} = ${call}; if (!tsc_value_is_undefined(${out})) ${replacement} = ${out}; }`);
         }
     }
 
@@ -5508,6 +5522,43 @@ class Emitter {
                 buf.line(`${current.c} = ${this.coerce(transformed, fieldType, member)};`);
             }
         }
+    }
+
+    private classDecoratorValue(cd: ts.ClassDeclaration): EmitResult {
+        const replacement = this.classDecoratorReplacementName(cd);
+        const adapter = this.ensureClassDecoratorAdapter(cd);
+        return {
+            c: `({ tsc_value_t _decorator_current = ${replacement}; tsc_value_is_undefined(_decorator_current) ? tsc_value_function_generic(${adapter}, NULL) : _decorator_current; })`,
+            ty: T_VALUE,
+        };
+    }
+
+    private ensureClassDecoratorAdapter(cd: ts.ClassDeclaration): string {
+        if (!cd.name) unsupported(cd, "decorated classes require a named class");
+        const className = cd.name.text;
+        const name = `${className}_class_decorator_original`;
+        if (this.nodeFunctionAdapters.has(name)) return name;
+        this.nodeFunctionAdapters.add(name);
+        const ctor = cd.members.find(ts.isConstructorDeclaration);
+        const paramTypes = (ctor?.parameters ?? []).map((param) => this.prepareType(mapType(param, this.checker)));
+        const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
+        this.protos.line(signature + ";");
+        const buf = new CBuf();
+        buf.open(signature);
+        buf.line("(void)env;");
+        buf.line("(void)this_arg;");
+        buf.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
+        const callArgs: string[] = [];
+        for (let i = 0; i < paramTypes.length; i++) {
+            const raw = `(${i} < args->len ? TSC_ARR(tsc_value_t, args, ${i}) : tsc_value_undefined())`;
+            callArgs.push(this.coerce({ c: raw, ty: T_VALUE }, paramTypes[i]!, cd));
+        }
+        const call = `${className}_new(${callArgs.join(", ")})`;
+        buf.line(`return ${this.coerce({ c: call, ty: classType(className) }, T_VALUE, cd)};`);
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return name;
     }
 
     private classStaticMethodDecoratorValue(
@@ -24123,6 +24174,39 @@ class Emitter {
         );
     }
 
+    private emitDecoratedClassNew(
+        node: ts.NewExpression,
+        cd: ts.ClassDeclaration,
+        className: string,
+        specs: readonly SequencedCallArg[],
+    ): EmitResult {
+        const replacement = this.classDecoratorReplacementName(cd);
+        const ret = classType(className);
+        return this.emitSequencedExpr(ret, specs, (args) => {
+            const fn = this.freshTemp("_class_replacement");
+            const out = this.freshTemp("_class_result");
+            const av = this.freshTemp("_class_args");
+            const pieces: string[] = [
+                `tsc_value_t ${fn} = ${replacement}`,
+                `${ret.c} ${out} = NULL`,
+                `if (tsc_value_is_undefined(${fn})) { ${out} = ${className}_new(${args.join(", ")}); } else { tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, args.length)});`,
+            ];
+            args.forEach((arg, index) => {
+                const spec = specs[index]!;
+                const argType = spec.target ?? spec.value.ty;
+                pieces.push(`tsc_array_push_value(${av}, ${this.coerce({ c: arg, ty: argType }, T_VALUE, spec.node ?? node)})`);
+            });
+            const constructed = {
+                c: `tsc_value_construct(${fn}, tsc_value_array(${av}))`,
+                ty: T_VALUE,
+            };
+            pieces.push(`${out} = ${this.coerce(constructed, ret, node)}`);
+            pieces.push("}");
+            pieces.push(out);
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
     private emitNew(n: ts.NewExpression): EmitResult {
         if (
             ts.isPropertyAccessExpression(n.expression) &&
@@ -24490,6 +24574,9 @@ class Emitter {
             return this.emitStaticSpreadCall(n, `${cls}_new`, classType(cls), params);
         }
         const specs = this.callSpecsFromSignature(n, argList, params);
+        if (classDecl && ts.canHaveDecorators(classDecl) && (ts.getDecorators(classDecl) ?? []).length > 0) {
+            return this.emitDecoratedClassNew(n, classDecl, cls, specs);
+        }
         return this.emitSequencedCall(`${cls}_new`, classType(cls), specs);
     }
 

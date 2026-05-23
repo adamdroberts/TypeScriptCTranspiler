@@ -95,6 +95,12 @@ tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args) {
     if (!value_is_box(args) || value_tag(args) != TSC_VALUE_TAG_ARRAY) {
         tsc_panic("Reflect.construct argumentsList must be an array");
     }
+    if (value_is_box(target) && value_tag(target) == TSC_VALUE_TAG_FUNCTION) {
+        tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(target);
+        if (ident->kind == TSC_FUNCTION_IDENTITY_GENERIC) {
+            return ident->code.generic(ident->env, tsc_value_undefined(), (tsc_array_t*)value_ptr(args));
+        }
+    }
     if (value_is_box(target) && value_tag(target) == TSC_VALUE_TAG_OBJECT) {
         tsc_object_t* o = (tsc_object_t*)value_ptr(target);
         if (o->is_proxy) {
