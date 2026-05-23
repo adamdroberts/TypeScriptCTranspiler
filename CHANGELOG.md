@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes array/object literal spreads through earlier pure const array/string/object literal operands. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused static object literals with side-effect-free computed keys when those keys resolve statically. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused classes with side-effect-free computed member names when those names resolve statically. Test: `generated_c_dce_class`.
 - Generated-C DCE now also prunes unused subclasses with simple earlier class bases when the subclass definition has no observable side effects. Test: `generated_c_dce_class`.

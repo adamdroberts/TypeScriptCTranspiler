@@ -10,6 +10,10 @@ unused_satisfies
 unused_non_null
 unused_spread_array
 unused_spread_object
+unused_spread_source_array
+unused_spread_source_object
+unused_const_spread_array
+unused_const_spread_object
 unused_chain_seed
 unused_chain_mid
 unused_chain_object

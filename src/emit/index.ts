@@ -701,7 +701,7 @@ class Emitter {
             return expr.elements.every((element) => {
                 if (ts.isOmittedExpression(element)) return true;
                 if (ts.isSpreadElement(element)) {
-                    return this.isSideEffectFreeArraySpreadOperand(element.expression);
+                    return this.isSideEffectFreeArraySpreadOperand(element.expression, seenConsts);
                 }
                 return this.isSideEffectFreeTopLevelConstInitializer(element, seenConsts);
             });
@@ -709,7 +709,7 @@ class Emitter {
         if (ts.isObjectLiteralExpression(expr)) {
             return expr.properties.every((prop) => {
                 if (ts.isSpreadAssignment(prop)) {
-                    return this.isSideEffectFreeObjectSpreadOperand(prop.expression);
+                    return this.isSideEffectFreeObjectSpreadOperand(prop.expression, seenConsts);
                 }
                 if (!ts.isPropertyAssignment(prop)) return false;
                 if (!this.objectLiteralPropertyNameHasNoDefinitionSideEffects(prop.name, seenConsts)) return false;
@@ -763,22 +763,53 @@ class Emitter {
         return expr;
     }
 
-    private isSideEffectFreeArraySpreadOperand(expr: ts.Expression): boolean {
+    private isSideEffectFreeArraySpreadOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (
-            !ts.isArrayLiteralExpression(unwrapped) &&
-            !ts.isStringLiteral(unwrapped) &&
-            !ts.isNoSubstitutionTemplateLiteral(unwrapped)
+            ts.isArrayLiteralExpression(unwrapped) ||
+            ts.isStringLiteral(unwrapped) ||
+            ts.isNoSubstitutionTemplateLiteral(unwrapped)
         ) {
-            return false;
+            return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
         }
-        return this.isSideEffectFreeTopLevelConstInitializer(unwrapped);
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeArraySpreadOperand(init, seenConsts);
     }
 
-    private isSideEffectFreeObjectSpreadOperand(expr: ts.Expression): boolean {
+    private isSideEffectFreeObjectSpreadOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (!ts.isObjectLiteralExpression(unwrapped)) return false;
-        return this.isSideEffectFreeTopLevelConstInitializer(unwrapped);
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeObjectSpreadOperand(init, seenConsts);
+    }
+
+    private sideEffectFreeEarlierConstInitializer(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): ts.Expression | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (!ts.isIdentifier(unwrapped)) return null;
+        const sym = this.symbolForIdentifier(unwrapped);
+        if (!sym || seenConsts.has(sym)) return null;
+        const decl = sym.valueDeclaration ?? sym.declarations?.[0];
+        if (!decl || !ts.isVariableDeclaration(decl) || !decl.initializer) return null;
+        if (!ts.isIdentifier(decl.name)) return null;
+        if ((decl.parent.flags & ts.NodeFlags.Const) === 0) return null;
+        const source = unwrapped.getSourceFile();
+        if (decl.getSourceFile() !== source) return null;
+        if (decl.getStart(source) >= unwrapped.getStart(source)) return null;
+        seenConsts.add(sym);
+        const pure = this.isSideEffectFreeTopLevelConstInitializer(decl.initializer, seenConsts);
+        seenConsts.delete(sym);
+        return pure ? decl.initializer : null;
     }
 
     private shouldEmitTopLevelVariable(decl: ts.VariableDeclaration): boolean {
