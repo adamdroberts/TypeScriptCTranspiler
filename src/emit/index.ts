@@ -10914,6 +10914,7 @@ class Emitter {
         const method = methodAccess.name.text;
         if (
             method !== "hasOwnProperty" &&
+            method !== "isPrototypeOf" &&
             method !== "propertyIsEnumerable" &&
             method !== "toLocaleString" &&
             method !== "toString" &&
@@ -10932,7 +10933,7 @@ class Emitter {
         const minArgs = isTargetOnlyCall ? 1 : 2;
         if (call.arguments.length < minArgs) {
             if (isTargetOnlyCall) unsupported(call, `Object.prototype.${method}.call expects target`);
-            unsupported(call, `Object.prototype.${method}.call expects target and key`);
+            unsupported(call, `Object.prototype.${method}.call expects target and argument`);
         }
         const targetNode = call.arguments[0]!;
         const target = this.emitExpr(targetNode);
@@ -10979,6 +10980,15 @@ class Emitter {
                 { value: target, node: targetNode },
                 ...this.ignoredArgumentSpecs(call.arguments, 1),
             ], ([value]) => value!);
+        }
+        if (method === "isPrototypeOf") {
+            const objectNode = call.arguments[1]!;
+            const objectValue = this.emitExpr(objectNode);
+            return this.emitSequencedExpr(T_BOOLEAN, [
+                { value: target, target: T_VALUE, node: targetNode },
+                { value: objectValue, target: T_VALUE, node: objectNode },
+                ...this.ignoredArgumentSpecs(call.arguments, 2),
+            ], ([prototype, object]) => `tsc_value_is_prototype_of(${prototype}, ${object})`);
         }
         const keyNode = call.arguments[1]!;
         const ignored = this.ignoredArgumentSpecs(call.arguments, 2);

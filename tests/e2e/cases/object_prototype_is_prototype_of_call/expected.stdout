@@ -1,0 +1,13 @@
+ignored: grand
+grand-child: true
+ignored: parent
+parent-child: true
+ignored: child
+child-parent: false
+other-child: false
+self: false
+ignored: number
+nonobject-target: false
+nonobject-value: false
+ignored: typed
+typed-target: false

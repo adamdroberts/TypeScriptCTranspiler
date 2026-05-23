@@ -1,0 +1,3 @@
+{
+  "description": "Object.prototype.isPrototypeOf.call dispatches over dynamic prototype chains while evaluating ignored extras"
+}
