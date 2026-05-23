@@ -429,8 +429,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Runtime: `tsc_os_*`. Tests: `stdlib_os`, `os_more`, `os_dev_null`, `os_host_more`, `os_system_stats`, `os_user_info`
 
 ### `crypto`
-- `crypto.createHash("sha1" | "sha256" | "sha512").update(data).digest("hex" | "base64")` backed by OpenSSL SHA helpers from the global `crypto` object, named imports, and namespace imports from `"crypto"` / `"node:crypto"`. `Hash.update(...)` accepts strings and Buffers. Tests: `crypto_sha256`, `crypto_hash_more`, `crypto_import`, `crypto_digest_base64`
-- `crypto.randomBytes(size)` returns a Buffer filled by OpenSSL `RAND_bytes` with a libc `rand()` fallback, through the global crypto object and named/namespace imports from `"crypto"` / `"node:crypto"`. Test: `crypto_random_bytes`
+- `crypto.createHash("sha1" | "sha256" | "sha512").update(data).digest("hex" | "base64")` backed by OpenSSL SHA helpers from the global `crypto` object, named imports, and namespace imports from `"crypto"` / `"node:crypto"`, with catchable validation failures for unsupported algorithms and digest encodings. `Hash.update(...)` accepts strings and Buffers. Tests: `crypto_sha256`, `crypto_hash_more`, `crypto_import`, `crypto_digest_base64`, `crypto_errors`
+- `crypto.randomBytes(size)` returns a Buffer filled by OpenSSL `RAND_bytes` with a libc `rand()` fallback, through the global crypto object and named/namespace imports from `"crypto"` / `"node:crypto"`, with catchable invalid-size validation. Tests: `crypto_random_bytes`, `crypto_errors`
 - `crypto.randomUUID()` returns RFC 4122 version 4 UUID strings through the global crypto object and named/namespace imports from `"crypto"` / `"node:crypto"`. Test: `crypto_random_uuid`
 
 ### `EventEmitter`
@@ -704,6 +704,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `crypto_hash_more` | sha1/sha512 digests and Buffer-backed hash updates |
 | `crypto_import` | crypto/node:crypto createHash named and namespace imports |
 | `crypto_digest_base64` | crypto Hash.digest base64 output |
+| `crypto_errors` | crypto validation failures are catchable |
 | `crypto_random_bytes` | crypto.randomBytes Buffer creation |
 | `crypto_random_uuid` | crypto.randomUUID version 4 UUID strings |
 | `custom_iterator_entry_destructure` | custom iterator yielding ObjectEntry values with `[key, value]` destructuring |
