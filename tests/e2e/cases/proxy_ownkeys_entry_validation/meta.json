@@ -1,0 +1,3 @@
+{
+  "description": "Proxy ownKeys trap entry validation rejects non-string keys"
+}

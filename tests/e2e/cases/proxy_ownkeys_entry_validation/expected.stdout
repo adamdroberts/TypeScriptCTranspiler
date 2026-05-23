@@ -1,0 +1,3 @@
+reflect numeric: Proxy ownKeys trap entries must be strings
+object mixed: Proxy ownKeys trap entries must be strings
+valid: a

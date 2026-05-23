@@ -724,6 +724,14 @@ static bool str_array_contains(const tsc_array_t* keys, const tsc_str_t* key) {
     return false;
 }
 
+static tsc_str_t* proxy_own_key_to_string(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
+        return (tsc_str_t*)value_ptr(v);
+    }
+    tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap entries must be strings"));
+    return tsc_str_from_lit("", 0);
+}
+
 static void validate_proxy_own_keys_result(const tsc_object_t* proxy, const tsc_array_t* keys) {
     if (!keys) return;
     for (size_t i = 0; i < keys->len; i++) {
@@ -773,7 +781,7 @@ tsc_array_t* tsc_object_keys_dyn(const tsc_object_t* o) {
             tsc_array_t* result = tsc_array_new(sizeof(tsc_str_t*), arr->len);
             for (size_t i = 0; i < arr->len; i++) {
                 tsc_value_t v = TSC_ARR(tsc_value_t, arr, i);
-                tsc_str_t* key = tsc_value_as_string(v);
+                tsc_str_t* key = proxy_own_key_to_string(v);
                 if (str_array_contains(result, key)) {
                     tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap returned duplicate key"));
                 }
@@ -819,7 +827,7 @@ tsc_array_t* tsc_object_own_keys_dyn(const tsc_object_t* o) {
             tsc_array_t* result = tsc_array_new(sizeof(tsc_str_t*), arr->len);
             for (size_t i = 0; i < arr->len; i++) {
                 tsc_value_t v = TSC_ARR(tsc_value_t, arr, i);
-                tsc_str_t* key = tsc_value_as_string(v);
+                tsc_str_t* key = proxy_own_key_to_string(v);
                 tsc_array_push_raw(result, &key);
             }
             validate_proxy_own_keys_result(o, result);
