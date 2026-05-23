@@ -28,3 +28,19 @@ console.log("construct:", made.value);
 console.log("json object:", JSON.stringify(holder));
 console.log("json list:", JSON.stringify(list));
 console.log("json top:", JSON.stringify(outerCallable), JSON.stringify(objectProxy));
+
+const revocable: any = Proxy.revocable(add as any, {});
+const outerRevoked: any = new Proxy(revocable.proxy, {});
+console.log("revoked type before:", typeof outerRevoked);
+revocable.revoke();
+console.log("revoked type after:", typeof outerRevoked);
+try {
+    console.log("revoked string:", String(outerRevoked));
+} catch (e: any) {
+    console.log("revoked string:", e);
+}
+try {
+    console.log("revoked json:", JSON.stringify(outerRevoked));
+} catch (e: any) {
+    console.log("revoked json:", e);
+}

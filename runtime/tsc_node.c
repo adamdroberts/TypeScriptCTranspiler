@@ -1423,7 +1423,7 @@ tsc_str_t* tsc_value_to_string(tsc_value_t v) {
         }
         case TSC_VALUE_TAG_OBJECT: {
             tsc_object_t* o = (tsc_object_t*)value_ptr(v);
-            if (o && o->is_proxy && o->proxy_revoked) {
+            if (o && o->is_proxy && tsc_proxy_chain_has_revoked(v)) {
                 tsc_throw_str(tsc_str_from_cstr("Cannot perform 'get' on a proxy that has been revoked"));
             }
             if (tsc_proxy_trap_is_callable(v)) {

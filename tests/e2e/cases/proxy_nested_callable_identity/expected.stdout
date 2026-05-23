@@ -5,3 +5,7 @@ construct: ok
 json object: {"objectProxy":{},"value":"kept"}
 json list: [null,{}]
 json top: null {}
+revoked type before: function
+revoked type after: function
+revoked string: Cannot perform 'get' on a proxy that has been revoked
+revoked json: Cannot perform 'get' on a proxy that has been revoked

@@ -42,6 +42,14 @@ bool tsc_proxy_trap_is_callable(tsc_value_t trap) {
     return o && o->is_proxy && tsc_proxy_trap_is_callable(o->proxy_target);
 }
 
+bool tsc_proxy_chain_has_revoked(tsc_value_t v) {
+    if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) return false;
+    tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+    if (!o || !o->is_proxy) return false;
+    if (o->proxy_revoked) return true;
+    return tsc_proxy_chain_has_revoked(o->proxy_target);
+}
+
 void tsc_proxy_require_callable_trap(tsc_value_t trap, const char* message) {
     if (!tsc_proxy_trap_is_callable(trap)) {
         tsc_throw_str(tsc_str_from_cstr(message));
@@ -928,6 +936,9 @@ tsc_array_t* tsc_object_entries_dyn(const tsc_object_t* o) {
 
 static bool value_is_callable_proxy(tsc_value_t v) {
     if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) return false;
+    if (tsc_proxy_chain_has_revoked(v)) {
+        tsc_throw_str(tsc_str_from_cstr("Cannot perform 'get' on a proxy that has been revoked"));
+    }
     return tsc_proxy_trap_is_callable(v);
 }
 
@@ -963,7 +974,7 @@ tsc_str_t* tsc_value_json_stringify(tsc_value_t v) {
         }
         case TSC_VALUE_TAG_OBJECT: {
             tsc_object_t* o = (tsc_object_t*)value_ptr(v);
-            if (o && o->is_proxy && o->proxy_revoked) {
+            if (o && o->is_proxy && tsc_proxy_chain_has_revoked(v)) {
                 tsc_throw_str(tsc_str_from_cstr("Cannot perform 'get' on a proxy that has been revoked"));
             }
             if (value_is_callable_proxy(v)) return tsc_str_from_lit("null", 4);

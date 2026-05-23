@@ -348,6 +348,7 @@ int64_t array_range_index(double value, int64_t len, double fallback);
 void object_reserve(tsc_object_t* o, size_t cap);
 ssize_t object_find(const tsc_object_t* o, const tsc_str_t* key);
 bool tsc_proxy_trap_is_callable(tsc_value_t trap);
+bool tsc_proxy_chain_has_revoked(tsc_value_t v);
 void tsc_proxy_require_callable_trap(tsc_value_t trap, const char* message);
 void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* proxy, const tsc_str_t* key, tsc_value_t result);
 const tsc_object_t* object_prototype_object(const tsc_object_t* o);
