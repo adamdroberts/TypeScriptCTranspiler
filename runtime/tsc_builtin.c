@@ -1582,7 +1582,6 @@ tsc_value_t tsc_proxy_revoke(void* env, tsc_value_t receiver, tsc_array_t* args)
         tsc_object_t* o = (tsc_object_t*)value_ptr(proxy_val);
         if (o->is_proxy) {
             o->proxy_revoked = true;
-            o->proxy_target = tsc_value_null();
             o->proxy_handler = tsc_value_null();
         }
     }

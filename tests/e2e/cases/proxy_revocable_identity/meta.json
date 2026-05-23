@@ -1,0 +1,3 @@
+{
+  "description": "Revoked callable Proxy values preserve typeof identity while String and JSON throw revoked get errors"
+}
