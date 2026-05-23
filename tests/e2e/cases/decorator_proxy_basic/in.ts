@@ -11,6 +11,7 @@ function trapApply(target: any, thisArg: any, args: any): any {
 
 const proxied: any = new Proxy(mark as any, { apply: trapApply as any });
 
+@proxied
 class Box {
     @proxied
     method(): void {}

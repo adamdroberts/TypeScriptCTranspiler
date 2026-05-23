@@ -5400,25 +5400,16 @@ class Emitter {
                 `({ (void)(${fnName}(${[...(thisType ? ["tsc_value_undefined()"] : []), ...vals].join(", ")})); })`,
             ).c;
         }
+        if (ts.isIdentifier(expr) && this.identifierDeclaredType(expr)?.kind === "value") {
+            return this.emitDynamicDecoratorFunctionCall(
+                { c: this.identifierRead(expr), ty: T_VALUE },
+                args,
+                expr,
+            );
+        }
         const callee = this.emitExpr(expr);
         if (callee.ty.kind === "value") {
-            const specs: SequencedCallArg[] = [
-                { value: callee, target: T_VALUE, node: expr },
-                ...args.map((arg) => ({
-                    value: arg,
-                    target: T_VALUE,
-                    node: expr,
-                })),
-            ];
-            return this.emitSequencedExpr(T_VOID, specs, ([fn, ...vals]) => {
-                const av = this.freshTemp("_decorator_args");
-                const pieces = [`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${vals.length || 1})`];
-                for (const value of vals) {
-                    pieces.push(`tsc_array_push_value(${av}, ${value})`);
-                }
-                pieces.push(`(void)tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}))`);
-                return `({ ${pieces.join("; ")}; })`;
-            }).c;
+            return this.emitDynamicDecoratorFunctionCall(callee, args, expr);
         }
         if (callee.ty.kind !== "function" || !callee.ty.ret) {
             unsupported(expr, `${label} expression must be callable`);
@@ -5440,6 +5431,30 @@ class Emitter {
             const callArgs = vals.slice(1);
             const call = `${fn}->fn(${[`${fn}->env`, ...(callee.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`;
             return `({ (void)(${call}); })`;
+        }).c;
+    }
+
+    private emitDynamicDecoratorFunctionCall(
+        callee: EmitResult,
+        args: EmitResult[],
+        node: ts.Expression,
+    ): string {
+        const specs: SequencedCallArg[] = [
+            { value: callee, target: T_VALUE, node },
+            ...args.map((arg) => ({
+                value: arg,
+                target: T_VALUE,
+                node,
+            })),
+        ];
+        return this.emitSequencedExpr(T_VOID, specs, ([fn, ...vals]) => {
+            const av = this.freshTemp("_decorator_args");
+            const pieces = [`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${vals.length || 1})`];
+            for (const value of vals) {
+                pieces.push(`tsc_array_push_value(${av}, ${value})`);
+            }
+            pieces.push(`(void)tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}))`);
+            return `({ ${pieces.join("; ")}; })`;
         }).c;
     }
 
