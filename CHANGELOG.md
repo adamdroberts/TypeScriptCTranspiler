@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Fixed
+- Immediate dynamic thenable assimilation now rejects repeated thenable identities in the recursive resolution chain instead of recursing indefinitely. Test: `promise_thenable_self_resolution`.
 - Immediate dynamic thenables that resolve to themselves now reject instead of recursing indefinitely. Test: `promise_thenable_self_resolution`.
 - Immediate dynamic thenable assimilation now recursively adopts settled nested thenables and prevents a later resolve/reject call from overriding an already-started pending nested adoption. Test: `promise_thenable_recursive`.
 - `Promise.resolve(...)` and immediate Promise callback return handling now assimilate dynamic thenables in the settled subset, including fulfillment, rejection, non-callable `then` passthrough, thrown `then` rejection, and first-settlement wins. Test: `promise_thenable_assimilation`.
