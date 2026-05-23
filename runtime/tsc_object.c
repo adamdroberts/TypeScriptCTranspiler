@@ -725,11 +725,8 @@ bool tsc_object_is_extensible(const tsc_object_t* o) {
         tsc_array_push_value(args, o->proxy_target);
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
         bool extensible = tsc_value_is_truthy(res);
-        if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
-            const tsc_object_t* target = (const tsc_object_t*)value_ptr(o->proxy_target);
-            if (extensible != target->extensible) {
-                tsc_throw_str(tsc_str_from_cstr("Proxy isExtensible trap result does not match target"));
-            }
+        if (value_is_box(o->proxy_target) && extensible != tsc_value_is_extensible(o->proxy_target)) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy isExtensible trap result does not match target"));
         }
         return extensible;
     }
@@ -752,11 +749,8 @@ bool tsc_object_prevent_extensions(tsc_object_t* o) {
         tsc_array_push_value(args, o->proxy_target);
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
         bool prevented = tsc_value_is_truthy(res);
-        if (prevented && value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
-            const tsc_object_t* target = (const tsc_object_t*)value_ptr(o->proxy_target);
-            if (target->extensible) {
-                tsc_throw_str(tsc_str_from_cstr("Proxy preventExtensions trap cannot report success for extensible target"));
-            }
+        if (prevented && value_is_box(o->proxy_target) && tsc_value_is_extensible(o->proxy_target)) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy preventExtensions trap cannot report success for extensible target"));
         }
         return prevented;
     }

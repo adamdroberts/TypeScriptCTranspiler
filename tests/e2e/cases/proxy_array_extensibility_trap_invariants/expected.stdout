@@ -1,0 +1,5 @@
+open false: Proxy isExtensible trap result does not match target
+closed true: Proxy isExtensible trap result does not match target
+fake prevent: Proxy preventExtensions trap cannot report success for extensible target
+fake still extensible: true
+real prevent: true
