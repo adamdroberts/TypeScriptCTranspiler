@@ -25,6 +25,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Array-target Proxy `getPrototypeOf` and `setPrototypeOf` traps now forward to array targets and enforce non-extensible prototype invariants. Test: `proxy_array_prototype_invariants`.
 - Boxed function identities now track prototype and extensibility state for Object/Reflect prototype helpers and non-extensible prototype-change rejection. Test: `function_prototypes`.
 - Boxed function identities now track seal/freeze state, and trapless function Proxy values forward `Object.seal`, `Object.freeze`, `Object.isSealed`, and `Object.isFrozen` to their function targets. Test: `function_integrity`.
+- Repeated direct references to the same function now reuse a stable boxed function identity, so `Object.is(fn as any, fn as any)` and shared function Object/Reflect integrity state behave consistently. Test: `function_integrity`.
 - Function-target Proxy `getPrototypeOf` and `setPrototypeOf` traps now forward to function targets and enforce non-extensible prototype invariants. Test: `proxy_function_prototype_invariants`.
 - Proxy construct traps now have explicit coverage for returning arrays, functions, ordinary objects, and rejected primitive results. Test: `proxy_construct_return_objects`.
 - Trapless array Proxy values now forward `Object.keys`, `Object.values`, `Object.entries`, `Reflect.ownKeys`, descriptor lookup, `Object.hasOwn`, `in`, and `propertyIsEnumerable` object-helper operations to their array targets. Test: `proxy_array_object_helpers`.
