@@ -511,6 +511,25 @@ class Emitter {
         ) {
             return true;
         }
+        if (ts.isArrayLiteralExpression(expr)) {
+            return expr.elements.every((element) =>
+                ts.isOmittedExpression(element) ||
+                (!ts.isSpreadElement(element) && this.isSideEffectFreeTopLevelConstInitializer(element))
+            );
+        }
+        if (ts.isObjectLiteralExpression(expr)) {
+            return expr.properties.every((prop) => {
+                if (!ts.isPropertyAssignment(prop)) return false;
+                if (
+                    !ts.isIdentifier(prop.name) &&
+                    !ts.isStringLiteral(prop.name) &&
+                    !ts.isNumericLiteral(prop.name)
+                ) {
+                    return false;
+                }
+                return this.isSideEffectFreeTopLevelConstInitializer(prop.initializer);
+            });
+        }
         return false;
     }
 
