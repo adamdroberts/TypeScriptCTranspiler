@@ -21,6 +21,7 @@ interface Case {
     nativeAddonManifest?: string;
     dynamicRequireManifest?: string;
     runtimeCodeManifest?: string;
+    unsafeEval?: boolean;
     release?: boolean;
 }
 
@@ -40,6 +41,7 @@ async function discoverCases(): Promise<Case[]> {
         const nativeAddonManifestPath = path.join(casesDir, d, "native-addon-manifest.json");
         const dynamicRequireManifestPath = path.join(casesDir, d, "dynamic-require-manifest.json");
         const runtimeCodeManifestPath = path.join(casesDir, d, "runtime-code-manifest.json");
+        const unsafeEvalPath = path.join(casesDir, d, "compile.unsafe_eval");
         const releasePath = path.join(casesDir, d, "compile.release");
         try {
             await fs.access(entry);
@@ -78,6 +80,13 @@ async function discoverCases(): Promise<Case[]> {
             } catch {
                 // optional runtime code allow-list
             }
+            let unsafeEval = false;
+            try {
+                await fs.access(unsafeEvalPath);
+                unsafeEval = true;
+            } catch {
+                // default safe AOT-only runtime-code compilation
+            }
             let expectedMainCContains: string | undefined;
             try {
                 expectedMainCContains = (await fs.readFile(expectedMainCContainsPath, "utf8")).trimEnd();
@@ -95,6 +104,7 @@ async function discoverCases(): Promise<Case[]> {
                     nativeAddonManifest,
                     dynamicRequireManifest,
                     runtimeCodeManifest,
+                    unsafeEval,
                     release,
                 });
                 continue;
@@ -116,6 +126,7 @@ async function discoverCases(): Promise<Case[]> {
                 nativeAddonManifest,
                 dynamicRequireManifest,
                 runtimeCodeManifest,
+                unsafeEval,
                 release,
             });
         } catch {
@@ -160,6 +171,7 @@ async function main(): Promise<void> {
             nativeAddonManifest: c.nativeAddonManifest,
             dynamicRequireManifest: c.dynamicRequireManifest,
             runtimeCodeManifest: c.runtimeCodeManifest,
+            unsafeEval: c.unsafeEval,
         });
         if (c.expectedExitCode !== undefined) {
             if (r.exitCode !== c.expectedExitCode) {
