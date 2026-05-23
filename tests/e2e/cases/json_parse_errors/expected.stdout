@@ -1,0 +1,4 @@
+object: JSON.parse expected string
+unicode: JSON.parse invalid unicode escape
+trailing: JSON.parse trailing input
+after: {"ok":true}

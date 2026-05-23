@@ -1483,24 +1483,24 @@ static int jp_hex_digit(unsigned char c) {
 }
 
 static uint32_t jp_read_u4(json_parser_t* p) {
-    if (p->pos + 4 > p->len) tsc_panic("JSON.parse bad unicode escape");
+    if (p->pos + 4 > p->len) tsc_throw_str(tsc_str_from_cstr("JSON.parse bad unicode escape"));
     uint32_t cp = 0;
     for (int i = 0; i < 4; i++) {
         int digit = jp_hex_digit((unsigned char)p->s[p->pos++]);
-        if (digit < 0) tsc_panic("JSON.parse bad unicode escape");
+        if (digit < 0) tsc_throw_str(tsc_str_from_cstr("JSON.parse bad unicode escape"));
         cp = (cp << 4) | (uint32_t)digit;
     }
     return cp;
 }
 
 static void jp_append_code_point(char* buf, size_t* out, uint32_t cp) {
-    if (cp >= 0xD800 && cp <= 0xDFFF) tsc_panic("JSON.parse invalid unicode escape");
-    if (cp > 0x10FFFF) tsc_panic("JSON.parse invalid unicode escape");
+    if (cp >= 0xD800 && cp <= 0xDFFF) tsc_throw_str(tsc_str_from_cstr("JSON.parse invalid unicode escape"));
+    if (cp > 0x10FFFF) tsc_throw_str(tsc_str_from_cstr("JSON.parse invalid unicode escape"));
     *out += write_utf8_code_point(buf + *out, cp);
 }
 
 tsc_str_t* jp_string(json_parser_t* p) {
-    if (p->pos >= p->len || p->s[p->pos] != '"') tsc_panic("JSON.parse expected string");
+    if (p->pos >= p->len || p->s[p->pos] != '"') tsc_throw_str(tsc_str_from_cstr("JSON.parse expected string"));
     p->pos++;
     char* buf = (char*)TSC_GC_MALLOC_ATOMIC(p->len - p->pos + 1);
     size_t out = 0;
@@ -1512,7 +1512,7 @@ tsc_str_t* jp_string(json_parser_t* p) {
             return s;
         }
         if (c == '\\') {
-            if (p->pos >= p->len) tsc_panic("JSON.parse bad escape");
+            if (p->pos >= p->len) tsc_throw_str(tsc_str_from_cstr("JSON.parse bad escape"));
             c = (unsigned char)p->s[p->pos++];
             switch (c) {
                 case '"': buf[out++] = '"'; break;
@@ -1527,23 +1527,23 @@ tsc_str_t* jp_string(json_parser_t* p) {
                     uint32_t cp = jp_read_u4(p);
                     if (cp >= 0xD800 && cp <= 0xDBFF) {
                         if (p->pos + 6 > p->len || p->s[p->pos] != '\\' || p->s[p->pos + 1] != 'u') {
-                            tsc_panic("JSON.parse invalid unicode escape");
+                            tsc_throw_str(tsc_str_from_cstr("JSON.parse invalid unicode escape"));
                         }
                         p->pos += 2;
                         uint32_t low = jp_read_u4(p);
-                        if (low < 0xDC00 || low > 0xDFFF) tsc_panic("JSON.parse invalid unicode escape");
+                        if (low < 0xDC00 || low > 0xDFFF) tsc_throw_str(tsc_str_from_cstr("JSON.parse invalid unicode escape"));
                         cp = 0x10000 + (((cp - 0xD800) << 10) | (low - 0xDC00));
                     }
                     jp_append_code_point(buf, &out, cp);
                     break;
                 }
-                default: tsc_panic("JSON.parse unsupported escape");
+                default: tsc_throw_str(tsc_str_from_cstr("JSON.parse unsupported escape"));
             }
         } else {
             buf[out++] = (char)c;
         }
     }
-    tsc_panic("JSON.parse unterminated string");
+    tsc_throw_str(tsc_str_from_cstr("JSON.parse unterminated string"));
     return tsc_str_from_lit("", 0);
 }
 
@@ -1567,9 +1567,9 @@ tsc_value_t jp_array(json_parser_t* p) {
             p->pos++;
             return tsc_value_array(a);
         }
-        tsc_panic("JSON.parse expected array separator");
+        tsc_throw_str(tsc_str_from_cstr("JSON.parse expected array separator"));
     }
-    tsc_panic("JSON.parse unterminated array");
+    tsc_throw_str(tsc_str_from_cstr("JSON.parse unterminated array"));
     return tsc_value_array(a);
 }
 
@@ -1585,7 +1585,7 @@ tsc_value_t jp_object(json_parser_t* p) {
         jp_ws(p);
         tsc_str_t* key = jp_string(p);
         jp_ws(p);
-        if (p->pos >= p->len || p->s[p->pos] != ':') tsc_panic("JSON.parse expected ':'");
+        if (p->pos >= p->len || p->s[p->pos] != ':') tsc_throw_str(tsc_str_from_cstr("JSON.parse expected ':'"));
         p->pos++;
         tsc_value_t value = jp_value(p);
         tsc_object_set(o, key, value);
@@ -1598,9 +1598,9 @@ tsc_value_t jp_object(json_parser_t* p) {
             p->pos++;
             return tsc_value_object(o);
         }
-        tsc_panic("JSON.parse expected object separator");
+        tsc_throw_str(tsc_str_from_cstr("JSON.parse expected object separator"));
     }
-    tsc_panic("JSON.parse unterminated object");
+    tsc_throw_str(tsc_str_from_cstr("JSON.parse unterminated object"));
     return tsc_value_object(o);
 }
 
@@ -1608,14 +1608,14 @@ tsc_value_t jp_number(json_parser_t* p) {
     const char* start = p->s + p->pos;
     char* end = NULL;
     double n = strtod(start, &end);
-    if (end == start) tsc_panic("JSON.parse expected number");
+    if (end == start) tsc_throw_str(tsc_str_from_cstr("JSON.parse expected number"));
     p->pos += (size_t)(end - start);
     return tsc_value_num(n);
 }
 
 tsc_value_t jp_value(json_parser_t* p) {
     jp_ws(p);
-    if (p->pos >= p->len) tsc_panic("JSON.parse unexpected end");
+    if (p->pos >= p->len) tsc_throw_str(tsc_str_from_cstr("JSON.parse unexpected end"));
     char c = p->s[p->pos];
     if (c == '"') return tsc_value_string(jp_string(p));
     if (c == '[') return jp_array(p);
@@ -1630,7 +1630,7 @@ tsc_value_t tsc_json_parse(tsc_str_t* text) {
     json_parser_t p = { text->data, text->len, 0 };
     tsc_value_t v = jp_value(&p);
     jp_ws(&p);
-    if (p.pos != p.len) tsc_panic("JSON.parse trailing input");
+    if (p.pos != p.len) tsc_throw_str(tsc_str_from_cstr("JSON.parse trailing input"));
     return v;
 }
 
