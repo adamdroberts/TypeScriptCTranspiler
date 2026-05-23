@@ -9,11 +9,18 @@ tsc_object_t* tsc_object_new(void) {
     o->class_ptr = NULL;
     o->is_proxy = false;
     o->proxy_revoked = false;
+    o->shape_version = 1;
     o->proxy_target = tsc_value_undefined();
     o->proxy_handler = tsc_value_undefined();
     o->prototype = tsc_value_null();
     o->props = (tsc_object_prop_t*)TSC_GC_MALLOC(sizeof(tsc_object_prop_t) * o->cap);
     return o;
+}
+
+static void object_shape_changed(tsc_object_t* o) {
+    if (!o) return;
+    o->shape_version++;
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_OBJECT_SHAPE_UPDATE);
 }
 
 void object_reserve(tsc_object_t* o, size_t cap) {
@@ -588,6 +595,7 @@ bool object_set_own_data(tsc_object_t* o, tsc_str_t* key, tsc_value_t value) {
     o->props[o->len].enumerable = true;
     o->props[o->len].configurable = true;
     o->len++;
+    object_shape_changed(o);
     return true;
 }
 
@@ -696,6 +704,7 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
         if (has_writable) p->writable = writable;
         if (has_enumerable) p->enumerable = enumerable;
         if (has_configurable) p->configurable = configurable;
+        object_shape_changed(o);
         return true;
     }
     if (!o->extensible) return false;
@@ -713,6 +722,7 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
     o->props[o->len].enumerable = has_enumerable ? enumerable : false;
     o->props[o->len].configurable = has_configurable ? configurable : false;
     o->len++;
+    object_shape_changed(o);
     return true;
 }
 
@@ -781,6 +791,7 @@ bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_ge
         prop->writable = false;
         prop->enumerable = next_enumerable;
         prop->configurable = next_configurable;
+        object_shape_changed(o);
         return true;
     }
     if (!o->extensible) return false;
@@ -798,6 +809,7 @@ bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_ge
     o->props[o->len].enumerable = has_enumerable ? enumerable : false;
     o->props[o->len].configurable = has_configurable ? configurable : false;
     o->len++;
+    object_shape_changed(o);
     return true;
 }
 
@@ -879,6 +891,7 @@ bool tsc_object_set_prototype_of(tsc_object_t* o, tsc_value_t prototype) {
     if (!o->extensible) return false;
     if (object_chain_contains(prototype, o)) return false;
     o->prototype = prototype;
+    object_shape_changed(o);
     return true;
 }
 
@@ -1080,6 +1093,7 @@ bool tsc_object_delete(tsc_object_t* o, const tsc_str_t* key) {
         o->props[i - 1] = o->props[i];
     }
     o->len--;
+    object_shape_changed(o);
     return true;
 }
 
@@ -1128,7 +1142,10 @@ bool tsc_object_prevent_extensions(tsc_object_t* o) {
         }
         return prevented;
     }
-    o->extensible = false;
+    if (o->extensible) {
+        o->extensible = false;
+        object_shape_changed(o);
+    }
     return true;
 }
 
@@ -1143,6 +1160,7 @@ bool tsc_object_seal(tsc_object_t* o) {
     for (size_t i = 0; i < o->len; i++) {
         o->props[i].configurable = false;
     }
+    object_shape_changed(o);
     return true;
 }
 
@@ -1155,6 +1173,7 @@ bool tsc_object_freeze(tsc_object_t* o) {
     for (size_t i = 0; i < o->len; i++) {
         o->props[i].writable = false;
     }
+    object_shape_changed(o);
     return true;
 }
 

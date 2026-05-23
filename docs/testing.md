@@ -309,7 +309,7 @@ tests/e2e/
         └── expected.stdout
 ```
 
-Each subdirectory under `tests/e2e/cases/` is one test. The harness auto-discovers every directory with `in.ts` plus either `expected.stdout` or `expected.exitcode`. A case may also include `expected.mainc.contains` to assert that generated `main.c` contains a substring; `{{ENTRY}}` expands to the case entry path. `run.env` adds `KEY=VALUE` pairs to the binary execution environment, and `expected.stderr.contains` asserts that the captured stderr includes a diagnostic substring. A `compile.release` marker compiles that case with `--release`.
+Each subdirectory under `tests/e2e/cases/` is one test. The harness auto-discovers every directory with `in.ts` plus either `expected.stdout` or `expected.exitcode`. A case may also include `expected.mainc.contains` to assert that generated `main.c` contains a substring; `{{ENTRY}}` expands to the case entry path. `run.env` adds `KEY=VALUE` pairs to the binary execution environment, and `expected.stderr.contains` asserts that the captured stderr includes each non-empty diagnostic substring line. A `compile.release` marker compiles that case with `--release`.
 
 ## How the harness works
 
@@ -376,7 +376,7 @@ If your test imports other files, add them to the same directory. They're auto-p
 - **Error paths at the emit level** — expected-failure coverage exists for emitter diagnostics, but broader exit-code coverage is still thin.
 - **Multi-config matrix** — `--no-gc`, default, and one `--release` case are covered. macOS / Windows / clang paths aren't exercised yet.
 - **Binary size / perf regressions** — the manual benchmark harness records `tsc2c` output binary bytes and timing/ops data; `bun run bench:check -- <results.json> [policy.json]` can enforce thresholds from a JSON policy, with `MAX_BINARY_BYTES`, `MAX_TSC2C_MS`, `MIN_VS_BUN`, and `MIN_VS_NODE` as local overrides. `bun run bench:smoke` uses `manual-tests/benchmarks/thresholds-smoke.json` for the default local/CI smoke. A full shared CI matrix and long-run threshold policy still remain.
-- **Inline-cache baselines** — `TSC_DYNAMIC_STATS=1` makes compiled binaries print dynamic property-operation counters to stderr at process exit. `dynamic_runtime_stats` covers the opt-in path, but actual inline caches and shape hit/miss accounting remain Phase 15 work.
+- **Inline-cache baselines** — `TSC_DYNAMIC_STATS=1` makes compiled binaries print dynamic property-operation counters and object shape-update counters to stderr at process exit. `dynamic_runtime_stats` covers the opt-in path, but actual inline caches and generated-code cache hit/miss accounting remain Phase 15 work.
 - **Stdlib edge cases** at scale — we test "happy path" for each feature. Fuzz / property-based testing would improve coverage.
 
 These are candidate Phase 15 work. See [`todo.md`](todo.md).

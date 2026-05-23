@@ -113,6 +113,7 @@ struct tsc_object {
     void* class_ptr;
     bool is_proxy;
     bool proxy_revoked;
+    uint64_t shape_version;
     tsc_value_t proxy_target;
     tsc_value_t proxy_handler;
     tsc_value_t prototype;
@@ -192,6 +193,7 @@ typedef enum {
     TSC_DYNAMIC_STAT_DELETE_PROP,
     TSC_DYNAMIC_STAT_OWN_KEYS,
     TSC_DYNAMIC_STAT_GET_OWN_PROPERTY_DESCRIPTOR,
+    TSC_DYNAMIC_STAT_OBJECT_SHAPE_UPDATE,
     TSC_DYNAMIC_STAT_COUNT,
 } tsc_dynamic_stat_kind_t;
 

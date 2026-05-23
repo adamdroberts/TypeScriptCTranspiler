@@ -220,15 +220,19 @@ async function main(): Promise<void> {
             failed++;
             continue;
         }
-        if (c.expectedStderrContains !== undefined && !run.stderr.includes(c.expectedStderrContains)) {
-            console.log("STDERR MISSING EXPECTED SUBSTRING");
-            console.log("---expected substring---");
-            process.stdout.write(c.expectedStderrContains);
-            console.log("---actual---");
-            process.stdout.write(run.stderr);
-            console.log("---end---");
-            failed++;
-            continue;
+        if (c.expectedStderrContains !== undefined) {
+            const needles = c.expectedStderrContains.split(/\r?\n/).filter((line) => line.length > 0);
+            const missing = needles.find((needle) => !run.stderr.includes(needle));
+            if (missing !== undefined) {
+                console.log("STDERR MISSING EXPECTED SUBSTRING");
+                console.log("---expected substring---");
+                process.stdout.write(missing);
+                console.log("---actual---");
+                process.stdout.write(run.stderr);
+                console.log("---end---");
+                failed++;
+                continue;
+            }
         }
         if (run.stdout !== c.expected) {
             console.log("STDOUT MISMATCH");
