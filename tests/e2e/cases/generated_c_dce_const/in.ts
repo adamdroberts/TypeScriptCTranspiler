@@ -335,6 +335,20 @@ function constantBranch(value: number): number {
     return static_branch_after_exit;
 }
 
+function branchInnerExit(value: boolean): number {
+    if (value) {
+        return 85;
+        const branch_inner_after_return = 86;
+        console.log(branch_inner_after_return);
+    } else {
+        {
+            return 87;
+            const nested_branch_inner_after_return = 88;
+            console.log(nested_branch_inner_after_return);
+        }
+    }
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -450,6 +464,7 @@ function doExit(value: boolean): number {
 console.log(
     usedLocal(used_count),
     constantBranch(used_count),
+    branchInnerExit(true),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),

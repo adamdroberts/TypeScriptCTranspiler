@@ -9025,9 +9025,11 @@ class Emitter {
                 ) {
                     this.emitStmt(buf, child);
                     i++;
+                    if (this.statementAlwaysExits(child)) break;
                     continue;
                 }
                 this.emitStmt(buf, child);
+                if (this.statementAlwaysExits(child)) break;
             }
         } else {
             this.emitStmt(buf, s);
