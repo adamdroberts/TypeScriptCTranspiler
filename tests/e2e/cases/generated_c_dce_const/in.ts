@@ -350,6 +350,7 @@ const unused_object_keys_with_call = Object.keys({ dead_object_keys_with: 1 }).w
 const unused_array_to_string_call = ["dead_array_to_string", "dead_array_to_string_tail"].toString();
 const unused_array_to_locale_string_call = ["dead_array_to_locale_string", "dead_array_to_locale_string_tail"].toLocaleString();
 const unused_array_value_of_call = unused_spread_source_array.valueOf();
+Object.keys("kept_object_keys_string_map").map((key) => key + "kept_object_keys_string_map_callback");
 const unused_error_constructor = new Error("dead_error_constructor");
 const unused_type_error_constructor = new TypeError("dead_type_error_constructor");
 const unused_aggregate_error_constructor = new AggregateError(["dead_aggregate_error_item"], "dead_aggregate_error_message", { cause: "dead_aggregate_error_cause" });

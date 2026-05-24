@@ -5,6 +5,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- E2E `expected.mainc.contains` assertions now check each non-empty line independently, matching `expected.mainc.not_contains` and allowing multiple generated-C preservation markers per case. Test: `generated_c_dce_const`.
+- Generated-C DCE `Object.keys(...)` length proofs now preserve non-empty string primitive key arrays instead of treating every primitive receiver as empty. Test: `generated_c_dce_const`.
 - Generated-C DCE now uses simple `Object.keys(...)` length proofs to prune unused empty-array HOF, singleton comparator `sort(...)`, and in-range `.with(...)` calls. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused in-range `.with(...)` calls on direct `Array.of(...)` and one-argument `Array.from(...)` results with compile-time-proven length. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused array HOF calls on direct `Array.of()` and one-argument `Array.from(...)` results when the receiver is compile-time-proven empty, so callbacks cannot run. Test: `generated_c_dce_const`.

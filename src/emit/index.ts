@@ -1946,6 +1946,10 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): number | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        const stringText = this.sideEffectFreeStringLiteralText(unwrapped, seenConsts);
+        if (stringText !== null) {
+            return Array.from(stringText).length;
+        }
         if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) {
             return 0;
         }

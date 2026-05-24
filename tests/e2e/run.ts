@@ -203,13 +203,16 @@ async function main(): Promise<void> {
         }
         if (c.expectedMainCContains !== undefined) {
             const nativePkgNode = path.resolve(casesDir, "../../../node_modules/native-pkg/build/Release/native.node");
-            const needle = c.expectedMainCContains
+            const needles = c.expectedMainCContains
                 .replaceAll("{{ENTRY}}", c.entry)
-                .replaceAll("{{NATIVE_PKG_NODE}}", nativePkgNode);
-            if (!r.mainC.includes(needle)) {
+                .replaceAll("{{NATIVE_PKG_NODE}}", nativePkgNode)
+                .split(/\r?\n/)
+                .filter((line) => line.length > 0);
+            const missing = needles.find((needle) => !r.mainC.includes(needle));
+            if (missing !== undefined) {
                 console.log("MAINC MISSING EXPECTED SUBSTRING");
                 console.log("---expected substring---");
-                process.stdout.write(needle);
+                process.stdout.write(missing);
                 console.log("---end---");
                 failed++;
                 continue;
