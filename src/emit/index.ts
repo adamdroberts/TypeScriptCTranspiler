@@ -2683,6 +2683,8 @@ class Emitter {
         if (arrayLength !== null) return arrayLength;
         const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
         if (objectLength !== null) return objectLength;
+        const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(unwrapped, seenConsts);
+        if (staticBuiltObjectLength !== null) return staticBuiltObjectLength;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectKeysLength(init, seenConsts) : null;
     }
@@ -2706,6 +2708,8 @@ class Emitter {
         }
         const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
         if (objectLength !== null) return objectLength;
+        const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(unwrapped, seenConsts);
+        if (staticBuiltObjectLength !== null) return staticBuiltObjectLength;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectGetOwnPropertyNamesLength(init, seenConsts) : null;
     }
@@ -2729,6 +2733,8 @@ class Emitter {
         }
         const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
         if (objectLength !== null) return objectLength;
+        const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(unwrapped, seenConsts);
+        if (staticBuiltObjectLength !== null) return staticBuiltObjectLength;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectValuesLength(init, seenConsts) : null;
     }
@@ -2752,6 +2758,8 @@ class Emitter {
         }
         const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
         if (objectLength !== null) return objectLength;
+        const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(unwrapped, seenConsts);
+        if (staticBuiltObjectLength !== null) return staticBuiltObjectLength;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectEntriesLength(init, seenConsts) : null;
     }
@@ -2768,6 +2776,8 @@ class Emitter {
         }
         const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
         if (objectLength !== null) return objectLength;
+        const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(unwrapped, seenConsts);
+        if (staticBuiltObjectLength !== null) return staticBuiltObjectLength;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeReflectOwnKeysLength(init, seenConsts) : null;
     }
@@ -2778,6 +2788,26 @@ class Emitter {
     ): number | null {
         const keys = this.sideEffectFreeObjectLiteralOwnStringKeys(expr, seenConsts);
         return keys === null ? null : keys.size;
+    }
+
+    private sideEffectFreeStaticBuiltObjectOwnStringKeyCount(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.isObjectFromEntriesCall(unwrapped) && unwrapped.arguments.length === 1) {
+            const entries = this.sideEffectFreeObjectFromEntriesOwnDataEntries(
+                unwrapped.arguments[0]!,
+                new Set(seenConsts),
+            );
+            return entries === null ? null : entries.length;
+        }
+        if (this.isObjectAssignCall(unwrapped)) {
+            const entries = this.sideEffectFreeObjectAssignOwnDataEntries(unwrapped, new Set(seenConsts));
+            return entries === null ? null : entries.length;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(init, seenConsts) : null;
     }
 
     private sideEffectFreeObjectLiteralOwnStringKeys(
