@@ -1422,6 +1422,10 @@ class Emitter {
                     this.isSideEffectFreePrimitiveNumberCoercion(args[0]!, seenConsts) &&
                     this.isSideEffectFreePrimitiveNumberCoercion(args[1]!, seenConsts) &&
                     (!args[2] || this.isSideEffectFreePrimitiveNumberCoercion(args[2], seenConsts));
+            case "push":
+            case "unshift":
+                return this.isSideEffectFreeFreshArrayLiteralOperand(recv, seenConsts) &&
+                    allArgsPure();
             default:
                 return false;
         }

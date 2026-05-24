@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused pure fresh-array `push(...)` / `unshift(...)` calls with pure inserted values. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure fresh-array `fill(...)` / `copyWithin(...)` calls with pure value/index inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure fresh-array `pop()` / `shift()` / `reverse()` calls with pure ignored extra arguments. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure string `split(...)` calls with fresh RegExp separators and optional primitive numeric limits. Test: `generated_c_dce_const`.
