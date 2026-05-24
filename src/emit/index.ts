@@ -1464,7 +1464,10 @@ class Emitter {
         if (
             ts.isIdentifier(recv) &&
             this.isUnshadowedGlobalIdentifier(recv, "Buffer") &&
-            this.isSideEffectFreeBufferStaticCall(method, call.arguments, seenConsts)
+            (
+                this.isSideEffectFreeBufferStaticCall(method, call.arguments, seenConsts) ||
+                this.isSideEffectFreeBufferAllocationCall(method, call.arguments, seenConsts)
+            )
         ) {
             return true;
         }
@@ -1798,6 +1801,39 @@ class Emitter {
                         staticStringExpressionText(args[1]) === "utf-8"
                     ) &&
                     ignoredAfter(args[1] ? 2 : 1);
+            default:
+                return false;
+        }
+    }
+
+    private isSideEffectFreeBufferAllocationCall(
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const nonNegativeFiniteNumber = (arg: ts.Expression): boolean => {
+            const value = this.sideEffectFreePrimitiveNumberValue(arg, seenConsts);
+            return value !== null && Number.isFinite(value) && value >= 0;
+        };
+        switch (method) {
+            case "from":
+                return args.length >= 1 &&
+                    args.length <= 2 &&
+                    this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
+                    (
+                        !args[1] ||
+                        this.isUndefinedExpression(args[1]) ||
+                        staticStringExpressionText(args[1]) === "utf8" ||
+                        staticStringExpressionText(args[1]) === "utf-8"
+                    );
+            case "alloc":
+                return args.length >= 1 &&
+                    args.length <= 2 &&
+                    nonNegativeFiniteNumber(args[0]!) &&
+                    (!args[1] || this.isSideEffectFreePrimitiveNumberCoercion(args[1], seenConsts));
+            case "allocUnsafe":
+            case "allocUnsafeSlow":
+                return args.length === 1 && nonNegativeFiniteNumber(args[0]!);
             default:
                 return false;
         }

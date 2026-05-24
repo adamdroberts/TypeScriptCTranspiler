@@ -107,6 +107,9 @@ const unused_net_global_is_ipv4_call = net.isIPv4("dead_net_global_is_ipv4_ignor
 const unused_buffer_byte_length_call = Buffer.byteLength("dead_buffer_byte_length_ignored", "utf8");
 const unused_buffer_is_encoding_call = Buffer.isEncoding("dead_buffer_is_encoding_ignored");
 const unused_buffer_is_buffer_call = Buffer.isBuffer("dead_buffer_is_buffer_ignored");
+const unused_buffer_from_call = Buffer.from("dead_buffer_from_ignored", "utf8");
+const unused_buffer_alloc_call = Buffer.alloc(2, 65);
+const unused_buffer_alloc_unsafe_call = Buffer.allocUnsafe(2);
 const unused_global_parse_int = parseInt("dead_global_parse_int", 10);
 const unused_global_parse_float = parseFloat("dead_global_parse_float");
 const unused_global_is_nan = isNaN("dead_global_is_nan");
@@ -815,6 +818,9 @@ Promise.resolve(nodeNet.isIP("top_level_dead_promise_resolve_net_is_ip_ignored")
 Promise.resolve(netIsIPv6("top_level_dead_promise_resolve_net_named_is_ipv6_ignored"));
 Buffer.byteLength("top_level_dead_buffer_byte_length_ignored", "utf8");
 Buffer.isEncoding("top_level_dead_buffer_is_encoding_ignored");
+Buffer.from("top_level_dead_buffer_from_ignored");
+Buffer.alloc(2, 65);
+Buffer.allocUnsafe(2);
 Promise.resolve(Buffer.byteLength("top_level_dead_promise_resolve_buffer_byte_length_ignored"));
 Promise.resolve(Buffer.isBuffer("top_level_dead_promise_resolve_buffer_is_buffer_ignored"));
 parseInt("top_level_dead_global_parse_int", 10);
@@ -1479,6 +1485,9 @@ function usedLocal(value: number): number {
     Promise.resolve(netIsIPv6("local_dead_promise_resolve_net_named_is_ipv6_ignored"));
     Buffer.byteLength("local_dead_buffer_byte_length_ignored", "utf8");
     Buffer.isEncoding("local_dead_buffer_is_encoding_ignored");
+    Buffer.from("local_dead_buffer_from_ignored");
+    Buffer.alloc(2, 65);
+    Buffer.allocUnsafe(2);
     Promise.resolve(Buffer.byteLength("local_dead_promise_resolve_buffer_byte_length_ignored"));
     Promise.resolve(Buffer.isBuffer("local_dead_promise_resolve_buffer_is_buffer_ignored"));
     parseInt("local_dead_global_parse_int", 10);
