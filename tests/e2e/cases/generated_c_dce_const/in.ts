@@ -128,6 +128,8 @@ const unused_promise_resolve_array_string_call = Promise.resolve(["dead_promise_
 const unused_promise_resolve_string_length_call = Promise.resolve("dead_promise_resolve_string_length".length);
 const unused_promise_resolve_array_length_call = Promise.resolve(["dead_promise_resolve_array_length"].length);
 const unused_promise_resolve_string_element_call = Promise.resolve("dead_promise_resolve_string_element"[0]);
+const unused_promise_resolve_array_element_call = Promise.resolve(["dead_promise_resolve_array_element"][0]);
+const unused_promise_resolve_array_element_oob_call = Promise.resolve(["dead_promise_resolve_array_element_oob"][4]);
 const unused_promise_resolve_date_getter_call = Promise.resolve(new Date("2101-01-02T03:04:05Z").getTime("dead_promise_resolve_date_getter_ignored"));
 const unused_promise_resolve_date_string_call = Promise.resolve(new Date("2101-02-03T04:05:06Z").toUTCString("dead_promise_resolve_date_string_ignored"));
 const unused_promise_resolve_error_string_call = Promise.resolve(new Error("dead_promise_resolve_error_message").toString("dead_promise_resolve_error_ignored"));
@@ -394,6 +396,8 @@ Promise.resolve(["top_level_dead_promise_resolve_array_string"].toLocaleString()
 Promise.resolve("top_level_dead_promise_resolve_string_length".length);
 Promise.resolve(["top_level_dead_promise_resolve_array_length"].length);
 Promise.resolve("top_level_dead_promise_resolve_string_element"[1]);
+Promise.resolve(["top_level_dead_promise_resolve_array_element"][0]);
+Promise.resolve(["top_level_dead_promise_resolve_array_element_oob"][4]);
 Promise.resolve(new Date("2102-01-02T03:04:05Z").getUTCFullYear("top_level_dead_promise_resolve_date_getter_ignored"));
 Promise.resolve(new Date("2102-02-03T04:05:06Z").toDateString("top_level_dead_promise_resolve_date_string_ignored"));
 Promise.resolve(new TypeError("top_level_dead_promise_resolve_error_message").toLocaleString("top_level_dead_promise_resolve_error_ignored"));
@@ -671,6 +675,8 @@ function usedLocal(value: number): number {
     Promise.resolve("local_dead_promise_resolve_string_length".length);
     Promise.resolve(["local_dead_promise_resolve_array_length"].length);
     Promise.resolve("local_dead_promise_resolve_string_element"[2]);
+    Promise.resolve(["local_dead_promise_resolve_array_element"][0]);
+    Promise.resolve(["local_dead_promise_resolve_array_element_oob"][4]);
     Promise.resolve(new Date("2103-01-02T03:04:05Z").valueOf("local_dead_promise_resolve_date_getter_ignored"));
     Promise.resolve(new Date("2103-02-03T04:05:06Z").toTimeString("local_dead_promise_resolve_date_string_ignored"));
     Promise.resolve(new RangeError("local_dead_promise_resolve_error_message").toString("local_dead_promise_resolve_error_ignored"));

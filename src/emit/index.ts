@@ -2347,6 +2347,9 @@ class Emitter {
         if (this.isSideEffectFreeStringElementAccess(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreePrimitiveArrayElementAccess(unwrapped, seenConsts)) {
+            return true;
+        }
         if (
             ts.isPrefixUnaryExpression(unwrapped) &&
             (
@@ -2442,6 +2445,34 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreePrimitivePromiseResolveValue(init, seenConsts);
+    }
+
+    private isSideEffectFreePrimitiveArrayElementAccess(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!ts.isElementAccessExpression(expr) || !expr.argumentExpression) return false;
+        const index = this.sideEffectFreePrimitiveNumberValue(expr.argumentExpression, seenConsts);
+        if (index === null || !Number.isInteger(index)) return false;
+        return this.isSideEffectFreePrimitiveArrayElementOperand(expr.expression, index, seenConsts);
+    }
+
+    private isSideEffectFreePrimitiveArrayElementOperand(
+        expr: ts.Expression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            if (!this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts)) return false;
+            if (index < 0 || index >= unwrapped.elements.length) return true;
+            const element = unwrapped.elements[index];
+            if (!element || ts.isOmittedExpression(element)) return true;
+            if (ts.isSpreadElement(element)) return false;
+            return this.isSideEffectFreePrimitivePromiseResolveValue(element, new Set(seenConsts));
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreePrimitiveArrayElementOperand(init, index, seenConsts);
     }
 
     private isSideEffectFreeStringElementAccess(
