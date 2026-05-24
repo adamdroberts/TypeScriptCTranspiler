@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes unused pure `Buffer.toString(...)`, `Buffer.toLocaleString(...)`, and `Buffer.valueOf(...)` calls on fresh side-effect-free Buffer operands, including primitive `Promise.resolve(...)` inputs for string-returning methods. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused pure `Buffer.from(...)`, `Buffer.alloc(...)`, `Buffer.allocUnsafe(...)`, and `Buffer.allocUnsafeSlow(...)` allocations when their bounded arguments cannot throw. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused pure primitive-returning `Buffer.byteLength(...)`, `Buffer.isEncoding(...)`, and `Buffer.isBuffer(...)` calls, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused pure `net.isIP(...)`, `net.isIPv4(...)`, and `net.isIPv6(...)` calls, including named imports and primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.

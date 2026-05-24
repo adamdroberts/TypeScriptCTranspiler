@@ -1181,6 +1181,9 @@ class Emitter {
         if (this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeBufferMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
         if (
             ts.isIdentifier(recv) &&
             method === "isArray" &&
@@ -1839,6 +1842,65 @@ class Emitter {
         }
     }
 
+    private isSideEffectFreeFreshBufferOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Buffer") &&
+            this.isSideEffectFreeBufferAllocationCall(unwrapped.expression.name.text, unwrapped.arguments, seenConsts)
+        ) {
+            return true;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeFreshBufferOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeBufferMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!this.isSideEffectFreeFreshBufferOperand(recv, seenConsts)) return false;
+        const ignoredAfter = (index: number): boolean =>
+            Array.from(args).slice(index).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+        switch (method) {
+            case "toLocaleString":
+            case "valueOf":
+                return ignoredAfter(0);
+            case "toString":
+                return (
+                    !args[0] ||
+                    this.isUndefinedExpression(args[0]) ||
+                    staticStringExpressionText(args[0]) === "utf8" ||
+                    staticStringExpressionText(args[0]) === "utf-8"
+                ) &&
+                    ignoredAfter(args[0] ? 1 : 0);
+            default:
+                return false;
+        }
+    }
+
+    private isSideEffectFreePrimitiveBufferMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return (
+            method === "toLocaleString" ||
+            method === "toString"
+        ) &&
+            this.isSideEffectFreeBufferMethodCall(recv, method, args, seenConsts);
+    }
+
     private isSideEffectFreePrimitiveMethodCall(
         call: ts.CallExpression,
         seenConsts: Set<ts.Symbol>,
@@ -1863,7 +1925,8 @@ class Emitter {
                     this.isSideEffectFreeStringMethodCall(recv, method, call.arguments, seenConsts) ||
                     this.isSideEffectFreeArrayMethodCall(recv, method, call.arguments, seenConsts) ||
                     this.isSideEffectFreeBuiltinObjectPrototypeMethodCall(recv, method, call.arguments, seenConsts) ||
-                    this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts)
+                    this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts) ||
+                    this.isSideEffectFreePrimitiveBufferMethodCall(recv, method, call.arguments, seenConsts)
                 ) {
                     return true;
                 }
