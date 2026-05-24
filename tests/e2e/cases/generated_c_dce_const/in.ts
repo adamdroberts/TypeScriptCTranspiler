@@ -342,6 +342,8 @@ const unused_array_from_string_to_sorted_comparator_call = Array.from("x").toSor
 const unused_array_to_spliced_call = ["dead_array_to_spliced"].toSpliced(0, 0, "dead_array_to_spliced_insert");
 const unused_array_to_reversed_call = ["dead_array_to_reversed"].toReversed();
 const unused_array_with_call = ["dead_array_with", "dead_array_with_tail"].with(1, "dead_array_with_replacement");
+const unused_array_of_with_call = Array.of("dead_array_of_with").with(0, "dead_array_of_with_replacement");
+const unused_array_from_with_call = Array.from(["dead_array_from_with"]).with(-1, "dead_array_from_with_replacement");
 const unused_array_to_string_call = ["dead_array_to_string", "dead_array_to_string_tail"].toString();
 const unused_array_to_locale_string_call = ["dead_array_to_locale_string", "dead_array_to_locale_string_tail"].toLocaleString();
 const unused_array_value_of_call = unused_spread_source_array.valueOf();
@@ -744,6 +746,8 @@ Array.from("x").toSorted((a, b) => "top_level_dead_array_from_string_to_sorted_c
 ["top_level_dead_array_to_spliced"].toSpliced(0, 0, "top_level_dead_array_to_spliced_insert");
 ["top_level_dead_array_to_reversed"].toReversed();
 ["top_level_dead_array_with", "top_level_dead_array_with_tail"].with(-1, "top_level_dead_array_with_replacement");
+Array.of("top_level_dead_array_of_with").with(0, "top_level_dead_array_of_with_replacement");
+Array.from(["top_level_dead_array_from_with"]).with(-1, "top_level_dead_array_from_with_replacement");
 ["top_level_dead_array_to_string", "top_level_dead_array_to_string_tail"].toString();
 ["top_level_dead_array_to_locale_string", "top_level_dead_array_to_locale_string_tail"].toLocaleString();
 new Error("top_level_dead_error_constructor");
@@ -1159,6 +1163,8 @@ function usedLocal(value: number): number {
     Array.from("x").toSorted((a, b) => "local_dead_array_from_string_to_sorted_comparator".length + a.localeCompare(b));
     ["local_dead_array_to_spliced"].toSpliced(0, 0, "local_dead_array_to_spliced_insert");
     ["local_dead_array_with", "local_dead_array_with_tail"].with(0, "local_dead_array_with_replacement");
+    Array.of("local_dead_array_of_with").with(0, "local_dead_array_of_with_replacement");
+    Array.from(["local_dead_array_from_with"]).with(-1, "local_dead_array_from_with_replacement");
     ["local_dead_array_to_string", "local_dead_array_to_string_tail"].toString();
     ["local_dead_array_to_locale_string", "local_dead_array_to_locale_string_tail"].toLocaleString();
     new Error("local_dead_error_constructor");

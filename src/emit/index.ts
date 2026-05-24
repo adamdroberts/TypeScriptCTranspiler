@@ -1648,7 +1648,7 @@ class Emitter {
                         allArgsPure(2);
             case "with": {
                 if (args.length !== 2) return false;
-                const length = this.sideEffectFreeArrayLiteralLength(recv, seenConsts);
+                const length = this.sideEffectFreeFreshOrReturnedArrayLength(recv, seenConsts);
                 const index = this.sideEffectFreePrimitiveNumberValue(args[0]!, seenConsts);
                 if (length === null || index === null || !Number.isInteger(index)) return false;
                 const actualIndex = index < 0 ? length + index : index;
