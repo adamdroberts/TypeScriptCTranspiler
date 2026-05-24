@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Custom iterable classes can now be backed by materialized synchronous generator results from `[Symbol.iterator]()` in the eager iterator subset. Test: `generator_backed_iterable`.
 - Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with primitive property reads through `Object.fromEntries(Object.entries(...))` over pure spread-built object literals. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes string-array method calls such as `.join(...)` / `.toString()` on `Object.values(...)` and stringifiable `Object.entries(...)` results over pure spread-built object literals. Test: `generated_c_dce_const`.
 - Generated-C DCE now uses object-spread-aware element proofs for `Object.values(...)[i]` and `Object.entries(...)[i][j]` over pure object literals, including overwritten keys. Test: `generated_c_dce_const`.
