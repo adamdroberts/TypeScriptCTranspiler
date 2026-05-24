@@ -5,7 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
-- Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning `Array.isArray(...)`, `Object.is(...)`, `Object.hasOwn(...)`, `URL.canParse(...)`, and `Reflect.has(...)` results. Test: `generated_c_dce_const`.
+- Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning `Array.isArray(...)`, `Object.is(...)`, `Object.hasOwn(...)`, Object extensibility predicate, `URL.canParse(...)`, and Reflect predicate results. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with side-effect-free `String.fromCharCode(...)`, `String.fromCodePoint(...)`, and `RegExp.escape(...)` primitive results. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with side-effect-free `Date.now(...)`, `Date.parse(...)`, and `Date.UTC(...)` primitive results. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with side-effect-free `Number.parse*` and `Number.is*` primitive results. Test: `generated_c_dce_const`.
