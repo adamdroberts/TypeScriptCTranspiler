@@ -3915,6 +3915,14 @@ class Emitter {
                     );
             });
         }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map") &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+        ) {
+            return true;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeWeakMapConstructorSource(init, seenConsts);
     }
@@ -31355,10 +31363,36 @@ class Emitter {
             if (mapped.kind !== "weakmap")
                 unsupported(n, "new WeakMap() requires <K, V> type parameters");
             const args = n.arguments ?? [];
-            if (args.length > 0) unsupported(n, "new WeakMap(entries) is currently only supported when pruned by generated-C DCE");
+            if (args.length > 1) unsupported(n, "new WeakMap() expects 0 or 1 arguments");
             const k = mapped.key!;
             const v = mapped.elem!;
             requireWeakObjectKey(n, k, "WeakMap");
+            if (args.length === 1) {
+                const entries = this.emitExpr(args[0]!);
+                if (
+                    entries.ty.kind !== "map" ||
+                    !entries.ty.key ||
+                    !entries.ty.elem ||
+                    !sameCType(entries.ty.key, k) ||
+                    !sameCType(entries.ty.elem, v)
+                ) {
+                    unsupported(args[0]!, "new WeakMap(entries) expects a Map whose key/value types match the WeakMap");
+                }
+                return this.emitSequencedExpr(mapped, [{ value: entries }], ([source]) => {
+                    const map = this.freshTemp("_weak_map_init");
+                    const idx = this.freshTemp("_i");
+                    const keyPtr = this.freshTemp("_key");
+                    const valuePtr = this.freshTemp("_value");
+                    return (
+                        `({ tsc_map_t* const ${source}_src = ${source}; ` +
+                        `tsc_map_t* ${map} = tsc_map_new(sizeof(${k.c}), sizeof(${v.c}), ${keyKindOf(k)}, ${source}_src->len); ` +
+                        `for (size_t ${idx} = 0; ${idx} < ${source}_src->len; ${idx}++) { ` +
+                        `void* ${keyPtr} = (char*)${source}_src->keys + ${idx} * ${source}_src->ks; ` +
+                        `void* ${valuePtr} = (char*)${source}_src->values + ${idx} * ${source}_src->vs; ` +
+                        `tsc_map_set_raw(${map}, ${keyPtr}, ${valuePtr}); } ${map}; })`
+                    );
+                });
+            }
             return {
                 c: `tsc_map_new(sizeof(${k.c}), sizeof(${v.c}), ${keyKindOf(k)}, 0)`,
                 ty: mapped,

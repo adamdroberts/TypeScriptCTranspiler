@@ -381,6 +381,7 @@ interface WeakMap<K extends object, V> {
 }
 interface WeakMapConstructor {
     new <K extends object, V>(entries: [K, V][]): WeakMap<K, V>;
+    new <K extends object, V>(entries: Map<K, V>): WeakMap<K, V>;
     new <K extends object, V>(): WeakMap<K, V>;
 }
 declare var WeakMap: WeakMapConstructor;

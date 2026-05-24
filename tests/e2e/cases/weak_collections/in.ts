@@ -18,6 +18,11 @@ console.log("get:", names.get(alice));
 console.log("missing:", names.get(bob) === undefined);
 console.log("delete:", names.delete(alice), names.has(alice));
 
+const mapSource = new Map<User, string>();
+mapSource.set(alice, "seeded-admin");
+const seededNames = new WeakMap<User, string>(mapSource);
+console.log("seeded map:", seededNames.get(alice), seededNames.has(bob));
+
 const token = new Token(7);
 const other = new Token(8);
 const seen = new WeakSet<Token>();
