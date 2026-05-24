@@ -66,6 +66,10 @@ unused_new_date_empty_call
 unused_new_date_string_call
 unused_new_date_number_call
 unused_new_date_parts_call
+unused_new_map_empty_call
+unused_new_set_empty_call
+unused_new_weak_map_empty_call
+unused_new_weak_set_empty_call
 unused_uri_source
 unused_encode_uri_call
 unused_encode_uri_component_call

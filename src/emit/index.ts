@@ -1807,6 +1807,9 @@ class Emitter {
             const args = expr.arguments ?? ts.factory.createNodeArray();
             if (name === "RegExp") return this.isSideEffectFreeRegExpConstructorArgs(args, seenConsts);
             if (name === "Date") return this.isSideEffectFreeDateConstructorArgs(args, seenConsts);
+            if (name === "Map" || name === "Set" || name === "WeakMap" || name === "WeakSet") {
+                return args.length === 0;
+            }
             return false;
         }
         const args = Array.from(expr.arguments ?? []);
