@@ -116,6 +116,10 @@ const unused_promise_resolve_object_frozen_call = Promise.resolve(Object.isFroze
 const unused_promise_resolve_url_can_parse_call = Promise.resolve(URL.canParse("https://dead-promise-resolve-url-can-parse.test/"));
 const unused_promise_resolve_reflect_has_call = Promise.resolve(Reflect.has({ dead_promise_resolve_reflect_has: 1 }, "dead_promise_resolve_reflect_has"));
 const unused_promise_resolve_reflect_extensible_call = Promise.resolve(Reflect.isExtensible({ dead_promise_resolve_reflect_extensible: 1 }));
+const unused_promise_resolve_string_method_call = Promise.resolve("dead_promise_resolve_string_method".toUpperCase());
+const unused_promise_resolve_string_search_call = Promise.resolve("dead_promise_resolve_string_search".search("resolve"));
+const unused_promise_resolve_regexp_test_call = Promise.resolve(/dead_promise_resolve_regexp_test/.test("dead_promise_resolve_regexp_test"));
+const unused_promise_resolve_regexp_string_call = Promise.resolve(/dead_promise_resolve_regexp_string/.toString());
 const unused_promise_resolve_parser_call = Promise.resolve(parseInt("456789", 10));
 const unused_promise_resolve_number_parse_call = Promise.resolve(Number.parseInt("dead_promise_resolve_number_parse", 10));
 const unused_promise_resolve_number_predicate_call = Promise.resolve(Number.isSafeInteger("dead_promise_resolve_number_predicate".length));
@@ -366,6 +370,10 @@ Promise.resolve(Object.isFrozen({ top_level_dead_promise_resolve_object_frozen: 
 Promise.resolve(URL.canParse("https://top-level-dead-promise-resolve-url-can-parse.test/"));
 Promise.resolve(Reflect.has({ top_level_dead_promise_resolve_reflect_has: 1 }, "top_level_dead_promise_resolve_reflect_has"));
 Promise.resolve(Reflect.isExtensible({ top_level_dead_promise_resolve_reflect_extensible: 1 }));
+Promise.resolve("top_level_dead_promise_resolve_string_method".trim());
+Promise.resolve("top_level_dead_promise_resolve_string_replace".replace("replace", "done"));
+Promise.resolve(/top_level_dead_promise_resolve_regexp_test/.test("top_level_dead_promise_resolve_regexp_test"));
+Promise.resolve(/top_level_dead_promise_resolve_regexp_string/.toString());
 Promise.resolve(parseFloat("765432.25"));
 Promise.resolve(Number.parseFloat("top_level_dead_promise_resolve_number_parse"));
 Promise.resolve(Number.isInteger("top_level_dead_promise_resolve_number_predicate".length));
@@ -627,6 +635,10 @@ function usedLocal(value: number): number {
     Promise.resolve(URL.canParse("https://local-dead-promise-resolve-url-can-parse.test/"));
     Promise.resolve(Reflect.has({ local_dead_promise_resolve_reflect_has: 1 }, "local_dead_promise_resolve_reflect_has"));
     Promise.resolve(Reflect.isExtensible({ local_dead_promise_resolve_reflect_extensible: 1 }));
+    Promise.resolve("local_dead_promise_resolve_string_method".toLowerCase());
+    Promise.resolve("local_dead_promise_resolve_string_prefix".startsWith("local"));
+    Promise.resolve(/local_dead_promise_resolve_regexp_test/.test("local_dead_promise_resolve_regexp_test"));
+    Promise.resolve(/local_dead_promise_resolve_regexp_string/.toString());
     Promise.resolve(isFinite("123"));
     Promise.resolve(Number.parseInt("local_dead_promise_resolve_number_parse", 10));
     Promise.resolve(Number.isFinite("local_dead_promise_resolve_number_predicate".length));

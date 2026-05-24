@@ -1458,6 +1458,59 @@ class Emitter {
         return isPrimitiveReturningHelper && this.isSideEffectFreeStaticCall(call, seenConsts);
     }
 
+    private isSideEffectFreePrimitiveMethodCall(
+        call: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!ts.isPropertyAccessExpression(call.expression)) return false;
+        const recv = call.expression.expression;
+        const method = call.expression.name.text;
+        switch (method) {
+            case "charAt":
+            case "charCodeAt":
+            case "at":
+            case "codePointAt":
+            case "slice":
+            case "substring":
+            case "substr":
+            case "includes":
+            case "indexOf":
+            case "lastIndexOf":
+            case "startsWith":
+            case "endsWith":
+            case "localeCompare":
+            case "concat":
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+            case "toUpperCase":
+            case "toLowerCase":
+            case "trim":
+            case "trimLeft":
+            case "trimRight":
+            case "trimStart":
+            case "trimEnd":
+            case "isWellFormed":
+            case "toWellFormed":
+            case "normalize":
+            case "repeat":
+            case "padStart":
+            case "padEnd":
+            case "replace":
+            case "replaceAll":
+            case "search":
+                if (this.isSideEffectFreeStringMethodCall(recv, method, call.arguments, seenConsts)) {
+                    return true;
+                }
+                break;
+        }
+        return (
+            method === "test" ||
+            method === "toString" ||
+            method === "toLocaleString"
+        ) && this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts);
+    }
+
     private isSideEffectFreeArrayMethodCall(
         recv: ts.Expression,
         method: string,
@@ -2206,6 +2259,12 @@ class Emitter {
         if (
             ts.isCallExpression(unwrapped) &&
             this.isSideEffectFreePrimitiveStaticCall(unwrapped, seenConsts)
+        ) {
+            return true;
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            this.isSideEffectFreePrimitiveMethodCall(unwrapped, seenConsts)
         ) {
             return true;
         }
