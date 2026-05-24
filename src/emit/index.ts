@@ -1984,8 +1984,8 @@ class Emitter {
                 const key = this.staticPropertyName(prop.name);
                 if (key !== "encoding") return false;
                 if (this.isUndefinedExpression(prop.initializer)) return true;
-                return ts.isStringLiteralLike(prop.initializer) &&
-                    (prop.initializer.text === "utf8" || prop.initializer.text === "utf-8");
+                const encoding = this.sideEffectFreeStringLiteralText(prop.initializer, seenConsts);
+                return encoding === "utf8" || encoding === "utf-8";
             });
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
