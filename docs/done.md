@@ -1517,7 +1517,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `json_parse_errors` | JSON.parse syntax errors throw catchable runtime exceptions |
 | `reflect_length_errors` | Reflect and spread-call runtime arity mismatches throw catchable exceptions |
 | `stdlib_os` | os module + Date.now + Number.* statics |
-| `runtime_eval` | constant expression eval compiles AOT |
+| `runtime_eval` | constant expression eval compiles AOT, including earlier local static `const` string aliases and local const string maps |
 | `runtime_eval_manifest` | manifest-listed non-constant eval source dispatches to generated AOT constants |
 | `runtime_code_manifest_object` | named runtime-code manifest object maps dispatch eval/function allow-list entries to generated AOT constants |
 | `runtime_eval_unknown` | expected diagnostic for unknown-source `eval(...)` runtime compilation |
@@ -1528,7 +1528,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `runtime_function_constructor_unknown` | expected diagnostic for unknown-source `new Function(...)` runtime compilation |
 | `runtime_function_manifest` | manifest-listed non-constant `Function(...)` and `new Function(...)` bodies dispatch to generated AOT constants |
 | `runtime_function_manifest_params` | manifest-listed `Function(...)` bodies dispatch from the final argument when parameter names are static, including earlier local static `const` aliases |
-| `runtime_function_params_aot` | constant-body `Function(...)` with static parameter-name strings compiles AOT |
+| `runtime_function_params_aot` | constant-body `Function(...)` with static parameter-name strings compiles AOT, including earlier local static `const` aliases and local const string maps/arrays |
 | `runtime_function_unsafe_bridge` | `--unsafe-eval --emit-c-only` emits the embedded Node bridge for unknown Function source |
 | `runtime_function_constructor_unsafe_bridge` | `--unsafe-eval --emit-c-only` emits the embedded Node bridge for unknown new Function source |
 | `satisfies_expression` | TypeScript satisfies expressions erase to their runtime operand |

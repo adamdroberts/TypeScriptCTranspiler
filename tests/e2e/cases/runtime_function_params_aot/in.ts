@@ -19,5 +19,20 @@ function localNewParamFunction(): unknown {
     return makeLocal();
 }
 
+function localCollectionParamFunction(): unknown {
+    const key = "second";
+    const names = {
+        first: "unused",
+        second: "ignored",
+    } as const;
+    const bodies = {
+        first: "return 'unused';",
+        second: "return 'local-collection-function';",
+    } as const;
+    const makeLocal = Function(names[key], bodies[key]);
+    return makeLocal();
+}
+
 console.log("local function params aot:", localParamFunction());
 console.log("local new function params aot:", localNewParamFunction());
+console.log("local collection function params aot:", localCollectionParamFunction());

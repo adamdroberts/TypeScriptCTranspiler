@@ -7,3 +7,14 @@ function localEval(): unknown {
 }
 
 console.log(localEval());
+
+function localCollectionEval(): unknown {
+    const key = "second";
+    const sources = {
+        first: "'unused'",
+        second: "'local' + '-collection-eval'",
+    } as const;
+    return eval(sources[key]);
+}
+
+console.log(localCollectionEval());
