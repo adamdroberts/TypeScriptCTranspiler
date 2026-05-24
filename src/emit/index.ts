@@ -1762,6 +1762,12 @@ class Emitter {
             return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
                 this.isSideEffectFreePrimitiveCallableConstructorArgs(call.arguments, seenConsts);
         }
+        if (name === "Date") {
+            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+                Array.from(call.arguments).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+        }
         if (name === "BigInt") {
             return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
                 call.arguments.length >= 1 &&
