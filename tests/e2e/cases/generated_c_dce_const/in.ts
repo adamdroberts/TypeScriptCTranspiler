@@ -90,6 +90,7 @@ const unused_process_release_name_includes_call = (process.release.name.includes
 const unused_process_cwd_length_call = process.cwd("dead_process_cwd_length_ignored".length).length;
 const unused_process_stdin_fd_read = (process.stdin.fd, "dead_process_stdin_fd_read".length);
 const unused_process_stdout_writable_read = process.stdout.writable;
+const unused_process_stdout_readable_read = (process.stdout as any).readable;
 const unused_process_cwd_call = process.cwd("dead_process_cwd_ignored".length);
 const unused_process_uptime_call = process.uptime("dead_process_uptime_ignored".length);
 const unused_process_hrtime_call = process.hrtime();
@@ -427,6 +428,7 @@ const unused_promise_resolve_process_release_name_includes_call = Promise.resolv
 const unused_promise_resolve_process_cwd_upper_call = Promise.resolve(process.cwd("dead_promise_resolve_process_cwd_upper_ignored".length).toUpperCase());
 const unused_promise_resolve_process_stderr_tty_read = Promise.resolve(process.stderr.isTTY);
 const unused_promise_resolve_process_stdin_readable_read = Promise.resolve((process.stdin.readable, "dead_promise_resolve_process_stdin_readable_read".length));
+const unused_promise_resolve_process_stdout_readable_read = Promise.resolve(((process.stdout as any).readable, "dead_promise_resolve_process_stdout_readable_read".length));
 const unused_promise_resolve_process_cwd_call = Promise.resolve(process.cwd("dead_promise_resolve_process_cwd_ignored".length));
 const unused_promise_resolve_process_uptime_call = Promise.resolve(process.uptime("dead_promise_resolve_process_uptime_ignored".length));
 const unused_promise_resolve_process_cpu_system_read = Promise.resolve(process.cpuUsage().system + "dead_promise_resolve_process_cpu_system_read".length);
@@ -1112,6 +1114,7 @@ Promise.resolve((process.release.name.includes("node"), "top_level_dead_promise_
 Promise.resolve(process.cwd("top_level_dead_promise_resolve_process_cwd_upper_ignored".length).toUpperCase());
 (process.stdin.isTTY, "top_level_dead_process_stdin_tty_read".length);
 (process.stderr.writable, "top_level_dead_process_stderr_writable_read".length);
+((process.stdout as any).readable, "top_level_dead_process_stdout_readable_read".length);
 Promise.resolve(process.stdout.fd);
 Promise.resolve((process.stdout.isTTY, "top_level_dead_promise_resolve_process_stdout_tty_read".length));
 process.cwd("top_level_dead_process_cwd_ignored".length);
@@ -2082,6 +2085,7 @@ function usedLocal(value: number): number {
     Promise.resolve(process.cwd("local_dead_promise_resolve_process_cwd_upper_ignored".length).toUpperCase());
     (process.stdin.isTTY, "local_dead_process_stdin_tty_read".length);
     (process.stderr.writable, "local_dead_process_stderr_writable_read".length);
+    ((process.stdout as any).readable, "local_dead_process_stdout_readable_read".length);
     Promise.resolve(process.stdout.fd);
     Promise.resolve((process.stdout.isTTY, "local_dead_promise_resolve_process_stdout_tty_read".length));
     process.cwd("local_dead_process_cwd_ignored".length);
