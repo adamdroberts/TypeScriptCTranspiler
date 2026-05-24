@@ -129,6 +129,7 @@ const unused_promise_resolve_string_length_call = Promise.resolve("dead_promise_
 const unused_promise_resolve_array_length_call = Promise.resolve(["dead_promise_resolve_array_length"].length);
 const unused_promise_resolve_string_element_call = Promise.resolve("dead_promise_resolve_string_element"[0]);
 const unused_promise_resolve_template_call = Promise.resolve(`dead_promise_resolve_template_${"value"}`);
+const unused_promise_resolve_conditional_call = Promise.resolve(true ? "dead_promise_resolve_conditional_true" : "dead_promise_resolve_conditional_false");
 const unused_promise_resolve_object_property_call = Promise.resolve({ dead_promise_resolve_object_property: "dead_promise_resolve_object_property" }.dead_promise_resolve_object_property);
 const unused_promise_resolve_object_property_missing_call = Promise.resolve(({ dead_promise_resolve_object_property_missing_source: 1 } as { [key: string]: number }).dead_promise_resolve_object_property_missing);
 const unused_promise_resolve_array_element_call = Promise.resolve(["dead_promise_resolve_array_element"][0]);
@@ -400,6 +401,7 @@ Promise.resolve("top_level_dead_promise_resolve_string_length".length);
 Promise.resolve(["top_level_dead_promise_resolve_array_length"].length);
 Promise.resolve("top_level_dead_promise_resolve_string_element"[1]);
 Promise.resolve(`top_level_dead_promise_resolve_template_${"value"}`);
+Promise.resolve(false ? "top_level_dead_promise_resolve_conditional_true" : "top_level_dead_promise_resolve_conditional_false");
 Promise.resolve({ top_level_dead_promise_resolve_object_property: "top_level_dead_promise_resolve_object_property" }.top_level_dead_promise_resolve_object_property);
 Promise.resolve(({ top_level_dead_promise_resolve_object_property_missing_source: 1 } as { [key: string]: number }).top_level_dead_promise_resolve_object_property_missing);
 Promise.resolve(["top_level_dead_promise_resolve_array_element"][0]);
@@ -682,6 +684,7 @@ function usedLocal(value: number): number {
     Promise.resolve(["local_dead_promise_resolve_array_length"].length);
     Promise.resolve("local_dead_promise_resolve_string_element"[2]);
     Promise.resolve(`local_dead_promise_resolve_template_${"value"}`);
+    Promise.resolve(true ? "local_dead_promise_resolve_conditional_true" : "local_dead_promise_resolve_conditional_false");
     Promise.resolve({ local_dead_promise_resolve_object_property: "local_dead_promise_resolve_object_property" }.local_dead_promise_resolve_object_property);
     Promise.resolve(({ local_dead_promise_resolve_object_property_missing_source: 1 } as { [key: string]: number }).local_dead_promise_resolve_object_property_missing);
     Promise.resolve(["local_dead_promise_resolve_array_element"][0]);

@@ -2331,6 +2331,9 @@ class Emitter {
         if (ts.isTemplateExpression(unwrapped) && this.isSideEffectFreePrimitiveTemplateExpression(unwrapped, seenConsts)) {
             return true;
         }
+        if (ts.isConditionalExpression(unwrapped) && this.isSideEffectFreePrimitiveConditionalExpression(unwrapped, seenConsts)) {
+            return true;
+        }
         if (
             ts.isIdentifier(unwrapped) &&
             (
@@ -2460,6 +2463,22 @@ class Emitter {
         return expr.templateSpans.every((span) =>
             this.isSideEffectFreePrimitivePromiseResolveValue(span.expression, seenConsts)
         );
+    }
+
+    private isSideEffectFreePrimitiveConditionalExpression(
+        expr: ts.ConditionalExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const condition = this.staticBooleanValue(expr.condition, seenConsts);
+        if (condition === true) {
+            return this.isSideEffectFreePrimitivePromiseResolveValue(expr.whenTrue, seenConsts);
+        }
+        if (condition === false) {
+            return this.isSideEffectFreePrimitivePromiseResolveValue(expr.whenFalse, seenConsts);
+        }
+        return this.isSideEffectFreeTopLevelConstInitializer(expr.condition, seenConsts) &&
+            this.isSideEffectFreePrimitivePromiseResolveValue(expr.whenTrue, seenConsts) &&
+            this.isSideEffectFreePrimitivePromiseResolveValue(expr.whenFalse, seenConsts);
     }
 
     private isSideEffectFreePrimitiveObjectPropertyRead(
