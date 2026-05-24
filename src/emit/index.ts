@@ -2780,18 +2780,13 @@ class Emitter {
         ) {
             return unwrapped;
         }
+        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
+        if (targetOperand) {
+            return this.sideEffectFreeObjectIdentityKey(targetOperand, new Set(seenConsts));
+        }
         if (!ts.isIdentifier(unwrapped)) return null;
-        const sym = this.symbolForIdentifier(unwrapped);
-        if (!sym) return null;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        if (!init) return null;
-        const initUnwrapped = this.unwrapSideEffectFreeStaticExpression(init);
-        return (
-            ts.isObjectLiteralExpression(initUnwrapped) ||
-            ts.isArrayLiteralExpression(initUnwrapped)
-        )
-            ? sym
-            : null;
+        return init ? this.sideEffectFreeObjectIdentityKey(init, seenConsts) : null;
     }
 
     private sideEffectFreeMapEntryArrayLiteral(
