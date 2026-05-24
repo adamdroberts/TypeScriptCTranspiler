@@ -1055,6 +1055,9 @@ class Emitter {
         if (ts.isTaggedTemplateExpression(unwrapped) && this.isSideEffectFreeStringRawTaggedTemplate(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeJsonStringifyCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -1201,6 +1204,9 @@ class Emitter {
             return true;
         }
         if (ts.isTaggedTemplateExpression(unwrapped) && this.isSideEffectFreeStringRawTaggedTemplate(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeJsonStringifyCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -1432,6 +1438,9 @@ class Emitter {
         ) {
             return this.isSideEffectFreeStringCoercion(call.arguments[0]!, seenConsts) &&
                 (!call.arguments[1] || this.isSideEffectFreeStringCoercion(call.arguments[1], seenConsts));
+        }
+        if (this.isSideEffectFreeJsonStringifyCall(call, seenConsts)) {
+            return true;
         }
         if (
             ts.isIdentifier(recv) &&
@@ -5058,6 +5067,9 @@ class Emitter {
         if (ts.isTaggedTemplateExpression(unwrapped) && this.isSideEffectFreeStringRawTaggedTemplate(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeJsonStringifyCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -5122,6 +5134,9 @@ class Emitter {
             return true;
         }
         if (ts.isTaggedTemplateExpression(unwrapped) && this.isSideEffectFreeStringRawTaggedTemplate(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeJsonStringifyCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -6117,6 +6132,9 @@ class Emitter {
             return true;
         }
         if (ts.isTaggedTemplateExpression(unwrapped) && this.isSideEffectFreeStringRawTaggedTemplate(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeJsonStringifyCall(unwrapped, seenConsts)) {
             return true;
         }
         if (ts.isConditionalExpression(unwrapped) && this.isSideEffectFreePrimitiveConditionalExpression(unwrapped, seenConsts)) {
@@ -8266,6 +8284,69 @@ class Emitter {
         return expr.template.templateSpans.every((span) =>
             this.isSideEffectFreePrimitivePromiseResolveValue(span.expression, seenConsts)
         );
+    }
+
+    private isSideEffectFreeJsonStringifyCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            unwrapped.expression.name.text === "stringify" &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "JSON") &&
+            unwrapped.arguments.length === 1
+        ) {
+            return this.isSideEffectFreeJsonStringifyOperand(unwrapped.arguments[0]!, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeJsonStringifyCall(init, seenConsts);
+    }
+
+    private isSideEffectFreeJsonStringifyOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        switch (unwrapped.kind) {
+            case ts.SyntaxKind.TrueKeyword:
+            case ts.SyntaxKind.FalseKeyword:
+            case ts.SyntaxKind.NullKeyword:
+                return true;
+        }
+        if (
+            ts.isStringLiteral(unwrapped) ||
+            ts.isNoSubstitutionTemplateLiteral(unwrapped) ||
+            ts.isNumericLiteral(unwrapped)
+        ) {
+            return true;
+        }
+        if (ts.isPrefixUnaryExpression(unwrapped)) {
+            return (
+                unwrapped.operator === ts.SyntaxKind.PlusToken ||
+                unwrapped.operator === ts.SyntaxKind.MinusToken
+            ) && this.isSideEffectFreeJsonStringifyOperand(unwrapped.operand, seenConsts);
+        }
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            return unwrapped.elements.every((element) =>
+                !ts.isOmittedExpression(element) &&
+                !ts.isSpreadElement(element) &&
+                this.isSideEffectFreeJsonStringifyOperand(element, seenConsts)
+            );
+        }
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            return unwrapped.properties.every((prop) => {
+                if (!ts.isPropertyAssignment(prop)) return false;
+                if (!this.objectLiteralPropertyNameHasNoDefinitionSideEffects(prop.name, seenConsts)) {
+                    return false;
+                }
+                return this.isSideEffectFreeJsonStringifyOperand(prop.initializer, seenConsts);
+            });
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeJsonStringifyOperand(init, seenConsts);
     }
 
     private isSideEffectFreeStringStaticStringCall(
