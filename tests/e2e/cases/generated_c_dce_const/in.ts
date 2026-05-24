@@ -107,6 +107,8 @@ const unused_new_weak_map_ignored_extra_entry_call = new WeakMap<object, string>
     ([{ dead_new_weak_map_ignored_extra_key: 1 }, "dead_new_weak_map_ignored_extra_value", "dead_new_weak_map_ignored_extra"] as unknown as [object, string]),
 ]);
 const unused_new_weak_map_map_source_call = new WeakMap<object, string>(new Map<object, string>());
+const unused_weak_map_get_call = new WeakMap<object, string>().get({ dead_weak_map_get_key: 1 });
+const unused_weak_map_has_call = new WeakMap<object, string>([[{ dead_weak_map_has_source_key: 1 }, "dead_weak_map_has_source_value"]]).has({ dead_weak_map_has_key: 1 });
 const unused_new_weak_set_empty_call = new WeakSet<object>();
 const unused_new_weak_set_static_source_call = new WeakSet<object>([
     { dead_new_weak_set_static_value: 1 },
@@ -116,6 +118,7 @@ const unused_new_weak_set_set_source_call = new WeakSet<object>(new Set<object>(
 const unused_new_weak_set_object_set_source_call = new WeakSet<object>(new Set<object>([
     { dead_new_weak_set_object_set_source_value: 1 },
 ]));
+const unused_weak_set_has_call = new WeakSet<object>([{ dead_weak_set_has_source: 1 }]).has({ dead_weak_set_has_key: 1 });
 const unused_new_weak_ref_call = new WeakRef<object>({ label: "dead_weak_ref_target" });
 const unused_new_finalization_registry_call = new FinalizationRegistry<string>((held) => {
     "dead_finalization_registry_callback";
@@ -684,6 +687,8 @@ new WeakMap<object, string>([
     ([{ top_level_dead_new_weak_map_ignored_extra_key: 1 }, "top_level_dead_new_weak_map_ignored_extra_value", "top_level_dead_new_weak_map_ignored_extra"] as unknown as [object, string]),
 ]);
 new WeakMap<object, string>(new Map<object, string>());
+new WeakMap<object, string>().get({ top_level_dead_weak_map_get_key: 1 });
+new WeakMap<object, string>([[{ top_level_dead_weak_map_has_source_key: 1 }, "top_level_dead_weak_map_has_source_value"]]).has({ top_level_dead_weak_map_has_key: 1 });
 new WeakSet<object>();
 new WeakSet<object>([
     { top_level_dead_new_weak_set_static_value: 1 },
@@ -693,6 +698,7 @@ new WeakSet<object>(new Set<object>());
 new WeakSet<object>(new Set<object>([
     { top_level_dead_new_weak_set_object_set_source_value: 1 },
 ]));
+new WeakSet<object>([{ top_level_dead_weak_set_has_source: 1 }]).has({ top_level_dead_weak_set_has_key: 1 });
 new WeakRef<object>({ label: "top_level_dead_weak_ref_target" });
 new FinalizationRegistry<string>((held) => {
     "top_level_dead_finalization_registry_callback";
@@ -1251,6 +1257,8 @@ function usedLocal(value: number): number {
         ([{ local_dead_new_weak_map_ignored_extra_key: 1 }, "local_dead_new_weak_map_ignored_extra_value", "local_dead_new_weak_map_ignored_extra"] as unknown as [object, string]),
     ]);
     new WeakMap<object, string>(new Map<object, string>());
+    new WeakMap<object, string>().get({ local_dead_weak_map_get_key: 1 });
+    new WeakMap<object, string>([[{ local_dead_weak_map_has_source_key: 1 }, "local_dead_weak_map_has_source_value"]]).has({ local_dead_weak_map_has_key: 1 });
     new WeakSet<object>();
     new WeakSet<object>([
         { local_dead_new_weak_set_static_value: 1 },
@@ -1260,6 +1268,7 @@ function usedLocal(value: number): number {
     new WeakSet<object>(new Set<object>([
         { local_dead_new_weak_set_object_set_source_value: 1 },
     ]));
+    new WeakSet<object>([{ local_dead_weak_set_has_source: 1 }]).has({ local_dead_weak_set_has_key: 1 });
     new WeakRef<object>({ label: "local_dead_weak_ref_target" });
     new FinalizationRegistry<string>((held) => {
         "local_dead_finalization_registry_callback";

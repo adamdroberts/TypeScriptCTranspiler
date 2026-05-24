@@ -1104,6 +1104,12 @@ class Emitter {
         if (this.isSideEffectFreeSetMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeWeakMapMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeWeakSetMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
@@ -1821,6 +1827,65 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeFreshSetOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeWeakMapMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return (
+            method === "get" ||
+            method === "has"
+        ) &&
+            args.length === 1 &&
+            this.isSideEffectFreeFreshWeakMapOperand(recv, seenConsts) &&
+            this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(args[0]!, seenConsts);
+    }
+
+    private isSideEffectFreeFreshWeakMapOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "WeakMap")
+        ) {
+            return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeFreshWeakMapOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeWeakSetMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return method === "has" &&
+            args.length === 1 &&
+            this.isSideEffectFreeFreshWeakSetOperand(recv, seenConsts) &&
+            this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(args[0]!, seenConsts);
+    }
+
+    private isSideEffectFreeFreshWeakSetOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "WeakSet")
+        ) {
+            return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeFreshWeakSetOperand(init, seenConsts);
     }
 
     private isSideEffectFreeArrayOperand(
