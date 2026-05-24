@@ -3654,8 +3654,19 @@ class Emitter {
                         this.isSideEffectFreeSetConstructorSource(args[0]!, seenConsts)
                     );
             }
-            if (name === "WeakMap" || name === "WeakSet") {
-                return args.length === 0;
+            if (name === "WeakMap") {
+                return args.length === 0 ||
+                    (
+                        args.length === 1 &&
+                        this.isSideEffectFreeWeakMapConstructorSource(args[0]!, seenConsts)
+                    );
+            }
+            if (name === "WeakSet") {
+                return args.length === 0 ||
+                    (
+                        args.length === 1 &&
+                        this.isSideEffectFreeWeakSetConstructorSource(args[0]!, seenConsts)
+                    );
             }
             if (name === "WeakRef") {
                 return args.length === 1 &&
@@ -3879,6 +3890,42 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeSetConstructorSource(init, seenConsts);
+    }
+
+    private isSideEffectFreeWeakMapConstructorSource(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        const elements = this.sideEffectFreeMapArraySourceExpressions(unwrapped, seenConsts);
+        if (elements) {
+            return elements.every((element) => {
+                const entry = this.sideEffectFreeMapEntryArrayLiteral(element, seenConsts);
+                return !!entry &&
+                    entry.elements.length >= 2 &&
+                    ts.isExpression(entry.elements[0]!) &&
+                    ts.isExpression(entry.elements[1]!) &&
+                    this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(entry.elements[0]!, seenConsts) &&
+                    this.isSideEffectFreeTopLevelConstInitializer(entry.elements[1]!, seenConsts);
+            });
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeWeakMapConstructorSource(init, seenConsts);
+    }
+
+    private isSideEffectFreeWeakSetConstructorSource(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        const elements = this.sideEffectFreeSetArraySourceExpressions(unwrapped, seenConsts);
+        if (elements) {
+            return elements.every((element) =>
+                this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(element, seenConsts)
+            );
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeWeakSetConstructorSource(init, seenConsts);
     }
 
     private isSideEffectFreeErrorOptionsObject(
@@ -31301,6 +31348,8 @@ class Emitter {
             const mapped = mapTsType(n, ty, this.checker);
             if (mapped.kind !== "weakmap")
                 unsupported(n, "new WeakMap() requires <K, V> type parameters");
+            const args = n.arguments ?? [];
+            if (args.length > 0) unsupported(n, "new WeakMap(entries) is currently only supported when pruned by generated-C DCE");
             const k = mapped.key!;
             const v = mapped.elem!;
             requireWeakObjectKey(n, k, "WeakMap");
@@ -31314,6 +31363,8 @@ class Emitter {
             const mapped = mapTsType(n, ty, this.checker);
             if (mapped.kind !== "weakset")
                 unsupported(n, "new WeakSet() requires <T> type parameter");
+            const args = n.arguments ?? [];
+            if (args.length > 0) unsupported(n, "new WeakSet(values) is currently only supported when pruned by generated-C DCE");
             const e = mapped.elem!;
             requireWeakObjectKey(n, e, "WeakSet");
             return {

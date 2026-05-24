@@ -130,6 +130,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Generated-C DCE now recognizes unused pure `AggregateError(...)` constructor and callable forms with side-effect-free errors/message/options/ignored inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `WeakRef(...)` and `FinalizationRegistry(...)` constructors when their evaluated constructor inputs are side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure no-argument `Map`, `Set`, `WeakMap`, and `WeakSet` constructors. Test: `generated_c_dce_const`.
+- Generated-C DCE now recognizes unused pure `WeakMap(...)` / `WeakSet(...)` constructors over static object-literal sources. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Object.groupBy(...)` and `Map.groupBy(...)` calls over statically empty array sources. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Array.from(empty, mapper[, thisArg])` calls when the array/string source is statically empty. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure comparator `sort(...)` and `toSorted(...)` calls on fresh array literals with at most one element. Test: `generated_c_dce_const`.

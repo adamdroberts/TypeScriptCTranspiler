@@ -380,6 +380,7 @@ interface WeakMap<K extends object, V> {
     valueOf(...ignored: any[]): WeakMap<K, V>;
 }
 interface WeakMapConstructor {
+    new <K extends object, V>(entries: [K, V][]): WeakMap<K, V>;
     new <K extends object, V>(): WeakMap<K, V>;
 }
 declare var WeakMap: WeakMapConstructor;
@@ -393,6 +394,7 @@ interface WeakSet<T extends object> {
     valueOf(...ignored: any[]): WeakSet<T>;
 }
 interface WeakSetConstructor {
+    new <T extends object>(values: T[]): WeakSet<T>;
     new <T extends object>(): WeakSet<T>;
 }
 declare var WeakSet: WeakSetConstructor;

@@ -80,7 +80,15 @@ const unused_new_set_empty_call = new Set<number>();
 const unused_new_set_array_call = new Set(["dead_new_set_array", "dead_new_set_array_tail"]);
 const unused_new_set_copy_call = new Set(new Set(["dead_new_set_copy", "dead_new_set_copy_tail"]));
 const unused_new_weak_map_empty_call = new WeakMap<object, string>();
+const unused_new_weak_map_static_source_call = new WeakMap<object, string>([
+    [{ dead_new_weak_map_static_key: 1 }, "dead_new_weak_map_static_value"],
+    [{ dead_new_weak_map_static_tail_key: 2 }, "dead_new_weak_map_static_tail_value"],
+]);
 const unused_new_weak_set_empty_call = new WeakSet<object>();
+const unused_new_weak_set_static_source_call = new WeakSet<object>([
+    { dead_new_weak_set_static_value: 1 },
+    { dead_new_weak_set_static_tail: 2 },
+]);
 const unused_new_weak_ref_call = new WeakRef<object>({ label: "dead_weak_ref_target" });
 const unused_new_finalization_registry_call = new FinalizationRegistry<string>((held) => {
     "dead_finalization_registry_callback";
@@ -593,7 +601,15 @@ new Set<number>();
 new Set(["top_level_dead_new_set_array", "top_level_dead_new_set_array_tail"]);
 new Set(new Set(["top_level_dead_new_set_copy", "top_level_dead_new_set_copy_tail"]));
 new WeakMap<object, string>();
+new WeakMap<object, string>([
+    [{ top_level_dead_new_weak_map_static_key: 1 }, "top_level_dead_new_weak_map_static_value"],
+    [{ top_level_dead_new_weak_map_static_tail_key: 2 }, "top_level_dead_new_weak_map_static_tail_value"],
+]);
 new WeakSet<object>();
+new WeakSet<object>([
+    { top_level_dead_new_weak_set_static_value: 1 },
+    { top_level_dead_new_weak_set_static_tail: 2 },
+]);
 new WeakRef<object>({ label: "top_level_dead_weak_ref_target" });
 new FinalizationRegistry<string>((held) => {
     "top_level_dead_finalization_registry_callback";
@@ -1106,7 +1122,15 @@ function usedLocal(value: number): number {
     new Set(["local_dead_new_set_array", "local_dead_new_set_array_tail"]);
     new Set(new Set(["local_dead_new_set_copy", "local_dead_new_set_copy_tail"]));
     new WeakMap<object, string>();
+    new WeakMap<object, string>([
+        [{ local_dead_new_weak_map_static_key: 1 }, "local_dead_new_weak_map_static_value"],
+        [{ local_dead_new_weak_map_static_tail_key: 2 }, "local_dead_new_weak_map_static_tail_value"],
+    ]);
     new WeakSet<object>();
+    new WeakSet<object>([
+        { local_dead_new_weak_set_static_value: 1 },
+        { local_dead_new_weak_set_static_tail: 2 },
+    ]);
     new WeakRef<object>({ label: "local_dead_weak_ref_target" });
     new FinalizationRegistry<string>((held) => {
         "local_dead_finalization_registry_callback";
