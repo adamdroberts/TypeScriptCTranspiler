@@ -200,6 +200,7 @@ const unused_object_assign_object_call = Object.assign({ dead_object_assign_targ
 const unused_object_assign_array_call = Object.assign(["dead_object_assign_array_target"], ["dead_object_assign_array_source"]);
 const unused_object_assign_const_source_call = Object.assign({ dead_object_assign_const_target: 1 }, unused_spread_source_object);
 const unused_object_assign_primitive_source_call = Object.assign({ dead_object_assign_primitive_target: 1 }, "dead_object_assign_primitive_source");
+const unused_object_assign_nullish_source_call = Object.assign({ dead_object_assign_nullish_target: 1 }, null, undefined, "dead_object_assign_nullish_primitive_source");
 const unused_object_define_property_call = Object.defineProperty({ dead_object_define_property_target: 1 }, "dead_object_define_property_key", { value: "dead_object_define_property_value", enumerable: true });
 const unused_object_define_properties_call = Object.defineProperties({ dead_object_define_properties_target: 1 }, { dead_object_define_properties_key: { value: "dead_object_define_properties_value", configurable: true } });
 const unused_object_from_entries_call = Object.fromEntries([["dead_object_from_entries_key", "dead_object_from_entries_value"]]);
@@ -390,6 +391,7 @@ Object.create({ top_level_dead_create_descriptors_proto: 1 }, { top_level_dead_c
 Object.assign({ top_level_dead_assign_target: 1 }, { top_level_dead_assign_source: 2 });
 Object.assign(["top_level_dead_assign_array_target"], ["top_level_dead_assign_array_source"]);
 Object.assign({ top_level_dead_assign_primitive_target: 1 }, "top_level_dead_assign_primitive_source");
+Object.assign({ top_level_dead_assign_nullish_target: 1 }, null, undefined, "top_level_dead_assign_nullish_primitive_source");
 Object.defineProperty({ top_level_dead_define_property_target: 1 }, "top_level_dead_define_property_key", { value: "top_level_dead_define_property_value", writable: true });
 Object.defineProperties({ top_level_dead_define_properties_target: 1 }, { top_level_dead_define_properties_key: { value: "top_level_dead_define_properties_value", enumerable: true } });
 Object.fromEntries([["top_level_dead_from_entries_key", "top_level_dead_from_entries_value"]]);
@@ -604,6 +606,7 @@ function usedLocal(value: number): number {
     Object.assign({ local_dead_assign_target: 1 }, { local_dead_assign_source: 2 });
     Object.assign(["local_dead_assign_array_target"], ["local_dead_assign_array_source"]);
     Object.assign({ local_dead_assign_primitive_target: 1 }, "local_dead_assign_primitive_source");
+    Object.assign({ local_dead_assign_nullish_target: 1 }, null, undefined, "local_dead_assign_nullish_primitive_source");
     Object.defineProperty({ local_dead_define_property_target: 1 }, "local_dead_define_property_key", { value: "local_dead_define_property_value", enumerable: true });
     Object.defineProperties({ local_dead_define_properties_target: 1 }, { local_dead_define_properties_key: { value: "local_dead_define_properties_value", configurable: true } });
     Object.fromEntries([["local_dead_from_entries_key", "local_dead_from_entries_value"]]);

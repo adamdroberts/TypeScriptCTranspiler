@@ -1221,7 +1221,7 @@ class Emitter {
             const [target, ...sources] = Array.from(call.arguments);
             return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(target!, seenConsts) &&
                 sources.every((source) =>
-                    this.isSideEffectFreeObjectCoercionOperand(source, seenConsts)
+                    this.isSideEffectFreeObjectAssignSourceOperand(source, seenConsts)
                 );
         }
         if (
@@ -2349,6 +2349,26 @@ class Emitter {
     ): boolean {
         return this.isSideEffectFreeObjectEnumerationOperand(expr, seenConsts) ||
             this.isSideEffectFreeNonNullishPrimitiveObjectOperand(expr, seenConsts);
+    }
+
+    private isSideEffectFreeObjectAssignSourceOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            unwrapped.kind === ts.SyntaxKind.NullKeyword ||
+            unwrapped.kind === ts.SyntaxKind.UndefinedKeyword ||
+            (
+                ts.isIdentifier(unwrapped) &&
+                this.isUnshadowedGlobalIdentifier(unwrapped, "undefined")
+            )
+        ) {
+            return true;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        if (init) return this.isSideEffectFreeObjectAssignSourceOperand(init, seenConsts);
+        return this.isSideEffectFreeObjectCoercionOperand(unwrapped, seenConsts);
     }
 
     private isSideEffectFreeNonNullishPrimitiveObjectOperand(
