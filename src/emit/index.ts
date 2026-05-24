@@ -2546,6 +2546,9 @@ class Emitter {
             case ts.SyntaxKind.ExclamationEqualsEqualsToken:
                 return this.isSideEffectFreePrimitivePromiseResolveValue(expr.left, seenConsts) &&
                     this.isSideEffectFreePrimitivePromiseResolveValue(expr.right, seenConsts);
+            case ts.SyntaxKind.InKeyword:
+                return this.isSideEffectFreePrimitivePromiseResolveValue(expr.left, seenConsts) &&
+                    this.isSideEffectFreeInRightOperand(expr.right, seenConsts);
             default:
                 return false;
         }
