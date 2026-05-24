@@ -2372,6 +2372,12 @@ class Emitter {
             return true;
         }
         if (
+            ts.isCallExpression(unwrapped) &&
+            this.isSideEffectFreePrimitiveReflectGetCall(unwrapped, seenConsts)
+        ) {
+            return true;
+        }
+        if (
             ts.isPrefixUnaryExpression(unwrapped) &&
             (
                 unwrapped.operator === ts.SyntaxKind.PlusToken ||
@@ -2588,6 +2594,43 @@ class Emitter {
                 this.isSideEffectFreePrimitiveObjectPropertyOperand(expr.expression, key, seenConsts);
         }
         return false;
+    }
+
+    private isSideEffectFreePrimitiveReflectGetCall(
+        call: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (
+            call.arguments.length !== 2 ||
+            !ts.isPropertyAccessExpression(call.expression) ||
+            !ts.isIdentifier(call.expression.expression) ||
+            !this.isUnshadowedGlobalIdentifier(call.expression.expression, "Reflect") ||
+            call.expression.name.text !== "get"
+        ) {
+            return false;
+        }
+
+        const key = this.sideEffectFreeObjectPropertyReadKey(call.arguments[1]!, seenConsts);
+        if (key === null) return false;
+        const target = call.arguments[0]!;
+        if (
+            this.sideEffectFreePrimitiveObjectPropertyOperandResult(
+                target,
+                key,
+                new Set(seenConsts),
+            ) !== "unsafe"
+        ) {
+            return true;
+        }
+        const index = this.sideEffectFreeArrayIndexFromObjectPropertyKey(key);
+        return index !== null &&
+            this.isSideEffectFreePrimitiveArrayElementOperand(target, index, new Set(seenConsts));
+    }
+
+    private sideEffectFreeArrayIndexFromObjectPropertyKey(key: string): number | null {
+        if (!/^(?:0|[1-9]\d*)$/.test(key)) return null;
+        const index = Number(key);
+        return Number.isSafeInteger(index) && String(index) === key ? index : null;
     }
 
     private sideEffectFreeObjectPropertyReadKey(
