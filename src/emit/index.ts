@@ -1710,13 +1710,13 @@ class Emitter {
             case "findLastIndex":
                 return args.length >= 1 &&
                     args.length <= 2 &&
-                    this.isSideEffectFreeFreshEmptyArrayLiteralOperand(recv, seenConsts) &&
+                    this.isSideEffectFreeFreshOrReturnedEmptyArrayOperand(recv, seenConsts) &&
                     this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts) &&
                     (!args[1] || this.isSideEffectFreeTopLevelConstInitializer(args[1], seenConsts));
             case "reduce":
             case "reduceRight":
                 return args.length === 2 &&
-                    this.isSideEffectFreeFreshEmptyArrayLiteralOperand(recv, seenConsts) &&
+                    this.isSideEffectFreeFreshOrReturnedEmptyArrayOperand(recv, seenConsts) &&
                     this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts) &&
                     this.isSideEffectFreeTopLevelConstInitializer(args[1]!, seenConsts);
             default:
@@ -1810,6 +1810,13 @@ class Emitter {
         return ts.isArrayLiteralExpression(unwrapped) &&
             unwrapped.elements.length === 0 &&
             this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+    }
+
+    private isSideEffectFreeFreshOrReturnedEmptyArrayOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return this.sideEffectFreeFreshOrReturnedArrayLength(expr, seenConsts) === 0;
     }
 
     private isSideEffectFreeEmptyArrayFromSource(
