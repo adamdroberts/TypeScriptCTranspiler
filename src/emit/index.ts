@@ -1549,6 +1549,7 @@ class Emitter {
                     this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
                     (!args[1] || this.isSideEffectFreePrimitiveNumberCoercion(args[1], seenConsts));
             case "match":
+            case "matchAll":
             case "search":
                 return args.length >= 1 &&
                     this.isSideEffectFreeRegExpPatternString(args[0]!, seenConsts) &&
