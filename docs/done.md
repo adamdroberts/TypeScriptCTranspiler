@@ -668,6 +668,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Generated-C DCE prunes unused primitive `process` metadata reads such as `platform`, `arch`, `pid`, `ppid`, `version`, `title`, `argv0`, and `execPath`, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused well-known `Symbol.iterator` / `Symbol.asyncIterator` reads and their `.description` reads, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused `Math` / `Number` static numeric constant reads, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
+- Generated-C DCE treats pure `String.fromCharCode(...)`, `String.fromCodePoint(...)`, and `RegExp.escape(...)` results as side-effect-free `.length`, string-method, and indexable operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE treats safe URI encode/decode helper results as side-effect-free `.length`, string-method, and indexable operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning fresh-Date method results. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning fresh-array method results. Test: `generated_c_dce_const`

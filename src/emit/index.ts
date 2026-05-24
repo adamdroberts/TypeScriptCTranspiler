@@ -1040,6 +1040,9 @@ class Emitter {
         if (this.isSideEffectFreeUriStringCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeStringStaticStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -1174,6 +1177,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeUriStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeStringStaticStringCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -5019,6 +5025,9 @@ class Emitter {
         if (this.isSideEffectFreeUriStringCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeStringStaticStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -5071,6 +5080,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeUriStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeStringStaticStringCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -8148,6 +8160,32 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeUriStringCall(init, seenConsts);
+    }
+
+    private isSideEffectFreeStringStaticStringCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (!ts.isCallExpression(unwrapped) || !ts.isPropertyAccessExpression(unwrapped.expression)) {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+            return !!init && this.isSideEffectFreeStringStaticStringCall(init, seenConsts);
+        }
+        const recv = unwrapped.expression.expression;
+        const method = unwrapped.expression.name.text;
+        const stringStatic =
+            ts.isIdentifier(recv) &&
+            (
+                (
+                    this.isUnshadowedGlobalIdentifier(recv, "String") &&
+                    (method === "fromCharCode" || method === "fromCodePoint")
+                ) ||
+                (
+                    this.isUnshadowedGlobalIdentifier(recv, "RegExp") &&
+                    method === "escape"
+                )
+            );
+        return stringStatic && this.isSideEffectFreeStaticCall(unwrapped, seenConsts);
     }
 
     private sideEffectFreeStringLiteralText(
