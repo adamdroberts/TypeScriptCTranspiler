@@ -1545,6 +1545,11 @@ class Emitter {
                     args.length <= 2 &&
                     this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
                     (!args[1] || this.isSideEffectFreePrimitiveNumberCoercion(args[1], seenConsts));
+            case "match":
+            case "search":
+                return args.length >= 1 &&
+                    this.isSideEffectFreeRegExpPatternString(args[0]!, seenConsts) &&
+                    allArgsPure(1);
             default:
                 return false;
         }
@@ -1572,6 +1577,20 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeStringCoercion(init, seenConsts);
+    }
+
+    private isSideEffectFreeRegExpPatternString(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const pattern = this.sideEffectFreeStringLiteralText(expr, seenConsts);
+        if (pattern === null) return false;
+        try {
+            new RegExp(pattern);
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     private isSideEffectFreeGlobalCall(

@@ -89,6 +89,8 @@ unused_string_pad_call
 unused_string_replace_call
 unused_string_replace_all_call
 unused_string_split_call
+unused_string_match_call
+unused_string_search_call
 unused_array_slice_call
 unused_array_at_call
 unused_array_includes_call
@@ -141,6 +143,8 @@ dead_string_pad
 dead_string_replace
 dead_string_replace_all
 dead_string_split
+dead_string_match
+dead_string_search
 dead_array_slice
 dead_array_at
 dead_array_includes
@@ -311,6 +315,8 @@ top_level_dead_string_pad
 top_level_dead_string_replace
 top_level_dead_string_replace_all
 top_level_dead_string_split
+top_level_dead_string_match
+top_level_dead_string_search
 top_level_dead_array_slice
 top_level_dead_array_at
 top_level_dead_array_includes
@@ -431,6 +437,8 @@ local_dead_string_pad
 local_dead_string_replace
 local_dead_string_replace_all
 local_dead_string_split
+local_dead_string_match
+local_dead_string_search
 local_dead_array_slice
 local_dead_array_at
 local_dead_array_includes
