@@ -1537,6 +1537,11 @@ class Emitter {
                     this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
                     this.isSideEffectFreeStringCoercion(args[1]!, seenConsts) &&
                     allArgsPure(2);
+            case "split":
+                return args.length >= 1 &&
+                    args.length <= 2 &&
+                    this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
+                    (!args[1] || this.isSideEffectFreePrimitiveNumberCoercion(args[1], seenConsts));
             default:
                 return false;
         }

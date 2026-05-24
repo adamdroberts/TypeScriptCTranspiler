@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused pure string `split(...)` calls when the separator is string-coercible and the optional limit is primitive numeric. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure string `replace(...)` / `replaceAll(...)` calls when search and replacement values are string-coercible constants. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure array `toString()` / `toLocaleString()` calls on string-only pure array operands. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Array.prototype.join(...)` calls on string-only pure array operands. Test: `generated_c_dce_const`.
