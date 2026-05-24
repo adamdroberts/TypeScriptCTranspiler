@@ -1870,7 +1870,8 @@ class Emitter {
             (
                 this.isSideEffectFreeStringArrayReturningArrayHelperCall(unwrapped, seenConsts) ||
                 this.isSideEffectFreeStringArrayReturningObjectKeyHelperCall(unwrapped, seenConsts) ||
-                this.isSideEffectFreeStringArrayReturningObjectValuesCall(unwrapped, seenConsts)
+                this.isSideEffectFreeStringArrayReturningObjectValuesCall(unwrapped, seenConsts) ||
+                this.isSideEffectFreeStringArrayReturningEmptyObjectEntriesCall(unwrapped, seenConsts)
             )
         ) {
             return true;
@@ -1920,6 +1921,22 @@ class Emitter {
             return false;
         }
         return this.isSideEffectFreeObjectValuesStringCoercionSource(call.arguments[0]!, seenConsts);
+    }
+
+    private isSideEffectFreeStringArrayReturningEmptyObjectEntriesCall(
+        call: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            !ts.isIdentifier(call.expression.expression) ||
+            !this.isUnshadowedGlobalIdentifier(call.expression.expression, "Object") ||
+            call.expression.name.text !== "entries" ||
+            call.arguments.length !== 1
+        ) {
+            return false;
+        }
+        return this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(call.arguments[0]!, seenConsts);
     }
 
     private isSideEffectFreeObjectValuesStringCoercionSource(

@@ -231,6 +231,9 @@ const unused_promise_resolve_object_entries_key_call = Promise.resolve(Object.en
 const unused_promise_resolve_object_entries_value_call = Promise.resolve(Object.entries({ dead_promise_resolve_object_entries_value_key: "dead_promise_resolve_object_entries_value" })[0][1]);
 const unused_promise_resolve_object_entries_array_value_call = Promise.resolve(Object.entries(["dead_promise_resolve_object_entries_array_value"])[0][1]);
 const unused_promise_resolve_object_entries_string_value_call = Promise.resolve(Object.entries("dead_promise_resolve_object_entries_string_value")[0][1]);
+const unused_promise_resolve_object_entries_map_join_call = Promise.resolve(Object.entries(new Map([["dead_promise_resolve_object_entries_map_join", 1]])).join("|"));
+const unused_promise_resolve_object_entries_set_to_string_call = Promise.resolve(Object.entries(new Set(["dead_promise_resolve_object_entries_set_to_string"])).toString("dead_promise_resolve_object_entries_set_to_string_ignored"));
+const unused_promise_resolve_object_entries_weak_set_to_string_call = Promise.resolve(Object.entries(new WeakSet<object>()).toString("dead_promise_resolve_object_entries_weak_set_to_string"));
 const unused_promise_resolve_object_values_freeze_call = Promise.resolve(Object.values(Object.freeze({ dead_promise_resolve_object_values_freeze: "dead_promise_resolve_object_values_freeze" }))[0]);
 const unused_promise_resolve_object_entries_freeze_call = Promise.resolve(Object.entries(Object.freeze({ dead_promise_resolve_object_entries_freeze: "dead_promise_resolve_object_entries_freeze" }))[0][1]);
 const dead_promise_resolve_array_spread_source = ["dead_promise_resolve_array_spread"];
@@ -607,6 +610,9 @@ Promise.resolve(Object.entries({ top_level_dead_promise_resolve_object_entries_k
 Promise.resolve(Object.entries({ top_level_dead_promise_resolve_object_entries_value_key: "top_level_dead_promise_resolve_object_entries_value" })[0][1]);
 Promise.resolve(Object.entries(["top_level_dead_promise_resolve_object_entries_array_value"])[0][1]);
 Promise.resolve(Object.entries("top_level_dead_promise_resolve_object_entries_string_value")[0][1]);
+Promise.resolve(Object.entries(new Map([["top_level_dead_promise_resolve_object_entries_map_join", 1]])).join("|"));
+Promise.resolve(Object.entries(new Set(["top_level_dead_promise_resolve_object_entries_set_to_string"])).toString("top_level_dead_promise_resolve_object_entries_set_to_string_ignored"));
+Promise.resolve(Object.entries(new WeakSet<object>()).toString("top_level_dead_promise_resolve_object_entries_weak_set_to_string"));
 Promise.resolve(Object.values(Object.freeze({ top_level_dead_promise_resolve_object_values_freeze: "top_level_dead_promise_resolve_object_values_freeze" }))[0]);
 Promise.resolve(Object.entries(Object.freeze({ top_level_dead_promise_resolve_object_entries_freeze: "top_level_dead_promise_resolve_object_entries_freeze" }))[0][1]);
 const top_level_dead_promise_resolve_array_spread_source = ["top_level_dead_promise_resolve_array_spread"];
@@ -994,6 +1000,9 @@ function usedLocal(value: number): number {
     Promise.resolve(Object.entries({ local_dead_promise_resolve_object_entries_value_key: "local_dead_promise_resolve_object_entries_value" })[0][1]);
     Promise.resolve(Object.entries(["local_dead_promise_resolve_object_entries_array_value"])[0][1]);
     Promise.resolve(Object.entries("local_dead_promise_resolve_object_entries_string_value")[0][1]);
+    Promise.resolve(Object.entries(new Map([["local_dead_promise_resolve_object_entries_map_join", 1]])).join("|"));
+    Promise.resolve(Object.entries(new Set(["local_dead_promise_resolve_object_entries_set_to_string"])).toString("local_dead_promise_resolve_object_entries_set_to_string_ignored"));
+    Promise.resolve(Object.entries(new WeakSet<object>()).toString("local_dead_promise_resolve_object_entries_weak_set_to_string"));
     Promise.resolve(Object.values(Object.freeze({ local_dead_promise_resolve_object_values_freeze: "local_dead_promise_resolve_object_values_freeze" }))[0]);
     Promise.resolve(Object.entries(Object.freeze({ local_dead_promise_resolve_object_entries_freeze: "local_dead_promise_resolve_object_entries_freeze" }))[0][1]);
     const local_dead_promise_resolve_array_spread_source = ["local_dead_promise_resolve_array_spread"];
