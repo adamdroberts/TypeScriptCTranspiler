@@ -2242,6 +2242,14 @@ class Emitter {
         ) {
             return this.isSideEffectFreeObjectCoercionOperand(unwrapped.arguments[0]!, seenConsts);
         }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map") &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+        ) {
+            return true;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeObjectFromEntriesOperand(init, seenConsts);
     }
