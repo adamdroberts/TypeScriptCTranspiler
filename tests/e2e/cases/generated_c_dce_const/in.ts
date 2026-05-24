@@ -187,6 +187,10 @@ const unused_promise_resolve_reflect_own_keys_freeze_element_call = Promise.reso
 const unused_promise_resolve_object_keys_join_call = Promise.resolve(Object.keys({ dead_promise_resolve_object_keys_join: 1 }).join("|"));
 const unused_promise_resolve_object_property_names_join_call = Promise.resolve(Object.getOwnPropertyNames(["dead_promise_resolve_object_property_names_join"]).join("|"));
 const unused_promise_resolve_object_keys_includes_call = Promise.resolve(Object.keys({ dead_promise_resolve_object_keys_includes: 1 }).includes("dead_promise_resolve_object_keys_includes"));
+const unused_promise_resolve_object_keys_assign_join_call = Promise.resolve(Object.keys(Object.assign({}, { dead_promise_resolve_object_keys_assign_join: 1 })).join("|"));
+const unused_promise_resolve_object_property_names_from_entries_join_call = Promise.resolve(Object.getOwnPropertyNames(Object.fromEntries<{ dead_promise_resolve_object_property_names_from_entries_join: number }>([["dead_promise_resolve_object_property_names_from_entries_join", 1]])).join("|"));
+const unused_promise_resolve_object_keys_create_descriptor_to_string_call = Promise.resolve(Object.keys(Object.create(null, { dead_promise_resolve_object_keys_create_descriptor_to_string: { value: 1, enumerable: true } })).toString());
+const unused_promise_resolve_object_property_names_define_property_includes_call = Promise.resolve(Object.getOwnPropertyNames(Object.defineProperty({}, "dead_promise_resolve_object_property_names_define_property_includes", { value: 1, enumerable: true })).includes("dead_promise_resolve_object_property_names_define_property_includes"));
 const unused_promise_resolve_reflect_own_keys_join_call = Promise.resolve(Reflect.ownKeys({ dead_promise_resolve_reflect_own_keys_join: 1 }).join("|"));
 const unused_promise_resolve_reflect_own_keys_to_string_call = Promise.resolve(Reflect.ownKeys(["dead_promise_resolve_reflect_own_keys_to_string"]).toString());
 const unused_promise_resolve_reflect_own_keys_assign_join_call = Promise.resolve(Reflect.ownKeys(Object.assign({}, { dead_promise_resolve_reflect_own_keys_assign_join: 1 })).join("|"));
@@ -550,6 +554,10 @@ Promise.resolve(Reflect.ownKeys(Object.freeze({ top_level_dead_promise_resolve_r
 Promise.resolve(Object.keys({ top_level_dead_promise_resolve_object_keys_join: 1 }).join("|"));
 Promise.resolve(Object.getOwnPropertyNames(["top_level_dead_promise_resolve_object_property_names_join"]).join("|"));
 Promise.resolve(Object.keys({ top_level_dead_promise_resolve_object_keys_includes: 1 }).includes("top_level_dead_promise_resolve_object_keys_includes"));
+Promise.resolve(Object.keys(Object.assign({}, { top_level_dead_promise_resolve_object_keys_assign_join: 1 })).join("|"));
+Promise.resolve(Object.getOwnPropertyNames(Object.fromEntries<{ top_level_dead_promise_resolve_object_property_names_from_entries_join: number }>([["top_level_dead_promise_resolve_object_property_names_from_entries_join", 1]])).join("|"));
+Promise.resolve(Object.keys(Object.create(null, { top_level_dead_promise_resolve_object_keys_create_descriptor_to_string: { value: 1, enumerable: true } })).toString());
+Promise.resolve(Object.getOwnPropertyNames(Object.defineProperty({}, "top_level_dead_promise_resolve_object_property_names_define_property_includes", { value: 1, enumerable: true })).includes("top_level_dead_promise_resolve_object_property_names_define_property_includes"));
 Promise.resolve(Reflect.ownKeys({ top_level_dead_promise_resolve_reflect_own_keys_join: 1 }).join("|"));
 Promise.resolve(Reflect.ownKeys(["top_level_dead_promise_resolve_reflect_own_keys_to_string"]).toString());
 Promise.resolve(Reflect.ownKeys(Object.assign({}, { top_level_dead_promise_resolve_reflect_own_keys_assign_join: 1 })).join("|"));
@@ -924,6 +932,10 @@ function usedLocal(value: number): number {
     Promise.resolve(Object.keys({ local_dead_promise_resolve_object_keys_join: 1 }).join("|"));
     Promise.resolve(Object.getOwnPropertyNames(["local_dead_promise_resolve_object_property_names_join"]).join("|"));
     Promise.resolve(Object.keys({ local_dead_promise_resolve_object_keys_includes: 1 }).includes("local_dead_promise_resolve_object_keys_includes"));
+    Promise.resolve(Object.keys(Object.assign({}, { local_dead_promise_resolve_object_keys_assign_join: 1 })).join("|"));
+    Promise.resolve(Object.getOwnPropertyNames(Object.fromEntries<{ local_dead_promise_resolve_object_property_names_from_entries_join: number }>([["local_dead_promise_resolve_object_property_names_from_entries_join", 1]])).join("|"));
+    Promise.resolve(Object.keys(Object.create(null, { local_dead_promise_resolve_object_keys_create_descriptor_to_string: { value: 1, enumerable: true } })).toString());
+    Promise.resolve(Object.getOwnPropertyNames(Object.defineProperty({}, "local_dead_promise_resolve_object_property_names_define_property_includes", { value: 1, enumerable: true })).includes("local_dead_promise_resolve_object_property_names_define_property_includes"));
     Promise.resolve(Reflect.ownKeys({ local_dead_promise_resolve_reflect_own_keys_join: 1 }).join("|"));
     Promise.resolve(Reflect.ownKeys(["local_dead_promise_resolve_reflect_own_keys_to_string"]).toString());
     Promise.resolve(Reflect.ownKeys(Object.assign({}, { local_dead_promise_resolve_reflect_own_keys_assign_join: 1 })).join("|"));
