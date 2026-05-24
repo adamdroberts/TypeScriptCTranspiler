@@ -1376,6 +1376,16 @@ class Emitter {
                         this.isSideEffectFreePrimitiveNumberCoercion(args[0]!, seenConsts) &&
                         this.isSideEffectFreePrimitiveNumberCoercion(args[1]!, seenConsts) &&
                         allArgsPure(2);
+            case "with": {
+                if (args.length !== 2) return false;
+                const length = this.sideEffectFreeArrayLiteralLength(recv, seenConsts);
+                const index = this.sideEffectFreePrimitiveNumberValue(args[0]!, seenConsts);
+                if (length === null || index === null || !Number.isInteger(index)) return false;
+                const actualIndex = index < 0 ? length + index : index;
+                return actualIndex >= 0 &&
+                    actualIndex < length &&
+                    this.isSideEffectFreeTopLevelConstInitializer(args[1]!, seenConsts);
+            }
             case "keys":
             case "values":
             case "entries":
@@ -1397,6 +1407,21 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeArrayOperand(init, seenConsts);
+    }
+
+    private sideEffectFreeArrayLiteralLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            return unwrapped.elements.every((element) => ts.isExpression(element)) &&
+                this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts)
+                ? unwrapped.elements.length
+                : null;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeArrayLiteralLength(init, seenConsts) : null;
     }
 
     private isSideEffectFreeStringMethodCall(
