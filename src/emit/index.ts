@@ -1031,6 +1031,9 @@ class Emitter {
         if (this.isSideEffectFreeDateStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeBufferStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -1156,6 +1159,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeDateStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeBufferStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -2169,6 +2175,21 @@ class Emitter {
             method === "toString"
         ) &&
             this.isSideEffectFreeBufferMethodCall(recv, method, args, seenConsts);
+    }
+
+    private isSideEffectFreeBufferStringMethodCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!ts.isCallExpression(expr) || !ts.isPropertyAccessExpression(expr.expression)) {
+            return false;
+        }
+        const method = expr.expression.name.text;
+        return (
+            method === "toLocaleString" ||
+            method === "toString"
+        ) &&
+            this.isSideEffectFreeBufferMethodCall(expr.expression.expression, method, expr.arguments, seenConsts);
     }
 
     private isSideEffectFreeCryptoCall(
@@ -4962,6 +4983,9 @@ class Emitter {
         if (this.isSideEffectFreeDateStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeBufferStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -5005,6 +5029,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeDateStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeBufferStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
