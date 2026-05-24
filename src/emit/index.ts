@@ -2492,7 +2492,8 @@ class Emitter {
                 unwrapped.expression.text === "WeakMap" ||
                 unwrapped.expression.text === "WeakSet" ||
                 unwrapped.expression.text === "WeakRef" ||
-                unwrapped.expression.text === "FinalizationRegistry"
+                unwrapped.expression.text === "FinalizationRegistry" ||
+                unwrapped.expression.text === "URL"
             )
         ) {
             return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);

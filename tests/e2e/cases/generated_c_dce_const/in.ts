@@ -224,6 +224,8 @@ const unused_map_group_by_empty_call = Map.groupBy([] as number[], (value) => "d
 const unused_collection_object_keys_call = Object.keys(new Map<string, number>());
 const unused_collection_object_has_own_call = Object.hasOwn(new Set<string>(), "dead_collection_has_own");
 const unused_collection_reflect_own_keys_call = Reflect.ownKeys(new WeakRef<object>({ label: "dead_collection_reflect_weak_ref" }));
+const unused_url_object_keys_call = Object.keys(new URL("https://dead-url-object-keys.test/path"));
+const unused_url_reflect_own_keys_call = Reflect.ownKeys(new URL("https://dead-url-reflect-own-keys.test/path"));
 const unused_reflect_has_call = Reflect.has({ dead_reflect_has: 1 }, "dead_reflect_has");
 const unused_reflect_own_keys_call = Reflect.ownKeys({ dead_reflect_own_keys: 1 });
 const unused_reflect_get_call = Reflect.get({ dead_reflect_get: 1 }, "dead_reflect_get");
@@ -428,6 +430,8 @@ Map.groupBy([] as number[], (value) => "top_level_dead_map_group_by_empty" + val
 Object.keys(new WeakMap<object, string>());
 Object.hasOwn(new FinalizationRegistry<string>(() => "top_level_dead_collection_finregistry"), "top_level_dead_collection_has_own");
 Reflect.ownKeys(new WeakRef<object>({ label: "top_level_dead_collection_reflect_weak_ref" }));
+Object.keys(new URL("https://top-level-dead-url-object-keys.test/path"));
+Reflect.ownKeys(new URL("https://top-level-dead-url-reflect-own-keys.test/path"));
 Reflect.has({ top_level_dead_reflect_has: 1 }, "top_level_dead_reflect_has");
 Reflect.ownKeys({ top_level_dead_reflect_own_keys: 1 });
 Reflect.get({ top_level_dead_reflect_get: 1 }, "top_level_dead_reflect_get");
@@ -657,6 +661,8 @@ function usedLocal(value: number): number {
     Object.keys(new Set<string>());
     Object.hasOwn(new FinalizationRegistry<string>(() => "local_dead_collection_finregistry"), "local_dead_collection_has_own");
     Reflect.ownKeys(new WeakRef<object>({ label: "local_dead_collection_reflect_weak_ref" }));
+    Object.keys(new URL("https://local-dead-url-object-keys.test/path"));
+    Reflect.ownKeys(new URL("https://local-dead-url-reflect-own-keys.test/path"));
     Reflect.get({ local_dead_reflect_get: 1 }, "local_dead_reflect_get");
     Reflect.get(["local_dead_reflect_get_array"], "0");
     Reflect.set({ local_dead_reflect_set_target: 1 }, "local_dead_reflect_set_key", "local_dead_reflect_set_value");

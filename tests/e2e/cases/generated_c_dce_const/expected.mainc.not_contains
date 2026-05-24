@@ -368,6 +368,8 @@ unused_map_group_by_empty_call
 unused_collection_object_keys_call
 unused_collection_object_has_own_call
 unused_collection_reflect_own_keys_call
+unused_url_object_keys_call
+unused_url_reflect_own_keys_call
 unused_reflect_has_call
 unused_reflect_own_keys_call
 unused_reflect_get_call
@@ -439,6 +441,12 @@ dead_object_group_by_empty
 dead_map_group_by_empty
 dead_collection_has_own
 dead_collection_reflect_weak_ref
+dead-url-object-keys
+dead-url-reflect-own-keys
+top-level-dead-url-object-keys
+top-level-dead-url-reflect-own-keys
+local-dead-url-object-keys
+local-dead-url-reflect-own-keys
 dead_reflect_has
 dead_reflect_own_keys
 dead_reflect_get
