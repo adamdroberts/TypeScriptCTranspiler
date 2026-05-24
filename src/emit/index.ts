@@ -1924,7 +1924,7 @@ class Emitter {
                         this.sideEffectFreeNumericSetConstructorSourceLength(args[0]!, seenConsts) ??
                         this.sideEffectFreeBooleanSetConstructorSourceLength(args[0]!, seenConsts)
                     )
-                    : this.sideEffectFreeStringKeyMapConstructorSourceLength(args[0]!, seenConsts);
+                    : this.sideEffectFreeMapConstructorSourceLength(args[0]!, seenConsts);
                 if (exactLiteralLength !== null) return exactLiteralLength;
                 if (globalName === "Set") {
                     const uniqueObjectEntriesLength = this.sideEffectFreeUniqueObjectEntriesSetSourceLength(
@@ -2488,6 +2488,15 @@ class Emitter {
         return init ? this.sideEffectFreeSetArraySourceExpressions(init, seenConsts) : null;
     }
 
+    private sideEffectFreeMapConstructorSourceLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        return this.sideEffectFreeStringKeyMapConstructorSourceLength(expr, seenConsts) ??
+            this.sideEffectFreeNumericKeyMapConstructorSourceLength(expr, seenConsts) ??
+            this.sideEffectFreeBooleanKeyMapConstructorSourceLength(expr, seenConsts);
+    }
+
     private sideEffectFreeStringKeyMapConstructorSourceLength(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -2535,6 +2544,84 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeStringKeyMapConstructorSourceLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeNumericKeyMapConstructorSourceLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        const elements = this.sideEffectFreeMapArraySourceExpressions(unwrapped, seenConsts);
+        if (elements) {
+            const keys = new Set<string>();
+            for (const element of elements) {
+                const entry = this.sideEffectFreeMapEntryArrayLiteral(element, seenConsts);
+                if (!entry || entry.elements.length < 2) return null;
+                const key = entry.elements[0]!;
+                if (!ts.isExpression(key)) return null;
+                const keyValue = this.sideEffectFreeNumericSameValueZeroKey(key, seenConsts);
+                if (keyValue === null) return null;
+                for (const entryElement of entry.elements) {
+                    if (
+                        !ts.isExpression(entryElement) ||
+                        !this.isSideEffectFreeTopLevelConstInitializer(entryElement, seenConsts)
+                    ) {
+                        return null;
+                    }
+                }
+                keys.add(keyValue);
+            }
+            return keys.size;
+        }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map") &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+        ) {
+            return this.sideEffectFreeNewCollectionLength(unwrapped, "Map", seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeNumericKeyMapConstructorSourceLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeBooleanKeyMapConstructorSourceLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        const elements = this.sideEffectFreeMapArraySourceExpressions(unwrapped, seenConsts);
+        if (elements) {
+            const keys = new Set<boolean>();
+            for (const element of elements) {
+                const entry = this.sideEffectFreeMapEntryArrayLiteral(element, seenConsts);
+                if (!entry || entry.elements.length < 2) return null;
+                const key = entry.elements[0]!;
+                if (!ts.isExpression(key)) return null;
+                const keyValue = this.sideEffectFreeBooleanLiteralValue(key, seenConsts);
+                if (keyValue === null) return null;
+                for (const entryElement of entry.elements) {
+                    if (
+                        !ts.isExpression(entryElement) ||
+                        !this.isSideEffectFreeTopLevelConstInitializer(entryElement, seenConsts)
+                    ) {
+                        return null;
+                    }
+                }
+                keys.add(keyValue);
+            }
+            return keys.size;
+        }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map") &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+        ) {
+            return this.sideEffectFreeNewCollectionLength(unwrapped, "Map", seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeBooleanKeyMapConstructorSourceLength(init, seenConsts) : null;
     }
 
     private sideEffectFreeMapEntryArrayLiteral(
