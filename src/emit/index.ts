@@ -1912,7 +1912,10 @@ class Emitter {
             if (args.length === 0) return 0;
             if (args.length === 1) {
                 const exactLiteralLength = globalName === "Set"
-                    ? this.sideEffectFreeStringSetConstructorSourceLength(args[0]!, seenConsts)
+                    ? (
+                        this.sideEffectFreeStringSetConstructorSourceLength(args[0]!, seenConsts) ??
+                        this.sideEffectFreeNumericSetConstructorSourceLength(args[0]!, seenConsts)
+                    )
                     : this.sideEffectFreeStringKeyMapConstructorSourceLength(args[0]!, seenConsts);
                 if (exactLiteralLength !== null) return exactLiteralLength;
                 const sourceLength = this.sideEffectFreeArrayLiteralLength(args[0]!, seenConsts);
@@ -1948,6 +1951,66 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeStringSetConstructorSourceLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeNumericSetConstructorSourceLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            const values = new Set<string>();
+            for (const element of unwrapped.elements) {
+                if (!ts.isExpression(element)) return null;
+                const valueKey = this.sideEffectFreeFiniteNumericSameValueZeroKey(element, seenConsts);
+                if (valueKey === null) return null;
+                values.add(valueKey);
+            }
+            return values.size;
+        }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set") &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+        ) {
+            return this.sideEffectFreeNewCollectionLength(unwrapped, "Set", seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeNumericSetConstructorSourceLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeFiniteNumericSameValueZeroKey(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): string | null {
+        const value = this.sideEffectFreeFiniteNumericLiteralValue(expr, seenConsts);
+        if (value === null) return null;
+        return Object.is(value, -0) ? "number:0" : `number:${value}`;
+    }
+
+    private sideEffectFreeFiniteNumericLiteralValue(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isNumericLiteral(unwrapped)) {
+            const value = Number(unwrapped.text);
+            return Number.isFinite(value) ? value : null;
+        }
+        if (
+            ts.isPrefixUnaryExpression(unwrapped) &&
+            (
+                unwrapped.operator === ts.SyntaxKind.PlusToken ||
+                unwrapped.operator === ts.SyntaxKind.MinusToken
+            )
+        ) {
+            const value = this.sideEffectFreeFiniteNumericLiteralValue(unwrapped.operand, seenConsts);
+            if (value === null) return null;
+            return unwrapped.operator === ts.SyntaxKind.MinusToken ? -value : value;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeFiniteNumericLiteralValue(init, seenConsts) : null;
     }
 
     private sideEffectFreeStringKeyMapConstructorSourceLength(
