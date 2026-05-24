@@ -2079,30 +2079,8 @@ class Emitter {
         }
         const arrayLength = this.sideEffectFreeArrayLiteralLength(unwrapped, seenConsts);
         if (arrayLength !== null) return arrayLength;
-        if (ts.isObjectLiteralExpression(unwrapped)) {
-            let count = 0;
-            for (const prop of unwrapped.properties) {
-                if (ts.isPropertyAssignment(prop)) {
-                    if (
-                        this.objectLiteralStaticStringKey(prop.name, seenConsts) === null ||
-                        !this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts)
-                    ) {
-                        return null;
-                    }
-                    count++;
-                    continue;
-                }
-                if (ts.isShorthandPropertyAssignment(prop)) {
-                    if (!this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts)) {
-                        return null;
-                    }
-                    count++;
-                    continue;
-                }
-                return null;
-            }
-            return count;
-        }
+        const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
+        if (objectLength !== null) return objectLength;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectKeysLength(init, seenConsts) : null;
     }
@@ -2124,30 +2102,8 @@ class Emitter {
         if (this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(unwrapped, seenConsts)) {
             return 0;
         }
-        if (ts.isObjectLiteralExpression(unwrapped)) {
-            let count = 0;
-            for (const prop of unwrapped.properties) {
-                if (ts.isPropertyAssignment(prop)) {
-                    if (
-                        this.objectLiteralStaticStringKey(prop.name, seenConsts) === null ||
-                        !this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts)
-                    ) {
-                        return null;
-                    }
-                    count++;
-                    continue;
-                }
-                if (ts.isShorthandPropertyAssignment(prop)) {
-                    if (!this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts)) {
-                        return null;
-                    }
-                    count++;
-                    continue;
-                }
-                return null;
-            }
-            return count;
-        }
+        const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
+        if (objectLength !== null) return objectLength;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectGetOwnPropertyNamesLength(init, seenConsts) : null;
     }
@@ -2169,30 +2125,8 @@ class Emitter {
         if (this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(unwrapped, seenConsts)) {
             return 0;
         }
-        if (ts.isObjectLiteralExpression(unwrapped)) {
-            let count = 0;
-            for (const prop of unwrapped.properties) {
-                if (ts.isPropertyAssignment(prop)) {
-                    if (
-                        this.objectLiteralStaticStringKey(prop.name, seenConsts) === null ||
-                        !this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts)
-                    ) {
-                        return null;
-                    }
-                    count++;
-                    continue;
-                }
-                if (ts.isShorthandPropertyAssignment(prop)) {
-                    if (!this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts)) {
-                        return null;
-                    }
-                    count++;
-                    continue;
-                }
-                return null;
-            }
-            return count;
-        }
+        const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
+        if (objectLength !== null) return objectLength;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectValuesLength(init, seenConsts) : null;
     }
@@ -2214,30 +2148,8 @@ class Emitter {
         if (this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(unwrapped, seenConsts)) {
             return 0;
         }
-        if (ts.isObjectLiteralExpression(unwrapped)) {
-            let count = 0;
-            for (const prop of unwrapped.properties) {
-                if (ts.isPropertyAssignment(prop)) {
-                    if (
-                        this.objectLiteralStaticStringKey(prop.name, seenConsts) === null ||
-                        !this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts)
-                    ) {
-                        return null;
-                    }
-                    count++;
-                    continue;
-                }
-                if (ts.isShorthandPropertyAssignment(prop)) {
-                    if (!this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts)) {
-                        return null;
-                    }
-                    count++;
-                    continue;
-                }
-                return null;
-            }
-            return count;
-        }
+        const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
+        if (objectLength !== null) return objectLength;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectEntriesLength(init, seenConsts) : null;
     }
@@ -2252,32 +2164,64 @@ class Emitter {
         if (this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(unwrapped, seenConsts)) {
             return 0;
         }
+        const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
+        if (objectLength !== null) return objectLength;
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeReflectOwnKeysLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeObjectLiteralOwnStringKeyCount(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const keys = this.sideEffectFreeObjectLiteralOwnStringKeys(expr, seenConsts);
+        return keys === null ? null : keys.size;
+    }
+
+    private sideEffectFreeObjectLiteralOwnStringKeys(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): Set<string> | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (ts.isObjectLiteralExpression(unwrapped)) {
-            let count = 0;
+            const keys = new Set<string>();
             for (const prop of unwrapped.properties) {
                 if (ts.isPropertyAssignment(prop)) {
+                    const key = this.objectLiteralStaticStringKey(prop.name, seenConsts);
                     if (
-                        this.objectLiteralStaticStringKey(prop.name, seenConsts) === null ||
+                        key === null ||
                         !this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts)
                     ) {
                         return null;
                     }
-                    count++;
+                    keys.add(key);
                     continue;
                 }
                 if (ts.isShorthandPropertyAssignment(prop)) {
                     if (!this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts)) {
                         return null;
                     }
-                    count++;
+                    keys.add(prop.name.text);
+                    continue;
+                }
+                if (ts.isSpreadAssignment(prop)) {
+                    if (!this.isSideEffectFreeObjectSpreadOperand(prop.expression, seenConsts)) {
+                        return null;
+                    }
+                    const spreadKeys = this.sideEffectFreeObjectLiteralOwnStringKeys(
+                        prop.expression,
+                        new Set(seenConsts),
+                    );
+                    if (spreadKeys === null) return null;
+                    for (const key of spreadKeys) keys.add(key);
                     continue;
                 }
                 return null;
             }
-            return count;
+            return keys;
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return init ? this.sideEffectFreeReflectOwnKeysLength(init, seenConsts) : null;
+        return init ? this.sideEffectFreeObjectLiteralOwnStringKeys(init, seenConsts) : null;
     }
 
     private isSideEffectFreeStringArrayOperand(
