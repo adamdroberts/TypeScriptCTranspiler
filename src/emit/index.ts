@@ -1032,6 +1032,9 @@ class Emitter {
         if (this.isSideEffectFreeSymbolStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeArrayStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -1196,6 +1199,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeSymbolStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeArrayStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
@@ -2798,6 +2804,29 @@ class Emitter {
             default:
                 return false;
         }
+    }
+
+    private isSideEffectFreeArrayStringMethodCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (!ts.isCallExpression(unwrapped) || !ts.isPropertyAccessExpression(unwrapped.expression)) {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+            return !!init && this.isSideEffectFreeArrayStringMethodCall(init, seenConsts);
+        }
+        const method = unwrapped.expression.name.text;
+        return (
+            method === "join" ||
+            method === "toString" ||
+            method === "toLocaleString"
+        ) &&
+            this.isSideEffectFreeArrayMethodCall(
+                unwrapped.expression.expression,
+                method,
+                unwrapped.arguments,
+                seenConsts,
+            );
     }
 
     private isSideEffectFreeFreshMapOperand(
@@ -5074,6 +5103,9 @@ class Emitter {
         if (this.isSideEffectFreeSymbolStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeArrayStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -5156,6 +5188,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeSymbolStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeArrayStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
@@ -6286,6 +6321,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeSymbolStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeArrayStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeWellKnownSymbolRead(unwrapped)) {

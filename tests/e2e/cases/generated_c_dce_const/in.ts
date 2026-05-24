@@ -500,6 +500,9 @@ const unused_promise_resolve_array_includes_call = Promise.resolve(["dead_promis
 const unused_promise_resolve_array_index_call = Promise.resolve(["dead_promise_resolve_array_index"].indexOf("missing"));
 const unused_promise_resolve_array_join_call = Promise.resolve(["dead_promise_resolve_array_join"].join(","));
 const unused_promise_resolve_array_string_call = Promise.resolve(["dead_promise_resolve_array_string"].toString());
+const unused_promise_resolve_array_join_length_read = Promise.resolve(["dead_promise_resolve_array_join_length_read"].join(",").length);
+const unused_promise_resolve_array_to_string_upper_call = Promise.resolve((["dead_promise_resolve_array_to_string_upper_call"].toString().toUpperCase(), "dead_promise_resolve_array_to_string_upper_call_marker"));
+const unused_promise_resolve_array_to_locale_index_read = Promise.resolve((["dead_promise_resolve_array_to_locale_index_read"].toLocaleString()[0], "dead_promise_resolve_array_to_locale_index_read_marker"));
 const unused_promise_resolve_string_length_call = Promise.resolve("dead_promise_resolve_string_length".length);
 const unused_promise_resolve_array_length_call = Promise.resolve(["dead_promise_resolve_array_length"].length);
 const unused_promise_resolve_string_element_call = Promise.resolve("dead_promise_resolve_string_element"[0]);
@@ -873,6 +876,9 @@ const unused_reflect_own_keys_define_properties_with_call = Reflect.ownKeys(Obje
 const unused_reflect_own_keys_freeze_with_call = Reflect.ownKeys(Object.freeze({ dead_reflect_own_keys_freeze_with: 1, dead_reflect_own_keys_freeze_tail: 2 })).with(1, "dead_reflect_own_keys_freeze_replacement");
 const unused_array_to_string_call = ["dead_array_to_string", "dead_array_to_string_tail"].toString();
 const unused_array_to_locale_string_call = ["dead_array_to_locale_string", "dead_array_to_locale_string_tail"].toLocaleString();
+const unused_array_join_length_read = ["dead_array_join_length_read"].join("|").length;
+const unused_array_to_string_upper_call = (["dead_array_to_string_upper_call"].toString().toUpperCase(), "dead_array_to_string_upper_call_marker".length);
+const unused_array_to_locale_index_read = (["dead_array_to_locale_index_read"].toLocaleString()[0], "dead_array_to_locale_index_read_marker".length);
 const unused_array_value_of_call = unused_spread_source_array.valueOf();
 Object.keys("kept_object_keys_string_map").map((key) => key + "kept_object_keys_string_map_callback");
 Object.getOwnPropertyNames("x").map((key) => key + "kept_object_property_names_string_map_callback");
@@ -1433,6 +1439,9 @@ Promise.resolve(["top_level_dead_promise_resolve_array_includes"].includes("miss
 Promise.resolve(["top_level_dead_promise_resolve_array_index"].lastIndexOf("missing"));
 Promise.resolve(["top_level_dead_promise_resolve_array_join"].join("|"));
 Promise.resolve(["top_level_dead_promise_resolve_array_string"].toLocaleString());
+Promise.resolve(["top_level_dead_promise_resolve_array_join_length_read"].join("|").length);
+Promise.resolve((["top_level_dead_promise_resolve_array_to_string_upper_call"].toString().toUpperCase(), "top_level_dead_promise_resolve_array_to_string_upper_call_marker"));
+Promise.resolve((["top_level_dead_promise_resolve_array_to_locale_index_read"].toLocaleString()[0], "top_level_dead_promise_resolve_array_to_locale_index_read_marker"));
 Promise.resolve("top_level_dead_promise_resolve_string_length".length);
 Promise.resolve(["top_level_dead_promise_resolve_array_length"].length);
 Promise.resolve("top_level_dead_promise_resolve_string_element"[1]);
@@ -1790,6 +1799,9 @@ Reflect.ownKeys(Object.defineProperties({} as { top_level_dead_reflect_own_keys_
 Reflect.ownKeys(Object.freeze({ top_level_dead_reflect_own_keys_freeze_with: 1, top_level_dead_reflect_own_keys_freeze_tail: 2 })).with(1, "top_level_dead_reflect_own_keys_freeze_replacement");
 ["top_level_dead_array_to_string", "top_level_dead_array_to_string_tail"].toString();
 ["top_level_dead_array_to_locale_string", "top_level_dead_array_to_locale_string_tail"].toLocaleString();
+["top_level_dead_array_join_length_read"].join("|").length;
+(["top_level_dead_array_to_string_upper_call"].toString().toUpperCase(), "top_level_dead_array_to_string_upper_call_marker".length);
+(["top_level_dead_array_to_locale_index_read"].toLocaleString()[0], "top_level_dead_array_to_locale_index_read_marker".length);
 new Error("top_level_dead_error_constructor");
 new RangeError("top_level_dead_range_error_constructor");
 new AggregateError(["top_level_dead_aggregate_error_item"], "top_level_dead_aggregate_error_message", { cause: "top_level_dead_aggregate_error_cause" });
@@ -2357,6 +2369,9 @@ function usedLocal(value: number): number {
     Promise.resolve(["local_dead_promise_resolve_array_index"].indexOf("missing"));
     Promise.resolve(["local_dead_promise_resolve_array_join"].join("/"));
     Promise.resolve(["local_dead_promise_resolve_array_string"].toString());
+    Promise.resolve(["local_dead_promise_resolve_array_join_length_read"].join("/").length);
+    Promise.resolve((["local_dead_promise_resolve_array_to_string_upper_call"].toString().toUpperCase(), "local_dead_promise_resolve_array_to_string_upper_call_marker"));
+    Promise.resolve((["local_dead_promise_resolve_array_to_locale_index_read"].toLocaleString()[0], "local_dead_promise_resolve_array_to_locale_index_read_marker"));
     Promise.resolve("local_dead_promise_resolve_string_length".length);
     Promise.resolve(["local_dead_promise_resolve_array_length"].length);
     Promise.resolve("local_dead_promise_resolve_string_element"[2]);
@@ -2716,6 +2731,9 @@ function usedLocal(value: number): number {
     Reflect.ownKeys(Object.freeze({ local_dead_reflect_own_keys_freeze_with: 1, local_dead_reflect_own_keys_freeze_tail: 2 })).with(1, "local_dead_reflect_own_keys_freeze_replacement");
     ["local_dead_array_to_string", "local_dead_array_to_string_tail"].toString();
     ["local_dead_array_to_locale_string", "local_dead_array_to_locale_string_tail"].toLocaleString();
+    ["local_dead_array_join_length_read"].join("/").length;
+    (["local_dead_array_to_string_upper_call"].toString().toUpperCase(), "local_dead_array_to_string_upper_call_marker".length);
+    (["local_dead_array_to_locale_index_read"].toLocaleString()[0], "local_dead_array_to_locale_index_read_marker".length);
     new Error("local_dead_error_constructor");
     new SyntaxError("local_dead_syntax_error_constructor");
     new AggregateError(["local_dead_aggregate_error_item"], "local_dead_aggregate_error_message", { cause: "local_dead_aggregate_error_cause" });
