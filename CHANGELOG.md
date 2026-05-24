@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now treats Map/Set constructor sources with exact zero-length proofs as empty for `Array.from(..., mapper)` pruning. Test: `generated_c_dce_const`.
 - Generated-C DCE now follows target-returning `Object.*` wrapper aliases in object identity Map/Set length proofs. Test: `generated_c_dce_const`.
 - Generated-C DCE now deduplicates repeated const object identities in `Object.values(array-like)` Set source length proofs. Test: `generated_c_dce_const`.
 - Generated-C DCE now deduplicates repeated const object identities in `Object.values(...)` Set source length proofs, including `Object.fromEntries(...)` and `Object.assign(...)` builders. Test: `generated_c_dce_const`.

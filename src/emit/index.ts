@@ -1849,6 +1849,8 @@ class Emitter {
             this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map") &&
             this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
         ) {
+            const exactLength = this.sideEffectFreeNewCollectionLength(unwrapped, "Map", seenConsts);
+            if (exactLength !== null) return exactLength === 0;
             const args = Array.from(unwrapped.arguments ?? []);
             return args.length === 0 ||
                 (
@@ -1874,6 +1876,8 @@ class Emitter {
             this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set") &&
             this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
         ) {
+            const exactLength = this.sideEffectFreeNewCollectionLength(unwrapped, "Set", seenConsts);
+            if (exactLength !== null) return exactLength === 0;
             const args = Array.from(unwrapped.arguments ?? []);
             return args.length === 0 ||
                 (

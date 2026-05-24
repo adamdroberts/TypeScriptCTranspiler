@@ -626,6 +626,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning string and fresh-RegExp method results. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning `Array.isArray(...)`, `Object.is(...)`, `Object.hasOwn(...)`, Object extensibility predicate, `URL.canParse(...)`, and Reflect predicate results. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes unused pure `WeakMap(...)` / `WeakSet(...)` constructors over static object-literal sources. Test: `generated_c_dce_const`
+- Generated-C DCE treats Map/Set constructor sources with exact zero-length proofs as empty for unused `Array.from(..., mapper)` pruning. Test: `generated_c_dce_const`
 - Generated-C DCE requires ignored extra `Map(...)` / `WeakMap(...)` entry slots to be side-effect-free before pruning static constructor sources. Test: `generated_c_dce_const`
 - Generated-C DCE preserves `WeakMap(...)` primitive-key rejection by pruning typed `Map` sources only when the source is empty or statically object-key-proven. Tests: `generated_c_dce_const`, `weak_map_primitive_map_source_reject`
 - Generated-C DCE preserves `WeakSet(...)` primitive-value rejection by pruning typed `Set` sources only when the source is empty or statically object-value-proven. Tests: `generated_c_dce_const`, `weak_set_primitive_set_source_reject`

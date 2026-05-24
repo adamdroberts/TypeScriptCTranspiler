@@ -355,6 +355,8 @@ const unused_array_of_empty_map_call = Array.of<string>().map(() => "dead_array_
 const unused_array_from_empty_filter_call = Array.from([] as string[]).filter(() => "dead_array_from_empty_filter".length > 0);
 const unused_array_from_empty_set_map_call = Array.from(new Set<string>()).map(() => "dead_array_from_empty_set_map");
 const unused_array_from_empty_map_map_call = Array.from(new Map<string, string>()).map(() => "dead_array_from_empty_map_map");
+const unused_array_from_object_keys_empty_set_mapper_call = Array.from(new Set(Object.keys({})), (value) => value + "dead_array_from_object_keys_empty_set_mapper");
+const unused_array_from_object_entries_empty_map_mapper_call = Array.from(new Map(Object.entries({})), (entry) => entry[0] + "dead_array_from_object_entries_empty_map_mapper");
 const unused_object_keys_empty_map_call = Object.keys({}).map(() => "dead_object_keys_empty_map");
 const unused_object_keys_array_empty_map_call = Object.keys([] as string[]).map(() => "dead_object_keys_array_empty_map");
 const unused_object_property_names_empty_map_call = Object.getOwnPropertyNames({}).map(() => "dead_object_property_names_empty_map");
@@ -905,6 +907,8 @@ Array.of<string>().map(() => "top_level_dead_array_of_empty_map");
 Array.from([] as string[]).filter(() => "top_level_dead_array_from_empty_filter".length > 0);
 Array.from(new Set<string>()).map(() => "top_level_dead_array_from_empty_set_map");
 Array.from(new Map<string, string>()).map(() => "top_level_dead_array_from_empty_map_map");
+Array.from(new Set(Object.keys({})), (value) => value + "top_level_dead_array_from_object_keys_empty_set_mapper");
+Array.from(new Map(Object.entries({})), (entry) => entry[0] + "top_level_dead_array_from_object_entries_empty_map_mapper");
 Object.keys({}).map(() => "top_level_dead_object_keys_empty_map");
 Object.keys([] as string[]).map(() => "top_level_dead_object_keys_array_empty_map");
 Object.getOwnPropertyNames({}).map(() => "top_level_dead_object_property_names_empty_map");
@@ -1449,6 +1453,8 @@ function usedLocal(value: number): number {
     Array.from([] as string[]).filter(() => "local_dead_array_from_empty_filter".length > 0);
     Array.from(new Set<string>()).map(() => "local_dead_array_from_empty_set_map");
     Array.from(new Map<string, string>()).map(() => "local_dead_array_from_empty_map_map");
+    Array.from(new Set(Object.keys({})), (value) => value + "local_dead_array_from_object_keys_empty_set_mapper");
+    Array.from(new Map(Object.entries({})), (entry) => entry[0] + "local_dead_array_from_object_entries_empty_map_mapper");
     Object.keys({}).map(() => "local_dead_object_keys_empty_map");
     Object.keys([] as string[]).map(() => "local_dead_object_keys_array_empty_map");
     Object.getOwnPropertyNames({}).map(() => "local_dead_object_property_names_empty_map");
