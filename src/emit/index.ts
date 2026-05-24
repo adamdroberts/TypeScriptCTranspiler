@@ -3352,6 +3352,14 @@ class Emitter {
         ) {
             return index < 0 ? "absent" : "present";
         }
+        if (
+            method === "ownKeys" &&
+            call.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Reflect") &&
+            this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts)
+        ) {
+            return index < 0 ? "absent" : "present";
+        }
         return null;
     }
 
