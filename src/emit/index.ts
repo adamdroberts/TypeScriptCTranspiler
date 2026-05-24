@@ -1363,6 +1363,10 @@ class Emitter {
             case "lastIndexOf":
             case "includes":
                 return searchArgs();
+            case "join":
+                return args.length <= 1 &&
+                    this.isSideEffectFreeStringArrayOperand(recv, seenConsts) &&
+                    (!args[0] || this.isSideEffectFreeStringCoercion(args[0], seenConsts));
             case "concat":
                 return allArgsPure();
             case "flat":
@@ -1422,6 +1426,21 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeArrayLiteralLength(init, seenConsts) : null;
+    }
+
+    private isSideEffectFreeStringArrayOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            return unwrapped.elements.every((element) =>
+                ts.isExpression(element) &&
+                this.isSideEffectFreeStringCoercion(element, seenConsts)
+            );
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeStringArrayOperand(init, seenConsts);
     }
 
     private isSideEffectFreeStringMethodCall(

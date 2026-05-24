@@ -89,6 +89,7 @@ unused_array_values_method_call
 unused_array_entries_method_call
 unused_array_concat_call
 unused_array_flat_call
+unused_array_join_call
 unused_array_to_sorted_call
 unused_array_to_spliced_call
 unused_array_to_reversed_call
@@ -131,6 +132,7 @@ dead_array_entries_method
 dead_array_concat
 dead_array_concat_tail
 dead_array_flat
+dead_array_join
 dead_array_to_sorted
 dead_array_to_spliced
 dead_array_to_spliced_insert
@@ -289,6 +291,7 @@ top_level_dead_array_concat
 top_level_dead_array_concat_tail
 top_level_dead_array_flat
 top_level_dead_array_flat_tail
+top_level_dead_array_join
 top_level_dead_array_to_sorted
 top_level_dead_array_to_spliced
 top_level_dead_array_to_spliced_insert
@@ -398,6 +401,7 @@ local_dead_array_entries_method
 local_dead_array_concat
 local_dead_array_concat_tail
 local_dead_array_flat
+local_dead_array_join
 local_dead_array_to_sorted
 local_dead_array_to_spliced
 local_dead_array_to_spliced_insert
