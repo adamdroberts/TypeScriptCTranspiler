@@ -2114,6 +2114,9 @@ class Emitter {
             ts.isCallExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
             (
+                unwrapped.expression.text === "String" ||
+                unwrapped.expression.text === "Number" ||
+                unwrapped.expression.text === "Boolean" ||
                 unwrapped.expression.text === "BigInt" ||
                 unwrapped.expression.text === "Symbol" ||
                 unwrapped.expression.text === "parseInt" ||
