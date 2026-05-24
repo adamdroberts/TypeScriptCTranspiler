@@ -1909,7 +1909,7 @@ class Emitter {
                 return args.length === 0 ||
                     (
                         args.length === 1 &&
-                        this.isSideEffectFreeArrayOperand(args[0]!, seenConsts)
+                        this.isSideEffectFreeSetConstructorSource(args[0]!, seenConsts)
                     );
             }
             if (name === "WeakMap" || name === "WeakSet") {
@@ -1989,8 +1989,34 @@ class Emitter {
         ) {
             return this.isSideEffectFreeObjectCoercionOperand(unwrapped.arguments[0]!, seenConsts);
         }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map") &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+        ) {
+            return true;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeMapConstructorSource(init, seenConsts);
+    }
+
+    private isSideEffectFreeSetConstructorSource(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.isSideEffectFreeArrayOperand(unwrapped, seenConsts)) return true;
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set") &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+        ) {
+            return true;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeSetConstructorSource(init, seenConsts);
     }
 
     private isSideEffectFreeErrorOptionsObject(
