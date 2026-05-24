@@ -3918,13 +3918,22 @@ class Emitter {
         if (
             ts.isNewExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map") &&
-            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map")
         ) {
-            return true;
+            return this.isSideEffectFreeWeakMapMapConstructorSource(unwrapped, seenConsts);
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeWeakMapConstructorSource(init, seenConsts);
+    }
+
+    private isSideEffectFreeWeakMapMapConstructorSource(
+        expr: ts.NewExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const args = Array.from(expr.arguments ?? []);
+        if (args.length === 0) return true;
+        if (args.length !== 1) return false;
+        return this.isSideEffectFreeWeakMapConstructorSource(args[0]!, seenConsts);
     }
 
     private isSideEffectFreeWeakSetConstructorSource(
