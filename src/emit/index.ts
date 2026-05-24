@@ -2082,6 +2082,15 @@ class Emitter {
         if (ts.isArrayLiteralExpression(unwrapped)) {
             const elements: ts.Expression[] = [];
             for (const element of unwrapped.elements) {
+                if (ts.isSpreadElement(element)) {
+                    const spreadElements = this.sideEffectFreeSetArraySourceExpressions(
+                        element.expression,
+                        new Set(seenConsts),
+                    );
+                    if (spreadElements === null) return null;
+                    elements.push(...spreadElements);
+                    continue;
+                }
                 if (!ts.isExpression(element)) return null;
                 elements.push(element);
             }
