@@ -1524,6 +1524,9 @@ class Emitter {
                 }
                 break;
         }
+        if (this.isSideEffectFreeDateMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
         return method === "test" &&
             this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts);
     }
@@ -2089,6 +2092,68 @@ class Emitter {
                 ? this.isSideEffectFreePrimitiveNumberCoercion(arg, seenConsts)
                 : this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
         );
+    }
+
+    private isSideEffectFreeDateMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!this.isSideEffectFreeFreshDateOperand(recv, seenConsts)) return false;
+        const allArgsPure = (): boolean =>
+            Array.from(args).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+        switch (method) {
+            case "getTime":
+            case "valueOf":
+            case "getUTCFullYear":
+            case "getUTCMonth":
+            case "getUTCDate":
+            case "getUTCDay":
+            case "getUTCHours":
+            case "getUTCMinutes":
+            case "getUTCSeconds":
+            case "getUTCMilliseconds":
+            case "getFullYear":
+            case "getYear":
+            case "getMonth":
+            case "getDate":
+            case "getDay":
+            case "getHours":
+            case "getMinutes":
+            case "getSeconds":
+            case "getMilliseconds":
+            case "getTimezoneOffset":
+            case "toString":
+            case "toLocaleString":
+            case "toLocaleDateString":
+            case "toLocaleTimeString":
+            case "toGMTString":
+            case "toUTCString":
+            case "toDateString":
+            case "toTimeString":
+                return allArgsPure();
+            default:
+                return false;
+        }
+    }
+
+    private isSideEffectFreeFreshDateOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Date")
+        ) {
+            return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeFreshDateOperand(init, seenConsts);
     }
 
     private isSideEffectFreeAggregateErrorConstructorArgs(
