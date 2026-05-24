@@ -1046,6 +1046,9 @@ class Emitter {
         if (this.isSideEffectFreeCallableGlobalStringCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeBase64StringCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -1186,6 +1189,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeCallableGlobalStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeBase64StringCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -5037,6 +5043,9 @@ class Emitter {
         if (this.isSideEffectFreeCallableGlobalStringCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeBase64StringCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -5095,6 +5104,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeCallableGlobalStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeBase64StringCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -5209,6 +5221,22 @@ class Emitter {
             return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
                 call.arguments.length >= 1 &&
                 this.isSideEffectFreeUriStringCoercion(call.arguments[0]!, seenConsts) &&
+                Array.from(call.arguments).slice(1).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+        }
+        if (name === "btoa") {
+            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+                call.arguments.length >= 1 &&
+                this.isSideEffectFreeStringCoercion(call.arguments[0]!, seenConsts) &&
+                Array.from(call.arguments).slice(1).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+        }
+        if (name === "atob") {
+            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+                call.arguments.length >= 1 &&
+                this.isSideEffectFreeBase64StringCoercion(call.arguments[0]!, seenConsts) &&
                 Array.from(call.arguments).slice(1).every((arg) =>
                     this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
                 );
@@ -6209,7 +6237,9 @@ class Emitter {
                 unwrapped.expression.text === "encodeURI" ||
                 unwrapped.expression.text === "encodeURIComponent" ||
                 unwrapped.expression.text === "decodeURI" ||
-                unwrapped.expression.text === "decodeURIComponent"
+                unwrapped.expression.text === "decodeURIComponent" ||
+                unwrapped.expression.text === "btoa" ||
+                unwrapped.expression.text === "atob"
             ) &&
             this.isSideEffectFreeGlobalCall(unwrapped, seenConsts)
         ) {
@@ -8172,6 +8202,33 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeUriStringCall(init, seenConsts);
+    }
+
+    private isSideEffectFreeBase64StringCoercion(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const text = this.sideEffectFreeStringLiteralText(expr, seenConsts);
+        return text !== null && /^[A-Za-z0-9+/=\s]*$/.test(text);
+    }
+
+    private isSideEffectFreeBase64StringCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            (
+                unwrapped.expression.text === "btoa" ||
+                unwrapped.expression.text === "atob"
+            )
+        ) {
+            return this.isSideEffectFreeGlobalCall(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeBase64StringCall(init, seenConsts);
     }
 
     private isSideEffectFreeStringStaticStringCall(
