@@ -1104,6 +1104,9 @@ class Emitter {
         ) {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
         }
+        if (this.isSideEffectFreePathParsePropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeIndexableOperand(init, seenConsts);
     }
@@ -4834,6 +4837,9 @@ class Emitter {
         if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
             return true;
         }
+        if (this.isSideEffectFreePathParsePropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeStringOperand(init, seenConsts);
     }
@@ -4844,6 +4850,9 @@ class Emitter {
     ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
+            return true;
+        }
+        if (this.isSideEffectFreePathParsePropertyRead(unwrapped, seenConsts)) {
             return true;
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
