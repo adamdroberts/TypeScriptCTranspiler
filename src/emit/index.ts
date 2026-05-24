@@ -2338,6 +2338,13 @@ class Emitter {
             return true;
         }
         if (
+            ts.isPropertyAccessExpression(unwrapped) &&
+            unwrapped.name.text === "length" &&
+            this.isSideEffectFreeLengthOperand(unwrapped.expression, seenConsts)
+        ) {
+            return true;
+        }
+        if (
             ts.isPrefixUnaryExpression(unwrapped) &&
             (
                 unwrapped.operator === ts.SyntaxKind.PlusToken ||
