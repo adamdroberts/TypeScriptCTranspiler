@@ -794,7 +794,8 @@ class Emitter {
                 this.isUnshadowedGlobalIdentifier(expr, "undefined") ||
                 this.isUnshadowedGlobalIdentifier(expr, "NaN") ||
                 this.isUnshadowedGlobalIdentifier(expr, "Infinity") ||
-                this.isSideEffectFreeCommonJSPathIdentifier(expr)
+                this.isSideEffectFreeCommonJSPathIdentifier(expr) ||
+                this.isSideEffectFreeBuiltinStringConstantIdentifier(expr)
             ) {
                 return true;
             }
@@ -930,6 +931,9 @@ class Emitter {
             if (this.isSideEffectFreeModulePrimitiveMetadataRead(expr)) {
                 return true;
             }
+            if (this.isSideEffectFreeBuiltinModuleConstantRead(expr)) {
+                return true;
+            }
             return this.isSideEffectFreeObjectReadOperand(expr.expression, seenConsts);
         }
         if (ts.isElementAccessExpression(expr) && expr.argumentExpression) {
@@ -979,6 +983,12 @@ class Emitter {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
         }
         if (ts.isIdentifier(unwrapped) && this.isSideEffectFreeCommonJSPathIdentifier(unwrapped)) {
+            return true;
+        }
+        if (ts.isIdentifier(unwrapped) && this.isSideEffectFreeBuiltinStringConstantIdentifier(unwrapped)) {
+            return true;
+        }
+        if (this.isSideEffectFreeBuiltinModuleConstantRead(unwrapped)) {
             return true;
         }
         if (
@@ -4716,7 +4726,8 @@ class Emitter {
             (
                 this.isUnshadowedGlobalIdentifier(unwrapped, "NaN") ||
                 this.isUnshadowedGlobalIdentifier(unwrapped, "Infinity") ||
-                this.isSideEffectFreeCommonJSPathIdentifier(unwrapped)
+                this.isSideEffectFreeCommonJSPathIdentifier(unwrapped) ||
+                this.isSideEffectFreeBuiltinStringConstantIdentifier(unwrapped)
             )
         ) {
             return true;
@@ -4760,6 +4771,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeModulePrimitiveMetadataRead(unwrapped)) {
+            return true;
+        }
+        if (this.isSideEffectFreeBuiltinModuleConstantRead(unwrapped)) {
             return true;
         }
         if (this.isSideEffectFreeStringElementAccess(unwrapped, seenConsts)) {
@@ -4978,6 +4992,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeStaticNumericPropertyRead(unwrapped)) {
+            return true;
+        }
+        if (this.isSideEffectFreeBuiltinModuleConstantRead(unwrapped)) {
             return true;
         }
         return this.isSideEffectFreePrimitiveNumberCoercion(unwrapped, seenConsts);
@@ -6321,6 +6338,62 @@ class Emitter {
             default:
                 return false;
         }
+    }
+
+    private isSideEffectFreeBuiltinStringConstantIdentifier(expr: ts.Identifier): boolean {
+        return this.isNamedImportFrom(expr, ["path", "node:path"], "sep") ||
+            this.isNamedImportFrom(expr, ["path", "node:path"], "delimiter") ||
+            this.isNamedImportFrom(expr, ["os", "node:os"], "EOL") ||
+            this.isNamedImportFrom(expr, ["os", "node:os"], "devNull");
+    }
+
+    private isFsAccessConstantName(name: string): boolean {
+        switch (name) {
+            case "F_OK":
+            case "R_OK":
+            case "W_OK":
+            case "X_OK":
+            case "COPYFILE_EXCL":
+            case "COPYFILE_FICLONE":
+            case "COPYFILE_FICLONE_FORCE":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private isSideEffectFreeBuiltinModuleConstantRead(expr: ts.Expression): boolean {
+        if (!ts.isPropertyAccessExpression(expr)) return false;
+        const name = expr.name.text;
+        if (
+            this.isFsAccessConstantName(name) &&
+            ts.isPropertyAccessExpression(expr.expression) &&
+            expr.expression.name.text === "constants" &&
+            ts.isIdentifier(expr.expression.expression) &&
+            this.isFsModuleIdentifier(expr.expression.expression)
+        ) {
+            return true;
+        }
+        if (
+            this.isFsAccessConstantName(name) &&
+            ts.isIdentifier(expr.expression) &&
+            this.isNamedImportFrom(expr.expression, ["fs", "node:fs"], "constants")
+        ) {
+            return true;
+        }
+        if (this.isPathPosixReceiver(expr.expression) && (name === "sep" || name === "delimiter")) {
+            return true;
+        }
+        if (
+            ts.isIdentifier(expr.expression) &&
+            this.isPathModuleIdentifier(expr.expression) &&
+            (name === "sep" || name === "delimiter")
+        ) {
+            return true;
+        }
+        return ts.isIdentifier(expr.expression) &&
+            this.isOsModuleIdentifier(expr.expression) &&
+            (name === "EOL" || name === "devNull");
     }
 
     private isSideEffectFreeFreshSymbolOperand(
