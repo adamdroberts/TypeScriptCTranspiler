@@ -251,6 +251,8 @@ function earlierConstStringDeclaration(id: ts.Identifier): ts.VariableDeclaratio
 function stringLiteralUnionIdentifierTexts(id: ts.Identifier): string[] {
     const paramValues = parameterStringLiteralUnionTexts(id);
     if (paramValues.length > 0) return paramValues;
+    const localValues = earlierVariableStringLiteralUnionTexts(id);
+    if (localValues.length > 0) return localValues;
     const topLevelValues = topLevelVariableStringLiteralUnionTexts(id);
     if (topLevelValues.length > 0) return topLevelValues;
     return [];
@@ -276,6 +278,24 @@ function topLevelVariableStringLiteralUnionTexts(id: ts.Identifier): string[] {
     for (const stmt of sf.statements) {
         if (!ts.isVariableStatement(stmt)) continue;
         for (const decl of stmt.declarationList.declarations) {
+            if (ts.isIdentifier(decl.name) && decl.name.text === id.text) {
+                return stringLiteralUnionTypeTexts(decl.type);
+            }
+        }
+    }
+    return [];
+}
+
+function earlierVariableStringLiteralUnionTexts(id: ts.Identifier): string[] {
+    let cur: ts.Node = id;
+    while (cur.parent && !ts.isStatement(cur)) cur = cur.parent;
+    const stmt = cur;
+    const block = stmt.parent;
+    if (!ts.isBlock(block) && !ts.isSourceFile(block) && !ts.isModuleBlock(block)) return [];
+    for (const sibling of block.statements) {
+        if (sibling === stmt) break;
+        if (!ts.isVariableStatement(sibling)) continue;
+        for (const decl of sibling.declarationList.declarations) {
             if (ts.isIdentifier(decl.name) && decl.name.text === id.text) {
                 return stringLiteralUnionTypeTexts(decl.type);
             }

@@ -1,4 +1,7 @@
 literal union a init
 literal union b init
+literal union local a init
+literal union local b init
 literal union first: literal-b
 literal union second: literal-a
+literal union local: literal-local-b

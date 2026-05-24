@@ -11,6 +11,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - AOT `eval(...)`, `Function(...)`, and `new Function(...)` source extraction now accepts earlier local static `const` string aliases for single-source bodies and parameter-name strings. Tests: `runtime_eval`, `runtime_function_params_aot`.
 - AOT runtime-code string extraction now accepts earlier local static `const` string maps and arrays used through element/property access. Tests: `runtime_eval`, `runtime_function_params_aot`.
 - Static string proof now resolves numeric literal indexes into const string arrays, tightening AOT runtime-code and dynamic-require closure resolution. Tests: `runtime_function_params_aot`, `dynamic_require_static_collections`.
+- Dynamic `require(...)` finite string proofs now include earlier local variables annotated with string-literal union types. Test: `dynamic_require_literal_union`.
 - Runtime-code manifest `Function(...)` dispatch now accepts earlier local static `const` aliases for parameter-name strings before the manifest-selected body argument. Test: `runtime_function_manifest_params`.
 - Generated-C DCE now recognizes earlier static `const` aliases for supported Buffer UTF-8 encoding arguments. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes earlier static `const` aliases for supported `os.userInfo(...)` UTF-8 `encoding` option values. Test: `generated_c_dce_const`.
