@@ -141,6 +141,7 @@ unused_math_abs_call
 unused_math_max_call
 unused_math_hypot_call
 unused_string_from_char_code
+unused_string_from_code_point
 unused_regexp_escape_call
 dead_regexp_escape
 unused_object_keys_call

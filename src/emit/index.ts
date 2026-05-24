@@ -1195,12 +1195,22 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
-            method === "fromCharCode" &&
             this.isUnshadowedGlobalIdentifier(recv, "String")
         ) {
-            return call.arguments.every((arg) =>
-                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-            );
+            if (method === "fromCharCode") {
+                return call.arguments.every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+            }
+            if (method === "fromCodePoint") {
+                return call.arguments.every((arg) => {
+                    const value = this.sideEffectFreePrimitiveNumberValue(arg, seenConsts);
+                    return value !== null &&
+                        Number.isInteger(value) &&
+                        value >= 0 &&
+                        value <= 0x10ffff;
+                });
+            }
         }
         if (
             ts.isIdentifier(recv) &&
