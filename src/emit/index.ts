@@ -1107,6 +1107,18 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            (
+                method === "all" ||
+                method === "allSettled" ||
+                method === "race"
+            ) &&
+            call.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Promise")
+        ) {
+            return this.sideEffectFreeArrayLiteralLength(call.arguments[0]!, seenConsts) === 0;
+        }
+        if (
+            ts.isIdentifier(recv) &&
             method === "canParse" &&
             call.arguments.length >= 1 &&
             call.arguments.length <= 2 &&
