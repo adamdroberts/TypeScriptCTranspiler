@@ -2874,10 +2874,21 @@ class Emitter {
         if (
             this.isUnshadowedGlobalIdentifier(recv, "Array") &&
             method === "from" &&
-            unwrapped.arguments.length === 1 &&
+            unwrapped.arguments.length >= 1 &&
+            unwrapped.arguments.length <= 3 &&
             this.isSideEffectFreeStaticCall(unwrapped, seenConsts)
         ) {
             const source = unwrapped.arguments[0]!;
+            if (
+                unwrapped.arguments.length >= 2 &&
+                this.isSideEffectFreeEmptyArrayFromSource(source, seenConsts) &&
+                this.isSideEffectFreeTopLevelConstInitializer(unwrapped.arguments[1]!, seenConsts) &&
+                (!unwrapped.arguments[2] ||
+                    this.isSideEffectFreeTopLevelConstInitializer(unwrapped.arguments[2], seenConsts))
+            ) {
+                return 0;
+            }
+            if (unwrapped.arguments.length !== 1) return null;
             const sourceArrayLength = this.sideEffectFreeArrayLiteralLength(source, seenConsts);
             if (sourceArrayLength !== null) return sourceArrayLength;
             const sourceText = this.sideEffectFreeStringLiteralText(source, seenConsts);
