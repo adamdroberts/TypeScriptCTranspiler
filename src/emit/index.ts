@@ -1938,10 +1938,10 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): number | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isArrayLiteralExpression(unwrapped)) {
+        const elements = this.sideEffectFreeSetArraySourceExpressions(unwrapped);
+        if (elements) {
             const values = new Set<string>();
-            for (const element of unwrapped.elements) {
-                if (!ts.isExpression(element)) return null;
+            for (const element of elements) {
                 const value = this.sideEffectFreeStringLiteralText(element, seenConsts);
                 if (value === null) return null;
                 values.add(value);
@@ -1965,10 +1965,10 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): number | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isArrayLiteralExpression(unwrapped)) {
+        const elements = this.sideEffectFreeSetArraySourceExpressions(unwrapped);
+        if (elements) {
             const values = new Set<string>();
-            for (const element of unwrapped.elements) {
-                if (!ts.isExpression(element)) return null;
+            for (const element of elements) {
                 const valueKey = this.sideEffectFreeNumericSameValueZeroKey(element, seenConsts);
                 if (valueKey === null) return null;
                 values.add(valueKey);
@@ -2041,10 +2041,10 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): number | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isArrayLiteralExpression(unwrapped)) {
+        const elements = this.sideEffectFreeSetArraySourceExpressions(unwrapped);
+        if (elements) {
             const values = new Set<boolean>();
-            for (const element of unwrapped.elements) {
-                if (!ts.isExpression(element)) return null;
+            for (const element of elements) {
                 const value = this.sideEffectFreeBooleanLiteralValue(element, seenConsts);
                 if (value === null) return null;
                 values.add(value);
@@ -2072,6 +2072,28 @@ class Emitter {
         if (unwrapped.kind === ts.SyntaxKind.FalseKeyword) return false;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeBooleanLiteralValue(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeSetArraySourceExpressions(expr: ts.Expression): ts.Expression[] | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            const elements: ts.Expression[] = [];
+            for (const element of unwrapped.elements) {
+                if (!ts.isExpression(element)) return null;
+                elements.push(element);
+            }
+            return elements;
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Array") &&
+            unwrapped.expression.name.text === "of"
+        ) {
+            return Array.from(unwrapped.arguments);
+        }
+        return null;
     }
 
     private sideEffectFreeStringKeyMapConstructorSourceLength(
