@@ -29737,15 +29737,21 @@ class Emitter {
                 out[key] = false;
                 continue;
             }
-            if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
-                out[key] = true;
-            } else if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) {
-                out[key] = false;
-            } else {
+            const value = this.fsBooleanOptionValue(prop.initializer);
+            if (value === null) {
                 unsupported(prop.initializer, `${label}.${key} must be a boolean literal in this subset`);
             }
+            out[key] = value;
         }
         return out;
+    }
+
+    private fsBooleanOptionValue(expr: ts.Expression, seenConsts = new Set<ts.Symbol>()): boolean | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (unwrapped.kind === ts.SyntaxKind.TrueKeyword) return true;
+        if (unwrapped.kind === ts.SyntaxKind.FalseKeyword) return false;
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.fsBooleanOptionValue(init, seenConsts) : null;
     }
 
     private validateFsEncodingOptions(options: ts.Expression | undefined, label: string): "string" | "buffer" {

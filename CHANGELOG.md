@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `fs.rmSync(...)`, `fs.rmdirSync(...)`, and their immediate `fs.promises` counterparts now accept earlier static `const` aliases for supported boolean option values such as `recursive` and `force`. Test: `fs_recursive_options`.
 - `dns.lookup(...)` and `dns.promises.lookup(...)` now accept earlier static `const` aliases for numeric family shorthand plus literal `family`, `all`, `verbatim`, and `order` option values. Test: `dns_lookup_option_forms`.
 - `dns.lookup(...)` and `dns.promises.lookup(...)` now accept static `const` aliases for DNS hint expressions in the supported immediate lookup subset. Test: `dns_lookup_hints`.
 - Generated-C DCE now prunes unused static/module `events.once(new EventEmitter(), eventName, options)` calls when the options argument is explicitly defaulted. Test: `generated_c_dce_const`.
