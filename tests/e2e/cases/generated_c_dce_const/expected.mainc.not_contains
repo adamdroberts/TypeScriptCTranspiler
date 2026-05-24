@@ -123,12 +123,14 @@ unused_map_has_call
 unused_map_keys_call
 unused_map_values_call
 unused_map_entries_call
+unused_map_size_read
 unused_new_set_empty_call
 unused_new_set_array_call
 unused_new_set_copy_call
 unused_set_has_call
 unused_set_keys_call
 unused_set_values_call
+unused_set_size_read
 unused_set_union_call
 unused_set_intersection_call
 unused_set_difference_call
@@ -174,6 +176,7 @@ dead_map_has
 dead_map_keys
 dead_map_values
 dead_map_entries
+dead_map_size
 dead_new_set_array
 dead_new_set_array_tail
 dead_new_set_copy
@@ -181,6 +184,7 @@ dead_new_set_copy_tail
 dead_set_has
 dead_set_keys
 dead_set_values
+dead_set_size
 dead_set_union
 dead_set_intersection
 dead_set_difference
@@ -207,6 +211,7 @@ top_level_dead_map_has
 top_level_dead_map_keys
 top_level_dead_map_values
 top_level_dead_map_entries
+top_level_dead_map_size
 top_level_dead_new_set_array
 top_level_dead_new_set_array_tail
 top_level_dead_new_set_copy
@@ -214,6 +219,7 @@ top_level_dead_new_set_copy_tail
 top_level_dead_set_has
 top_level_dead_set_keys
 top_level_dead_set_values
+top_level_dead_set_size
 top_level_dead_set_union
 top_level_dead_set_intersection
 top_level_dead_set_difference
@@ -243,6 +249,7 @@ local_dead_map_has
 local_dead_map_keys
 local_dead_map_values
 local_dead_map_entries
+local_dead_map_size
 local_dead_new_set_array
 local_dead_new_set_array_tail
 local_dead_new_set_copy
@@ -250,6 +257,7 @@ local_dead_new_set_copy_tail
 local_dead_set_has
 local_dead_set_keys
 local_dead_set_values
+local_dead_set_size
 local_dead_set_union
 local_dead_set_intersection
 local_dead_set_difference
@@ -297,6 +305,8 @@ unused_promise_resolve_string_code_point_call
 unused_promise_resolve_regexp_escape_call
 unused_promise_resolve_array_is_array_call
 unused_promise_resolve_object_is_call
+unused_promise_resolve_map_size_call
+unused_promise_resolve_set_size_call
 unused_promise_resolve_object_has_own_call
 unused_promise_resolve_object_extensible_call
 unused_promise_resolve_object_sealed_call
@@ -380,6 +390,8 @@ local_dead_promise_resolve_string_static
 local_dead_promise_resolve_regexp_escape
 dead_promise_resolve_array_is_array
 dead_promise_resolve_object_is
+dead_promise_resolve_map_size
+dead_promise_resolve_set_size
 dead_promise_resolve_object_has_own
 dead_promise_resolve_object_extensible
 dead_promise_resolve_object_sealed

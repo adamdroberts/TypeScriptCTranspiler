@@ -626,6 +626,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning string and fresh-RegExp method results. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning `Array.isArray(...)`, `Object.is(...)`, `Object.hasOwn(...)`, Object extensibility predicate, `URL.canParse(...)`, and Reflect predicate results. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes unused pure `WeakMap(...)` / `WeakSet(...)` constructors over static object-literal sources. Test: `generated_c_dce_const`
+- Generated-C DCE prunes unused typed `Map.size` / `Set.size` reads over side-effect-free collection operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused `WeakRef.deref(...)` and fresh `FinalizationRegistry.register(...)` / `unregister(...)` calls with side-effect-free operands. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused read-only `WeakMap` / `WeakSet` method calls over side-effect-free weak collection operands. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused read-only `Map` / `Set` method calls over side-effect-free collection operands. Test: `generated_c_dce_const`

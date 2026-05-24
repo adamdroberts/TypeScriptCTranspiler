@@ -899,6 +899,9 @@ class Emitter {
             if (expr.name.text === "length") {
                 return this.isSideEffectFreeLengthOperand(expr.expression, seenConsts);
             }
+            if (expr.name.text === "size") {
+                return this.isSideEffectFreeCollectionSizeOperand(expr.expression, seenConsts);
+            }
             return this.isSideEffectFreeObjectReadOperand(expr.expression, seenConsts);
         }
         if (ts.isElementAccessExpression(expr) && expr.argumentExpression) {
@@ -961,6 +964,14 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeLengthOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeCollectionSizeOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return this.isSideEffectFreeFreshMapOperand(expr, seenConsts) ||
+            this.isSideEffectFreeFreshSetOperand(expr, seenConsts);
     }
 
     private isSideEffectFreeArrayReturningArrayHelperCall(
@@ -4549,6 +4560,13 @@ class Emitter {
             ts.isPropertyAccessExpression(unwrapped) &&
             unwrapped.name.text === "length" &&
             this.isSideEffectFreeLengthOperand(unwrapped.expression, seenConsts)
+        ) {
+            return true;
+        }
+        if (
+            ts.isPropertyAccessExpression(unwrapped) &&
+            unwrapped.name.text === "size" &&
+            this.isSideEffectFreeCollectionSizeOperand(unwrapped.expression, seenConsts)
         ) {
             return true;
         }
