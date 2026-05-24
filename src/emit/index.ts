@@ -1605,7 +1605,33 @@ class Emitter {
         if (arrayLength === 0) return true;
         const stringText = this.sideEffectFreeStringLiteralText(expr, seenConsts);
         return (stringText !== null && stringText.length === 0) ||
+            this.isSideEffectFreeEmptyMapSource(expr, seenConsts) ||
             this.isSideEffectFreeEmptySetSource(expr, seenConsts);
+    }
+
+    private isSideEffectFreeEmptyMapSource(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map") &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+        ) {
+            const args = Array.from(unwrapped.arguments ?? []);
+            return args.length === 0 ||
+                (
+                    args.length === 1 &&
+                    (
+                        this.sideEffectFreeArrayLiteralLength(args[0]!, seenConsts) === 0 ||
+                        this.isSideEffectFreeEmptyMapSource(args[0]!, seenConsts)
+                    )
+                );
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeEmptyMapSource(init, seenConsts);
     }
 
     private isSideEffectFreeEmptySetSource(
@@ -1619,7 +1645,15 @@ class Emitter {
             this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set") &&
             this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
         ) {
-            return true;
+            const args = Array.from(unwrapped.arguments ?? []);
+            return args.length === 0 ||
+                (
+                    args.length === 1 &&
+                    (
+                        this.sideEffectFreeArrayLiteralLength(args[0]!, seenConsts) === 0 ||
+                        this.isSideEffectFreeEmptySetSource(args[0]!, seenConsts)
+                    )
+                );
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeEmptySetSource(init, seenConsts);

@@ -43,7 +43,9 @@ const unused_array_from_map_call = Array.from(new Map([["dead_array_from_map_key
 const unused_array_from_set_call = Array.from(new Set(["dead_array_from_set", "dead_array_from_set_tail"]));
 const unused_array_from_empty_array_mapper_call = Array.from([] as number[], (value) => value + "dead_array_from_empty_array_mapper".length);
 const unused_array_from_empty_string_mapper_call = Array.from("", (value) => value + "dead_array_from_empty_string_mapper");
+const unused_array_from_empty_map_mapper_call = Array.from(new Map<string, number>(), (entry) => entry[1] + "dead_array_from_empty_map_mapper".length);
 const unused_array_from_empty_set_mapper_call = Array.from(new Set<number>(), (value) => value + "dead_array_from_empty_set_mapper".length);
+Array.from(new Set(["kept_array_from_non_empty_set_mapper"]), (value) => value);
 const unused_const_array_from_call = Array.from(unused_spread_source_array);
 const unused_number_is_finite = Number.isFinite(1);
 const unused_number_is_integer = Number.isInteger(2);
@@ -279,6 +281,7 @@ Array.from(new Map([["top_level_dead_array_from_map_key", "top_level_dead_array_
 Array.from(new Set(["top_level_dead_array_from_set", "top_level_dead_array_from_set_tail"]));
 Array.from([] as number[], (value) => value + "top_level_dead_array_from_empty_array_mapper".length);
 Array.from("", (value) => value + "top_level_dead_array_from_empty_string_mapper");
+Array.from(new Map<string, number>(), (entry) => entry[1] + "top_level_dead_array_from_empty_map_mapper".length);
 Array.from(new Set<number>(), (value) => value + "top_level_dead_array_from_empty_set_mapper".length);
 Number.isFinite("top_level_dead_number_is_finite".length);
 parseInt("top_level_dead_global_parse_int", 10);
@@ -520,6 +523,7 @@ function usedLocal(value: number): number {
     Array.from(new Set(["local_dead_array_from_set", "local_dead_array_from_set_tail"]));
     Array.from([] as number[], (value) => value + "local_dead_array_from_empty_array_mapper".length);
     Array.from("", (value) => value + "local_dead_array_from_empty_string_mapper");
+    Array.from(new Map<string, number>(), (entry) => entry[1] + "local_dead_array_from_empty_map_mapper".length);
     Array.from(new Set<number>(), (value) => value + "local_dead_array_from_empty_set_mapper".length);
     Number.isInteger("local_dead_number_is_integer".length);
     parseInt("local_dead_global_parse_int", 10);
