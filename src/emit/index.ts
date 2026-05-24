@@ -2344,6 +2344,9 @@ class Emitter {
         ) {
             return true;
         }
+        if (this.isSideEffectFreeStringElementAccess(unwrapped, seenConsts)) {
+            return true;
+        }
         if (
             ts.isPrefixUnaryExpression(unwrapped) &&
             (
@@ -2439,6 +2442,16 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreePrimitivePromiseResolveValue(init, seenConsts);
+    }
+
+    private isSideEffectFreeStringElementAccess(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!ts.isElementAccessExpression(expr) || !expr.argumentExpression) return false;
+        if (!this.isSideEffectFreeStringOperand(expr.expression, seenConsts)) return false;
+        const index = this.sideEffectFreePrimitiveNumberValue(expr.argumentExpression, seenConsts);
+        return index !== null && Number.isInteger(index);
     }
 
     private isSideEffectFreeRegExpConstructorArgs(
