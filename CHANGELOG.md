@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused pure `flatMap(...)` calls plus `reduce(...)` / `reduceRight(...)` calls with explicit pure initial values on fresh empty array literals. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure predicate/search HOF calls on fresh empty array literals with pure callback and `thisArg` expressions. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `map(...)` / `filter(...)` / `forEach(...)` calls on fresh empty array literals with pure callback and `thisArg` expressions. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure default `sort()` calls on fresh string-array literals. Test: `generated_c_dce_const`.

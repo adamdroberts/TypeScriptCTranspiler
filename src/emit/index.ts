@@ -1430,6 +1430,7 @@ class Emitter {
                 return args.length === 0 &&
                     this.isSideEffectFreeFreshStringArrayOperand(recv, seenConsts);
             case "map":
+            case "flatMap":
             case "filter":
             case "forEach":
             case "some":
@@ -1443,6 +1444,12 @@ class Emitter {
                     this.isSideEffectFreeFreshEmptyArrayLiteralOperand(recv, seenConsts) &&
                     this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts) &&
                     (!args[1] || this.isSideEffectFreeTopLevelConstInitializer(args[1], seenConsts));
+            case "reduce":
+            case "reduceRight":
+                return args.length === 2 &&
+                    this.isSideEffectFreeFreshEmptyArrayLiteralOperand(recv, seenConsts) &&
+                    this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts) &&
+                    this.isSideEffectFreeTopLevelConstInitializer(args[1]!, seenConsts);
             default:
                 return false;
         }
