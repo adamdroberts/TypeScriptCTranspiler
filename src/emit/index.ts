@@ -6009,6 +6009,9 @@ class Emitter {
         if (this.isSideEffectFreeBuiltinModuleConstantRead(unwrapped)) {
             return true;
         }
+        if (this.isSideEffectFreeProcessUsagePropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeEventEmitterDefaultMaxListenersRead(unwrapped)) {
             return true;
         }
@@ -7327,6 +7330,7 @@ class Emitter {
         }
         const method = recv.expression.name.text;
         const field = expr.name.text;
+        const cpuFields = new Set(["user", "system"]);
         const memoryFields = new Set(["rss", "heapTotal", "heapUsed", "external", "arrayBuffers"]);
         const resourceFields = new Set([
             "userCPUTime",
@@ -7346,9 +7350,10 @@ class Emitter {
             "voluntaryContextSwitches",
             "involuntaryContextSwitches",
         ]);
+        if (method === "cpuUsage" && !cpuFields.has(field)) return false;
         if (method === "memoryUsage" && !memoryFields.has(field)) return false;
         if (method === "resourceUsage" && !resourceFields.has(field)) return false;
-        if (method !== "memoryUsage" && method !== "resourceUsage") return false;
+        if (method !== "cpuUsage" && method !== "memoryUsage" && method !== "resourceUsage") return false;
         return this.isSideEffectFreeProcessCall(processExpr, method, recv.arguments, seenConsts);
     }
 
