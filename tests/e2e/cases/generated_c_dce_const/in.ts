@@ -120,9 +120,16 @@ const unused_new_weak_set_object_set_source_call = new WeakSet<object>(new Set<o
 ]));
 const unused_weak_set_has_call = new WeakSet<object>([{ dead_weak_set_has_source: 1 }]).has({ dead_weak_set_has_key: 1 });
 const unused_new_weak_ref_call = new WeakRef<object>({ label: "dead_weak_ref_target" });
+const unused_weak_ref_deref_call = new WeakRef<object>({ label: "dead_weak_ref_deref_target" }).deref("dead_weak_ref_deref_ignored");
 const unused_new_finalization_registry_call = new FinalizationRegistry<string>((held) => {
     "dead_finalization_registry_callback";
 });
+const unused_finregistry_register_call = new FinalizationRegistry<string>((held) => {
+    "dead_finregistry_register_callback";
+}).register({ label: "dead_finregistry_register_target" }, "dead_finregistry_register_held", { label: "dead_finregistry_register_token" });
+const unused_finregistry_unregister_call = new FinalizationRegistry<string>((held) => {
+    "dead_finregistry_unregister_callback";
+}).unregister({ label: "dead_finregistry_unregister_token" }, "dead_finregistry_unregister_ignored");
 const unused_uri_source = "dead_uri_source";
 const unused_url_can_parse_call = URL.canParse("https://dead-url-can-parse.test/path");
 const unused_url_can_parse_base_call = URL.canParse("dead-url-can-parse-child", "https://dead-url-can-parse-base.test/root/");
@@ -700,9 +707,16 @@ new WeakSet<object>(new Set<object>([
 ]));
 new WeakSet<object>([{ top_level_dead_weak_set_has_source: 1 }]).has({ top_level_dead_weak_set_has_key: 1 });
 new WeakRef<object>({ label: "top_level_dead_weak_ref_target" });
+new WeakRef<object>({ label: "top_level_dead_weak_ref_deref_target" }).deref("top_level_dead_weak_ref_deref_ignored");
 new FinalizationRegistry<string>((held) => {
     "top_level_dead_finalization_registry_callback";
 });
+new FinalizationRegistry<string>((held) => {
+    "top_level_dead_finregistry_register_callback";
+}).register({ label: "top_level_dead_finregistry_register_target" }, "top_level_dead_finregistry_register_held", { label: "top_level_dead_finregistry_register_token" });
+new FinalizationRegistry<string>((held) => {
+    "top_level_dead_finregistry_unregister_callback";
+}).unregister({ label: "top_level_dead_finregistry_unregister_token" }, "top_level_dead_finregistry_unregister_ignored");
 URL.canParse("https://top-level-dead-url-can-parse.test/path");
 URL.canParse("top-level-dead-url-can-parse-child", "https://top-level-dead-url-can-parse-base.test/root/");
 Promise.resolve("top_level_dead_promise_resolve", "top_level_dead_promise_resolve_ignored");
@@ -1270,9 +1284,16 @@ function usedLocal(value: number): number {
     ]));
     new WeakSet<object>([{ local_dead_weak_set_has_source: 1 }]).has({ local_dead_weak_set_has_key: 1 });
     new WeakRef<object>({ label: "local_dead_weak_ref_target" });
+    new WeakRef<object>({ label: "local_dead_weak_ref_deref_target" }).deref("local_dead_weak_ref_deref_ignored");
     new FinalizationRegistry<string>((held) => {
         "local_dead_finalization_registry_callback";
     });
+    new FinalizationRegistry<string>((held) => {
+        "local_dead_finregistry_register_callback";
+    }).register({ label: "local_dead_finregistry_register_target" }, "local_dead_finregistry_register_held", { label: "local_dead_finregistry_register_token" });
+    new FinalizationRegistry<string>((held) => {
+        "local_dead_finregistry_unregister_callback";
+    }).unregister({ label: "local_dead_finregistry_unregister_token" }, "local_dead_finregistry_unregister_ignored");
     URL.canParse("https://local-dead-url-can-parse.test/path");
     URL.canParse("local-dead-url-can-parse-child", "https://local-dead-url-can-parse-base.test/root/");
     Promise.resolve("local_dead_promise_resolve", "local_dead_promise_resolve_ignored");

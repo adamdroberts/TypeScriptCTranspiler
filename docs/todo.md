@@ -226,6 +226,7 @@ This is the next item that most directly expands what programs can be written ag
   - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning string and fresh-RegExp method results. Test: `generated_c_dce_const`.
   - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning `Array.isArray(...)`, `Object.is(...)`, `Object.hasOwn(...)`, Object extensibility predicate, `URL.canParse(...)`, and Reflect predicate results. Test: `generated_c_dce_const`.
   - Generated-C DCE recognizes unused pure `WeakMap(...)` / `WeakSet(...)` constructors over static object-literal sources. Test: `generated_c_dce_const`.
+  - Generated-C DCE prunes unused `WeakRef.deref(...)` and fresh `FinalizationRegistry.register(...)` / `unregister(...)` calls with side-effect-free operands. Test: `generated_c_dce_const`.
   - Generated-C DCE prunes unused read-only `WeakMap` / `WeakSet` method calls over side-effect-free weak collection operands. Test: `generated_c_dce_const`.
   - Generated-C DCE prunes unused read-only `Map` / `Set` method calls over side-effect-free collection operands. Test: `generated_c_dce_const`.
   - Generated-C DCE prunes unused ES2025 Set composition and predicate calls over side-effect-free Set operands. Test: `generated_c_dce_const`.

@@ -1110,6 +1110,12 @@ class Emitter {
         if (this.isSideEffectFreeWeakSetMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeWeakRefMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeFinRegistryMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
@@ -1886,6 +1892,80 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeFreshWeakSetOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeWeakRefMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return method === "deref" &&
+            this.isSideEffectFreeFreshWeakRefOperand(recv, seenConsts) &&
+            Array.from(args).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+    }
+
+    private isSideEffectFreeFreshWeakRefOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "WeakRef")
+        ) {
+            return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeFreshWeakRefOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeFinRegistryMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!this.isSideEffectFreeFreshFinRegistryOperand(recv, seenConsts)) return false;
+        if (method === "unregister") {
+            return args.length >= 1 &&
+                this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(args[0]!, seenConsts) &&
+                Array.from(args).slice(1).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+        }
+        if (method !== "register" || args.length < 2) return false;
+        if (
+            !this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(args[0]!, seenConsts) ||
+            !this.isSideEffectFreeTopLevelConstInitializer(args[1]!, seenConsts)
+        ) {
+            return false;
+        }
+        if (args[2] && !this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(args[2], seenConsts)) {
+            return false;
+        }
+        return Array.from(args).slice(3).every((arg) =>
+            this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+        );
+    }
+
+    private isSideEffectFreeFreshFinRegistryOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "FinalizationRegistry")
+        ) {
+            return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeFreshFinRegistryOperand(init, seenConsts);
     }
 
     private isSideEffectFreeArrayOperand(

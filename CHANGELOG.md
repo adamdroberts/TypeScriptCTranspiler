@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes unused `WeakRef.deref(...)` and fresh `FinalizationRegistry.register(...)` / `unregister(...)` calls with side-effect-free operands. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused read-only `WeakMap` / `WeakSet` method calls over side-effect-free weak collection operands. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused read-only `Map` / `Set` method calls over side-effect-free collection operands. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused ES2025 Set composition and predicate calls over side-effect-free Set operands. Test: `generated_c_dce_const`.
