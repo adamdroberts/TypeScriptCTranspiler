@@ -223,6 +223,7 @@ This is the next item that most directly expands what programs can be written ag
   - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning fresh-Error method results. Test: `generated_c_dce_const`.
   - Generated-C DCE prunes unused fresh-Error `.name` / `.message` reads, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
   - Generated-C DCE prunes unused fresh-Error `.cause` and fresh-AggregateError `.errors` reads when the constructor inputs are side-effect-free. Test: `generated_c_dce_const`.
+  - Generated-C DCE prunes unused pure `path` helper calls such as `join(...)`, `normalize(...)`, `relative(...)`, `parse(...)`, and primitive-returning path calls inside `Promise.resolve(...)`, including named imports. Test: `generated_c_dce_const`.
   - Generated-C DCE prunes unused pure `os` metadata calls such as `platform(...)`, `arch(...)`, `cpus(...)`, `loadavg(...)`, and memory/uptime helpers, including named imports and primitive `Promise.resolve(...)` inputs where the result is primitive. Test: `generated_c_dce_const`.
   - Aliased named imports for `EventEmitter` support `defaultMaxListeners` reads and assignments. Test: `event_emitter_default_max_listeners`.
   - Aliased named imports for DNS hint constants such as `V4MAPPED as hint` lower correctly in expressions and DNS lookup options. Test: `dns_lookup_hints`.

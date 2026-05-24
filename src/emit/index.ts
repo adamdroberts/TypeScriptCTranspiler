@@ -1430,6 +1430,13 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            this.isPathModuleIdentifier(recv) &&
+            this.isSideEffectFreePathCall(method, call.arguments, seenConsts)
+        ) {
+            return true;
+        }
+        if (
+            ts.isIdentifier(recv) &&
             this.isUnshadowedGlobalIdentifier(recv, "String")
         ) {
             if (method === "fromCharCode") {
@@ -1610,6 +1617,10 @@ class Emitter {
             (
                 this.isOsModuleIdentifier(recv) &&
                 this.isSideEffectFreePrimitiveOsCall(method, call.arguments, seenConsts)
+            ) ||
+            (
+                this.isPathModuleIdentifier(recv) &&
+                this.isSideEffectFreePrimitivePathCall(method, call.arguments, seenConsts)
             );
         return isPrimitiveReturningHelper && this.isSideEffectFreeStaticCall(call, seenConsts);
     }
@@ -1664,6 +1675,60 @@ class Emitter {
             "uptime",
         ].includes(method) &&
             this.isSideEffectFreeOsCall(method, args, seenConsts);
+    }
+
+    private isSideEffectFreePathCall(
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const stringArg = (index: number): boolean =>
+            !!args[index] && this.isSideEffectFreeStringCoercion(args[index]!, seenConsts);
+        const ignoredAfter = (index: number): boolean =>
+            Array.from(args).slice(index).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+        switch (method) {
+            case "join":
+            case "resolve":
+                return Array.from(args).every((arg) =>
+                    this.isSideEffectFreeStringCoercion(arg, seenConsts)
+                );
+            case "normalize":
+            case "isAbsolute":
+            case "toNamespacedPath":
+            case "dirname":
+            case "extname":
+            case "parse":
+                return stringArg(0) && ignoredAfter(1);
+            case "relative":
+                return stringArg(0) && stringArg(1) && ignoredAfter(2);
+            case "basename":
+                return stringArg(0) &&
+                    (!args[1] || this.isSideEffectFreeStringCoercion(args[1], seenConsts)) &&
+                    ignoredAfter(args[1] ? 2 : 1);
+            default:
+                return false;
+        }
+    }
+
+    private isSideEffectFreePrimitivePathCall(
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return [
+            "join",
+            "resolve",
+            "normalize",
+            "isAbsolute",
+            "relative",
+            "toNamespacedPath",
+            "basename",
+            "dirname",
+            "extname",
+        ].includes(method) &&
+            this.isSideEffectFreePathCall(method, args, seenConsts);
     }
 
     private isSideEffectFreePrimitiveMethodCall(
@@ -4317,6 +4382,10 @@ class Emitter {
         if (osExport !== null) {
             return this.isSideEffectFreeOsCall(osExport, call.arguments, seenConsts);
         }
+        const pathExport = this.namedImportExportName(call.expression, ["path", "node:path"]);
+        if (pathExport !== null) {
+            return this.isSideEffectFreePathCall(pathExport, call.arguments, seenConsts);
+        }
         if (name === "BigInt") {
             return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
                 call.arguments.length >= 1 &&
@@ -4909,6 +4978,13 @@ class Emitter {
             if (
                 osExport !== null &&
                 this.isSideEffectFreePrimitiveOsCall(osExport, unwrapped.arguments, seenConsts)
+            ) {
+                return true;
+            }
+            const pathExport = this.namedImportExportName(unwrapped.expression, ["path", "node:path"]);
+            if (
+                pathExport !== null &&
+                this.isSideEffectFreePrimitivePathCall(pathExport, unwrapped.arguments, seenConsts)
             ) {
                 return true;
             }
