@@ -2426,6 +2426,9 @@ class Emitter {
         if (this.isSideEffectFreePrimitiveObjectPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreePrimitiveObjectEntriesTupleElementAccess(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreePrimitiveArrayElementAccess(unwrapped, seenConsts)) {
             return true;
         }
@@ -2652,6 +2655,36 @@ class Emitter {
                 this.isSideEffectFreePrimitiveObjectPropertyOperand(expr.expression, key, seenConsts);
         }
         return false;
+    }
+
+    private isSideEffectFreePrimitiveObjectEntriesTupleElementAccess(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!ts.isElementAccessExpression(expr) || !expr.argumentExpression) return false;
+        const tupleIndex = this.sideEffectFreePrimitiveNumberValue(expr.argumentExpression, seenConsts);
+        if (tupleIndex !== 0 && tupleIndex !== 1) return false;
+        const entryAccess = this.unwrapSideEffectFreeStaticExpression(expr.expression);
+        if (!ts.isElementAccessExpression(entryAccess) || !entryAccess.argumentExpression) return false;
+        const entryIndex = this.sideEffectFreePrimitiveNumberValue(entryAccess.argumentExpression, seenConsts);
+        if (entryIndex === null || !Number.isInteger(entryIndex)) return false;
+        const entriesCall = this.unwrapSideEffectFreeStaticExpression(entryAccess.expression);
+        if (
+            !ts.isCallExpression(entriesCall) ||
+            !ts.isPropertyAccessExpression(entriesCall.expression) ||
+            !ts.isIdentifier(entriesCall.expression.expression) ||
+            !this.isUnshadowedGlobalIdentifier(entriesCall.expression.expression, "Object") ||
+            entriesCall.expression.name.text !== "entries" ||
+            entriesCall.arguments.length !== 1
+        ) {
+            return false;
+        }
+        return this.sideEffectFreePrimitiveObjectEntriesTupleElementResult(
+            entriesCall.arguments[0]!,
+            entryIndex,
+            tupleIndex,
+            seenConsts,
+        ) !== "unsafe";
     }
 
     private isSideEffectFreePrimitiveReflectGetCall(
@@ -3471,6 +3504,93 @@ class Emitter {
             return "unsafe";
         }
         return "absent";
+    }
+
+    private sideEffectFreePrimitiveObjectEntriesTupleElementResult(
+        expr: ts.Expression,
+        entryIndex: number,
+        tupleIndex: 0 | 1,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        if (entryIndex < 0) return "absent";
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            return this.sideEffectFreePrimitiveObjectEntriesLiteralTupleElementResult(
+                unwrapped,
+                entryIndex,
+                tupleIndex,
+                seenConsts,
+            );
+        }
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            return tupleIndex === 0
+                ? this.sideEffectFreePrimitiveArrayEntryKeyElementResult(unwrapped, entryIndex, seenConsts)
+                : this.sideEffectFreePrimitiveArrayLiteralElementResult(unwrapped, entryIndex, seenConsts);
+        }
+        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
+            return entryIndex < Array.from(unwrapped.text).length ? "present" : "absent";
+        }
+        if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) {
+            return "absent";
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init
+            ? this.sideEffectFreePrimitiveObjectEntriesTupleElementResult(
+                init,
+                entryIndex,
+                tupleIndex,
+                seenConsts,
+            )
+            : "unsafe";
+    }
+
+    private sideEffectFreePrimitiveObjectEntriesLiteralTupleElementResult(
+        literal: ts.ObjectLiteralExpression,
+        entryIndex: number,
+        tupleIndex: 0 | 1,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        let offset = 0;
+        for (const prop of literal.properties) {
+            if (ts.isPropertyAssignment(prop)) {
+                const key = this.objectLiteralStaticStringKey(prop.name, seenConsts);
+                if (key === null || !this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts)) {
+                    return "unsafe";
+                }
+                if (offset === entryIndex) {
+                    return tupleIndex === 0 ||
+                        this.isSideEffectFreePrimitivePromiseResolveValue(prop.initializer, new Set(seenConsts))
+                        ? "present"
+                        : "unsafe";
+                }
+                offset++;
+                continue;
+            }
+            if (ts.isShorthandPropertyAssignment(prop)) {
+                if (!this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts)) {
+                    return "unsafe";
+                }
+                if (offset === entryIndex) {
+                    return tupleIndex === 0 ||
+                        this.isSideEffectFreePrimitivePromiseResolveValue(prop.name, new Set(seenConsts))
+                        ? "present"
+                        : "unsafe";
+                }
+                offset++;
+                continue;
+            }
+            return "unsafe";
+        }
+        return "absent";
+    }
+
+    private sideEffectFreePrimitiveArrayEntryKeyElementResult(
+        literal: ts.ArrayLiteralExpression,
+        entryIndex: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        const result = this.sideEffectFreePrimitiveArrayLiteralElementResult(literal, entryIndex, seenConsts);
+        return result === "unsafe" ? "unsafe" : result;
     }
 
     private sideEffectFreePrimitiveArrayFromElementResult(
