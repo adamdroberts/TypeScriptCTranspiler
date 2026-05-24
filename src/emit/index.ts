@@ -20778,45 +20778,7 @@ class Emitter {
 
     private aotRuntimeCodeStaticString(expr: ts.Expression): string | null {
         return staticStringExpressionText(expr) ??
-            this.sideEffectFreeStringLiteralText(expr, new Set()) ??
-            this.aotRuntimeCodeEarlierConstString(expr, new Set());
-    }
-
-    private aotRuntimeCodeEarlierConstString(
-        expr: ts.Expression,
-        seenNames: Set<string>,
-    ): string | null {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
-            return unwrapped.text;
-        }
-        if (!ts.isIdentifier(unwrapped) || seenNames.has(unwrapped.text)) return null;
-        const init = this.earlierConstInitializerInStatementBlock(unwrapped);
-        if (!init) return null;
-        seenNames.add(unwrapped.text);
-        const text = staticStringExpressionText(init) ??
-            this.aotRuntimeCodeEarlierConstString(init, seenNames);
-        seenNames.delete(unwrapped.text);
-        return text;
-    }
-
-    private earlierConstInitializerInStatementBlock(id: ts.Identifier): ts.Expression | null {
-        let cur: ts.Node = id;
-        while (cur.parent && !ts.isStatement(cur)) cur = cur.parent;
-        const stmt = cur;
-        const block = stmt.parent;
-        if (!ts.isBlock(block) && !ts.isSourceFile(block) && !ts.isModuleBlock(block)) return null;
-        for (const sibling of block.statements) {
-            if (sibling === stmt) break;
-            if (!ts.isVariableStatement(sibling)) continue;
-            if ((sibling.declarationList.flags & ts.NodeFlags.Const) === 0) continue;
-            for (const decl of sibling.declarationList.declarations) {
-                if (ts.isIdentifier(decl.name) && decl.name.text === id.text && decl.initializer) {
-                    return decl.initializer;
-                }
-            }
-        }
-        return null;
+            this.sideEffectFreeStringLiteralText(expr, new Set());
     }
 
     private emitAotEvalManifestDispatch(

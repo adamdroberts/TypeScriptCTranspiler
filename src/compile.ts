@@ -359,54 +359,7 @@ function functionConstructorBodyArg(call: ts.CallExpression | ts.NewExpression):
 }
 
 function runtimeCodeStringText(expr: ts.Expression): string | null {
-    return staticStringExpressionText(expr) ??
-        earlierConstStringText(expr, new Set());
-}
-
-function earlierConstStringText(expr: ts.Expression, seenNames: Set<string>): string | null {
-    const unwrapped = unwrapStaticStringExpression(expr);
-    if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
-        return unwrapped.text;
-    }
-    if (!ts.isIdentifier(unwrapped) || seenNames.has(unwrapped.text)) return null;
-    const init = earlierConstInitializerInStatementBlock(unwrapped);
-    if (!init) return null;
-    seenNames.add(unwrapped.text);
-    const text = staticStringExpressionText(init) ?? earlierConstStringText(init, seenNames);
-    seenNames.delete(unwrapped.text);
-    return text;
-}
-
-function earlierConstInitializerInStatementBlock(id: ts.Identifier): ts.Expression | null {
-    let cur: ts.Node = id;
-    while (cur.parent && !ts.isStatement(cur)) cur = cur.parent;
-    const stmt = cur;
-    const block = stmt.parent;
-    if (!ts.isBlock(block) && !ts.isSourceFile(block) && !ts.isModuleBlock(block)) return null;
-    for (const sibling of block.statements) {
-        if (sibling === stmt) break;
-        if (!ts.isVariableStatement(sibling)) continue;
-        if ((sibling.declarationList.flags & ts.NodeFlags.Const) === 0) continue;
-        for (const decl of sibling.declarationList.declarations) {
-            if (ts.isIdentifier(decl.name) && decl.name.text === id.text && decl.initializer) {
-                return decl.initializer;
-            }
-        }
-    }
-    return null;
-}
-
-function unwrapStaticStringExpression(expr: ts.Expression): ts.Expression {
-    while (
-        ts.isParenthesizedExpression(expr) ||
-        ts.isAsExpression(expr) ||
-        ts.isTypeAssertionExpression(expr) ||
-        ts.isNonNullExpression(expr) ||
-        ts.isSatisfiesExpression(expr)
-    ) {
-        expr = expr.expression;
-    }
-    return expr;
+    return staticStringExpressionText(expr);
 }
 
 function addNativeAddonDiagnostics(
