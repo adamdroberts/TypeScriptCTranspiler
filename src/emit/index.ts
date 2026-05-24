@@ -2328,6 +2328,9 @@ class Emitter {
         ) {
             return true;
         }
+        if (ts.isTemplateExpression(unwrapped) && this.isSideEffectFreePrimitiveTemplateExpression(unwrapped, seenConsts)) {
+            return true;
+        }
         if (
             ts.isIdentifier(unwrapped) &&
             (
@@ -2448,6 +2451,15 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreePrimitivePromiseResolveValue(init, seenConsts);
+    }
+
+    private isSideEffectFreePrimitiveTemplateExpression(
+        expr: ts.TemplateExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return expr.templateSpans.every((span) =>
+            this.isSideEffectFreePrimitivePromiseResolveValue(span.expression, seenConsts)
+        );
     }
 
     private isSideEffectFreePrimitiveObjectPropertyRead(
