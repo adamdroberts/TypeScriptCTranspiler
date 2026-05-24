@@ -2438,11 +2438,7 @@ class Emitter {
         }
         const entries = this.sideEffectFreeObjectLiteralOwnDataEntries(unwrapped, seenConsts);
         if (entries) {
-            return entries.every((entry) =>
-                this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(entry.value, seenConsts)
-            )
-                ? entries.length
-                : null;
+            return this.sideEffectFreeObjectIdentityEntryValueSetLength(entries, seenConsts);
         }
         if (this.isObjectFromEntriesCall(unwrapped) && unwrapped.arguments.length === 1) {
             const fromEntries = this.sideEffectFreeObjectFromEntriesOwnDataEntries(
@@ -2450,20 +2446,12 @@ class Emitter {
                 new Set(seenConsts),
             );
             if (fromEntries === null) return null;
-            return fromEntries.every((entry) =>
-                this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(entry.value, seenConsts)
-            )
-                ? fromEntries.length
-                : null;
+            return this.sideEffectFreeObjectIdentityEntryValueSetLength(fromEntries, seenConsts);
         }
         if (this.isObjectAssignCall(unwrapped)) {
             const assignEntries = this.sideEffectFreeObjectAssignOwnDataEntries(unwrapped, new Set(seenConsts));
             if (assignEntries === null) return null;
-            return assignEntries.every((entry) =>
-                this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(entry.value, seenConsts)
-            )
-                ? assignEntries.length
-                : null;
+            return this.sideEffectFreeObjectIdentityEntryValueSetLength(assignEntries, seenConsts);
         }
         const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
         if (targetOperand) {
@@ -2471,6 +2459,19 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectValuesFreshObjectSetLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeObjectIdentityEntryValueSetLength(
+        entries: { key: string; value: ts.Expression }[],
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const values = new Set<ts.Expression | ts.Symbol>();
+        for (const entry of entries) {
+            const valueIdentity = this.sideEffectFreeObjectIdentityKey(entry.value, seenConsts);
+            if (!valueIdentity) return null;
+            values.add(valueIdentity);
+        }
+        return values.size;
     }
 
     private sideEffectFreeObjectFromEntriesOwnDataEntries(

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now deduplicates repeated const object identities in `Object.values(...)` Set source length proofs, including `Object.fromEntries(...)` and `Object.assign(...)` builders. Test: `generated_c_dce_const`.
 - Generated-C DCE now uses exact static repeated const object-value `Array.from(new Set(...))` length proofs, enabling duplicate object-value Sets to prune unused in-range `.with(...)` calls. Test: `generated_c_dce_const`.
 - Generated-C DCE now uses exact static repeated const object-key `Array.from(new Map(...))` length proofs, enabling duplicate object-key Maps to prune unused in-range `.with(...)` calls. Test: `generated_c_dce_const`.
 - Generated-C DCE now uses exact static `Object.values(...)` Set source lengths for fresh object values, including `Object.fromEntries(...)` and `Object.assign(...)` sources, enabling unused in-range `.with(...)` calls after uniqueness proofs to be pruned. Test: `generated_c_dce_const`.
