@@ -2341,6 +2341,12 @@ class Emitter {
             return true;
         }
         if (
+            (ts.isVoidExpression(unwrapped) || ts.isTypeOfExpression(unwrapped)) &&
+            this.isSideEffectFreeTopLevelConstInitializer(unwrapped.expression, seenConsts)
+        ) {
+            return true;
+        }
+        if (
             ts.isIdentifier(unwrapped) &&
             (
                 this.isUnshadowedGlobalIdentifier(unwrapped, "NaN") ||
