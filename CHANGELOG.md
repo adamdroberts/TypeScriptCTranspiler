@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now uses exact static `Object.values(...)` Set source lengths for fresh object values, including `Object.fromEntries(...)` and `Object.assign(...)` sources, enabling unused in-range `.with(...)` calls after uniqueness proofs to be pruned. Test: `generated_c_dce_const`.
 - Generated-C DCE now uses exact static fresh object-value `Array.from(new Set(...))` length proofs, enabling unused in-range `.with(...)` calls on multi-entry object Sets to be pruned. Test: `generated_c_dce_const`.
 - Generated-C DCE now uses exact static numeric, boolean, and fresh object-key `Array.from(new Map(...))` length proofs, enabling unused in-range `.with(...)` calls on multi-entry primitive/object-key Maps to be pruned. Test: `generated_c_dce_const`.
 - Typed `ObjectEntry<V, K>` tuples can now carry non-string keys through `new Map(entries)`, `Map.entries()`, `Array.from(map)`, and direct `new WeakMap(entries)` construction when key/value types match. Test: `map_object_entry_constructors`.

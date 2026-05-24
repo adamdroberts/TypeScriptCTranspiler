@@ -2385,6 +2385,8 @@ class Emitter {
                 ? elements.length
                 : null;
         }
+        const valueSourceLength = this.sideEffectFreeFreshObjectValueArraySourceSetLength(unwrapped, seenConsts);
+        if (valueSourceLength !== null) return valueSourceLength;
         if (
             ts.isNewExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
@@ -2395,6 +2397,78 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeFreshObjectSetConstructorSourceLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeFreshObjectValueArraySourceSetLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Object") &&
+            unwrapped.expression.name.text === "values" &&
+            unwrapped.arguments.length === 1
+        ) {
+            return this.sideEffectFreeObjectValuesFreshObjectSetLength(unwrapped.arguments[0]!, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeFreshObjectValueArraySourceSetLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeObjectValuesFreshObjectSetLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.sideEffectFreeStringLiteralText(unwrapped, seenConsts) !== null) return null;
+        if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) return 0;
+        if (this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(unwrapped, seenConsts)) return 0;
+        const elements = this.sideEffectFreeSetArraySourceExpressions(unwrapped, seenConsts);
+        if (elements) {
+            return elements.every((element) =>
+                this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(element, seenConsts)
+            )
+                ? elements.length
+                : null;
+        }
+        const entries = this.sideEffectFreeObjectLiteralOwnDataEntries(unwrapped, seenConsts);
+        if (entries) {
+            return entries.every((entry) =>
+                this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(entry.value, seenConsts)
+            )
+                ? entries.length
+                : null;
+        }
+        if (this.isObjectFromEntriesCall(unwrapped) && unwrapped.arguments.length === 1) {
+            const fromEntries = this.sideEffectFreeObjectFromEntriesOwnDataEntries(
+                unwrapped.arguments[0]!,
+                new Set(seenConsts),
+            );
+            if (fromEntries === null) return null;
+            return fromEntries.every((entry) =>
+                this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(entry.value, seenConsts)
+            )
+                ? fromEntries.length
+                : null;
+        }
+        if (this.isObjectAssignCall(unwrapped)) {
+            const assignEntries = this.sideEffectFreeObjectAssignOwnDataEntries(unwrapped, new Set(seenConsts));
+            if (assignEntries === null) return null;
+            return assignEntries.every((entry) =>
+                this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(entry.value, seenConsts)
+            )
+                ? assignEntries.length
+                : null;
+        }
+        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
+        if (targetOperand) {
+            return this.sideEffectFreeObjectValuesFreshObjectSetLength(targetOperand, new Set(seenConsts));
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeObjectValuesFreshObjectSetLength(init, seenConsts) : null;
     }
 
     private sideEffectFreeObjectFromEntriesOwnDataEntries(
