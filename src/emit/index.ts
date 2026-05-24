@@ -1691,7 +1691,7 @@ class Emitter {
                     allArgsPure();
             case "sort":
                 if (args.length === 0) {
-                    return this.isSideEffectFreeFreshStringArrayOperand(recv, seenConsts);
+                    return this.isSideEffectFreeFreshOrReturnedStringArrayOperand(recv, seenConsts);
                 }
                 if (!this.isSideEffectFreeFreshArrayLiteralOperand(recv, seenConsts)) return false;
                 const length = this.sideEffectFreeArrayLiteralLength(recv, seenConsts);
@@ -1765,6 +1765,27 @@ class Emitter {
             ts.isExpression(element) &&
             this.isSideEffectFreeStringCoercion(element, seenConsts)
         );
+    }
+
+    private isSideEffectFreeFreshOrReturnedStringArrayOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            return unwrapped.elements.every((element) =>
+                ts.isExpression(element) &&
+                this.isSideEffectFreeStringCoercion(element, seenConsts)
+            );
+        }
+        return ts.isCallExpression(unwrapped) &&
+            (
+                this.isSideEffectFreeStringArrayReturningArrayHelperCall(unwrapped, seenConsts) ||
+                this.isSideEffectFreeStringArrayReturningObjectKeyHelperCall(unwrapped, seenConsts) ||
+                this.isSideEffectFreeStringArrayReturningObjectValuesCall(unwrapped, seenConsts) ||
+                this.isSideEffectFreeStringArrayReturningEmptyObjectEntriesCall(unwrapped, seenConsts) ||
+                this.isSideEffectFreeStringArrayReturningStringifiableObjectEntriesCall(unwrapped, seenConsts)
+            );
     }
 
     private isSideEffectFreeFreshEmptyArrayLiteralOperand(
