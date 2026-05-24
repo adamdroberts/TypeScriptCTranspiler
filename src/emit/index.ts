@@ -1735,7 +1735,10 @@ class Emitter {
         }
         if (
             ts.isCallExpression(unwrapped) &&
-            this.isSideEffectFreeArrayReturningArrayHelperCall(unwrapped, seenConsts)
+            (
+                this.isSideEffectFreeArrayReturningArrayHelperCall(unwrapped, seenConsts) ||
+                this.isSideEffectFreeArrayReturningObjectHelperCall(unwrapped, seenConsts)
+            )
         ) {
             return true;
         }
@@ -1864,12 +1867,34 @@ class Emitter {
         }
         if (
             ts.isCallExpression(unwrapped) &&
-            this.isSideEffectFreeStringArrayReturningArrayHelperCall(unwrapped, seenConsts)
+            (
+                this.isSideEffectFreeStringArrayReturningArrayHelperCall(unwrapped, seenConsts) ||
+                this.isSideEffectFreeStringArrayReturningObjectKeyHelperCall(unwrapped, seenConsts)
+            )
         ) {
             return true;
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeStringArrayOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeStringArrayReturningObjectKeyHelperCall(
+        call: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            !ts.isIdentifier(call.expression.expression) ||
+            !this.isUnshadowedGlobalIdentifier(call.expression.expression, "Object") ||
+            (
+                call.expression.name.text !== "keys" &&
+                call.expression.name.text !== "getOwnPropertyNames"
+            ) ||
+            call.arguments.length !== 1
+        ) {
+            return false;
+        }
+        return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts);
     }
 
     private isSideEffectFreeStringArrayReturningArrayHelperCall(
