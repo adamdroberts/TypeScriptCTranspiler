@@ -1824,6 +1824,10 @@ class Emitter {
             case "extname":
             case "parse":
                 return stringArg(0) && ignoredAfter(1);
+            case "format":
+                return !!args[0] &&
+                    this.isSideEffectFreePathFormatObject(args[0]!, seenConsts) &&
+                    ignoredAfter(1);
             case "relative":
                 return stringArg(0) && stringArg(1) && ignoredAfter(2);
             case "basename":
@@ -1850,8 +1854,27 @@ class Emitter {
             "basename",
             "dirname",
             "extname",
+            "format",
         ].includes(method) &&
             this.isSideEffectFreePathCall(method, args, seenConsts);
+    }
+
+    private isSideEffectFreePathFormatObject(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            return unwrapped.properties.every((prop) => {
+                if (!ts.isPropertyAssignment(prop)) return false;
+                const key = this.objectLiteralStaticStringKey(prop.name, seenConsts);
+                if (key === null) return false;
+                if (this.isUndefinedExpression(prop.initializer)) return true;
+                return this.isSideEffectFreeStringCoercion(prop.initializer, seenConsts);
+            });
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreePathFormatObject(init, seenConsts);
     }
 
     private isSideEffectFreeNetCall(

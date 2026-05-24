@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes unused pure `path.format(...)` calls over side-effect-free static path-object records, including named/posix forms and primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused pure `path.posix.*` helper calls and named `posix` import calls for the supported POSIX path subset, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused valid `os.userInfo(...)` calls and direct field reads, including named/namespace imports, literal UTF-8 options, explicit `undefined` defaults, and primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused direct field reads from static `process.versions`, `process.release`, and `process.features` metadata objects, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
