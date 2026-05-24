@@ -2337,6 +2337,9 @@ class Emitter {
         if (ts.isBinaryExpression(unwrapped) && this.isSideEffectFreePrimitiveBinaryExpression(unwrapped, seenConsts)) {
             return true;
         }
+        if (ts.isDeleteExpression(unwrapped) && this.isSideEffectFreeDeleteExpression(unwrapped, seenConsts)) {
+            return true;
+        }
         if (
             ts.isIdentifier(unwrapped) &&
             (

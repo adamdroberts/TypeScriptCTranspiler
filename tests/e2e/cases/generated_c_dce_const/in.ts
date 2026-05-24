@@ -139,6 +139,7 @@ const unused_promise_resolve_arithmetic_call = Promise.resolve("dead_promise_res
 const unused_promise_resolve_comparison_call = Promise.resolve("dead_promise_resolve_comparison".length > 2);
 const unused_promise_resolve_equality_call = Promise.resolve(String("dead_promise_resolve_equality") === "missing");
 const unused_promise_resolve_in_call = Promise.resolve("dead_promise_resolve_in_key" in { dead_promise_resolve_in_key: true });
+const unused_promise_resolve_delete_call = Promise.resolve(delete ({ dead_promise_resolve_delete_key: true } as { dead_promise_resolve_delete_key?: boolean }).dead_promise_resolve_delete_key);
 const unused_promise_resolve_object_property_call = Promise.resolve({ dead_promise_resolve_object_property: "dead_promise_resolve_object_property" }.dead_promise_resolve_object_property);
 const unused_promise_resolve_object_property_missing_call = Promise.resolve(({ dead_promise_resolve_object_property_missing_source: 1 } as { [key: string]: number }).dead_promise_resolve_object_property_missing);
 const unused_promise_resolve_array_element_call = Promise.resolve(["dead_promise_resolve_array_element"][0]);
@@ -420,6 +421,7 @@ Promise.resolve("top_level_dead_promise_resolve_arithmetic".length * 2);
 Promise.resolve("top_level_dead_promise_resolve_comparison".length <= 99);
 Promise.resolve(String("top_level_dead_promise_resolve_equality") !== "missing");
 Promise.resolve("top_level_dead_promise_resolve_in_key" in { top_level_dead_promise_resolve_in_key: true });
+Promise.resolve(delete ({ top_level_dead_promise_resolve_delete_key: true } as { top_level_dead_promise_resolve_delete_key?: boolean }).top_level_dead_promise_resolve_delete_key);
 Promise.resolve({ top_level_dead_promise_resolve_object_property: "top_level_dead_promise_resolve_object_property" }.top_level_dead_promise_resolve_object_property);
 Promise.resolve(({ top_level_dead_promise_resolve_object_property_missing_source: 1 } as { [key: string]: number }).top_level_dead_promise_resolve_object_property_missing);
 Promise.resolve(["top_level_dead_promise_resolve_array_element"][0]);
@@ -712,6 +714,7 @@ function usedLocal(value: number): number {
     Promise.resolve("local_dead_promise_resolve_comparison".length >= 1);
     Promise.resolve(String("local_dead_promise_resolve_equality") == "missing");
     Promise.resolve("local_dead_promise_resolve_in_key" in { local_dead_promise_resolve_in_key: true });
+    Promise.resolve(delete ({ local_dead_promise_resolve_delete_key: true } as { local_dead_promise_resolve_delete_key?: boolean }).local_dead_promise_resolve_delete_key);
     Promise.resolve({ local_dead_promise_resolve_object_property: "local_dead_promise_resolve_object_property" }.local_dead_promise_resolve_object_property);
     Promise.resolve(({ local_dead_promise_resolve_object_property_missing_source: 1 } as { [key: string]: number }).local_dead_promise_resolve_object_property_missing);
     Promise.resolve(["local_dead_promise_resolve_array_element"][0]);
