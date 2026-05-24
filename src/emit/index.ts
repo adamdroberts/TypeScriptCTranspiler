@@ -2128,8 +2128,8 @@ class Emitter {
         if (elements) {
             const keys = new Set<string>();
             for (const element of elements) {
-                const entry = this.unwrapSideEffectFreeStaticExpression(element);
-                if (!ts.isArrayLiteralExpression(entry) || entry.elements.length < 2) return null;
+                const entry = this.sideEffectFreeMapEntryArrayLiteral(element, seenConsts);
+                if (!entry || entry.elements.length < 2) return null;
                 const key = entry.elements[0]!;
                 if (!ts.isExpression(key)) return null;
                 const keyText = this.sideEffectFreeStringLiteralText(key, seenConsts);
@@ -2156,6 +2156,16 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeStringKeyMapConstructorSourceLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeMapEntryArrayLiteral(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): ts.ArrayLiteralExpression | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrayLiteralExpression(unwrapped)) return unwrapped;
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeMapEntryArrayLiteral(init, seenConsts) : null;
     }
 
     private sideEffectFreeMapArraySourceExpressions(
@@ -3252,8 +3262,8 @@ class Emitter {
         const elements = this.sideEffectFreeMapArraySourceExpressions(unwrapped, seenConsts);
         if (elements) {
             return elements.every((element) => {
-                const entry = this.unwrapSideEffectFreeStaticExpression(element);
-                return ts.isArrayLiteralExpression(entry) &&
+                const entry = this.sideEffectFreeMapEntryArrayLiteral(element, seenConsts);
+                return !!entry &&
                     entry.elements.length >= 2 &&
                     ts.isExpression(entry.elements[0]!) &&
                     ts.isExpression(entry.elements[1]!) &&
