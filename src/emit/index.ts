@@ -29312,12 +29312,11 @@ class Emitter {
             }
             case "writeFileSync": {
                 if (args.length < 2)
-                    unsupported(call, "fs.writeFileSync needs path, data, and optional UTF-8 encoding/flag options");
+                    unsupported(call, "fs.writeFileSync needs path, data, and optional UTF-8/hex/base64 encoding/flag options");
                 const options = this.validateFsWriteFileOptions(args[2], "fs.writeFileSync");
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.writeFileSync data must be string or Buffer");
-                const fn = d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync_opts_mode" : "tsc_fs_write_file_sync_opts_mode";
                 return this.emitSequencedExpr(T_VOID, [
                     this.fsPathSpec(p, args[0]!, "fs.writeFileSync path"),
                     { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
@@ -29327,16 +29326,15 @@ class Emitter {
                     options.mode,
                     ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
                 ], ([path, data, append, exclusive, update, mode]) =>
-                    `({ ${fn}(${path!}, ${data!}, ${append!}, ${exclusive!}, ${update!}, ${mode!}); })`,
+                    `({ ${this.emitFsWriteFileCall(path!, data!, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, append!, exclusive!, update!, mode!)}; })`,
                 );
             }
             case "appendFileSync": {
-                if (args.length < 2) unsupported(call, "fs.appendFileSync needs path, data, and optional UTF-8 encoding/flag options");
+                if (args.length < 2) unsupported(call, "fs.appendFileSync needs path, data, and optional UTF-8/hex/base64 encoding/flag options");
                 const options = this.validateFsAppendFileOptions(args[2], "fs.appendFileSync");
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.appendFileSync data must be string or Buffer");
-                const fn = d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync_opts_mode" : "tsc_fs_write_file_sync_opts_mode";
                 return this.emitSequencedExpr(T_VOID, [
                     this.fsPathSpec(p, args[0]!, "fs.appendFileSync path"),
                     { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
@@ -29346,7 +29344,7 @@ class Emitter {
                     options.mode,
                     ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
                 ], ([path, data, append, exclusive, update, mode]) =>
-                    `({ ${fn}(${path!}, ${data!}, ${append!}, ${exclusive!}, ${update!}, ${mode!}); })`,
+                    `({ ${this.emitFsWriteFileCall(path!, data!, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, append!, exclusive!, update!, mode!)}; })`,
                 );
             }
             case "existsSync": {
@@ -29842,16 +29840,39 @@ class Emitter {
         return `tsc_buffer_to_string(tsc_fs_read_file_buffer_sync(${path}), tsc_str_from_lit("${encoding}", ${encoding.length}))`;
     }
 
-    private validateFsWriteFileOptions(options: ts.Expression | undefined, label: string): { append: boolean; exclusive: boolean; update: boolean; mode: SequencedCallArg } {
+    private emitFsWriteFileCall(
+        path: string,
+        data: string,
+        dataKind: "string" | "buffer",
+        encoding: "utf8" | "hex" | "base64",
+        append: string,
+        exclusive: string,
+        update: string,
+        mode: string,
+    ): string {
+        if (dataKind === "buffer") {
+            return `tsc_fs_write_file_buffer_sync_opts_mode(${path}, ${data}, ${append}, ${exclusive}, ${update}, ${mode})`;
+        }
+        if (encoding === "utf8") {
+            return `tsc_fs_write_file_sync_opts_mode(${path}, ${data}, ${append}, ${exclusive}, ${update}, ${mode})`;
+        }
+        const encoded = `tsc_buffer_from_str(${data}, tsc_str_from_lit("${encoding}", ${encoding.length}))`;
+        return `tsc_fs_write_file_buffer_sync_opts_mode(${path}, ${encoded}, ${append}, ${exclusive}, ${update}, ${mode})`;
+    }
+
+    private validateFsWriteFileOptions(options: ts.Expression | undefined, label: string): { append: boolean; exclusive: boolean; update: boolean; encoding: "utf8" | "hex" | "base64"; mode: SequencedCallArg } {
         const out = { append: false, exclusive: false, update: false };
+        let encoding: "utf8" | "hex" | "base64" = "utf8";
         let mode: SequencedCallArg = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
-        if (!options || this.isUndefinedExpression(options)) return { ...out, mode };
-        const checkEncoding = (node: ts.Expression): void => {
-            if (this.isUndefinedExpression(node)) return;
+        if (!options || this.isUndefinedExpression(options)) return { ...out, encoding, mode };
+        const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" => {
+            if (this.isUndefinedExpression(node)) return "utf8";
             const text = this.sideEffectFreeStringLiteralText(node, new Set());
-            if (text === null || (text !== "utf8" && text !== "utf-8")) {
-                unsupported(node, `${label} only supports UTF-8 encoding options in this subset`);
+            if (text !== null) {
+                if (text === "utf8" || text === "utf-8") return "utf8";
+                if (text === "hex" || text === "base64") return text;
             }
+            unsupported(node, `${label} only supports UTF-8, hex, or base64 encoding options in this subset`);
         };
         const checkFlag = (node: ts.Expression): void => {
             if (this.isUndefinedExpression(node)) return;
@@ -29865,11 +29886,11 @@ class Emitter {
             out.update = text === "r+" || text === "rs+";
         };
         if (this.sideEffectFreeStringLiteralText(options, new Set()) !== null) {
-            checkEncoding(options);
-            return { ...out, mode };
+            encoding = checkEncoding(options);
+            return { ...out, encoding, mode };
         }
         if (!ts.isObjectLiteralExpression(options)) {
-            unsupported(options, `${label} options must be a UTF-8 string literal or object literal in this subset`);
+            unsupported(options, `${label} options must be a UTF-8/hex/base64 string literal or object literal in this subset`);
         }
         for (const prop of options.properties) {
             if (!ts.isPropertyAssignment(prop)) {
@@ -29877,7 +29898,7 @@ class Emitter {
             }
             const key = this.staticPropertyName(prop.name);
             if (key === "encoding") {
-                checkEncoding(prop.initializer);
+                encoding = checkEncoding(prop.initializer);
             } else if (key === "flag") {
                 checkFlag(prop.initializer);
             } else if (key === "mode") {
@@ -29899,19 +29920,22 @@ class Emitter {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
         }
-        return { ...out, mode };
+        return { ...out, encoding, mode };
     }
 
-    private validateFsAppendFileOptions(options: ts.Expression | undefined, label: string): { exclusive: boolean; mode: SequencedCallArg } {
+    private validateFsAppendFileOptions(options: ts.Expression | undefined, label: string): { exclusive: boolean; encoding: "utf8" | "hex" | "base64"; mode: SequencedCallArg } {
         const out = { exclusive: false };
+        let encoding: "utf8" | "hex" | "base64" = "utf8";
         let mode: SequencedCallArg = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
-        if (!options || this.isUndefinedExpression(options)) return { ...out, mode };
-        const checkEncoding = (node: ts.Expression): void => {
-            if (this.isUndefinedExpression(node)) return;
+        if (!options || this.isUndefinedExpression(options)) return { ...out, encoding, mode };
+        const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" => {
+            if (this.isUndefinedExpression(node)) return "utf8";
             const text = this.sideEffectFreeStringLiteralText(node, new Set());
-            if (text === null || (text !== "utf8" && text !== "utf-8")) {
-                unsupported(node, `${label} only supports UTF-8 encoding options in this subset`);
+            if (text !== null) {
+                if (text === "utf8" || text === "utf-8") return "utf8";
+                if (text === "hex" || text === "base64") return text;
             }
+            unsupported(node, `${label} only supports UTF-8, hex, or base64 encoding options in this subset`);
         };
         const checkFlag = (node: ts.Expression): void => {
             if (this.isUndefinedExpression(node)) return;
@@ -29923,11 +29947,11 @@ class Emitter {
             out.exclusive = text === "ax" || text === "ax+";
         };
         if (this.sideEffectFreeStringLiteralText(options, new Set()) !== null) {
-            checkEncoding(options);
-            return { ...out, mode };
+            encoding = checkEncoding(options);
+            return { ...out, encoding, mode };
         }
         if (!ts.isObjectLiteralExpression(options)) {
-            unsupported(options, `${label} options must be a UTF-8 string literal or object literal in this subset`);
+            unsupported(options, `${label} options must be a UTF-8/hex/base64 string literal or object literal in this subset`);
         }
         for (const prop of options.properties) {
             if (!ts.isPropertyAssignment(prop)) {
@@ -29935,7 +29959,7 @@ class Emitter {
             }
             const key = this.staticPropertyName(prop.name);
             if (key === "encoding") {
-                checkEncoding(prop.initializer);
+                encoding = checkEncoding(prop.initializer);
             } else if (key === "flag") {
                 checkFlag(prop.initializer);
             } else if (key === "mode") {
@@ -29957,7 +29981,7 @@ class Emitter {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
         }
-        return { ...out, mode };
+        return { ...out, encoding, mode };
     }
 
     private validateFsReaddirOptions(
@@ -30115,35 +30139,33 @@ class Emitter {
                 });
             }
             case "writeFile": {
-                if (args.length < 2) unsupported(call, "fs.promises.writeFile needs path, data, and optional UTF-8 encoding/flag options");
+                if (args.length < 2) unsupported(call, "fs.promises.writeFile needs path, data, and optional UTF-8/hex/base64 encoding/flag options");
                 const options = this.validateFsWriteFileOptions(args[2], "fs.promises.writeFile");
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.promises.writeFile data must be string or Buffer");
-                const fn = d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync_opts_mode" : "tsc_fs_write_file_sync_opts_mode";
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.writeFile path"),
                     { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
                     options.mode,
                     ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
                 ], ([path, data, mode]) =>
-                    settle(`({ ${fn}(${path!}, ${data!}, ${options.append ? "true" : "false"}, ${options.exclusive ? "true" : "false"}, ${options.update ? "true" : "false"}, ${mode!}); tsc_promise_resolve(tsc_value_undefined()); })`),
+                    settle(`({ ${this.emitFsWriteFileCall(path!, data!, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, options.append ? "true" : "false", options.exclusive ? "true" : "false", options.update ? "true" : "false", mode!)}; tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "appendFile": {
-                if (args.length < 2) unsupported(call, "fs.promises.appendFile needs path, data, and optional UTF-8 encoding/flag options");
+                if (args.length < 2) unsupported(call, "fs.promises.appendFile needs path, data, and optional UTF-8/hex/base64 encoding/flag options");
                 const options = this.validateFsAppendFileOptions(args[2], "fs.promises.appendFile");
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.promises.appendFile data must be string or Buffer");
-                const fn = d.ty.kind === "buffer" ? "tsc_fs_write_file_buffer_sync_opts_mode" : "tsc_fs_write_file_sync_opts_mode";
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.appendFile path"),
                     { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
                     options.mode,
                     ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
                 ], ([path, data, mode]) =>
-                    settle(`({ ${fn}(${path!}, ${data!}, true, ${options.exclusive ? "true" : "false"}, false, ${mode!}); tsc_promise_resolve(tsc_value_undefined()); })`),
+                    settle(`({ ${this.emitFsWriteFileCall(path!, data!, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, "true", options.exclusive ? "true" : "false", "false", mode!)}; tsc_promise_resolve(tsc_value_undefined()); })`),
                 );
             }
             case "readdir": {
