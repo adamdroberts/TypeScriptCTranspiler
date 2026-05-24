@@ -226,6 +226,7 @@ This is the next item that most directly expands what programs can be written ag
   - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning fresh-array method results. Test: `generated_c_dce_const`.
   - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning string and fresh-RegExp method results. Test: `generated_c_dce_const`.
   - Generated-C DCE prunes unused fresh-RegExp readonly property reads, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
+  - Generated-C DCE prunes unused fresh-Symbol `.description` reads, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
   - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning `Array.isArray(...)`, `Object.is(...)`, `Object.hasOwn(...)`, Object extensibility predicate, `URL.canParse(...)`, and Reflect predicate results. Test: `generated_c_dce_const`.
   - Generated-C DCE prunes unused readonly URL property reads over valid side-effect-free URL constructor operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
   - Generated-C DCE prunes unused URL object/string helper calls over valid side-effect-free URL constructor operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.

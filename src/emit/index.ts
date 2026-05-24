@@ -911,6 +911,9 @@ class Emitter {
             if (this.isSideEffectFreeRegExpPropertyRead(expr, seenConsts)) {
                 return true;
             }
+            if (this.isSideEffectFreeSymbolDescriptionRead(expr, seenConsts)) {
+                return true;
+            }
             return this.isSideEffectFreeObjectReadOperand(expr.expression, seenConsts);
         }
         if (ts.isElementAccessExpression(expr) && expr.argumentExpression) {
@@ -4711,6 +4714,9 @@ class Emitter {
         if (this.isSideEffectFreeRegExpPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeSymbolDescriptionRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeStringElementAccess(unwrapped, seenConsts)) {
             return true;
         }
@@ -6151,6 +6157,30 @@ class Emitter {
         ]);
         return fields.has(expr.name.text) &&
             this.isSideEffectFreeFreshRegExpOperand(expr.expression, seenConsts);
+    }
+
+    private isSideEffectFreeSymbolDescriptionRead(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!ts.isPropertyAccessExpression(expr) || expr.name.text !== "description") return false;
+        return this.isSideEffectFreeFreshSymbolOperand(expr.expression, seenConsts);
+    }
+
+    private isSideEffectFreeFreshSymbolOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const recv = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(recv) &&
+            ts.isIdentifier(recv.expression) &&
+            this.isUnshadowedGlobalIdentifier(recv.expression, "Symbol")
+        ) {
+            return this.isSideEffectFreeGlobalCall(recv, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(recv, seenConsts);
+        return !!init && this.isSideEffectFreeFreshSymbolOperand(init, seenConsts);
     }
 
     private isSideEffectFreeFreshRegExpOperand(

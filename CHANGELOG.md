@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes unused fresh-Symbol `.description` reads, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused fresh-RegExp readonly property reads, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused fresh-Error `.name` / `.message` reads, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused readonly URL property reads over valid side-effect-free URL constructor operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.

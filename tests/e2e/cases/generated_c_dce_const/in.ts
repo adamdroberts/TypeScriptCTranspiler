@@ -335,6 +335,7 @@ const unused_promise_resolve_error_message_read = Promise.resolve(new Error("dea
 const unused_promise_resolve_type_error_name_read = Promise.resolve(new TypeError("dead_promise_resolve_type_error_name_read").name);
 const unused_promise_resolve_regexp_source_read = Promise.resolve(/dead_promise_resolve_regexp_source_read/gi.source);
 const unused_promise_resolve_regexp_global_read = Promise.resolve(new RegExp("dead_promise_resolve_regexp_global_read", "g").global);
+const unused_promise_resolve_symbol_description_read = Promise.resolve(Symbol("dead_promise_resolve_symbol_description_read").description);
 const unused_promise_resolve_parser_call = Promise.resolve(parseInt("456789", 10));
 const unused_promise_resolve_number_parse_call = Promise.resolve(Number.parseInt("dead_promise_resolve_number_parse", 10));
 const unused_promise_resolve_number_predicate_call = Promise.resolve(Number.isSafeInteger("dead_promise_resolve_number_predicate".length));
@@ -564,6 +565,7 @@ const unused_type_error_name_read = new TypeError("dead_type_error_name_read").n
 const unused_regexp_source_read = /dead_regexp_source_read/gi.source;
 const unused_regexp_flags_read = new RegExp("dead_regexp_flags_read", "ms").flags;
 const unused_regexp_boolean_read = /dead_regexp_boolean_read/y.sticky;
+const unused_symbol_description_read = Symbol("dead_symbol_description_read").description;
 const unused_object_is = Object.is("dead", unused_label);
 const unused_math_abs_call = Math.abs(-1);
 const unused_math_max_call = Math.max(1, 2, 3);
@@ -948,6 +950,7 @@ Promise.resolve(new Error("top_level_dead_promise_resolve_error_message_read").m
 Promise.resolve(new RangeError("top_level_dead_promise_resolve_error_name_read").name);
 Promise.resolve(/top_level_dead_promise_resolve_regexp_source_read/i.source);
 Promise.resolve(new RegExp("top_level_dead_promise_resolve_regexp_unicode_read", "u").unicode);
+Promise.resolve(Symbol("top_level_dead_promise_resolve_symbol_description_read").description);
 Promise.resolve(parseFloat("765432.25"));
 Promise.resolve(Number.parseFloat("top_level_dead_promise_resolve_number_parse"));
 Promise.resolve(Number.isInteger("top_level_dead_promise_resolve_number_predicate".length));
@@ -1154,6 +1157,7 @@ new SyntaxError("top_level_dead_error_name_read").name;
 /top_level_dead_regexp_source_read/g.source;
 new RegExp("top_level_dead_regexp_flags_read", "im").flags;
 new RegExp("top_level_dead_regexp_boolean_read", "s").dotAll;
+Symbol("top_level_dead_symbol_description_read").description;
 Object.is("top_level_dead_object_is", "dead");
 Math.max("top_level_dead_math_call".length, 1);
 String.fromCharCode("top_level_dead_from_char_code".length);
@@ -1552,6 +1556,7 @@ function usedLocal(value: number): number {
     Promise.resolve(new TypeError("local_dead_promise_resolve_error_name_read").name);
     Promise.resolve(/local_dead_promise_resolve_regexp_source_read/m.source);
     Promise.resolve(new RegExp("local_dead_promise_resolve_regexp_multiline_read", "m").multiline);
+    Promise.resolve(Symbol("local_dead_promise_resolve_symbol_description_read").description);
     Promise.resolve(isFinite("123"));
     Promise.resolve(Number.parseInt("local_dead_promise_resolve_number_parse", 10));
     Promise.resolve(Number.isFinite("local_dead_promise_resolve_number_predicate".length));
@@ -1760,6 +1765,7 @@ function usedLocal(value: number): number {
     /local_dead_regexp_source_read/g.source;
     new RegExp("local_dead_regexp_flags_read", "im").flags;
     new RegExp("local_dead_regexp_boolean_read", "s").dotAll;
+    Symbol("local_dead_symbol_description_read").description;
     Object.is("local_dead_object_is", "dead");
     Math.min("local_dead_math_call".length, 1);
     String.fromCharCode("local_dead_from_char_code".length);
