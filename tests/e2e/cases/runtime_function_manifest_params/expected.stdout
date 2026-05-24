@@ -1,2 +1,4 @@
 manifest function params: 17
 manifest new function params: manifest-params
+local manifest function params: 23
+local manifest new function params: local-manifest-params

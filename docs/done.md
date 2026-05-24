@@ -1527,7 +1527,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `runtime_function_constructor` | constant-body `new Function(...)` compiles AOT |
 | `runtime_function_constructor_unknown` | expected diagnostic for unknown-source `new Function(...)` runtime compilation |
 | `runtime_function_manifest` | manifest-listed non-constant `Function(...)` and `new Function(...)` bodies dispatch to generated AOT constants |
-| `runtime_function_manifest_params` | manifest-listed `Function(...)` bodies dispatch from the final argument when parameter names are static |
+| `runtime_function_manifest_params` | manifest-listed `Function(...)` bodies dispatch from the final argument when parameter names are static, including earlier local static `const` aliases |
 | `runtime_function_params_aot` | constant-body `Function(...)` with static parameter-name strings compiles AOT |
 | `runtime_function_unsafe_bridge` | `--unsafe-eval --emit-c-only` emits the embedded Node bridge for unknown Function source |
 | `runtime_function_constructor_unsafe_bridge` | `--unsafe-eval --emit-c-only` emits the embedded Node bridge for unknown new Function source |
