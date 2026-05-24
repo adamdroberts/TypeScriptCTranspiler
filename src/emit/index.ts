@@ -946,8 +946,30 @@ class Emitter {
         ) {
             return true;
         }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            this.isSideEffectFreeArrayReturningArrayHelperCall(unwrapped, seenConsts)
+        ) {
+            return true;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeLengthOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeArrayReturningArrayHelperCall(
+        call: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            !ts.isIdentifier(call.expression.expression) ||
+            !this.isUnshadowedGlobalIdentifier(call.expression.expression, "Array")
+        ) {
+            return false;
+        }
+        const method = call.expression.name.text;
+        return (method === "of" || method === "from") &&
+            this.isSideEffectFreeStaticCall(call, seenConsts);
     }
 
     private isSideEffectFreeArrayReturningObjectHelperCall(
