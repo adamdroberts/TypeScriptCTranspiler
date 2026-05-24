@@ -1898,7 +1898,21 @@ class Emitter {
             if (name === "RegExp") return this.isSideEffectFreeRegExpConstructorArgs(args, seenConsts);
             if (name === "Date") return this.isSideEffectFreeDateConstructorArgs(args, seenConsts);
             if (name === "AggregateError") return this.isSideEffectFreeAggregateErrorConstructorArgs(args, seenConsts);
-            if (name === "Map" || name === "Set" || name === "WeakMap" || name === "WeakSet") {
+            if (name === "Map") {
+                return args.length === 0 ||
+                    (
+                        args.length === 1 &&
+                        this.isSideEffectFreeMapConstructorSource(args[0]!, seenConsts)
+                    );
+            }
+            if (name === "Set") {
+                return args.length === 0 ||
+                    (
+                        args.length === 1 &&
+                        this.isSideEffectFreeArrayOperand(args[0]!, seenConsts)
+                    );
+            }
+            if (name === "WeakMap" || name === "WeakSet") {
                 return args.length === 0;
             }
             if (name === "WeakRef") {
@@ -1946,6 +1960,37 @@ class Emitter {
             Array.from(args).slice(3).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
             );
+    }
+
+    private isSideEffectFreeMapConstructorSource(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            return unwrapped.elements.every((element) => {
+                if (!ts.isExpression(element)) return false;
+                const entry = this.unwrapSideEffectFreeStaticExpression(element);
+                return ts.isArrayLiteralExpression(entry) &&
+                    entry.elements.length >= 2 &&
+                    ts.isExpression(entry.elements[0]!) &&
+                    ts.isExpression(entry.elements[1]!) &&
+                    this.isSideEffectFreeTopLevelConstInitializer(entry.elements[0]!, seenConsts) &&
+                    this.isSideEffectFreeTopLevelConstInitializer(entry.elements[1]!, seenConsts);
+            });
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Object") &&
+            unwrapped.expression.name.text === "entries" &&
+            unwrapped.arguments.length === 1
+        ) {
+            return this.isSideEffectFreeObjectCoercionOperand(unwrapped.arguments[0]!, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeMapConstructorSource(init, seenConsts);
     }
 
     private isSideEffectFreeErrorOptionsObject(
