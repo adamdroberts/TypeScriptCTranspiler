@@ -2765,6 +2765,12 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): "present" | "absent" | "unsafe" {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        const descriptorMapResult = this.sideEffectFreePrimitiveDescriptorMapPropertyReadResult(
+            unwrapped,
+            key,
+            seenConsts,
+        );
+        if (descriptorMapResult !== null) return descriptorMapResult;
         if (ts.isObjectLiteralExpression(unwrapped)) {
             return this.sideEffectFreePrimitiveObjectLiteralPropertyReadResult(
                 unwrapped,
@@ -2825,6 +2831,62 @@ class Emitter {
         return init
             ? this.sideEffectFreePrimitiveObjectPropertyOperandResult(init, key, seenConsts)
             : "unsafe";
+    }
+
+    private sideEffectFreePrimitiveDescriptorMapPropertyReadResult(
+        expr: ts.Expression,
+        descriptorKey: string,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "unsafe" | null {
+        if (
+            descriptorKey !== "value" &&
+            descriptorKey !== "writable" &&
+            descriptorKey !== "enumerable" &&
+            descriptorKey !== "configurable" &&
+            descriptorKey !== "get" &&
+            descriptorKey !== "set"
+        ) {
+            return null;
+        }
+        const access = this.sideEffectFreeOwnPropertyDescriptorsAccess(expr, seenConsts);
+        if (access === null) return null;
+        return this.sideEffectFreePrimitiveObjectOrArrayPropertyResult(
+            access.target,
+            access.key,
+            new Set(seenConsts),
+        ) === "present"
+            ? "present"
+            : "unsafe";
+    }
+
+    private sideEffectFreeOwnPropertyDescriptorsAccess(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): { target: ts.Expression; key: string } | null {
+        let objectExpr: ts.Expression;
+        let key: string | null;
+        if (ts.isPropertyAccessExpression(expr)) {
+            objectExpr = expr.expression;
+            key = expr.name.text;
+        } else if (ts.isElementAccessExpression(expr) && expr.argumentExpression) {
+            objectExpr = expr.expression;
+            key = this.sideEffectFreeObjectPropertyReadKey(expr.argumentExpression, seenConsts);
+        } else {
+            return null;
+        }
+        if (key === null) return null;
+        const unwrappedObject = this.unwrapSideEffectFreeStaticExpression(objectExpr);
+        if (
+            !ts.isCallExpression(unwrappedObject) ||
+            !ts.isPropertyAccessExpression(unwrappedObject.expression) ||
+            !ts.isIdentifier(unwrappedObject.expression.expression) ||
+            !this.isUnshadowedGlobalIdentifier(unwrappedObject.expression.expression, "Object") ||
+            unwrappedObject.expression.name.text !== "getOwnPropertyDescriptors" ||
+            unwrappedObject.arguments.length !== 1
+        ) {
+            return null;
+        }
+        return { target: unwrappedObject.arguments[0]!, key };
     }
 
     private sideEffectFreePrimitiveObjectAssignPropertyReadResult(
