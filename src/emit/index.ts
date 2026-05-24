@@ -4468,6 +4468,19 @@ class Emitter {
             return this.isSideEffectFreeObjectEnumerationOperand(targetOperand, new Set(seenConsts));
         }
         if (
+            ts.isCallExpression(unwrapped) &&
+            (
+                this.isObjectAssignCall(unwrapped) ||
+                this.isObjectFromEntriesCall(unwrapped) ||
+                this.isObjectCreateCall(unwrapped) ||
+                this.isObjectDefinePropertyCall(unwrapped) ||
+                this.isObjectDefinePropertiesCall(unwrapped)
+            ) &&
+            this.isSideEffectFreeStaticCall(unwrapped, seenConsts)
+        ) {
+            return true;
+        }
+        if (
             ts.isNewExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
             (
