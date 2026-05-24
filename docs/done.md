@@ -533,6 +533,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - TypeScript type-checking via the official compiler API — any TS type error is surfaced with full source context (file:line:col + code frame) before emission. Test: try `/tmp/bad.ts` with `const x: number = "str"`.
 - Unsupported-feature diagnostics include source location and a one-line reason — exit code 3 distinguishes them from TS errors (exit 2) and gcc failures (exit 1).
 - E2E `expected.mainc.contains` assertions check each non-empty line independently, matching `expected.mainc.not_contains` and allowing multiple generated-C preservation markers per case. Test: `generated_c_dce_const`
+- Generated-C DCE treats pure callable `String(...)` and `Date(...)` results as side-effect-free `.length`, string-method, and indexable operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with primitive property reads through `Object.fromEntries(Object.entries(...))` over pure spread-built object literals. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes string-array method calls such as `.join(...)` / `.toString()` on `Object.values(...)` and stringifiable `Object.entries(...)` results over pure spread-built object literals. Test: `generated_c_dce_const`
 - Generated-C DCE uses object-spread-aware element proofs for `Object.values(...)[i]` and `Object.entries(...)[i][j]` over pure object literals, including overwritten keys. Test: `generated_c_dce_const`

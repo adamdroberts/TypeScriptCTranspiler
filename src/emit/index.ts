@@ -1043,6 +1043,9 @@ class Emitter {
         if (this.isSideEffectFreeStringStaticStringCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeCallableGlobalStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -1180,6 +1183,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeStringStaticStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeCallableGlobalStringCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -5028,6 +5034,9 @@ class Emitter {
         if (this.isSideEffectFreeStringStaticStringCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeCallableGlobalStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -5083,6 +5092,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeStringStaticStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeCallableGlobalStringCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -8186,6 +8198,25 @@ class Emitter {
                 )
             );
         return stringStatic && this.isSideEffectFreeStaticCall(unwrapped, seenConsts);
+    }
+
+    private isSideEffectFreeCallableGlobalStringCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            (
+                unwrapped.expression.text === "String" ||
+                unwrapped.expression.text === "Date"
+            )
+        ) {
+            return this.isSideEffectFreeGlobalCall(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeCallableGlobalStringCall(init, seenConsts);
     }
 
     private sideEffectFreeStringLiteralText(
