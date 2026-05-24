@@ -2653,6 +2653,13 @@ class Emitter {
                 seenConsts,
             );
         }
+        if (this.isObjectFromEntriesCall(unwrapped)) {
+            return this.sideEffectFreePrimitiveObjectFromEntriesPropertyReadResult(
+                unwrapped,
+                key,
+                seenConsts,
+            );
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init
             ? this.sideEffectFreePrimitiveObjectPropertyOperandResult(init, key, seenConsts)
@@ -2710,6 +2717,83 @@ class Emitter {
             ts.isIdentifier(expr.expression.expression) &&
             this.isUnshadowedGlobalIdentifier(expr.expression.expression, "Object") &&
             expr.expression.name.text === "assign";
+    }
+
+    private sideEffectFreePrimitiveObjectFromEntriesPropertyReadResult(
+        call: ts.CallExpression,
+        key: string,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        if (call.arguments.length !== 1) return "unsafe";
+        return this.sideEffectFreeObjectFromEntriesPropertyReadResult(
+            call.arguments[0]!,
+            key,
+            seenConsts,
+        );
+    }
+
+    private sideEffectFreeObjectFromEntriesPropertyReadResult(
+        expr: ts.Expression,
+        key: string,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            for (let i = unwrapped.elements.length - 1; i >= 0; i--) {
+                const element = unwrapped.elements[i]!;
+                if (!ts.isExpression(element)) return "unsafe";
+                const entry = this.unwrapSideEffectFreeStaticExpression(element);
+                if (!ts.isArrayLiteralExpression(entry) || entry.elements.length < 2) return "unsafe";
+                if (!entry.elements.every((entryElement) =>
+                    ts.isExpression(entryElement) &&
+                    this.isSideEffectFreeTopLevelConstInitializer(entryElement, seenConsts)
+                )) {
+                    return "unsafe";
+                }
+                const entryKey = this.sideEffectFreeObjectPropertyReadKey(
+                    entry.elements[0]!,
+                    seenConsts,
+                );
+                if (entryKey === null) return "unsafe";
+                if (entryKey === key) {
+                    return this.isSideEffectFreePrimitivePromiseResolveValue(
+                        entry.elements[1]!,
+                        new Set(seenConsts),
+                    )
+                        ? "present"
+                        : "unsafe";
+                }
+            }
+            return "absent";
+        }
+        if (this.isObjectEntriesCall(unwrapped)) {
+            return this.sideEffectFreePrimitiveObjectPropertyOperandResult(
+                unwrapped.arguments[0]!,
+                key,
+                new Set(seenConsts),
+            );
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init
+            ? this.sideEffectFreeObjectFromEntriesPropertyReadResult(init, key, seenConsts)
+            : "unsafe";
+    }
+
+    private isObjectFromEntriesCall(expr: ts.Expression): expr is ts.CallExpression {
+        return ts.isCallExpression(expr) &&
+            ts.isPropertyAccessExpression(expr.expression) &&
+            ts.isIdentifier(expr.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(expr.expression.expression, "Object") &&
+            expr.expression.name.text === "fromEntries";
+    }
+
+    private isObjectEntriesCall(expr: ts.Expression): expr is ts.CallExpression {
+        return ts.isCallExpression(expr) &&
+            ts.isPropertyAccessExpression(expr.expression) &&
+            ts.isIdentifier(expr.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(expr.expression.expression, "Object") &&
+            expr.expression.name.text === "entries" &&
+            expr.arguments.length === 1;
     }
 
     private sideEffectFreePrimitiveObjectLiteralPropertyReadResult(
