@@ -135,6 +135,9 @@ const unused_promise_resolve_nullish_source: string | undefined = String("dead_p
 const unused_promise_resolve_logical_call = Promise.resolve(unused_promise_resolve_logical_source && "dead_promise_resolve_logical_right");
 const unused_promise_resolve_nullish_call = Promise.resolve(unused_promise_resolve_nullish_source ?? "dead_promise_resolve_nullish_right");
 const unused_promise_resolve_comma_call = Promise.resolve((String("dead_promise_resolve_comma_left"), "dead_promise_resolve_comma_right"));
+const unused_promise_resolve_arithmetic_call = Promise.resolve("dead_promise_resolve_arithmetic".length + 3);
+const unused_promise_resolve_comparison_call = Promise.resolve("dead_promise_resolve_comparison".length > 2);
+const unused_promise_resolve_equality_call = Promise.resolve(String("dead_promise_resolve_equality") === "missing");
 const unused_promise_resolve_object_property_call = Promise.resolve({ dead_promise_resolve_object_property: "dead_promise_resolve_object_property" }.dead_promise_resolve_object_property);
 const unused_promise_resolve_object_property_missing_call = Promise.resolve(({ dead_promise_resolve_object_property_missing_source: 1 } as { [key: string]: number }).dead_promise_resolve_object_property_missing);
 const unused_promise_resolve_array_element_call = Promise.resolve(["dead_promise_resolve_array_element"][0]);
@@ -412,6 +415,9 @@ const top_level_dead_promise_resolve_nullish_source: string | undefined = String
 Promise.resolve(top_level_dead_promise_resolve_logical_source || "top_level_dead_promise_resolve_logical_right");
 Promise.resolve(top_level_dead_promise_resolve_nullish_source ?? "top_level_dead_promise_resolve_nullish_right");
 Promise.resolve((String("top_level_dead_promise_resolve_comma_left"), "top_level_dead_promise_resolve_comma_right"));
+Promise.resolve("top_level_dead_promise_resolve_arithmetic".length * 2);
+Promise.resolve("top_level_dead_promise_resolve_comparison".length <= 99);
+Promise.resolve(String("top_level_dead_promise_resolve_equality") !== "missing");
 Promise.resolve({ top_level_dead_promise_resolve_object_property: "top_level_dead_promise_resolve_object_property" }.top_level_dead_promise_resolve_object_property);
 Promise.resolve(({ top_level_dead_promise_resolve_object_property_missing_source: 1 } as { [key: string]: number }).top_level_dead_promise_resolve_object_property_missing);
 Promise.resolve(["top_level_dead_promise_resolve_array_element"][0]);
@@ -700,6 +706,9 @@ function usedLocal(value: number): number {
     Promise.resolve(local_dead_promise_resolve_logical_source && "local_dead_promise_resolve_logical_right");
     Promise.resolve(local_dead_promise_resolve_nullish_source ?? "local_dead_promise_resolve_nullish_right");
     Promise.resolve((String("local_dead_promise_resolve_comma_left"), "local_dead_promise_resolve_comma_right"));
+    Promise.resolve("local_dead_promise_resolve_arithmetic".length - 1);
+    Promise.resolve("local_dead_promise_resolve_comparison".length >= 1);
+    Promise.resolve(String("local_dead_promise_resolve_equality") == "missing");
     Promise.resolve({ local_dead_promise_resolve_object_property: "local_dead_promise_resolve_object_property" }.local_dead_promise_resolve_object_property);
     Promise.resolve(({ local_dead_promise_resolve_object_property_missing_source: 1 } as { [key: string]: number }).local_dead_promise_resolve_object_property_missing);
     Promise.resolve(["local_dead_promise_resolve_array_element"][0]);

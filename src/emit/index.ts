@@ -2522,9 +2522,48 @@ class Emitter {
             case ts.SyntaxKind.CommaToken:
                 return this.isSideEffectFreeTopLevelConstInitializer(expr.left, seenConsts) &&
                     this.isSideEffectFreePrimitivePromiseResolveValue(expr.right, seenConsts);
+            case ts.SyntaxKind.PlusToken:
+            case ts.SyntaxKind.MinusToken:
+            case ts.SyntaxKind.AsteriskToken:
+            case ts.SyntaxKind.SlashToken:
+            case ts.SyntaxKind.PercentToken:
+            case ts.SyntaxKind.AsteriskAsteriskToken:
+            case ts.SyntaxKind.LessThanToken:
+            case ts.SyntaxKind.LessThanEqualsToken:
+            case ts.SyntaxKind.GreaterThanToken:
+            case ts.SyntaxKind.GreaterThanEqualsToken:
+            case ts.SyntaxKind.AmpersandToken:
+            case ts.SyntaxKind.BarToken:
+            case ts.SyntaxKind.CaretToken:
+            case ts.SyntaxKind.LessThanLessThanToken:
+            case ts.SyntaxKind.GreaterThanGreaterThanToken:
+            case ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken:
+                return this.isSideEffectFreePrimitiveNumericBinaryOperand(expr.left, seenConsts) &&
+                    this.isSideEffectFreePrimitiveNumericBinaryOperand(expr.right, seenConsts);
+            case ts.SyntaxKind.EqualsEqualsToken:
+            case ts.SyntaxKind.EqualsEqualsEqualsToken:
+            case ts.SyntaxKind.ExclamationEqualsToken:
+            case ts.SyntaxKind.ExclamationEqualsEqualsToken:
+                return this.isSideEffectFreePrimitivePromiseResolveValue(expr.left, seenConsts) &&
+                    this.isSideEffectFreePrimitivePromiseResolveValue(expr.right, seenConsts);
             default:
                 return false;
         }
+    }
+
+    private isSideEffectFreePrimitiveNumericBinaryOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isPropertyAccessExpression(unwrapped) &&
+            unwrapped.name.text === "length" &&
+            this.isSideEffectFreeLengthOperand(unwrapped.expression, seenConsts)
+        ) {
+            return true;
+        }
+        return this.isSideEffectFreePrimitiveNumberCoercion(unwrapped, seenConsts);
     }
 
     private isSideEffectFreePrimitiveObjectPropertyRead(
