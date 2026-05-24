@@ -152,6 +152,9 @@ const unused_crypto_namespace_hash_digest_call = nodeCrypto.createHash("sha256")
 const unused_new_event_target_call = new EventTarget("dead_new_event_target_ignored".length);
 const unused_new_event_call = new Event("dead_new_event_type", { cancelable: true });
 const unused_event_type_read = new Event("dead_event_type_read").type;
+const unused_event_type_length_read = new Event("dead_event_type_length_read").type.length;
+const unused_event_type_upper_call = (new Event("dead_event_type_upper_call").type.toUpperCase(), "dead_event_type_upper_call_marker".length);
+const unused_event_type_index_read = (new Event("dead_event_type_index_read").type[0], "dead_event_type_index_read_marker".length);
 const unused_event_cancelable_read = new Event("dead_event_cancelable_read", { cancelable: true }).cancelable;
 const unused_event_default_prevented_read = new Event("dead_event_default_prevented_read").defaultPrevented;
 const unused_event_target_read = new Event("dead_event_target_read").target;
@@ -380,6 +383,9 @@ const unused_promise_resolve_event_default_read = Promise.resolve(nodeEvents.Eve
 const unused_promise_resolve_event_named_default_read = Promise.resolve(defaultMaxListeners + "dead_promise_resolve_event_named_default_read".length);
 const unused_promise_resolve_event_alias_default_read = Promise.resolve(ImportedEventEmitter.defaultMaxListeners + "dead_promise_resolve_event_alias_default_read".length);
 const unused_promise_resolve_event_type_read = Promise.resolve(new Event("dead_promise_resolve_event_type_read").type);
+const unused_promise_resolve_event_type_length_read = Promise.resolve(new Event("dead_promise_resolve_event_type_length_read").type.length);
+const unused_promise_resolve_event_type_upper_call = Promise.resolve((new Event("dead_promise_resolve_event_type_upper_call").type.toUpperCase(), "dead_promise_resolve_event_type_upper_call_marker"));
+const unused_promise_resolve_event_type_index_read = Promise.resolve((new Event("dead_promise_resolve_event_type_index_read").type[0], "dead_promise_resolve_event_type_index_read_marker"));
 const unused_promise_resolve_event_cancelable_read = Promise.resolve(new Event("dead_promise_resolve_event_cancelable_read", { cancelable: true }).cancelable);
 const unused_promise_resolve_event_default_prevented_read = Promise.resolve(new Event("dead_promise_resolve_event_default_prevented_read").defaultPrevented);
 const unused_promise_resolve_event_emitter_get_max_call = Promise.resolve(new EventEmitter().getMaxListeners("dead_promise_resolve_event_emitter_get_max_ignored".length));
@@ -1043,6 +1049,9 @@ Promise.resolve(nodeCrypto.createHash("sha512").update("top_level_dead_promise_r
 new EventTarget("top_level_dead_new_event_target_ignored".length);
 new Event("top_level_dead_new_event_type", { cancelable: true });
 new Event("top_level_dead_event_type_read").type;
+new Event("top_level_dead_event_type_length_read").type.length;
+(new Event("top_level_dead_event_type_upper_call").type.toUpperCase(), "top_level_dead_event_type_upper_call_marker".length);
+(new Event("top_level_dead_event_type_index_read").type[0], "top_level_dead_event_type_index_read_marker".length);
 new Event("top_level_dead_event_cancelable_read", { cancelable: true }).cancelable;
 new Event("top_level_dead_event_default_prevented_read").defaultPrevented;
 new Event("top_level_dead_event_target_read").target;
@@ -1056,6 +1065,9 @@ new EventTarget().removeEventListener("top_level_dead_event_target_remove", () =
 Promise.resolve(nodeEvents.defaultMaxListeners + "top_level_dead_promise_resolve_event_default_read".length);
 Promise.resolve(defaultMaxListeners + "top_level_dead_promise_resolve_event_named_default_read".length);
 Promise.resolve(new Event("top_level_dead_promise_resolve_event_type_read").type);
+Promise.resolve(new Event("top_level_dead_promise_resolve_event_type_length_read").type.length);
+Promise.resolve((new Event("top_level_dead_promise_resolve_event_type_upper_call").type.toUpperCase(), "top_level_dead_promise_resolve_event_type_upper_call_marker"));
+Promise.resolve((new Event("top_level_dead_promise_resolve_event_type_index_read").type[0], "top_level_dead_promise_resolve_event_type_index_read_marker"));
 Promise.resolve(new Event("top_level_dead_promise_resolve_event_cancelable_read", { cancelable: true }).cancelable);
 Promise.resolve(new Event("top_level_dead_promise_resolve_event_default_prevented_read").defaultPrevented);
 Promise.resolve(new EventEmitter().getMaxListeners("top_level_dead_promise_resolve_event_emitter_get_max_ignored".length));
@@ -1865,6 +1877,9 @@ function usedLocal(value: number): number {
     new EventTarget("local_dead_new_event_target_ignored".length);
     new Event("local_dead_new_event_type", { cancelable: true });
     new Event("local_dead_event_type_read").type;
+    new Event("local_dead_event_type_length_read").type.length;
+    (new Event("local_dead_event_type_upper_call").type.toUpperCase(), "local_dead_event_type_upper_call_marker".length);
+    (new Event("local_dead_event_type_index_read").type[0], "local_dead_event_type_index_read_marker".length);
     new Event("local_dead_event_cancelable_read", { cancelable: true }).cancelable;
     new Event("local_dead_event_default_prevented_read").defaultPrevented;
     new Event("local_dead_event_target_read").target;
@@ -1878,6 +1893,9 @@ function usedLocal(value: number): number {
     Promise.resolve(nodeEvents.defaultMaxListeners + "local_dead_promise_resolve_event_default_read".length);
     Promise.resolve(defaultMaxListeners + "local_dead_promise_resolve_event_named_default_read".length);
     Promise.resolve(new Event("local_dead_promise_resolve_event_type_read").type);
+    Promise.resolve(new Event("local_dead_promise_resolve_event_type_length_read").type.length);
+    Promise.resolve((new Event("local_dead_promise_resolve_event_type_upper_call").type.toUpperCase(), "local_dead_promise_resolve_event_type_upper_call_marker"));
+    Promise.resolve((new Event("local_dead_promise_resolve_event_type_index_read").type[0], "local_dead_promise_resolve_event_type_index_read_marker"));
     Promise.resolve(new Event("local_dead_promise_resolve_event_cancelable_read", { cancelable: true }).cancelable);
     Promise.resolve(new Event("local_dead_promise_resolve_event_default_prevented_read").defaultPrevented);
     Promise.resolve(new EventEmitter().getMaxListeners("local_dead_promise_resolve_event_emitter_get_max_ignored".length));

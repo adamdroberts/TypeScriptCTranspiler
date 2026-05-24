@@ -1022,6 +1022,9 @@ class Emitter {
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeEventTypePropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -1138,6 +1141,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeEventTypePropertyRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -4935,6 +4941,9 @@ class Emitter {
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeEventTypePropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -4969,6 +4978,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeEventTypePropertyRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -5267,6 +5279,15 @@ class Emitter {
         if (!ts.isPropertyAccessExpression(expr)) return false;
         const fields = new Set(["type", "defaultPrevented", "cancelable"]);
         return fields.has(expr.name.text) &&
+            this.isSideEffectFreeFreshEventOperand(expr.expression, seenConsts);
+    }
+
+    private isSideEffectFreeEventTypePropertyRead(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return ts.isPropertyAccessExpression(expr) &&
+            expr.name.text === "type" &&
             this.isSideEffectFreeFreshEventOperand(expr.expression, seenConsts);
     }
 
