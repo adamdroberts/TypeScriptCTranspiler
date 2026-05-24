@@ -5,7 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
-- Generated-C DCE now uses exact static numeric and boolean `Array.from(new Map(...))` length proofs with duplicate key handling, enabling unused in-range `.with(...)` calls on multi-entry primitive-key Maps to be pruned. Test: `generated_c_dce_const`.
+- Generated-C DCE now uses exact static numeric, boolean, and fresh object-key `Array.from(new Map(...))` length proofs, enabling unused in-range `.with(...)` calls on multi-entry primitive/object-key Maps to be pruned. Test: `generated_c_dce_const`.
 - Typed `ObjectEntry<V, K>` tuples can now carry non-string keys through `new Map(entries)`, `Map.entries()`, `Array.from(map)`, and direct `new WeakMap(entries)` construction when key/value types match. Test: `map_object_entry_constructors`.
 - `WeakSet<T>` constructor calls can now initialize from typed `Set<T>` sources with matching object element types, and generated-C DCE only prunes typed Set sources when empty or statically object-proven. Tests: `weak_collections`, `generated_c_dce_const`, `weak_set_primitive_set_source_reject`.
 - Generated-C DCE now keeps `WeakMap(...)` constructors over typed `Map` sources unless the Map source is empty or statically object-key-proven, preserving primitive-key rejection. Tests: `generated_c_dce_const`, `weak_map_primitive_map_source_reject`.

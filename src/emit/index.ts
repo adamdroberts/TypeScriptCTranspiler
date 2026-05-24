@@ -2494,7 +2494,8 @@ class Emitter {
     ): number | null {
         return this.sideEffectFreeStringKeyMapConstructorSourceLength(expr, seenConsts) ??
             this.sideEffectFreeNumericKeyMapConstructorSourceLength(expr, seenConsts) ??
-            this.sideEffectFreeBooleanKeyMapConstructorSourceLength(expr, seenConsts);
+            this.sideEffectFreeBooleanKeyMapConstructorSourceLength(expr, seenConsts) ??
+            this.sideEffectFreeFreshObjectKeyMapConstructorSourceLength(expr, seenConsts);
     }
 
     private sideEffectFreeStringKeyMapConstructorSourceLength(
@@ -2622,6 +2623,46 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeBooleanKeyMapConstructorSourceLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeFreshObjectKeyMapConstructorSourceLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        const elements = this.sideEffectFreeMapArraySourceExpressions(unwrapped, seenConsts);
+        if (elements) {
+            for (const element of elements) {
+                const entry = this.sideEffectFreeMapEntryArrayLiteral(element, seenConsts);
+                if (!entry || entry.elements.length < 2) return null;
+                const key = entry.elements[0]!;
+                if (
+                    !ts.isExpression(key) ||
+                    !this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(key, seenConsts)
+                ) {
+                    return null;
+                }
+                for (const entryElement of entry.elements) {
+                    if (
+                        !ts.isExpression(entryElement) ||
+                        !this.isSideEffectFreeTopLevelConstInitializer(entryElement, seenConsts)
+                    ) {
+                        return null;
+                    }
+                }
+            }
+            return elements.length;
+        }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map") &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+        ) {
+            return this.sideEffectFreeNewCollectionLength(unwrapped, "Map", seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeFreshObjectKeyMapConstructorSourceLength(init, seenConsts) : null;
     }
 
     private sideEffectFreeMapEntryArrayLiteral(
