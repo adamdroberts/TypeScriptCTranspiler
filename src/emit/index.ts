@@ -2147,6 +2147,16 @@ class Emitter {
             return keys.size;
         }
         if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Object") &&
+            unwrapped.expression.name.text === "entries" &&
+            unwrapped.arguments.length === 1
+        ) {
+            return this.sideEffectFreeObjectEntriesLength(unwrapped.arguments[0]!, seenConsts);
+        }
+        if (
             ts.isNewExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
             this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map") &&
