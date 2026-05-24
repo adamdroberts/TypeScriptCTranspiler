@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes unused pure `EventEmitter`, `EventTarget`, and bounded `Event` constructor calls, including named `EventEmitter` imports. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused pure process metadata calls such as `cwd()`, `uptime()`, `hrtime()`, `hrtime.bigint()`, POSIX id/group reads, and no-argument `umask()`, including primitive `Promise.resolve(...)` inputs where the result is primitive. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused pure `Buffer.toString(...)`, `Buffer.toLocaleString(...)`, and `Buffer.valueOf(...)` calls on fresh side-effect-free Buffer operands, including primitive `Promise.resolve(...)` inputs for string-returning methods. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused pure `Buffer.from(...)`, `Buffer.alloc(...)`, `Buffer.allocUnsafe(...)`, and `Buffer.allocUnsafeSlow(...)` allocations when their bounded arguments cannot throw. Test: `generated_c_dce_const`.

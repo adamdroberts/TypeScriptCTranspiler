@@ -100,6 +100,10 @@ const unused_event_default_read = EventEmitter.defaultMaxListeners + "dead_event
 const unused_event_namespace_default_read = nodeEvents.defaultMaxListeners + "dead_event_namespace_default_read".length;
 const unused_event_named_default_read = defaultMaxListeners + "dead_event_named_default_read".length;
 const unused_event_alias_default_read = ImportedEventEmitter.defaultMaxListeners + "dead_event_alias_default_read".length;
+const unused_new_event_emitter_call = new EventEmitter("dead_new_event_emitter_ignored".length);
+const unused_new_imported_event_emitter_call = new ImportedEventEmitter("dead_new_imported_event_emitter_ignored".length);
+const unused_new_event_target_call = new EventTarget("dead_new_event_target_ignored".length);
+const unused_new_event_call = new Event("dead_new_event_type", { cancelable: true });
 const unused_os_platform_call = nodeOs.platform("dead_os_platform_ignored".length);
 const unused_os_named_arch_call = osArch("dead_os_named_arch_ignored".length);
 const unused_os_loadavg_call = nodeOs.loadavg("dead_os_loadavg_ignored".length);
@@ -818,6 +822,10 @@ Promise.resolve(ALL + "top_level_dead_promise_resolve_dns_named_constant_read".l
 EventEmitter.defaultMaxListeners + "top_level_dead_event_default_read".length;
 nodeEvents.EventEmitter.defaultMaxListeners + "top_level_dead_event_namespace_default_read".length;
 defaultMaxListeners + "top_level_dead_event_named_default_read".length;
+new EventEmitter("top_level_dead_new_event_emitter_ignored".length);
+new ImportedEventEmitter("top_level_dead_new_imported_event_emitter_ignored".length);
+new EventTarget("top_level_dead_new_event_target_ignored".length);
+new Event("top_level_dead_new_event_type", { cancelable: true });
 Promise.resolve(nodeEvents.defaultMaxListeners + "top_level_dead_promise_resolve_event_default_read".length);
 Promise.resolve(defaultMaxListeners + "top_level_dead_promise_resolve_event_named_default_read".length);
 nodeOs.type("top_level_dead_os_type_ignored".length);
@@ -1496,6 +1504,10 @@ function usedLocal(value: number): number {
     EventEmitter.defaultMaxListeners + "local_dead_event_default_read".length;
     nodeEvents.EventEmitter.defaultMaxListeners + "local_dead_event_namespace_default_read".length;
     defaultMaxListeners + "local_dead_event_named_default_read".length;
+    new EventEmitter("local_dead_new_event_emitter_ignored".length);
+    new ImportedEventEmitter("local_dead_new_imported_event_emitter_ignored".length);
+    new EventTarget("local_dead_new_event_target_ignored".length);
+    new Event("local_dead_new_event_type", { cancelable: true });
     Promise.resolve(nodeEvents.defaultMaxListeners + "local_dead_promise_resolve_event_default_read".length);
     Promise.resolve(defaultMaxListeners + "local_dead_promise_resolve_event_named_default_read".length);
     nodeOs.type("local_dead_os_type_ignored".length);

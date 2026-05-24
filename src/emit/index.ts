@@ -4681,6 +4681,26 @@ class Emitter {
     ): boolean {
         if (!ts.isIdentifier(expr.expression)) return false;
         const name = expr.expression.text;
+        const args = expr.arguments ?? ts.factory.createNodeArray();
+        if (this.isEventEmitterConstructorIdentifier(expr.expression)) {
+            return Array.from(args).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+        }
+        if (
+            name === "EventTarget" &&
+            this.isUnshadowedGlobalIdentifier(expr.expression, "EventTarget")
+        ) {
+            return Array.from(args).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+        }
+        if (
+            name === "Event" &&
+            this.isUnshadowedGlobalIdentifier(expr.expression, "Event")
+        ) {
+            return this.isSideEffectFreeEventConstructorArgs(args, seenConsts);
+        }
         const pureErrorConstructors = new Set([
             "Error",
             "TypeError",
@@ -4692,7 +4712,6 @@ class Emitter {
         ]);
         if (!pureErrorConstructors.has(name) || !this.isUnshadowedGlobalIdentifier(expr.expression, name)) {
             if (!this.isUnshadowedGlobalIdentifier(expr.expression, name)) return false;
-            const args = expr.arguments ?? ts.factory.createNodeArray();
             if (name === "RegExp") return this.isSideEffectFreeRegExpConstructorArgs(args, seenConsts);
             if (name === "Date") return this.isSideEffectFreeDateConstructorArgs(args, seenConsts);
             if (name === "AggregateError") return this.isSideEffectFreeAggregateErrorConstructorArgs(args, seenConsts);
@@ -4735,12 +4754,31 @@ class Emitter {
             }
             return false;
         }
-        const args = Array.from(expr.arguments ?? []);
-        if (args.length === 0) return true;
-        return this.isSideEffectFreePrimitiveNumberCoercion(args[0]!, seenConsts) &&
-            args.slice(1).every((arg) =>
+        const errorArgs = Array.from(args);
+        if (errorArgs.length === 0) return true;
+        return this.isSideEffectFreePrimitiveNumberCoercion(errorArgs[0]!, seenConsts) &&
+            errorArgs.slice(1).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-            );
+        );
+    }
+
+    private isSideEffectFreeEventConstructorArgs(
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (args.length < 1 || args.length > 2) return false;
+        if (!this.isSideEffectFreeStringCoercion(args[0]!, seenConsts)) return false;
+        const options = args[1];
+        if (!options || this.isUndefinedExpression(options)) return true;
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(options);
+        if (!ts.isObjectLiteralExpression(unwrapped)) return false;
+        return unwrapped.properties.every((prop) => {
+            if (!ts.isPropertyAssignment(prop) || !ts.isIdentifier(prop.name)) return false;
+            if (prop.name.text !== "cancelable") return false;
+            if (this.isUndefinedExpression(prop.initializer)) return true;
+            return prop.initializer.kind === ts.SyntaxKind.TrueKeyword ||
+                prop.initializer.kind === ts.SyntaxKind.FalseKeyword;
+        });
     }
 
     private isSideEffectFreeDateConstructorArgs(
