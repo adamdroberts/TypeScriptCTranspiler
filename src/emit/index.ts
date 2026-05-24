@@ -1127,6 +1127,9 @@ class Emitter {
         if (this.isSideEffectFreeFinRegistryMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeBuiltinObjectPrototypeMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
@@ -1575,6 +1578,7 @@ class Emitter {
                 if (
                     this.isSideEffectFreeStringMethodCall(recv, method, call.arguments, seenConsts) ||
                     this.isSideEffectFreeArrayMethodCall(recv, method, call.arguments, seenConsts) ||
+                    this.isSideEffectFreeBuiltinObjectPrototypeMethodCall(recv, method, call.arguments, seenConsts) ||
                     this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts)
                 ) {
                     return true;
@@ -1617,6 +1621,12 @@ class Emitter {
                     return true;
                 }
                 break;
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+                if (this.isSideEffectFreeBuiltinObjectPrototypeMethodCall(recv, method, call.arguments, seenConsts)) {
+                    return true;
+                }
+                break;
         }
         if (this.isSideEffectFreeDateMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
@@ -1626,6 +1636,38 @@ class Emitter {
         }
         return method === "test" &&
             this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts);
+    }
+
+    private isSideEffectFreeBuiltinObjectPrototypeMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const recvPure = this.isSideEffectFreeFreshMapOperand(recv, seenConsts) ||
+            this.isSideEffectFreeFreshSetOperand(recv, seenConsts) ||
+            this.isSideEffectFreeFreshWeakMapOperand(recv, seenConsts) ||
+            this.isSideEffectFreeFreshWeakSetOperand(recv, seenConsts) ||
+            this.isSideEffectFreeFreshWeakRefOperand(recv, seenConsts) ||
+            this.isSideEffectFreeFreshFinRegistryOperand(recv, seenConsts);
+        if (!recvPure) return false;
+        switch (method) {
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+                return args.length >= 1 &&
+                    this.isSideEffectFreePropertyKeyCoercion(args[0]!, seenConsts) &&
+                    Array.from(args).slice(1).every((arg) =>
+                        this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                    );
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                return Array.from(args).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+            default:
+                return false;
+        }
     }
 
     private isSideEffectFreeArrayMethodCall(
