@@ -2334,6 +2334,9 @@ class Emitter {
         if (ts.isConditionalExpression(unwrapped) && this.isSideEffectFreePrimitiveConditionalExpression(unwrapped, seenConsts)) {
             return true;
         }
+        if (ts.isBinaryExpression(unwrapped) && this.isSideEffectFreePrimitiveBinaryExpression(unwrapped, seenConsts)) {
+            return true;
+        }
         if (
             ts.isIdentifier(unwrapped) &&
             (
@@ -2479,6 +2482,49 @@ class Emitter {
         return this.isSideEffectFreeTopLevelConstInitializer(expr.condition, seenConsts) &&
             this.isSideEffectFreePrimitivePromiseResolveValue(expr.whenTrue, seenConsts) &&
             this.isSideEffectFreePrimitivePromiseResolveValue(expr.whenFalse, seenConsts);
+    }
+
+    private isSideEffectFreePrimitiveBinaryExpression(
+        expr: ts.BinaryExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        switch (expr.operatorToken.kind) {
+            case ts.SyntaxKind.AmpersandAmpersandToken: {
+                const left = this.staticBooleanValue(expr.left, seenConsts);
+                if (left === false) return this.isSideEffectFreePrimitivePromiseResolveValue(expr.left, seenConsts);
+                if (left === true) {
+                    return this.isSideEffectFreeTopLevelConstInitializer(expr.left, seenConsts) &&
+                        this.isSideEffectFreePrimitivePromiseResolveValue(expr.right, seenConsts);
+                }
+                return this.isSideEffectFreePrimitivePromiseResolveValue(expr.left, seenConsts) &&
+                    this.isSideEffectFreePrimitivePromiseResolveValue(expr.right, seenConsts);
+            }
+            case ts.SyntaxKind.BarBarToken: {
+                const left = this.staticBooleanValue(expr.left, seenConsts);
+                if (left === true) return this.isSideEffectFreePrimitivePromiseResolveValue(expr.left, seenConsts);
+                if (left === false) {
+                    return this.isSideEffectFreeTopLevelConstInitializer(expr.left, seenConsts) &&
+                        this.isSideEffectFreePrimitivePromiseResolveValue(expr.right, seenConsts);
+                }
+                return this.isSideEffectFreePrimitivePromiseResolveValue(expr.left, seenConsts) &&
+                    this.isSideEffectFreePrimitivePromiseResolveValue(expr.right, seenConsts);
+            }
+            case ts.SyntaxKind.QuestionQuestionToken: {
+                const left = this.staticNullishState(expr.left, seenConsts);
+                if (left === "nonNullish") return this.isSideEffectFreePrimitivePromiseResolveValue(expr.left, seenConsts);
+                if (left === "nullish") {
+                    return this.isSideEffectFreeTopLevelConstInitializer(expr.left, seenConsts) &&
+                        this.isSideEffectFreePrimitivePromiseResolveValue(expr.right, seenConsts);
+                }
+                return this.isSideEffectFreePrimitivePromiseResolveValue(expr.left, seenConsts) &&
+                    this.isSideEffectFreePrimitivePromiseResolveValue(expr.right, seenConsts);
+            }
+            case ts.SyntaxKind.CommaToken:
+                return this.isSideEffectFreeTopLevelConstInitializer(expr.left, seenConsts) &&
+                    this.isSideEffectFreePrimitivePromiseResolveValue(expr.right, seenConsts);
+            default:
+                return false;
+        }
     }
 
     private isSideEffectFreePrimitiveObjectPropertyRead(
