@@ -823,6 +823,7 @@ class Emitter {
         if (ts.isCallExpression(expr)) {
             return this.isSideEffectFreeSymbolStringMethodCall(expr, seenConsts) ||
                 this.isSideEffectFreeObjectPrototypeToStringCall(expr, seenConsts) ||
+                this.isSideEffectFreeObjectPrototypeToLocaleStringCall(expr, seenConsts) ||
                 this.isSideEffectFreeStaticCall(expr, seenConsts) ||
                 this.isSideEffectFreeGlobalCall(expr, seenConsts);
         }
@@ -1057,6 +1058,9 @@ class Emitter {
         if (this.isSideEffectFreeObjectPrototypeToStringCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeObjectPrototypeToLocaleStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -1236,6 +1240,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeObjectPrototypeToStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeObjectPrototypeToLocaleStringCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
@@ -2729,6 +2736,45 @@ class Emitter {
         return Array.from(unwrapped.arguments).every((arg) =>
             this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
         );
+    }
+
+    private isSideEffectFreeObjectPrototypeToLocaleStringCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (!ts.isCallExpression(unwrapped)) {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+            return !!init && this.isSideEffectFreeObjectPrototypeToLocaleStringCall(init, seenConsts);
+        }
+        if (!ts.isPropertyAccessExpression(unwrapped.expression) || unwrapped.expression.name.text !== "call") {
+            return false;
+        }
+        const methodAccess = unwrapped.expression.expression;
+        if (
+            !ts.isPropertyAccessExpression(methodAccess) ||
+            methodAccess.name.text !== "toLocaleString"
+        ) {
+            return false;
+        }
+        const prototypeAccess = methodAccess.expression;
+        if (
+            !ts.isPropertyAccessExpression(prototypeAccess) ||
+            prototypeAccess.name.text !== "prototype" ||
+            !ts.isIdentifier(prototypeAccess.expression) ||
+            !this.isUnshadowedGlobalIdentifier(prototypeAccess.expression, "Object") ||
+            unwrapped.arguments.length < 1
+        ) {
+            return false;
+        }
+        const receiver = unwrapped.arguments[0]!;
+        return (
+            this.isSideEffectFreeStringCoercion(receiver, seenConsts) ||
+            this.isSideEffectFreeNonStringPrimitiveObjectOperand(receiver, seenConsts)
+        ) &&
+            Array.from(unwrapped.arguments).slice(1).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
     }
 
     private isSideEffectFreeArrayMethodCall(
@@ -5207,6 +5253,9 @@ class Emitter {
         if (this.isSideEffectFreeObjectPrototypeToStringCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeObjectPrototypeToLocaleStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -5304,6 +5353,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeObjectPrototypeToStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeObjectPrototypeToLocaleStringCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
@@ -6442,6 +6494,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeObjectPrototypeToStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeObjectPrototypeToLocaleStringCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeRegExpPropertyRead(unwrapped, seenConsts)) {
