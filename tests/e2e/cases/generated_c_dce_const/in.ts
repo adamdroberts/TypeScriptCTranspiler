@@ -682,6 +682,8 @@ const unused_promise_resolve_object_prototype_to_string_index_read = Promise.res
 const unused_promise_resolve_object_prototype_to_locale_length_read = Promise.resolve(Object.prototype.toLocaleString.call("dead_promise_resolve_object_prototype_to_locale_length").length + "dead_promise_resolve_object_prototype_to_locale_length_read".length);
 const unused_promise_resolve_object_prototype_to_locale_upper_call = Promise.resolve((Object.prototype.toLocaleString.call(false).toUpperCase(), "dead_promise_resolve_object_prototype_to_locale_upper_call_marker"));
 const unused_promise_resolve_object_prototype_to_locale_index_read = Promise.resolve((Object.prototype.toLocaleString.call(789n)[0], "dead_promise_resolve_object_prototype_to_locale_index_read_marker"));
+const unused_promise_resolve_object_prototype_to_string_call = Promise.resolve(Object.prototype.toString.call({ dead_promise_resolve_object_prototype_to_string_call: 1 }));
+const unused_promise_resolve_object_prototype_to_locale_call = Promise.resolve(Object.prototype.toLocaleString.call("dead_promise_resolve_object_prototype_to_locale_call"));
 const unused_promise_resolve_parser_call = Promise.resolve(parseInt("456789", 10));
 const unused_promise_resolve_number_parse_call = Promise.resolve(Number.parseInt("dead_promise_resolve_number_parse", 10));
 const unused_promise_resolve_number_predicate_call = Promise.resolve(Number.isSafeInteger("dead_promise_resolve_number_predicate".length));
@@ -947,6 +949,8 @@ const unused_object_prototype_to_string_index_read = (Object.prototype.toString.
 const unused_object_prototype_to_locale_length_read = Object.prototype.toLocaleString.call("dead_object_prototype_to_locale_length").length + "dead_object_prototype_to_locale_length_read".length;
 const unused_object_prototype_to_locale_upper_call = (Object.prototype.toLocaleString.call(123).toUpperCase(), "dead_object_prototype_to_locale_upper_call_marker".length);
 const unused_object_prototype_to_locale_index_read = (Object.prototype.toLocaleString.call(456n)[0], "dead_object_prototype_to_locale_index_read_marker".length);
+const unused_object_prototype_to_string_call = Object.prototype.toString.call({ dead_object_prototype_to_string_call: 1 });
+const unused_object_prototype_to_locale_call = Object.prototype.toLocaleString.call("dead_object_prototype_to_locale_call");
 const unused_object_is = Object.is("dead", unused_label);
 const unused_math_abs_call = Math.abs(-1);
 const unused_math_max_call = Math.max(1, 2, 3);
@@ -1501,6 +1505,8 @@ Promise.resolve((Object.prototype.toString.call(null)[0], "top_level_dead_promis
 Promise.resolve(Object.prototype.toLocaleString.call("top_level_dead_promise_resolve_object_prototype_to_locale_length").length + "top_level_dead_promise_resolve_object_prototype_to_locale_length_read".length);
 Promise.resolve((Object.prototype.toLocaleString.call(true).toUpperCase(), "top_level_dead_promise_resolve_object_prototype_to_locale_upper_call_marker"));
 Promise.resolve((Object.prototype.toLocaleString.call(654n)[0], "top_level_dead_promise_resolve_object_prototype_to_locale_index_read_marker"));
+Promise.resolve(Object.prototype.toString.call({ top_level_dead_promise_resolve_object_prototype_to_string_call: 1 }));
+Promise.resolve(Object.prototype.toLocaleString.call("top_level_dead_promise_resolve_object_prototype_to_locale_call"));
 Promise.resolve("top_level_dead_promise_resolve_string_length".length);
 Promise.resolve(["top_level_dead_promise_resolve_array_length"].length);
 Promise.resolve("top_level_dead_promise_resolve_string_element"[1]);
@@ -1897,6 +1903,8 @@ Object.prototype.toString.call({ top_level_dead_object_prototype_to_string_lengt
 Object.prototype.toLocaleString.call("top_level_dead_object_prototype_to_locale_length").length + "top_level_dead_object_prototype_to_locale_length_read".length;
 (Object.prototype.toLocaleString.call(false).toUpperCase(), "top_level_dead_object_prototype_to_locale_upper_call_marker".length);
 (Object.prototype.toLocaleString.call(987n)[0], "top_level_dead_object_prototype_to_locale_index_read_marker".length);
+Object.prototype.toString.call({ top_level_dead_object_prototype_to_string_call: 1 });
+Object.prototype.toLocaleString.call("top_level_dead_object_prototype_to_locale_call");
 Object.is("top_level_dead_object_is", "dead");
 Math.max("top_level_dead_math_call".length, 1);
 String.fromCharCode("top_level_dead_from_char_code".length);
@@ -2465,6 +2473,8 @@ function usedLocal(value: number): number {
     Promise.resolve(Object.prototype.toLocaleString.call("local_dead_promise_resolve_object_prototype_to_locale_length").length + "local_dead_promise_resolve_object_prototype_to_locale_length_read".length);
     Promise.resolve((Object.prototype.toLocaleString.call(false).toUpperCase(), "local_dead_promise_resolve_object_prototype_to_locale_upper_call_marker"));
     Promise.resolve((Object.prototype.toLocaleString.call(321n)[0], "local_dead_promise_resolve_object_prototype_to_locale_index_read_marker"));
+    Promise.resolve(Object.prototype.toString.call({ local_dead_promise_resolve_object_prototype_to_string_call: 1 }));
+    Promise.resolve(Object.prototype.toLocaleString.call("local_dead_promise_resolve_object_prototype_to_locale_call"));
     Promise.resolve("local_dead_promise_resolve_string_length".length);
     Promise.resolve(["local_dead_promise_resolve_array_length"].length);
     Promise.resolve("local_dead_promise_resolve_string_element"[2]);
@@ -2863,6 +2873,8 @@ function usedLocal(value: number): number {
     Object.prototype.toLocaleString.call("local_dead_object_prototype_to_locale_length").length + "local_dead_object_prototype_to_locale_length_read".length;
     (Object.prototype.toLocaleString.call(true).toUpperCase(), "local_dead_object_prototype_to_locale_upper_call_marker".length);
     (Object.prototype.toLocaleString.call(789n)[0], "local_dead_object_prototype_to_locale_index_read_marker".length);
+    Object.prototype.toString.call({ local_dead_object_prototype_to_string_call: 1 });
+    Object.prototype.toLocaleString.call("local_dead_object_prototype_to_locale_call");
     Object.is("local_dead_object_is", "dead");
     Math.min("local_dead_math_call".length, 1);
     String.fromCharCode("local_dead_from_char_code".length);
