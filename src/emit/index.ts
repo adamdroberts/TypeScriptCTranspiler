@@ -1483,6 +1483,12 @@ class Emitter {
             return true;
         }
         if (
+            this.isPathPosixReceiver(recv) &&
+            this.isSideEffectFreePathCall(method, call.arguments, seenConsts)
+        ) {
+            return true;
+        }
+        if (
             ts.isIdentifier(recv) &&
             this.isNetModuleIdentifier(recv) &&
             this.isSideEffectFreeNetCall(method, call.arguments, seenConsts)
@@ -1650,8 +1656,12 @@ class Emitter {
     ): boolean {
         if (!ts.isPropertyAccessExpression(call.expression)) return false;
         const recv = call.expression.expression;
-        if (!ts.isIdentifier(recv)) return false;
         const method = call.expression.name.text;
+        if (this.isPathPosixReceiver(recv)) {
+            return this.isSideEffectFreePrimitivePathCall(method, call.arguments, seenConsts) &&
+                this.isSideEffectFreeStaticCall(call, seenConsts);
+        }
+        if (!ts.isIdentifier(recv)) return false;
         const isPrimitiveReturningHelper =
             (
                 this.isUnshadowedGlobalIdentifier(recv, "Array") &&

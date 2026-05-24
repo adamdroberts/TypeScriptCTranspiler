@@ -10,7 +10,7 @@ import * as nodeNet from "node:net";
 import { EOL as osEOL, arch as osArch, availableParallelism, devNull as osDevNull, userInfo as osUserInfo } from "os";
 import { isIP as netIsIP, isIPv6 as netIsIPv6 } from "net";
 import * as nodeOs from "node:os";
-import { delimiter as pathDelimiter, isAbsolute as pathIsAbsolute, normalize as pathNormalize, sep as pathSep } from "path";
+import { delimiter as pathDelimiter, isAbsolute as pathIsAbsolute, normalize as pathNormalize, posix as pathPosix, sep as pathSep } from "path";
 import * as nodePath from "node:path";
 
 const used_count = 4;
@@ -156,6 +156,9 @@ const unused_os_named_user_info_uid_read = osUserInfo().uid + "dead_os_named_use
 const unused_path_join_call = nodePath.join("dead_path_join_ignored", "tail");
 const unused_path_named_normalize_call = pathNormalize("dead_path_named_normalize_ignored/..");
 const unused_path_parse_call = nodePath.parse("dead_path_parse_ignored");
+const unused_path_posix_join_call = nodePath.posix.join("dead_path_posix_join_ignored", "tail");
+const unused_path_named_posix_normalize_call = pathPosix.normalize("dead_path_named_posix_normalize_ignored/..");
+const unused_path_global_posix_parse_call = path.posix.parse("dead_path_global_posix_parse_ignored");
 const unused_net_is_ip_call = nodeNet.isIP("dead_net_is_ip_ignored");
 const unused_net_named_is_ip_call = netIsIP("dead_net_named_is_ip_ignored");
 const unused_net_global_is_ipv4_call = net.isIPv4("dead_net_global_is_ipv4_ignored");
@@ -360,6 +363,8 @@ const unused_promise_resolve_os_user_info_homedir_read = Promise.resolve(nodeOs.
 const unused_promise_resolve_os_named_user_info_gid_read = Promise.resolve(osUserInfo({ encoding: undefined }).gid + "dead_promise_resolve_os_named_user_info_gid_read".length);
 const unused_promise_resolve_path_absolute_call = Promise.resolve(nodePath.isAbsolute("dead_promise_resolve_path_absolute_ignored"));
 const unused_promise_resolve_path_named_absolute_call = Promise.resolve(pathIsAbsolute("/dead_promise_resolve_path_named_absolute_ignored"));
+const unused_promise_resolve_path_posix_basename_call = Promise.resolve(nodePath.posix.basename("dead_promise_resolve_path_posix_basename_ignored.txt", ".txt"));
+const unused_promise_resolve_path_named_posix_relative_call = Promise.resolve(pathPosix.relative("dead_promise_resolve_path_named_posix_relative_from", "dead_promise_resolve_path_named_posix_relative_to"));
 const unused_promise_resolve_net_is_ipv6_call = Promise.resolve(nodeNet.isIPv6("dead_promise_resolve_net_is_ipv6_ignored"));
 const unused_promise_resolve_net_named_is_ipv6_call = Promise.resolve(netIsIPv6("dead_promise_resolve_net_named_is_ipv6_ignored"));
 const unused_promise_resolve_buffer_byte_length_call = Promise.resolve(Buffer.byteLength("dead_promise_resolve_buffer_byte_length_ignored", "utf-8"));
@@ -985,8 +990,13 @@ Promise.resolve(osUserInfo({ encoding: undefined }).gid + "top_level_dead_promis
 nodePath.relative("top_level_dead_path_relative_from", "top_level_dead_path_relative_to");
 pathNormalize("top_level_dead_path_named_normalize_ignored/..");
 nodePath.parse("top_level_dead_path_parse_ignored");
+nodePath.posix.join("top_level_dead_path_posix_join_ignored", "tail");
+pathPosix.normalize("top_level_dead_path_named_posix_normalize_ignored/..");
+path.posix.toNamespacedPath("top_level_dead_path_global_posix_namespaced_ignored");
 Promise.resolve(nodePath.basename("top_level_dead_promise_resolve_path_basename_ignored.txt", ".txt"));
 Promise.resolve(pathIsAbsolute("/top_level_dead_promise_resolve_path_named_absolute_ignored"));
+Promise.resolve(nodePath.posix.basename("top_level_dead_promise_resolve_path_posix_basename_ignored.txt", ".txt"));
+Promise.resolve(pathPosix.relative("top_level_dead_promise_resolve_path_named_posix_relative_from", "top_level_dead_promise_resolve_path_named_posix_relative_to"));
 nodeNet.isIPv4("top_level_dead_net_is_ipv4_ignored");
 netIsIP("top_level_dead_net_named_is_ip_ignored");
 Promise.resolve(nodeNet.isIP("top_level_dead_promise_resolve_net_is_ip_ignored"));
@@ -1741,8 +1751,13 @@ function usedLocal(value: number): number {
     nodePath.relative("local_dead_path_relative_from", "local_dead_path_relative_to");
     pathNormalize("local_dead_path_named_normalize_ignored/..");
     nodePath.parse("local_dead_path_parse_ignored");
+    nodePath.posix.join("local_dead_path_posix_join_ignored", "tail");
+    pathPosix.normalize("local_dead_path_named_posix_normalize_ignored/..");
+    path.posix.toNamespacedPath("local_dead_path_global_posix_namespaced_ignored");
     Promise.resolve(nodePath.basename("local_dead_promise_resolve_path_basename_ignored.txt", ".txt"));
     Promise.resolve(pathIsAbsolute("/local_dead_promise_resolve_path_named_absolute_ignored"));
+    Promise.resolve(nodePath.posix.basename("local_dead_promise_resolve_path_posix_basename_ignored.txt", ".txt"));
+    Promise.resolve(pathPosix.relative("local_dead_promise_resolve_path_named_posix_relative_from", "local_dead_promise_resolve_path_named_posix_relative_to"));
     nodeNet.isIPv6("local_dead_net_is_ipv6_ignored");
     netIsIP("local_dead_net_named_is_ip_ignored");
     Promise.resolve(nodeNet.isIP("local_dead_promise_resolve_net_is_ip_ignored"));
