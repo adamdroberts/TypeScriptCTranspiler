@@ -3371,9 +3371,60 @@ class Emitter {
                 seenConsts,
             );
         }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set") &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+        ) {
+            const args = Array.from(unwrapped.arguments ?? []);
+            if (args.length === 0) return "absent";
+            if (args.length === 1) {
+                return this.sideEffectFreePrimitiveArrayFromSetElementResult(
+                    args[0]!,
+                    index,
+                    seenConsts,
+                );
+            }
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init
             ? this.sideEffectFreePrimitiveArrayFromElementResult(init, index, seenConsts)
+            : "unsafe";
+    }
+
+    private sideEffectFreePrimitiveArrayFromSetElementResult(
+        expr: ts.Expression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            return this.sideEffectFreePrimitiveArrayLiteralElementResult(
+                unwrapped,
+                index,
+                seenConsts,
+            );
+        }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set") &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+        ) {
+            const args = Array.from(unwrapped.arguments ?? []);
+            if (args.length === 0) return "absent";
+            if (args.length === 1) {
+                return this.sideEffectFreePrimitiveArrayFromSetElementResult(
+                    args[0]!,
+                    index,
+                    seenConsts,
+                );
+            }
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init
+            ? this.sideEffectFreePrimitiveArrayFromSetElementResult(init, index, seenConsts)
             : "unsafe";
     }
 

@@ -174,6 +174,7 @@ const unused_promise_resolve_array_from_array_element_call = Promise.resolve(Arr
 const unused_promise_resolve_array_from_string_element_call = Promise.resolve(Array.from("dead_promise_resolve_array_from_string_element")[0]);
 const unused_promise_resolve_object_keys_element_call = Promise.resolve(Object.keys({ dead_promise_resolve_object_keys_element: 1 })[0]);
 const unused_promise_resolve_object_property_names_element_call = Promise.resolve(Object.getOwnPropertyNames(["dead_promise_resolve_object_property_names_element"])[0]);
+const unused_promise_resolve_array_from_set_element_call = Promise.resolve(Array.from(new Set(["dead_promise_resolve_array_from_set_element"]))[0]);
 const dead_promise_resolve_array_spread_source = ["dead_promise_resolve_array_spread"];
 const unused_promise_resolve_array_spread_call = Promise.resolve([0, ...dead_promise_resolve_array_spread_source][1]);
 const unused_promise_resolve_string_spread_call = Promise.resolve([..."dead_promise_resolve_string_spread"][2]);
@@ -491,6 +492,7 @@ Promise.resolve(Array.from(["top_level_dead_promise_resolve_array_from_array_ele
 Promise.resolve(Array.from("top_level_dead_promise_resolve_array_from_string_element")[0]);
 Promise.resolve(Object.keys({ top_level_dead_promise_resolve_object_keys_element: 1 })[0]);
 Promise.resolve(Object.getOwnPropertyNames(["top_level_dead_promise_resolve_object_property_names_element"])[0]);
+Promise.resolve(Array.from(new Set(["top_level_dead_promise_resolve_array_from_set_element"]))[0]);
 const top_level_dead_promise_resolve_array_spread_source = ["top_level_dead_promise_resolve_array_spread"];
 Promise.resolve([0, ...top_level_dead_promise_resolve_array_spread_source][1]);
 Promise.resolve([..."top_level_dead_promise_resolve_string_spread"][3]);
@@ -819,6 +821,7 @@ function usedLocal(value: number): number {
     Promise.resolve(Array.from("local_dead_promise_resolve_array_from_string_element")[0]);
     Promise.resolve(Object.keys({ local_dead_promise_resolve_object_keys_element: 1 })[0]);
     Promise.resolve(Object.getOwnPropertyNames(["local_dead_promise_resolve_object_property_names_element"])[0]);
+    Promise.resolve(Array.from(new Set(["local_dead_promise_resolve_array_from_set_element"]))[0]);
     const local_dead_promise_resolve_array_spread_source = ["local_dead_promise_resolve_array_spread"];
     Promise.resolve([0, ...local_dead_promise_resolve_array_spread_source][1]);
     Promise.resolve([..."local_dead_promise_resolve_string_spread"][4]);
