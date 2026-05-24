@@ -902,6 +902,9 @@ class Emitter {
             if (expr.name.text === "size") {
                 return this.isSideEffectFreeCollectionSizeOperand(expr.expression, seenConsts);
             }
+            if (this.isSideEffectFreeURLPropertyRead(expr, seenConsts)) {
+                return true;
+            }
             return this.isSideEffectFreeObjectReadOperand(expr.expression, seenConsts);
         }
         if (ts.isElementAccessExpression(expr) && expr.argumentExpression) {
@@ -1685,6 +1688,26 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeFreshURLOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeURLPropertyRead(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!ts.isPropertyAccessExpression(expr)) return false;
+        const fields = new Set([
+            "href",
+            "protocol",
+            "host",
+            "hostname",
+            "port",
+            "pathname",
+            "search",
+            "hash",
+            "origin",
+        ]);
+        return fields.has(expr.name.text) &&
+            this.isSideEffectFreeFreshURLOperand(expr.expression, seenConsts);
     }
 
     private isSideEffectFreeBuiltinObjectPrototypeMethodCall(
@@ -4659,6 +4682,9 @@ class Emitter {
             unwrapped.name.text === "size" &&
             this.isSideEffectFreeCollectionSizeOperand(unwrapped.expression, seenConsts)
         ) {
+            return true;
+        }
+        if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeStringElementAccess(unwrapped, seenConsts)) {
