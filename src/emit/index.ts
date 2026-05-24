@@ -1936,7 +1936,8 @@ class Emitter {
         ) {
             return false;
         }
-        return this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(call.arguments[0]!, seenConsts);
+        return this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(call.arguments[0]!, seenConsts) ||
+            this.isSideEffectFreeNonStringPrimitiveObjectEntriesSource(call.arguments[0]!, seenConsts);
     }
 
     private isSideEffectFreeObjectValuesStringCoercionSource(
@@ -2029,6 +2030,21 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(init, seenConsts);
+    }
+
+    private isSideEffectFreeNonStringPrimitiveObjectEntriesSource(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
+            return false;
+        }
+        if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) {
+            return true;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeNonStringPrimitiveObjectEntriesSource(init, seenConsts);
     }
 
     private isSideEffectFreeObjectAssignStringValuesCall(
