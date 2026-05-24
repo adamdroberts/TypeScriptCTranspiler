@@ -1058,6 +1058,9 @@ class Emitter {
         if (this.isSideEffectFreeJsonStringifyCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeStringReturningStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -1207,6 +1210,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeJsonStringifyCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeStringReturningStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -5070,6 +5076,9 @@ class Emitter {
         if (this.isSideEffectFreeJsonStringifyCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeStringReturningStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -5137,6 +5146,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeJsonStringifyCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeStringReturningStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -6135,6 +6147,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeJsonStringifyCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeStringReturningStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (ts.isConditionalExpression(unwrapped) && this.isSideEffectFreePrimitiveConditionalExpression(unwrapped, seenConsts)) {
@@ -8347,6 +8362,49 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeJsonStringifyOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeStringReturningStringMethodCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (!ts.isCallExpression(unwrapped) || !ts.isPropertyAccessExpression(unwrapped.expression)) {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+            return !!init && this.isSideEffectFreeStringReturningStringMethodCall(init, seenConsts);
+        }
+        const method = unwrapped.expression.name.text;
+        const returnsString =
+            method === "charAt" ||
+            method === "at" ||
+            method === "slice" ||
+            method === "substring" ||
+            method === "substr" ||
+            method === "concat" ||
+            method === "toLocaleString" ||
+            method === "toString" ||
+            method === "valueOf" ||
+            method === "toUpperCase" ||
+            method === "toLowerCase" ||
+            method === "trim" ||
+            method === "trimLeft" ||
+            method === "trimRight" ||
+            method === "trimStart" ||
+            method === "trimEnd" ||
+            method === "toWellFormed" ||
+            method === "normalize" ||
+            method === "repeat" ||
+            method === "padStart" ||
+            method === "padEnd" ||
+            method === "replace" ||
+            method === "replaceAll";
+        return returnsString &&
+            this.isSideEffectFreeStringMethodCall(
+                unwrapped.expression.expression,
+                method,
+                unwrapped.arguments,
+                seenConsts,
+            );
     }
 
     private isSideEffectFreeStringStaticStringCall(

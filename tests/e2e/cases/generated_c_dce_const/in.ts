@@ -373,6 +373,10 @@ const unused_promise_resolve_json_stringify_call = Promise.resolve(JSON.stringif
 const unused_promise_resolve_json_stringify_length_read = Promise.resolve(JSON.stringify(["dead_promise_resolve_json_stringify_length_read", true]).length);
 const unused_promise_resolve_json_stringify_upper_call = Promise.resolve((JSON.stringify("dead_promise_resolve_json_stringify_upper_call").toUpperCase(), "dead_promise_resolve_json_stringify_upper_call_marker"));
 const unused_promise_resolve_json_stringify_index_read = Promise.resolve((JSON.stringify({ label: "dead_promise_resolve_json_stringify_index_read" })[0], "dead_promise_resolve_json_stringify_index_read_marker"));
+const unused_promise_resolve_string_method_to_well_formed_call = Promise.resolve("dead_promise_resolve_string_method_to_well_formed".toWellFormed());
+const unused_promise_resolve_string_method_to_well_formed_length_read = Promise.resolve("dead_promise_resolve_string_method_to_well_formed_length_read".toWellFormed().length);
+const unused_promise_resolve_string_method_trim_upper_call = Promise.resolve((" dead_promise_resolve_string_method_trim_upper_call ".trim().toUpperCase(), "dead_promise_resolve_string_method_trim_upper_call_marker"));
+const unused_promise_resolve_string_method_normalize_index_read = Promise.resolve(("dead_promise_resolve_string_method_normalize_index_read".normalize()[0], "dead_promise_resolve_string_method_normalize_index_read_marker"));
 const unused_promise_resolve_string_static_length_read = Promise.resolve(String.fromCharCode("dead_promise_resolve_string_static_length_read".length).length);
 const unused_promise_resolve_string_code_point_upper_call = Promise.resolve((String.fromCodePoint(0x41, 0x42).toUpperCase(), "dead_promise_resolve_string_code_point_upper_call_marker"));
 const unused_promise_resolve_regexp_escape_index_read = Promise.resolve((RegExp.escape("dead_promise_resolve_regexp_escape_index_read")[0], "dead_promise_resolve_regexp_escape_index_read_marker"));
@@ -900,6 +904,9 @@ const unused_json_stringify_call = JSON.stringify({ dead_json_stringify_key: "de
 const unused_json_stringify_length_read = JSON.stringify(["dead_json_stringify_length_read", 2]).length;
 const unused_json_stringify_upper_call = (JSON.stringify("dead_json_stringify_upper_call").toUpperCase(), "dead_json_stringify_upper_call_marker".length);
 const unused_json_stringify_index_read = (JSON.stringify({ label: "dead_json_stringify_index_read" })[0], "dead_json_stringify_index_read_marker".length);
+const unused_string_method_to_well_formed_length_read = "dead_string_method_to_well_formed_length_read".toWellFormed().length;
+const unused_string_method_trim_upper_call = (" dead_string_method_trim_upper_call ".trim().toUpperCase(), "dead_string_method_trim_upper_call_marker".length);
+const unused_string_method_normalize_index_read = ("dead_string_method_normalize_index_read".normalize()[0], "dead_string_method_normalize_index_read_marker".length);
 const unused_string_from_char_code_length_read = String.fromCharCode("dead_string_from_char_code_length_read".length).length;
 const unused_string_from_code_point_upper_call = (String.fromCodePoint(0x41, 0x42).toUpperCase(), "dead_string_from_code_point_upper_call_marker".length);
 const unused_regexp_escape_index_read = (RegExp.escape("dead_regexp_escape_index_read")[0], "dead_regexp_escape_index_read_marker".length);
@@ -1382,6 +1389,10 @@ Promise.resolve(JSON.stringify({ top_level_dead_promise_resolve_json_stringify_k
 Promise.resolve(JSON.stringify(["top_level_dead_promise_resolve_json_stringify_length_read", true]).length);
 Promise.resolve((JSON.stringify("top_level_dead_promise_resolve_json_stringify_upper_call").toUpperCase(), "top_level_dead_promise_resolve_json_stringify_upper_call_marker"));
 Promise.resolve((JSON.stringify({ label: "top_level_dead_promise_resolve_json_stringify_index_read" })[0], "top_level_dead_promise_resolve_json_stringify_index_read_marker"));
+Promise.resolve("top_level_dead_promise_resolve_string_method_to_well_formed".toWellFormed());
+Promise.resolve("top_level_dead_promise_resolve_string_method_to_well_formed_length_read".toWellFormed().length);
+Promise.resolve((" top_level_dead_promise_resolve_string_method_trim_upper_call ".trim().toUpperCase(), "top_level_dead_promise_resolve_string_method_trim_upper_call_marker"));
+Promise.resolve(("top_level_dead_promise_resolve_string_method_normalize_index_read".normalize()[0], "top_level_dead_promise_resolve_string_method_normalize_index_read_marker"));
 Promise.resolve(String.fromCharCode("top_level_dead_promise_resolve_string_static_length_read".length).length);
 Promise.resolve((String.fromCodePoint(0x41, 0x43).toUpperCase(), "top_level_dead_promise_resolve_string_code_point_upper_call_marker"));
 Promise.resolve((RegExp.escape("top_level_dead_promise_resolve_regexp_escape_index_read")[0], "top_level_dead_promise_resolve_regexp_escape_index_read_marker"));
@@ -1783,6 +1794,9 @@ JSON.stringify({ top_level_dead_json_stringify_key: "top_level_dead_json_stringi
 JSON.stringify(["top_level_dead_json_stringify_length_read", 2]).length;
 (JSON.stringify("top_level_dead_json_stringify_upper_call").toUpperCase(), "top_level_dead_json_stringify_upper_call_marker".length);
 (JSON.stringify({ label: "top_level_dead_json_stringify_index_read" })[0], "top_level_dead_json_stringify_index_read_marker".length);
+"top_level_dead_string_method_to_well_formed_length_read".toWellFormed().length;
+(" top_level_dead_string_method_trim_upper_call ".trim().toUpperCase(), "top_level_dead_string_method_trim_upper_call_marker".length);
+("top_level_dead_string_method_normalize_index_read".normalize()[0], "top_level_dead_string_method_normalize_index_read_marker".length);
 String.fromCharCode("top_level_dead_string_from_char_code_length_read".length).length;
 (String.fromCodePoint(0x41, 0x44).toUpperCase(), "top_level_dead_string_from_code_point_upper_call_marker".length);
 (RegExp.escape("top_level_dead_regexp_escape_index_read")[0], "top_level_dead_regexp_escape_index_read_marker".length);
@@ -2281,6 +2295,10 @@ function usedLocal(value: number): number {
     Promise.resolve(JSON.stringify(["local_dead_promise_resolve_json_stringify_length_read", true]).length);
     Promise.resolve((JSON.stringify("local_dead_promise_resolve_json_stringify_upper_call").toUpperCase(), "local_dead_promise_resolve_json_stringify_upper_call_marker"));
     Promise.resolve((JSON.stringify({ label: "local_dead_promise_resolve_json_stringify_index_read" })[0], "local_dead_promise_resolve_json_stringify_index_read_marker"));
+    Promise.resolve("local_dead_promise_resolve_string_method_to_well_formed".toWellFormed());
+    Promise.resolve("local_dead_promise_resolve_string_method_to_well_formed_length_read".toWellFormed().length);
+    Promise.resolve((" local_dead_promise_resolve_string_method_trim_upper_call ".trim().toUpperCase(), "local_dead_promise_resolve_string_method_trim_upper_call_marker"));
+    Promise.resolve(("local_dead_promise_resolve_string_method_normalize_index_read".normalize()[0], "local_dead_promise_resolve_string_method_normalize_index_read_marker"));
     Promise.resolve(String.fromCharCode("local_dead_promise_resolve_string_static_length_read".length).length);
     Promise.resolve((String.fromCodePoint(0x41, 0x45).toUpperCase(), "local_dead_promise_resolve_string_code_point_upper_call_marker"));
     Promise.resolve((RegExp.escape("local_dead_promise_resolve_regexp_escape_index_read")[0], "local_dead_promise_resolve_regexp_escape_index_read_marker"));
@@ -2684,6 +2702,9 @@ function usedLocal(value: number): number {
     JSON.stringify(["local_dead_json_stringify_length_read", 2]).length;
     (JSON.stringify("local_dead_json_stringify_upper_call").toUpperCase(), "local_dead_json_stringify_upper_call_marker".length);
     (JSON.stringify({ label: "local_dead_json_stringify_index_read" })[0], "local_dead_json_stringify_index_read_marker".length);
+    "local_dead_string_method_to_well_formed_length_read".toWellFormed().length;
+    (" local_dead_string_method_trim_upper_call ".trim().toUpperCase(), "local_dead_string_method_trim_upper_call_marker".length);
+    ("local_dead_string_method_normalize_index_read".normalize()[0], "local_dead_string_method_normalize_index_read_marker".length);
     String.fromCharCode("local_dead_string_from_char_code_length_read".length).length;
     (String.fromCodePoint(0x41, 0x46).toUpperCase(), "local_dead_string_from_code_point_upper_call_marker".length);
     (RegExp.escape("local_dead_regexp_escape_index_read")[0], "local_dead_regexp_escape_index_read_marker".length);
