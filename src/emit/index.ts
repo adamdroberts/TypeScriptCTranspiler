@@ -1885,16 +1885,24 @@ class Emitter {
         if (
             !ts.isPropertyAccessExpression(call.expression) ||
             !ts.isIdentifier(call.expression.expression) ||
-            !this.isUnshadowedGlobalIdentifier(call.expression.expression, "Object") ||
-            (
-                call.expression.name.text !== "keys" &&
-                call.expression.name.text !== "getOwnPropertyNames"
-            ) ||
             call.arguments.length !== 1
         ) {
             return false;
         }
-        return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts);
+        const recv = call.expression.expression;
+        const method = call.expression.name.text;
+        if (
+            this.isUnshadowedGlobalIdentifier(recv, "Object") &&
+            (
+                method === "keys" ||
+                method === "getOwnPropertyNames"
+            )
+        ) {
+            return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts);
+        }
+        return this.isUnshadowedGlobalIdentifier(recv, "Reflect") &&
+            method === "ownKeys" &&
+            this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts);
     }
 
     private isSideEffectFreeStringArrayReturningArrayHelperCall(
