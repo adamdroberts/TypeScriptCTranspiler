@@ -1759,6 +1759,10 @@ class Emitter {
             return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
                 this.isSideEffectFreeRegExpConstructorArgs(call.arguments, seenConsts);
         }
+        if (name === "AggregateError") {
+            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+                this.isSideEffectFreeAggregateErrorConstructorArgs(call.arguments, seenConsts);
+        }
         if (name === "Symbol") {
             return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
                 (
@@ -1807,6 +1811,7 @@ class Emitter {
             const args = expr.arguments ?? ts.factory.createNodeArray();
             if (name === "RegExp") return this.isSideEffectFreeRegExpConstructorArgs(args, seenConsts);
             if (name === "Date") return this.isSideEffectFreeDateConstructorArgs(args, seenConsts);
+            if (name === "AggregateError") return this.isSideEffectFreeAggregateErrorConstructorArgs(args, seenConsts);
             if (name === "Map" || name === "Set" || name === "WeakMap" || name === "WeakSet") {
                 return args.length === 0;
             }
@@ -1842,6 +1847,40 @@ class Emitter {
                 ? this.isSideEffectFreePrimitiveNumberCoercion(arg, seenConsts)
                 : this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
         );
+    }
+
+    private isSideEffectFreeAggregateErrorConstructorArgs(
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (args.length < 1) return false;
+        return this.isSideEffectFreeArrayOperand(args[0]!, seenConsts) &&
+            (!args[1] || this.isSideEffectFreeStringCoercion(args[1], seenConsts)) &&
+            (!args[2] || this.isSideEffectFreeErrorOptionsObject(args[2], seenConsts)) &&
+            Array.from(args).slice(3).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+    }
+
+    private isSideEffectFreeErrorOptionsObject(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            return unwrapped.properties.every((prop) => {
+                if (ts.isPropertyAssignment(prop)) {
+                    return this.objectLiteralStaticStringKey(prop.name, seenConsts) !== null &&
+                        this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts);
+                }
+                if (ts.isShorthandPropertyAssignment(prop)) {
+                    return this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts);
+                }
+                return false;
+            });
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeErrorOptionsObject(init, seenConsts);
     }
 
     private isSideEffectFreeRegExpConstructorArgs(

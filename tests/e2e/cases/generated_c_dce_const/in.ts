@@ -142,6 +142,8 @@ const unused_array_to_locale_string_call = ["dead_array_to_locale_string", "dead
 const unused_array_value_of_call = unused_spread_source_array.valueOf();
 const unused_error_constructor = new Error("dead_error_constructor");
 const unused_type_error_constructor = new TypeError("dead_type_error_constructor");
+const unused_aggregate_error_constructor = new AggregateError(["dead_aggregate_error_item"], "dead_aggregate_error_message", { cause: "dead_aggregate_error_cause" });
+const unused_aggregate_error_call = AggregateError(["dead_aggregate_error_call_item"], "dead_aggregate_error_call_message");
 const unused_object_is = Object.is("dead", unused_label);
 const unused_math_abs_call = Math.abs(-1);
 const unused_math_max_call = Math.max(1, 2, 3);
@@ -310,6 +312,8 @@ Symbol("top_level_dead_symbol_constructor");
 ["top_level_dead_array_to_locale_string", "top_level_dead_array_to_locale_string_tail"].toLocaleString();
 new Error("top_level_dead_error_constructor");
 new RangeError("top_level_dead_range_error_constructor");
+new AggregateError(["top_level_dead_aggregate_error_item"], "top_level_dead_aggregate_error_message", { cause: "top_level_dead_aggregate_error_cause" });
+AggregateError(["top_level_dead_aggregate_error_call_item"], "top_level_dead_aggregate_error_call_message");
 Object.is("top_level_dead_object_is", "dead");
 Math.max("top_level_dead_math_call".length, 1);
 String.fromCharCode("top_level_dead_from_char_code".length);
@@ -492,6 +496,8 @@ function usedLocal(value: number): number {
     ["local_dead_array_to_locale_string", "local_dead_array_to_locale_string_tail"].toLocaleString();
     new Error("local_dead_error_constructor");
     new SyntaxError("local_dead_syntax_error_constructor");
+    new AggregateError(["local_dead_aggregate_error_item"], "local_dead_aggregate_error_message", { cause: "local_dead_aggregate_error_cause" });
+    AggregateError(["local_dead_aggregate_error_call_item"], "local_dead_aggregate_error_call_message");
     Object.is("local_dead_object_is", "dead");
     Math.min("local_dead_math_call".length, 1);
     String.fromCharCode("local_dead_from_char_code".length);
