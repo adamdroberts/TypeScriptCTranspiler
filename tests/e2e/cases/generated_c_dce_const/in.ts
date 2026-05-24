@@ -333,6 +333,8 @@ const unused_promise_resolve_error_string_call = Promise.resolve(new Error("dead
 const unused_promise_resolve_aggregate_error_string_call = Promise.resolve(new AggregateError(["dead_promise_resolve_aggregate_error_item"], "dead_promise_resolve_aggregate_error_message").toLocaleString("dead_promise_resolve_aggregate_error_ignored"));
 const unused_promise_resolve_error_message_read = Promise.resolve(new Error("dead_promise_resolve_error_message_read").message);
 const unused_promise_resolve_type_error_name_read = Promise.resolve(new TypeError("dead_promise_resolve_type_error_name_read").name);
+const unused_promise_resolve_regexp_source_read = Promise.resolve(/dead_promise_resolve_regexp_source_read/gi.source);
+const unused_promise_resolve_regexp_global_read = Promise.resolve(new RegExp("dead_promise_resolve_regexp_global_read", "g").global);
 const unused_promise_resolve_parser_call = Promise.resolve(parseInt("456789", 10));
 const unused_promise_resolve_number_parse_call = Promise.resolve(Number.parseInt("dead_promise_resolve_number_parse", 10));
 const unused_promise_resolve_number_predicate_call = Promise.resolve(Number.isSafeInteger("dead_promise_resolve_number_predicate".length));
@@ -559,6 +561,9 @@ const unused_aggregate_error_constructor = new AggregateError(["dead_aggregate_e
 const unused_aggregate_error_call = AggregateError(["dead_aggregate_error_call_item"], "dead_aggregate_error_call_message");
 const unused_error_message_read = new Error("dead_error_message_read").message;
 const unused_type_error_name_read = new TypeError("dead_type_error_name_read").name;
+const unused_regexp_source_read = /dead_regexp_source_read/gi.source;
+const unused_regexp_flags_read = new RegExp("dead_regexp_flags_read", "ms").flags;
+const unused_regexp_boolean_read = /dead_regexp_boolean_read/y.sticky;
 const unused_object_is = Object.is("dead", unused_label);
 const unused_math_abs_call = Math.abs(-1);
 const unused_math_max_call = Math.max(1, 2, 3);
@@ -941,6 +946,8 @@ Promise.resolve(new TypeError("top_level_dead_promise_resolve_error_message").to
 Promise.resolve(new AggregateError(["top_level_dead_promise_resolve_aggregate_error_item"], "top_level_dead_promise_resolve_aggregate_error_message").toString("top_level_dead_promise_resolve_aggregate_error_ignored"));
 Promise.resolve(new Error("top_level_dead_promise_resolve_error_message_read").message);
 Promise.resolve(new RangeError("top_level_dead_promise_resolve_error_name_read").name);
+Promise.resolve(/top_level_dead_promise_resolve_regexp_source_read/i.source);
+Promise.resolve(new RegExp("top_level_dead_promise_resolve_regexp_unicode_read", "u").unicode);
 Promise.resolve(parseFloat("765432.25"));
 Promise.resolve(Number.parseFloat("top_level_dead_promise_resolve_number_parse"));
 Promise.resolve(Number.isInteger("top_level_dead_promise_resolve_number_predicate".length));
@@ -1144,6 +1151,9 @@ new AggregateError(["top_level_dead_aggregate_error_item"], "top_level_dead_aggr
 AggregateError(["top_level_dead_aggregate_error_call_item"], "top_level_dead_aggregate_error_call_message");
 new Error("top_level_dead_error_message_read").message;
 new SyntaxError("top_level_dead_error_name_read").name;
+/top_level_dead_regexp_source_read/g.source;
+new RegExp("top_level_dead_regexp_flags_read", "im").flags;
+new RegExp("top_level_dead_regexp_boolean_read", "s").dotAll;
 Object.is("top_level_dead_object_is", "dead");
 Math.max("top_level_dead_math_call".length, 1);
 String.fromCharCode("top_level_dead_from_char_code".length);
@@ -1540,6 +1550,8 @@ function usedLocal(value: number): number {
     Promise.resolve(new AggregateError(["local_dead_promise_resolve_aggregate_error_item"], "local_dead_promise_resolve_aggregate_error_message").toLocaleString("local_dead_promise_resolve_aggregate_error_ignored"));
     Promise.resolve(new Error("local_dead_promise_resolve_error_message_read").message);
     Promise.resolve(new TypeError("local_dead_promise_resolve_error_name_read").name);
+    Promise.resolve(/local_dead_promise_resolve_regexp_source_read/m.source);
+    Promise.resolve(new RegExp("local_dead_promise_resolve_regexp_multiline_read", "m").multiline);
     Promise.resolve(isFinite("123"));
     Promise.resolve(Number.parseInt("local_dead_promise_resolve_number_parse", 10));
     Promise.resolve(Number.isFinite("local_dead_promise_resolve_number_predicate".length));
@@ -1745,6 +1757,9 @@ function usedLocal(value: number): number {
     AggregateError(["local_dead_aggregate_error_call_item"], "local_dead_aggregate_error_call_message");
     new Error("local_dead_error_message_read").message;
     new RangeError("local_dead_error_name_read").name;
+    /local_dead_regexp_source_read/g.source;
+    new RegExp("local_dead_regexp_flags_read", "im").flags;
+    new RegExp("local_dead_regexp_boolean_read", "s").dotAll;
     Object.is("local_dead_object_is", "dead");
     Math.min("local_dead_math_call".length, 1);
     String.fromCharCode("local_dead_from_char_code".length);

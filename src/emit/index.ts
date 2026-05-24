@@ -908,6 +908,9 @@ class Emitter {
             if (this.isSideEffectFreeErrorStringPropertyRead(expr, seenConsts)) {
                 return true;
             }
+            if (this.isSideEffectFreeRegExpPropertyRead(expr, seenConsts)) {
+                return true;
+            }
             return this.isSideEffectFreeObjectReadOperand(expr.expression, seenConsts);
         }
         if (ts.isElementAccessExpression(expr) && expr.argumentExpression) {
@@ -4705,6 +4708,9 @@ class Emitter {
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeRegExpPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeStringElementAccess(unwrapped, seenConsts)) {
             return true;
         }
@@ -6127,6 +6133,26 @@ class Emitter {
         }
     }
 
+    private isSideEffectFreeRegExpPropertyRead(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!ts.isPropertyAccessExpression(expr)) return false;
+        const fields = new Set([
+            "source",
+            "flags",
+            "global",
+            "hasIndices",
+            "ignoreCase",
+            "multiline",
+            "dotAll",
+            "sticky",
+            "unicode",
+        ]);
+        return fields.has(expr.name.text) &&
+            this.isSideEffectFreeFreshRegExpOperand(expr.expression, seenConsts);
+    }
+
     private isSideEffectFreeFreshRegExpOperand(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -6150,7 +6176,8 @@ class Emitter {
                 seenConsts,
             );
         }
-        return false;
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeFreshRegExpOperand(init, seenConsts);
     }
 
     private isSideEffectFreeNumericParserArgs(
