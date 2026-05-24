@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused pure `Array.from(new Set(), mapper[, thisArg])` calls over empty typed Set sources. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Object.fromEntries(new Map())` calls over empty typed Map sources. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Object.fromEntries(Object.entries(...))` calls over side-effect-free sources. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Object.assign(...)` calls with nullish sources and fresh object/array targets. Test: `generated_c_dce_const`.

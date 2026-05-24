@@ -40,6 +40,7 @@ unused_array_from_array_call
 unused_array_from_string_call
 unused_array_from_empty_array_mapper_call
 unused_array_from_empty_string_mapper_call
+unused_array_from_empty_set_mapper_call
 unused_const_array_from_call
 dead_array_of
 dead_array_of_tail
@@ -47,6 +48,7 @@ dead_array_from_array
 dead_array_from_string
 dead_array_from_empty_array_mapper
 dead_array_from_empty_string_mapper
+dead_array_from_empty_set_mapper
 unused_number_is_finite
 unused_number_is_integer
 unused_number_is_safe_integer

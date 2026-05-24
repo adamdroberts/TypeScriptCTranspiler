@@ -1604,7 +1604,25 @@ class Emitter {
         const arrayLength = this.sideEffectFreeArrayLiteralLength(expr, seenConsts);
         if (arrayLength === 0) return true;
         const stringText = this.sideEffectFreeStringLiteralText(expr, seenConsts);
-        return stringText !== null && stringText.length === 0;
+        return (stringText !== null && stringText.length === 0) ||
+            this.isSideEffectFreeEmptySetSource(expr, seenConsts);
+    }
+
+    private isSideEffectFreeEmptySetSource(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set") &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+        ) {
+            return true;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeEmptySetSource(init, seenConsts);
     }
 
     private sideEffectFreeArrayLiteralLength(
