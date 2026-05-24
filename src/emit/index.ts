@@ -25467,7 +25467,7 @@ class Emitter {
         return null;
     }
 
-    private dnsLookupHintValue(expr: ts.Expression): number {
+    private dnsLookupHintValue(expr: ts.Expression, seenConsts = new Set<ts.Symbol>()): number {
         while (
             ts.isParenthesizedExpression(expr) ||
             ts.isAsExpression(expr) ||
@@ -25484,13 +25484,26 @@ class Emitter {
             if (value !== null) {
                 return value;
             }
+            const symbol = this.checker.getSymbolAtLocation(expr);
+            const decl = symbol?.valueDeclaration;
+            if (symbol && decl && !seenConsts.has(symbol) && ts.isVariableDeclaration(decl) && decl.initializer && ts.isIdentifier(decl.name)) {
+                const list = decl.parent;
+                if (ts.isVariableDeclarationList(list) && (list.flags & ts.NodeFlags.Const) !== 0) {
+                    seenConsts.add(symbol);
+                    try {
+                        return this.dnsLookupHintValue(decl.initializer, seenConsts);
+                    } finally {
+                        seenConsts.delete(symbol);
+                    }
+                }
+            }
         }
         if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.expression) && this.isDnsModuleIdentifier(expr.expression)) {
             const value = this.dnsLookupHintConstant(expr.name.text);
             if (value !== null) return value;
         }
         if (ts.isBinaryExpression(expr) && expr.operatorToken.kind === ts.SyntaxKind.BarToken) {
-            return this.dnsLookupHintValue(expr.left) | this.dnsLookupHintValue(expr.right);
+            return this.dnsLookupHintValue(expr.left, seenConsts) | this.dnsLookupHintValue(expr.right, seenConsts);
         }
         unsupported(expr, "dns.lookup hints must be a numeric literal or DNS hint constants in this subset");
     }
