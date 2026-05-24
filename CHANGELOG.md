@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now treats string-valued built-in module constants such as `path.sep`, `path.delimiter`, `os.EOL`, and `os.devNull` as side-effect-free string/indexable operands, including named imports and primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats CommonJS path constants and string-valued `module` metadata reads as side-effect-free `.length`, string-method, and indexable operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats string-valued `process` metadata reads and pure `process.cwd(...)` calls as side-effect-free `.length`, string-method, and indexable operands, including object metadata and primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats string fields from pure `os.userInfo(...)` results as side-effect-free `.length`, string-method, and indexable operands, including named imports and primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.

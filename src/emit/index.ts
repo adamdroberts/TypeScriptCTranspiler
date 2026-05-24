@@ -1013,6 +1013,9 @@ class Emitter {
         if (this.isSideEffectFreeCommonJsStringOperand(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeBuiltinStringOperand(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -1120,6 +1123,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeCommonJsStringOperand(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeBuiltinStringOperand(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -4908,6 +4914,9 @@ class Emitter {
         if (this.isSideEffectFreeCommonJsStringOperand(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeBuiltinStringOperand(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -4933,6 +4942,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeCommonJsStringOperand(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeBuiltinStringOperand(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -7754,6 +7766,40 @@ class Emitter {
             this.isNamedImportFrom(expr, ["path", "node:path"], "delimiter") ||
             this.isNamedImportFrom(expr, ["os", "node:os"], "EOL") ||
             this.isNamedImportFrom(expr, ["os", "node:os"], "devNull");
+    }
+
+    private isSideEffectFreeBuiltinStringOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isIdentifier(unwrapped) &&
+            this.isSideEffectFreeBuiltinStringConstantIdentifier(unwrapped)
+        ) {
+            return true;
+        }
+        if (
+            ts.isPropertyAccessExpression(unwrapped) &&
+            this.isSideEffectFreeBuiltinModuleConstantRead(unwrapped)
+        ) {
+            const name = unwrapped.name.text;
+            if (this.isPathPosixReceiver(unwrapped.expression) && (name === "sep" || name === "delimiter")) {
+                return true;
+            }
+            if (
+                ts.isIdentifier(unwrapped.expression) &&
+                this.isPathModuleIdentifier(unwrapped.expression) &&
+                (name === "sep" || name === "delimiter")
+            ) {
+                return true;
+            }
+            return ts.isIdentifier(unwrapped.expression) &&
+                this.isOsModuleIdentifier(unwrapped.expression) &&
+                (name === "EOL" || name === "devNull");
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeBuiltinStringOperand(init, seenConsts);
     }
 
     private isSideEffectFreeBuiltinNumericConstantIdentifier(expr: ts.Identifier): boolean {
