@@ -1198,7 +1198,7 @@ class Emitter {
             call.arguments.length === 2 &&
             this.isUnshadowedGlobalIdentifier(recv, "Map")
         ) {
-            return this.sideEffectFreeArrayLiteralLength(call.arguments[0]!, seenConsts) === 0 &&
+            return this.isSideEffectFreeEmptyArrayFromSource(call.arguments[0]!, seenConsts) &&
                 this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts);
         }
         if (
@@ -1331,7 +1331,7 @@ class Emitter {
             call.arguments.length === 2 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
         ) {
-            return this.sideEffectFreeArrayLiteralLength(call.arguments[0]!, seenConsts) === 0 &&
+            return this.isSideEffectFreeEmptyArrayFromSource(call.arguments[0]!, seenConsts) &&
                 this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts);
         }
         if (
@@ -1832,6 +1832,8 @@ class Emitter {
     ): boolean {
         const arrayLength = this.sideEffectFreeArrayLiteralLength(expr, seenConsts);
         if (arrayLength === 0) return true;
+        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(expr, seenConsts);
+        if (returnedArrayLength === 0) return true;
         const stringText = this.sideEffectFreeStringLiteralText(expr, seenConsts);
         return (stringText !== null && stringText.length === 0) ||
             this.isSideEffectFreeEmptyMapSource(expr, seenConsts) ||
