@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `fs.realpathSync(...)`, `fs.readlinkSync(...)`, `fs.mkdtempSync(...)`, and their immediate `fs.promises` counterparts now treat direct `null` options and `{ encoding: null }` as default string results. Tests: `fs_link_path_encoding_options`, `fs_mkdtemp_encoding_options`.
 - `fs.readdirSync(...)` and immediate `fs.promises.readdir(...)` now treat direct `null` options and `{ encoding: null }` as default string filename results. Test: `fs_readdir_null_encoding_options`.
 - `fs.readdirSync(...)` and immediate `fs.promises.readdir(...)` now accept literal `"hex"` / `"base64"` string and object encodings for string filename arrays, including recursive results and earlier static `const` aliases. Test: `fs_readdir_encoded_options`.
 - `fs.realpathSync(...)`, `fs.readlinkSync(...)`, `fs.mkdtempSync(...)`, and their immediate `fs.promises` counterparts now accept literal `"hex"` / `"base64"` string and object encodings for string results, including earlier static `const` aliases. Test: `fs_path_result_encoded_options`.

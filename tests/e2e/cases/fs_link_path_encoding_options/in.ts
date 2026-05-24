@@ -21,9 +21,9 @@ const syncRealpathBuffer = fs.realpathSync(path.join(nested, ".."), BUFFER_ENCOD
 const syncReadlinkBuffer = nodefs.readlinkSync(link, { encoding: BUFFER_ENCODING });
 console.log("sync buffer:", Buffer.isBuffer(syncRealpathBuffer), syncRealpathBuffer.toString() === root, syncReadlinkBuffer.toString() === target);
 
-const syncRealpathNull = fs.realpathSync(path.join(nested, ".."), { encoding: null });
+const syncRealpathNull = fs.realpathSync(path.join(nested, ".."), null);
 const syncReadlinkNull = nodefs.readlinkSync(link, { encoding: null });
-console.log("sync null:", Buffer.isBuffer(syncRealpathNull), syncRealpathNull.toString() === root, syncReadlinkNull.toString() === target);
+console.log("sync null:", Buffer.isBuffer(syncRealpathNull as any), syncRealpathNull === root, syncReadlinkNull === target);
 
 fs.promises.realpath(path.join(nested, ".."), { encoding: UTF8 }).then((promiseRealpath) => {
     console.log("promise realpath:", promiseRealpath === root);
@@ -41,12 +41,12 @@ nodefs.promises.readlink(link, BUFFER_ENCODING).then((promiseReadlink: Buffer): 
     console.log("promise readlink buffer:", Buffer.isBuffer(promiseReadlink), promiseReadlink.toString() === target);
 });
 
-fs.promises.realpath(path.join(nested, ".."), { encoding: null }).then((promiseRealpath: Buffer): void => {
-    console.log("promise realpath null:", Buffer.isBuffer(promiseRealpath), promiseRealpath.toString() === root);
+fs.promises.realpath(path.join(nested, ".."), null).then((promiseRealpath: string): void => {
+    console.log("promise realpath null:", Buffer.isBuffer(promiseRealpath as any), promiseRealpath === root);
 });
 
-nodefs.promises.readlink(link, { encoding: null }).then((promiseReadlink: Buffer): void => {
-    console.log("promise readlink null:", Buffer.isBuffer(promiseReadlink), promiseReadlink.toString() === target);
+nodefs.promises.readlink(link, { encoding: null }).then((promiseReadlink: string): void => {
+    console.log("promise readlink null:", Buffer.isBuffer(promiseReadlink as any), promiseReadlink === target);
 });
 
 fs.rmSync(root, { recursive: true, force: true });

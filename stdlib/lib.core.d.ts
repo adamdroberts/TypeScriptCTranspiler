@@ -974,18 +974,19 @@ interface FSEncodingOptions {
     encoding?: FSEncoding;
 }
 interface FSBufferEncodingOptions {
-    encoding: FSBufferEncoding | null;
+    encoding: FSBufferEncoding;
 }
 interface FSPathResultEncodingOptions {
-    encoding?: FSPathResultEncoding;
+    encoding?: FSPathResultEncoding | null;
 }
-type FSPathResultEncodingOption = FSPathResultEncoding | FSPathResultEncodingOptions;
+type FSPathResultEncodingOption = FSPathResultEncoding | null | FSPathResultEncodingOptions;
 type FSReadFileFlag = "r" | "rs" | "r+" | "rs+";
 interface FSReadFileOptions {
     encoding?: FSReadFileStringEncoding;
     flag?: FSReadFileFlag;
 }
-interface FSReadFileBufferObjectOptions extends FSBufferEncodingOptions {
+interface FSReadFileBufferObjectOptions {
+    encoding: FSBufferEncoding | null;
     flag?: FSReadFileFlag;
 }
 type FSReadFileBufferOptions = FSBufferEncoding | null | FSReadFileBufferObjectOptions;

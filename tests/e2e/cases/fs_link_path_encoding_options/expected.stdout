@@ -1,9 +1,9 @@
 sync: true true
 sync buffer: true true true
-sync null: true true true
+sync null: false true true
 promise realpath: true
 promise readlink: true
 promise realpath buffer: true true
 promise readlink buffer: true true
-promise realpath null: true true
-promise readlink null: true true
+promise realpath null: false true
+promise readlink null: false true

@@ -1,6 +1,6 @@
 sync: true true
 sync buffer: true true true
-sync null: true true true
+sync null: false true true
 promise: true true
 promise buffer: true true true
-promise null: true true true
+promise null: false true true

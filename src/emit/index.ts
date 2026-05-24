@@ -29761,17 +29761,20 @@ class Emitter {
         if (!options || this.isUndefinedExpression(options)) return "utf8";
         const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" | "buffer" => {
             if (this.isUndefinedExpression(node)) return "utf8";
+            if (node.kind === ts.SyntaxKind.NullKeyword) return "utf8";
             const text = this.sideEffectFreeStringLiteralText(node, new Set());
             if (text !== null) {
                 if (text === "utf8" || text === "utf-8") return "utf8";
                 if (text === "hex" || text === "base64") return text;
                 if (text === "buffer") return "buffer";
             }
-            if (node.kind === ts.SyntaxKind.NullKeyword) return "buffer";
             unsupported(node, `${label} only supports UTF-8, hex, base64, buffer, or null encoding options in this subset`);
         };
         if (this.sideEffectFreeStringLiteralText(options, new Set()) !== null) {
             return checkEncoding(options);
+        }
+        if (options.kind === ts.SyntaxKind.NullKeyword) {
+            return "utf8";
         }
         if (!ts.isObjectLiteralExpression(options)) {
             unsupported(options, `${label} options must be a UTF-8/hex/base64/buffer string literal or object literal in this subset`);

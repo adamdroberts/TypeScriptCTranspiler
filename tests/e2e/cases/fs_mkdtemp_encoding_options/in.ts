@@ -13,9 +13,8 @@ const syncBufferDir = fs.mkdtempSync(syncPrefix, { encoding: BUFFER_ENCODING });
 const syncBufferPath = syncBufferDir.toString();
 console.log("sync buffer:", Buffer.isBuffer(syncBufferDir), syncBufferPath.indexOf(syncPrefix) === 0, fs.statSync(syncBufferPath).isDirectory());
 
-const syncNullDir = fs.mkdtempSync(syncPrefix, { encoding: null });
-const syncNullPath = syncNullDir.toString();
-console.log("sync null:", Buffer.isBuffer(syncNullDir), syncNullPath.indexOf(syncPrefix) === 0, fs.statSync(syncNullPath).isDirectory());
+const syncNullDir = fs.mkdtempSync(syncPrefix, null);
+console.log("sync null:", Buffer.isBuffer(syncNullDir as any), syncNullDir.indexOf(syncPrefix) === 0, fs.statSync(syncNullDir).isDirectory());
 
 nodefs.promises.mkdtemp(promisePrefix, { encoding: UTF8_DASH }).then((promiseDir: string): string => {
     console.log("promise:", promiseDir.indexOf(promisePrefix) === 0, fs.statSync(promiseDir).isDirectory());
@@ -29,12 +28,11 @@ nodefs.promises.mkdtemp(promisePrefix, BUFFER_ENCODING).then((promiseDir: Buffer
     fs.rmSync(promisePath, { recursive: true, force: true });
 });
 
-nodefs.promises.mkdtemp(promisePrefix, { encoding: null }).then((promiseDir: Buffer): void => {
-    const promisePath = promiseDir.toString();
-    console.log("promise null:", Buffer.isBuffer(promiseDir), promisePath.indexOf(promisePrefix) === 0, fs.statSync(promisePath).isDirectory());
-    fs.rmSync(promisePath, { recursive: true, force: true });
+nodefs.promises.mkdtemp(promisePrefix, { encoding: null }).then((promiseDir: string): void => {
+    console.log("promise null:", Buffer.isBuffer(promiseDir as any), promiseDir.indexOf(promisePrefix) === 0, fs.statSync(promiseDir).isDirectory());
+    fs.rmSync(promiseDir, { recursive: true, force: true });
 });
 
 fs.rmSync(syncDir, { recursive: true, force: true });
 fs.rmSync(syncBufferPath, { recursive: true, force: true });
-fs.rmSync(syncNullPath, { recursive: true, force: true });
+fs.rmSync(syncNullDir, { recursive: true, force: true });
