@@ -938,6 +938,9 @@ class Emitter {
             if (this.isSideEffectFreeOsUserInfoPropertyRead(expr, seenConsts)) {
                 return true;
             }
+            if (this.isSideEffectFreePathParsePropertyRead(expr, seenConsts)) {
+                return true;
+            }
             if (this.isSideEffectFreeProcessStdioMetadataRead(expr)) {
                 return true;
             }
@@ -1875,6 +1878,48 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreePathFormatObject(init, seenConsts);
+    }
+
+    private isSideEffectFreePathParsePropertyRead(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (!ts.isPropertyAccessExpression(unwrapped)) {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+            return !!init && this.isSideEffectFreePathParsePropertyRead(init, seenConsts);
+        }
+        if (!["root", "dir", "base", "ext", "name"].includes(unwrapped.name.text)) {
+            return false;
+        }
+        const recv = this.unwrapSideEffectFreeStaticExpression(unwrapped.expression);
+        if (ts.isCallExpression(recv)) {
+            if (
+                ts.isPropertyAccessExpression(recv.expression) &&
+                recv.expression.name.text === "parse"
+            ) {
+                const parseRecv = recv.expression.expression;
+                return (
+                    (
+                        ts.isIdentifier(parseRecv) &&
+                        this.isPathModuleIdentifier(parseRecv)
+                    ) ||
+                    this.isPathPosixReceiver(parseRecv)
+                ) &&
+                    this.isSideEffectFreePathCall("parse", recv.arguments, seenConsts);
+            }
+            if (
+                ts.isIdentifier(recv.expression) &&
+                this.isNamedImportFrom(recv.expression, ["path", "node:path"], "parse")
+            ) {
+                return this.isSideEffectFreePathCall("parse", recv.arguments, seenConsts);
+            }
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(recv, seenConsts);
+        return !!init && this.isSideEffectFreePathParsePropertyRead(
+            ts.factory.createPropertyAccessExpression(init, unwrapped.name.text),
+            seenConsts,
+        );
     }
 
     private isSideEffectFreeNetCall(
@@ -5806,6 +5851,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeOsUserInfoPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreePathParsePropertyRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStdioMetadataRead(unwrapped)) {
