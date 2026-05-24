@@ -1531,6 +1531,12 @@ class Emitter {
                     (!args[1] || this.isSideEffectFreeStringCoercion(args[1], seenConsts)) &&
                     allArgsPure(2);
             }
+            case "replace":
+            case "replaceAll":
+                return args.length >= 2 &&
+                    this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
+                    this.isSideEffectFreeStringCoercion(args[1]!, seenConsts) &&
+                    allArgsPure(2);
             default:
                 return false;
         }

@@ -81,6 +81,8 @@ unused_const_string_trim_call
 unused_string_normalize_call
 unused_string_repeat_call
 unused_string_pad_call
+unused_string_replace_call
+unused_string_replace_all_call
 unused_array_slice_call
 unused_array_at_call
 unused_array_includes_call
@@ -125,6 +127,8 @@ dead_string_case
 dead_string_normalize
 dead_string_repeat
 dead_string_pad
+dead_string_replace
+dead_string_replace_all
 dead_array_slice
 dead_array_at
 dead_array_includes
@@ -287,6 +291,8 @@ top_level_dead_string_trim
 top_level_dead_string_normalize
 top_level_dead_string_repeat
 top_level_dead_string_pad
+top_level_dead_string_replace
+top_level_dead_string_replace_all
 top_level_dead_array_slice
 top_level_dead_array_at
 top_level_dead_array_includes
@@ -399,6 +405,8 @@ local_dead_string_trim
 local_dead_string_normalize
 local_dead_string_repeat
 local_dead_string_pad
+local_dead_string_replace
+local_dead_string_replace_all
 local_dead_array_slice
 local_dead_array_at
 local_dead_array_includes
