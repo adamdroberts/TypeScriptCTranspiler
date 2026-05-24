@@ -30012,17 +30012,24 @@ class Emitter {
             }
             const key = this.staticPropertyName(prop.name);
             if (key === "bigint") {
-                if (prop.initializer.kind !== ts.SyntaxKind.FalseKeyword && !this.isUndefinedExpression(prop.initializer)) {
+                if (this.isUndefinedExpression(prop.initializer)) {
+                    continue;
+                }
+                const bigint = this.fsBooleanOptionValue(prop.initializer);
+                if (bigint !== false) {
                     unsupported(prop.initializer, `${label} only supports bigint: false in this subset`);
                 }
                 continue;
             }
             if (key === "throwIfNoEntry") {
-                if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) {
-                    throwIfNoEntry = false;
-                } else if (prop.initializer.kind !== ts.SyntaxKind.TrueKeyword && !this.isUndefinedExpression(prop.initializer)) {
+                if (this.isUndefinedExpression(prop.initializer)) {
+                    continue;
+                }
+                const value = this.fsBooleanOptionValue(prop.initializer);
+                if (value === null) {
                     unsupported(prop.initializer, `${label}.throwIfNoEntry must be a boolean literal in this subset`);
                 }
+                throwIfNoEntry = value;
                 continue;
             }
             unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
