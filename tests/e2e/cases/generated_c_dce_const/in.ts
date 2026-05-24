@@ -108,6 +108,7 @@ const unused_array_fill_call = ["dead_array_fill", "dead_array_fill_tail"].fill(
 const unused_array_copy_within_call = ["dead_array_copy_within", "dead_array_copy_within_tail"].copyWithin(0, 1);
 const unused_array_push_call = ["dead_array_push"].push("dead_array_push_value");
 const unused_array_unshift_call = ["dead_array_unshift"].unshift("dead_array_unshift_value");
+const unused_array_sort_call = ["dead_array_sort_b", "dead_array_sort_a"].sort();
 const unused_array_to_sorted_call = ["dead_array_to_sorted"].toSorted();
 const unused_array_to_spliced_call = ["dead_array_to_spliced"].toSpliced(0, 0, "dead_array_to_spliced_insert");
 const unused_array_to_reversed_call = ["dead_array_to_reversed"].toReversed();
@@ -250,6 +251,7 @@ Symbol("top_level_dead_symbol_constructor");
 ["top_level_dead_array_copy_within", "top_level_dead_array_copy_within_tail"].copyWithin(0, 1);
 ["top_level_dead_array_push"].push("top_level_dead_array_push_value");
 ["top_level_dead_array_unshift"].unshift("top_level_dead_array_unshift_value");
+["top_level_dead_array_sort_b", "top_level_dead_array_sort_a"].sort();
 ["top_level_dead_array_to_sorted"].toSorted();
 ["top_level_dead_array_to_spliced"].toSpliced(0, 0, "top_level_dead_array_to_spliced_insert");
 ["top_level_dead_array_to_reversed"].toReversed();
@@ -406,6 +408,7 @@ function usedLocal(value: number): number {
     ["local_dead_array_copy_within", "local_dead_array_copy_within_tail"].copyWithin(0, 1);
     ["local_dead_array_push"].push("local_dead_array_push_value");
     ["local_dead_array_unshift"].unshift("local_dead_array_unshift_value");
+    ["local_dead_array_sort_b", "local_dead_array_sort_a"].sort();
     ["local_dead_array_to_sorted"].toSorted();
     ["local_dead_array_to_spliced"].toSpliced(0, 0, "local_dead_array_to_spliced_insert");
     ["local_dead_array_with", "local_dead_array_with_tail"].with(0, "local_dead_array_with_replacement");

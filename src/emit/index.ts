@@ -1426,6 +1426,9 @@ class Emitter {
             case "unshift":
                 return this.isSideEffectFreeFreshArrayLiteralOperand(recv, seenConsts) &&
                     allArgsPure();
+            case "sort":
+                return args.length === 0 &&
+                    this.isSideEffectFreeFreshStringArrayOperand(recv, seenConsts);
             default:
                 return false;
         }
@@ -1450,6 +1453,18 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         return ts.isArrayLiteralExpression(unwrapped) &&
             this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+    }
+
+    private isSideEffectFreeFreshStringArrayOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (!ts.isArrayLiteralExpression(unwrapped)) return false;
+        return unwrapped.elements.every((element) =>
+            ts.isExpression(element) &&
+            this.isSideEffectFreeStringCoercion(element, seenConsts)
+        );
     }
 
     private sideEffectFreeArrayLiteralLength(

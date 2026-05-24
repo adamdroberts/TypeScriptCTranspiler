@@ -111,6 +111,7 @@ unused_array_fill_call
 unused_array_copy_within_call
 unused_array_push_call
 unused_array_unshift_call
+unused_array_sort_call
 unused_array_to_sorted_call
 unused_array_to_spliced_call
 unused_array_to_reversed_call
@@ -177,6 +178,7 @@ dead_array_fill
 dead_array_copy_within
 dead_array_push
 dead_array_unshift
+dead_array_sort
 dead_array_to_sorted
 dead_array_to_spliced
 dead_array_to_spliced_insert
@@ -359,6 +361,7 @@ top_level_dead_array_fill
 top_level_dead_array_copy_within
 top_level_dead_array_push
 top_level_dead_array_unshift
+top_level_dead_array_sort
 top_level_dead_array_to_sorted
 top_level_dead_array_to_spliced
 top_level_dead_array_to_spliced_insert
@@ -492,6 +495,7 @@ local_dead_array_fill
 local_dead_array_copy_within
 local_dead_array_push
 local_dead_array_unshift
+local_dead_array_sort
 local_dead_array_to_sorted
 local_dead_array_to_spliced
 local_dead_array_to_spliced_insert
