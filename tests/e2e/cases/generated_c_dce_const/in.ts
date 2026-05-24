@@ -83,6 +83,13 @@ const unused_new_map_copy_call = new Map(new Map([["dead_new_map_copy_key", "dea
 const unused_new_set_empty_call = new Set<number>();
 const unused_new_set_array_call = new Set(["dead_new_set_array", "dead_new_set_array_tail"]);
 const unused_new_set_copy_call = new Set(new Set(["dead_new_set_copy", "dead_new_set_copy_tail"]));
+const unused_set_union_call = new Set(["dead_set_union"]).union(new Set(["dead_set_union_other"]));
+const unused_set_intersection_call = new Set(["dead_set_intersection"]).intersection(new Set(["dead_set_intersection_other"]));
+const unused_set_difference_call = new Set(["dead_set_difference"]).difference(new Set(["dead_set_difference_other"]));
+const unused_set_symmetric_difference_call = new Set(["dead_set_symmetric_difference"]).symmetricDifference(new Set(["dead_set_symmetric_difference_other"]));
+const unused_set_subset_call = new Set(["dead_set_subset"]).isSubsetOf(new Set(["dead_set_subset_other"]));
+const unused_set_superset_call = new Set(["dead_set_superset"]).isSupersetOf(new Set(["dead_set_superset_other"]));
+const unused_set_disjoint_call = new Set(["dead_set_disjoint"]).isDisjointFrom(new Set(["dead_set_disjoint_other"]));
 const unused_new_weak_map_empty_call = new WeakMap<object, string>();
 const unused_new_weak_map_static_source_call = new WeakMap<object, string>([
     [{ dead_new_weak_map_static_key: 1 }, "dead_new_weak_map_static_value"],
@@ -645,6 +652,13 @@ new Map(new Map([["top_level_dead_new_map_copy_key", "top_level_dead_new_map_cop
 new Set<number>();
 new Set(["top_level_dead_new_set_array", "top_level_dead_new_set_array_tail"]);
 new Set(new Set(["top_level_dead_new_set_copy", "top_level_dead_new_set_copy_tail"]));
+new Set(["top_level_dead_set_union"]).union(new Set(["top_level_dead_set_union_other"]));
+new Set(["top_level_dead_set_intersection"]).intersection(new Set(["top_level_dead_set_intersection_other"]));
+new Set(["top_level_dead_set_difference"]).difference(new Set(["top_level_dead_set_difference_other"]));
+new Set(["top_level_dead_set_symmetric_difference"]).symmetricDifference(new Set(["top_level_dead_set_symmetric_difference_other"]));
+new Set(["top_level_dead_set_subset"]).isSubsetOf(new Set(["top_level_dead_set_subset_other"]));
+new Set(["top_level_dead_set_superset"]).isSupersetOf(new Set(["top_level_dead_set_superset_other"]));
+new Set(["top_level_dead_set_disjoint"]).isDisjointFrom(new Set(["top_level_dead_set_disjoint_other"]));
 new WeakMap<object, string>();
 new WeakMap<object, string>([
     [{ top_level_dead_new_weak_map_static_key: 1 }, "top_level_dead_new_weak_map_static_value"],
@@ -1197,6 +1211,13 @@ function usedLocal(value: number): number {
     new Set<number>();
     new Set(["local_dead_new_set_array", "local_dead_new_set_array_tail"]);
     new Set(new Set(["local_dead_new_set_copy", "local_dead_new_set_copy_tail"]));
+    new Set(["local_dead_set_union"]).union(new Set(["local_dead_set_union_other"]));
+    new Set(["local_dead_set_intersection"]).intersection(new Set(["local_dead_set_intersection_other"]));
+    new Set(["local_dead_set_difference"]).difference(new Set(["local_dead_set_difference_other"]));
+    new Set(["local_dead_set_symmetric_difference"]).symmetricDifference(new Set(["local_dead_set_symmetric_difference_other"]));
+    new Set(["local_dead_set_subset"]).isSubsetOf(new Set(["local_dead_set_subset_other"]));
+    new Set(["local_dead_set_superset"]).isSupersetOf(new Set(["local_dead_set_superset_other"]));
+    new Set(["local_dead_set_disjoint"]).isDisjointFrom(new Set(["local_dead_set_disjoint_other"]));
     new WeakMap<object, string>();
     new WeakMap<object, string>([
         [{ local_dead_new_weak_map_static_key: 1 }, "local_dead_new_weak_map_static_value"],

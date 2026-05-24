@@ -1098,6 +1098,9 @@ class Emitter {
         if (this.isSideEffectFreeArrayMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeSetMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
@@ -1729,6 +1732,44 @@ class Emitter {
             default:
                 return false;
         }
+    }
+
+    private isSideEffectFreeSetMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (
+            method !== "union" &&
+            method !== "intersection" &&
+            method !== "difference" &&
+            method !== "symmetricDifference" &&
+            method !== "isSubsetOf" &&
+            method !== "isSupersetOf" &&
+            method !== "isDisjointFrom"
+        ) {
+            return false;
+        }
+        return args.length === 1 &&
+            this.isSideEffectFreeFreshSetOperand(recv, seenConsts) &&
+            this.isSideEffectFreeFreshSetOperand(args[0]!, seenConsts);
+    }
+
+    private isSideEffectFreeFreshSetOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set")
+        ) {
+            return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeFreshSetOperand(init, seenConsts);
     }
 
     private isSideEffectFreeArrayOperand(

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes unused ES2025 Set composition and predicate calls over side-effect-free Set operands. Test: `generated_c_dce_const`.
 - Generated-C DCE now carries exact length proofs through nested one-argument `Array.from(...)` over returned array sources. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused `Promise.all(...)` / `Promise.allSettled(...)` / `Promise.race(...)` over statically empty returned array sources. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused `Object.groupBy(...)` / `Map.groupBy(...)` over statically empty returned array sources. Test: `generated_c_dce_const`.
