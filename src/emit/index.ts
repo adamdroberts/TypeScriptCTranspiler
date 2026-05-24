@@ -1193,6 +1193,9 @@ class Emitter {
         if (this.isSideEffectFreeEventEmitterMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeHashMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeEventMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
@@ -1200,6 +1203,13 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeEventEmitterStaticMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
+        if (
+            ts.isIdentifier(recv) &&
+            this.isCryptoModuleIdentifier(recv) &&
+            this.isSideEffectFreeCryptoCall(method, call.arguments, seenConsts)
+        ) {
             return true;
         }
         if (
@@ -1680,6 +1690,10 @@ class Emitter {
                 this.isSideEffectFreeNetCall(method, call.arguments, seenConsts)
             ) ||
             (
+                this.isCryptoModuleIdentifier(recv) &&
+                this.isSideEffectFreePrimitiveCryptoCall(method, call.arguments, seenConsts)
+            ) ||
+            (
                 this.isNamespaceImportFrom(recv, ["events", "node:events"]) &&
                 this.isSideEffectFreePrimitiveEventsStaticCall(method, call.arguments, seenConsts)
             ) ||
@@ -1939,6 +1953,108 @@ class Emitter {
             this.isSideEffectFreeBufferMethodCall(recv, method, args, seenConsts);
     }
 
+    private isSideEffectFreeCryptoCall(
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return method === "createHash" &&
+            args.length === 1 &&
+            this.isSideEffectFreeCryptoHashAlgorithm(args[0]!, seenConsts);
+    }
+
+    private isSideEffectFreePrimitiveCryptoCall(
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return false;
+    }
+
+    private isSideEffectFreeCryptoHashAlgorithm(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const alg = this.sideEffectFreeStringLiteralText(expr, seenConsts);
+        return alg === "sha1" || alg === "sha256" || alg === "sha512";
+    }
+
+    private isSideEffectFreeCryptoDigestEncoding(
+        expr: ts.Expression | undefined,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!expr || this.isUndefinedExpression(expr)) return true;
+        const encoding = this.sideEffectFreeStringLiteralText(expr, seenConsts);
+        return encoding === "hex" || encoding === "base64";
+    }
+
+    private isSideEffectFreeHashUpdateData(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return this.isSideEffectFreeStringCoercion(expr, seenConsts) ||
+            this.isSideEffectFreeFreshBufferOperand(expr, seenConsts);
+    }
+
+    private isSideEffectFreeDirectFreshHashOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression)
+        ) {
+            const recv = unwrapped.expression.expression;
+            const method = unwrapped.expression.name.text;
+            if (method === "createHash" && ts.isIdentifier(recv) && this.isCryptoModuleIdentifier(recv)) {
+                return this.isSideEffectFreeCryptoCall(method, unwrapped.arguments, seenConsts);
+            }
+            if (method === "update") {
+                return unwrapped.arguments.length === 1 &&
+                    this.isSideEffectFreeDirectFreshHashOperand(recv, seenConsts) &&
+                    this.isSideEffectFreeHashUpdateData(unwrapped.arguments[0]!, seenConsts);
+            }
+        }
+        if (ts.isCallExpression(unwrapped) && ts.isIdentifier(unwrapped.expression)) {
+            const cryptoExport = this.namedImportExportName(unwrapped.expression, ["crypto", "node:crypto"]);
+            return cryptoExport !== null &&
+                this.isSideEffectFreeCryptoCall(cryptoExport, unwrapped.arguments, seenConsts);
+        }
+        return false;
+    }
+
+    private isSideEffectFreeHashMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!this.isSideEffectFreeDirectFreshHashOperand(recv, seenConsts)) return false;
+        switch (method) {
+            case "update":
+                return args.length === 1 &&
+                    this.isSideEffectFreeHashUpdateData(args[0]!, seenConsts);
+            case "digest":
+                return args.length <= 1 &&
+                    this.isSideEffectFreeCryptoDigestEncoding(args[0], seenConsts);
+            default:
+                return false;
+        }
+    }
+
+    private isSideEffectFreePrimitiveHashMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return method === "digest" &&
+            args.length === 1 &&
+            !this.isUndefinedExpression(args[0]!) &&
+            this.isSideEffectFreeHashMethodCall(recv, method, args, seenConsts);
+    }
+
     private isSideEffectFreeProcessCall(
         recv: ts.Expression,
         method: string,
@@ -2083,6 +2199,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeErrorMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreePrimitiveHashMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreePrimitiveEventEmitterMethodCall(recv, method, call.arguments, seenConsts)) {
@@ -4675,6 +4794,10 @@ class Emitter {
         if (eventsExport !== null) {
             return this.isSideEffectFreeEventsStaticCall(eventsExport, call.arguments, seenConsts);
         }
+        const cryptoExport = this.namedImportExportName(call.expression, ["crypto", "node:crypto"]);
+        if (cryptoExport !== null) {
+            return this.isSideEffectFreeCryptoCall(cryptoExport, call.arguments, seenConsts);
+        }
         if (name === "BigInt") {
             return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
                 call.arguments.length >= 1 &&
@@ -5701,6 +5824,13 @@ class Emitter {
             if (
                 eventsExport !== null &&
                 this.isSideEffectFreePrimitiveEventsStaticCall(eventsExport, unwrapped.arguments, seenConsts)
+            ) {
+                return true;
+            }
+            const cryptoExport = this.namedImportExportName(unwrapped.expression, ["crypto", "node:crypto"]);
+            if (
+                cryptoExport !== null &&
+                this.isSideEffectFreePrimitiveCryptoCall(cryptoExport, unwrapped.arguments, seenConsts)
             ) {
                 return true;
             }
