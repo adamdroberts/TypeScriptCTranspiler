@@ -1891,9 +1891,31 @@ class Emitter {
         }
         if (method === "from" && call.arguments.length === 1) {
             return this.isSideEffectFreeStringOperand(call.arguments[0]!, seenConsts) ||
-                this.isSideEffectFreeStringArrayOperand(call.arguments[0]!, new Set(seenConsts));
+                this.isSideEffectFreeStringArrayOperand(call.arguments[0]!, new Set(seenConsts)) ||
+                this.isSideEffectFreeStringSetConstructorSource(call.arguments[0]!, new Set(seenConsts));
         }
         return false;
+    }
+
+    private isSideEffectFreeStringSetConstructorSource(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set")
+        ) {
+            const args = Array.from(unwrapped.arguments ?? []);
+            return args.length === 0 ||
+                (
+                    args.length === 1 &&
+                    this.isSideEffectFreeStringArrayOperand(args[0]!, seenConsts)
+                );
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeStringSetConstructorSource(init, seenConsts);
     }
 
     private isSideEffectFreeStringMethodCall(

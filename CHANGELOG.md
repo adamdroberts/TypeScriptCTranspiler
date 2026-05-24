@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with primitive string-array method results from compile-time-proven `Array.from(new Set([...]))` receivers. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with primitive array method results from compile-time-proven `Array.of(...)` and one-argument `Array.from(...)` receivers. Test: `generated_c_dce_const`.
 - Generated-C DCE now has explicit coverage for unused pure `Promise.resolve(...)` calls with side-effect-free primitive Object/Reflect predicate, get, and descriptor reads through compile-time-proven target-returning Object wrappers. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive `Object.keys(...)`, `Object.getOwnPropertyNames(...)`, and `Reflect.ownKeys(...)` element reads through compile-time-proven target-returning Object wrappers. Test: `generated_c_dce_const`.

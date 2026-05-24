@@ -191,6 +191,8 @@ const unused_promise_resolve_array_of_join_call = Promise.resolve(Array.of("dead
 const unused_promise_resolve_array_from_join_call = Promise.resolve(Array.from(["dead_promise_resolve_array_from_join"]).join("|"));
 const unused_promise_resolve_array_from_string_to_string_call = Promise.resolve(Array.from("dead_promise_resolve_array_from_string_to_string").toString());
 const unused_promise_resolve_array_from_includes_call = Promise.resolve(Array.from(["dead_promise_resolve_array_from_includes"]).includes("dead_promise_resolve_array_from_includes"));
+const unused_promise_resolve_array_from_set_join_call = Promise.resolve(Array.from(new Set(["dead_promise_resolve_array_from_set_join"])).join("|"));
+const unused_promise_resolve_array_from_set_to_string_call = Promise.resolve(Array.from(new Set(["dead_promise_resolve_array_from_set_to_string"])).toString());
 const unused_promise_resolve_object_values_array_element_call = Promise.resolve(Object.values(["dead_promise_resolve_object_values_array_element"])[0]);
 const unused_promise_resolve_object_values_string_element_call = Promise.resolve(Object.values("dead_promise_resolve_object_values_string_element")[0]);
 const unused_promise_resolve_object_values_object_element_call = Promise.resolve(Object.values({ dead_promise_resolve_object_values_object_element: "dead_promise_resolve_object_values_object_element" })[0]);
@@ -534,6 +536,8 @@ Promise.resolve(Array.of("top_level_dead_promise_resolve_array_of_join").join("|
 Promise.resolve(Array.from(["top_level_dead_promise_resolve_array_from_join"]).join("|"));
 Promise.resolve(Array.from("top_level_dead_promise_resolve_array_from_string_to_string").toString());
 Promise.resolve(Array.from(["top_level_dead_promise_resolve_array_from_includes"]).includes("top_level_dead_promise_resolve_array_from_includes"));
+Promise.resolve(Array.from(new Set(["top_level_dead_promise_resolve_array_from_set_join"])).join("|"));
+Promise.resolve(Array.from(new Set(["top_level_dead_promise_resolve_array_from_set_to_string"])).toString());
 Promise.resolve(Object.values(["top_level_dead_promise_resolve_object_values_array_element"])[0]);
 Promise.resolve(Object.values("top_level_dead_promise_resolve_object_values_string_element")[0]);
 Promise.resolve(Object.values({ top_level_dead_promise_resolve_object_values_object_element: "top_level_dead_promise_resolve_object_values_object_element" })[0]);
@@ -888,6 +892,8 @@ function usedLocal(value: number): number {
     Promise.resolve(Array.from(["local_dead_promise_resolve_array_from_join"]).join("|"));
     Promise.resolve(Array.from("local_dead_promise_resolve_array_from_string_to_string").toString());
     Promise.resolve(Array.from(["local_dead_promise_resolve_array_from_includes"]).includes("local_dead_promise_resolve_array_from_includes"));
+    Promise.resolve(Array.from(new Set(["local_dead_promise_resolve_array_from_set_join"])).join("|"));
+    Promise.resolve(Array.from(new Set(["local_dead_promise_resolve_array_from_set_to_string"])).toString());
     Promise.resolve(Object.values(["local_dead_promise_resolve_object_values_array_element"])[0]);
     Promise.resolve(Object.values("local_dead_promise_resolve_object_values_string_element")[0]);
     Promise.resolve(Object.values({ local_dead_promise_resolve_object_values_object_element: "local_dead_promise_resolve_object_values_object_element" })[0]);
