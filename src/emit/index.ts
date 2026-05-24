@@ -1951,6 +1951,15 @@ class Emitter {
                 return false;
             });
         }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            (
+                this.isSideEffectFreeStringArrayReturningArrayHelperCall(unwrapped, seenConsts) ||
+                this.isSideEffectFreeStringArrayReturningObjectKeyHelperCall(unwrapped, seenConsts)
+            )
+        ) {
+            return true;
+        }
         if (this.isObjectAssignCall(unwrapped)) {
             return this.isSideEffectFreeObjectAssignStringValuesCall(unwrapped, seenConsts);
         }
@@ -4522,6 +4531,9 @@ class Emitter {
             ) &&
             this.isSideEffectFreeStaticCall(unwrapped, seenConsts)
         ) {
+            return true;
+        }
+        if (this.isSideEffectFreeArrayOperand(unwrapped, new Set(seenConsts))) {
             return true;
         }
         return this.isSideEffectFreeObjectEnumerationOperand(unwrapped, seenConsts) ||
