@@ -5037,6 +5037,28 @@ class Emitter {
                             this.isSideEffectFreeStringCoercion(args[0]!, seenConsts)
                         )
                     );
+            case "on":
+            case "addListener":
+            case "prependListener":
+            case "once":
+            case "prependOnceListener":
+            case "off":
+            case "removeListener":
+                return this.isSideEffectFreeDirectFreshEventEmitterOperand(recv, seenConsts) &&
+                    args.length === 2 &&
+                    this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
+                    this.isSideEffectFreeEventListenerOperand(args[1]!, seenConsts);
+            case "emit": {
+                if (!this.isSideEffectFreeDirectFreshEventEmitterOperand(recv, seenConsts) || args.length < 1) {
+                    return false;
+                }
+                const eventName = this.sideEffectFreeStringLiteralText(args[0]!, seenConsts);
+                return eventName !== null &&
+                    eventName !== "error" &&
+                    Array.from(args).slice(1).every((arg) =>
+                        this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                    );
+            }
             case "listenerCount":
             case "listeners":
             case "rawListeners":
@@ -5063,11 +5085,22 @@ class Emitter {
         return (
             method === "getMaxListeners" ||
             method === "listenerCount" ||
+            method === "emit" ||
             method === "hasOwnProperty" ||
             method === "propertyIsEnumerable" ||
             method === "toLocaleString" ||
             method === "toString"
         ) && this.isSideEffectFreeEventEmitterMethodCall(recv, method, args, seenConsts);
+    }
+
+    private isSideEffectFreeEventListenerOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrowFunction(unwrapped) || ts.isFunctionExpression(unwrapped)) return true;
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeEventListenerOperand(init, seenConsts);
     }
 
     private isSideEffectFreeEventEmitterStaticMethodCall(
