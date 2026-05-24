@@ -211,6 +211,10 @@ const unused_collection_object_has_own_call = Object.hasOwn(new Set<string>(), "
 const unused_collection_reflect_own_keys_call = Reflect.ownKeys(new WeakRef<object>({ label: "dead_collection_reflect_weak_ref" }));
 const unused_reflect_has_call = Reflect.has({ dead_reflect_has: 1 }, "dead_reflect_has");
 const unused_reflect_own_keys_call = Reflect.ownKeys({ dead_reflect_own_keys: 1 });
+const unused_reflect_get_call = Reflect.get({ dead_reflect_get: 1 }, "dead_reflect_get");
+const unused_reflect_get_array_call = Reflect.get(["dead_reflect_get_array"], "0");
+const unused_reflect_set_call = Reflect.set({ dead_reflect_set_target: 1 }, "dead_reflect_set_key", "dead_reflect_set_value");
+const unused_reflect_set_array_call = Reflect.set(["dead_reflect_set_array_target"], "0", "dead_reflect_set_array_value");
 const unused_reflect_descriptor_call = Reflect.getOwnPropertyDescriptor({ dead_reflect_descriptor: 1 }, "dead_reflect_descriptor");
 const unused_reflect_delete_property_call = Reflect.deleteProperty({ dead_reflect_delete_property: 1 }, "dead_reflect_delete_property");
 const unused_reflect_define_property_call = Reflect.defineProperty({ dead_reflect_define_property_target: 1 }, "dead_reflect_define_property_key", { value: "dead_reflect_define_property_value", configurable: true });
@@ -396,6 +400,10 @@ Object.hasOwn(new FinalizationRegistry<string>(() => "top_level_dead_collection_
 Reflect.ownKeys(new WeakRef<object>({ label: "top_level_dead_collection_reflect_weak_ref" }));
 Reflect.has({ top_level_dead_reflect_has: 1 }, "top_level_dead_reflect_has");
 Reflect.ownKeys({ top_level_dead_reflect_own_keys: 1 });
+Reflect.get({ top_level_dead_reflect_get: 1 }, "top_level_dead_reflect_get");
+Reflect.get(["top_level_dead_reflect_get_array"], "0");
+Reflect.set({ top_level_dead_reflect_set_target: 1 }, "top_level_dead_reflect_set_key", "top_level_dead_reflect_set_value");
+Reflect.set(["top_level_dead_reflect_set_array_target"], "0", "top_level_dead_reflect_set_array_value");
 Reflect.deleteProperty({ top_level_dead_reflect_delete_property: 1 }, "top_level_dead_reflect_delete_property");
 Reflect.defineProperty({ top_level_dead_reflect_define_property_target: 1 }, "top_level_dead_reflect_define_property_key", { value: "top_level_dead_reflect_define_property_value", enumerable: true });
 Reflect.getPrototypeOf({ top_level_dead_reflect_get_prototype: 1 });
@@ -604,6 +612,10 @@ function usedLocal(value: number): number {
     Object.keys(new Set<string>());
     Object.hasOwn(new FinalizationRegistry<string>(() => "local_dead_collection_finregistry"), "local_dead_collection_has_own");
     Reflect.ownKeys(new WeakRef<object>({ label: "local_dead_collection_reflect_weak_ref" }));
+    Reflect.get({ local_dead_reflect_get: 1 }, "local_dead_reflect_get");
+    Reflect.get(["local_dead_reflect_get_array"], "0");
+    Reflect.set({ local_dead_reflect_set_target: 1 }, "local_dead_reflect_set_key", "local_dead_reflect_set_value");
+    Reflect.set(["local_dead_reflect_set_array_target"], "0", "local_dead_reflect_set_array_value");
     Reflect.getOwnPropertyDescriptor({ local_dead_reflect_descriptor: 1 }, "local_dead_reflect_descriptor");
     Reflect.ownKeys(["local_dead_reflect_array_keys"]);
     Reflect.deleteProperty({ local_dead_reflect_delete_property: 1 }, "local_dead_reflect_delete_property");

@@ -1325,6 +1325,27 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            method === "get" &&
+            (call.arguments.length === 2 || call.arguments.length === 3) &&
+            this.isUnshadowedGlobalIdentifier(recv, "Reflect")
+        ) {
+            return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts) &&
+                this.isSideEffectFreePropertyKeyCoercion(call.arguments[1]!, seenConsts) &&
+                (!call.arguments[2] || this.isSideEffectFreeTopLevelConstInitializer(call.arguments[2], seenConsts));
+        }
+        if (
+            ts.isIdentifier(recv) &&
+            method === "set" &&
+            (call.arguments.length === 3 || call.arguments.length === 4) &&
+            this.isUnshadowedGlobalIdentifier(recv, "Reflect")
+        ) {
+            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) &&
+                this.isSideEffectFreePropertyKeyCoercion(call.arguments[1]!, seenConsts) &&
+                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[2]!, seenConsts) &&
+                (!call.arguments[3] || this.isSideEffectFreeTopLevelConstInitializer(call.arguments[3], seenConsts));
+        }
+        if (
+            ts.isIdentifier(recv) &&
             method === "deleteProperty" &&
             call.arguments.length === 2 &&
             this.isUnshadowedGlobalIdentifier(recv, "Reflect")
