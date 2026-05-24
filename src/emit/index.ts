@@ -1352,6 +1352,11 @@ class Emitter {
         args: ts.NodeArray<ts.Expression>,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
+        if (method === "now") {
+            return Array.from(args).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+        }
         if (method === "parse") {
             if (args.length === 0) return true;
             return this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&

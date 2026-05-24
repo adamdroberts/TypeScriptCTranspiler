@@ -60,6 +60,8 @@ unused_number_parse_float
 unused_string_constructor_call
 unused_number_constructor_call
 unused_boolean_constructor_call
+unused_date_now_call
+dead_date_now_ignored
 unused_date_parse_call
 unused_date_utc_call
 unused_new_date_empty_call
@@ -368,6 +370,7 @@ top_level_dead_number_parse_int
 top_level_dead_number_parse_float
 top_level_dead_string_constructor
 top_level_dead_boolean_constructor
+top_level_dead_date_now_ignored
 2020-02-03T04:05:06Z
 2020-02-04T05:06:07Z
 top_level_dead_weak_ref_target
@@ -528,6 +531,7 @@ local_dead_number_parse_int
 local_dead_number_parse_float
 local_dead_string_constructor
 local_dead_boolean_constructor
+local_dead_date_now_ignored
 2020-03-04T05:06:07Z
 2020-03-05T06:07:08Z
 local_dead_weak_ref_target
