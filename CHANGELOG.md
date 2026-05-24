@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now uses exact static string-literal `Array.from(new Set(...))` / string-key `Array.from(new Map(...))` length proofs beyond singleton collections, enabling unused in-range `.with(...)` calls on multi-entry collections to be pruned. Test: `generated_c_dce_const`.
 - `Object.keys([...])` inline array literals now feed typed array methods such as comparator `sort(...)` without producing boxed-value C initializer errors. Test: `object_array_enumeration`.
 - Generated-C DCE now uses `Object.keys(array)` length proofs to prune unused empty-array HOF, singleton comparator `sort(...)` / `toSorted(...)`, and in-range `.with(...)` calls while preserving larger array-key comparator callbacks. Test: `generated_c_dce_const`.
 - Generated-C DCE now uses exact empty/singleton `Array.from(new Set(...))` and `Array.from(new Map(...))` length proofs to prune unused empty-array HOF, singleton comparator `sort(...)` / `toSorted(...)`, and in-range `.with(...)` calls while preserving larger collection comparator callbacks. Test: `generated_c_dce_const`.

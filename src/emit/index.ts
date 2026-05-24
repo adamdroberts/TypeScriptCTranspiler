@@ -1911,12 +1911,82 @@ class Emitter {
             const args = Array.from(unwrapped.arguments ?? []);
             if (args.length === 0) return 0;
             if (args.length === 1) {
+                const exactLiteralLength = globalName === "Set"
+                    ? this.sideEffectFreeStringSetConstructorSourceLength(args[0]!, seenConsts)
+                    : this.sideEffectFreeStringKeyMapConstructorSourceLength(args[0]!, seenConsts);
+                if (exactLiteralLength !== null) return exactLiteralLength;
                 const sourceLength = this.sideEffectFreeArrayLiteralLength(args[0]!, seenConsts);
                 return sourceLength !== null && sourceLength <= 1 ? sourceLength : null;
             }
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeNewCollectionLength(init, globalName, seenConsts) : null;
+    }
+
+    private sideEffectFreeStringSetConstructorSourceLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            const values = new Set<string>();
+            for (const element of unwrapped.elements) {
+                if (!ts.isExpression(element)) return null;
+                const value = this.sideEffectFreeStringLiteralText(element, seenConsts);
+                if (value === null) return null;
+                values.add(value);
+            }
+            return values.size;
+        }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set") &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+        ) {
+            return this.sideEffectFreeNewCollectionLength(unwrapped, "Set", seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeStringSetConstructorSourceLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeStringKeyMapConstructorSourceLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            const keys = new Set<string>();
+            for (const element of unwrapped.elements) {
+                if (!ts.isExpression(element)) return null;
+                const entry = this.unwrapSideEffectFreeStaticExpression(element);
+                if (!ts.isArrayLiteralExpression(entry) || entry.elements.length < 2) return null;
+                const key = entry.elements[0]!;
+                if (!ts.isExpression(key)) return null;
+                const keyText = this.sideEffectFreeStringLiteralText(key, seenConsts);
+                if (keyText === null) return null;
+                for (const entryElement of entry.elements) {
+                    if (
+                        !ts.isExpression(entryElement) ||
+                        !this.isSideEffectFreeTopLevelConstInitializer(entryElement, seenConsts)
+                    ) {
+                        return null;
+                    }
+                }
+                keys.add(keyText);
+            }
+            return keys.size;
+        }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map") &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+        ) {
+            return this.sideEffectFreeNewCollectionLength(unwrapped, "Map", seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeStringKeyMapConstructorSourceLength(init, seenConsts) : null;
     }
 
     private sideEffectFreeFreshOrReturnedArrayLength(
