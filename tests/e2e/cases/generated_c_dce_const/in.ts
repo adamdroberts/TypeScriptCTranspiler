@@ -171,6 +171,8 @@ const unused_object_define_property_call = Object.defineProperty({ dead_object_d
 const unused_object_define_properties_call = Object.defineProperties({ dead_object_define_properties_target: 1 }, { dead_object_define_properties_key: { value: "dead_object_define_properties_value", configurable: true } });
 const unused_object_from_entries_call = Object.fromEntries([["dead_object_from_entries_key", "dead_object_from_entries_value"]]);
 const unused_object_from_entries_const_call = Object.fromEntries(unused_from_entries_source);
+const unused_object_group_by_empty_call = Object.groupBy([] as number[], (value) => "dead_object_group_by_empty" + value);
+const unused_map_group_by_empty_call = Map.groupBy([] as number[], (value) => "dead_map_group_by_empty" + value);
 const unused_reflect_has_call = Reflect.has({ dead_reflect_has: 1 }, "dead_reflect_has");
 const unused_reflect_own_keys_call = Reflect.ownKeys({ dead_reflect_own_keys: 1 });
 const unused_reflect_descriptor_call = Reflect.getOwnPropertyDescriptor({ dead_reflect_descriptor: 1 }, "dead_reflect_descriptor");
@@ -318,6 +320,8 @@ Object.assign(["top_level_dead_assign_array_target"], ["top_level_dead_assign_ar
 Object.defineProperty({ top_level_dead_define_property_target: 1 }, "top_level_dead_define_property_key", { value: "top_level_dead_define_property_value", writable: true });
 Object.defineProperties({ top_level_dead_define_properties_target: 1 }, { top_level_dead_define_properties_key: { value: "top_level_dead_define_properties_value", enumerable: true } });
 Object.fromEntries([["top_level_dead_from_entries_key", "top_level_dead_from_entries_value"]]);
+Object.groupBy([] as number[], (value) => "top_level_dead_object_group_by_empty" + value);
+Map.groupBy([] as number[], (value) => "top_level_dead_map_group_by_empty" + value);
 Reflect.has({ top_level_dead_reflect_has: 1 }, "top_level_dead_reflect_has");
 Reflect.ownKeys({ top_level_dead_reflect_own_keys: 1 });
 Reflect.deleteProperty({ top_level_dead_reflect_delete_property: 1 }, "top_level_dead_reflect_delete_property");
@@ -490,6 +494,8 @@ function usedLocal(value: number): number {
     Object.defineProperty({ local_dead_define_property_target: 1 }, "local_dead_define_property_key", { value: "local_dead_define_property_value", enumerable: true });
     Object.defineProperties({ local_dead_define_properties_target: 1 }, { local_dead_define_properties_key: { value: "local_dead_define_properties_value", configurable: true } });
     Object.fromEntries([["local_dead_from_entries_key", "local_dead_from_entries_value"]]);
+    Object.groupBy([] as number[], (value) => "local_dead_object_group_by_empty" + value);
+    Map.groupBy([] as number[], (value) => "local_dead_map_group_by_empty" + value);
     Reflect.getOwnPropertyDescriptor({ local_dead_reflect_descriptor: 1 }, "local_dead_reflect_descriptor");
     Reflect.ownKeys(["local_dead_reflect_array_keys"]);
     Reflect.deleteProperty({ local_dead_reflect_delete_property: 1 }, "local_dead_reflect_delete_property");
