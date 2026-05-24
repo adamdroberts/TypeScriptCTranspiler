@@ -1437,6 +1437,13 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            this.isNetModuleIdentifier(recv) &&
+            this.isSideEffectFreeNetCall(method, call.arguments, seenConsts)
+        ) {
+            return true;
+        }
+        if (
+            ts.isIdentifier(recv) &&
             this.isUnshadowedGlobalIdentifier(recv, "String")
         ) {
             if (method === "fromCharCode") {
@@ -1621,6 +1628,10 @@ class Emitter {
             (
                 this.isPathModuleIdentifier(recv) &&
                 this.isSideEffectFreePrimitivePathCall(method, call.arguments, seenConsts)
+            ) ||
+            (
+                this.isNetModuleIdentifier(recv) &&
+                this.isSideEffectFreeNetCall(method, call.arguments, seenConsts)
             );
         return isPrimitiveReturningHelper && this.isSideEffectFreeStaticCall(call, seenConsts);
     }
@@ -1729,6 +1740,23 @@ class Emitter {
             "extname",
         ].includes(method) &&
             this.isSideEffectFreePathCall(method, args, seenConsts);
+    }
+
+    private isSideEffectFreeNetCall(
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return [
+            "isIP",
+            "isIPv4",
+            "isIPv6",
+        ].includes(method) &&
+            args.length >= 1 &&
+            this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
+            Array.from(args).slice(1).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
     }
 
     private isSideEffectFreePrimitiveMethodCall(
@@ -4386,6 +4414,10 @@ class Emitter {
         if (pathExport !== null) {
             return this.isSideEffectFreePathCall(pathExport, call.arguments, seenConsts);
         }
+        const netExport = this.namedImportExportName(call.expression, ["net", "node:net"]);
+        if (netExport !== null) {
+            return this.isSideEffectFreeNetCall(netExport, call.arguments, seenConsts);
+        }
         if (name === "BigInt") {
             return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
                 call.arguments.length >= 1 &&
@@ -4985,6 +5017,13 @@ class Emitter {
             if (
                 pathExport !== null &&
                 this.isSideEffectFreePrimitivePathCall(pathExport, unwrapped.arguments, seenConsts)
+            ) {
+                return true;
+            }
+            const netExport = this.namedImportExportName(unwrapped.expression, ["net", "node:net"]);
+            if (
+                netExport !== null &&
+                this.isSideEffectFreeNetCall(netExport, unwrapped.arguments, seenConsts)
             ) {
                 return true;
             }
