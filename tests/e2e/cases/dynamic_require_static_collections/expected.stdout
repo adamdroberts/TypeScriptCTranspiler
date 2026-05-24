@@ -2,4 +2,8 @@ static map a init
 static map b init
 static array a init
 static array b init
+local static map a init
+local static map b init
+local static array a init
+local static array b init
 static collection requires done
