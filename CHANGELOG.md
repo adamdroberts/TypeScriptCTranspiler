@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with side-effect-free `BigInt(...)` and `Symbol(...)` primitive results. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure Object/Reflect own-property helper calls over freshly constructed valid URL objects. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `new URL(...)` calls with compile-time-valid literal inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `new Map(existingMap)` / `new Set(existingSet)` copy constructors over side-effect-free source constructors. Test: `generated_c_dce_const`.

@@ -2110,6 +2110,17 @@ class Emitter {
         ) {
             return true;
         }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            (
+                unwrapped.expression.text === "BigInt" ||
+                unwrapped.expression.text === "Symbol"
+            ) &&
+            this.isSideEffectFreeGlobalCall(unwrapped, seenConsts)
+        ) {
+            return true;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreePrimitivePromiseResolveValue(init, seenConsts);
     }
