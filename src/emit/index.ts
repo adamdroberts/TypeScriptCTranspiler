@@ -967,6 +967,9 @@ class Emitter {
                 this.isSideEffectFreeTopLevelConstInitializer(span.expression, seenConsts)
             );
         }
+        if (ts.isTaggedTemplateExpression(expr) && this.isSideEffectFreeStringRawTaggedTemplate(expr, seenConsts)) {
+            return true;
+        }
         if (ts.isArrayLiteralExpression(expr)) {
             return expr.elements.every((element) => {
                 if (ts.isOmittedExpression(element)) return true;
@@ -1047,6 +1050,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeBase64StringCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (ts.isTaggedTemplateExpression(unwrapped) && this.isSideEffectFreeStringRawTaggedTemplate(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -1192,6 +1198,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeBase64StringCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (ts.isTaggedTemplateExpression(unwrapped) && this.isSideEffectFreeStringRawTaggedTemplate(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -5046,6 +5055,9 @@ class Emitter {
         if (this.isSideEffectFreeBase64StringCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (ts.isTaggedTemplateExpression(unwrapped) && this.isSideEffectFreeStringRawTaggedTemplate(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -5107,6 +5119,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeBase64StringCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (ts.isTaggedTemplateExpression(unwrapped) && this.isSideEffectFreeStringRawTaggedTemplate(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -6099,6 +6114,9 @@ class Emitter {
             return true;
         }
         if (ts.isTemplateExpression(unwrapped) && this.isSideEffectFreePrimitiveTemplateExpression(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (ts.isTaggedTemplateExpression(unwrapped) && this.isSideEffectFreeStringRawTaggedTemplate(unwrapped, seenConsts)) {
             return true;
         }
         if (ts.isConditionalExpression(unwrapped) && this.isSideEffectFreePrimitiveConditionalExpression(unwrapped, seenConsts)) {
@@ -8229,6 +8247,25 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeBase64StringCall(init, seenConsts);
+    }
+
+    private isSideEffectFreeStringRawTaggedTemplate(
+        expr: ts.TaggedTemplateExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const tag = expr.tag;
+        if (
+            !ts.isPropertyAccessExpression(tag) ||
+            tag.name.text !== "raw" ||
+            !ts.isIdentifier(tag.expression) ||
+            !this.isUnshadowedGlobalIdentifier(tag.expression, "String")
+        ) {
+            return false;
+        }
+        if (ts.isNoSubstitutionTemplateLiteral(expr.template)) return true;
+        return expr.template.templateSpans.every((span) =>
+            this.isSideEffectFreePrimitivePromiseResolveValue(span.expression, seenConsts)
+        );
     }
 
     private isSideEffectFreeStringStaticStringCall(
