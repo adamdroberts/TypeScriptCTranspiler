@@ -626,6 +626,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning string and fresh-RegExp method results. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning `Array.isArray(...)`, `Object.is(...)`, `Object.hasOwn(...)`, Object extensibility predicate, `URL.canParse(...)`, and Reflect predicate results. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes unused pure `WeakMap(...)` / `WeakSet(...)` constructors over static object-literal sources. Test: `generated_c_dce_const`
+- Generated-C DCE prunes unused `Promise.all(...)` / `Promise.allSettled(...)` / `Promise.race(...)` over statically empty returned array sources. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused `Object.groupBy(...)` / `Map.groupBy(...)` over statically empty returned array sources. Test: `generated_c_dce_const`
 - Generated-C DCE exposes zero-length proofs for mapped `Array.from(empty, mapper[, thisArg])` results, enabling chained unused array-method pruning. Test: `generated_c_dce_const`
 - Generated-C DCE treats Map/Set constructor sources with exact zero-length proofs as empty for unused `Array.from(..., mapper)` pruning. Test: `generated_c_dce_const`

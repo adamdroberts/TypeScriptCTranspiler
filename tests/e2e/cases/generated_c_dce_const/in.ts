@@ -112,6 +112,9 @@ const unused_promise_resolve_call = Promise.resolve("dead_promise_resolve", "dea
 const unused_promise_all_empty_call = Promise.all([] as Promise<string>[]);
 const unused_promise_all_settled_empty_call = Promise.allSettled([] as Promise<string>[]);
 const unused_promise_race_empty_call = Promise.race([] as Promise<string>[]);
+const unused_promise_all_array_of_empty_call = Promise.all(Array.of<Promise<string>>());
+const unused_promise_all_settled_array_from_empty_call = Promise.allSettled(Array.from([] as Promise<string>[]));
+const unused_promise_race_array_from_empty_call = Promise.race(Array.from([] as Promise<string>[]));
 const unused_promise_resolve_bigint_call = Promise.resolve(123456789n);
 const unused_promise_resolve_signed_number_call = Promise.resolve(-123456.5);
 const unused_promise_resolve_nan_call = Promise.resolve(NaN, "dead_promise_resolve_nan_ignored");
@@ -669,6 +672,9 @@ Promise.resolve("top_level_dead_promise_resolve", "top_level_dead_promise_resolv
 Promise.all([] as Promise<string>[]);
 Promise.allSettled([] as Promise<string>[]);
 Promise.race([] as Promise<string>[]);
+Promise.all(Array.of<Promise<string>>());
+Promise.allSettled(Array.from([] as Promise<string>[]));
+Promise.race(Array.from([] as Promise<string>[]));
 Promise.resolve(987654321n);
 Promise.resolve(+765432.25);
 Promise.resolve(NaN, "top_level_dead_promise_resolve_nan_ignored");
@@ -1217,6 +1223,9 @@ function usedLocal(value: number): number {
     Promise.all([] as Promise<string>[]);
     Promise.allSettled([] as Promise<string>[]);
     Promise.race([] as Promise<string>[]);
+    Promise.all(Array.of<Promise<string>>());
+    Promise.allSettled(Array.from([] as Promise<string>[]));
+    Promise.race(Array.from([] as Promise<string>[]));
     Promise.resolve(234567891n);
     Promise.resolve(-345678.75);
     Promise.resolve(-NaN, "local_dead_promise_resolve_nan_ignored");

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes unused `Promise.all(...)` / `Promise.allSettled(...)` / `Promise.race(...)` over statically empty returned array sources. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused `Object.groupBy(...)` / `Map.groupBy(...)` over statically empty returned array sources. Test: `generated_c_dce_const`.
 - Generated-C DCE now exposes zero-length proofs for mapped `Array.from(empty, mapper[, thisArg])` results, enabling chained unused array-method pruning. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats Map/Set constructor sources with exact zero-length proofs as empty for `Array.from(..., mapper)` pruning. Test: `generated_c_dce_const`.

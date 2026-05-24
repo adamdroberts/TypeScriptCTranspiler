@@ -1180,7 +1180,7 @@ class Emitter {
             call.arguments.length === 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Promise")
         ) {
-            return this.sideEffectFreeArrayLiteralLength(call.arguments[0]!, seenConsts) === 0;
+            return this.isSideEffectFreeFreshOrReturnedEmptyArrayOperand(call.arguments[0]!, seenConsts);
         }
         if (
             ts.isIdentifier(recv) &&
