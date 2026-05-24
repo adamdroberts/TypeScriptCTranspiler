@@ -29634,13 +29634,11 @@ class Emitter {
                     recursive = false;
                     continue;
                 }
-                if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
-                    recursive = true;
-                } else if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) {
-                    recursive = false;
-                } else {
+                const value = this.fsBooleanOptionValue(prop.initializer);
+                if (value === null) {
                     unsupported(prop.initializer, `${label}.recursive must be a boolean literal in this subset`);
                 }
+                recursive = value;
                 continue;
             }
             if (key === "mode") {
@@ -29976,13 +29974,11 @@ class Emitter {
                     withFileTypes = false;
                     continue;
                 }
-                if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
-                    withFileTypes = true;
-                } else if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) {
-                    withFileTypes = false;
-                } else {
+                const value = this.fsBooleanOptionValue(prop.initializer);
+                if (value === null) {
                     unsupported(prop.initializer, `${label}.withFileTypes must be a boolean literal in this subset`);
                 }
+                withFileTypes = value;
                 continue;
             }
             if (key === "recursive") {
@@ -29990,13 +29986,11 @@ class Emitter {
                     recursive = false;
                     continue;
                 }
-                if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
-                    recursive = true;
-                } else if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) {
-                    recursive = false;
-                } else {
+                const value = this.fsBooleanOptionValue(prop.initializer);
+                if (value === null) {
                     unsupported(prop.initializer, `${label}.recursive must be a boolean literal in this subset`);
                 }
+                recursive = value;
                 continue;
             }
             unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
