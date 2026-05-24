@@ -2129,6 +2129,15 @@ class Emitter {
         ) {
             return true;
         }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Math") &&
+            this.isSideEffectFreeMathCall(unwrapped.expression.name.text, unwrapped.arguments, seenConsts)
+        ) {
+            return true;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreePrimitivePromiseResolveValue(init, seenConsts);
     }

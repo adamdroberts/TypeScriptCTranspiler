@@ -139,6 +139,7 @@ unused_promise_resolve_bigint_constructor_call
 unused_promise_resolve_symbol_call
 unused_promise_resolve_parser_call
 unused_promise_resolve_uri_call
+unused_promise_resolve_math_call
 dead_promise_resolve
 dead_promise_resolve_nan_ignored
 dead_promise_resolve_infinity_ignored
@@ -152,6 +153,9 @@ local_dead_promise_resolve_symbol
 dead promise resolve uri
 top level dead promise resolve uri
 local-dead-promise-resolve-uri
+dead_promise_resolve_math
+top_level_dead_promise_resolve_math
+local_dead_promise_resolve_math
 456789123
 567891234
 456789
