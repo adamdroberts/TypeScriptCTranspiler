@@ -1408,6 +1408,20 @@ class Emitter {
             case "reverse":
                 return this.isSideEffectFreeFreshArrayLiteralOperand(recv, seenConsts) &&
                     allArgsPure();
+            case "fill":
+                return args.length >= 1 &&
+                    args.length <= 3 &&
+                    this.isSideEffectFreeFreshArrayLiteralOperand(recv, seenConsts) &&
+                    this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts) &&
+                    (!args[1] || this.isSideEffectFreePrimitiveNumberCoercion(args[1], seenConsts)) &&
+                    (!args[2] || this.isSideEffectFreePrimitiveNumberCoercion(args[2], seenConsts));
+            case "copyWithin":
+                return args.length >= 2 &&
+                    args.length <= 3 &&
+                    this.isSideEffectFreeFreshArrayLiteralOperand(recv, seenConsts) &&
+                    this.isSideEffectFreePrimitiveNumberCoercion(args[0]!, seenConsts) &&
+                    this.isSideEffectFreePrimitiveNumberCoercion(args[1]!, seenConsts) &&
+                    (!args[2] || this.isSideEffectFreePrimitiveNumberCoercion(args[2], seenConsts));
             default:
                 return false;
         }
