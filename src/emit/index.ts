@@ -12705,10 +12705,25 @@ class Emitter {
     private isCommonJsModuleAliasDeclaration(decl: ts.VariableDeclaration): boolean {
         if (!this.isJavaScriptSourceFile(decl.getSourceFile())) return false;
         if (!ts.isIdentifier(decl.name) || !decl.initializer) return false;
-        let init = decl.initializer;
+        return this.isCommonJsModuleAliasInitializer(decl.initializer);
+    }
+
+    private isCommonJsModuleAliasInitializer(expr: ts.Expression): boolean {
+        let init = expr;
         while (ts.isParenthesizedExpression(init)) init = init.expression;
-        return ts.isIdentifier(init) &&
-            init.text === "module";
+        return ts.isIdentifier(init) && this.isCommonJsModuleIdentifier(init);
+    }
+
+    private isCommonJsModuleDestructureAliasDeclaration(decl: ts.VariableDeclaration): boolean {
+        if (!this.isJavaScriptSourceFile(decl.getSourceFile())) return false;
+        if (!ts.isObjectBindingPattern(decl.name) || !decl.initializer) return false;
+        if (!this.isCommonJsModuleAliasInitializer(decl.initializer)) return false;
+        for (const element of decl.name.elements) {
+            if (!ts.isIdentifier(element.name) || element.initializer || element.dotDotDotToken) return false;
+            const name = this.staticPropertyName(element.propertyName ?? element.name);
+            if (name !== "require" && name !== "exports") return false;
+        }
+        return true;
     }
 
     private isCommonJsExportsTargetExpression(expr: ts.Expression): boolean {
@@ -12723,6 +12738,9 @@ class Emitter {
     private isCommonJsExportsAliasIdentifier(id: ts.Identifier): boolean {
         const sym = this.symbolForIdentifier(id);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        if (decl && ts.isBindingElement(decl) && this.isCommonJsModuleExportsAliasBindingElement(decl)) {
+            return true;
+        }
         return !!decl && ts.isVariableDeclaration(decl) && this.isCommonJsExportsAliasDeclaration(decl);
     }
 
@@ -12735,6 +12753,17 @@ class Emitter {
         while (ts.isParenthesizedExpression(init)) init = init.expression;
         return (ts.isIdentifier(init) && init.text === "exports") ||
             (ts.isPropertyAccessExpression(init) && this.isModuleExportsAccess(init));
+    }
+
+    private isCommonJsModuleExportsAliasBindingElement(element: ts.BindingElement): boolean {
+        if (!ts.isIdentifier(element.name) || element.initializer || element.dotDotDotToken) return false;
+        if (this.staticPropertyName(element.propertyName ?? element.name) !== "exports") return false;
+        const binding = element.parent;
+        const decl = binding.parent;
+        return ts.isObjectBindingPattern(binding) &&
+            ts.isVariableDeclaration(decl) &&
+            !!decl.initializer &&
+            this.isCommonJsModuleAliasInitializer(decl.initializer);
     }
 
     private commonJsExportCName(expr: CommonJsExportAccess): string | null {
@@ -12783,6 +12812,9 @@ class Emitter {
     private isCommonJsRequireAliasIdentifier(id: ts.Identifier): boolean {
         const sym = this.symbolForIdentifier(id);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        if (decl && ts.isBindingElement(decl) && this.isCommonJsModuleRequireAliasBindingElement(decl)) {
+            return true;
+        }
         if (decl && ts.isVariableDeclaration(decl) && this.isCommonJsRequireAliasDeclaration(decl)) {
             return true;
         }
@@ -12807,6 +12839,17 @@ class Emitter {
         while (ts.isParenthesizedExpression(init)) init = init.expression;
         return (ts.isIdentifier(init) && init.text === "require") ||
             (ts.isPropertyAccessExpression(init) && this.isModuleRequireAccess(init));
+    }
+
+    private isCommonJsModuleRequireAliasBindingElement(element: ts.BindingElement): boolean {
+        if (!ts.isIdentifier(element.name) || element.initializer || element.dotDotDotToken) return false;
+        if (this.staticPropertyName(element.propertyName ?? element.name) !== "require") return false;
+        const binding = element.parent;
+        const decl = binding.parent;
+        return ts.isObjectBindingPattern(binding) &&
+            ts.isVariableDeclaration(decl) &&
+            !!decl.initializer &&
+            this.isCommonJsModuleAliasInitializer(decl.initializer);
     }
 
     private requireCallSpecifier(expr: ts.Expression): string | null {
@@ -15813,6 +15856,7 @@ class Emitter {
         const isConst = (vs.declarationList.flags & ts.NodeFlags.Const) !== 0;
         for (const d of vs.declarationList.declarations) {
             if (!ts.isIdentifier(d.name)) {
+                if (this.isCommonJsModuleDestructureAliasDeclaration(d)) continue;
                 const spec = d.initializer ? this.requireCallSpecifier(d.initializer) : null;
                 if (spec && ts.isObjectBindingPattern(d.name)) {
                     this.emitTopLevelRequireDestructuring(initBuf, d, spec);
@@ -16405,6 +16449,7 @@ class Emitter {
             (vs.declarationList.flags & ts.NodeFlags.Const) !== 0;
         for (const d of vs.declarationList.declarations) {
             if (!ts.isIdentifier(d.name)) {
+                if (this.isCommonJsModuleDestructureAliasDeclaration(d)) continue;
                 const spec = d.initializer ? this.requireCallSpecifier(d.initializer) : null;
                 if (spec && ts.isObjectBindingPattern(d.name)) {
                     this.emitLocalRequireDestructuring(buf, d, spec, isConst);

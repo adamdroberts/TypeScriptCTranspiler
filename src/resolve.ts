@@ -206,10 +206,20 @@ function commonJsModuleAliases(sf: ts.SourceFile): Set<string> {
 function commonJsRequireAliases(sf: ts.SourceFile, moduleAliases: Set<string>): Set<string> {
     const aliases = new Set<string>();
     const visit = (node: ts.Node): void => {
-        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
-            let init = node.initializer;
+        if (ts.isVariableDeclaration(node) && node.initializer) {
+            let init: ts.Expression = node.initializer;
             while (ts.isParenthesizedExpression(init)) init = init.expression;
-            if (isCommonJsRequireAliasInitializer(init, moduleAliases)) aliases.add(node.name.text);
+            if (ts.isIdentifier(node.name) && isCommonJsRequireAliasInitializer(init, moduleAliases)) {
+                aliases.add(node.name.text);
+            }
+            if (ts.isObjectBindingPattern(node.name) && isCommonJsModuleAliasInitializer(init, moduleAliases)) {
+                for (const element of node.name.elements) {
+                    if (!ts.isIdentifier(element.name) || element.initializer || element.dotDotDotToken) continue;
+                    if (staticPropertyName(element.propertyName ?? element.name) === "require") {
+                        aliases.add(element.name.text);
+                    }
+                }
+            }
         }
         ts.forEachChild(node, visit);
     };
@@ -219,4 +229,13 @@ function commonJsRequireAliases(sf: ts.SourceFile, moduleAliases: Set<string>): 
 
 function isCommonJsRequireAliasInitializer(expr: ts.Expression, moduleAliases: Set<string>): boolean {
     return isCommonJsRequireCallee(expr, new Set(), moduleAliases);
+}
+
+function isCommonJsModuleAliasInitializer(expr: ts.Expression, moduleAliases: Set<string>): boolean {
+    return ts.isIdentifier(expr) && (expr.text === "module" || moduleAliases.has(expr.text));
+}
+
+function staticPropertyName(name: ts.PropertyName | ts.BindingName): string | null {
+    if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) return name.text;
+    return null;
 }

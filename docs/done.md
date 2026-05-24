@@ -542,6 +542,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - TypeScript type-checking via the official compiler API — any TS type error is surfaced with full source context (file:line:col + code frame) before emission. Test: try `/tmp/bad.ts` with `const x: number = "str"`.
 - Unsupported-feature diagnostics include source location and a one-line reason — exit code 3 distinguishes them from TS errors (exit 2) and gcc failures (exit 1).
 - E2E `expected.mainc.contains` assertions check each non-empty line independently, matching `expected.mainc.not_contains` and allowing multiple generated-C preservation markers per case. Test: `generated_c_dce_const`
+- CommonJS package sources treat `const { require: req, exports: out } = module` destructuring as static wrapper aliases for AOT require edges and export mutations. Test: `node_modules_commonjs_module_destructure_wrapper`
 - CommonJS package sources treat function-scoped `const mod = module` aliases as static wrapper aliases for scoped `mod.require(...)`, `const req = mod.require`, and read-only module metadata. Test: `node_modules_commonjs_function_scope_module_alias`
 - CommonJS package sources treat top-level `const mod = module` aliases as static wrapper aliases for `mod.require(...)`, `const req = mod.require`, `mod.exports.*`, and module metadata reads such as `mod.filename`, `mod.path`, `mod.loaded`, and `mod.paths`. Test: `node_modules_commonjs_module_alias_wrapper`
 - Generated-C DCE treats side-effect-free string-array method results as side-effect-free `.length`, string-method, and indexable operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
@@ -1245,6 +1246,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_commonjs_module_metadata_more` | read-only CommonJS `module.parent` / `module.children` / `module.isPreloading` metadata |
 | `node_modules_commonjs_module_paths` | read-only CommonJS `module.paths` metadata with a package-local node_modules lookup path |
 | `node_modules_commonjs_module_alias_wrapper` | narrow CommonJS top-level module alias for require, exports, and wrapper metadata |
+| `node_modules_commonjs_module_destructure_wrapper` | CommonJS module wrapper destructuring aliases for static require and exports |
 | `node_modules_commonjs_module_require` | narrow CommonJS package top-level and package-local literal `module.require(...)` member reads/calls/re-exports |
 | `node_modules_commonjs_require_alias` | narrow CommonJS package top-level static `require` and `module.require` aliases for package-local member exports |
 | `node_modules_commonjs_package_named` | narrow CommonJS package named exports through `exports.name` / `module.exports.name` |
