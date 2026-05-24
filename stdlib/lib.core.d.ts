@@ -655,6 +655,8 @@ interface Process {
     nextTick<A>(callback: (this: any, arg: A) => void, arg: A): void;
     nextTick<A, B>(callback: (this: any, arg1: A, arg2: B) => void, arg1: A, arg2: B): void;
     nextTick<A, B, C>(callback: (this: any, arg1: A, arg2: B, arg3: C) => void, arg1: A, arg2: B, arg3: C): void;
+    nextTick<A, B, C, D>(callback: (this: any, arg1: A, arg2: B, arg3: C, arg4: D) => void, arg1: A, arg2: B, arg3: C, arg4: D): void;
+    nextTick<A, B, C, D, E>(callback: (this: any, arg1: A, arg2: B, arg3: C, arg4: D, arg5: E) => void, arg1: A, arg2: B, arg3: C, arg4: D, arg5: E): void;
     getuid(...ignored: any[]): number;
     getgid(...ignored: any[]): number;
     geteuid(...ignored: any[]): number;
@@ -683,12 +685,16 @@ declare function setTimeout(callback: (this: any) => void, delay?: number): numb
 declare function setTimeout<A>(callback: (this: any, arg: A) => void, delay: number, arg: A): number;
 declare function setTimeout<A, B>(callback: (this: any, arg1: A, arg2: B) => void, delay: number, arg1: A, arg2: B): number;
 declare function setTimeout<A, B, C>(callback: (this: any, arg1: A, arg2: B, arg3: C) => void, delay: number, arg1: A, arg2: B, arg3: C): number;
+declare function setTimeout<A, B, C, D>(callback: (this: any, arg1: A, arg2: B, arg3: C, arg4: D) => void, delay: number, arg1: A, arg2: B, arg3: C, arg4: D): number;
+declare function setTimeout<A, B, C, D, E>(callback: (this: any, arg1: A, arg2: B, arg3: C, arg4: D, arg5: E) => void, delay: number, arg1: A, arg2: B, arg3: C, arg4: D, arg5: E): number;
 declare function clearTimeout(handle?: number, ...ignored: any[]): void;
 declare function clearInterval(handle?: number, ...ignored: any[]): void;
 declare function setImmediate(callback: (this: any) => void): number;
 declare function setImmediate<A>(callback: (this: any, arg: A) => void, arg: A): number;
 declare function setImmediate<A, B>(callback: (this: any, arg1: A, arg2: B) => void, arg1: A, arg2: B): number;
 declare function setImmediate<A, B, C>(callback: (this: any, arg1: A, arg2: B, arg3: C) => void, arg1: A, arg2: B, arg3: C): number;
+declare function setImmediate<A, B, C, D>(callback: (this: any, arg1: A, arg2: B, arg3: C, arg4: D) => void, arg1: A, arg2: B, arg3: C, arg4: D): number;
+declare function setImmediate<A, B, C, D, E>(callback: (this: any, arg1: A, arg2: B, arg3: C, arg4: D, arg5: E) => void, arg1: A, arg2: B, arg3: C, arg4: D, arg5: E): number;
 declare function clearImmediate(handle?: number, ...ignored: any[]): void;
 declare const NaN: number;
 declare const Infinity: number;

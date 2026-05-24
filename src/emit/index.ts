@@ -20313,7 +20313,7 @@ class Emitter {
             });
         }
         if (name === "setImmediate") {
-            if (call.arguments.length < 1 || call.arguments.length > 4) unsupported(call, "setImmediate expects a callback and up to 3 arguments in this subset");
+            if (call.arguments.length < 1 || call.arguments.length > 6) unsupported(call, "setImmediate expects a callback and up to 5 arguments in this subset");
             const callbackNode = call.arguments[0]!;
             const callback = this.emitExpr(callbackNode);
             const argNodes = Array.from(call.arguments.slice(1));
@@ -20340,7 +20340,7 @@ class Emitter {
             return this.emitClearTimerCall(call, "tsc_clear_immediate");
         }
         if (name === "setTimeout") {
-            if (call.arguments.length < 1 || call.arguments.length > 5) unsupported(call, "setTimeout expects a callback, optional literal 0 delay, and up to 3 arguments in this subset");
+            if (call.arguments.length < 1 || call.arguments.length > 7) unsupported(call, "setTimeout expects a callback, optional literal 0 delay, and up to 5 arguments in this subset");
             const callbackNode = call.arguments[0]!;
             const callback = this.emitExpr(callbackNode);
             if (call.arguments.length >= 2 && !this.isZeroDelayLiteral(call.arguments[1]!)) {
@@ -22189,7 +22189,7 @@ class Emitter {
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "process") {
             switch (memberName) {
                 case "nextTick": {
-                    if (call.arguments.length < 1 || call.arguments.length > 4) unsupported(call, "process.nextTick expects a callback and up to 3 arguments in this subset");
+                    if (call.arguments.length < 1 || call.arguments.length > 6) unsupported(call, "process.nextTick expects a callback and up to 5 arguments in this subset");
                     const callbackNode = call.arguments[0]!;
                     const callback = this.emitExpr(callbackNode);
                     const argNodes = Array.from(call.arguments.slice(1));

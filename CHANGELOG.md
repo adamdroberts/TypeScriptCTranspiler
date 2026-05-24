@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Bounded scheduler callbacks for `process.nextTick`, zero-delay `setTimeout`, and `setImmediate` now accept up to five typed queued callback arguments. Test: `scheduler_many_args`.
 - `fs.realpathSync(...)`, `fs.readlinkSync(...)`, `fs.mkdtempSync(...)`, and their immediate `fs.promises` counterparts now treat direct `null` options and `{ encoding: null }` as default string results. Tests: `fs_link_path_encoding_options`, `fs_mkdtemp_encoding_options`.
 - `fs.readdirSync(...)` and immediate `fs.promises.readdir(...)` now treat direct `null` options and `{ encoding: null }` as default string filename results. Test: `fs_readdir_null_encoding_options`.
 - `fs.readdirSync(...)` and immediate `fs.promises.readdir(...)` now accept literal `"hex"` / `"base64"` string and object encodings for string filename arrays, including recursive results and earlier static `const` aliases. Test: `fs_readdir_encoded_options`.
