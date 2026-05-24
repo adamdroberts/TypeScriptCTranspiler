@@ -1,9 +1,9 @@
 import * as nodeDns from "node:dns";
-import { ADDRCONFIG, ALL, V4MAPPED, lookup, promises } from "dns";
+import { ADDRCONFIG as DNS_ADDRCONFIG, ALL, V4MAPPED as DNS_V4MAPPED, lookup, promises } from "dns";
 
-console.log("constants:", dns.ADDRCONFIG, nodeDns.V4MAPPED, ADDRCONFIG, ALL);
+console.log("constants:", dns.ADDRCONFIG, nodeDns.V4MAPPED, DNS_ADDRCONFIG, ALL);
 
-lookup("127.0.0.1", { family: 6, hints: V4MAPPED }, (err: any, address: string, family: number): void => {
+lookup("127.0.0.1", { family: 6, hints: DNS_V4MAPPED }, (err: any, address: string, family: number): void => {
     console.log("callback hints:", err === null, address.indexOf("127.0.0.1") >= 0, family);
 });
 

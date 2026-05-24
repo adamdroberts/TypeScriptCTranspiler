@@ -6362,9 +6362,10 @@ class Emitter {
     }
 
     private isSideEffectFreeBuiltinNumericConstantIdentifier(expr: ts.Identifier): boolean {
+        const dnsExport = this.namedImportExportName(expr, ["dns", "node:dns"]);
         return (
-            this.dnsLookupHintConstant(expr.text) !== null &&
-            this.isNamedImportFrom(expr, ["dns", "node:dns"], expr.text)
+            dnsExport !== null &&
+            this.dnsLookupHintConstant(dnsExport) !== null
         ) || this.isNamedImportFrom(expr, ["events", "node:events"], "defaultMaxListeners");
     }
 
@@ -11051,16 +11052,19 @@ class Emitter {
     }
 
     private isNamedImportFrom(id: ts.Identifier, moduleNames: readonly string[], exportedName: string): boolean {
+        return this.namedImportExportName(id, moduleNames) === exportedName;
+    }
+
+    private namedImportExportName(id: ts.Identifier, moduleNames: readonly string[]): string | null {
         const sym = this.checker.getSymbolAtLocation(id);
         for (const decl of sym?.declarations ?? []) {
             if (!ts.isImportSpecifier(decl) || decl.name.text !== id.text) continue;
             const imported = decl.propertyName?.text ?? decl.name.text;
-            if (imported !== exportedName) continue;
             const importDecl = decl.parent.parent.parent;
             const spec = importDecl.moduleSpecifier;
-            if (ts.isStringLiteral(spec) && moduleNames.includes(spec.text)) return true;
+            if (ts.isStringLiteral(spec) && moduleNames.includes(spec.text)) return imported;
         }
-        return false;
+        return null;
     }
 
     private isNamespaceImportFrom(id: ts.Identifier, moduleNames: readonly string[]): boolean {
@@ -15630,8 +15634,9 @@ class Emitter {
             if (this.isNamedImportFrom(expr, ["os", "node:os"], "devNull")) {
                 return { c: this.stringLit("/dev/null"), ty: T_STRING };
             }
-            const dnsHint = this.dnsLookupHintConstant(expr.text);
-            if (dnsHint !== null && this.isNamedImportFrom(expr, ["dns", "node:dns"], expr.text)) {
+            const dnsExport = this.namedImportExportName(expr, ["dns", "node:dns"]);
+            const dnsHint = dnsExport === null ? null : this.dnsLookupHintConstant(dnsExport);
+            if (dnsHint !== null) {
                 return { c: dnsHint.toFixed(1), ty: T_NUMBER };
             }
             const sym = this.symbolForIdentifier(expr);
@@ -23076,8 +23081,9 @@ class Emitter {
         }
         if (ts.isNumericLiteral(expr)) return Number(expr.text);
         if (ts.isIdentifier(expr)) {
-            const value = this.dnsLookupHintConstant(expr.text);
-            if (value !== null && this.isNamedImportFrom(expr, ["dns", "node:dns"], expr.text)) {
+            const dnsExport = this.namedImportExportName(expr, ["dns", "node:dns"]);
+            const value = dnsExport === null ? null : this.dnsLookupHintConstant(dnsExport);
+            if (value !== null) {
                 return value;
             }
         }

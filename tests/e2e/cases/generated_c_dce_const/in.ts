@@ -1,4 +1,4 @@
-import { ADDRCONFIG, ALL } from "dns";
+import { ADDRCONFIG, ALL, V4MAPPED as dnsV4Mapped } from "dns";
 import { EventEmitter, defaultMaxListeners } from "events";
 import { constants as fsConstants } from "fs";
 import * as nodeDns from "node:dns";
@@ -88,6 +88,7 @@ const unused_os_constant_read = nodeOs.EOL.length + "dead_os_constant_read".leng
 const unused_os_named_constant_read = osDevNull.length + "dead_os_named_constant_read".length;
 const unused_dns_constant_read = nodeDns.ADDRCONFIG + "dead_dns_constant_read".length;
 const unused_dns_named_constant_read = ALL + "dead_dns_named_constant_read".length;
+const unused_dns_alias_constant_read = dnsV4Mapped + "dead_dns_alias_constant_read".length;
 const unused_event_default_read = EventEmitter.defaultMaxListeners + "dead_event_default_read".length;
 const unused_event_namespace_default_read = nodeEvents.defaultMaxListeners + "dead_event_namespace_default_read".length;
 const unused_event_named_default_read = defaultMaxListeners + "dead_event_named_default_read".length;
@@ -244,6 +245,7 @@ const unused_promise_resolve_path_constant_read = Promise.resolve(pathSep.length
 const unused_promise_resolve_os_constant_read = Promise.resolve(osEOL.length + "dead_promise_resolve_os_constant_read".length);
 const unused_promise_resolve_dns_constant_read = Promise.resolve(nodeDns.V4MAPPED + "dead_promise_resolve_dns_constant_read".length);
 const unused_promise_resolve_dns_named_constant_read = Promise.resolve(ADDRCONFIG + "dead_promise_resolve_dns_named_constant_read".length);
+const unused_promise_resolve_dns_alias_constant_read = Promise.resolve(dnsV4Mapped + "dead_promise_resolve_dns_alias_constant_read".length);
 const unused_promise_resolve_event_default_read = Promise.resolve(nodeEvents.EventEmitter.defaultMaxListeners + "dead_promise_resolve_event_default_read".length);
 const unused_promise_resolve_event_named_default_read = Promise.resolve(defaultMaxListeners + "dead_promise_resolve_event_named_default_read".length);
 const unused_promise_resolve_string_method_call = Promise.resolve("dead_promise_resolve_string_method".toUpperCase());
