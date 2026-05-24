@@ -26026,15 +26026,17 @@ class Emitter {
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === "killSignal",
         );
         if (!prop || this.isUndefinedExpression(prop.initializer)) return "15.0";
-        if (ts.isNumericLiteral(prop.initializer)) {
-            const signal = Number(prop.initializer.text);
+        const numericSignal = this.sideEffectFreeNumericLiteralSameValueZeroValue(prop.initializer, new Set());
+        if (numericSignal !== null) {
+            const signal = numericSignal;
             if (signal === 9 || signal === 15) return `${signal}.0`;
             unsupported(prop.initializer, "child_process killSignal only supports SIGTERM, SIGKILL, 9, and 15");
         }
-        if (!ts.isStringLiteral(prop.initializer)) {
+        const signalText = this.sideEffectFreeStringLiteralText(prop.initializer, new Set());
+        if (signalText === null) {
             unsupported(prop.initializer, "child_process killSignal must be a literal signal string or numeric signal in this subset");
         }
-        switch (prop.initializer.text) {
+        switch (signalText) {
             case "SIGTERM": return "15.0";
             case "SIGKILL": return "9.0";
             default:
