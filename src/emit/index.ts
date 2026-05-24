@@ -793,7 +793,8 @@ class Emitter {
             if (
                 this.isUnshadowedGlobalIdentifier(expr, "undefined") ||
                 this.isUnshadowedGlobalIdentifier(expr, "NaN") ||
-                this.isUnshadowedGlobalIdentifier(expr, "Infinity")
+                this.isUnshadowedGlobalIdentifier(expr, "Infinity") ||
+                this.isSideEffectFreeCommonJSPathIdentifier(expr)
             ) {
                 return true;
             }
@@ -926,6 +927,9 @@ class Emitter {
             if (this.isSideEffectFreeProcessStdioMetadataRead(expr)) {
                 return true;
             }
+            if (this.isSideEffectFreeModulePrimitiveMetadataRead(expr)) {
+                return true;
+            }
             return this.isSideEffectFreeObjectReadOperand(expr.expression, seenConsts);
         }
         if (ts.isElementAccessExpression(expr) && expr.argumentExpression) {
@@ -973,6 +977,9 @@ class Emitter {
             ts.isNoSubstitutionTemplateLiteral(unwrapped)
         ) {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+        }
+        if (ts.isIdentifier(unwrapped) && this.isSideEffectFreeCommonJSPathIdentifier(unwrapped)) {
+            return true;
         }
         if (
             ts.isCallExpression(unwrapped) &&
@@ -4708,7 +4715,8 @@ class Emitter {
             ts.isIdentifier(unwrapped) &&
             (
                 this.isUnshadowedGlobalIdentifier(unwrapped, "NaN") ||
-                this.isUnshadowedGlobalIdentifier(unwrapped, "Infinity")
+                this.isUnshadowedGlobalIdentifier(unwrapped, "Infinity") ||
+                this.isSideEffectFreeCommonJSPathIdentifier(unwrapped)
             )
         ) {
             return true;
@@ -4749,6 +4757,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeProcessStdioMetadataRead(unwrapped)) {
+            return true;
+        }
+        if (this.isSideEffectFreeModulePrimitiveMetadataRead(unwrapped)) {
             return true;
         }
         if (this.isSideEffectFreeStringElementAccess(unwrapped, seenConsts)) {
@@ -6288,6 +6299,25 @@ class Emitter {
                 return streamName === "stdin";
             case "writable":
                 return streamName !== "stdin";
+            default:
+                return false;
+        }
+    }
+
+    private isSideEffectFreeCommonJSPathIdentifier(expr: ts.Identifier): boolean {
+        return this.isUnshadowedGlobalIdentifier(expr, "__filename") ||
+            this.isUnshadowedGlobalIdentifier(expr, "__dirname");
+    }
+
+    private isSideEffectFreeModulePrimitiveMetadataRead(expr: ts.Expression): boolean {
+        if (!ts.isPropertyAccessExpression(expr) || !ts.isIdentifier(expr.expression)) return false;
+        if (!this.isUnshadowedGlobalIdentifier(expr.expression, "module")) return false;
+        switch (expr.name.text) {
+            case "filename":
+            case "id":
+            case "path":
+            case "loaded":
+                return true;
             default:
                 return false;
         }
