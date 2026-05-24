@@ -542,6 +542,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - TypeScript type-checking via the official compiler API — any TS type error is surfaced with full source context (file:line:col + code frame) before emission. Test: try `/tmp/bad.ts` with `const x: number = "str"`.
 - Unsupported-feature diagnostics include source location and a one-line reason — exit code 3 distinguishes them from TS errors (exit 2) and gcc failures (exit 1).
 - E2E `expected.mainc.contains` assertions check each non-empty line independently, matching `expected.mainc.not_contains` and allowing multiple generated-C preservation markers per case. Test: `generated_c_dce_const`
+- CommonJS package sources treat function-scoped `const mod = module` aliases as static wrapper aliases for scoped `mod.require(...)`, `const req = mod.require`, and read-only module metadata. Test: `node_modules_commonjs_function_scope_module_alias`
 - CommonJS package sources treat top-level `const mod = module` aliases as static wrapper aliases for `mod.require(...)`, `const req = mod.require`, `mod.exports.*`, and module metadata reads such as `mod.filename`, `mod.path`, `mod.loaded`, and `mod.paths`. Test: `node_modules_commonjs_module_alias_wrapper`
 - Generated-C DCE treats side-effect-free string-array method results as side-effect-free `.length`, string-method, and indexable operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE treats side-effect-free Symbol description and string method results as side-effect-free `.length`, string-method, and indexable operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
@@ -1166,6 +1167,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_commonjs_exports_default_interop` | narrow CommonJS `exports.default` interop with transpiled-ESM `__esModule` marker elision including `exports.__esModule = true` |
 | `node_modules_commonjs_function_scope_require` | function-scoped static literal CommonJS require namespace, destructured with absent-export defaults/rest, bound-default, and direct-default calls |
 | `node_modules_commonjs_function_scope_require_alias` | function-scoped static literal CommonJS `require` / `module.require` aliases for namespace, destructured, bound-default, and direct-default calls |
+| `node_modules_commonjs_function_scope_module_alias` | function-scoped CommonJS module aliases for static require and wrapper metadata |
 | `node_modules_commonjs_module_exports_arrow` | narrow CommonJS package arrow-function-valued `module.exports` default |
 | `node_modules_commonjs_module_exports_array` | narrow CommonJS package array-valued `module.exports` default reads |
 | `node_modules_commonjs_module_exports_function` | narrow CommonJS package function-valued `module.exports` default import |

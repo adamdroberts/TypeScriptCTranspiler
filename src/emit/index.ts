@@ -12681,7 +12681,7 @@ class Emitter {
     }
 
     private isCommonJsModuleIdentifier(id: ts.Identifier): boolean {
-        if (id.text === "module" && this.isUnshadowedGlobalIdentifier(id, "module")) return true;
+        if (id.text === "module") return true;
         const sym = this.symbolForIdentifier(id);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         if (decl && ts.isVariableDeclaration(decl) && this.isCommonJsModuleAliasDeclaration(decl)) {
@@ -12705,13 +12705,10 @@ class Emitter {
     private isCommonJsModuleAliasDeclaration(decl: ts.VariableDeclaration): boolean {
         if (!this.isJavaScriptSourceFile(decl.getSourceFile())) return false;
         if (!ts.isIdentifier(decl.name) || !decl.initializer) return false;
-        const stmt = decl.parent.parent;
-        if (!ts.isVariableStatement(stmt) || stmt.parent !== decl.getSourceFile()) return false;
         let init = decl.initializer;
         while (ts.isParenthesizedExpression(init)) init = init.expression;
         return ts.isIdentifier(init) &&
-            init.text === "module" &&
-            this.isUnshadowedGlobalIdentifier(init, "module");
+            init.text === "module";
     }
 
     private isCommonJsExportsTargetExpression(expr: ts.Expression): boolean {
