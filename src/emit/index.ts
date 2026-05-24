@@ -1950,6 +1950,8 @@ class Emitter {
         }
         const keySourceLength = this.sideEffectFreeStringKeyArraySourceLength(unwrapped, seenConsts);
         if (keySourceLength !== null) return keySourceLength;
+        const valueSourceLength = this.sideEffectFreeStringValueArraySourceSetLength(unwrapped, seenConsts);
+        if (valueSourceLength !== null) return valueSourceLength;
         if (
             ts.isNewExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
@@ -1992,6 +1994,62 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeStringKeyArraySourceLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeStringValueArraySourceSetLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Object") &&
+            unwrapped.expression.name.text === "values" &&
+            unwrapped.arguments.length === 1
+        ) {
+            return this.sideEffectFreeObjectValuesStringSetLength(unwrapped.arguments[0]!, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeStringValueArraySourceSetLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeObjectValuesStringSetLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        const stringText = this.sideEffectFreeStringLiteralText(unwrapped, seenConsts);
+        if (stringText !== null) return new Set(Array.from(stringText)).size;
+        if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) return 0;
+        if (this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(unwrapped, seenConsts)) return 0;
+        const elements = this.sideEffectFreeSetArraySourceExpressions(unwrapped, seenConsts);
+        if (elements) {
+            const values = new Set<string>();
+            for (const element of elements) {
+                const value = this.sideEffectFreeStringLiteralText(element, seenConsts);
+                if (value === null) return null;
+                values.add(value);
+            }
+            return values.size;
+        }
+        const entries = this.sideEffectFreeObjectLiteralOwnDataEntries(unwrapped, seenConsts);
+        if (entries) {
+            const values = new Set<string>();
+            for (const entry of entries) {
+                const value = this.sideEffectFreeStringLiteralText(entry.value, seenConsts);
+                if (value === null) return null;
+                values.add(value);
+            }
+            return values.size;
+        }
+        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
+        if (targetOperand) {
+            return this.sideEffectFreeObjectValuesStringSetLength(targetOperand, new Set(seenConsts));
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeObjectValuesStringSetLength(init, seenConsts) : null;
     }
 
     private sideEffectFreeNumericSetConstructorSourceLength(
