@@ -1432,6 +1432,12 @@ class Emitter {
             case "map":
             case "filter":
             case "forEach":
+            case "some":
+            case "every":
+            case "find":
+            case "findIndex":
+            case "findLast":
+            case "findLastIndex":
                 return args.length >= 1 &&
                     args.length <= 2 &&
                     this.isSideEffectFreeFreshEmptyArrayLiteralOperand(recv, seenConsts) &&
