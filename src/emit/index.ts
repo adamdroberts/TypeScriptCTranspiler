@@ -1408,6 +1408,32 @@ class Emitter {
             case "isWellFormed":
             case "toWellFormed":
                 return allArgsPure();
+            case "normalize": {
+                if (args.length === 0) return true;
+                const form = this.sideEffectFreeStringLiteralText(args[0]!, seenConsts);
+                return form !== null &&
+                    ["NFC", "NFD", "NFKC", "NFKD"].includes(form) &&
+                    allArgsPure(1);
+            }
+            case "repeat": {
+                if (args.length < 1) return false;
+                const count = this.sideEffectFreePrimitiveNumberValue(args[0]!, seenConsts);
+                const text = this.sideEffectFreeStringLiteralText(recv, seenConsts);
+                if (count === null || text === null || count < 0 || !Number.isFinite(count)) {
+                    return false;
+                }
+                return Math.trunc(count) * Math.max(1, text.length * 4) <= 4096 &&
+                    allArgsPure(1);
+            }
+            case "padStart":
+            case "padEnd": {
+                if (args.length < 1) return false;
+                const target = this.sideEffectFreePrimitiveNumberValue(args[0]!, seenConsts);
+                if (target === null || target < 0 || !Number.isFinite(target)) return false;
+                return Math.trunc(target) <= 4096 &&
+                    (!args[1] || this.isSideEffectFreeStringCoercion(args[1], seenConsts)) &&
+                    allArgsPure(2);
+            }
             default:
                 return false;
         }
@@ -1613,6 +1639,39 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeStringLiteralText(init, seenConsts) : null;
+    }
+
+    private sideEffectFreePrimitiveNumberValue(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        switch (unwrapped.kind) {
+            case ts.SyntaxKind.TrueKeyword:
+                return 1;
+            case ts.SyntaxKind.FalseKeyword:
+            case ts.SyntaxKind.NullKeyword:
+                return 0;
+            case ts.SyntaxKind.UndefinedKeyword:
+                return Number.NaN;
+        }
+        if (ts.isNumericLiteral(unwrapped)) return Number(unwrapped.text);
+        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
+            return Number(unwrapped.text);
+        }
+        if (
+            ts.isPrefixUnaryExpression(unwrapped) &&
+            (
+                unwrapped.operator === ts.SyntaxKind.PlusToken ||
+                unwrapped.operator === ts.SyntaxKind.MinusToken
+            )
+        ) {
+            const value = this.sideEffectFreePrimitiveNumberValue(unwrapped.operand, seenConsts);
+            if (value === null) return null;
+            return unwrapped.operator === ts.SyntaxKind.MinusToken ? -value : value;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreePrimitiveNumberValue(init, seenConsts) : null;
     }
 
     private isSideEffectFreeBigIntCoercion(

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused pure bounded string-copy calls such as `normalize(...)`, `repeat(...)`, `padStart(...)`, and `padEnd(...)` on pure string operands as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Array.prototype.toSpliced(...)` calls on pure array operands as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Array.prototype.concat(...)`, `flat(...)`, and default `toSorted()` calls on pure array operands as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes `Object.setPrototypeOf(...)` and `Reflect.setPrototypeOf(...)` over fresh object/array literal targets and pure object/null prototypes as side-effect-free when unused. Test: `generated_c_dce_const`.
