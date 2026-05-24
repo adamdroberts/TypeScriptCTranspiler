@@ -150,6 +150,9 @@ const dead_promise_resolve_object_spread_source = { dead_promise_resolve_object_
 const unused_promise_resolve_object_spread_call = Promise.resolve({ ...dead_promise_resolve_object_spread_source }.dead_promise_resolve_object_spread);
 const unused_promise_resolve_object_property_call = Promise.resolve({ dead_promise_resolve_object_property: "dead_promise_resolve_object_property" }.dead_promise_resolve_object_property);
 const unused_promise_resolve_object_property_missing_call = Promise.resolve(({ dead_promise_resolve_object_property_missing_source: 1 } as { [key: string]: number }).dead_promise_resolve_object_property_missing);
+const dead_promise_resolve_array_spread_source = ["dead_promise_resolve_array_spread"];
+const unused_promise_resolve_array_spread_call = Promise.resolve([0, ...dead_promise_resolve_array_spread_source][1]);
+const unused_promise_resolve_string_spread_call = Promise.resolve([..."dead_promise_resolve_string_spread"][2]);
 const unused_promise_resolve_array_element_call = Promise.resolve(["dead_promise_resolve_array_element"][0]);
 const unused_promise_resolve_array_element_oob_call = Promise.resolve(["dead_promise_resolve_array_element_oob"][4]);
 const unused_promise_resolve_date_getter_call = Promise.resolve(new Date("2101-01-02T03:04:05Z").getTime("dead_promise_resolve_date_getter_ignored"));
@@ -440,6 +443,9 @@ const top_level_dead_promise_resolve_object_spread_source = { top_level_dead_pro
 Promise.resolve({ ...top_level_dead_promise_resolve_object_spread_source }.top_level_dead_promise_resolve_object_spread);
 Promise.resolve({ top_level_dead_promise_resolve_object_property: "top_level_dead_promise_resolve_object_property" }.top_level_dead_promise_resolve_object_property);
 Promise.resolve(({ top_level_dead_promise_resolve_object_property_missing_source: 1 } as { [key: string]: number }).top_level_dead_promise_resolve_object_property_missing);
+const top_level_dead_promise_resolve_array_spread_source = ["top_level_dead_promise_resolve_array_spread"];
+Promise.resolve([0, ...top_level_dead_promise_resolve_array_spread_source][1]);
+Promise.resolve([..."top_level_dead_promise_resolve_string_spread"][3]);
 Promise.resolve(["top_level_dead_promise_resolve_array_element"][0]);
 Promise.resolve(["top_level_dead_promise_resolve_array_element_oob"][4]);
 Promise.resolve(new Date("2102-01-02T03:04:05Z").getUTCFullYear("top_level_dead_promise_resolve_date_getter_ignored"));
@@ -741,6 +747,9 @@ function usedLocal(value: number): number {
     Promise.resolve({ ...local_dead_promise_resolve_object_spread_source }.local_dead_promise_resolve_object_spread);
     Promise.resolve({ local_dead_promise_resolve_object_property: "local_dead_promise_resolve_object_property" }.local_dead_promise_resolve_object_property);
     Promise.resolve(({ local_dead_promise_resolve_object_property_missing_source: 1 } as { [key: string]: number }).local_dead_promise_resolve_object_property_missing);
+    const local_dead_promise_resolve_array_spread_source = ["local_dead_promise_resolve_array_spread"];
+    Promise.resolve([0, ...local_dead_promise_resolve_array_spread_source][1]);
+    Promise.resolve([..."local_dead_promise_resolve_string_spread"][4]);
     Promise.resolve(["local_dead_promise_resolve_array_element"][0]);
     Promise.resolve(["local_dead_promise_resolve_array_element_oob"][4]);
     Promise.resolve(new Date("2103-01-02T03:04:05Z").valueOf("local_dead_promise_resolve_date_getter_ignored"));

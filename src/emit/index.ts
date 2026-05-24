@@ -2721,17 +2721,116 @@ class Emitter {
         index: number,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
+        return this.sideEffectFreePrimitiveArrayElementOperandResult(expr, index, seenConsts) !== "unsafe";
+    }
+
+    private sideEffectFreePrimitiveArrayElementOperandResult(
+        expr: ts.Expression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (ts.isArrayLiteralExpression(unwrapped)) {
-            if (!this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts)) return false;
-            if (index < 0 || index >= unwrapped.elements.length) return true;
-            const element = unwrapped.elements[index];
-            if (!element || ts.isOmittedExpression(element)) return true;
-            if (ts.isSpreadElement(element)) return false;
-            return this.isSideEffectFreePrimitivePromiseResolveValue(element, new Set(seenConsts));
+            return this.sideEffectFreePrimitiveArrayLiteralElementResult(
+                unwrapped,
+                index,
+                seenConsts,
+            );
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreePrimitiveArrayElementOperand(init, index, seenConsts);
+        return init
+            ? this.sideEffectFreePrimitiveArrayElementOperandResult(init, index, seenConsts)
+            : "unsafe";
+    }
+
+    private sideEffectFreePrimitiveArrayLiteralElementResult(
+        literal: ts.ArrayLiteralExpression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        if (!this.isSideEffectFreeTopLevelConstInitializer(literal, seenConsts)) return "unsafe";
+        if (index < 0) return "absent";
+        let offset = 0;
+        for (const element of literal.elements) {
+            if (ts.isSpreadElement(element)) {
+                const spreadLength = this.sideEffectFreeArraySpreadElementCount(
+                    element.expression,
+                    seenConsts,
+                );
+                if (spreadLength === null) return "unsafe";
+                if (index < offset + spreadLength) {
+                    return this.sideEffectFreePrimitiveArraySpreadElementResult(
+                        element.expression,
+                        index - offset,
+                        new Set(seenConsts),
+                    );
+                }
+                offset += spreadLength;
+                continue;
+            }
+            if (index === offset) {
+                if (!element || ts.isOmittedExpression(element)) return "absent";
+                return this.isSideEffectFreePrimitivePromiseResolveValue(
+                    element,
+                    new Set(seenConsts),
+                )
+                    ? "present"
+                    : "unsafe";
+            }
+            offset++;
+        }
+        return "absent";
+    }
+
+    private sideEffectFreePrimitiveArraySpreadElementResult(
+        expr: ts.Expression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            return this.sideEffectFreePrimitiveArrayLiteralElementResult(
+                unwrapped,
+                index,
+                seenConsts,
+            );
+        }
+        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
+            return index >= 0 && index < Array.from(unwrapped.text).length ? "present" : "absent";
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init
+            ? this.sideEffectFreePrimitiveArraySpreadElementResult(init, index, seenConsts)
+            : "unsafe";
+    }
+
+    private sideEffectFreeArraySpreadElementCount(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
+            return Array.from(unwrapped.text).length;
+        }
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            if (!this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts)) return null;
+            let count = 0;
+            for (const element of unwrapped.elements) {
+                if (ts.isSpreadElement(element)) {
+                    const spreadLength = this.sideEffectFreeArraySpreadElementCount(
+                        element.expression,
+                        seenConsts,
+                    );
+                    if (spreadLength === null) return null;
+                    count += spreadLength;
+                    continue;
+                }
+                count++;
+            }
+            return count;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeArraySpreadElementCount(init, seenConsts) : null;
     }
 
     private isSideEffectFreeStringElementAccess(
