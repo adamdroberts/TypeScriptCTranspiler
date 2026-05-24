@@ -21,3 +21,10 @@ const chooseNamed: boolean = true;
 const namedModuleName = chooseNamed ? "./other_named_a" : "./other_named_b";
 const selectedNamed: any = require(namedModuleName);
 console.log("dynamic require named:", selectedNamed.label);
+
+function loadLocal(): any {
+    const localModuleName = "./other_local";
+    return require(localModuleName);
+}
+
+console.log("dynamic require local:", loadLocal().label);

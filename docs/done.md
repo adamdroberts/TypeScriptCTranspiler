@@ -1420,7 +1420,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_string_substr` | dynamic string substr start/length semantics |
 | `dynamic_string_substring` | dynamic string substring clamp/swap semantics |
 | `dynamic_string_trim_edges` | dynamic string trimStart and trimEnd |
-| `dynamic_require` | top-level finite const string `require(name)` resolved as an AOT module edge, including static concatenation, template expressions, side-effect-only conditionals, value-returning `module.exports` dispatch, and named-export object materialization |
+| `dynamic_require` | finite const string `require(name)` resolved as an AOT module edge, including earlier local const aliases, static concatenation, template expressions, side-effect-only conditionals, value-returning `module.exports` dispatch, and named-export object materialization |
 | `dynamic_require_commonjs_shapes` | dynamic require dispatch materializes object-literal CommonJS exports that spread package-local require results |
 | `dynamic_require_literal_union` | finite string-literal union annotations provide AOT dynamic require alternatives for parameters and top-level variables |
 | `dynamic_require_manifest` | explicit dynamic require manifest compiles a non-finite `require(variable)` allow-list into the AOT graph and finite runtime dispatch |

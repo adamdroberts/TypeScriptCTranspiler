@@ -69,7 +69,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return resolveStaticCollectionAccess(node.expression, node.name);
         }
         if (!ts.isIdentifier(node)) return [];
-        const decl = topLevelConstStringDeclaration(node);
+        const decl = earlierConstStringDeclaration(node) ?? topLevelConstStringDeclaration(node);
         if (decl?.initializer) {
             if (seen.has(decl)) return [];
             seen.add(decl);
@@ -93,7 +93,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             collectionExpr = collectionExpr.expression;
         }
         if (!ts.isIdentifier(collectionExpr)) return [];
-        const decl = topLevelConstStringDeclaration(collectionExpr);
+        const decl = earlierConstStringDeclaration(collectionExpr) ?? topLevelConstStringDeclaration(collectionExpr);
         if (!decl?.initializer || seen.has(decl)) return [];
         seen.add(decl);
         let init = decl.initializer;
@@ -224,6 +224,23 @@ function topLevelConstStringDeclaration(id: ts.Identifier): ts.VariableDeclarati
         if (!ts.isVariableStatement(stmt)) continue;
         if ((ts.getCombinedNodeFlags(stmt.declarationList) & ts.NodeFlags.Const) === 0) continue;
         for (const decl of stmt.declarationList.declarations) {
+            if (ts.isIdentifier(decl.name) && decl.name.text === id.text) return decl;
+        }
+    }
+    return null;
+}
+
+function earlierConstStringDeclaration(id: ts.Identifier): ts.VariableDeclaration | null {
+    let cur: ts.Node = id;
+    while (cur.parent && !ts.isStatement(cur)) cur = cur.parent;
+    const stmt = cur;
+    const block = stmt.parent;
+    if (!ts.isBlock(block) && !ts.isSourceFile(block) && !ts.isModuleBlock(block)) return null;
+    for (const sibling of block.statements) {
+        if (sibling === stmt) break;
+        if (!ts.isVariableStatement(sibling)) continue;
+        if ((ts.getCombinedNodeFlags(sibling.declarationList) & ts.NodeFlags.Const) === 0) continue;
+        for (const decl of sibling.declarationList.declarations) {
             if (ts.isIdentifier(decl.name) && decl.name.text === id.text) return decl;
         }
     }
