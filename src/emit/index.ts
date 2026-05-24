@@ -29746,14 +29746,15 @@ class Emitter {
         if (!options || this.isUndefinedExpression(options)) return "string";
         const checkEncoding = (node: ts.Expression): "string" | "buffer" => {
             if (this.isUndefinedExpression(node)) return "string";
-            if (ts.isStringLiteralLike(node)) {
-                if (node.text === "utf8" || node.text === "utf-8") return "string";
-                if (node.text === "buffer") return "buffer";
+            const text = this.sideEffectFreeStringLiteralText(node, new Set());
+            if (text !== null) {
+                if (text === "utf8" || text === "utf-8") return "string";
+                if (text === "buffer") return "buffer";
             }
             if (node.kind === ts.SyntaxKind.NullKeyword) return "buffer";
             unsupported(node, `${label} only supports UTF-8, buffer, or null encoding options in this subset`);
         };
-        if (ts.isStringLiteralLike(options)) {
+        if (this.sideEffectFreeStringLiteralText(options, new Set()) !== null) {
             return checkEncoding(options);
         }
         if (!ts.isObjectLiteralExpression(options)) {
@@ -29777,20 +29778,22 @@ class Emitter {
         if (!options || this.isUndefinedExpression(options)) return "string";
         const checkEncoding = (node: ts.Expression): "string" | "buffer" => {
             if (this.isUndefinedExpression(node)) return "string";
-            if (ts.isStringLiteralLike(node)) {
-                if (node.text === "utf8" || node.text === "utf-8") return "string";
-                if (node.text === "buffer") return "buffer";
+            const text = this.sideEffectFreeStringLiteralText(node, new Set());
+            if (text !== null) {
+                if (text === "utf8" || text === "utf-8") return "string";
+                if (text === "buffer") return "buffer";
             }
             if (node.kind === ts.SyntaxKind.NullKeyword) return "buffer";
             unsupported(node, `${label} only supports UTF-8, buffer, or null encoding options in this subset`);
         };
         const checkFlag = (node: ts.Expression): void => {
             if (this.isUndefinedExpression(node)) return;
-            if (!ts.isStringLiteralLike(node) || !["r", "rs", "r+", "rs+"].includes(node.text)) {
+            const text = this.sideEffectFreeStringLiteralText(node, new Set());
+            if (text === null || !["r", "rs", "r+", "rs+"].includes(text)) {
                 unsupported(node, `${label} only supports literal "r", "rs", "r+", or "rs+" flags in this subset`);
             }
         };
-        if (ts.isStringLiteralLike(options)) {
+        if (this.sideEffectFreeStringLiteralText(options, new Set()) !== null) {
             return checkEncoding(options);
         }
         if (options.kind === ts.SyntaxKind.NullKeyword) {
@@ -29824,21 +29827,23 @@ class Emitter {
         if (!options || this.isUndefinedExpression(options)) return { ...out, mode };
         const checkEncoding = (node: ts.Expression): void => {
             if (this.isUndefinedExpression(node)) return;
-            if (!ts.isStringLiteralLike(node) || (node.text !== "utf8" && node.text !== "utf-8")) {
+            const text = this.sideEffectFreeStringLiteralText(node, new Set());
+            if (text === null || (text !== "utf8" && text !== "utf-8")) {
                 unsupported(node, `${label} only supports UTF-8 encoding options in this subset`);
             }
         };
         const checkFlag = (node: ts.Expression): void => {
             if (this.isUndefinedExpression(node)) return;
             const supportedFlags = ["w", "wx", "w+", "wx+", "a", "ax", "a+", "ax+", "as", "as+", "r+", "rs+"];
-            if (!ts.isStringLiteralLike(node) || !supportedFlags.includes(node.text)) {
+            const text = this.sideEffectFreeStringLiteralText(node, new Set());
+            if (text === null || !supportedFlags.includes(text)) {
                 unsupported(node, `${label} only supports literal "w", "wx", "w+", "wx+", "a", "ax", "a+", "ax+", "as", "as+", "r+", or "rs+" flags in this subset`);
             }
-            out.append = node.text === "a" || node.text === "ax" || node.text === "a+" || node.text === "ax+" || node.text === "as" || node.text === "as+";
-            out.exclusive = node.text === "wx" || node.text === "wx+" || node.text === "ax" || node.text === "ax+";
-            out.update = node.text === "r+" || node.text === "rs+";
+            out.append = text === "a" || text === "ax" || text === "a+" || text === "ax+" || text === "as" || text === "as+";
+            out.exclusive = text === "wx" || text === "wx+" || text === "ax" || text === "ax+";
+            out.update = text === "r+" || text === "rs+";
         };
-        if (ts.isStringLiteralLike(options)) {
+        if (this.sideEffectFreeStringLiteralText(options, new Set()) !== null) {
             checkEncoding(options);
             return { ...out, mode };
         }
@@ -29882,19 +29887,21 @@ class Emitter {
         if (!options || this.isUndefinedExpression(options)) return { ...out, mode };
         const checkEncoding = (node: ts.Expression): void => {
             if (this.isUndefinedExpression(node)) return;
-            if (!ts.isStringLiteralLike(node) || (node.text !== "utf8" && node.text !== "utf-8")) {
+            const text = this.sideEffectFreeStringLiteralText(node, new Set());
+            if (text === null || (text !== "utf8" && text !== "utf-8")) {
                 unsupported(node, `${label} only supports UTF-8 encoding options in this subset`);
             }
         };
         const checkFlag = (node: ts.Expression): void => {
             if (this.isUndefinedExpression(node)) return;
             const supportedFlags = ["a", "ax", "a+", "ax+", "as", "as+"];
-            if (!ts.isStringLiteralLike(node) || !supportedFlags.includes(node.text)) {
+            const text = this.sideEffectFreeStringLiteralText(node, new Set());
+            if (text === null || !supportedFlags.includes(text)) {
                 unsupported(node, `${label} only supports literal "a", "ax", "a+", "ax+", "as", or "as+" flags in this subset`);
             }
-            out.exclusive = node.text === "ax" || node.text === "ax+";
+            out.exclusive = text === "ax" || text === "ax+";
         };
-        if (ts.isStringLiteralLike(options)) {
+        if (this.sideEffectFreeStringLiteralText(options, new Set()) !== null) {
             checkEncoding(options);
             return { ...out, mode };
         }
