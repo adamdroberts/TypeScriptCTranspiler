@@ -1933,6 +1933,9 @@ class Emitter {
         if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(unwrapped, seenConsts)) {
+            return true;
+        }
         if (ts.isArrayLiteralExpression(unwrapped)) {
             return unwrapped.elements.every((element) =>
                 ts.isExpression(element) &&
@@ -1984,6 +1987,31 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeObjectValuesStringCoercionSource(init, seenConsts);
+    }
+
+    private isSideEffectFreeEmptyOwnPropertyObjectValuesSource(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            (
+                unwrapped.expression.text === "Map" ||
+                unwrapped.expression.text === "Set" ||
+                unwrapped.expression.text === "WeakMap" ||
+                unwrapped.expression.text === "WeakSet" ||
+                unwrapped.expression.text === "WeakRef" ||
+                unwrapped.expression.text === "FinalizationRegistry" ||
+                unwrapped.expression.text === "URL"
+            ) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, unwrapped.expression.text)
+        ) {
+            return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(init, seenConsts);
     }
 
     private isSideEffectFreeObjectAssignStringValuesCall(
