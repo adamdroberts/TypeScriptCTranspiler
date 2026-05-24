@@ -2170,6 +2170,15 @@ class Emitter {
             ts.isCallExpression(unwrapped) &&
             ts.isPropertyAccessExpression(unwrapped.expression) &&
             ts.isIdentifier(unwrapped.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Date") &&
+            this.isSideEffectFreeStaticCall(unwrapped, seenConsts)
+        ) {
+            return true;
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
             this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Number") &&
             this.isSideEffectFreeStaticCall(unwrapped, seenConsts)
         ) {
