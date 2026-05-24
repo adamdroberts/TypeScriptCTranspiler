@@ -1242,6 +1242,15 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            method === "deleteProperty" &&
+            call.arguments.length === 2 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Reflect")
+        ) {
+            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) &&
+                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts);
+        }
+        if (
+            ts.isIdentifier(recv) &&
             (
                 method === "getPrototypeOf" ||
                 method === "isExtensible"
