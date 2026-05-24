@@ -1034,6 +1034,9 @@ class Emitter {
         if (this.isSideEffectFreeBufferStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -1162,6 +1165,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeBufferStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -2292,6 +2298,21 @@ class Emitter {
             args.length === 1 &&
             !this.isUndefinedExpression(args[0]!) &&
             this.isSideEffectFreeHashMethodCall(recv, method, args, seenConsts);
+    }
+
+    private isSideEffectFreeHashDigestStringMethodCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!ts.isCallExpression(expr) || !ts.isPropertyAccessExpression(expr.expression)) {
+            return false;
+        }
+        return this.isSideEffectFreePrimitiveHashMethodCall(
+            expr.expression.expression,
+            expr.expression.name.text,
+            expr.arguments,
+            seenConsts,
+        );
     }
 
     private isSideEffectFreeProcessCall(
@@ -4986,6 +5007,9 @@ class Emitter {
         if (this.isSideEffectFreeBufferStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -5032,6 +5056,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeBufferStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
