@@ -1423,6 +1423,13 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            this.isOsModuleIdentifier(recv) &&
+            this.isSideEffectFreeOsCall(method, call.arguments, seenConsts)
+        ) {
+            return true;
+        }
+        if (
+            ts.isIdentifier(recv) &&
             this.isUnshadowedGlobalIdentifier(recv, "String")
         ) {
             if (method === "fromCharCode") {
@@ -1599,8 +1606,64 @@ class Emitter {
                     method === "has" ||
                     method === "isExtensible"
                 )
+            ) ||
+            (
+                this.isOsModuleIdentifier(recv) &&
+                this.isSideEffectFreePrimitiveOsCall(method, call.arguments, seenConsts)
             );
         return isPrimitiveReturningHelper && this.isSideEffectFreeStaticCall(call, seenConsts);
+    }
+
+    private isSideEffectFreeOsCall(
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return [
+            "platform",
+            "type",
+            "release",
+            "version",
+            "endianness",
+            "machine",
+            "arch",
+            "hostname",
+            "tmpdir",
+            "homedir",
+            "cpus",
+            "availableParallelism",
+            "totalmem",
+            "freemem",
+            "uptime",
+            "loadavg",
+        ].includes(method) &&
+            Array.from(args).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+    }
+
+    private isSideEffectFreePrimitiveOsCall(
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return [
+            "platform",
+            "type",
+            "release",
+            "version",
+            "endianness",
+            "machine",
+            "arch",
+            "hostname",
+            "tmpdir",
+            "homedir",
+            "availableParallelism",
+            "totalmem",
+            "freemem",
+            "uptime",
+        ].includes(method) &&
+            this.isSideEffectFreeOsCall(method, args, seenConsts);
     }
 
     private isSideEffectFreePrimitiveMethodCall(
@@ -4250,6 +4313,10 @@ class Emitter {
                     this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
                 );
         }
+        const osExport = this.namedImportExportName(call.expression, ["os", "node:os"]);
+        if (osExport !== null) {
+            return this.isSideEffectFreeOsCall(osExport, call.arguments, seenConsts);
+        }
         if (name === "BigInt") {
             return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
                 call.arguments.length >= 1 &&
@@ -4836,6 +4903,15 @@ class Emitter {
             this.isSideEffectFreeGlobalCall(unwrapped, seenConsts)
         ) {
             return true;
+        }
+        if (ts.isCallExpression(unwrapped) && ts.isIdentifier(unwrapped.expression)) {
+            const osExport = this.namedImportExportName(unwrapped.expression, ["os", "node:os"]);
+            if (
+                osExport !== null &&
+                this.isSideEffectFreePrimitiveOsCall(osExport, unwrapped.arguments, seenConsts)
+            ) {
+                return true;
+            }
         }
         if (
             ts.isCallExpression(unwrapped) &&

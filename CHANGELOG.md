@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes unused pure `os` metadata calls such as `platform(...)`, `arch(...)`, `cpus(...)`, `loadavg(...)`, and memory/uptime helpers, including named imports and primitive `Promise.resolve(...)` inputs where the result is primitive. Test: `generated_c_dce_const`.
 - Aliased named imports for `EventEmitter` now support `defaultMaxListeners` reads and assignments. Test: `event_emitter_default_max_listeners`.
 - Aliased named imports for DNS hint constants such as `V4MAPPED as hint` now lower correctly in expressions and DNS lookup options. Test: `dns_lookup_hints`.
 - Generated-C DCE now prunes unused `EventEmitter.defaultMaxListeners` and module-level `defaultMaxListeners` reads, including namespace forms and primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
