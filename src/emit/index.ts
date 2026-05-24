@@ -29372,7 +29372,7 @@ class Emitter {
                 return this.emitSequencedExpr(T_VOID, specs, ([path]) => `tsc_fs_access_sync(${path!})`);
             }
             case "readdirSync": {
-                if (args.length < 1) unsupported(call, "fs.readdirSync needs path and optional UTF-8/buffer encoding or withFileTypes options");
+                if (args.length < 1) unsupported(call, "fs.readdirSync needs path and optional UTF-8/hex/base64/buffer encoding or withFileTypes options");
                 const options = this.validateFsReaddirOptions(args[1], "fs.readdirSync");
                 const p = this.emitExpr(args[0]!);
                 if (options.withFileTypes) {
@@ -29390,7 +29390,10 @@ class Emitter {
                 return this.emitSequencedExpr(arrayType(T_STRING), [
                     this.fsPathSpec(p, args[0]!, "fs.readdirSync path"),
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
-                ], ([path]) => `${options.recursive ? "tsc_fs_readdir_recursive_sync" : "tsc_fs_readdir_sync"}(${path!})`);
+                ], ([path]) => {
+                    const value = `${options.recursive ? "tsc_fs_readdir_recursive_sync" : "tsc_fs_readdir_sync"}(${path!})`;
+                    return this.emitFsStringArrayEncodingResult(value, options.encoding);
+                });
             }
             case "statSync": {
                 if (args.length < 1) unsupported(call, "fs.statSync needs path and optional { bigint: false, throwIfNoEntry } options");
@@ -29793,6 +29796,12 @@ class Emitter {
         return `tsc_buffer_to_string(tsc_buffer_from_str(${value}, NULL), tsc_str_from_lit("${encoding}", ${encoding.length}))`;
     }
 
+    private emitFsStringArrayEncodingResult(value: string, encoding: "utf8" | "hex" | "base64" | "buffer"): string {
+        if (encoding === "utf8") return value;
+        if (encoding === "buffer") throw new Error("internal buffer array encoding should use the Buffer readdir path");
+        return `({ tsc_array_t* const _src = ${value}; tsc_array_t* _out = tsc_array_new(sizeof(tsc_str_t*), _src->len ? _src->len : 1); for (size_t _i = 0; _i < _src->len; _i++) { tsc_str_t* _name = TSC_ARR(tsc_str_t*, _src, _i); tsc_str_t* _encoded = tsc_buffer_to_string(tsc_buffer_from_str(_name, NULL), tsc_str_from_lit("${encoding}", ${encoding.length})); tsc_array_push_raw(_out, &_encoded); } _out; })`;
+    }
+
     private validateFsReadFileOptions(options: ts.Expression | undefined, label: string): "utf8" | "hex" | "base64" | "buffer" {
         if (!options || this.isUndefinedExpression(options)) return "utf8";
         const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" | "buffer" => {
@@ -29994,26 +30003,27 @@ class Emitter {
     private validateFsReaddirOptions(
         options: ts.Expression | undefined,
         label: string,
-    ): { withFileTypes: boolean; recursive: boolean; encoding: "string" | "buffer" } {
-        if (!options || this.isUndefinedExpression(options)) return { withFileTypes: false, recursive: false, encoding: "string" };
-        const checkEncoding = (node: ts.Expression): "string" | "buffer" => {
-            if (this.isUndefinedExpression(node)) return "string";
+    ): { withFileTypes: boolean; recursive: boolean; encoding: "utf8" | "hex" | "base64" | "buffer" } {
+        if (!options || this.isUndefinedExpression(options)) return { withFileTypes: false, recursive: false, encoding: "utf8" };
+        const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" | "buffer" => {
+            if (this.isUndefinedExpression(node)) return "utf8";
             const text = this.sideEffectFreeStringLiteralText(node, new Set());
             if (text !== null) {
-                if (text === "utf8" || text === "utf-8") return "string";
+                if (text === "utf8" || text === "utf-8") return "utf8";
+                if (text === "hex" || text === "base64") return text;
                 if (text === "buffer") return "buffer";
             }
-            unsupported(node, `${label} only supports UTF-8 or buffer encoding options in this subset`);
+            unsupported(node, `${label} only supports UTF-8, hex, base64, or buffer encoding options in this subset`);
         };
         if (this.sideEffectFreeStringLiteralText(options, new Set()) !== null) {
             return { withFileTypes: false, recursive: false, encoding: checkEncoding(options) };
         }
         if (!ts.isObjectLiteralExpression(options)) {
-            unsupported(options, `${label} options must be a UTF-8/buffer string literal or object literal in this subset`);
+            unsupported(options, `${label} options must be a UTF-8/hex/base64/buffer string literal or object literal in this subset`);
         }
         let withFileTypes = false;
         let recursive = false;
-        let encoding: "string" | "buffer" = "string";
+        let encoding: "utf8" | "hex" | "base64" | "buffer" = "utf8";
         for (const prop of options.properties) {
             if (!ts.isPropertyAssignment(prop)) {
                 unsupported(prop, `${label} options only support encoding, withFileTypes, and recursive property assignments`);
@@ -30049,7 +30059,7 @@ class Emitter {
             }
             unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
         }
-        if (withFileTypes && encoding === "buffer") unsupported(options, `${label} does not support combining withFileTypes and buffer encoding yet`);
+        if (withFileTypes && encoding !== "utf8") unsupported(options, `${label} does not support combining withFileTypes and non-UTF-8 encoding yet`);
         return { withFileTypes, recursive, encoding };
     }
 
@@ -30176,7 +30186,7 @@ class Emitter {
                 );
             }
             case "readdir": {
-                if (args.length < 1) unsupported(call, "fs.promises.readdir needs path and optional UTF-8/buffer encoding or withFileTypes options");
+                if (args.length < 1) unsupported(call, "fs.promises.readdir needs path and optional UTF-8/hex/base64/buffer encoding or withFileTypes options");
                 const options = this.validateFsReaddirOptions(args[1], "fs.promises.readdir");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
@@ -30194,10 +30204,13 @@ class Emitter {
                             : options.recursive
                                 ? "tsc_fs_readdir_recursive_sync"
                                 : "tsc_fs_readdir_sync";
+                    const value = options.encoding === "hex" || options.encoding === "base64"
+                        ? this.emitFsStringArrayEncodingResult(`${fn}(${path!})`, options.encoding)
+                        : `${fn}(${path!})`;
                     if (mapped.elem?.kind === "array") {
-                        return settle(`tsc_promise_resolve_array(${fn}(${path!}))`);
+                        return settle(`tsc_promise_resolve_array(${value})`);
                     }
-                    return settle(`tsc_promise_resolve(tsc_value_array(${fn}(${path!})))`);
+                    return settle(`tsc_promise_resolve(tsc_value_array(${value}))`);
                 });
             }
             case "stat": {

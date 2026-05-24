@@ -968,6 +968,7 @@ type FSEncoding = "utf8" | "utf-8";
 type FSReadFileStringEncoding = FSEncoding | "hex" | "base64";
 type FSFileContentEncoding = FSEncoding | "hex" | "base64";
 type FSPathResultEncoding = FSEncoding | "hex" | "base64";
+type FSReaddirStringEncoding = FSEncoding | "hex" | "base64";
 type FSBufferEncoding = "buffer";
 interface FSEncodingOptions {
     encoding?: FSEncoding;
@@ -1005,10 +1006,12 @@ interface FSAppendFileOptions {
     flush?: boolean;
 }
 type FSAppendFileEncodingOptions = FSFileContentEncoding | FSAppendFileOptions;
-interface FSReaddirOptions extends FSEncodingOptions {
+interface FSReaddirOptions {
+    encoding?: FSReaddirStringEncoding;
     recursive?: boolean;
     withFileTypes?: false;
 }
+type FSReaddirStringOptions = FSReaddirStringEncoding | FSReaddirOptions;
 interface FSReaddirBufferOptions extends FSBufferEncodingOptions {
     recursive?: boolean;
     withFileTypes?: false;
@@ -1041,7 +1044,7 @@ interface FS {
     accessSync(path: FSPathLike, mode?: number, ...ignored: any[]): void;
     readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Buffer[];
     readdirSync(path: FSPathLike, options: FSReaddirDirentOptions, ...ignored: any[]): FSDirent[];
-    readdirSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReaddirOptions, ...ignored: any[]): string[];
+    readdirSync(path: FSPathLike, options?: FSReaddirStringOptions, ...ignored: any[]): string[];
     statSync(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): FSStats | undefined;
     statSync(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): FSStats;
     lstatSync(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): FSStats | undefined;
@@ -1076,7 +1079,7 @@ interface FSPromises {
     appendFile(path: FSPathLike, data: string | Buffer, options?: FSAppendFileEncodingOptions, ...ignored: any[]): Promise<void>;
     readdir(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Promise<Buffer[]>;
     readdir(path: FSPathLike, options: FSReaddirDirentOptions, ...ignored: any[]): Promise<FSDirent[]>;
-    readdir(path: FSPathLike, options?: FSFileEncodingOptions | FSReaddirOptions, ...ignored: any[]): Promise<string[]>;
+    readdir(path: FSPathLike, options?: FSReaddirStringOptions, ...ignored: any[]): Promise<string[]>;
     stat(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): Promise<FSStats | undefined>;
     stat(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): Promise<FSStats>;
     lstat(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): Promise<FSStats | undefined>;
@@ -1116,7 +1119,7 @@ declare module "fs" {
     export function accessSync(path: FSPathLike, mode?: number, ...ignored: any[]): void;
     export function readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Buffer[];
     export function readdirSync(path: FSPathLike, options: FSReaddirDirentOptions, ...ignored: any[]): FSDirent[];
-    export function readdirSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReaddirOptions, ...ignored: any[]): string[];
+    export function readdirSync(path: FSPathLike, options?: FSReaddirStringOptions, ...ignored: any[]): string[];
     export function statSync(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): FSStats | undefined;
     export function statSync(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): FSStats;
     export function lstatSync(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): FSStats | undefined;
@@ -1154,7 +1157,7 @@ declare module "node:fs" {
     export function accessSync(path: FSPathLike, mode?: number, ...ignored: any[]): void;
     export function readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Buffer[];
     export function readdirSync(path: FSPathLike, options: FSReaddirDirentOptions, ...ignored: any[]): FSDirent[];
-    export function readdirSync(path: FSPathLike, options?: FSFileEncodingOptions | FSReaddirOptions, ...ignored: any[]): string[];
+    export function readdirSync(path: FSPathLike, options?: FSReaddirStringOptions, ...ignored: any[]): string[];
     export function statSync(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): FSStats | undefined;
     export function statSync(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): FSStats;
     export function lstatSync(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): FSStats | undefined;
