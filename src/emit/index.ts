@@ -30041,7 +30041,8 @@ class Emitter {
 
     private validateFsSymlinkType(type: ts.Expression | undefined, label: string): void {
         if (!type || this.isUndefinedExpression(type)) return;
-        if (!ts.isStringLiteralLike(type) || !["file", "dir", "junction"].includes(type.text)) {
+        const text = this.sideEffectFreeStringLiteralText(type, new Set());
+        if (text === null || !["file", "dir", "junction"].includes(text)) {
             unsupported(type, `${label} only supports literal "file", "dir", or "junction" symlink types`);
         }
     }
