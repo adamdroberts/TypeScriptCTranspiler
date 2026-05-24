@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes unused pure primitive-returning `Buffer.byteLength(...)`, `Buffer.isEncoding(...)`, and `Buffer.isBuffer(...)` calls, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused pure `net.isIP(...)`, `net.isIPv4(...)`, and `net.isIPv6(...)` calls, including named imports and primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused pure `path` helper calls such as `join(...)`, `normalize(...)`, `relative(...)`, `parse(...)`, and primitive-returning path calls inside `Promise.resolve(...)`, including named imports. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused pure `os` metadata calls such as `platform(...)`, `arch(...)`, `cpus(...)`, `loadavg(...)`, and memory/uptime helpers, including named imports and primitive `Promise.resolve(...)` inputs where the result is primitive. Test: `generated_c_dce_const`.

@@ -1463,6 +1463,13 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            this.isUnshadowedGlobalIdentifier(recv, "Buffer") &&
+            this.isSideEffectFreeBufferStaticCall(method, call.arguments, seenConsts)
+        ) {
+            return true;
+        }
+        if (
+            ts.isIdentifier(recv) &&
             method === "escape" &&
             call.arguments.length === 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "RegExp")
@@ -1622,6 +1629,10 @@ class Emitter {
                 )
             ) ||
             (
+                this.isUnshadowedGlobalIdentifier(recv, "Buffer") &&
+                this.isSideEffectFreeBufferStaticCall(method, call.arguments, seenConsts)
+            ) ||
+            (
                 this.isOsModuleIdentifier(recv) &&
                 this.isSideEffectFreePrimitiveOsCall(method, call.arguments, seenConsts)
             ) ||
@@ -1757,6 +1768,39 @@ class Emitter {
             Array.from(args).slice(1).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
             );
+    }
+
+    private isSideEffectFreeBufferStaticCall(
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const ignoredAfter = (index: number): boolean =>
+            Array.from(args).slice(index).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+        switch (method) {
+            case "isBuffer":
+                return args.length >= 1 &&
+                    this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts) &&
+                    ignoredAfter(1);
+            case "isEncoding":
+                return args.length >= 1 &&
+                    this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
+                    ignoredAfter(1);
+            case "byteLength":
+                return args.length >= 1 &&
+                    this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
+                    (
+                        !args[1] ||
+                        this.isUndefinedExpression(args[1]) ||
+                        staticStringExpressionText(args[1]) === "utf8" ||
+                        staticStringExpressionText(args[1]) === "utf-8"
+                    ) &&
+                    ignoredAfter(args[1] ? 2 : 1);
+            default:
+                return false;
+        }
     }
 
     private isSideEffectFreePrimitiveMethodCall(
