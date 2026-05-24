@@ -1044,6 +1044,9 @@ class Emitter {
         if (this.isSideEffectFreeEventTypePropertyRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeEventStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -1211,6 +1214,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeEventTypePropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeEventStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
@@ -5115,6 +5121,9 @@ class Emitter {
         if (this.isSideEffectFreeEventTypePropertyRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeEventStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -5200,6 +5209,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeEventTypePropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeEventStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
@@ -5647,6 +5659,23 @@ class Emitter {
     ): boolean {
         return method !== "valueOf" &&
             this.isSideEffectFreeEventTargetMethodCall(recv, method, args, seenConsts);
+    }
+
+    private isSideEffectFreeEventStringMethodCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (!ts.isCallExpression(unwrapped) || !ts.isPropertyAccessExpression(unwrapped.expression)) {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+            return !!init && this.isSideEffectFreeEventStringMethodCall(init, seenConsts);
+        }
+        const recv = unwrapped.expression.expression;
+        const method = unwrapped.expression.name.text;
+        if (method !== "toString" && method !== "toLocaleString") return false;
+        return this.isSideEffectFreeEventMethodCall(recv, method, unwrapped.arguments, seenConsts) ||
+            this.isSideEffectFreeEventTargetMethodCall(recv, method, unwrapped.arguments, seenConsts) ||
+            this.isSideEffectFreeEventEmitterMethodCall(recv, method, unwrapped.arguments, seenConsts);
     }
 
     private isSideEffectFreeEventTargetListenerOptions(
@@ -6309,6 +6338,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreePrimitiveEventPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeEventStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeRegExpPropertyRead(unwrapped, seenConsts)) {

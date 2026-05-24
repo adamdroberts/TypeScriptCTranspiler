@@ -166,6 +166,9 @@ const unused_event_prevent_default_call = new Event("dead_event_prevent_default_
 const unused_event_to_string_call = new Event("dead_event_to_string_call").toString("dead_event_to_string_ignored".length);
 const unused_event_target_dispatch_call = new EventTarget().dispatchEvent(new Event("dead_event_target_dispatch_call", { cancelable: true }));
 const unused_event_target_to_string_call = new EventTarget().toString("dead_event_target_to_string_ignored".length);
+const unused_event_to_string_length_read = new Event("dead_event_to_string_length_read").toString().length;
+const unused_event_target_to_locale_upper_call = (new EventTarget().toLocaleString().toUpperCase(), "dead_event_target_to_locale_upper_call_marker".length);
+const unused_event_emitter_to_string_index_read = (new EventEmitter().toString()[0], "dead_event_emitter_to_string_index_read_marker".length);
 const unused_os_platform_call = nodeOs.platform("dead_os_platform_ignored".length);
 const unused_os_named_arch_call = osArch("dead_os_named_arch_ignored".length);
 const unused_os_loadavg_call = nodeOs.loadavg("dead_os_loadavg_ignored".length);
@@ -453,6 +456,9 @@ const unused_promise_resolve_event_prevent_default_call = Promise.resolve(new Ev
 const unused_promise_resolve_event_to_string_call = Promise.resolve(new Event("dead_promise_resolve_event_to_string_call").toString("dead_promise_resolve_event_to_string_ignored".length));
 const unused_promise_resolve_event_target_dispatch_call = Promise.resolve(new EventTarget().dispatchEvent(new Event("dead_promise_resolve_event_target_dispatch_call")));
 const unused_promise_resolve_event_target_to_string_call = Promise.resolve(new EventTarget().toString("dead_promise_resolve_event_target_to_string_ignored".length));
+const unused_promise_resolve_event_to_string_length_read = Promise.resolve(new Event("dead_promise_resolve_event_to_string_length_read").toString().length);
+const unused_promise_resolve_event_target_to_locale_upper_call = Promise.resolve((new EventTarget().toLocaleString().toUpperCase(), "dead_promise_resolve_event_target_to_locale_upper_call_marker"));
+const unused_promise_resolve_event_emitter_to_string_index_read = Promise.resolve((new EventEmitter().toString()[0], "dead_promise_resolve_event_emitter_to_string_index_read_marker"));
 const unused_promise_resolve_event_target_add_call = Promise.resolve(new EventTarget().addEventListener("dead_promise_resolve_event_target_add", () => undefined, { once: true }));
 const unused_promise_resolve_event_target_remove_call = Promise.resolve(new EventTarget().removeEventListener("dead_promise_resolve_event_target_remove", () => undefined, false));
 const unused_promise_resolve_crypto_hash_digest_call = Promise.resolve(crypto.createHash("sha256").update("dead_promise_resolve_crypto_hash_digest").digest("hex"));
@@ -1171,6 +1177,9 @@ new Event("top_level_dead_event_prevent_default_call", { cancelable: true }).pre
 new Event("top_level_dead_event_to_string_call").toString("top_level_dead_event_to_string_ignored".length);
 new EventTarget().dispatchEvent(new Event("top_level_dead_event_target_dispatch_call", { cancelable: true }));
 new EventTarget().toString("top_level_dead_event_target_to_string_ignored".length);
+new Event("top_level_dead_event_to_string_length_read").toString().length;
+(new EventTarget().toLocaleString().toUpperCase(), "top_level_dead_event_target_to_locale_upper_call_marker".length);
+(new EventEmitter().toString()[0], "top_level_dead_event_emitter_to_string_index_read_marker".length);
 new EventTarget().addEventListener("top_level_dead_event_target_add", () => undefined, { once: true, passive: false });
 new EventTarget().removeEventListener("top_level_dead_event_target_remove", () => undefined, true);
 Promise.resolve(nodeEvents.defaultMaxListeners + "top_level_dead_promise_resolve_event_default_read".length);
@@ -1194,6 +1203,9 @@ Promise.resolve(new Event("top_level_dead_promise_resolve_event_prevent_default_
 Promise.resolve(new Event("top_level_dead_promise_resolve_event_to_string_call").toString("top_level_dead_promise_resolve_event_to_string_ignored".length));
 Promise.resolve(new EventTarget().dispatchEvent(new Event("top_level_dead_promise_resolve_event_target_dispatch_call")));
 Promise.resolve(new EventTarget().toString("top_level_dead_promise_resolve_event_target_to_string_ignored".length));
+Promise.resolve(new Event("top_level_dead_promise_resolve_event_to_string_length_read").toString().length);
+Promise.resolve((new EventTarget().toLocaleString().toUpperCase(), "top_level_dead_promise_resolve_event_target_to_locale_upper_call_marker"));
+Promise.resolve((new EventEmitter().toString()[0], "top_level_dead_promise_resolve_event_emitter_to_string_index_read_marker"));
 Promise.resolve(new EventTarget().addEventListener("top_level_dead_promise_resolve_event_target_add", () => undefined, { capture: false }));
 Promise.resolve(new EventTarget().removeEventListener("top_level_dead_promise_resolve_event_target_remove", () => undefined));
 nodeOs.type("top_level_dead_os_type_ignored".length);
@@ -2101,6 +2113,9 @@ function usedLocal(value: number): number {
     new Event("local_dead_event_to_string_call").toString("local_dead_event_to_string_ignored".length);
     new EventTarget().dispatchEvent(new Event("local_dead_event_target_dispatch_call", { cancelable: true }));
     new EventTarget().toString("local_dead_event_target_to_string_ignored".length);
+    new Event("local_dead_event_to_string_length_read").toString().length;
+    (new EventTarget().toLocaleString().toUpperCase(), "local_dead_event_target_to_locale_upper_call_marker".length);
+    (new EventEmitter().toString()[0], "local_dead_event_emitter_to_string_index_read_marker".length);
     new EventTarget().addEventListener("local_dead_event_target_add", () => undefined, { once: undefined });
     new EventTarget().removeEventListener("local_dead_event_target_remove", () => undefined);
     Promise.resolve(nodeEvents.defaultMaxListeners + "local_dead_promise_resolve_event_default_read".length);
@@ -2124,6 +2139,9 @@ function usedLocal(value: number): number {
     Promise.resolve(new Event("local_dead_promise_resolve_event_to_string_call").toString("local_dead_promise_resolve_event_to_string_ignored".length));
     Promise.resolve(new EventTarget().dispatchEvent(new Event("local_dead_promise_resolve_event_target_dispatch_call")));
     Promise.resolve(new EventTarget().toString("local_dead_promise_resolve_event_target_to_string_ignored".length));
+    Promise.resolve(new Event("local_dead_promise_resolve_event_to_string_length_read").toString().length);
+    Promise.resolve((new EventTarget().toLocaleString().toUpperCase(), "local_dead_promise_resolve_event_target_to_locale_upper_call_marker"));
+    Promise.resolve((new EventEmitter().toString()[0], "local_dead_promise_resolve_event_emitter_to_string_index_read_marker"));
     Promise.resolve(new EventTarget().addEventListener("local_dead_promise_resolve_event_target_add", () => undefined));
     Promise.resolve(new EventTarget().removeEventListener("local_dead_promise_resolve_event_target_remove", () => undefined, { capture: true }));
     nodeOs.type("local_dead_os_type_ignored".length);
