@@ -364,6 +364,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Supported `child_process` option objects now treat explicitly `undefined` property values as defaults across callback, sync, and `spawnSync` subsets. Test: `child_process_option_property_undefined`.
 - Supported `child_process` option objects now accept earlier static `const` aliases for boolean option values such as `windowsHide` and `shell`. Tests: `child_process_windows_hide_option`, `child_process_shell_false`.
 - Supported `child_process` option objects now accept earlier static `const` aliases for numeric and string `killSignal` values. Tests: `child_process_numeric_kill_signal`, `child_process_exec_sync_timeout_options`, `child_process_spawn_sync_kill_signal`.
+- `process.kill(pid, signal)` now accepts earlier static `const` aliases for supported numeric and string signal values. Test: `process_kill_signal_zero`.
 - Supported fs option objects now treat explicitly `undefined` property values as defaults for sync and immediate `fs.promises` calls. Test: `fs_option_property_undefined`.
 - `crypto.randomUUID(...)` now accepts a bounded `{ disableEntropyCache }` options object plus ignored extra arguments for global, namespace, and named import forms. Test: `crypto_random_uuid`.
 - Global `btoa(...)` and `atob(...)` now evaluate ignored extra arguments after the input string. Test: `base64_globals`.

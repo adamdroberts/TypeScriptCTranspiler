@@ -26046,15 +26046,16 @@ class Emitter {
 
     private processSignalArgument(signal: ts.Expression | undefined): string {
         if (!signal || this.isUndefinedExpression(signal)) return "15.0";
-        if (ts.isNumericLiteral(signal)) {
-            const numeric = Number(signal.text);
+        const numeric = this.sideEffectFreeNumericLiteralSameValueZeroValue(signal, new Set());
+        if (numeric !== null) {
             if (numeric === 0 || numeric === 9 || numeric === 15) return `${numeric}.0`;
             unsupported(signal, "process.kill only supports signals 0, SIGTERM, SIGKILL, 9, and 15");
         }
-        if (!ts.isStringLiteral(signal)) {
+        const text = this.sideEffectFreeStringLiteralText(signal, new Set());
+        if (text === null) {
             unsupported(signal, "process.kill signal must be a literal signal string or numeric signal in this subset");
         }
-        switch (signal.text) {
+        switch (text) {
             case "SIGTERM": return "15.0";
             case "SIGKILL": return "9.0";
             default:
