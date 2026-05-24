@@ -1,4 +1,6 @@
+import { ADDRCONFIG, ALL } from "dns";
 import { constants as fsConstants } from "fs";
+import * as nodeDns from "node:dns";
 import * as nodeFs from "node:fs";
 import { EOL as osEOL, devNull as osDevNull } from "os";
 import * as nodeOs from "node:os";
@@ -82,6 +84,8 @@ const unused_path_constant_read = nodePath.sep.length + "dead_path_constant_read
 const unused_path_named_constant_read = pathDelimiter.length + "dead_path_named_constant_read".length;
 const unused_os_constant_read = nodeOs.EOL.length + "dead_os_constant_read".length;
 const unused_os_named_constant_read = osDevNull.length + "dead_os_named_constant_read".length;
+const unused_dns_constant_read = nodeDns.ADDRCONFIG + "dead_dns_constant_read".length;
+const unused_dns_named_constant_read = ALL + "dead_dns_named_constant_read".length;
 const unused_global_parse_int = parseInt("dead_global_parse_int", 10);
 const unused_global_parse_float = parseFloat("dead_global_parse_float");
 const unused_global_is_nan = isNaN("dead_global_is_nan");
@@ -233,6 +237,8 @@ const unused_promise_resolve_module_id_read = Promise.resolve((module.id, "dead_
 const unused_promise_resolve_fs_constant_read = Promise.resolve(nodeFs.constants.R_OK + "dead_promise_resolve_fs_constant_read".length);
 const unused_promise_resolve_path_constant_read = Promise.resolve(pathSep.length + "dead_promise_resolve_path_constant_read".length);
 const unused_promise_resolve_os_constant_read = Promise.resolve(osEOL.length + "dead_promise_resolve_os_constant_read".length);
+const unused_promise_resolve_dns_constant_read = Promise.resolve(nodeDns.V4MAPPED + "dead_promise_resolve_dns_constant_read".length);
+const unused_promise_resolve_dns_named_constant_read = Promise.resolve(ADDRCONFIG + "dead_promise_resolve_dns_named_constant_read".length);
 const unused_promise_resolve_string_method_call = Promise.resolve("dead_promise_resolve_string_method".toUpperCase());
 const unused_promise_resolve_string_search_call = Promise.resolve("dead_promise_resolve_string_search".search("resolve"));
 const unused_promise_resolve_regexp_test_call = Promise.resolve(/dead_promise_resolve_regexp_test/.test("dead_promise_resolve_regexp_test"));
@@ -751,6 +757,10 @@ osEOL.length + "top_level_dead_os_named_constant_read".length;
 Promise.resolve(nodeFs.constants.X_OK + "top_level_dead_promise_resolve_fs_constant_read".length);
 Promise.resolve(nodePath.delimiter.length + "top_level_dead_promise_resolve_path_constant_read".length);
 Promise.resolve(nodeOs.EOL.length + "top_level_dead_promise_resolve_os_constant_read".length);
+nodeDns.ALL + "top_level_dead_dns_constant_read".length;
+ADDRCONFIG + "top_level_dead_dns_named_constant_read".length;
+Promise.resolve(nodeDns.ADDRCONFIG + "top_level_dead_promise_resolve_dns_constant_read".length);
+Promise.resolve(ALL + "top_level_dead_promise_resolve_dns_named_constant_read".length);
 parseInt("top_level_dead_global_parse_int", 10);
 parseFloat("top_level_dead_global_parse_float");
 isNaN("top_level_dead_global_is_nan");
@@ -1388,6 +1398,10 @@ function usedLocal(value: number): number {
     Promise.resolve(nodeFs.constants.X_OK + "local_dead_promise_resolve_fs_constant_read".length);
     Promise.resolve(nodePath.delimiter.length + "local_dead_promise_resolve_path_constant_read".length);
     Promise.resolve(nodeOs.EOL.length + "local_dead_promise_resolve_os_constant_read".length);
+    nodeDns.ALL + "local_dead_dns_constant_read".length;
+    ADDRCONFIG + "local_dead_dns_named_constant_read".length;
+    Promise.resolve(nodeDns.ADDRCONFIG + "local_dead_promise_resolve_dns_constant_read".length);
+    Promise.resolve(ALL + "local_dead_promise_resolve_dns_named_constant_read".length);
     parseInt("local_dead_global_parse_int", 10);
     parseFloat("local_dead_global_parse_float");
     isNaN("local_dead_global_is_nan");

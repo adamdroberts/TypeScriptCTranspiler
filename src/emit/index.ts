@@ -795,7 +795,8 @@ class Emitter {
                 this.isUnshadowedGlobalIdentifier(expr, "NaN") ||
                 this.isUnshadowedGlobalIdentifier(expr, "Infinity") ||
                 this.isSideEffectFreeCommonJSPathIdentifier(expr) ||
-                this.isSideEffectFreeBuiltinStringConstantIdentifier(expr)
+                this.isSideEffectFreeBuiltinStringConstantIdentifier(expr) ||
+                this.isSideEffectFreeBuiltinNumericConstantIdentifier(expr)
             ) {
                 return true;
             }
@@ -4727,7 +4728,8 @@ class Emitter {
                 this.isUnshadowedGlobalIdentifier(unwrapped, "NaN") ||
                 this.isUnshadowedGlobalIdentifier(unwrapped, "Infinity") ||
                 this.isSideEffectFreeCommonJSPathIdentifier(unwrapped) ||
-                this.isSideEffectFreeBuiltinStringConstantIdentifier(unwrapped)
+                this.isSideEffectFreeBuiltinStringConstantIdentifier(unwrapped) ||
+                this.isSideEffectFreeBuiltinNumericConstantIdentifier(unwrapped)
             )
         ) {
             return true;
@@ -4995,6 +4997,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeBuiltinModuleConstantRead(unwrapped)) {
+            return true;
+        }
+        if (ts.isIdentifier(unwrapped) && this.isSideEffectFreeBuiltinNumericConstantIdentifier(unwrapped)) {
             return true;
         }
         return this.isSideEffectFreePrimitiveNumberCoercion(unwrapped, seenConsts);
@@ -6347,6 +6352,11 @@ class Emitter {
             this.isNamedImportFrom(expr, ["os", "node:os"], "devNull");
     }
 
+    private isSideEffectFreeBuiltinNumericConstantIdentifier(expr: ts.Identifier): boolean {
+        return this.dnsLookupHintConstant(expr.text) !== null &&
+            this.isNamedImportFrom(expr, ["dns", "node:dns"], expr.text);
+    }
+
     private isFsAccessConstantName(name: string): boolean {
         switch (name) {
             case "F_OK":
@@ -6378,6 +6388,13 @@ class Emitter {
             this.isFsAccessConstantName(name) &&
             ts.isIdentifier(expr.expression) &&
             this.isNamedImportFrom(expr.expression, ["fs", "node:fs"], "constants")
+        ) {
+            return true;
+        }
+        if (
+            ts.isIdentifier(expr.expression) &&
+            this.isDnsModuleIdentifier(expr.expression) &&
+            this.dnsLookupHintConstant(name) !== null
         ) {
             return true;
         }
