@@ -2689,6 +2689,10 @@ class Emitter {
             true,
         );
         if (staticBuiltObjectLength !== null) return staticBuiltObjectLength;
+        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
+        if (targetOperand) {
+            return this.sideEffectFreeObjectKeysLength(targetOperand, new Set(seenConsts));
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectKeysLength(init, seenConsts) : null;
     }
@@ -2718,6 +2722,10 @@ class Emitter {
             false,
         );
         if (staticBuiltObjectLength !== null) return staticBuiltObjectLength;
+        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
+        if (targetOperand) {
+            return this.sideEffectFreeObjectGetOwnPropertyNamesLength(targetOperand, new Set(seenConsts));
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectGetOwnPropertyNamesLength(init, seenConsts) : null;
     }
@@ -2747,6 +2755,10 @@ class Emitter {
             true,
         );
         if (staticBuiltObjectLength !== null) return staticBuiltObjectLength;
+        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
+        if (targetOperand) {
+            return this.sideEffectFreeObjectValuesLength(targetOperand, new Set(seenConsts));
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectValuesLength(init, seenConsts) : null;
     }
@@ -2776,6 +2788,10 @@ class Emitter {
             true,
         );
         if (staticBuiltObjectLength !== null) return staticBuiltObjectLength;
+        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
+        if (targetOperand) {
+            return this.sideEffectFreeObjectEntriesLength(targetOperand, new Set(seenConsts));
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectEntriesLength(init, seenConsts) : null;
     }
@@ -2798,6 +2814,10 @@ class Emitter {
             false,
         );
         if (staticBuiltObjectLength !== null) return staticBuiltObjectLength;
+        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
+        if (targetOperand) {
+            return this.sideEffectFreeReflectOwnKeysLength(targetOperand, new Set(seenConsts));
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeReflectOwnKeysLength(init, seenConsts) : null;
     }
