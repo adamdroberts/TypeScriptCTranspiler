@@ -1193,6 +1193,9 @@ class Emitter {
         if (this.isSideEffectFreeEventMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeEventTargetMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
         if (
             ts.isIdentifier(recv) &&
             method === "isArray" &&
@@ -2061,6 +2064,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreePrimitiveEventMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreePrimitiveEventTargetMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
         return method === "test" &&
@@ -4806,6 +4812,44 @@ class Emitter {
         return !!init && this.isSideEffectFreeFreshEventOperand(init, seenConsts);
     }
 
+    private isSideEffectFreeDirectFreshEventOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        return ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Event") &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
+    }
+
+    private isSideEffectFreeFreshEventTargetOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "EventTarget")
+        ) {
+            return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeFreshEventTargetOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeDirectFreshEventTargetOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        return ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "EventTarget") &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
+    }
+
     private isSideEffectFreeEventPropertyRead(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -4835,6 +4879,10 @@ class Emitter {
         if (!this.isSideEffectFreeFreshEventOperand(recv, seenConsts)) return false;
         switch (method) {
             case "preventDefault":
+                return this.isSideEffectFreeDirectFreshEventOperand(recv, seenConsts) &&
+                    Array.from(args).every((arg) =>
+                        this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                    );
             case "toLocaleString":
             case "toString":
             case "valueOf":
@@ -4861,6 +4909,47 @@ class Emitter {
     ): boolean {
         return method !== "valueOf" &&
             this.isSideEffectFreeEventMethodCall(recv, method, args, seenConsts);
+    }
+
+    private isSideEffectFreeEventTargetMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        switch (method) {
+            case "dispatchEvent":
+                return this.isSideEffectFreeDirectFreshEventTargetOperand(recv, seenConsts) &&
+                    args.length === 1 &&
+                    this.isSideEffectFreeDirectFreshEventOperand(args[0]!, seenConsts);
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                return this.isSideEffectFreeFreshEventTargetOperand(recv, seenConsts) &&
+                    Array.from(args).every((arg) =>
+                        this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                    );
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+                return this.isSideEffectFreeFreshEventTargetOperand(recv, seenConsts) &&
+                    args.length >= 1 &&
+                    this.isSideEffectFreePropertyKeyCoercion(args[0]!, seenConsts) &&
+                    Array.from(args).slice(1).every((arg) =>
+                        this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                    );
+            default:
+                return false;
+        }
+    }
+
+    private isSideEffectFreePrimitiveEventTargetMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return method !== "valueOf" &&
+            this.isSideEffectFreeEventTargetMethodCall(recv, method, args, seenConsts);
     }
 
     private isSideEffectFreeDateConstructorArgs(
