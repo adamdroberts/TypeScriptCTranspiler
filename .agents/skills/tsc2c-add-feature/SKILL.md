@@ -72,7 +72,10 @@ Concrete example — say the user wants `String.prototype.at(i)`.
    }
    ```
 5. **`tests/e2e/cases/string_at/`**: write `in.ts` that calls `.at(0)`, `.at(-1)` etc. and `expected.stdout` with the outputs.
-6. Run `TSC2C_NO_GC=1 bun tests/e2e/run.ts` — expect all cases still pass including the new one.
+6. Run `bun run build`, `git diff --check`, and the narrowest relevant e2e
+   case or `--filter` selection. The full e2e suite can take hours on a large
+   checkout; run it only when the change has broad cross-cutting risk or the
+   user explicitly asks for release-level confidence.
 7. Update [docs/done.md](../../../docs/done.md) — add a bullet under "Strings" section.
 8. Remove the feature from [docs/todo.md](../../../docs/todo.md) if it was listed there.
 9. Append to [CHANGELOG.md](../../../CHANGELOG.md) under "Unreleased → Added".
@@ -130,9 +133,9 @@ Push back only when the requested shape cannot be proven or allow-listed at buil
 # 1. tsc still type-checks our own source
 bun run build
 
-# 2. all existing tests still pass
-TSC2C_NO_GC=1 bun tests/e2e/run.ts
-# → 24 passed, 0 failed (+ your new case)
+# 2. focused e2e coverage for the touched feature
+TSC2C_NO_GC=1 bun tests/e2e/run.ts --filter <case>
+# Run the full suite only for broad-risk changes or explicit release checks.
 
 # 3. if you changed runtime/, spot-check with --verbose on an affected example
 ./bin/tsc2c examples/<affected>.ts -o /tmp/ex --no-gc --verbose
