@@ -1948,6 +1948,12 @@ class Emitter {
                 return false;
             });
         }
+        if (this.isObjectAssignCall(unwrapped)) {
+            return this.isSideEffectFreeObjectAssignStringValuesCall(unwrapped, seenConsts);
+        }
+        if (this.isObjectFromEntriesCall(unwrapped)) {
+            return this.isSideEffectFreeObjectFromEntriesStringValuesCall(unwrapped, seenConsts);
+        }
         const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
         if (targetOperand) {
             return this.isSideEffectFreeObjectValuesStringCoercionSource(
@@ -1957,6 +1963,65 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeObjectValuesStringCoercionSource(init, seenConsts);
+    }
+
+    private isSideEffectFreeObjectAssignStringValuesCall(
+        call: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (call.arguments.length < 1) return false;
+        const [target, ...sources] = Array.from(call.arguments);
+        return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(target!, seenConsts) &&
+            this.isSideEffectFreeObjectValuesStringCoercionSource(target!, new Set(seenConsts)) &&
+            sources.every((source) =>
+                this.isSideEffectFreeObjectAssignStringValuesSource(source, new Set(seenConsts))
+            );
+    }
+
+    private isSideEffectFreeObjectAssignStringValuesSource(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.isSideEffectFreeNullishObjectAssignSource(unwrapped, seenConsts)) return true;
+        if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) return true;
+        return this.isSideEffectFreeObjectValuesStringCoercionSource(unwrapped, seenConsts);
+    }
+
+    private isSideEffectFreeObjectFromEntriesStringValuesCall(
+        call: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return call.arguments.length === 1 &&
+            this.isSideEffectFreeObjectFromEntriesStringValuesOperand(call.arguments[0]!, seenConsts);
+    }
+
+    private isSideEffectFreeObjectFromEntriesStringValuesOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            return unwrapped.elements.every((element) => {
+                if (!ts.isExpression(element)) return false;
+                const entry = this.unwrapSideEffectFreeStaticExpression(element);
+                if (!ts.isArrayLiteralExpression(entry) || entry.elements.length < 2) return false;
+                return entry.elements.every((entryElement, index) => {
+                    if (!ts.isExpression(entryElement)) return false;
+                    if (index === 0) return this.isSideEffectFreePropertyKeyCoercion(entryElement, seenConsts);
+                    if (index === 1) return this.isSideEffectFreeStringCoercion(entryElement, seenConsts);
+                    return this.isSideEffectFreeTopLevelConstInitializer(entryElement, seenConsts);
+                });
+            });
+        }
+        if (this.isObjectEntriesCall(unwrapped)) {
+            return this.isSideEffectFreeObjectValuesStringCoercionSource(
+                unwrapped.arguments[0]!,
+                new Set(seenConsts),
+            );
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeObjectFromEntriesStringValuesOperand(init, seenConsts);
     }
 
     private isSideEffectFreeStringArrayReturningArrayHelperCall(
@@ -4350,6 +4415,13 @@ class Emitter {
         const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
         if (targetOperand) {
             return this.isSideEffectFreeObjectCoercionOperand(targetOperand, new Set(seenConsts));
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            (this.isObjectAssignCall(unwrapped) || this.isObjectFromEntriesCall(unwrapped)) &&
+            this.isSideEffectFreeStaticCall(unwrapped, seenConsts)
+        ) {
+            return true;
         }
         return this.isSideEffectFreeObjectEnumerationOperand(unwrapped, seenConsts) ||
             this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts);
