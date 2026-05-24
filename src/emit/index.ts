@@ -2683,7 +2683,11 @@ class Emitter {
         if (arrayLength !== null) return arrayLength;
         const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
         if (objectLength !== null) return objectLength;
-        const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(unwrapped, seenConsts);
+        const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(
+            unwrapped,
+            seenConsts,
+            true,
+        );
         if (staticBuiltObjectLength !== null) return staticBuiltObjectLength;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectKeysLength(init, seenConsts) : null;
@@ -2708,7 +2712,11 @@ class Emitter {
         }
         const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
         if (objectLength !== null) return objectLength;
-        const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(unwrapped, seenConsts);
+        const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(
+            unwrapped,
+            seenConsts,
+            false,
+        );
         if (staticBuiltObjectLength !== null) return staticBuiltObjectLength;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectGetOwnPropertyNamesLength(init, seenConsts) : null;
@@ -2733,7 +2741,11 @@ class Emitter {
         }
         const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
         if (objectLength !== null) return objectLength;
-        const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(unwrapped, seenConsts);
+        const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(
+            unwrapped,
+            seenConsts,
+            true,
+        );
         if (staticBuiltObjectLength !== null) return staticBuiltObjectLength;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectValuesLength(init, seenConsts) : null;
@@ -2758,7 +2770,11 @@ class Emitter {
         }
         const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
         if (objectLength !== null) return objectLength;
-        const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(unwrapped, seenConsts);
+        const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(
+            unwrapped,
+            seenConsts,
+            true,
+        );
         if (staticBuiltObjectLength !== null) return staticBuiltObjectLength;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectEntriesLength(init, seenConsts) : null;
@@ -2776,7 +2792,11 @@ class Emitter {
         }
         const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
         if (objectLength !== null) return objectLength;
-        const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(unwrapped, seenConsts);
+        const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(
+            unwrapped,
+            seenConsts,
+            false,
+        );
         if (staticBuiltObjectLength !== null) return staticBuiltObjectLength;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeReflectOwnKeysLength(init, seenConsts) : null;
@@ -2793,6 +2813,7 @@ class Emitter {
     private sideEffectFreeStaticBuiltObjectOwnStringKeyCount(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
+        enumerableOnly: boolean,
     ): number | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (this.isObjectFromEntriesCall(unwrapped) && unwrapped.arguments.length === 1) {
@@ -2806,8 +2827,129 @@ class Emitter {
             const entries = this.sideEffectFreeObjectAssignOwnDataEntries(unwrapped, new Set(seenConsts));
             return entries === null ? null : entries.length;
         }
+        const descriptorKeys = this.sideEffectFreeDescriptorBuiltObjectOwnStringKeys(
+            unwrapped,
+            seenConsts,
+            enumerableOnly,
+        );
+        if (descriptorKeys !== null) return descriptorKeys.size;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return init ? this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(init, seenConsts) : null;
+        return init
+            ? this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(init, seenConsts, enumerableOnly)
+            : null;
+    }
+
+    private sideEffectFreeDescriptorBuiltObjectOwnStringKeys(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+        enumerableOnly: boolean,
+    ): Set<string> | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isCallExpression(unwrapped) && this.isObjectCreateCall(unwrapped)) {
+            if (
+                unwrapped.arguments.length < 1 ||
+                unwrapped.arguments.length > 2 ||
+                !this.isSideEffectFreeObjectCreatePrototypeOperand(unwrapped.arguments[0]!, seenConsts)
+            ) {
+                return null;
+            }
+            if (!unwrapped.arguments[1]) return new Set();
+            return this.sideEffectFreeDataDescriptorMapOwnStringKeys(
+                unwrapped.arguments[1],
+                seenConsts,
+                enumerableOnly,
+            );
+        }
+        if (ts.isCallExpression(unwrapped) && this.isObjectDefinePropertyCall(unwrapped)) {
+            if (
+                unwrapped.arguments.length !== 3 ||
+                this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped.arguments[0]!, seenConsts) !== 0
+            ) {
+                return null;
+            }
+            const key = this.sideEffectFreeObjectPropertyReadKey(unwrapped.arguments[1]!, seenConsts);
+            if (key === null) return null;
+            const include = this.sideEffectFreeDataDescriptorIncludesOwnKey(
+                unwrapped.arguments[2]!,
+                seenConsts,
+                enumerableOnly,
+            );
+            if (include === null) return null;
+            return include ? new Set([key]) : new Set();
+        }
+        if (ts.isCallExpression(unwrapped) && this.isObjectDefinePropertiesCall(unwrapped)) {
+            if (
+                unwrapped.arguments.length !== 2 ||
+                this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped.arguments[0]!, seenConsts) !== 0
+            ) {
+                return null;
+            }
+            return this.sideEffectFreeDataDescriptorMapOwnStringKeys(
+                unwrapped.arguments[1]!,
+                seenConsts,
+                enumerableOnly,
+            );
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init
+            ? this.sideEffectFreeDescriptorBuiltObjectOwnStringKeys(init, seenConsts, enumerableOnly)
+            : null;
+    }
+
+    private sideEffectFreeDataDescriptorMapOwnStringKeys(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+        enumerableOnly: boolean,
+    ): Set<string> | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            const keys = new Set<string>();
+            for (const prop of unwrapped.properties) {
+                if (!ts.isPropertyAssignment(prop)) return null;
+                const key = this.objectLiteralStaticStringKey(prop.name, seenConsts);
+                if (key === null) return null;
+                const include = this.sideEffectFreeDataDescriptorIncludesOwnKey(
+                    prop.initializer,
+                    seenConsts,
+                    enumerableOnly,
+                );
+                if (include === null) return null;
+                if (include) keys.add(key);
+            }
+            return keys;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init
+            ? this.sideEffectFreeDataDescriptorMapOwnStringKeys(init, seenConsts, enumerableOnly)
+            : null;
+    }
+
+    private sideEffectFreeDataDescriptorIncludesOwnKey(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+        enumerableOnly: boolean,
+    ): boolean | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            if (!this.isSideEffectFreeDataPropertyDescriptor(unwrapped, seenConsts)) return null;
+            if (!enumerableOnly) return true;
+            let enumerable = false;
+            for (const prop of unwrapped.properties) {
+                if (!ts.isPropertyAssignment(prop)) return null;
+                const key = this.objectLiteralStaticStringKey(prop.name, seenConsts);
+                if (key === null) return null;
+                if (key === "enumerable") {
+                    const value = this.sideEffectFreeBooleanLiteralValue(prop.initializer, seenConsts);
+                    if (value === null) return null;
+                    enumerable = value;
+                }
+            }
+            return enumerable;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init
+            ? this.sideEffectFreeDataDescriptorIncludesOwnKey(init, seenConsts, enumerableOnly)
+            : null;
     }
 
     private sideEffectFreeObjectLiteralOwnStringKeys(
