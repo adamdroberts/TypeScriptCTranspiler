@@ -905,6 +905,9 @@ class Emitter {
             if (this.isSideEffectFreeURLPropertyRead(expr, seenConsts)) {
                 return true;
             }
+            if (this.isSideEffectFreeErrorStringPropertyRead(expr, seenConsts)) {
+                return true;
+            }
             return this.isSideEffectFreeObjectReadOperand(expr.expression, seenConsts);
         }
         if (ts.isElementAccessExpression(expr) && expr.argumentExpression) {
@@ -4448,6 +4451,18 @@ class Emitter {
         return !!init && this.isSideEffectFreeFreshErrorOperand(init, seenConsts);
     }
 
+    private isSideEffectFreeErrorStringPropertyRead(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return ts.isPropertyAccessExpression(expr) &&
+            (
+                expr.name.text === "name" ||
+                expr.name.text === "message"
+            ) &&
+            this.isSideEffectFreeFreshErrorOperand(expr.expression, seenConsts);
+    }
+
     private isSideEffectFreeURLConstructorArgs(
         args: ts.NodeArray<ts.Expression>,
         seenConsts: Set<ts.Symbol>,
@@ -4685,6 +4700,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeStringElementAccess(unwrapped, seenConsts)) {
