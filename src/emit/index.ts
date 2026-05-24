@@ -25269,7 +25269,7 @@ class Emitter {
         ) {
             options = options.expression;
         }
-        if (options.kind === ts.SyntaxKind.TrueKeyword || options.kind === ts.SyntaxKind.FalseKeyword) {
+        if (this.sideEffectFreeBooleanLiteralValue(options, new Set()) !== null) {
             return out;
         }
         if (!ts.isObjectLiteralExpression(options)) {
@@ -25286,14 +25286,12 @@ class Emitter {
             if (this.isUndefinedExpression(prop.initializer)) {
                 continue;
             }
-            if (
-                prop.initializer.kind !== ts.SyntaxKind.TrueKeyword &&
-                prop.initializer.kind !== ts.SyntaxKind.FalseKeyword
-            ) {
+            const value = this.sideEffectFreeBooleanLiteralValue(prop.initializer, new Set());
+            if (value === null) {
                 unsupported(prop.initializer, `${label}.${key} must be a boolean literal in this subset`);
             }
             if (key === "once") {
-                out.once = prop.initializer.kind === ts.SyntaxKind.TrueKeyword;
+                out.once = value;
             }
         }
         return out;
@@ -26265,13 +26263,11 @@ class Emitter {
             if (this.isUndefinedExpression(prop.initializer)) {
                 continue;
             }
-            if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
-                cancelable = "true";
-            } else if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) {
-                cancelable = "false";
-            } else {
+            const value = this.sideEffectFreeBooleanLiteralValue(prop.initializer, new Set());
+            if (value === null) {
                 unsupported(prop.initializer, "Event cancelable option must be a boolean literal");
             }
+            cancelable = value ? "true" : "false";
         }
         return cancelable;
     }

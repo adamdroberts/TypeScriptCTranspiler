@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Event and EventTarget option objects now accept earlier static `const` aliases for supported boolean values such as listener `once`/`capture`/`passive` and Event `cancelable`. Tests: `event_target_options`, `event_target_undefined_options`.
 - `crypto.randomUUID(...)` now accepts earlier static `const` aliases for supported `disableEntropyCache` option values. Test: `crypto_random_uuid`.
 - `fs.writeFileSync(...)`, `fs.appendFileSync(...)`, and their immediate `fs.promises` counterparts now accept earlier static `const` aliases for supported `flush` option values. Test: `fs_write_append_mode_options`.
 - `fs.statSync(...)`, `fs.lstatSync(...)`, and their immediate `fs.promises` counterparts now accept earlier static `const` aliases for supported `bigint: false` and `throwIfNoEntry` option values. Test: `fs_stat_options`.

@@ -1,5 +1,7 @@
 const target = new EventTarget();
 const seen: string[] = [];
+const ONCE_TRUE = true;
+const CANCELABLE_TRUE = true;
 
 function first(event: Event): void {
     seen.push("first:" + event.type + ":" + event.cancelable);
@@ -15,7 +17,7 @@ target.addEventListener("save", first, {
     passive: undefined,
 });
 target.addEventListener("save", once, {
-    once: true,
+    once: ONCE_TRUE,
     capture: undefined,
     passive: undefined,
 });
@@ -26,5 +28,5 @@ console.log("undefined cancelable:", target.dispatchEvent(new Event("save", { ca
 target.removeEventListener("save", first, {
     capture: undefined,
 });
-console.log("removed:", target.dispatchEvent(new Event("save", { cancelable: true })));
+console.log("removed:", target.dispatchEvent(new Event("save", { cancelable: CANCELABLE_TRUE })));
 console.log("seen:", seen.join("|"));
