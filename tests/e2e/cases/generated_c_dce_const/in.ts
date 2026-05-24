@@ -74,6 +74,9 @@ const unused_new_url_call = new URL("https://dead-new-url.test/path?q=1");
 const unused_new_url_base_call = new URL("child", "https://dead-new-url-base.test/root/");
 const unused_new_map_empty_call = new Map<string, number>();
 const unused_new_map_entries_call = new Map([["dead_new_map_entries_key", "dead_new_map_entries_value"]]);
+const unused_new_map_ignored_extra_entry_call = new Map([
+    (["dead_new_map_ignored_extra_key", "dead_new_map_ignored_extra_value", "dead_new_map_ignored_extra"] as unknown as ObjectEntry<string>),
+]);
 const unused_new_map_object_entries_call = new Map(Object.entries({ dead_new_map_object_entries_key: "dead_new_map_object_entries_value" }));
 const unused_new_map_copy_call = new Map(new Map([["dead_new_map_copy_key", "dead_new_map_copy_value"]]));
 const unused_new_set_empty_call = new Set<number>();
@@ -83,6 +86,9 @@ const unused_new_weak_map_empty_call = new WeakMap<object, string>();
 const unused_new_weak_map_static_source_call = new WeakMap<object, string>([
     [{ dead_new_weak_map_static_key: 1 }, "dead_new_weak_map_static_value"],
     [{ dead_new_weak_map_static_tail_key: 2 }, "dead_new_weak_map_static_tail_value"],
+]);
+const unused_new_weak_map_ignored_extra_entry_call = new WeakMap<object, string>([
+    ([{ dead_new_weak_map_ignored_extra_key: 1 }, "dead_new_weak_map_ignored_extra_value", "dead_new_weak_map_ignored_extra"] as unknown as [object, string]),
 ]);
 const unused_new_weak_set_empty_call = new WeakSet<object>();
 const unused_new_weak_set_static_source_call = new WeakSet<object>([
@@ -595,6 +601,9 @@ new URL("https://top-level-dead-new-url.test/path");
 new URL("child", "https://top-level-dead-new-url-base.test/root/");
 new Map<string, number>();
 new Map([["top_level_dead_new_map_entries_key", "top_level_dead_new_map_entries_value"]]);
+new Map([
+    (["top_level_dead_new_map_ignored_extra_key", "top_level_dead_new_map_ignored_extra_value", "top_level_dead_new_map_ignored_extra"] as unknown as ObjectEntry<string>),
+]);
 new Map(Object.entries({ top_level_dead_new_map_object_entries_key: "top_level_dead_new_map_object_entries_value" }));
 new Map(new Map([["top_level_dead_new_map_copy_key", "top_level_dead_new_map_copy_value"]]));
 new Set<number>();
@@ -604,6 +613,9 @@ new WeakMap<object, string>();
 new WeakMap<object, string>([
     [{ top_level_dead_new_weak_map_static_key: 1 }, "top_level_dead_new_weak_map_static_value"],
     [{ top_level_dead_new_weak_map_static_tail_key: 2 }, "top_level_dead_new_weak_map_static_tail_value"],
+]);
+new WeakMap<object, string>([
+    ([{ top_level_dead_new_weak_map_ignored_extra_key: 1 }, "top_level_dead_new_weak_map_ignored_extra_value", "top_level_dead_new_weak_map_ignored_extra"] as unknown as [object, string]),
 ]);
 new WeakSet<object>();
 new WeakSet<object>([
@@ -1116,6 +1128,9 @@ function usedLocal(value: number): number {
     new URL("child", "https://local-dead-new-url-base.test/root/");
     new Map<string, number>();
     new Map([["local_dead_new_map_entries_key", "local_dead_new_map_entries_value"]]);
+    new Map([
+        (["local_dead_new_map_ignored_extra_key", "local_dead_new_map_ignored_extra_value", "local_dead_new_map_ignored_extra"] as unknown as ObjectEntry<string>),
+    ]);
     new Map(Object.entries({ local_dead_new_map_object_entries_key: "local_dead_new_map_object_entries_value" }));
     new Map(new Map([["local_dead_new_map_copy_key", "local_dead_new_map_copy_value"]]));
     new Set<number>();
@@ -1125,6 +1140,9 @@ function usedLocal(value: number): number {
     new WeakMap<object, string>([
         [{ local_dead_new_weak_map_static_key: 1 }, "local_dead_new_weak_map_static_value"],
         [{ local_dead_new_weak_map_static_tail_key: 2 }, "local_dead_new_weak_map_static_tail_value"],
+    ]);
+    new WeakMap<object, string>([
+        ([{ local_dead_new_weak_map_ignored_extra_key: 1 }, "local_dead_new_weak_map_ignored_extra_value", "local_dead_new_weak_map_ignored_extra"] as unknown as [object, string]),
     ]);
     new WeakSet<object>();
     new WeakSet<object>([

@@ -3849,7 +3849,10 @@ class Emitter {
                     ts.isExpression(entry.elements[0]!) &&
                     ts.isExpression(entry.elements[1]!) &&
                     this.isSideEffectFreeTopLevelConstInitializer(entry.elements[0]!, seenConsts) &&
-                    this.isSideEffectFreeTopLevelConstInitializer(entry.elements[1]!, seenConsts);
+                    Array.from(entry.elements).every((entryElement) =>
+                        ts.isExpression(entryElement) &&
+                        this.isSideEffectFreeTopLevelConstInitializer(entryElement, seenConsts)
+                    );
             });
         }
         if (
@@ -3906,7 +3909,10 @@ class Emitter {
                     ts.isExpression(entry.elements[0]!) &&
                     ts.isExpression(entry.elements[1]!) &&
                     this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(entry.elements[0]!, seenConsts) &&
-                    this.isSideEffectFreeTopLevelConstInitializer(entry.elements[1]!, seenConsts);
+                    Array.from(entry.elements).slice(1).every((entryElement) =>
+                        ts.isExpression(entryElement) &&
+                        this.isSideEffectFreeTopLevelConstInitializer(entryElement, seenConsts)
+                    );
             });
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
