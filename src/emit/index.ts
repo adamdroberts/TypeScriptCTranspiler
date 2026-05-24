@@ -3455,6 +3455,14 @@ class Emitter {
         if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) {
             return "absent";
         }
+        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
+        if (targetOperand) {
+            return this.sideEffectFreePrimitiveObjectValuesElementResult(
+                targetOperand,
+                index,
+                new Set(seenConsts),
+            );
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init
             ? this.sideEffectFreePrimitiveObjectValuesElementResult(init, index, seenConsts)
@@ -3533,6 +3541,15 @@ class Emitter {
         if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) {
             return "absent";
         }
+        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
+        if (targetOperand) {
+            return this.sideEffectFreePrimitiveObjectEntriesTupleElementResult(
+                targetOperand,
+                entryIndex,
+                tupleIndex,
+                new Set(seenConsts),
+            );
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init
             ? this.sideEffectFreePrimitiveObjectEntriesTupleElementResult(
@@ -3542,6 +3559,20 @@ class Emitter {
                 seenConsts,
             )
             : "unsafe";
+    }
+
+    private sideEffectFreeObjectTargetReturningOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): ts.Expression | null {
+        if (
+            !ts.isCallExpression(expr) ||
+            !this.isObjectTargetReturningCall(expr) ||
+            !this.isSideEffectFreeStaticCall(expr, seenConsts)
+        ) {
+            return null;
+        }
+        return expr.arguments[0] ?? null;
     }
 
     private sideEffectFreePrimitiveObjectEntriesLiteralTupleElementResult(
