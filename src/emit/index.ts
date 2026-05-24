@@ -923,6 +923,9 @@ class Emitter {
             if (this.isSideEffectFreeProcessPrimitiveMetadataRead(expr)) {
                 return true;
             }
+            if (this.isSideEffectFreeProcessStdioMetadataRead(expr)) {
+                return true;
+            }
             return this.isSideEffectFreeObjectReadOperand(expr.expression, seenConsts);
         }
         if (ts.isElementAccessExpression(expr) && expr.argumentExpression) {
@@ -4745,6 +4748,9 @@ class Emitter {
         if (this.isSideEffectFreeProcessPrimitiveMetadataRead(unwrapped)) {
             return true;
         }
+        if (this.isSideEffectFreeProcessStdioMetadataRead(unwrapped)) {
+            return true;
+        }
         if (this.isSideEffectFreeStringElementAccess(unwrapped, seenConsts)) {
             return true;
         }
@@ -6255,6 +6261,33 @@ class Emitter {
             case "argv0":
             case "execPath":
                 return true;
+            default:
+                return false;
+        }
+    }
+
+    private isSideEffectFreeProcessStdioMetadataRead(expr: ts.Expression): boolean {
+        if (!ts.isPropertyAccessExpression(expr)) return false;
+        const stream = expr.expression;
+        if (
+            !ts.isPropertyAccessExpression(stream) ||
+            !ts.isIdentifier(stream.expression) ||
+            !this.isUnshadowedGlobalIdentifier(stream.expression, "process")
+        ) {
+            return false;
+        }
+        const streamName = stream.name.text;
+        if (streamName !== "stdin" && streamName !== "stdout" && streamName !== "stderr") {
+            return false;
+        }
+        switch (expr.name.text) {
+            case "fd":
+            case "isTTY":
+                return true;
+            case "readable":
+                return streamName === "stdin";
+            case "writable":
+                return streamName !== "stdin";
             default:
                 return false;
         }

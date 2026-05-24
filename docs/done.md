@@ -623,6 +623,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning fresh-Error method results. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused fresh-Error `.name` / `.message` reads, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused fresh-Error `.cause` and fresh-AggregateError `.errors` reads when the constructor inputs are side-effect-free. Test: `generated_c_dce_const`
+- Generated-C DCE prunes unused `process.stdin` / `stdout` / `stderr` metadata reads such as `fd`, `isTTY`, `readable`, and `writable`, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused primitive `process` metadata reads such as `platform`, `arch`, `pid`, `ppid`, `version`, `title`, `argv0`, and `execPath`, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused well-known `Symbol.iterator` / `Symbol.asyncIterator` reads and their `.description` reads, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused `Math` / `Number` static numeric constant reads, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`

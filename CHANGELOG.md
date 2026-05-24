@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes unused `process.stdin` / `stdout` / `stderr` metadata reads such as `fd`, `isTTY`, `readable`, and `writable`, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused primitive `process` metadata reads such as `platform`, `arch`, `pid`, `ppid`, `version`, `title`, `argv0`, and `execPath`, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused well-known `Symbol.iterator` / `Symbol.asyncIterator` reads and their `.description` reads, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused `Math` / `Number` static numeric constant reads, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.

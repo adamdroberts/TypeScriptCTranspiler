@@ -63,6 +63,8 @@ const unused_symbol_async_iterator_description_read = (Symbol.asyncIterator.desc
 const unused_process_platform_read = process.platform;
 const unused_process_pid_read = process.pid;
 const unused_process_exec_path_read = (process.execPath, "dead_process_exec_path_read".length);
+const unused_process_stdin_fd_read = (process.stdin.fd, "dead_process_stdin_fd_read".length);
+const unused_process_stdout_writable_read = process.stdout.writable;
 const unused_global_parse_int = parseInt("dead_global_parse_int", 10);
 const unused_global_parse_float = parseFloat("dead_global_parse_float");
 const unused_global_is_nan = isNaN("dead_global_is_nan");
@@ -207,6 +209,8 @@ const unused_promise_resolve_symbol_iterator_read = Promise.resolve(Symbol.itera
 const unused_promise_resolve_well_known_symbol_description_read = Promise.resolve((Symbol.iterator.description, "dead_promise_resolve_well_known_symbol_description_read".length));
 const unused_promise_resolve_process_platform_read = Promise.resolve(process.platform);
 const unused_promise_resolve_process_ppid_read = Promise.resolve((process.ppid, "dead_promise_resolve_process_ppid_read".length));
+const unused_promise_resolve_process_stderr_tty_read = Promise.resolve(process.stderr.isTTY);
+const unused_promise_resolve_process_stdin_readable_read = Promise.resolve((process.stdin.readable, "dead_promise_resolve_process_stdin_readable_read".length));
 const unused_promise_resolve_string_method_call = Promise.resolve("dead_promise_resolve_string_method".toUpperCase());
 const unused_promise_resolve_string_search_call = Promise.resolve("dead_promise_resolve_string_search".search("resolve"));
 const unused_promise_resolve_regexp_test_call = Promise.resolve(/dead_promise_resolve_regexp_test/.test("dead_promise_resolve_regexp_test"));
@@ -708,6 +712,10 @@ Promise.resolve((Symbol.iterator.description, "top_level_dead_promise_resolve_we
 (process.version, "top_level_dead_process_version_read".length);
 Promise.resolve(process.title);
 Promise.resolve((process.argv0, "top_level_dead_promise_resolve_process_argv0_read".length));
+(process.stdin.isTTY, "top_level_dead_process_stdin_tty_read".length);
+(process.stderr.writable, "top_level_dead_process_stderr_writable_read".length);
+Promise.resolve(process.stdout.fd);
+Promise.resolve((process.stdout.isTTY, "top_level_dead_promise_resolve_process_stdout_tty_read".length));
 parseInt("top_level_dead_global_parse_int", 10);
 parseFloat("top_level_dead_global_parse_float");
 isNaN("top_level_dead_global_is_nan");
@@ -1328,6 +1336,10 @@ function usedLocal(value: number): number {
     (process.version, "local_dead_process_version_read".length);
     Promise.resolve(process.title);
     Promise.resolve((process.argv0, "local_dead_promise_resolve_process_argv0_read".length));
+    (process.stdin.isTTY, "local_dead_process_stdin_tty_read".length);
+    (process.stderr.writable, "local_dead_process_stderr_writable_read".length);
+    Promise.resolve(process.stdout.fd);
+    Promise.resolve((process.stdout.isTTY, "local_dead_promise_resolve_process_stdout_tty_read".length));
     parseInt("local_dead_global_parse_int", 10);
     parseFloat("local_dead_global_parse_float");
     isNaN("local_dead_global_is_nan");
