@@ -1016,6 +1016,9 @@ class Emitter {
         if (this.isSideEffectFreeBuiltinStringOperand(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeRegExpStringPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -1126,6 +1129,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeBuiltinStringOperand(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeRegExpStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -4917,6 +4923,9 @@ class Emitter {
         if (this.isSideEffectFreeBuiltinStringOperand(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeRegExpStringPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -4945,6 +4954,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeBuiltinStringOperand(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeRegExpStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -7476,6 +7488,15 @@ class Emitter {
         ]);
         return fields.has(expr.name.text) &&
             this.isSideEffectFreeFreshRegExpOperand(expr.expression, seenConsts);
+    }
+
+    private isSideEffectFreeRegExpStringPropertyRead(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return ts.isPropertyAccessExpression(expr) &&
+            (expr.name.text === "source" || expr.name.text === "flags") &&
+            this.isSideEffectFreeRegExpPropertyRead(expr, seenConsts);
     }
 
     private isSideEffectFreeSymbolDescriptionRead(
