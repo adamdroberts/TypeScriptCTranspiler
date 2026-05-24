@@ -1010,6 +1010,9 @@ class Emitter {
         if (this.isSideEffectFreeBuiltinModuleConstantRead(unwrapped)) {
             return true;
         }
+        if (this.isSideEffectFreePathParsePropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (
             ts.isCallExpression(unwrapped) &&
             this.isSideEffectFreeArrayReturningObjectHelperCall(unwrapped, seenConsts)

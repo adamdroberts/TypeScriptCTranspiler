@@ -165,6 +165,8 @@ const unused_path_parse_base_read = nodePath.parse("dead_path_parse_base_read.tx
 const unused_path_named_parse_ext_read = pathParse("dead_path_named_parse_ext_read.txt").ext;
 const unused_path_posix_parse_name_read = pathPosix.parse("/tmp/dead_path_posix_parse_name_read.txt").name;
 const unused_path_global_posix_parse_dir_read = path.posix.parse("/tmp/dead_path_global_posix_parse_dir_read.txt").dir;
+const unused_path_parse_base_length_read = nodePath.parse("dead_path_parse_base_length_read.txt").base.length;
+const unused_path_named_parse_ext_length_read = pathParse("dead_path_named_parse_ext_length_read.txt").ext.length;
 const unused_net_is_ip_call = nodeNet.isIP("dead_net_is_ip_ignored");
 const unused_net_named_is_ip_call = netIsIP("dead_net_named_is_ip_ignored");
 const unused_net_global_is_ipv4_call = net.isIPv4("dead_net_global_is_ipv4_ignored");
@@ -376,6 +378,7 @@ const unused_promise_resolve_path_posix_format_call = Promise.resolve(nodePath.p
 const unused_promise_resolve_path_parse_base_read = Promise.resolve(nodePath.parse("dead_promise_resolve_path_parse_base_read.txt").base);
 const unused_promise_resolve_path_named_parse_ext_read = Promise.resolve(pathParse("dead_promise_resolve_path_named_parse_ext_read.txt").ext);
 const unused_promise_resolve_path_posix_parse_name_read = Promise.resolve(pathPosix.parse("/tmp/dead_promise_resolve_path_posix_parse_name_read.txt").name);
+const unused_promise_resolve_path_parse_base_length_read = Promise.resolve(nodePath.parse("dead_promise_resolve_path_parse_base_length_read.txt").base.length);
 const unused_promise_resolve_net_is_ipv6_call = Promise.resolve(nodeNet.isIPv6("dead_promise_resolve_net_is_ipv6_ignored"));
 const unused_promise_resolve_net_named_is_ipv6_call = Promise.resolve(netIsIPv6("dead_promise_resolve_net_named_is_ipv6_ignored"));
 const unused_promise_resolve_buffer_byte_length_call = Promise.resolve(Buffer.byteLength("dead_promise_resolve_buffer_byte_length_ignored", "utf-8"));
@@ -1009,7 +1012,9 @@ pathPosix.format({ root: "/", base: "top_level_dead_path_posix_format_base.txt" 
 nodePath.parse("top_level_dead_path_parse_base_read.txt").base;
 pathParse("top_level_dead_path_named_parse_ext_read.txt").ext;
 pathPosix.parse("/tmp/top_level_dead_path_posix_parse_name_read.txt").name;
+nodePath.parse("top_level_dead_path_parse_base_length_read.txt").base.length;
 Promise.resolve(path.posix.parse("/tmp/top_level_dead_promise_resolve_path_global_posix_parse_dir_read.txt").dir);
+Promise.resolve(pathParse("top_level_dead_promise_resolve_path_named_parse_ext_length_read.txt").ext.length);
 Promise.resolve(nodePath.basename("top_level_dead_promise_resolve_path_basename_ignored.txt", ".txt"));
 Promise.resolve(pathIsAbsolute("/top_level_dead_promise_resolve_path_named_absolute_ignored"));
 Promise.resolve(nodePath.posix.basename("top_level_dead_promise_resolve_path_posix_basename_ignored.txt", ".txt"));
@@ -1778,7 +1783,9 @@ function usedLocal(value: number): number {
     nodePath.parse("local_dead_path_parse_base_read.txt").base;
     pathParse("local_dead_path_named_parse_ext_read.txt").ext;
     pathPosix.parse("/tmp/local_dead_path_posix_parse_name_read.txt").name;
+    nodePath.parse("local_dead_path_parse_base_length_read.txt").base.length;
     Promise.resolve(path.posix.parse("/tmp/local_dead_promise_resolve_path_global_posix_parse_dir_read.txt").dir);
+    Promise.resolve(pathParse("local_dead_promise_resolve_path_named_parse_ext_length_read.txt").ext.length);
     Promise.resolve(nodePath.basename("local_dead_promise_resolve_path_basename_ignored.txt", ".txt"));
     Promise.resolve(pathIsAbsolute("/local_dead_promise_resolve_path_named_absolute_ignored"));
     Promise.resolve(nodePath.posix.basename("local_dead_promise_resolve_path_posix_basename_ignored.txt", ".txt"));
