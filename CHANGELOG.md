@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `process.stdout.readable` and `process.stderr.readable` now return `false` in the bounded stdio metadata subset. Test: `process_stdio_readable_writable`.
 - Dynamic `require(...)` finite string proofs now include earlier local static `const` string aliases in the same statement block, compiling those specifiers into the AOT module graph. Test: `dynamic_require`.
 - Dynamic `require(...)` finite collection proofs now include earlier local static `const` string maps and arrays used through element/property access. Test: `dynamic_require_static_collections`.
 - Dynamic `require(...)` finite computed-map proofs now include earlier local static `const` maps with computed static keys. Test: `dynamic_require_static_computed_map`.

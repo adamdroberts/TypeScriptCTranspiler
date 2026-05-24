@@ -8362,7 +8362,7 @@ class Emitter {
 
     private isSideEffectFreeProcessStdioMetadataRead(expr: ts.Expression): boolean {
         if (!ts.isPropertyAccessExpression(expr)) return false;
-        const stream = expr.expression;
+        const stream = this.unwrapSideEffectFreeStaticExpression(expr.expression);
         if (
             !ts.isPropertyAccessExpression(stream) ||
             !ts.isIdentifier(stream.expression) ||
@@ -8379,7 +8379,7 @@ class Emitter {
             case "isTTY":
                 return true;
             case "readable":
-                return streamName === "stdin";
+                return true;
             case "writable":
                 return streamName !== "stdin";
             default:
@@ -35294,25 +35294,31 @@ class Emitter {
             }
         }
 
+        const stdioStreamExpr = this.unwrapSideEffectFreeStaticExpression(pa.expression);
         if (
-            ts.isPropertyAccessExpression(pa.expression) &&
-            ts.isIdentifier(pa.expression.expression) &&
-            pa.expression.expression.text === "process" &&
-            (pa.expression.name.text === "stdin" || pa.expression.name.text === "stdout" || pa.expression.name.text === "stderr")
+            ts.isPropertyAccessExpression(stdioStreamExpr) &&
+            ts.isIdentifier(stdioStreamExpr.expression) &&
+            stdioStreamExpr.expression.text === "process" &&
+            (
+                stdioStreamExpr.name.text === "stdin" ||
+                stdioStreamExpr.name.text === "stdout" ||
+                stdioStreamExpr.name.text === "stderr"
+            )
         ) {
-            const fd = pa.expression.name.text === "stdin"
+            const stream = stdioStreamExpr;
+            const fd = stream.name.text === "stdin"
                 ? "0"
-                : pa.expression.name.text === "stdout"
+                : stream.name.text === "stdout"
                     ? "1"
                     : "2";
             switch (pa.name.text) {
                 case "fd": return { c: `${fd}.0`, ty: T_NUMBER };
                 case "isTTY": return { c: `tsc_process_stdio_is_tty(${fd})`, ty: T_BOOLEAN };
                 case "readable":
-                    if (pa.expression.name.text === "stdin") return { c: "true", ty: T_BOOLEAN };
-                    break;
+                    if (stream.name.text === "stdin") return { c: "true", ty: T_BOOLEAN };
+                    return { c: "false", ty: T_BOOLEAN };
                 case "writable":
-                    if (pa.expression.name.text !== "stdin") return { c: "true", ty: T_BOOLEAN };
+                    if (stream.name.text !== "stdin") return { c: "true", ty: T_BOOLEAN };
                     break;
             }
         }

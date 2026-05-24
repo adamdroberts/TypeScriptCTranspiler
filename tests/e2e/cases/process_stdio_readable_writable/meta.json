@@ -1,1 +1,1 @@
-{"description":"process stdio readable and writable stream flags"}
+{"description":"process stdio readable and writable stream flags, including false readable metadata on output streams"}
