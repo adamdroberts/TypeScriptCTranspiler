@@ -72,6 +72,8 @@ unused_bigint_constructor_number_call
 unused_bigint_constructor_boolean_call
 unused_regexp_constructor_call
 unused_new_regexp_constructor_call
+unused_regexp_test_call
+unused_regexp_exec_call
 unused_symbol_constructor_call
 unused_string_char_at_call
 unused_string_index_of_call
@@ -119,6 +121,8 @@ dead-decode-uri-component
 123456
 dead_regexp_constructor
 dead_new_regexp_constructor
+dead_regexp_test
+dead_regexp_exec
 dead_symbol_constructor
 dead_string_method_source
 dead_string_char_at
@@ -284,6 +288,8 @@ top-level-dead-decode-uri-component
 234567
 top_level_dead_regexp_constructor
 top_level_dead_new_regexp_constructor
+top_level_dead_regexp_test
+top_level_dead_regexp_exec
 top_level_dead_symbol_constructor
 top_level_dead_string_char_at
 top_level_dead_string_includes
@@ -399,6 +405,8 @@ local-dead-decode-uri-component
 345678
 local_dead_regexp_constructor
 local_dead_new_regexp_constructor
+local_dead_regexp_test
+local_dead_regexp_exec
 local_dead_symbol_constructor
 local_dead_string_char_at
 local_dead_string_starts_with

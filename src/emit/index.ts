@@ -1033,6 +1033,9 @@ class Emitter {
         if (this.isSideEffectFreeArrayMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
         if (
             ts.isIdentifier(recv) &&
             method === "isArray" &&
@@ -1696,6 +1699,58 @@ class Emitter {
         } catch {
             return false;
         }
+    }
+
+    private isSideEffectFreeRegExpMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!this.isSideEffectFreeFreshRegExpOperand(recv, seenConsts)) return false;
+        const allArgsPure = (from = 0): boolean =>
+            Array.from(args).slice(from).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+        switch (method) {
+            case "exec":
+            case "test":
+                return args.length >= 1 &&
+                    this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
+                    allArgsPure(1);
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                return allArgsPure();
+            default:
+                return false;
+        }
+    }
+
+    private isSideEffectFreeFreshRegExpOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isRegularExpressionLiteral(unwrapped)) return true;
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "RegExp")
+        ) {
+            return this.isSideEffectFreeRegExpConstructorArgs(unwrapped.arguments, seenConsts);
+        }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "RegExp")
+        ) {
+            return this.isSideEffectFreeRegExpConstructorArgs(
+                unwrapped.arguments ?? ts.factory.createNodeArray(),
+                seenConsts,
+            );
+        }
+        return false;
     }
 
     private isSideEffectFreeNumericParserArgs(
