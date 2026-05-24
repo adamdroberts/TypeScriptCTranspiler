@@ -29872,7 +29872,7 @@ class Emitter {
                 if (this.isUndefinedExpression(prop.initializer)) {
                     continue;
                 }
-                if (prop.initializer.kind !== ts.SyntaxKind.TrueKeyword && prop.initializer.kind !== ts.SyntaxKind.FalseKeyword) {
+                if (this.fsBooleanOptionValue(prop.initializer) === null) {
                     unsupported(prop.initializer, `${label}.flush must be a boolean literal in this subset`);
                 }
             } else {
@@ -29928,7 +29928,7 @@ class Emitter {
                 if (this.isUndefinedExpression(prop.initializer)) {
                     continue;
                 }
-                if (prop.initializer.kind !== ts.SyntaxKind.TrueKeyword && prop.initializer.kind !== ts.SyntaxKind.FalseKeyword) {
+                if (this.fsBooleanOptionValue(prop.initializer) === null) {
                     unsupported(prop.initializer, `${label}.flush must be a boolean literal in this subset`);
                 }
             } else {

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `fs.writeFileSync(...)`, `fs.appendFileSync(...)`, and their immediate `fs.promises` counterparts now accept earlier static `const` aliases for supported `flush` option values. Test: `fs_write_append_mode_options`.
 - `fs.statSync(...)`, `fs.lstatSync(...)`, and their immediate `fs.promises` counterparts now accept earlier static `const` aliases for supported `bigint: false` and `throwIfNoEntry` option values. Test: `fs_stat_options`.
 - `fs.mkdirSync(...)`, immediate `fs.promises.mkdir(...)`, `fs.readdirSync(...)`, and immediate `fs.promises.readdir(...)` now accept earlier static `const` aliases for supported boolean option values such as `recursive` and `withFileTypes`. Tests: `fs_mkdir_mode_options`, `fs_readdir_options`.
 - `fs.cpSync(...)` and immediate `fs.promises.cp(...)` now accept earlier static `const` aliases for supported boolean option values such as `force`, `errorOnExist`, and `preserveTimestamps`. Test: `fs_cp_options`.
