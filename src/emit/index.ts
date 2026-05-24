@@ -1010,6 +1010,9 @@ class Emitter {
         if (this.isSideEffectFreeBuiltinModuleConstantRead(unwrapped)) {
             return true;
         }
+        if (this.isSideEffectFreeCommonJsStringOperand(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -1114,6 +1117,9 @@ class Emitter {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
         }
         if (this.isSideEffectFreeStringReturningPathCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeCommonJsStringOperand(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -4899,6 +4905,9 @@ class Emitter {
         if (this.isSideEffectFreeStringReturningPathCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeCommonJsStringOperand(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -4921,6 +4930,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeStringReturningPathCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeCommonJsStringOperand(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -7713,6 +7725,28 @@ class Emitter {
             default:
                 return false;
         }
+    }
+
+    private isSideEffectFreeCommonJsStringOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isIdentifier(unwrapped) &&
+            this.isSideEffectFreeCommonJSPathIdentifier(unwrapped)
+        ) {
+            return true;
+        }
+        if (
+            ts.isPropertyAccessExpression(unwrapped) &&
+            ["filename", "id", "path"].includes(unwrapped.name.text) &&
+            this.isSideEffectFreeModulePrimitiveMetadataRead(unwrapped)
+        ) {
+            return true;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeCommonJsStringOperand(init, seenConsts);
     }
 
     private isSideEffectFreeBuiltinStringConstantIdentifier(expr: ts.Identifier): boolean {
