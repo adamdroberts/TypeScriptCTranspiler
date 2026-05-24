@@ -1010,6 +1010,9 @@ class Emitter {
         if (this.isSideEffectFreeBuiltinModuleConstantRead(unwrapped)) {
             return true;
         }
+        if (this.isSideEffectFreeStringReturningPathCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreePathParsePropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -1103,6 +1106,9 @@ class Emitter {
             ts.isNoSubstitutionTemplateLiteral(unwrapped)
         ) {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+        }
+        if (this.isSideEffectFreeStringReturningPathCall(unwrapped, seenConsts)) {
+            return true;
         }
         if (this.isSideEffectFreePathParsePropertyRead(unwrapped, seenConsts)) {
             return true;
@@ -1926,6 +1932,47 @@ class Emitter {
             ts.factory.createPropertyAccessExpression(init, unwrapped.name.text),
             seenConsts,
         );
+    }
+
+    private isSideEffectFreeStringReturningPathCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isCallExpression(unwrapped)) {
+            const stringMethods = new Set([
+                "join",
+                "resolve",
+                "normalize",
+                "toNamespacedPath",
+                "dirname",
+                "extname",
+                "relative",
+                "basename",
+                "format",
+            ]);
+            if (ts.isPropertyAccessExpression(unwrapped.expression)) {
+                const method = unwrapped.expression.name.text;
+                if (!stringMethods.has(method)) return false;
+                const recv = unwrapped.expression.expression;
+                return (
+                    (
+                        ts.isIdentifier(recv) &&
+                        this.isPathModuleIdentifier(recv)
+                    ) ||
+                    this.isPathPosixReceiver(recv)
+                ) &&
+                    this.isSideEffectFreePathCall(method, unwrapped.arguments, seenConsts);
+            }
+            if (ts.isIdentifier(unwrapped.expression)) {
+                const method = this.namedImportExportName(unwrapped.expression, ["path", "node:path"]);
+                return method !== null &&
+                    stringMethods.has(method) &&
+                    this.isSideEffectFreePathCall(method, unwrapped.arguments, seenConsts);
+            }
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeStringReturningPathCall(init, seenConsts);
     }
 
     private isSideEffectFreeNetCall(
@@ -4837,6 +4884,9 @@ class Emitter {
         if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
             return true;
         }
+        if (this.isSideEffectFreeStringReturningPathCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreePathParsePropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -4850,6 +4900,9 @@ class Emitter {
     ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
+            return true;
+        }
+        if (this.isSideEffectFreeStringReturningPathCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreePathParsePropertyRead(unwrapped, seenConsts)) {
