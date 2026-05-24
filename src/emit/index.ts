@@ -1050,6 +1050,9 @@ class Emitter {
         if (this.isSideEffectFreePrimitiveObjectStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeBuiltinObjectPrototypeStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -1223,6 +1226,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreePrimitiveObjectStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeBuiltinObjectPrototypeStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
@@ -2662,6 +2668,26 @@ class Emitter {
             default:
                 return false;
         }
+    }
+
+    private isSideEffectFreeBuiltinObjectPrototypeStringMethodCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (!ts.isCallExpression(unwrapped) || !ts.isPropertyAccessExpression(unwrapped.expression)) {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+            return !!init && this.isSideEffectFreeBuiltinObjectPrototypeStringMethodCall(init, seenConsts);
+        }
+        const recv = unwrapped.expression.expression;
+        const method = unwrapped.expression.name.text;
+        return (method === "toString" || method === "toLocaleString") &&
+            this.isSideEffectFreeBuiltinObjectPrototypeMethodCall(
+                recv,
+                method,
+                unwrapped.arguments,
+                seenConsts,
+            );
     }
 
     private isSideEffectFreeArrayMethodCall(
@@ -5134,6 +5160,9 @@ class Emitter {
         if (this.isSideEffectFreePrimitiveObjectStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeBuiltinObjectPrototypeStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -5225,6 +5254,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreePrimitiveObjectStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeBuiltinObjectPrototypeStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
@@ -6357,6 +6389,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreePrimitiveObjectStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeBuiltinObjectPrototypeStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeRegExpPropertyRead(unwrapped, seenConsts)) {

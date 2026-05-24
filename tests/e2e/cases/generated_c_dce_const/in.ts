@@ -276,6 +276,11 @@ const unused_weak_ref_object_property_enum_call = new WeakRef<object>({ label: "
 const unused_finregistry_object_to_string_call = new FinalizationRegistry<string>((held) => {
     "dead_finregistry_object_to_string_callback";
 }).toString("dead_finregistry_object_to_string_ignored");
+const unused_map_object_to_string_length_read = new Map([["dead_map_object_to_string_length_key", "dead_map_object_to_string_length_value"]]).toString().length + "dead_map_object_to_string_length_read".length;
+const unused_weak_map_object_to_locale_upper_call = (new WeakMap<object, string>().toLocaleString().toUpperCase(), "dead_weak_map_object_to_locale_upper_call_marker".length);
+const unused_finregistry_object_to_string_index_read = (new FinalizationRegistry<string>((held) => {
+    "dead_finregistry_object_to_string_index_callback";
+}).toString()[0], "dead_finregistry_object_to_string_index_read_marker".length);
 const unused_new_set_empty_call = new Set<number>();
 const unused_new_set_array_call = new Set(["dead_new_set_array", "dead_new_set_array_tail"]);
 const unused_new_set_copy_call = new Set(new Set(["dead_new_set_copy", "dead_new_set_copy_tail"]));
@@ -390,6 +395,11 @@ const unused_promise_resolve_set_size_call = Promise.resolve(new Set(["dead_prom
 const unused_promise_resolve_map_object_to_string_call = Promise.resolve(new Map([["dead_promise_resolve_map_object_to_string_key", "dead_promise_resolve_map_object_to_string_value"]]).toString("dead_promise_resolve_map_object_to_string_ignored"));
 const unused_promise_resolve_set_object_has_own_call = Promise.resolve(new Set(["dead_promise_resolve_set_object_has_own"]).hasOwnProperty("dead_promise_resolve_set_object_has_own", "dead_promise_resolve_set_object_has_own_ignored"));
 const unused_promise_resolve_weak_ref_object_to_locale_string_call = Promise.resolve(new WeakRef<object>({ label: "dead_promise_resolve_weak_ref_object_to_locale_string_target" }).toLocaleString("dead_promise_resolve_weak_ref_object_to_locale_string_ignored"));
+const unused_promise_resolve_map_object_to_string_length_read = Promise.resolve(new Map([["dead_promise_resolve_map_object_to_string_length_key", "dead_promise_resolve_map_object_to_string_length_value"]]).toString().length + "dead_promise_resolve_map_object_to_string_length_read".length);
+const unused_promise_resolve_weak_map_object_to_locale_upper_call = Promise.resolve((new WeakMap<object, string>().toLocaleString().toUpperCase(), "dead_promise_resolve_weak_map_object_to_locale_upper_call_marker"));
+const unused_promise_resolve_finregistry_object_to_string_index_read = Promise.resolve((new FinalizationRegistry<string>((held) => {
+    "dead_promise_resolve_finregistry_object_to_string_index_callback";
+}).toString()[0], "dead_promise_resolve_finregistry_object_to_string_index_read_marker"));
 const unused_promise_resolve_object_has_own_call = Promise.resolve(Object.hasOwn({ dead_promise_resolve_object_has_own: 1 }, "dead_promise_resolve_object_has_own"));
 const unused_promise_resolve_object_extensible_call = Promise.resolve(Object.isExtensible({ dead_promise_resolve_object_extensible: 1 }));
 const unused_promise_resolve_object_sealed_call = Promise.resolve(Object.isSealed({ dead_promise_resolve_object_sealed: 1 }));
@@ -1336,6 +1346,11 @@ new Map([["top_level_dead_map_object_to_string_key", "top_level_dead_map_object_
 new Set(["top_level_dead_set_object_value_of"]).valueOf("top_level_dead_set_object_value_of_ignored");
 new WeakMap<object, string>().toLocaleString("top_level_dead_weak_map_object_to_locale_string_ignored");
 new WeakSet<object>().hasOwnProperty("top_level_dead_weak_set_object_has_own", "top_level_dead_weak_set_object_has_own_ignored");
+new Map([["top_level_dead_map_object_to_string_length_key", "top_level_dead_map_object_to_string_length_value"]]).toString().length + "top_level_dead_map_object_to_string_length_read".length;
+(new WeakMap<object, string>().toLocaleString().toUpperCase(), "top_level_dead_weak_map_object_to_locale_upper_call_marker".length);
+(new FinalizationRegistry<string>((held) => {
+    "top_level_dead_finregistry_object_to_string_index_callback";
+}).toString()[0], "top_level_dead_finregistry_object_to_string_index_read_marker".length);
 new WeakRef<object>({ label: "top_level_dead_weak_ref_object_property_enum_target" }).propertyIsEnumerable("top_level_dead_weak_ref_object_property_enum", "top_level_dead_weak_ref_object_property_enum_ignored");
 new FinalizationRegistry<string>((held) => {
     "top_level_dead_finregistry_object_to_string_callback";
@@ -1442,6 +1457,11 @@ Promise.resolve(Array.isArray(["top_level_dead_promise_resolve_array_is_array"])
 Promise.resolve(Object.is("top_level_dead_promise_resolve_object_is", "top_level_dead_promise_resolve_object_is"));
 Promise.resolve(new Map([["top_level_dead_promise_resolve_map_size_key", "top_level_dead_promise_resolve_map_size_value"]]).size);
 Promise.resolve(new Set(["top_level_dead_promise_resolve_set_size"]).size);
+Promise.resolve(new Map([["top_level_dead_promise_resolve_map_object_to_string_length_key", "top_level_dead_promise_resolve_map_object_to_string_length_value"]]).toString().length + "top_level_dead_promise_resolve_map_object_to_string_length_read".length);
+Promise.resolve((new WeakMap<object, string>().toLocaleString().toUpperCase(), "top_level_dead_promise_resolve_weak_map_object_to_locale_upper_call_marker"));
+Promise.resolve((new FinalizationRegistry<string>((held) => {
+    "top_level_dead_promise_resolve_finregistry_object_to_string_index_callback";
+}).toString()[0], "top_level_dead_promise_resolve_finregistry_object_to_string_index_read_marker"));
 Promise.resolve(Object.hasOwn({ top_level_dead_promise_resolve_object_has_own: 1 }, "top_level_dead_promise_resolve_object_has_own"));
 Promise.resolve(Object.isExtensible({ top_level_dead_promise_resolve_object_extensible: 1 }));
 Promise.resolve(Object.isSealed({ top_level_dead_promise_resolve_object_sealed: 1 }));
@@ -2278,6 +2298,11 @@ function usedLocal(value: number): number {
     new Set(["local_dead_set_object_value_of"]).valueOf("local_dead_set_object_value_of_ignored");
     new WeakMap<object, string>().toLocaleString("local_dead_weak_map_object_to_locale_string_ignored");
     new WeakSet<object>().hasOwnProperty("local_dead_weak_set_object_has_own", "local_dead_weak_set_object_has_own_ignored");
+    new Map([["local_dead_map_object_to_string_length_key", "local_dead_map_object_to_string_length_value"]]).toString().length + "local_dead_map_object_to_string_length_read".length;
+    (new WeakMap<object, string>().toLocaleString().toUpperCase(), "local_dead_weak_map_object_to_locale_upper_call_marker".length);
+    (new FinalizationRegistry<string>((held) => {
+        "local_dead_finregistry_object_to_string_index_callback";
+    }).toString()[0], "local_dead_finregistry_object_to_string_index_read_marker".length);
     new WeakRef<object>({ label: "local_dead_weak_ref_object_property_enum_target" }).propertyIsEnumerable("local_dead_weak_ref_object_property_enum", "local_dead_weak_ref_object_property_enum_ignored");
     new FinalizationRegistry<string>((held) => {
         "local_dead_finregistry_object_to_string_callback";
@@ -2384,6 +2409,11 @@ function usedLocal(value: number): number {
     Promise.resolve(Object.is("local_dead_promise_resolve_object_is", "local_dead_promise_resolve_object_is"));
     Promise.resolve(new Map([["local_dead_promise_resolve_map_size_key", "local_dead_promise_resolve_map_size_value"]]).size);
     Promise.resolve(new Set(["local_dead_promise_resolve_set_size"]).size);
+    Promise.resolve(new Map([["local_dead_promise_resolve_map_object_to_string_length_key", "local_dead_promise_resolve_map_object_to_string_length_value"]]).toString().length + "local_dead_promise_resolve_map_object_to_string_length_read".length);
+    Promise.resolve((new WeakMap<object, string>().toLocaleString().toUpperCase(), "local_dead_promise_resolve_weak_map_object_to_locale_upper_call_marker"));
+    Promise.resolve((new FinalizationRegistry<string>((held) => {
+        "local_dead_promise_resolve_finregistry_object_to_string_index_callback";
+    }).toString()[0], "local_dead_promise_resolve_finregistry_object_to_string_index_read_marker"));
     Promise.resolve(Object.hasOwn({ local_dead_promise_resolve_object_has_own: 1 }, "local_dead_promise_resolve_object_has_own"));
     Promise.resolve(Object.isExtensible({ local_dead_promise_resolve_object_extensible: 1 }));
     Promise.resolve(Object.isSealed({ local_dead_promise_resolve_object_sealed: 1 }));
