@@ -1922,7 +1922,8 @@ class Emitter {
                     ? (
                         this.sideEffectFreeStringSetConstructorSourceLength(args[0]!, seenConsts) ??
                         this.sideEffectFreeNumericSetConstructorSourceLength(args[0]!, seenConsts) ??
-                        this.sideEffectFreeBooleanSetConstructorSourceLength(args[0]!, seenConsts)
+                        this.sideEffectFreeBooleanSetConstructorSourceLength(args[0]!, seenConsts) ??
+                        this.sideEffectFreeFreshObjectSetConstructorSourceLength(args[0]!, seenConsts)
                     )
                     : this.sideEffectFreeMapConstructorSourceLength(args[0]!, seenConsts);
                 if (exactLiteralLength !== null) return exactLiteralLength;
@@ -2369,6 +2370,31 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeUniqueObjectEntriesSetSourceLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeFreshObjectSetConstructorSourceLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        const elements = this.sideEffectFreeSetArraySourceExpressions(unwrapped, seenConsts);
+        if (elements) {
+            return elements.every((element) =>
+                this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(element, seenConsts)
+            )
+                ? elements.length
+                : null;
+        }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set") &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+        ) {
+            return this.sideEffectFreeNewCollectionLength(unwrapped, "Set", seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeFreshObjectSetConstructorSourceLength(init, seenConsts) : null;
     }
 
     private sideEffectFreeObjectFromEntriesOwnDataEntries(
