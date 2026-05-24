@@ -2065,6 +2065,17 @@ class Emitter {
             }
             return values.size;
         }
+        if (this.isObjectAssignCall(unwrapped)) {
+            const assignEntries = this.sideEffectFreeObjectAssignOwnDataEntries(unwrapped, new Set(seenConsts));
+            if (assignEntries === null) return null;
+            const values = new Set<string>();
+            for (const entry of assignEntries) {
+                const value = this.sideEffectFreeStringLiteralText(entry.value, seenConsts);
+                if (value === null) return null;
+                values.add(value);
+            }
+            return values.size;
+        }
         const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
         if (targetOperand) {
             return this.sideEffectFreeObjectValuesStringSetLength(targetOperand, new Set(seenConsts));
@@ -2157,6 +2168,17 @@ class Emitter {
             if (fromEntries === null) return null;
             const values = new Set<string>();
             for (const entry of fromEntries) {
+                const valueKey = this.sideEffectFreeNumericSameValueZeroKey(entry.value, seenConsts);
+                if (valueKey === null) return null;
+                values.add(valueKey);
+            }
+            return values.size;
+        }
+        if (this.isObjectAssignCall(unwrapped)) {
+            const assignEntries = this.sideEffectFreeObjectAssignOwnDataEntries(unwrapped, new Set(seenConsts));
+            if (assignEntries === null) return null;
+            const values = new Set<string>();
+            for (const entry of assignEntries) {
                 const valueKey = this.sideEffectFreeNumericSameValueZeroKey(entry.value, seenConsts);
                 if (valueKey === null) return null;
                 values.add(valueKey);
@@ -2310,6 +2332,17 @@ class Emitter {
             }
             return values.size;
         }
+        if (this.isObjectAssignCall(unwrapped)) {
+            const assignEntries = this.sideEffectFreeObjectAssignOwnDataEntries(unwrapped, new Set(seenConsts));
+            if (assignEntries === null) return null;
+            const values = new Set<boolean>();
+            for (const entry of assignEntries) {
+                const value = this.sideEffectFreeBooleanLiteralValue(entry.value, seenConsts);
+                if (value === null) return null;
+                values.add(value);
+            }
+            return values.size;
+        }
         const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
         if (targetOperand) {
             return this.sideEffectFreeObjectValuesBooleanSetLength(targetOperand, new Set(seenConsts));
@@ -2367,6 +2400,35 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectFromEntriesOwnDataEntries(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeObjectAssignOwnDataEntries(
+        call: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): { key: string; value: ts.Expression }[] | null {
+        if (
+            call.arguments.length < 1 ||
+            !this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts)
+        ) {
+            return null;
+        }
+        const entries = new Map<string, ts.Expression>();
+        for (let i = 0; i < call.arguments.length; i++) {
+            const arg = call.arguments[i]!;
+            if (i > 0 && this.isSideEffectFreeNullishObjectAssignSource(arg, seenConsts)) {
+                continue;
+            }
+            if (i > 0 && this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(arg, seenConsts)) {
+                continue;
+            }
+            const sourceEntries = this.sideEffectFreeObjectLiteralOwnDataEntries(
+                arg,
+                new Set(seenConsts),
+            );
+            if (sourceEntries === null) return null;
+            for (const entry of sourceEntries) entries.set(entry.key, entry.value);
+        }
+        return Array.from(entries, ([key, value]) => ({ key, value }));
     }
 
     private sideEffectFreeBooleanLiteralValue(
