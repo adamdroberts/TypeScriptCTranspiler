@@ -2193,8 +2193,8 @@ class Emitter {
                     (
                         !args[1] ||
                         this.isUndefinedExpression(args[1]) ||
-                        staticStringExpressionText(args[1]) === "utf8" ||
-                        staticStringExpressionText(args[1]) === "utf-8"
+                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "utf8" ||
+                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "utf-8"
                     ) &&
                     ignoredAfter(args[1] ? 2 : 1);
             default:
@@ -2219,8 +2219,8 @@ class Emitter {
                     (
                         !args[1] ||
                         this.isUndefinedExpression(args[1]) ||
-                        staticStringExpressionText(args[1]) === "utf8" ||
-                        staticStringExpressionText(args[1]) === "utf-8"
+                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "utf8" ||
+                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "utf-8"
                     );
             case "alloc":
                 return args.length >= 1 &&
@@ -2272,8 +2272,8 @@ class Emitter {
                 return (
                     !args[0] ||
                     this.isUndefinedExpression(args[0]) ||
-                    staticStringExpressionText(args[0]) === "utf8" ||
-                    staticStringExpressionText(args[0]) === "utf-8"
+                    this.sideEffectFreeStringLiteralText(args[0], seenConsts) === "utf8" ||
+                    this.sideEffectFreeStringLiteralText(args[0], seenConsts) === "utf-8"
                 ) &&
                     ignoredAfter(args[0] ? 1 : 0);
             default:

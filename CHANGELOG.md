@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes earlier static `const` aliases for supported Buffer UTF-8 encoding arguments. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes earlier static `const` aliases for supported `os.userInfo(...)` UTF-8 `encoding` option values. Test: `generated_c_dce_const`.
 - `fs.readFileSync(...)`, `fs.writeFileSync(...)`, `fs.appendFileSync(...)`, and their immediate `fs.promises` counterparts now accept earlier static `const` aliases for supported string `encoding` and `flag` option values. Test: `fs_file_flag_options`.
 - `fs.readdirSync(...)`, `fs.realpathSync(...)`, `fs.readlinkSync(...)`, `fs.mkdtempSync(...)`, and their immediate `fs.promises` counterparts now accept earlier static `const` aliases for supported string `encoding` option values. Tests: `fs_readdir_buffer_options`, `fs_link_path_encoding_options`, `fs_mkdtemp_encoding_options`.
