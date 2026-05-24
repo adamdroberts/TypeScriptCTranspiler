@@ -25337,7 +25337,8 @@ class Emitter {
                 ], ([ee, event]) => `tsc_event_emitter_listeners(${ee}, ${event})`);
             }
             case "once": {
-                if (args.length !== 2) unsupported(call, "events.once expects emitter and eventName");
+                if (args.length < 2 || args.length > 3) unsupported(call, "events.once expects emitter, eventName, and optional options");
+                this.eventEmitterOnceOptions(args[2], "events.once");
                 const emitter = this.emitExpr(args[0]!);
                 const eventName = this.emitExpr(args[1]!);
                 const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
@@ -25366,6 +25367,34 @@ class Emitter {
             }
         }
         unsupported(call, `events.${method}`);
+    }
+
+    private eventEmitterOnceOptions(options: ts.Expression | undefined, label: string): void {
+        if (!options || this.isUndefinedExpression(options)) return;
+        while (
+            ts.isParenthesizedExpression(options) ||
+            ts.isAsExpression(options) ||
+            ts.isTypeAssertionExpression(options) ||
+            ts.isNonNullExpression(options) ||
+            ts.isSatisfiesExpression(options)
+        ) {
+            options = options.expression;
+        }
+        if (!ts.isObjectLiteralExpression(options)) {
+            unsupported(options, `${label} options must be an object literal in this subset`);
+        }
+        for (const prop of options.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, `${label} options only support property assignments`);
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (key !== "signal") {
+                unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+            }
+            if (!this.isUndefinedExpression(prop.initializer)) {
+                unsupported(prop.initializer, `${label}.signal requires AbortSignal support`);
+            }
+        }
     }
 
     private emitDnsCall(call: ts.CallExpression, method: string): EmitResult {

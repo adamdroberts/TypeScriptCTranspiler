@@ -1366,12 +1366,15 @@ interface EventEmitterConstructor {
     listenerCount(emitter: EventEmitter, eventName: string, listener?: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): number;
 }
 declare var EventEmitter: EventEmitterConstructor;
+interface EventEmitterOnceOptions {
+    signal?: any;
+}
 declare module "events" {
     export const EventEmitter: EventEmitterConstructor;
     export let defaultMaxListeners: number;
     export function listenerCount(emitter: EventEmitter, eventName: string, listener?: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): number;
     export function getEventListeners(emitter: EventEmitter, eventName: string, ...ignored: any[]): any[];
-    export function once(emitter: EventEmitter, eventName: string): Promise<any[]>;
+    export function once(emitter: EventEmitter, eventName: string, options?: EventEmitterOnceOptions): Promise<any[]>;
     export function setMaxListeners(n: number, emitter: EventEmitter): void;
     export function getMaxListeners(emitter: EventEmitter, ...ignored: any[]): number;
 }
@@ -1380,7 +1383,7 @@ declare module "node:events" {
     export let defaultMaxListeners: number;
     export function listenerCount(emitter: EventEmitter, eventName: string, listener?: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): number;
     export function getEventListeners(emitter: EventEmitter, eventName: string, ...ignored: any[]): any[];
-    export function once(emitter: EventEmitter, eventName: string): Promise<any[]>;
+    export function once(emitter: EventEmitter, eventName: string, options?: EventEmitterOnceOptions): Promise<any[]>;
     export function setMaxListeners(n: number, emitter: EventEmitter): void;
     export function getMaxListeners(emitter: EventEmitter, ...ignored: any[]): number;
 }

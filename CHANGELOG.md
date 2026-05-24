@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `events.once(emitter, eventName[, options])` now accepts omitted options, explicit `undefined`, and literal `{ signal: undefined }` defaults in the synchronous EventEmitter subset. Test: `event_emitter_once_options`.
 - Generated-C DCE now treats safe `Object.prototype.toLocaleString.call(...)` primitive/string receiver results as side-effect-free `.length`, string-method, and indexable operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats side-effect-free `Object.prototype.toString.call(...)` results as side-effect-free `.length`, string-method, and indexable operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats side-effect-free collection/weak-ref/finalization object string helper results as side-effect-free `.length`, string-method, and indexable operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
