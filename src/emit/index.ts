@@ -1184,6 +1184,9 @@ class Emitter {
         if (this.isSideEffectFreeBufferMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeProcessCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
         if (
             ts.isIdentifier(recv) &&
             method === "isArray" &&
@@ -1639,6 +1642,10 @@ class Emitter {
                 this.isSideEffectFreeBufferStaticCall(method, call.arguments, seenConsts)
             ) ||
             (
+                recv.text === "process" &&
+                this.isSideEffectFreePrimitiveProcessCall(recv, method, call.arguments, seenConsts)
+            ) ||
+            (
                 this.isOsModuleIdentifier(recv) &&
                 this.isSideEffectFreePrimitiveOsCall(method, call.arguments, seenConsts)
             ) ||
@@ -1899,6 +1906,69 @@ class Emitter {
             method === "toString"
         ) &&
             this.isSideEffectFreeBufferMethodCall(recv, method, args, seenConsts);
+    }
+
+    private isSideEffectFreeProcessCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const ignored = (): boolean =>
+            Array.from(args).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+        if (ts.isIdentifier(recv) && recv.text === "process") {
+            if (
+                method === "cwd" ||
+                method === "uptime" ||
+                method === "getuid" ||
+                method === "getgid" ||
+                method === "geteuid" ||
+                method === "getegid" ||
+                method === "getgroups" ||
+                method === "memoryUsage" ||
+                method === "resourceUsage"
+            ) {
+                return ignored();
+            }
+            if (method === "cpuUsage") {
+                return args.length === 0;
+            }
+            if (method === "hrtime") {
+                return args.length === 0;
+            }
+            if (method === "umask") {
+                return args.length === 0;
+            }
+            return false;
+        }
+        return ts.isPropertyAccessExpression(recv) &&
+            method === "bigint" &&
+            recv.name.text === "hrtime" &&
+            ts.isIdentifier(recv.expression) &&
+            recv.expression.text === "process" &&
+            ignored();
+    }
+
+    private isSideEffectFreePrimitiveProcessCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return ts.isIdentifier(recv) &&
+            recv.text === "process" &&
+            (
+                method === "cwd" ||
+                method === "uptime" ||
+                method === "getuid" ||
+                method === "getgid" ||
+                method === "geteuid" ||
+                method === "getegid" ||
+                method === "umask"
+            ) &&
+            this.isSideEffectFreeProcessCall(recv, method, args, seenConsts);
     }
 
     private isSideEffectFreePrimitiveMethodCall(
