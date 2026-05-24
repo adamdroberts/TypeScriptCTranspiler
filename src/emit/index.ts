@@ -1130,6 +1130,9 @@ class Emitter {
         if (this.isSideEffectFreeBuiltinObjectPrototypeMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeURLMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
@@ -1631,11 +1634,57 @@ class Emitter {
         if (this.isSideEffectFreeDateMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeURLMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeErrorMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
         return method === "test" &&
             this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts);
+    }
+
+    private isSideEffectFreeURLMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!this.isSideEffectFreeFreshURLOperand(recv, seenConsts)) return false;
+        switch (method) {
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+                return args.length >= 1 &&
+                    this.isSideEffectFreePropertyKeyCoercion(args[0]!, seenConsts) &&
+                    Array.from(args).slice(1).every((arg) =>
+                        this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                    );
+            case "toJSON":
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                return Array.from(args).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+            default:
+                return false;
+        }
+    }
+
+    private isSideEffectFreeFreshURLOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "URL")
+        ) {
+            return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeFreshURLOperand(init, seenConsts);
     }
 
     private isSideEffectFreeBuiltinObjectPrototypeMethodCall(

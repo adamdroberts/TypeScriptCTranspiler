@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes unused URL object/string helper calls over valid side-effect-free URL constructor operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused inherited object-prototype calls on side-effect-free collection/weak-ref/finalization operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused typed `Map.size` / `Set.size` reads over side-effect-free collection operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused `WeakRef.deref(...)` and fresh `FinalizationRegistry.register(...)` / `unregister(...)` calls with side-effect-free operands. Test: `generated_c_dce_const`.

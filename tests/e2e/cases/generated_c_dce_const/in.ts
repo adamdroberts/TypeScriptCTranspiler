@@ -73,6 +73,10 @@ const unused_new_date_number_call = new Date(1234567);
 const unused_new_date_parts_call = new Date(2020, 0, 3, 4, 5, 6, 7);
 const unused_new_url_call = new URL("https://dead-new-url.test/path?q=1");
 const unused_new_url_base_call = new URL("child", "https://dead-new-url-base.test/root/");
+const unused_url_to_string_call = new URL("https://dead-url-to-string.test/path").toString("dead_url_to_string_ignored");
+const unused_url_to_json_call = new URL("https://dead-url-to-json.test/path").toJSON("dead_url_to_json_ignored");
+const unused_url_value_of_call = new URL("https://dead-url-value-of.test/path").valueOf("dead_url_value_of_ignored");
+const unused_url_has_own_call = new URL("https://dead-url-has-own.test/path").hasOwnProperty("dead_url_has_own", "dead_url_has_own_ignored");
 const unused_new_map_empty_call = new Map<string, number>();
 const unused_new_map_entries_call = new Map([["dead_new_map_entries_key", "dead_new_map_entries_value"]]);
 const unused_new_map_ignored_extra_entry_call = new Map([
@@ -164,6 +168,9 @@ const unused_promise_resolve_date_callable_call = Promise.resolve(Date("dead_pro
 const unused_promise_resolve_date_now_call = Promise.resolve(Date.now("dead_promise_resolve_date_now_ignored"));
 const unused_promise_resolve_date_parse_call = Promise.resolve(Date.parse("2099-01-02T03:04:05Z"));
 const unused_promise_resolve_date_utc_call = Promise.resolve(Date.UTC(2099, 0, 2, 3, 4, 5, 6));
+const unused_promise_resolve_url_to_string_call = Promise.resolve(new URL("https://dead-promise-resolve-url-to-string.test/path").toString("dead_promise_resolve_url_to_string_ignored"));
+const unused_promise_resolve_url_to_json_call = Promise.resolve(new URL("https://dead-promise-resolve-url-to-json.test/path").toJSON("dead_promise_resolve_url_to_json_ignored"));
+const unused_promise_resolve_url_has_own_call = Promise.resolve(new URL("https://dead-promise-resolve-url-has-own.test/path").hasOwnProperty("dead_promise_resolve_url_has_own", "dead_promise_resolve_url_has_own_ignored"));
 const unused_promise_resolve_string_static_call = Promise.resolve(String.fromCharCode("dead_promise_resolve_string_static".length));
 const unused_promise_resolve_string_code_point_call = Promise.resolve(String.fromCodePoint(0x1f680));
 const unused_promise_resolve_regexp_escape_call = Promise.resolve(RegExp.escape("dead_promise_resolve_regexp_escape"));
@@ -675,6 +682,10 @@ new Date(2234567);
 new Date(2020, 1, 4, 5, 6, 7, 8);
 new URL("https://top-level-dead-new-url.test/path");
 new URL("child", "https://top-level-dead-new-url-base.test/root/");
+new URL("https://top-level-dead-url-to-string.test/path").toString("top_level_dead_url_to_string_ignored");
+new URL("https://top-level-dead-url-to-json.test/path").toJSON("top_level_dead_url_to_json_ignored");
+new URL("https://top-level-dead-url-value-of.test/path").valueOf("top_level_dead_url_value_of_ignored");
+new URL("https://top-level-dead-url-has-own.test/path").hasOwnProperty("top_level_dead_url_has_own", "top_level_dead_url_has_own_ignored");
 new Map<string, number>();
 new Map([["top_level_dead_new_map_entries_key", "top_level_dead_new_map_entries_value"]]);
 new Map([
@@ -1264,6 +1275,10 @@ function usedLocal(value: number): number {
     new Date(2020, 2, 5, 6, 7, 8, 9);
     new URL("https://local-dead-new-url.test/path");
     new URL("child", "https://local-dead-new-url-base.test/root/");
+    new URL("https://local-dead-url-to-string.test/path").toString("local_dead_url_to_string_ignored");
+    new URL("https://local-dead-url-to-json.test/path").toJSON("local_dead_url_to_json_ignored");
+    new URL("https://local-dead-url-value-of.test/path").valueOf("local_dead_url_value_of_ignored");
+    new URL("https://local-dead-url-has-own.test/path").hasOwnProperty("local_dead_url_has_own", "local_dead_url_has_own_ignored");
     new Map<string, number>();
     new Map([["local_dead_new_map_entries_key", "local_dead_new_map_entries_value"]]);
     new Map([
