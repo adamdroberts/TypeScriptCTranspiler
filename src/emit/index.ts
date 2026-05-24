@@ -29686,12 +29686,8 @@ class Emitter {
             if (this.isUndefinedExpression(prop.initializer)) {
                 continue;
             }
-            let value: boolean;
-            if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
-                value = true;
-            } else if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) {
-                value = false;
-            } else {
+            const value = this.fsBooleanOptionValue(prop.initializer);
+            if (value === null) {
                 unsupported(prop.initializer, `${label}.${key} must be a boolean literal in this subset`);
             }
             if (key === "recursive") out.recursive = value;
