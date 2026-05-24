@@ -8,6 +8,12 @@ Any directory under `tests/e2e/cases/` with an `in.ts` file is a real case. It m
 
 ## Running the suite
 
+The full e2e suite can take hours on a large checkout. Do not run it by default
+while iterating on a bounded change; prefer `bun run build`, `git diff --check`,
+and the narrowest relevant e2e case or `--filter` selection. Run the full suite
+only when the change has broad cross-cutting risk or you explicitly need release
+confidence.
+
 ```bash
 cd /home/adam/dev/innovation/TypeScriptC
 
