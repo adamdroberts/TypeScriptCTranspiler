@@ -634,6 +634,9 @@ const unused_promise_resolve_date_to_date_string_upper_call = Promise.resolve((n
 const unused_promise_resolve_date_to_time_string_index_read = Promise.resolve((new Date("2101-05-06T07:08:09Z").toTimeString()[0], "dead_promise_resolve_date_to_time_string_index_read_marker"));
 const unused_promise_resolve_error_string_call = Promise.resolve(new Error("dead_promise_resolve_error_message").toString("dead_promise_resolve_error_ignored"));
 const unused_promise_resolve_aggregate_error_string_call = Promise.resolve(new AggregateError(["dead_promise_resolve_aggregate_error_item"], "dead_promise_resolve_aggregate_error_message").toLocaleString("dead_promise_resolve_aggregate_error_ignored"));
+const unused_promise_resolve_error_to_string_length_read = Promise.resolve(new Error("dead_promise_resolve_error_to_string_length_read").toString().length);
+const unused_promise_resolve_error_to_locale_upper_call = Promise.resolve((new TypeError("dead_promise_resolve_error_to_locale_upper_call").toLocaleString().toUpperCase(), "dead_promise_resolve_error_to_locale_upper_call_marker"));
+const unused_promise_resolve_aggregate_error_to_string_index_read = Promise.resolve((new AggregateError(["dead_promise_resolve_aggregate_error_to_string_index_item"], "dead_promise_resolve_aggregate_error_to_string_index_read").toString()[0], "dead_promise_resolve_aggregate_error_to_string_index_read_marker"));
 const unused_promise_resolve_error_message_read = Promise.resolve(new Error("dead_promise_resolve_error_message_read").message);
 const unused_promise_resolve_type_error_name_read = Promise.resolve(new TypeError("dead_promise_resolve_type_error_name_read").name);
 const unused_promise_resolve_error_message_length_read = Promise.resolve(new Error("dead_promise_resolve_error_message_length_read").message.length);
@@ -882,6 +885,9 @@ const unused_aggregate_error_errors_read = new AggregateError(["dead_aggregate_e
 const unused_error_message_length_read = new Error("dead_error_message_length_read").message.length;
 const unused_error_name_upper_call = (new TypeError("dead_error_name_upper_call").name.toUpperCase(), "dead_error_name_upper_call_marker".length);
 const unused_error_message_index_read = (new SyntaxError("dead_error_message_index_read").message[0], "dead_error_message_index_read_marker".length);
+const unused_error_to_string_length_read = new Error("dead_error_to_string_length_read").toString().length;
+const unused_error_to_locale_upper_call = (new TypeError("dead_error_to_locale_upper_call").toLocaleString().toUpperCase(), "dead_error_to_locale_upper_call_marker".length);
+const unused_aggregate_error_to_string_index_read = (new AggregateError(["dead_aggregate_error_to_string_index_item"], "dead_aggregate_error_to_string_index_read").toString()[0], "dead_aggregate_error_to_string_index_read_marker".length);
 const unused_regexp_source_read = /dead_regexp_source_read/gi.source;
 const unused_regexp_flags_read = new RegExp("dead_regexp_flags_read", "ms").flags;
 const unused_regexp_boolean_read = /dead_regexp_boolean_read/y.sticky;
@@ -1549,6 +1555,9 @@ Promise.resolve((new Date("2102-04-05T06:07:08Z").toDateString().toUpperCase(), 
 Promise.resolve((new Date("2102-05-06T07:08:09Z").toTimeString()[0], "top_level_dead_promise_resolve_date_to_time_string_index_read_marker"));
 Promise.resolve(new TypeError("top_level_dead_promise_resolve_error_message").toLocaleString("top_level_dead_promise_resolve_error_ignored"));
 Promise.resolve(new AggregateError(["top_level_dead_promise_resolve_aggregate_error_item"], "top_level_dead_promise_resolve_aggregate_error_message").toString("top_level_dead_promise_resolve_aggregate_error_ignored"));
+Promise.resolve(new Error("top_level_dead_promise_resolve_error_to_string_length_read").toString().length);
+Promise.resolve((new TypeError("top_level_dead_promise_resolve_error_to_locale_upper_call").toLocaleString().toUpperCase(), "top_level_dead_promise_resolve_error_to_locale_upper_call_marker"));
+Promise.resolve((new AggregateError(["top_level_dead_promise_resolve_aggregate_error_to_string_index_item"], "top_level_dead_promise_resolve_aggregate_error_to_string_index_read").toString()[0], "top_level_dead_promise_resolve_aggregate_error_to_string_index_read_marker"));
 Promise.resolve(new Error("top_level_dead_promise_resolve_error_message_read").message);
 Promise.resolve(new RangeError("top_level_dead_promise_resolve_error_name_read").name);
 Promise.resolve(new Error("top_level_dead_promise_resolve_error_message_length_read").message.length);
@@ -1774,6 +1783,9 @@ new AggregateError(["top_level_dead_aggregate_error_errors_read"], "top_level_de
 new Error("top_level_dead_error_message_length_read").message.length;
 (new TypeError("top_level_dead_error_name_upper_call").name.toUpperCase(), "top_level_dead_error_name_upper_call_marker".length);
 (new SyntaxError("top_level_dead_error_message_index_read").message[0], "top_level_dead_error_message_index_read_marker".length);
+new Error("top_level_dead_error_to_string_length_read").toString().length;
+(new TypeError("top_level_dead_error_to_locale_upper_call").toLocaleString().toUpperCase(), "top_level_dead_error_to_locale_upper_call_marker".length);
+(new AggregateError(["top_level_dead_aggregate_error_to_string_index_item"], "top_level_dead_aggregate_error_to_string_index_read").toString()[0], "top_level_dead_aggregate_error_to_string_index_read_marker".length);
 /top_level_dead_regexp_source_read/g.source;
 new RegExp("top_level_dead_regexp_flags_read", "im").flags;
 new RegExp("top_level_dead_regexp_boolean_read", "s").dotAll;
@@ -2455,6 +2467,9 @@ function usedLocal(value: number): number {
     Promise.resolve((new Date("2103-05-06T07:08:09Z").toTimeString()[0], "local_dead_promise_resolve_date_to_time_string_index_read_marker"));
     Promise.resolve(new RangeError("local_dead_promise_resolve_error_message").toString("local_dead_promise_resolve_error_ignored"));
     Promise.resolve(new AggregateError(["local_dead_promise_resolve_aggregate_error_item"], "local_dead_promise_resolve_aggregate_error_message").toLocaleString("local_dead_promise_resolve_aggregate_error_ignored"));
+    Promise.resolve(new Error("local_dead_promise_resolve_error_to_string_length_read").toString().length);
+    Promise.resolve((new TypeError("local_dead_promise_resolve_error_to_locale_upper_call").toLocaleString().toUpperCase(), "local_dead_promise_resolve_error_to_locale_upper_call_marker"));
+    Promise.resolve((new AggregateError(["local_dead_promise_resolve_aggregate_error_to_string_index_item"], "local_dead_promise_resolve_aggregate_error_to_string_index_read").toString()[0], "local_dead_promise_resolve_aggregate_error_to_string_index_read_marker"));
     Promise.resolve(new Error("local_dead_promise_resolve_error_message_read").message);
     Promise.resolve(new TypeError("local_dead_promise_resolve_error_name_read").name);
     Promise.resolve(new Error("local_dead_promise_resolve_error_message_length_read").message.length);
@@ -2682,6 +2697,9 @@ function usedLocal(value: number): number {
     new Error("local_dead_error_message_length_read").message.length;
     (new TypeError("local_dead_error_name_upper_call").name.toUpperCase(), "local_dead_error_name_upper_call_marker".length);
     (new SyntaxError("local_dead_error_message_index_read").message[0], "local_dead_error_message_index_read_marker".length);
+    new Error("local_dead_error_to_string_length_read").toString().length;
+    (new TypeError("local_dead_error_to_locale_upper_call").toLocaleString().toUpperCase(), "local_dead_error_to_locale_upper_call_marker".length);
+    (new AggregateError(["local_dead_aggregate_error_to_string_index_item"], "local_dead_aggregate_error_to_string_index_read").toString()[0], "local_dead_aggregate_error_to_string_index_read_marker".length);
     /local_dead_regexp_source_read/g.source;
     new RegExp("local_dead_regexp_flags_read", "im").flags;
     new RegExp("local_dead_regexp_boolean_read", "s").dotAll;
