@@ -1810,6 +1810,14 @@ class Emitter {
             if (name === "Map" || name === "Set" || name === "WeakMap" || name === "WeakSet") {
                 return args.length === 0;
             }
+            if (name === "WeakRef") {
+                return args.length === 1 &&
+                    this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(args[0]!, seenConsts);
+            }
+            if (name === "FinalizationRegistry") {
+                return args.length === 1 &&
+                    this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts);
+            }
             return false;
         }
         const args = Array.from(expr.arguments ?? []);

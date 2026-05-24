@@ -65,6 +65,10 @@ const unused_new_map_empty_call = new Map<string, number>();
 const unused_new_set_empty_call = new Set<number>();
 const unused_new_weak_map_empty_call = new WeakMap<object, string>();
 const unused_new_weak_set_empty_call = new WeakSet<object>();
+const unused_new_weak_ref_call = new WeakRef<object>({ label: "dead_weak_ref_target" });
+const unused_new_finalization_registry_call = new FinalizationRegistry<string>((held) => {
+    "dead_finalization_registry_callback";
+});
 const unused_uri_source = "dead_uri_source";
 const unused_encode_uri_call = encodeURI("dead encode uri");
 const unused_encode_uri_component_call = encodeURIComponent(unused_uri_source);
@@ -233,6 +237,10 @@ new Map<string, number>();
 new Set<number>();
 new WeakMap<object, string>();
 new WeakSet<object>();
+new WeakRef<object>({ label: "top_level_dead_weak_ref_target" });
+new FinalizationRegistry<string>((held) => {
+    "top_level_dead_finalization_registry_callback";
+});
 encodeURI("top level dead encode uri");
 encodeURIComponent("top-level-dead-encode-uri-component");
 decodeURI("top-level-dead-decode-uri");
@@ -411,6 +419,10 @@ function usedLocal(value: number): number {
     new Set<number>();
     new WeakMap<object, string>();
     new WeakSet<object>();
+    new WeakRef<object>({ label: "local_dead_weak_ref_target" });
+    new FinalizationRegistry<string>((held) => {
+        "local_dead_finalization_registry_callback";
+    });
     encodeURI("local dead encode uri");
     encodeURIComponent("local-dead-encode-uri-component");
     decodeURI("local-dead-decode-uri");

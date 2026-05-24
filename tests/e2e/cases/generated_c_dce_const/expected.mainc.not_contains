@@ -70,6 +70,10 @@ unused_new_map_empty_call
 unused_new_set_empty_call
 unused_new_weak_map_empty_call
 unused_new_weak_set_empty_call
+unused_new_weak_ref_call
+unused_new_finalization_registry_call
+dead_weak_ref_target
+dead_finalization_registry_callback
 unused_uri_source
 unused_encode_uri_call
 unused_encode_uri_component_call
@@ -356,6 +360,8 @@ top_level_dead_string_constructor
 top_level_dead_boolean_constructor
 2020-02-03T04:05:06Z
 2020-02-04T05:06:07Z
+top_level_dead_weak_ref_target
+top_level_dead_finalization_registry_callback
 top level dead encode uri
 top-level-dead-encode-uri-component
 top-level-dead-decode-uri
@@ -508,6 +514,8 @@ local_dead_string_constructor
 local_dead_boolean_constructor
 2020-03-04T05:06:07Z
 2020-03-05T06:07:08Z
+local_dead_weak_ref_target
+local_dead_finalization_registry_callback
 local dead encode uri
 local-dead-encode-uri-component
 local-dead-decode-uri
