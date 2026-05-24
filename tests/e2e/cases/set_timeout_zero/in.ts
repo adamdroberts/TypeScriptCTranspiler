@@ -1,4 +1,6 @@
 const events: string[] = [];
+const ZERO_DELAY = 0;
+const NEGATIVE_ZERO_DELAY = -0;
 
 setTimeout((label: string, count: number) => {
     events.push(label + ":" + count);
@@ -10,12 +12,12 @@ setTimeout((label: string, count: number) => {
     });
     setTimeout(() => {
         events.push("nested-timeout");
-    }, 0);
-}, 0, "first", 1);
+    }, ZERO_DELAY);
+}, ZERO_DELAY, "first", 1);
 
 setTimeout(() => {
     events.push("last-timeout");
-}, 0);
+}, ZERO_DELAY);
 
 setTimeout(() => {
     events.push("undefined-timeout");
@@ -27,7 +29,7 @@ setTimeout(() => {
 
 setTimeout(() => {
     events.push("negative-zero-timeout");
-}, -0);
+}, NEGATIVE_ZERO_DELAY);
 
 setImmediate(() => {
     events.push("immediate");

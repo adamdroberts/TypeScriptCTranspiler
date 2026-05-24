@@ -26520,13 +26520,8 @@ class Emitter {
     private isZeroDelayLiteral(expr: ts.Expression): boolean {
         const cur = this.unwrapTransparentExpression(expr);
         if (this.isUndefinedLikeExpression(cur)) return true;
-        if (ts.isNumericLiteral(cur)) return Number(cur.text) === 0;
-        return (
-            ts.isPrefixUnaryExpression(cur) &&
-            (cur.operator === ts.SyntaxKind.PlusToken || cur.operator === ts.SyntaxKind.MinusToken) &&
-            ts.isNumericLiteral(cur.operand) &&
-            Number(cur.operand.text) === 0
-        );
+        const value = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr, new Set());
+        return value !== null && value === 0;
     }
 
     private emitEventListenerExpression(expr: ts.Expression): EmitResult {
