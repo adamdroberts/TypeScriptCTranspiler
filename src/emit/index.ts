@@ -1674,20 +1674,20 @@ class Emitter {
             case "fill":
                 return args.length >= 1 &&
                     args.length <= 3 &&
-                    this.isSideEffectFreeFreshArrayLiteralOperand(recv, seenConsts) &&
+                    this.isSideEffectFreeFreshOrReturnedArrayOperand(recv, seenConsts) &&
                     this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts) &&
                     (!args[1] || this.isSideEffectFreePrimitiveNumberCoercion(args[1], seenConsts)) &&
                     (!args[2] || this.isSideEffectFreePrimitiveNumberCoercion(args[2], seenConsts));
             case "copyWithin":
                 return args.length >= 2 &&
                     args.length <= 3 &&
-                    this.isSideEffectFreeFreshArrayLiteralOperand(recv, seenConsts) &&
+                    this.isSideEffectFreeFreshOrReturnedArrayOperand(recv, seenConsts) &&
                     this.isSideEffectFreePrimitiveNumberCoercion(args[0]!, seenConsts) &&
                     this.isSideEffectFreePrimitiveNumberCoercion(args[1]!, seenConsts) &&
                     (!args[2] || this.isSideEffectFreePrimitiveNumberCoercion(args[2], seenConsts));
             case "push":
             case "unshift":
-                return this.isSideEffectFreeFreshArrayLiteralOperand(recv, seenConsts) &&
+                return this.isSideEffectFreeFreshOrReturnedArrayOperand(recv, seenConsts) &&
                     allArgsPure();
             case "sort":
                 if (args.length === 0) {
