@@ -102,6 +102,11 @@ const unused_event_named_default_read = defaultMaxListeners + "dead_event_named_
 const unused_event_alias_default_read = ImportedEventEmitter.defaultMaxListeners + "dead_event_alias_default_read".length;
 const unused_new_event_emitter_call = new EventEmitter("dead_new_event_emitter_ignored".length);
 const unused_new_imported_event_emitter_call = new ImportedEventEmitter("dead_new_imported_event_emitter_ignored".length);
+const unused_event_emitter_get_max_call = new EventEmitter().getMaxListeners("dead_event_emitter_get_max_ignored".length);
+const unused_imported_event_emitter_listener_count_call = new ImportedEventEmitter().listenerCount("dead_imported_event_emitter_listener_count");
+const unused_event_emitter_listeners_call = new EventEmitter().listeners("dead_event_emitter_listeners");
+const unused_event_emitter_event_names_call = new EventEmitter().eventNames("dead_event_emitter_event_names_ignored".length);
+const unused_event_emitter_to_string_call = new EventEmitter().toString("dead_event_emitter_to_string_ignored".length);
 const unused_new_event_target_call = new EventTarget("dead_new_event_target_ignored".length);
 const unused_new_event_call = new Event("dead_new_event_type", { cancelable: true });
 const unused_event_type_read = new Event("dead_event_type_read").type;
@@ -293,6 +298,9 @@ const unused_promise_resolve_event_alias_default_read = Promise.resolve(Imported
 const unused_promise_resolve_event_type_read = Promise.resolve(new Event("dead_promise_resolve_event_type_read").type);
 const unused_promise_resolve_event_cancelable_read = Promise.resolve(new Event("dead_promise_resolve_event_cancelable_read", { cancelable: true }).cancelable);
 const unused_promise_resolve_event_default_prevented_read = Promise.resolve(new Event("dead_promise_resolve_event_default_prevented_read").defaultPrevented);
+const unused_promise_resolve_event_emitter_get_max_call = Promise.resolve(new EventEmitter().getMaxListeners("dead_promise_resolve_event_emitter_get_max_ignored".length));
+const unused_promise_resolve_imported_event_emitter_listener_count_call = Promise.resolve(new ImportedEventEmitter().listenerCount("dead_promise_resolve_imported_event_emitter_listener_count"));
+const unused_promise_resolve_event_emitter_to_string_call = Promise.resolve(new EventEmitter().toString("dead_promise_resolve_event_emitter_to_string_ignored".length));
 const unused_promise_resolve_event_prevent_default_call = Promise.resolve(new Event("dead_promise_resolve_event_prevent_default_call", { cancelable: true }).preventDefault("dead_promise_resolve_event_prevent_default_ignored".length));
 const unused_promise_resolve_event_to_string_call = Promise.resolve(new Event("dead_promise_resolve_event_to_string_call").toString("dead_promise_resolve_event_to_string_ignored".length));
 const unused_promise_resolve_event_target_dispatch_call = Promise.resolve(new EventTarget().dispatchEvent(new Event("dead_promise_resolve_event_target_dispatch_call")));
@@ -840,6 +848,11 @@ nodeEvents.EventEmitter.defaultMaxListeners + "top_level_dead_event_namespace_de
 defaultMaxListeners + "top_level_dead_event_named_default_read".length;
 new EventEmitter("top_level_dead_new_event_emitter_ignored".length);
 new ImportedEventEmitter("top_level_dead_new_imported_event_emitter_ignored".length);
+new EventEmitter().getMaxListeners("top_level_dead_event_emitter_get_max_ignored".length);
+new ImportedEventEmitter().listenerCount("top_level_dead_imported_event_emitter_listener_count");
+new EventEmitter().listeners("top_level_dead_event_emitter_listeners");
+new EventEmitter().eventNames("top_level_dead_event_emitter_event_names_ignored".length);
+new EventEmitter().toString("top_level_dead_event_emitter_to_string_ignored".length);
 new EventTarget("top_level_dead_new_event_target_ignored".length);
 new Event("top_level_dead_new_event_type", { cancelable: true });
 new Event("top_level_dead_event_type_read").type;
@@ -856,6 +869,9 @@ Promise.resolve(defaultMaxListeners + "top_level_dead_promise_resolve_event_name
 Promise.resolve(new Event("top_level_dead_promise_resolve_event_type_read").type);
 Promise.resolve(new Event("top_level_dead_promise_resolve_event_cancelable_read", { cancelable: true }).cancelable);
 Promise.resolve(new Event("top_level_dead_promise_resolve_event_default_prevented_read").defaultPrevented);
+Promise.resolve(new EventEmitter().getMaxListeners("top_level_dead_promise_resolve_event_emitter_get_max_ignored".length));
+Promise.resolve(new ImportedEventEmitter().listenerCount("top_level_dead_promise_resolve_imported_event_emitter_listener_count"));
+Promise.resolve(new EventEmitter().toString("top_level_dead_promise_resolve_event_emitter_to_string_ignored".length));
 Promise.resolve(new Event("top_level_dead_promise_resolve_event_prevent_default_call", { cancelable: true }).preventDefault("top_level_dead_promise_resolve_event_prevent_default_ignored".length));
 Promise.resolve(new Event("top_level_dead_promise_resolve_event_to_string_call").toString("top_level_dead_promise_resolve_event_to_string_ignored".length));
 Promise.resolve(new EventTarget().dispatchEvent(new Event("top_level_dead_promise_resolve_event_target_dispatch_call")));
@@ -1538,6 +1554,11 @@ function usedLocal(value: number): number {
     defaultMaxListeners + "local_dead_event_named_default_read".length;
     new EventEmitter("local_dead_new_event_emitter_ignored".length);
     new ImportedEventEmitter("local_dead_new_imported_event_emitter_ignored".length);
+    new EventEmitter().getMaxListeners("local_dead_event_emitter_get_max_ignored".length);
+    new ImportedEventEmitter().listenerCount("local_dead_imported_event_emitter_listener_count");
+    new EventEmitter().listeners("local_dead_event_emitter_listeners");
+    new EventEmitter().eventNames("local_dead_event_emitter_event_names_ignored".length);
+    new EventEmitter().toString("local_dead_event_emitter_to_string_ignored".length);
     new EventTarget("local_dead_new_event_target_ignored".length);
     new Event("local_dead_new_event_type", { cancelable: true });
     new Event("local_dead_event_type_read").type;
@@ -1554,6 +1575,9 @@ function usedLocal(value: number): number {
     Promise.resolve(new Event("local_dead_promise_resolve_event_type_read").type);
     Promise.resolve(new Event("local_dead_promise_resolve_event_cancelable_read", { cancelable: true }).cancelable);
     Promise.resolve(new Event("local_dead_promise_resolve_event_default_prevented_read").defaultPrevented);
+    Promise.resolve(new EventEmitter().getMaxListeners("local_dead_promise_resolve_event_emitter_get_max_ignored".length));
+    Promise.resolve(new ImportedEventEmitter().listenerCount("local_dead_promise_resolve_imported_event_emitter_listener_count"));
+    Promise.resolve(new EventEmitter().toString("local_dead_promise_resolve_event_emitter_to_string_ignored".length));
     Promise.resolve(new Event("local_dead_promise_resolve_event_prevent_default_call", { cancelable: true }).preventDefault("local_dead_promise_resolve_event_prevent_default_ignored".length));
     Promise.resolve(new Event("local_dead_promise_resolve_event_to_string_call").toString("local_dead_promise_resolve_event_to_string_ignored".length));
     Promise.resolve(new EventTarget().dispatchEvent(new Event("local_dead_promise_resolve_event_target_dispatch_call")));

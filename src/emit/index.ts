@@ -1190,6 +1190,9 @@ class Emitter {
         if (this.isSideEffectFreeProcessCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeEventEmitterMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeEventMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
@@ -2061,6 +2064,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeErrorMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreePrimitiveEventEmitterMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreePrimitiveEventMethodCall(recv, method, call.arguments, seenConsts)) {
@@ -4950,6 +4956,71 @@ class Emitter {
     ): boolean {
         return method !== "valueOf" &&
             this.isSideEffectFreeEventTargetMethodCall(recv, method, args, seenConsts);
+    }
+
+    private isSideEffectFreeFreshEventEmitterOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isEventEmitterConstructorIdentifier(unwrapped.expression)
+        ) {
+            return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeFreshEventEmitterOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeEventEmitterMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!this.isSideEffectFreeFreshEventEmitterOperand(recv, seenConsts)) return false;
+        switch (method) {
+            case "getMaxListeners":
+            case "eventNames":
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                return Array.from(args).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+            case "listenerCount":
+            case "listeners":
+            case "rawListeners":
+                return args.length === 1 &&
+                    this.isSideEffectFreeStringCoercion(args[0]!, seenConsts);
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+                return args.length >= 1 &&
+                    this.isSideEffectFreePropertyKeyCoercion(args[0]!, seenConsts) &&
+                    Array.from(args).slice(1).every((arg) =>
+                        this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                    );
+            default:
+                return false;
+        }
+    }
+
+    private isSideEffectFreePrimitiveEventEmitterMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return (
+            method === "getMaxListeners" ||
+            method === "listenerCount" ||
+            method === "hasOwnProperty" ||
+            method === "propertyIsEnumerable" ||
+            method === "toLocaleString" ||
+            method === "toString"
+        ) && this.isSideEffectFreeEventEmitterMethodCall(recv, method, args, seenConsts);
     }
 
     private isSideEffectFreeDateConstructorArgs(
