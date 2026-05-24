@@ -1,5 +1,5 @@
 import { ADDRCONFIG, ALL, V4MAPPED as dnsV4Mapped } from "dns";
-import { EventEmitter, EventEmitter as ImportedEventEmitter, defaultMaxListeners, getMaxListeners, listenerCount, setMaxListeners } from "events";
+import { EventEmitter, EventEmitter as ImportedEventEmitter, defaultMaxListeners, getMaxListeners, listenerCount, once as eventsOnce, setMaxListeners } from "events";
 import { constants as fsConstants } from "fs";
 import * as nodeDns from "node:dns";
 import * as nodeEvents from "node:events";
@@ -118,6 +118,8 @@ const unused_event_emitter_on_call = new EventEmitter().on("dead_event_emitter_o
 const unused_event_emitter_once_call = new EventEmitter().once("dead_event_emitter_once", () => undefined);
 const unused_event_emitter_off_call = new EventEmitter().off("dead_event_emitter_off", () => undefined);
 const unused_event_emitter_emit_call = new EventEmitter().emit("dead_event_emitter_emit", "dead_event_emitter_emit_payload");
+const unused_events_namespace_once_call = nodeEvents.once(new EventEmitter(), "dead_events_namespace_once");
+const unused_events_named_once_call = eventsOnce(new EventEmitter(), "dead_events_named_once");
 const unused_new_event_target_call = new EventTarget("dead_new_event_target_ignored".length);
 const unused_new_event_call = new Event("dead_new_event_type", { cancelable: true });
 const unused_event_type_read = new Event("dead_event_type_read").type;
@@ -885,6 +887,8 @@ new EventEmitter().removeListener("top_level_dead_event_emitter_remove_listener"
 new EventEmitter().emit("top_level_dead_event_emitter_emit", "top_level_dead_event_emitter_emit_payload");
 nodeEvents.setMaxListeners(15, new EventEmitter());
 setMaxListeners(16, new EventEmitter());
+nodeEvents.once(new EventEmitter(), "top_level_dead_events_namespace_once");
+eventsOnce(new EventEmitter(), "top_level_dead_events_named_once");
 new EventTarget("top_level_dead_new_event_target_ignored".length);
 new Event("top_level_dead_new_event_type", { cancelable: true });
 new Event("top_level_dead_event_type_read").type;
@@ -1614,6 +1618,8 @@ function usedLocal(value: number): number {
     new EventEmitter().emit("local_dead_event_emitter_emit", "local_dead_event_emitter_emit_payload");
     nodeEvents.setMaxListeners(20, new EventEmitter());
     setMaxListeners(21, new EventEmitter());
+    const unused_local_events_namespace_once_call = nodeEvents.once(new EventEmitter(), "local_dead_events_namespace_once");
+    const unused_local_events_named_once_call = eventsOnce(new EventEmitter(), "local_dead_events_named_once");
     new EventTarget("local_dead_new_event_target_ignored".length);
     new Event("local_dead_new_event_type", { cancelable: true });
     new Event("local_dead_event_type_read").type;

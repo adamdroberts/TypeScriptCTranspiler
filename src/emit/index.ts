@@ -5176,6 +5176,10 @@ class Emitter {
                 return args.length === 2 &&
                     this.isSideEffectFreePrimitiveNumberCoercion(args[0]!, seenConsts) &&
                     this.isSideEffectFreeDirectFreshEventEmitterOperand(args[1]!, seenConsts);
+            case "once":
+                return args.length === 2 &&
+                    this.isSideEffectFreeDirectFreshEventEmitterOperand(args[0]!, seenConsts) &&
+                    this.isSideEffectFreeStringCoercion(args[1]!, seenConsts);
             default:
                 return false;
         }
