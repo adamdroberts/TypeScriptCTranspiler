@@ -2007,6 +2007,8 @@ class Emitter {
         if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) {
             return 0;
         }
+        const arrayLength = this.sideEffectFreeArrayLiteralLength(unwrapped, seenConsts);
+        if (arrayLength !== null) return arrayLength;
         if (ts.isObjectLiteralExpression(unwrapped)) {
             let count = 0;
             for (const prop of unwrapped.properties) {
