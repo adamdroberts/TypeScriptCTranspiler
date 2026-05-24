@@ -3316,13 +3316,13 @@ class Emitter {
     ): "present" | "absent" | "unsafe" | null {
         if (
             !ts.isPropertyAccessExpression(call.expression) ||
-            !ts.isIdentifier(call.expression.expression) ||
-            !this.isUnshadowedGlobalIdentifier(call.expression.expression, "Array")
+            !ts.isIdentifier(call.expression.expression)
         ) {
             return null;
         }
+        const recv = call.expression.expression;
         const method = call.expression.name.text;
-        if (method === "of") {
+        if (this.isUnshadowedGlobalIdentifier(recv, "Array") && method === "of") {
             if (index < 0) return "absent";
             const arg = call.arguments[index];
             if (!arg) return "absent";
@@ -3330,12 +3330,27 @@ class Emitter {
                 ? "present"
                 : "unsafe";
         }
-        if (method === "from" && call.arguments.length === 1) {
+        if (
+            this.isUnshadowedGlobalIdentifier(recv, "Array") &&
+            method === "from" &&
+            call.arguments.length === 1
+        ) {
             return this.sideEffectFreePrimitiveArrayFromElementResult(
                 call.arguments[0]!,
                 index,
                 seenConsts,
             );
+        }
+        if (
+            (
+                method === "keys" ||
+                method === "getOwnPropertyNames"
+            ) &&
+            call.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Object") &&
+            this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts)
+        ) {
+            return index < 0 ? "absent" : "present";
         }
         return null;
     }
