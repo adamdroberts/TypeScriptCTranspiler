@@ -932,6 +932,9 @@ class Emitter {
             if (this.isSideEffectFreeProcessUsagePropertyRead(expr, seenConsts)) {
                 return true;
             }
+            if (this.isSideEffectFreeProcessObjectMetadataRead(expr)) {
+                return true;
+            }
             if (this.isSideEffectFreeProcessStdioMetadataRead(expr)) {
                 return true;
             }
@@ -5739,6 +5742,9 @@ class Emitter {
         if (this.isSideEffectFreeProcessUsagePropertyRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeProcessObjectMetadataRead(unwrapped)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStdioMetadataRead(unwrapped)) {
             return true;
         }
@@ -7355,6 +7361,37 @@ class Emitter {
         if (method === "resourceUsage" && !resourceFields.has(field)) return false;
         if (method !== "cpuUsage" && method !== "memoryUsage" && method !== "resourceUsage") return false;
         return this.isSideEffectFreeProcessCall(processExpr, method, recv.arguments, seenConsts);
+    }
+
+    private isSideEffectFreeProcessObjectMetadataRead(expr: ts.Expression): boolean {
+        if (!ts.isPropertyAccessExpression(expr) || !ts.isPropertyAccessExpression(expr.expression)) {
+            return false;
+        }
+        const recv = expr.expression;
+        if (!ts.isIdentifier(recv.expression) || !this.isUnshadowedGlobalIdentifier(recv.expression, "process")) {
+            return false;
+        }
+        const field = expr.name.text;
+        switch (recv.name.text) {
+            case "versions":
+                return field === "node" || field === "openssl" || field === "tsc2c";
+            case "release":
+                return field === "name" || field === "sourceUrl" || field === "headersUrl" || field === "libUrl";
+            case "features":
+                return [
+                    "inspector",
+                    "debug",
+                    "uv",
+                    "ipv6",
+                    "tls",
+                    "tls_alpn",
+                    "tls_sni",
+                    "tls_ocsp",
+                    "cached_builtins",
+                ].includes(field);
+            default:
+                return false;
+        }
     }
 
     private isSideEffectFreeProcessStdioMetadataRead(expr: ts.Expression): boolean {
