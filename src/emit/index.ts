@@ -1733,6 +1733,12 @@ class Emitter {
         if (ts.isArrayLiteralExpression(unwrapped)) {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
         }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            this.isSideEffectFreeArrayReturningArrayHelperCall(unwrapped, seenConsts)
+        ) {
+            return true;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeArrayOperand(init, seenConsts);
     }
@@ -1856,8 +1862,38 @@ class Emitter {
                 this.isSideEffectFreeStringCoercion(element, seenConsts)
             );
         }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            this.isSideEffectFreeStringArrayReturningArrayHelperCall(unwrapped, seenConsts)
+        ) {
+            return true;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeStringArrayOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeStringArrayReturningArrayHelperCall(
+        call: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            !ts.isIdentifier(call.expression.expression) ||
+            !this.isUnshadowedGlobalIdentifier(call.expression.expression, "Array")
+        ) {
+            return false;
+        }
+        const method = call.expression.name.text;
+        if (method === "of") {
+            return Array.from(call.arguments).every((arg) =>
+                this.isSideEffectFreeStringCoercion(arg, seenConsts)
+            );
+        }
+        if (method === "from" && call.arguments.length === 1) {
+            return this.isSideEffectFreeStringOperand(call.arguments[0]!, seenConsts) ||
+                this.isSideEffectFreeStringArrayOperand(call.arguments[0]!, new Set(seenConsts));
+        }
+        return false;
     }
 
     private isSideEffectFreeStringMethodCall(
