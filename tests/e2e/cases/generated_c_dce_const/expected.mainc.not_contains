@@ -112,6 +112,7 @@ unused_array_copy_within_call
 unused_array_push_call
 unused_array_unshift_call
 unused_array_sort_call
+unused_array_sort_comparator_call
 unused_empty_array_map_call
 unused_empty_array_flat_map_call
 unused_empty_array_filter_call
@@ -125,6 +126,7 @@ unused_empty_array_find_last_index_call
 unused_empty_array_reduce_call
 unused_empty_array_reduce_right_call
 unused_array_to_sorted_call
+unused_array_to_sorted_comparator_call
 unused_array_to_spliced_call
 unused_array_to_reversed_call
 unused_array_with_call
@@ -191,6 +193,7 @@ dead_array_copy_within
 dead_array_push
 dead_array_unshift
 dead_array_sort
+dead_array_sort_comparator
 dead_array_to_sorted
 dead_array_to_spliced
 dead_array_to_spliced_insert
@@ -386,6 +389,7 @@ top_level_dead_array_copy_within
 top_level_dead_array_push
 top_level_dead_array_unshift
 top_level_dead_array_sort
+top_level_dead_array_sort_comparator
 top_level_dead_empty_array_map
 top_level_dead_empty_array_flat_map
 top_level_dead_empty_array_filter
@@ -399,6 +403,7 @@ top_level_dead_empty_array_find_last_index
 top_level_dead_empty_array_reduce
 top_level_dead_empty_array_reduce_right
 top_level_dead_array_to_sorted
+top_level_dead_array_to_sorted_comparator
 top_level_dead_array_to_spliced
 top_level_dead_array_to_spliced_insert
 top_level_dead_array_to_reversed
@@ -532,6 +537,7 @@ local_dead_array_copy_within
 local_dead_array_push
 local_dead_array_unshift
 local_dead_array_sort
+local_dead_array_sort_comparator
 local_dead_empty_array_map
 local_dead_empty_array_flat_map
 local_dead_empty_array_filter
@@ -545,6 +551,7 @@ local_dead_empty_array_find_last_index
 local_dead_empty_array_reduce
 local_dead_empty_array_reduce_right
 local_dead_array_to_sorted
+local_dead_array_to_sorted_comparator
 local_dead_array_to_spliced
 local_dead_array_to_spliced_insert
 local_dead_array_with

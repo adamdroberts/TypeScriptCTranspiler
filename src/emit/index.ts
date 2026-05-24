@@ -1374,8 +1374,14 @@ class Emitter {
                 return allArgsPure();
             case "flat":
                 return numberArgs(1);
-            case "toSorted":
-                return args.length === 0;
+            case "toSorted": {
+                if (args.length === 0) return true;
+                const length = this.sideEffectFreeArrayLiteralLength(recv, seenConsts);
+                return args.length === 1 &&
+                    length !== null &&
+                    length <= 1 &&
+                    this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts);
+            }
             case "toSpliced":
                 return args.length <= 1
                     ? numberArgs(1)
@@ -1427,8 +1433,15 @@ class Emitter {
                 return this.isSideEffectFreeFreshArrayLiteralOperand(recv, seenConsts) &&
                     allArgsPure();
             case "sort":
-                return args.length === 0 &&
-                    this.isSideEffectFreeFreshStringArrayOperand(recv, seenConsts);
+                if (args.length === 0) {
+                    return this.isSideEffectFreeFreshStringArrayOperand(recv, seenConsts);
+                }
+                if (!this.isSideEffectFreeFreshArrayLiteralOperand(recv, seenConsts)) return false;
+                const length = this.sideEffectFreeArrayLiteralLength(recv, seenConsts);
+                return args.length === 1 &&
+                    length !== null &&
+                    length <= 1 &&
+                    this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts);
             case "map":
             case "flatMap":
             case "filter":
