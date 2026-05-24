@@ -935,6 +935,9 @@ class Emitter {
             if (this.isSideEffectFreeBuiltinModuleConstantRead(expr)) {
                 return true;
             }
+            if (this.isSideEffectFreeEventEmitterDefaultMaxListenersRead(expr)) {
+                return true;
+            }
             return this.isSideEffectFreeObjectReadOperand(expr.expression, seenConsts);
         }
         if (ts.isElementAccessExpression(expr) && expr.argumentExpression) {
@@ -4778,6 +4781,9 @@ class Emitter {
         if (this.isSideEffectFreeBuiltinModuleConstantRead(unwrapped)) {
             return true;
         }
+        if (this.isSideEffectFreeEventEmitterDefaultMaxListenersRead(unwrapped)) {
+            return true;
+        }
         if (this.isSideEffectFreeStringElementAccess(unwrapped, seenConsts)) {
             return true;
         }
@@ -4997,6 +5003,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeBuiltinModuleConstantRead(unwrapped)) {
+            return true;
+        }
+        if (this.isSideEffectFreeEventEmitterDefaultMaxListenersRead(unwrapped)) {
             return true;
         }
         if (ts.isIdentifier(unwrapped) && this.isSideEffectFreeBuiltinNumericConstantIdentifier(unwrapped)) {
@@ -6353,8 +6362,10 @@ class Emitter {
     }
 
     private isSideEffectFreeBuiltinNumericConstantIdentifier(expr: ts.Identifier): boolean {
-        return this.dnsLookupHintConstant(expr.text) !== null &&
-            this.isNamedImportFrom(expr, ["dns", "node:dns"], expr.text);
+        return (
+            this.dnsLookupHintConstant(expr.text) !== null &&
+            this.isNamedImportFrom(expr, ["dns", "node:dns"], expr.text)
+        ) || this.isNamedImportFrom(expr, ["events", "node:events"], "defaultMaxListeners");
     }
 
     private isFsAccessConstantName(name: string): boolean {
@@ -6411,6 +6422,26 @@ class Emitter {
         return ts.isIdentifier(expr.expression) &&
             this.isOsModuleIdentifier(expr.expression) &&
             (name === "EOL" || name === "devNull");
+    }
+
+    private isSideEffectFreeEventEmitterDefaultMaxListenersRead(expr: ts.Expression): boolean {
+        if (!ts.isPropertyAccessExpression(expr) || expr.name.text !== "defaultMaxListeners") {
+            return false;
+        }
+        const recv = expr.expression;
+        if (ts.isIdentifier(recv)) {
+            return (
+                recv.text === "EventEmitter" &&
+                (
+                    this.isUnshadowedGlobalIdentifier(recv, "EventEmitter") ||
+                    this.isNamedImportFrom(recv, ["events", "node:events"], "EventEmitter")
+                )
+            ) || this.isNamespaceImportFrom(recv, ["events", "node:events"]);
+        }
+        return ts.isPropertyAccessExpression(recv) &&
+            recv.name.text === "EventEmitter" &&
+            ts.isIdentifier(recv.expression) &&
+            this.isNamespaceImportFrom(recv.expression, ["events", "node:events"]);
     }
 
     private isSideEffectFreeFreshSymbolOperand(

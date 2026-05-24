@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes unused `EventEmitter.defaultMaxListeners` and module-level `defaultMaxListeners` reads, including namespace forms and primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused DNS hint constant reads such as `dns.ADDRCONFIG`, `V4MAPPED`, and `ALL`, including named imports and primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused built-in module constant reads for `fs.constants.*`, `path.sep` / `delimiter`, `path.posix` constants, and `os.EOL` / `devNull`, including named imports and primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused CommonJS metadata reads from `__filename`, `__dirname`, and primitive `module` fields such as `filename`, `id`, `path`, and `loaded`, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
