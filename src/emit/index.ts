@@ -920,6 +920,9 @@ class Emitter {
             if (this.isSideEffectFreeStaticNumericPropertyRead(expr)) {
                 return true;
             }
+            if (this.isSideEffectFreeProcessPrimitiveMetadataRead(expr)) {
+                return true;
+            }
             return this.isSideEffectFreeObjectReadOperand(expr.expression, seenConsts);
         }
         if (ts.isElementAccessExpression(expr) && expr.argumentExpression) {
@@ -4739,6 +4742,9 @@ class Emitter {
         if (this.isSideEffectFreeStaticNumericPropertyRead(unwrapped)) {
             return true;
         }
+        if (this.isSideEffectFreeProcessPrimitiveMetadataRead(unwrapped)) {
+            return true;
+        }
         if (this.isSideEffectFreeStringElementAccess(unwrapped, seenConsts)) {
             return true;
         }
@@ -6234,6 +6240,24 @@ class Emitter {
             }
         }
         return false;
+    }
+
+    private isSideEffectFreeProcessPrimitiveMetadataRead(expr: ts.Expression): boolean {
+        if (!ts.isPropertyAccessExpression(expr) || !ts.isIdentifier(expr.expression)) return false;
+        if (!this.isUnshadowedGlobalIdentifier(expr.expression, "process")) return false;
+        switch (expr.name.text) {
+            case "platform":
+            case "arch":
+            case "pid":
+            case "ppid":
+            case "version":
+            case "title":
+            case "argv0":
+            case "execPath":
+                return true;
+            default:
+                return false;
+        }
     }
 
     private isSideEffectFreeFreshSymbolOperand(
