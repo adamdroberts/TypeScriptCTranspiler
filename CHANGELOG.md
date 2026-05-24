@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Aliased named imports for `EventEmitter` now support `defaultMaxListeners` reads and assignments. Test: `event_emitter_default_max_listeners`.
 - Aliased named imports for DNS hint constants such as `V4MAPPED as hint` now lower correctly in expressions and DNS lookup options. Test: `dns_lookup_hints`.
 - Generated-C DCE now prunes unused `EventEmitter.defaultMaxListeners` and module-level `defaultMaxListeners` reads, including namespace forms and primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused DNS hint constant reads such as `dns.ADDRCONFIG`, `V4MAPPED`, and `ALL`, including named imports and primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.

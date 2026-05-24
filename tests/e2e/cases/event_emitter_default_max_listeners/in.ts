@@ -1,10 +1,10 @@
-import { defaultMaxListeners } from "events";
+import { EventEmitter as ImportedEventEmitter, defaultMaxListeners } from "events";
 import * as nodeEvents from "node:events";
 
 const before = new EventEmitter();
-console.log("initial:", EventEmitter.defaultMaxListeners, defaultMaxListeners, before.getMaxListeners());
+console.log("initial:", ImportedEventEmitter.defaultMaxListeners, defaultMaxListeners, before.getMaxListeners());
 
-EventEmitter.defaultMaxListeners = 3;
+ImportedEventEmitter.defaultMaxListeners = 3;
 
 const afterGlobal = new EventEmitter();
 console.log("global:", EventEmitter.defaultMaxListeners, nodeEvents.defaultMaxListeners, before.getMaxListeners(), afterGlobal.getMaxListeners());

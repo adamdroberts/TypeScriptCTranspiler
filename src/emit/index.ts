@@ -6431,13 +6431,8 @@ class Emitter {
         }
         const recv = expr.expression;
         if (ts.isIdentifier(recv)) {
-            return (
-                recv.text === "EventEmitter" &&
-                (
-                    this.isUnshadowedGlobalIdentifier(recv, "EventEmitter") ||
-                    this.isNamedImportFrom(recv, ["events", "node:events"], "EventEmitter")
-                )
-            ) || this.isNamespaceImportFrom(recv, ["events", "node:events"]);
+            return this.isEventEmitterConstructorIdentifier(recv) ||
+                this.isNamespaceImportFrom(recv, ["events", "node:events"]);
         }
         return ts.isPropertyAccessExpression(recv) &&
             recv.name.text === "EventEmitter" &&
@@ -17298,7 +17293,7 @@ class Emitter {
         if (expr.name.text !== "defaultMaxListeners") return false;
         const recv = expr.expression;
         return (
-            (ts.isIdentifier(recv) && recv.text === "EventEmitter") ||
+            (ts.isIdentifier(recv) && this.isEventEmitterConstructorIdentifier(recv)) ||
             (ts.isIdentifier(recv) && this.isNamespaceImportFrom(recv, ["events", "node:events"])) ||
             (
                 ts.isPropertyAccessExpression(recv) &&
@@ -17307,6 +17302,13 @@ class Emitter {
                 this.isNamespaceImportFrom(recv.expression, ["events", "node:events"])
             )
         );
+    }
+
+    private isEventEmitterConstructorIdentifier(id: ts.Identifier): boolean {
+        return (
+            id.text === "EventEmitter" &&
+            this.isUnshadowedGlobalIdentifier(id, "EventEmitter")
+        ) || this.isNamedImportFrom(id, ["events", "node:events"], "EventEmitter");
     }
 
     private emitEventEmitterDefaultMaxListenersAssignment(
@@ -32891,7 +32893,7 @@ class Emitter {
                 }
             }
             if (
-                (pa.expression.text === "EventEmitter" && pa.name.text === "defaultMaxListeners") ||
+                (this.isEventEmitterConstructorIdentifier(pa.expression) && pa.name.text === "defaultMaxListeners") ||
                 (this.isNamespaceImportFrom(pa.expression, ["events", "node:events"]) && pa.name.text === "defaultMaxListeners")
             ) {
                 return { c: "tsc_event_emitter_get_default_max_listeners()", ty: T_NUMBER };

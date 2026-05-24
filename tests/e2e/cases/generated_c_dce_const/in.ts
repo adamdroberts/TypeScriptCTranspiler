@@ -1,5 +1,5 @@
 import { ADDRCONFIG, ALL, V4MAPPED as dnsV4Mapped } from "dns";
-import { EventEmitter, defaultMaxListeners } from "events";
+import { EventEmitter, EventEmitter as ImportedEventEmitter, defaultMaxListeners } from "events";
 import { constants as fsConstants } from "fs";
 import * as nodeDns from "node:dns";
 import * as nodeEvents from "node:events";
@@ -92,6 +92,7 @@ const unused_dns_alias_constant_read = dnsV4Mapped + "dead_dns_alias_constant_re
 const unused_event_default_read = EventEmitter.defaultMaxListeners + "dead_event_default_read".length;
 const unused_event_namespace_default_read = nodeEvents.defaultMaxListeners + "dead_event_namespace_default_read".length;
 const unused_event_named_default_read = defaultMaxListeners + "dead_event_named_default_read".length;
+const unused_event_alias_default_read = ImportedEventEmitter.defaultMaxListeners + "dead_event_alias_default_read".length;
 const unused_global_parse_int = parseInt("dead_global_parse_int", 10);
 const unused_global_parse_float = parseFloat("dead_global_parse_float");
 const unused_global_is_nan = isNaN("dead_global_is_nan");
@@ -248,6 +249,7 @@ const unused_promise_resolve_dns_named_constant_read = Promise.resolve(ADDRCONFI
 const unused_promise_resolve_dns_alias_constant_read = Promise.resolve(dnsV4Mapped + "dead_promise_resolve_dns_alias_constant_read".length);
 const unused_promise_resolve_event_default_read = Promise.resolve(nodeEvents.EventEmitter.defaultMaxListeners + "dead_promise_resolve_event_default_read".length);
 const unused_promise_resolve_event_named_default_read = Promise.resolve(defaultMaxListeners + "dead_promise_resolve_event_named_default_read".length);
+const unused_promise_resolve_event_alias_default_read = Promise.resolve(ImportedEventEmitter.defaultMaxListeners + "dead_promise_resolve_event_alias_default_read".length);
 const unused_promise_resolve_string_method_call = Promise.resolve("dead_promise_resolve_string_method".toUpperCase());
 const unused_promise_resolve_string_search_call = Promise.resolve("dead_promise_resolve_string_search".search("resolve"));
 const unused_promise_resolve_regexp_test_call = Promise.resolve(/dead_promise_resolve_regexp_test/.test("dead_promise_resolve_regexp_test"));
