@@ -1396,6 +1396,10 @@ class Emitter {
             case "toReversed":
             case "valueOf":
                 return allArgsPure();
+            case "toLocaleString":
+            case "toString":
+                return this.isSideEffectFreeStringArrayOperand(recv, seenConsts) &&
+                    allArgsPure();
             default:
                 return false;
         }

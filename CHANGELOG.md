@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused pure array `toString()` / `toLocaleString()` calls on string-only pure array operands. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Array.prototype.join(...)` calls on string-only pure array operands. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Array.prototype.with(...)` calls on known-length pure array operands when the static index is in range. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused `Object.create(proto, descriptors)` calls with pure prototypes and data descriptor maps as side-effect-free. Test: `generated_c_dce_const`.
