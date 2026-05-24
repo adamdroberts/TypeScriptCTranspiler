@@ -2893,6 +2893,8 @@ class Emitter {
             if (unwrapped.arguments.length !== 1) return null;
             const sourceArrayLength = this.sideEffectFreeArrayLiteralLength(source, seenConsts);
             if (sourceArrayLength !== null) return sourceArrayLength;
+            const sourceReturnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(source, seenConsts);
+            if (sourceReturnedArrayLength !== null) return sourceReturnedArrayLength;
             const sourceText = this.sideEffectFreeStringLiteralText(source, seenConsts);
             if (sourceText !== null) return Array.from(sourceText).length;
             const sourceSetLength = this.sideEffectFreeNewCollectionLength(source, "Set", seenConsts);
@@ -6262,6 +6264,9 @@ class Emitter {
             ts.isNoSubstitutionTemplateLiteral(unwrapped)
         ) {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+        }
+        if (this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts) !== null) {
+            return true;
         }
         if (
             ts.isNewExpression(unwrapped) &&
