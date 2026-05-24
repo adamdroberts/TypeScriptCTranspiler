@@ -2673,6 +2673,13 @@ class Emitter {
         ) {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
         }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set")
+        ) {
+            return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeArraySpreadOperand(init, seenConsts);
     }

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused pure one-argument `Array.from(new Set(...))` calls over side-effect-free Set constructor sources. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with side-effect-free `String(...)`, `Number(...)`, and `Boolean(...)` primitive results. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with supported pure `Math.*(...)` primitive results. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with side-effect-free parser, predicate, and URI helper primitive results. Test: `generated_c_dce_const`.
