@@ -74,6 +74,7 @@ const unused_new_finalization_registry_call = new FinalizationRegistry<string>((
 const unused_uri_source = "dead_uri_source";
 const unused_url_can_parse_call = URL.canParse("https://dead-url-can-parse.test/path");
 const unused_url_can_parse_base_call = URL.canParse("dead-url-can-parse-child", "https://dead-url-can-parse-base.test/root/");
+const unused_promise_resolve_call = Promise.resolve("dead_promise_resolve", "dead_promise_resolve_ignored");
 const unused_encode_uri_call = encodeURI("dead encode uri");
 const unused_encode_uri_component_call = encodeURIComponent(unused_uri_source);
 const unused_decode_uri_call = decodeURI("dead-decode-uri");
@@ -254,6 +255,7 @@ new FinalizationRegistry<string>((held) => {
 });
 URL.canParse("https://top-level-dead-url-can-parse.test/path");
 URL.canParse("top-level-dead-url-can-parse-child", "https://top-level-dead-url-can-parse-base.test/root/");
+Promise.resolve("top_level_dead_promise_resolve", "top_level_dead_promise_resolve_ignored");
 encodeURI("top level dead encode uri");
 encodeURIComponent("top-level-dead-encode-uri-component");
 decodeURI("top-level-dead-decode-uri");
@@ -445,6 +447,7 @@ function usedLocal(value: number): number {
     });
     URL.canParse("https://local-dead-url-can-parse.test/path");
     URL.canParse("local-dead-url-can-parse-child", "https://local-dead-url-can-parse-base.test/root/");
+    Promise.resolve("local_dead_promise_resolve", "local_dead_promise_resolve_ignored");
     encodeURI("local dead encode uri");
     encodeURIComponent("local-dead-encode-uri-component");
     decodeURI("local-dead-decode-uri");

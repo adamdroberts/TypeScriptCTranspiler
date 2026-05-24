@@ -1094,6 +1094,19 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            method === "resolve" &&
+            this.isUnshadowedGlobalIdentifier(recv, "Promise")
+        ) {
+            return (
+                call.arguments.length === 0 ||
+                this.isSideEffectFreePrimitivePromiseResolveValue(call.arguments[0]!, seenConsts)
+            ) &&
+                Array.from(call.arguments).slice(1).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+        }
+        if (
+            ts.isIdentifier(recv) &&
             method === "canParse" &&
             call.arguments.length >= 1 &&
             call.arguments.length <= 2 &&
@@ -1902,6 +1915,29 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeErrorOptionsObject(init, seenConsts);
+    }
+
+    private isSideEffectFreePrimitivePromiseResolveValue(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        switch (unwrapped.kind) {
+            case ts.SyntaxKind.TrueKeyword:
+            case ts.SyntaxKind.FalseKeyword:
+            case ts.SyntaxKind.NullKeyword:
+            case ts.SyntaxKind.UndefinedKeyword:
+                return true;
+        }
+        if (
+            ts.isStringLiteral(unwrapped) ||
+            ts.isNoSubstitutionTemplateLiteral(unwrapped) ||
+            ts.isNumericLiteral(unwrapped)
+        ) {
+            return true;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreePrimitivePromiseResolveValue(init, seenConsts);
     }
 
     private isSideEffectFreeRegExpConstructorArgs(
