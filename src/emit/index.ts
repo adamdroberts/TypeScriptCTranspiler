@@ -1421,6 +1421,43 @@ class Emitter {
         return false;
     }
 
+    private isSideEffectFreePrimitiveStaticCall(
+        call: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!ts.isPropertyAccessExpression(call.expression)) return false;
+        const recv = call.expression.expression;
+        if (!ts.isIdentifier(recv)) return false;
+        const method = call.expression.name.text;
+        const isPrimitiveReturningHelper =
+            (
+                this.isUnshadowedGlobalIdentifier(recv, "Array") &&
+                method === "isArray"
+            ) ||
+            (
+                this.isUnshadowedGlobalIdentifier(recv, "URL") &&
+                method === "canParse"
+            ) ||
+            (
+                this.isUnshadowedGlobalIdentifier(recv, "Object") &&
+                (
+                    method === "is" ||
+                    method === "hasOwn" ||
+                    method === "isExtensible" ||
+                    method === "isSealed" ||
+                    method === "isFrozen"
+                )
+            ) ||
+            (
+                this.isUnshadowedGlobalIdentifier(recv, "Reflect") &&
+                (
+                    method === "has" ||
+                    method === "isExtensible"
+                )
+            );
+        return isPrimitiveReturningHelper && this.isSideEffectFreeStaticCall(call, seenConsts);
+    }
+
     private isSideEffectFreeArrayMethodCall(
         recv: ts.Expression,
         method: string,
@@ -2163,6 +2200,12 @@ class Emitter {
                 unwrapped.expression.text === "decodeURIComponent"
             ) &&
             this.isSideEffectFreeGlobalCall(unwrapped, seenConsts)
+        ) {
+            return true;
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            this.isSideEffectFreePrimitiveStaticCall(unwrapped, seenConsts)
         ) {
             return true;
         }
