@@ -4951,6 +4951,14 @@ class Emitter {
                 return this.isSideEffectFreeDirectFreshEventTargetOperand(recv, seenConsts) &&
                     args.length === 1 &&
                     this.isSideEffectFreeDirectFreshEventOperand(args[0]!, seenConsts);
+            case "addEventListener":
+            case "removeEventListener":
+                return this.isSideEffectFreeDirectFreshEventTargetOperand(recv, seenConsts) &&
+                    args.length >= 2 &&
+                    args.length <= 3 &&
+                    this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
+                    this.isSideEffectFreeEventListenerOperand(args[1]!, seenConsts) &&
+                    (!args[2] || this.isSideEffectFreeEventTargetListenerOptions(args[2], seenConsts));
             case "toLocaleString":
             case "toString":
             case "valueOf":
@@ -4979,6 +4987,32 @@ class Emitter {
     ): boolean {
         return method !== "valueOf" &&
             this.isSideEffectFreeEventTargetMethodCall(recv, method, args, seenConsts);
+    }
+
+    private isSideEffectFreeEventTargetListenerOptions(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.isUndefinedExpression(unwrapped)) return true;
+        if (
+            unwrapped.kind === ts.SyntaxKind.TrueKeyword ||
+            unwrapped.kind === ts.SyntaxKind.FalseKeyword
+        ) {
+            return true;
+        }
+        if (!ts.isObjectLiteralExpression(unwrapped)) {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+            return !!init && this.isSideEffectFreeEventTargetListenerOptions(init, seenConsts);
+        }
+        return unwrapped.properties.every((prop) => {
+            if (!ts.isPropertyAssignment(prop)) return false;
+            const key = this.staticPropertyName(prop.name);
+            if (key !== "once" && key !== "capture" && key !== "passive") return false;
+            if (this.isUndefinedExpression(prop.initializer)) return true;
+            return prop.initializer.kind === ts.SyntaxKind.TrueKeyword ||
+                prop.initializer.kind === ts.SyntaxKind.FalseKeyword;
+        });
     }
 
     private isSideEffectFreeFreshEventEmitterOperand(

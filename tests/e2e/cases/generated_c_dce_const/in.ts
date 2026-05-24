@@ -322,6 +322,8 @@ const unused_promise_resolve_event_prevent_default_call = Promise.resolve(new Ev
 const unused_promise_resolve_event_to_string_call = Promise.resolve(new Event("dead_promise_resolve_event_to_string_call").toString("dead_promise_resolve_event_to_string_ignored".length));
 const unused_promise_resolve_event_target_dispatch_call = Promise.resolve(new EventTarget().dispatchEvent(new Event("dead_promise_resolve_event_target_dispatch_call")));
 const unused_promise_resolve_event_target_to_string_call = Promise.resolve(new EventTarget().toString("dead_promise_resolve_event_target_to_string_ignored".length));
+const unused_promise_resolve_event_target_add_call = Promise.resolve(new EventTarget().addEventListener("dead_promise_resolve_event_target_add", () => undefined, { once: true }));
+const unused_promise_resolve_event_target_remove_call = Promise.resolve(new EventTarget().removeEventListener("dead_promise_resolve_event_target_remove", () => undefined, false));
 const unused_promise_resolve_os_platform_call = Promise.resolve(nodeOs.platform("dead_promise_resolve_os_platform_ignored".length));
 const unused_promise_resolve_os_named_call = Promise.resolve(availableParallelism("dead_promise_resolve_os_named_ignored".length));
 const unused_promise_resolve_path_absolute_call = Promise.resolve(nodePath.isAbsolute("dead_promise_resolve_path_absolute_ignored"));
@@ -894,6 +896,8 @@ new Event("top_level_dead_event_prevent_default_call", { cancelable: true }).pre
 new Event("top_level_dead_event_to_string_call").toString("top_level_dead_event_to_string_ignored".length);
 new EventTarget().dispatchEvent(new Event("top_level_dead_event_target_dispatch_call", { cancelable: true }));
 new EventTarget().toString("top_level_dead_event_target_to_string_ignored".length);
+new EventTarget().addEventListener("top_level_dead_event_target_add", () => undefined, { once: true, passive: false });
+new EventTarget().removeEventListener("top_level_dead_event_target_remove", () => undefined, true);
 Promise.resolve(nodeEvents.defaultMaxListeners + "top_level_dead_promise_resolve_event_default_read".length);
 Promise.resolve(defaultMaxListeners + "top_level_dead_promise_resolve_event_named_default_read".length);
 Promise.resolve(new Event("top_level_dead_promise_resolve_event_type_read").type);
@@ -912,6 +916,8 @@ Promise.resolve(new Event("top_level_dead_promise_resolve_event_prevent_default_
 Promise.resolve(new Event("top_level_dead_promise_resolve_event_to_string_call").toString("top_level_dead_promise_resolve_event_to_string_ignored".length));
 Promise.resolve(new EventTarget().dispatchEvent(new Event("top_level_dead_promise_resolve_event_target_dispatch_call")));
 Promise.resolve(new EventTarget().toString("top_level_dead_promise_resolve_event_target_to_string_ignored".length));
+Promise.resolve(new EventTarget().addEventListener("top_level_dead_promise_resolve_event_target_add", () => undefined, { capture: false }));
+Promise.resolve(new EventTarget().removeEventListener("top_level_dead_promise_resolve_event_target_remove", () => undefined));
 nodeOs.type("top_level_dead_os_type_ignored".length);
 osArch("top_level_dead_os_named_arch_ignored".length);
 nodeOs.cpus("top_level_dead_os_cpus_ignored".length);
@@ -1619,6 +1625,8 @@ function usedLocal(value: number): number {
     new Event("local_dead_event_to_string_call").toString("local_dead_event_to_string_ignored".length);
     new EventTarget().dispatchEvent(new Event("local_dead_event_target_dispatch_call", { cancelable: true }));
     new EventTarget().toString("local_dead_event_target_to_string_ignored".length);
+    new EventTarget().addEventListener("local_dead_event_target_add", () => undefined, { once: undefined });
+    new EventTarget().removeEventListener("local_dead_event_target_remove", () => undefined);
     Promise.resolve(nodeEvents.defaultMaxListeners + "local_dead_promise_resolve_event_default_read".length);
     Promise.resolve(defaultMaxListeners + "local_dead_promise_resolve_event_named_default_read".length);
     Promise.resolve(new Event("local_dead_promise_resolve_event_type_read").type);
@@ -1637,6 +1645,8 @@ function usedLocal(value: number): number {
     Promise.resolve(new Event("local_dead_promise_resolve_event_to_string_call").toString("local_dead_promise_resolve_event_to_string_ignored".length));
     Promise.resolve(new EventTarget().dispatchEvent(new Event("local_dead_promise_resolve_event_target_dispatch_call")));
     Promise.resolve(new EventTarget().toString("local_dead_promise_resolve_event_target_to_string_ignored".length));
+    Promise.resolve(new EventTarget().addEventListener("local_dead_promise_resolve_event_target_add", () => undefined));
+    Promise.resolve(new EventTarget().removeEventListener("local_dead_promise_resolve_event_target_remove", () => undefined, { capture: true }));
     nodeOs.type("local_dead_os_type_ignored".length);
     osArch("local_dead_os_named_arch_ignored".length);
     nodeOs.cpus("local_dead_os_cpus_ignored".length);
