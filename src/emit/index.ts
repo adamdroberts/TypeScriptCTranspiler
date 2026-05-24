@@ -2674,6 +2674,13 @@ class Emitter {
                 seenConsts,
             );
         }
+        if (ts.isCallExpression(unwrapped) && this.isObjectCreateCall(unwrapped)) {
+            return this.sideEffectFreePrimitiveObjectCreateReadResult(
+                unwrapped,
+                key,
+                seenConsts,
+            );
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init
             ? this.sideEffectFreePrimitiveObjectPropertyOperandResult(init, key, seenConsts)
@@ -2853,6 +2860,35 @@ class Emitter {
             seenConsts,
         );
         if (result !== "absent") return result;
+        return this.sideEffectFreePrimitiveObjectPropertyOperandResult(
+            call.arguments[0]!,
+            key,
+            new Set(seenConsts),
+        );
+    }
+
+    private sideEffectFreePrimitiveObjectCreateReadResult(
+        call: ts.CallExpression,
+        key: string,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        if (
+            call.arguments.length < 1 ||
+            call.arguments.length > 2 ||
+            !this.isSideEffectFreeObjectCreatePrototypeOperand(call.arguments[0]!, seenConsts)
+        ) {
+            return "unsafe";
+        }
+        if (call.arguments[1]) {
+            const descriptorResult = this.sideEffectFreeDataDescriptorMapPrimitiveValueResult(
+                call.arguments[1],
+                key,
+                seenConsts,
+            );
+            if (descriptorResult !== "absent") return descriptorResult;
+        }
+        const proto = this.unwrapSideEffectFreeStaticExpression(call.arguments[0]!);
+        if (proto.kind === ts.SyntaxKind.NullKeyword) return "absent";
         return this.sideEffectFreePrimitiveObjectPropertyOperandResult(
             call.arguments[0]!,
             key,
