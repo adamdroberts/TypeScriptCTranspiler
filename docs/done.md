@@ -186,7 +186,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 
 ### `WeakMap<K, V>` / `WeakSet<T>`
 - Typed object-key `WeakMap` supports `.set(k, v)`, `.get(k)`, `.has(k)`, and `.delete(k)`. Test: `weak_collections`
-- Typed object-key `WeakSet` supports `.add(v)`, `.has(v)`, and `.delete(v)`. Test: `weak_collections`
+- Typed object-key `WeakSet` supports `.add(v)`, `.has(v)`, `.delete(v)`, and construction from typed `T[]` arrays. Test: `weak_collections`
 - `.toString(...ignored)`, `.toLocaleString(...ignored)`, and `.valueOf(...ignored)` on both weak collections. Test: `collection_object_methods`
 - Runtime storage reuses pointer-key map/set tables; there is no iteration API exposed.
 

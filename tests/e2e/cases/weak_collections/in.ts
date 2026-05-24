@@ -24,3 +24,6 @@ const seen = new WeakSet<Token>();
 console.log("add:", seen.add(token).has(token));
 console.log("other:", seen.has(other));
 console.log("remove:", seen.delete(token), seen.has(token));
+
+const seeded = new WeakSet<Token>([token]);
+console.log("seeded:", seeded.has(token), seeded.has(other));

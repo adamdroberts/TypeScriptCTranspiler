@@ -31370,9 +31370,30 @@ class Emitter {
             if (mapped.kind !== "weakset")
                 unsupported(n, "new WeakSet() requires <T> type parameter");
             const args = n.arguments ?? [];
-            if (args.length > 0) unsupported(n, "new WeakSet(values) is currently only supported when pruned by generated-C DCE");
+            if (args.length > 1) unsupported(n, "new WeakSet() expects 0 or 1 arguments");
             const e = mapped.elem!;
             requireWeakObjectKey(n, e, "WeakSet");
+            if (args.length === 1) {
+                const values = this.emitExpr(args[0]!);
+                if (
+                    values.ty.kind !== "array" ||
+                    !values.ty.elem ||
+                    !sameCType(values.ty.elem, e)
+                ) {
+                    unsupported(args[0]!, "new WeakSet(values) expects an array whose element type matches the WeakSet");
+                }
+                return this.emitSequencedExpr(mapped, [{ value: values }], ([source]) => {
+                    const set = this.freshTemp("_weak_set_init");
+                    const idx = this.freshTemp("_i");
+                    const value = this.freshTemp("_value");
+                    return (
+                        `({ tsc_set_t* ${set} = tsc_set_new(sizeof(${e.c}), ${keyKindOf(e)}, ${source}->len); ` +
+                        `for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { ` +
+                        `${e.c} ${value} = TSC_ARR(${e.c}, ${source}, ${idx}); ` +
+                        `tsc_set_add_raw(${set}, &${value}); } ${set}; })`
+                    );
+                });
+            }
             return {
                 c: `tsc_set_new(sizeof(${e.c}), ${keyKindOf(e)}, 0)`,
                 ty: mapped,
