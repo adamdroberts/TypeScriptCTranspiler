@@ -2255,6 +2255,20 @@ class Emitter {
         if (ts.isObjectLiteralExpression(unwrapped) || ts.isArrayLiteralExpression(unwrapped)) {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
         }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            (
+                unwrapped.expression.text === "Map" ||
+                unwrapped.expression.text === "Set" ||
+                unwrapped.expression.text === "WeakMap" ||
+                unwrapped.expression.text === "WeakSet" ||
+                unwrapped.expression.text === "WeakRef" ||
+                unwrapped.expression.text === "FinalizationRegistry"
+            )
+        ) {
+            return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeObjectEnumerationOperand(init, seenConsts);
     }

@@ -187,6 +187,9 @@ const unused_object_from_entries_call = Object.fromEntries([["dead_object_from_e
 const unused_object_from_entries_const_call = Object.fromEntries(unused_from_entries_source);
 const unused_object_group_by_empty_call = Object.groupBy([] as number[], (value) => "dead_object_group_by_empty" + value);
 const unused_map_group_by_empty_call = Map.groupBy([] as number[], (value) => "dead_map_group_by_empty" + value);
+const unused_collection_object_keys_call = Object.keys(new Map<string, number>());
+const unused_collection_object_has_own_call = Object.hasOwn(new Set<string>(), "dead_collection_has_own");
+const unused_collection_reflect_own_keys_call = Reflect.ownKeys(new WeakRef<object>({ label: "dead_collection_reflect_weak_ref" }));
 const unused_reflect_has_call = Reflect.has({ dead_reflect_has: 1 }, "dead_reflect_has");
 const unused_reflect_own_keys_call = Reflect.ownKeys({ dead_reflect_own_keys: 1 });
 const unused_reflect_descriptor_call = Reflect.getOwnPropertyDescriptor({ dead_reflect_descriptor: 1 }, "dead_reflect_descriptor");
@@ -350,6 +353,9 @@ Object.defineProperties({ top_level_dead_define_properties_target: 1 }, { top_le
 Object.fromEntries([["top_level_dead_from_entries_key", "top_level_dead_from_entries_value"]]);
 Object.groupBy([] as number[], (value) => "top_level_dead_object_group_by_empty" + value);
 Map.groupBy([] as number[], (value) => "top_level_dead_map_group_by_empty" + value);
+Object.keys(new WeakMap<object, string>());
+Object.hasOwn(new FinalizationRegistry<string>(() => "top_level_dead_collection_finregistry"), "top_level_dead_collection_has_own");
+Reflect.ownKeys(new WeakRef<object>({ label: "top_level_dead_collection_reflect_weak_ref" }));
 Reflect.has({ top_level_dead_reflect_has: 1 }, "top_level_dead_reflect_has");
 Reflect.ownKeys({ top_level_dead_reflect_own_keys: 1 });
 Reflect.deleteProperty({ top_level_dead_reflect_delete_property: 1 }, "top_level_dead_reflect_delete_property");
@@ -538,6 +544,9 @@ function usedLocal(value: number): number {
     Object.fromEntries([["local_dead_from_entries_key", "local_dead_from_entries_value"]]);
     Object.groupBy([] as number[], (value) => "local_dead_object_group_by_empty" + value);
     Map.groupBy([] as number[], (value) => "local_dead_map_group_by_empty" + value);
+    Object.keys(new Set<string>());
+    Object.hasOwn(new FinalizationRegistry<string>(() => "local_dead_collection_finregistry"), "local_dead_collection_has_own");
+    Reflect.ownKeys(new WeakRef<object>({ label: "local_dead_collection_reflect_weak_ref" }));
     Reflect.getOwnPropertyDescriptor({ local_dead_reflect_descriptor: 1 }, "local_dead_reflect_descriptor");
     Reflect.ownKeys(["local_dead_reflect_array_keys"]);
     Reflect.deleteProperty({ local_dead_reflect_delete_property: 1 }, "local_dead_reflect_delete_property");
