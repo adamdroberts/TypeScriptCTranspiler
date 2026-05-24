@@ -1,0 +1,3 @@
+typed: typed 2 true
+dynamic: dynamic 7 true
+primitive: primitive 1 false

@@ -31495,6 +31495,20 @@ class Emitter {
         const pieces: string[] = [
             `${cls}_t* ${tmp} = (${cls}_t*)${alloc}(sizeof(${cls}_t))`,
         ];
+        const targetFields = this.objectProperties(targetType).map((prop) => {
+            const name = prop.getName();
+            const decl = prop.valueDeclaration ?? prop.getDeclarations()?.[0] ?? ol;
+            return {
+                name,
+                field: mangleIdent(name),
+                type: this.prepareType(mapTsType(
+                    decl,
+                    this.checker.getTypeOfSymbolAtLocation(prop, decl),
+                    this.checker,
+                )),
+            };
+        });
+        const targetByName = new Map(targetFields.map((field) => [field.name, field]));
         for (const prop of ol.properties) {
             if (ts.isPropertyAssignment(prop)) {
                 const fieldName = this.staticPropertyName(prop.name);
@@ -31515,6 +31529,53 @@ class Emitter {
                 pieces.push(
                     `${tmp}->${mangleIdent(prop.name.text)} = ${this.coerce(val, fieldType, prop.name)}`,
                 );
+            } else if (ts.isSpreadAssignment(prop)) {
+                const sourceTsType = this.expressionDeclaredOrCurrentType(prop.expression);
+                const source = this.emitExpr(prop.expression);
+                const sourceTmp = this.freshTemp("_obj_spread");
+                pieces.push(`${source.ty.c} const ${sourceTmp} = ${source.c}`);
+                const primitiveSource =
+                    source.ty.kind === "number" ||
+                    source.ty.kind === "boolean" ||
+                    source.ty.kind === "bigint" ||
+                    source.ty.kind === "symbol";
+                if (source.ty.kind === "class") {
+                    for (const sourceProp of this.objectProperties(sourceTsType)) {
+                        const targetField = targetByName.get(sourceProp.getName());
+                        if (!targetField) continue;
+                        const decl = sourceProp.valueDeclaration ?? sourceProp.getDeclarations()?.[0] ?? prop.expression;
+                        const sourceType = this.prepareType(mapTsType(
+                            decl,
+                            this.checker.getTypeOfSymbolAtLocation(sourceProp, decl),
+                            this.checker,
+                        ));
+                        const raw = {
+                            c: `${sourceTmp}->${mangleIdent(sourceProp.getName())}`,
+                            ty: sourceType,
+                        };
+                        pieces.push(
+                            `${tmp}->${targetField.field} = ${this.coerce(raw, targetField.type, prop.expression)}`,
+                        );
+                    }
+                    continue;
+                }
+                if (source.ty.kind === "value" || source.ty.kind === "array" || source.ty.kind === "string") {
+                    const boxed = this.coerce({ c: sourceTmp, ty: source.ty }, T_VALUE, prop.expression);
+                    for (const targetField of targetFields) {
+                        const key = `tsc_str_from_lit("${escapeCString(targetField.name)}", ${utf8ByteLen(targetField.name)})`;
+                        const raw = {
+                            c: `tsc_value_get_prop(${boxed}, ${key})`,
+                            ty: T_VALUE,
+                        };
+                        pieces.push(
+                            `if (tsc_value_has_own_prop(${boxed}, ${key})) ${tmp}->${targetField.field} = ${this.coerce(raw, targetField.type, prop.expression)}`,
+                        );
+                    }
+                    continue;
+                }
+                if (!primitiveSource) {
+                    unsupported(prop.expression, "typed object literal spread currently supports typed object, array, string, dynamic, or primitive sources");
+                }
             } else {
                 unsupported(
                     prop,
