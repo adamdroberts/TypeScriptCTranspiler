@@ -2074,6 +2074,8 @@ class Emitter {
             }
             return values.size;
         }
+        const valueSourceLength = this.sideEffectFreeNumericValueArraySourceSetLength(unwrapped, seenConsts);
+        if (valueSourceLength !== null) return valueSourceLength;
         if (
             ts.isNewExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
@@ -2084,6 +2086,61 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeNumericSetConstructorSourceLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeNumericValueArraySourceSetLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Object") &&
+            unwrapped.expression.name.text === "values" &&
+            unwrapped.arguments.length === 1
+        ) {
+            return this.sideEffectFreeObjectValuesNumericSetLength(unwrapped.arguments[0]!, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeNumericValueArraySourceSetLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeObjectValuesNumericSetLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.sideEffectFreeStringLiteralText(unwrapped, seenConsts) !== null) return null;
+        if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) return 0;
+        if (this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(unwrapped, seenConsts)) return 0;
+        const elements = this.sideEffectFreeSetArraySourceExpressions(unwrapped, seenConsts);
+        if (elements) {
+            const values = new Set<string>();
+            for (const element of elements) {
+                const valueKey = this.sideEffectFreeNumericSameValueZeroKey(element, seenConsts);
+                if (valueKey === null) return null;
+                values.add(valueKey);
+            }
+            return values.size;
+        }
+        const entries = this.sideEffectFreeObjectLiteralOwnDataEntries(unwrapped, seenConsts);
+        if (entries) {
+            const values = new Set<string>();
+            for (const entry of entries) {
+                const valueKey = this.sideEffectFreeNumericSameValueZeroKey(entry.value, seenConsts);
+                if (valueKey === null) return null;
+                values.add(valueKey);
+            }
+            return values.size;
+        }
+        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
+        if (targetOperand) {
+            return this.sideEffectFreeObjectValuesNumericSetLength(targetOperand, new Set(seenConsts));
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeObjectValuesNumericSetLength(init, seenConsts) : null;
     }
 
     private sideEffectFreeNumericSameValueZeroKey(
@@ -2150,6 +2207,8 @@ class Emitter {
             }
             return values.size;
         }
+        const valueSourceLength = this.sideEffectFreeBooleanValueArraySourceSetLength(unwrapped, seenConsts);
+        if (valueSourceLength !== null) return valueSourceLength;
         if (
             ts.isNewExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
@@ -2160,6 +2219,61 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeBooleanSetConstructorSourceLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeBooleanValueArraySourceSetLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Object") &&
+            unwrapped.expression.name.text === "values" &&
+            unwrapped.arguments.length === 1
+        ) {
+            return this.sideEffectFreeObjectValuesBooleanSetLength(unwrapped.arguments[0]!, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeBooleanValueArraySourceSetLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeObjectValuesBooleanSetLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.sideEffectFreeStringLiteralText(unwrapped, seenConsts) !== null) return null;
+        if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) return 0;
+        if (this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(unwrapped, seenConsts)) return 0;
+        const elements = this.sideEffectFreeSetArraySourceExpressions(unwrapped, seenConsts);
+        if (elements) {
+            const values = new Set<boolean>();
+            for (const element of elements) {
+                const value = this.sideEffectFreeBooleanLiteralValue(element, seenConsts);
+                if (value === null) return null;
+                values.add(value);
+            }
+            return values.size;
+        }
+        const entries = this.sideEffectFreeObjectLiteralOwnDataEntries(unwrapped, seenConsts);
+        if (entries) {
+            const values = new Set<boolean>();
+            for (const entry of entries) {
+                const value = this.sideEffectFreeBooleanLiteralValue(entry.value, seenConsts);
+                if (value === null) return null;
+                values.add(value);
+            }
+            return values.size;
+        }
+        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
+        if (targetOperand) {
+            return this.sideEffectFreeObjectValuesBooleanSetLength(targetOperand, new Set(seenConsts));
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeObjectValuesBooleanSetLength(init, seenConsts) : null;
     }
 
     private sideEffectFreeUniqueObjectEntriesSetSourceLength(
