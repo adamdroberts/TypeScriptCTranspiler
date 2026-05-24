@@ -1938,6 +1938,13 @@ class Emitter {
         ) {
             return this.sideEffectFreeObjectKeysLength(unwrapped.arguments[0]!, seenConsts);
         }
+        if (
+            method === "values" &&
+            unwrapped.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Object")
+        ) {
+            return this.sideEffectFreeObjectValuesLength(unwrapped.arguments[0]!, seenConsts);
+        }
         return null;
     }
 
@@ -1979,6 +1986,51 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectKeysLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeObjectValuesLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        const stringText = this.sideEffectFreeStringLiteralText(unwrapped, seenConsts);
+        if (stringText !== null) {
+            return Array.from(stringText).length;
+        }
+        if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) {
+            return 0;
+        }
+        const arrayLength = this.sideEffectFreeArrayLiteralLength(unwrapped, seenConsts);
+        if (arrayLength !== null) return arrayLength;
+        if (this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(unwrapped, seenConsts)) {
+            return 0;
+        }
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            let count = 0;
+            for (const prop of unwrapped.properties) {
+                if (ts.isPropertyAssignment(prop)) {
+                    if (
+                        this.objectLiteralStaticStringKey(prop.name, seenConsts) === null ||
+                        !this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts)
+                    ) {
+                        return null;
+                    }
+                    count++;
+                    continue;
+                }
+                if (ts.isShorthandPropertyAssignment(prop)) {
+                    if (!this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts)) {
+                        return null;
+                    }
+                    count++;
+                    continue;
+                }
+                return null;
+            }
+            return count;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeObjectValuesLength(init, seenConsts) : null;
     }
 
     private isSideEffectFreeStringArrayOperand(
