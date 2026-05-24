@@ -1948,6 +1948,8 @@ class Emitter {
             }
             return values.size;
         }
+        const keySourceLength = this.sideEffectFreeStringKeyArraySourceLength(unwrapped, seenConsts);
+        if (keySourceLength !== null) return keySourceLength;
         if (
             ts.isNewExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
@@ -1958,6 +1960,38 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeStringSetConstructorSourceLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeStringKeyArraySourceLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            unwrapped.arguments.length === 1
+        ) {
+            const recv = unwrapped.expression.expression;
+            const method = unwrapped.expression.name.text;
+            if (this.isUnshadowedGlobalIdentifier(recv, "Object")) {
+                if (method === "keys") {
+                    return this.sideEffectFreeObjectKeysLength(unwrapped.arguments[0]!, seenConsts);
+                }
+                if (method === "getOwnPropertyNames") {
+                    return this.sideEffectFreeObjectGetOwnPropertyNamesLength(unwrapped.arguments[0]!, seenConsts);
+                }
+            }
+            if (
+                this.isUnshadowedGlobalIdentifier(recv, "Reflect") &&
+                method === "ownKeys"
+            ) {
+                return this.sideEffectFreeReflectOwnKeysLength(unwrapped.arguments[0]!, seenConsts);
+            }
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeStringKeyArraySourceLength(init, seenConsts) : null;
     }
 
     private sideEffectFreeNumericSetConstructorSourceLength(
