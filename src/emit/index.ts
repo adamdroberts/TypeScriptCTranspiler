@@ -2681,6 +2681,13 @@ class Emitter {
                 seenConsts,
             );
         }
+        if (this.isObjectTargetReturningCall(unwrapped)) {
+            return this.sideEffectFreePrimitiveObjectTargetReturningReadResult(
+                unwrapped,
+                key,
+                seenConsts,
+            );
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init
             ? this.sideEffectFreePrimitiveObjectPropertyOperandResult(init, key, seenConsts)
@@ -2894,6 +2901,59 @@ class Emitter {
             key,
             new Set(seenConsts),
         );
+    }
+
+    private sideEffectFreePrimitiveObjectTargetReturningReadResult(
+        call: ts.CallExpression,
+        key: string,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        if (!ts.isPropertyAccessExpression(call.expression)) return "unsafe";
+        const method = call.expression.name.text;
+        if (
+            (
+                method === "preventExtensions" ||
+                method === "seal" ||
+                method === "freeze"
+            ) &&
+            call.arguments.length === 1 &&
+            this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts)
+        ) {
+            return this.sideEffectFreePrimitiveObjectPropertyOperandResult(
+                call.arguments[0]!,
+                key,
+                new Set(seenConsts),
+            );
+        }
+        if (
+            method === "setPrototypeOf" &&
+            call.arguments.length === 2 &&
+            this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) &&
+            this.isSideEffectFreeObjectCreatePrototypeOperand(call.arguments[1]!, seenConsts)
+        ) {
+            return this.sideEffectFreePrimitiveObjectPropertyOperandResult(
+                call.arguments[0]!,
+                key,
+                new Set(seenConsts),
+            );
+        }
+        return "unsafe";
+    }
+
+    private isObjectTargetReturningCall(expr: ts.Expression): expr is ts.CallExpression {
+        if (
+            !ts.isCallExpression(expr) ||
+            !ts.isPropertyAccessExpression(expr.expression) ||
+            !ts.isIdentifier(expr.expression.expression) ||
+            !this.isUnshadowedGlobalIdentifier(expr.expression.expression, "Object")
+        ) {
+            return false;
+        }
+        const method = expr.expression.name.text;
+        return method === "preventExtensions" ||
+            method === "seal" ||
+            method === "freeze" ||
+            method === "setPrototypeOf";
     }
 
     private sideEffectFreeDataDescriptorMapPrimitiveValueResult(
