@@ -2124,10 +2124,10 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): number | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isArrayLiteralExpression(unwrapped)) {
+        const elements = this.sideEffectFreeMapArraySourceExpressions(unwrapped, seenConsts);
+        if (elements) {
             const keys = new Set<string>();
-            for (const element of unwrapped.elements) {
-                if (!ts.isExpression(element)) return null;
+            for (const element of elements) {
                 const entry = this.unwrapSideEffectFreeStaticExpression(element);
                 if (!ts.isArrayLiteralExpression(entry) || entry.elements.length < 2) return null;
                 const key = entry.elements[0]!;
@@ -2156,6 +2156,51 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeStringKeyMapConstructorSourceLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeMapArraySourceExpressions(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): ts.Expression[] | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            const elements: ts.Expression[] = [];
+            for (const element of unwrapped.elements) {
+                if (ts.isSpreadElement(element)) {
+                    const spreadElements = this.sideEffectFreeMapArraySourceExpressions(
+                        element.expression,
+                        new Set(seenConsts),
+                    );
+                    if (spreadElements === null) return null;
+                    elements.push(...spreadElements);
+                    continue;
+                }
+                if (!ts.isExpression(element)) return null;
+                elements.push(element);
+            }
+            return elements;
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Array") &&
+            unwrapped.expression.name.text === "of"
+        ) {
+            return Array.from(unwrapped.arguments);
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Array") &&
+            unwrapped.expression.name.text === "from" &&
+            unwrapped.arguments.length === 1
+        ) {
+            return this.sideEffectFreeMapArraySourceExpressions(unwrapped.arguments[0]!, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeMapArraySourceExpressions(init, seenConsts) : null;
     }
 
     private sideEffectFreeFreshOrReturnedArrayLength(
@@ -3204,9 +3249,9 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isArrayLiteralExpression(unwrapped)) {
-            return unwrapped.elements.every((element) => {
-                if (!ts.isExpression(element)) return false;
+        const elements = this.sideEffectFreeMapArraySourceExpressions(unwrapped, seenConsts);
+        if (elements) {
+            return elements.every((element) => {
                 const entry = this.unwrapSideEffectFreeStaticExpression(element);
                 return ts.isArrayLiteralExpression(entry) &&
                     entry.elements.length >= 2 &&
