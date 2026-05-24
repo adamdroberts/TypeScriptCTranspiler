@@ -1633,7 +1633,7 @@ class Emitter {
                 return numberArgs(1);
             case "toSorted": {
                 if (args.length === 0) return true;
-                const length = this.sideEffectFreeArrayLiteralLength(recv, seenConsts);
+                const length = this.sideEffectFreeFreshOrReturnedArrayLength(recv, seenConsts);
                 return args.length === 1 &&
                     length !== null &&
                     length <= 1 &&
@@ -1693,8 +1693,7 @@ class Emitter {
                 if (args.length === 0) {
                     return this.isSideEffectFreeFreshOrReturnedStringArrayOperand(recv, seenConsts);
                 }
-                if (!this.isSideEffectFreeFreshArrayLiteralOperand(recv, seenConsts)) return false;
-                const length = this.sideEffectFreeArrayLiteralLength(recv, seenConsts);
+                const length = this.sideEffectFreeFreshOrReturnedArrayLength(recv, seenConsts);
                 return args.length === 1 &&
                     length !== null &&
                     length <= 1 &&
@@ -1888,6 +1887,43 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeArrayLiteralLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeFreshOrReturnedArrayLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        const literalLength = this.sideEffectFreeArrayLiteralLength(unwrapped, seenConsts);
+        if (literalLength !== null) return literalLength;
+        if (
+            !ts.isCallExpression(unwrapped) ||
+            !ts.isPropertyAccessExpression(unwrapped.expression) ||
+            !ts.isIdentifier(unwrapped.expression.expression) ||
+            !this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Array")
+        ) {
+            return null;
+        }
+        const method = unwrapped.expression.name.text;
+        if (method === "of") {
+            return Array.from(unwrapped.arguments).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            )
+                ? unwrapped.arguments.length
+                : null;
+        }
+        if (
+            method === "from" &&
+            unwrapped.arguments.length === 1 &&
+            this.isSideEffectFreeStaticCall(unwrapped, seenConsts)
+        ) {
+            const source = unwrapped.arguments[0]!;
+            const sourceArrayLength = this.sideEffectFreeArrayLiteralLength(source, seenConsts);
+            if (sourceArrayLength !== null) return sourceArrayLength;
+            const sourceText = this.sideEffectFreeStringLiteralText(source, seenConsts);
+            return sourceText === null ? null : Array.from(sourceText).length;
+        }
+        return null;
     }
 
     private isSideEffectFreeStringArrayOperand(

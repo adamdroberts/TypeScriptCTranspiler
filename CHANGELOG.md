@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused comparator `sort(...)` / `toSorted(...)` calls on direct `Array.of(...)` and one-argument `Array.from(...)` results with compile-time-proven length at most one. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused `fill(...)` / `copyWithin(...)` / `push(...)` / `unshift(...)` calls on fresh array results from compile-time-proven pure array and Object helper calls. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused `pop()` / `shift()` / `reverse()` calls on fresh array results from compile-time-proven pure array and Object helper calls. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused default `sort()` calls on fresh string-array results from compile-time-proven pure array and Object helper calls. Test: `generated_c_dce_const`.
