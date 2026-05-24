@@ -2034,6 +2034,16 @@ class Emitter {
         ) {
             return true;
         }
+        if (
+            ts.isPrefixUnaryExpression(unwrapped) &&
+            (
+                unwrapped.operator === ts.SyntaxKind.PlusToken ||
+                unwrapped.operator === ts.SyntaxKind.MinusToken
+            ) &&
+            ts.isNumericLiteral(this.unwrapSideEffectFreeStaticExpression(unwrapped.operand))
+        ) {
+            return true;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreePrimitivePromiseResolveValue(init, seenConsts);
     }

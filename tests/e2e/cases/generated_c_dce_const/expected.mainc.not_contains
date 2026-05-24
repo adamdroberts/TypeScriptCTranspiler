@@ -110,10 +110,14 @@ unused_promise_all_empty_call
 unused_promise_all_settled_empty_call
 unused_promise_race_empty_call
 unused_promise_resolve_bigint_call
+unused_promise_resolve_signed_number_call
 dead_promise_resolve
 123456789
 987654321
 234567891
+123456.5
+765432.25
+345678.75
 unused_encode_uri_call
 unused_encode_uri_component_call
 unused_decode_uri_call
