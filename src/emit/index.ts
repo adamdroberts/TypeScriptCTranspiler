@@ -905,7 +905,7 @@ class Emitter {
             if (this.isSideEffectFreeURLPropertyRead(expr, seenConsts)) {
                 return true;
             }
-            if (this.isSideEffectFreeErrorStringPropertyRead(expr, seenConsts)) {
+            if (this.isSideEffectFreeErrorPropertyRead(expr, seenConsts)) {
                 return true;
             }
             if (this.isSideEffectFreeRegExpPropertyRead(expr, seenConsts)) {
@@ -4466,6 +4466,16 @@ class Emitter {
                 expr.name.text === "name" ||
                 expr.name.text === "message"
             ) &&
+            this.isSideEffectFreeFreshErrorOperand(expr.expression, seenConsts);
+    }
+
+    private isSideEffectFreeErrorPropertyRead(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!ts.isPropertyAccessExpression(expr)) return false;
+        const fields = new Set(["name", "message", "cause", "errors"]);
+        return fields.has(expr.name.text) &&
             this.isSideEffectFreeFreshErrorOperand(expr.expression, seenConsts);
     }
 

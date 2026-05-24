@@ -562,6 +562,8 @@ const unused_aggregate_error_constructor = new AggregateError(["dead_aggregate_e
 const unused_aggregate_error_call = AggregateError(["dead_aggregate_error_call_item"], "dead_aggregate_error_call_message");
 const unused_error_message_read = new Error("dead_error_message_read").message;
 const unused_type_error_name_read = new TypeError("dead_type_error_name_read").name;
+const unused_error_cause_read = new Error("dead_error_cause_read_message", { cause: "dead_error_cause_read" }).cause;
+const unused_aggregate_error_errors_read = new AggregateError(["dead_aggregate_error_errors_read"], "dead_aggregate_error_errors_read_message").errors;
 const unused_regexp_source_read = /dead_regexp_source_read/gi.source;
 const unused_regexp_flags_read = new RegExp("dead_regexp_flags_read", "ms").flags;
 const unused_regexp_boolean_read = /dead_regexp_boolean_read/y.sticky;
@@ -1154,6 +1156,8 @@ new AggregateError(["top_level_dead_aggregate_error_item"], "top_level_dead_aggr
 AggregateError(["top_level_dead_aggregate_error_call_item"], "top_level_dead_aggregate_error_call_message");
 new Error("top_level_dead_error_message_read").message;
 new SyntaxError("top_level_dead_error_name_read").name;
+new Error("top_level_dead_error_cause_read_message", { cause: "top_level_dead_error_cause_read" }).cause;
+new AggregateError(["top_level_dead_aggregate_error_errors_read"], "top_level_dead_aggregate_error_errors_read_message").errors;
 /top_level_dead_regexp_source_read/g.source;
 new RegExp("top_level_dead_regexp_flags_read", "im").flags;
 new RegExp("top_level_dead_regexp_boolean_read", "s").dotAll;
@@ -1762,6 +1766,8 @@ function usedLocal(value: number): number {
     AggregateError(["local_dead_aggregate_error_call_item"], "local_dead_aggregate_error_call_message");
     new Error("local_dead_error_message_read").message;
     new RangeError("local_dead_error_name_read").name;
+    new Error("local_dead_error_cause_read_message", { cause: "local_dead_error_cause_read" }).cause;
+    new AggregateError(["local_dead_aggregate_error_errors_read"], "local_dead_aggregate_error_errors_read_message").errors;
     /local_dead_regexp_source_read/g.source;
     new RegExp("local_dead_regexp_flags_read", "im").flags;
     new RegExp("local_dead_regexp_boolean_read", "s").dotAll;
