@@ -4,14 +4,16 @@ import * as nodeCrypto from "node:crypto";
 const a = crypto.randomUUID();
 const b = randomUUID();
 const c = nodeCrypto.randomUUID();
+const DISABLE_CACHE_TRUE = true;
+const DISABLE_CACHE_FALSE = false;
 let seen = "";
 function mark(label: string): string {
     seen += label;
     return label;
 }
-const d = crypto.randomUUID({ disableEntropyCache: true }, mark("g"));
+const d = crypto.randomUUID({ disableEntropyCache: DISABLE_CACHE_TRUE }, mark("g"));
 const e = randomUUID(undefined, mark("n"));
-const f = nodeCrypto.randomUUID({ disableEntropyCache: false }, mark("m"));
+const f = nodeCrypto.randomUUID({ disableEntropyCache: DISABLE_CACHE_FALSE }, mark("m"));
 const g = randomUUID({ disableEntropyCache: undefined }, mark("u"));
 
 const variant = b.charAt(19);

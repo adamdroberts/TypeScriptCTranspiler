@@ -30536,7 +30536,7 @@ class Emitter {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
             const value = prop.initializer;
-            if (value.kind !== ts.SyntaxKind.TrueKeyword && value.kind !== ts.SyntaxKind.FalseKeyword && !this.isUndefinedExpression(value)) {
+            if (!this.isUndefinedExpression(value) && this.sideEffectFreeBooleanLiteralValue(value, new Set()) === null) {
                 unsupported(value, `${label}.disableEntropyCache must be a boolean literal in this subset`);
             }
         }
