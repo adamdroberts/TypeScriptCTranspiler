@@ -1906,13 +1906,13 @@ class Emitter {
         if (
             !ts.isCallExpression(unwrapped) ||
             !ts.isPropertyAccessExpression(unwrapped.expression) ||
-            !ts.isIdentifier(unwrapped.expression.expression) ||
-            !this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Array")
+            !ts.isIdentifier(unwrapped.expression.expression)
         ) {
             return null;
         }
+        const recv = unwrapped.expression.expression;
         const method = unwrapped.expression.name.text;
-        if (method === "of") {
+        if (this.isUnshadowedGlobalIdentifier(recv, "Array") && method === "of") {
             return Array.from(unwrapped.arguments).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
             )
@@ -1920,6 +1920,7 @@ class Emitter {
                 : null;
         }
         if (
+            this.isUnshadowedGlobalIdentifier(recv, "Array") &&
             method === "from" &&
             unwrapped.arguments.length === 1 &&
             this.isSideEffectFreeStaticCall(unwrapped, seenConsts)
@@ -1930,7 +1931,50 @@ class Emitter {
             const sourceText = this.sideEffectFreeStringLiteralText(source, seenConsts);
             return sourceText === null ? null : Array.from(sourceText).length;
         }
+        if (
+            method === "keys" &&
+            unwrapped.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Object")
+        ) {
+            return this.sideEffectFreeObjectKeysLength(unwrapped.arguments[0]!, seenConsts);
+        }
         return null;
+    }
+
+    private sideEffectFreeObjectKeysLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) {
+            return 0;
+        }
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            let count = 0;
+            for (const prop of unwrapped.properties) {
+                if (ts.isPropertyAssignment(prop)) {
+                    if (
+                        this.objectLiteralStaticStringKey(prop.name, seenConsts) === null ||
+                        !this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts)
+                    ) {
+                        return null;
+                    }
+                    count++;
+                    continue;
+                }
+                if (ts.isShorthandPropertyAssignment(prop)) {
+                    if (!this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts)) {
+                        return null;
+                    }
+                    count++;
+                    continue;
+                }
+                return null;
+            }
+            return count;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeObjectKeysLength(init, seenConsts) : null;
     }
 
     private isSideEffectFreeStringArrayOperand(
