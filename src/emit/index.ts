@@ -2375,18 +2375,11 @@ class Emitter {
             ts.isPrefixUnaryExpression(unwrapped) &&
             (
                 unwrapped.operator === ts.SyntaxKind.PlusToken ||
-                unwrapped.operator === ts.SyntaxKind.MinusToken
+                unwrapped.operator === ts.SyntaxKind.MinusToken ||
+                unwrapped.operator === ts.SyntaxKind.ExclamationToken ||
+                unwrapped.operator === ts.SyntaxKind.TildeToken
             ) &&
-            (
-                ts.isNumericLiteral(this.unwrapSideEffectFreeStaticExpression(unwrapped.operand)) ||
-                (
-                    ts.isIdentifier(this.unwrapSideEffectFreeStaticExpression(unwrapped.operand)) &&
-                    (
-                        this.isUnshadowedGlobalIdentifier(this.unwrapSideEffectFreeStaticExpression(unwrapped.operand) as ts.Identifier, "NaN") ||
-                        this.isUnshadowedGlobalIdentifier(this.unwrapSideEffectFreeStaticExpression(unwrapped.operand) as ts.Identifier, "Infinity")
-                    )
-                )
-            )
+            this.isSideEffectFreePrimitivePromiseResolveValue(unwrapped.operand, seenConsts)
         ) {
             return true;
         }
