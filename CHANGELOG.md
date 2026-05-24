@@ -362,6 +362,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `process.stdout.write(...)` and `process.stderr.write(...)` now treat explicitly `undefined` optional encoding/callback slots as defaults. Test: `process_stdio_write_undefined_options`.
 - `dns.lookup(...)` and `dns.promises.lookup(...)` option objects now treat explicitly `undefined` supported properties as defaults. Test: `dns_lookup_option_property_undefined`.
 - Supported `child_process` option objects now treat explicitly `undefined` property values as defaults across callback, sync, and `spawnSync` subsets. Test: `child_process_option_property_undefined`.
+- Supported `child_process` option objects now accept earlier static `const` aliases for boolean option values such as `windowsHide` and `shell`. Tests: `child_process_windows_hide_option`, `child_process_shell_false`.
 - Supported fs option objects now treat explicitly `undefined` property values as defaults for sync and immediate `fs.promises` calls. Test: `fs_option_property_undefined`.
 - `crypto.randomUUID(...)` now accepts a bounded `{ disableEntropyCache }` options object plus ignored extra arguments for global, namespace, and named import forms. Test: `crypto_random_uuid`.
 - Global `btoa(...)` and `atob(...)` now evaluate ignored extra arguments after the input string. Test: `base64_globals`.

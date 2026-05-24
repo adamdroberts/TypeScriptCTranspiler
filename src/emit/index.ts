@@ -26016,8 +26016,8 @@ class Emitter {
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === key,
         );
         if (!prop || this.isUndefinedExpression(prop.initializer)) return "false";
-        if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) return "true";
-        if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) return "false";
+        const value = this.sideEffectFreeBooleanLiteralValue(prop.initializer, new Set());
+        if (value !== null) return value ? "true" : "false";
         unsupported(prop.initializer, `child_process ${key} must be a literal boolean`);
     }
 
@@ -26181,11 +26181,11 @@ class Emitter {
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === "shell",
         );
         if (!prop || this.isUndefinedExpression(prop.initializer)) return null;
-        if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
-            return { c: `tsc_str_from_lit("/bin/sh", 7)`, ty: T_STRING, node: prop.initializer };
-        }
-        if (prop.initializer.kind === ts.SyntaxKind.FalseKeyword) {
-            return { c: "NULL", ty: T_STRING, node: prop.initializer };
+        const bool = this.sideEffectFreeBooleanLiteralValue(prop.initializer, new Set());
+        if (bool !== null) {
+            return bool
+                ? { c: `tsc_str_from_lit("/bin/sh", 7)`, ty: T_STRING, node: prop.initializer }
+                : { c: "NULL", ty: T_STRING, node: prop.initializer };
         }
         const value = this.emitExpr(prop.initializer);
         if (value.ty.kind !== "string") unsupported(prop.initializer, "child_process shell must be a boolean or string");
