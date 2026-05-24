@@ -1028,6 +1028,9 @@ class Emitter {
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeDateStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -1150,6 +1153,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeDateStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -4953,6 +4959,9 @@ class Emitter {
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeDateStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -4993,6 +5002,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeDateStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -5661,6 +5673,28 @@ class Emitter {
             default:
                 return false;
         }
+    }
+
+    private isSideEffectFreeDateStringMethodCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!ts.isCallExpression(expr) || !ts.isPropertyAccessExpression(expr.expression)) {
+            return false;
+        }
+        const method = expr.expression.name.text;
+        const stringMethods = new Set([
+            "toString",
+            "toLocaleString",
+            "toLocaleDateString",
+            "toLocaleTimeString",
+            "toGMTString",
+            "toUTCString",
+            "toDateString",
+            "toTimeString",
+        ]);
+        return stringMethods.has(method) &&
+            this.isSideEffectFreeDateMethodCall(expr.expression.expression, method, expr.arguments, seenConsts);
     }
 
     private isSideEffectFreeFreshDateOperand(

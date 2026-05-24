@@ -622,6 +622,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free string element-access primitive results. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free string/array `.length` numeric results. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free callable `Date(...)` string results. Test: `generated_c_dce_const`
+- Generated-C DCE treats string-returning fresh-Date methods already proven side-effect-free as side-effect-free `.length`, string-method, and indexable operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning fresh-Error method results. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused fresh-Error `.name` / `.message` reads, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused fresh-Error `.cause` and fresh-AggregateError `.errors` reads when the constructor inputs are side-effect-free. Test: `generated_c_dce_const`

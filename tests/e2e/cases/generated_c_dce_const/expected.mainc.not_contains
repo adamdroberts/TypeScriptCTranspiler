@@ -367,6 +367,9 @@ unused_new_date_empty_call
 unused_new_date_string_call
 unused_new_date_number_call
 unused_new_date_parts_call
+unused_date_to_utc_string_length_read
+unused_date_to_date_string_upper_call
+unused_date_to_time_string_index_read
 unused_new_url_call
 unused_new_url_base_call
 unused_url_to_string_call
@@ -687,6 +690,9 @@ unused_promise_resolve_array_element_call
 unused_promise_resolve_array_element_oob_call
 unused_promise_resolve_date_getter_call
 unused_promise_resolve_date_string_call
+unused_promise_resolve_date_to_utc_string_length_read
+unused_promise_resolve_date_to_date_string_upper_call
+unused_promise_resolve_date_to_time_string_index_read
 unused_promise_resolve_error_string_call
 unused_promise_resolve_aggregate_error_string_call
 unused_promise_resolve_parser_call
@@ -1075,6 +1081,11 @@ dead_promise_resolve_date_getter_ignored
 dead_promise_resolve_date_string_ignored
 2101-01-02T03:04:05Z
 2101-02-03T04:05:06Z
+2101-03-04T05:06:07Z
+2101-04-05T06:07:08Z
+dead_promise_resolve_date_to_date_string_upper_call_marker
+2101-05-06T07:08:09Z
+dead_promise_resolve_date_to_time_string_index_read_marker
 dead_promise_resolve_error_message
 dead_promise_resolve_error_ignored
 dead_promise_resolve_aggregate_error_item
@@ -1264,6 +1275,11 @@ top_level_dead_promise_resolve_date_getter_ignored
 top_level_dead_promise_resolve_date_string_ignored
 2102-01-02T03:04:05Z
 2102-02-03T04:05:06Z
+2102-03-04T05:06:07Z
+2102-04-05T06:07:08Z
+top_level_dead_promise_resolve_date_to_date_string_upper_call_marker
+2102-05-06T07:08:09Z
+top_level_dead_promise_resolve_date_to_time_string_index_read_marker
 top_level_dead_promise_resolve_error_message
 top_level_dead_promise_resolve_error_ignored
 top_level_dead_promise_resolve_aggregate_error_item
@@ -1443,6 +1459,11 @@ local_dead_promise_resolve_date_getter_ignored
 local_dead_promise_resolve_date_string_ignored
 2103-01-02T03:04:05Z
 2103-02-03T04:05:06Z
+2103-03-04T05:06:07Z
+2103-04-05T06:07:08Z
+local_dead_promise_resolve_date_to_date_string_upper_call_marker
+2103-05-06T07:08:09Z
+local_dead_promise_resolve_date_to_time_string_index_read_marker
 local_dead_promise_resolve_error_message
 local_dead_promise_resolve_error_ignored
 local_dead_promise_resolve_aggregate_error_item
@@ -1846,6 +1867,11 @@ dead_string_constructor
 dead_boolean_constructor
 2020-01-02T03:04:05Z
 2020-01-03T04:05:06Z
+2020-01-04T05:06:07Z
+2020-01-05T06:07:08Z
+dead_date_to_date_string_upper_call_marker
+2020-01-06T07:08:09Z
+dead_date_to_time_string_index_read_marker
 dead_uri_source
 dead encode uri
 dead-decode-uri
@@ -2463,6 +2489,11 @@ top_level_dead_date_callable_ignored
 top_level_dead_date_now_ignored
 2020-02-03T04:05:06Z
 2020-02-04T05:06:07Z
+2020-02-05T06:07:08Z
+2020-02-06T07:08:09Z
+top_level_dead_date_to_date_string_upper_call_marker
+2020-02-07T08:09:10Z
+top_level_dead_date_to_time_string_index_read_marker
 top_level_dead_weak_ref_target
 top_level_dead_finalization_registry_callback
 top-level-dead-url-can-parse
@@ -2910,6 +2941,11 @@ local_dead_date_callable_ignored
 local_dead_date_now_ignored
 2020-03-04T05:06:07Z
 2020-03-05T06:07:08Z
+2020-03-06T07:08:09Z
+2020-03-07T08:09:10Z
+local_dead_date_to_date_string_upper_call_marker
+2020-03-08T09:10:11Z
+local_dead_date_to_time_string_index_read_marker
 local_dead_weak_ref_target
 local_dead_finalization_registry_callback
 local-dead-url-can-parse
