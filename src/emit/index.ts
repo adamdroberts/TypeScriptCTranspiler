@@ -2347,6 +2347,9 @@ class Emitter {
         if (this.isSideEffectFreeStringElementAccess(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreePrimitiveObjectPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreePrimitiveArrayElementAccess(unwrapped, seenConsts)) {
             return true;
         }
@@ -2445,6 +2448,86 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreePrimitivePromiseResolveValue(init, seenConsts);
+    }
+
+    private isSideEffectFreePrimitiveObjectPropertyRead(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (ts.isPropertyAccessExpression(expr)) {
+            return this.isSideEffectFreePrimitiveObjectPropertyOperand(
+                expr.expression,
+                expr.name.text,
+                seenConsts,
+            );
+        }
+        if (ts.isElementAccessExpression(expr) && expr.argumentExpression) {
+            const key = this.sideEffectFreeObjectPropertyReadKey(expr.argumentExpression, seenConsts);
+            return key !== null &&
+                this.isSideEffectFreePrimitiveObjectPropertyOperand(expr.expression, key, seenConsts);
+        }
+        return false;
+    }
+
+    private sideEffectFreeObjectPropertyReadKey(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): string | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        switch (unwrapped.kind) {
+            case ts.SyntaxKind.TrueKeyword:
+                return "true";
+            case ts.SyntaxKind.FalseKeyword:
+                return "false";
+            case ts.SyntaxKind.NullKeyword:
+                return "null";
+            case ts.SyntaxKind.UndefinedKeyword:
+                return "undefined";
+        }
+        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
+            return unwrapped.text;
+        }
+        if (ts.isNumericLiteral(unwrapped)) {
+            return String(Number(unwrapped.text));
+        }
+        if (
+            ts.isPrefixUnaryExpression(unwrapped) &&
+            (
+                unwrapped.operator === ts.SyntaxKind.PlusToken ||
+                unwrapped.operator === ts.SyntaxKind.MinusToken
+            )
+        ) {
+            const value = this.sideEffectFreePrimitiveNumberValue(unwrapped, seenConsts);
+            return value === null ? null : String(value);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeObjectPropertyReadKey(init, seenConsts) : null;
+    }
+
+    private isSideEffectFreePrimitiveObjectPropertyOperand(
+        expr: ts.Expression,
+        key: string,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            if (!this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts)) return false;
+            for (let i = unwrapped.properties.length - 1; i >= 0; i--) {
+                const prop = unwrapped.properties[i]!;
+                if (!ts.isPropertyAssignment(prop)) return false;
+                const propKey = this.objectLiteralStaticStringKey(prop.name, seenConsts);
+                if (propKey === null) return false;
+                if (propKey === key) {
+                    return this.isSideEffectFreePrimitivePromiseResolveValue(
+                        prop.initializer,
+                        new Set(seenConsts),
+                    );
+                }
+            }
+            return true;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreePrimitiveObjectPropertyOperand(init, key, seenConsts);
     }
 
     private isSideEffectFreePrimitiveArrayElementAccess(
