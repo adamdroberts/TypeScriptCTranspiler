@@ -29411,7 +29411,7 @@ class Emitter {
                 ], ([path]) => `${options.throwIfNoEntry ? "tsc_fs_lstat_sync" : "tsc_fs_lstat_sync_no_throw"}(${path!})`);
             }
             case "realpathSync": {
-                if (args.length < 1) unsupported(call, "fs.realpathSync needs path and optional UTF-8/buffer encoding options");
+                if (args.length < 1) unsupported(call, "fs.realpathSync needs path and optional UTF-8/hex/base64/buffer encoding options");
                 const result = this.validateFsEncodingOptions(args[1], "fs.realpathSync");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(result === "buffer" ? T_BUFFER : T_STRING, [
@@ -29419,11 +29419,11 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => {
                     const value = `tsc_fs_realpath_sync(${path!})`;
-                    return result === "buffer" ? `tsc_buffer_from_str(${value}, NULL)` : value;
+                    return this.emitFsPathEncodingResult(value, result);
                 });
             }
             case "readlinkSync": {
-                if (args.length < 1) unsupported(call, "fs.readlinkSync needs path and optional UTF-8/buffer encoding options");
+                if (args.length < 1) unsupported(call, "fs.readlinkSync needs path and optional UTF-8/hex/base64/buffer encoding options");
                 const result = this.validateFsEncodingOptions(args[1], "fs.readlinkSync");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(result === "buffer" ? T_BUFFER : T_STRING, [
@@ -29431,7 +29431,7 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => {
                     const value = `tsc_fs_readlink_sync(${path!})`;
-                    return result === "buffer" ? `tsc_buffer_from_str(${value}, NULL)` : value;
+                    return this.emitFsPathEncodingResult(value, result);
                 });
             }
             case "symlinkSync": {
@@ -29456,7 +29456,7 @@ class Emitter {
                 ], ([oldPath, newPathValue]) => `tsc_fs_link_sync(${oldPath!}, ${newPathValue!})`);
             }
             case "mkdtempSync": {
-                if (args.length < 1) unsupported(call, "fs.mkdtempSync needs prefix and optional UTF-8/buffer encoding options");
+                if (args.length < 1) unsupported(call, "fs.mkdtempSync needs prefix and optional UTF-8/hex/base64/buffer encoding options");
                 const result = this.validateFsEncodingOptions(args[1], "fs.mkdtempSync");
                 const prefix = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(result === "buffer" ? T_BUFFER : T_STRING, [
@@ -29464,7 +29464,7 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([value]) => {
                     const dir = `tsc_fs_mkdtemp_sync(${value!})`;
-                    return result === "buffer" ? `tsc_buffer_from_str(${dir}, NULL)` : dir;
+                    return this.emitFsPathEncodingResult(dir, result);
                 });
             }
             case "truncateSync": {
@@ -29754,25 +29754,26 @@ class Emitter {
         return init ? this.fsBooleanOptionValue(init, seenConsts) : null;
     }
 
-    private validateFsEncodingOptions(options: ts.Expression | undefined, label: string): "string" | "buffer" {
-        if (!options || this.isUndefinedExpression(options)) return "string";
-        const checkEncoding = (node: ts.Expression): "string" | "buffer" => {
-            if (this.isUndefinedExpression(node)) return "string";
+    private validateFsEncodingOptions(options: ts.Expression | undefined, label: string): "utf8" | "hex" | "base64" | "buffer" {
+        if (!options || this.isUndefinedExpression(options)) return "utf8";
+        const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" | "buffer" => {
+            if (this.isUndefinedExpression(node)) return "utf8";
             const text = this.sideEffectFreeStringLiteralText(node, new Set());
             if (text !== null) {
-                if (text === "utf8" || text === "utf-8") return "string";
+                if (text === "utf8" || text === "utf-8") return "utf8";
+                if (text === "hex" || text === "base64") return text;
                 if (text === "buffer") return "buffer";
             }
             if (node.kind === ts.SyntaxKind.NullKeyword) return "buffer";
-            unsupported(node, `${label} only supports UTF-8, buffer, or null encoding options in this subset`);
+            unsupported(node, `${label} only supports UTF-8, hex, base64, buffer, or null encoding options in this subset`);
         };
         if (this.sideEffectFreeStringLiteralText(options, new Set()) !== null) {
             return checkEncoding(options);
         }
         if (!ts.isObjectLiteralExpression(options)) {
-            unsupported(options, `${label} options must be a UTF-8/buffer string literal or object literal in this subset`);
+            unsupported(options, `${label} options must be a UTF-8/hex/base64/buffer string literal or object literal in this subset`);
         }
-        let result: "string" | "buffer" = "string";
+        let result: "utf8" | "hex" | "base64" | "buffer" = "utf8";
         for (const prop of options.properties) {
             if (!ts.isPropertyAssignment(prop)) {
                 unsupported(prop, `${label} options only support encoding property assignments`);
@@ -29784,6 +29785,12 @@ class Emitter {
             result = checkEncoding(prop.initializer);
         }
         return result;
+    }
+
+    private emitFsPathEncodingResult(value: string, encoding: "utf8" | "hex" | "base64" | "buffer"): string {
+        if (encoding === "buffer") return `tsc_buffer_from_str(${value}, NULL)`;
+        if (encoding === "utf8") return value;
+        return `tsc_buffer_to_string(tsc_buffer_from_str(${value}, NULL), tsc_str_from_lit("${encoding}", ${encoding.length}))`;
     }
 
     private validateFsReadFileOptions(options: ts.Expression | undefined, label: string): "utf8" | "hex" | "base64" | "buffer" {
@@ -30216,7 +30223,7 @@ class Emitter {
                 ], ([path]) => settle(`tsc_promise_resolve_fs_stats(${fn}(${path!}))`));
             }
             case "realpath": {
-                if (args.length < 1) unsupported(call, "fs.promises.realpath needs a path and optional UTF-8/buffer encoding options");
+                if (args.length < 1) unsupported(call, "fs.promises.realpath needs a path and optional UTF-8/hex/base64/buffer encoding options");
                 const result = this.validateFsEncodingOptions(args[1], "fs.promises.realpath");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
@@ -30226,12 +30233,12 @@ class Emitter {
                     const value = `tsc_fs_realpath_sync(${path!})`;
                     const resolve = result === "buffer"
                         ? `tsc_promise_resolve_buffer(tsc_buffer_from_str(${value}, NULL))`
-                        : `tsc_promise_resolve(tsc_value_string(${value}))`;
+                        : `tsc_promise_resolve(tsc_value_string(${this.emitFsPathEncodingResult(value, result)}))`;
                     return settle(resolve);
                 });
             }
             case "readlink": {
-                if (args.length < 1) unsupported(call, "fs.promises.readlink needs a path and optional UTF-8/buffer encoding options");
+                if (args.length < 1) unsupported(call, "fs.promises.readlink needs a path and optional UTF-8/hex/base64/buffer encoding options");
                 const result = this.validateFsEncodingOptions(args[1], "fs.promises.readlink");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
@@ -30241,7 +30248,7 @@ class Emitter {
                     const value = `tsc_fs_readlink_sync(${path!})`;
                     const resolve = result === "buffer"
                         ? `tsc_promise_resolve_buffer(tsc_buffer_from_str(${value}, NULL))`
-                        : `tsc_promise_resolve(tsc_value_string(${value}))`;
+                        : `tsc_promise_resolve(tsc_value_string(${this.emitFsPathEncodingResult(value, result)}))`;
                     return settle(resolve);
                 });
             }
@@ -30271,7 +30278,7 @@ class Emitter {
                 );
             }
             case "mkdtemp": {
-                if (args.length < 1) unsupported(call, "fs.promises.mkdtemp needs prefix and optional UTF-8/buffer encoding options");
+                if (args.length < 1) unsupported(call, "fs.promises.mkdtemp needs prefix and optional UTF-8/hex/base64/buffer encoding options");
                 const result = this.validateFsEncodingOptions(args[1], "fs.promises.mkdtemp");
                 const prefix = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(mapped, [
@@ -30281,7 +30288,7 @@ class Emitter {
                     const value = `tsc_fs_mkdtemp_sync(${path!})`;
                     const resolve = result === "buffer"
                         ? `tsc_promise_resolve_buffer(tsc_buffer_from_str(${value}, NULL))`
-                        : `tsc_promise_resolve(tsc_value_string(${value}))`;
+                        : `tsc_promise_resolve(tsc_value_string(${this.emitFsPathEncodingResult(value, result)}))`;
                     return settle(resolve);
                 });
             }

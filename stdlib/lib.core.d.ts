@@ -967,6 +967,7 @@ interface FSCpOptions {
 type FSEncoding = "utf8" | "utf-8";
 type FSReadFileStringEncoding = FSEncoding | "hex" | "base64";
 type FSFileContentEncoding = FSEncoding | "hex" | "base64";
+type FSPathResultEncoding = FSEncoding | "hex" | "base64";
 type FSBufferEncoding = "buffer";
 interface FSEncodingOptions {
     encoding?: FSEncoding;
@@ -974,6 +975,10 @@ interface FSEncodingOptions {
 interface FSBufferEncodingOptions {
     encoding: FSBufferEncoding | null;
 }
+interface FSPathResultEncodingOptions {
+    encoding?: FSPathResultEncoding;
+}
+type FSPathResultEncodingOption = FSPathResultEncoding | FSPathResultEncodingOptions;
 type FSReadFileFlag = "r" | "rs" | "r+" | "rs+";
 interface FSReadFileOptions {
     encoding?: FSReadFileStringEncoding;
@@ -1042,13 +1047,13 @@ interface FS {
     lstatSync(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): FSStats | undefined;
     lstatSync(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): FSStats;
     realpathSync(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Buffer;
-    realpathSync(path: FSPathLike, options?: FSFileEncodingOptions, ...ignored: any[]): string;
+    realpathSync(path: FSPathLike, options?: FSPathResultEncodingOption, ...ignored: any[]): string;
     readlinkSync(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Buffer;
-    readlinkSync(path: FSPathLike, options?: FSFileEncodingOptions, ...ignored: any[]): string;
+    readlinkSync(path: FSPathLike, options?: FSPathResultEncodingOption, ...ignored: any[]): string;
     symlinkSync(target: FSPathLike, path: FSPathLike, type?: FSSymlinkType, ...ignored: any[]): void;
     linkSync(existingPath: FSPathLike, newPath: FSPathLike, ...ignored: any[]): void;
     mkdtempSync(prefix: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Buffer;
-    mkdtempSync(prefix: FSPathLike, options?: FSFileEncodingOptions, ...ignored: any[]): string;
+    mkdtempSync(prefix: FSPathLike, options?: FSPathResultEncodingOption, ...ignored: any[]): string;
     truncateSync(path: FSPathLike, len?: number, ...ignored: any[]): void;
     utimesSync(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): void;
     lutimesSync(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): void;
@@ -1077,13 +1082,13 @@ interface FSPromises {
     lstat(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): Promise<FSStats | undefined>;
     lstat(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): Promise<FSStats>;
     realpath(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Promise<Buffer>;
-    realpath(path: FSPathLike, options?: FSFileEncodingOptions, ...ignored: any[]): Promise<string>;
+    realpath(path: FSPathLike, options?: FSPathResultEncodingOption, ...ignored: any[]): Promise<string>;
     readlink(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Promise<Buffer>;
-    readlink(path: FSPathLike, options?: FSFileEncodingOptions, ...ignored: any[]): Promise<string>;
+    readlink(path: FSPathLike, options?: FSPathResultEncodingOption, ...ignored: any[]): Promise<string>;
     symlink(target: FSPathLike, path: FSPathLike, type?: FSSymlinkType, ...ignored: any[]): Promise<void>;
     link(existingPath: FSPathLike, newPath: FSPathLike, ...ignored: any[]): Promise<void>;
     mkdtemp(prefix: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Promise<Buffer>;
-    mkdtemp(prefix: FSPathLike, options?: FSFileEncodingOptions, ...ignored: any[]): Promise<string>;
+    mkdtemp(prefix: FSPathLike, options?: FSPathResultEncodingOption, ...ignored: any[]): Promise<string>;
     truncate(path: FSPathLike, len?: number, ...ignored: any[]): Promise<void>;
     utimes(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): Promise<void>;
     lutimes(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): Promise<void>;
@@ -1117,13 +1122,13 @@ declare module "fs" {
     export function lstatSync(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): FSStats | undefined;
     export function lstatSync(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): FSStats;
     export function realpathSync(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Buffer;
-    export function realpathSync(path: FSPathLike, options?: FSFileEncodingOptions, ...ignored: any[]): string;
+    export function realpathSync(path: FSPathLike, options?: FSPathResultEncodingOption, ...ignored: any[]): string;
     export function readlinkSync(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Buffer;
-    export function readlinkSync(path: FSPathLike, options?: FSFileEncodingOptions, ...ignored: any[]): string;
+    export function readlinkSync(path: FSPathLike, options?: FSPathResultEncodingOption, ...ignored: any[]): string;
     export function symlinkSync(target: FSPathLike, path: FSPathLike, type?: FSSymlinkType, ...ignored: any[]): void;
     export function linkSync(existingPath: FSPathLike, newPath: FSPathLike, ...ignored: any[]): void;
     export function mkdtempSync(prefix: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Buffer;
-    export function mkdtempSync(prefix: FSPathLike, options?: FSFileEncodingOptions, ...ignored: any[]): string;
+    export function mkdtempSync(prefix: FSPathLike, options?: FSPathResultEncodingOption, ...ignored: any[]): string;
     export function truncateSync(path: FSPathLike, len?: number, ...ignored: any[]): void;
     export function utimesSync(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): void;
     export function lutimesSync(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): void;
@@ -1155,13 +1160,13 @@ declare module "node:fs" {
     export function lstatSync(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): FSStats | undefined;
     export function lstatSync(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): FSStats;
     export function realpathSync(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Buffer;
-    export function realpathSync(path: FSPathLike, options?: FSFileEncodingOptions, ...ignored: any[]): string;
+    export function realpathSync(path: FSPathLike, options?: FSPathResultEncodingOption, ...ignored: any[]): string;
     export function readlinkSync(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Buffer;
-    export function readlinkSync(path: FSPathLike, options?: FSFileEncodingOptions, ...ignored: any[]): string;
+    export function readlinkSync(path: FSPathLike, options?: FSPathResultEncodingOption, ...ignored: any[]): string;
     export function symlinkSync(target: FSPathLike, path: FSPathLike, type?: FSSymlinkType, ...ignored: any[]): void;
     export function linkSync(existingPath: FSPathLike, newPath: FSPathLike, ...ignored: any[]): void;
     export function mkdtempSync(prefix: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Buffer;
-    export function mkdtempSync(prefix: FSPathLike, options?: FSFileEncodingOptions, ...ignored: any[]): string;
+    export function mkdtempSync(prefix: FSPathLike, options?: FSPathResultEncodingOption, ...ignored: any[]): string;
     export function truncateSync(path: FSPathLike, len?: number, ...ignored: any[]): void;
     export function utimesSync(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): void;
     export function lutimesSync(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): void;

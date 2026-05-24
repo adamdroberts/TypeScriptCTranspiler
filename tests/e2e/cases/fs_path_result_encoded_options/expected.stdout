@@ -1,0 +1,5 @@
+sync path: true true
+sync mkdtemp: true
+promise realpath: true
+promise readlink: true
+promise mkdtemp: true

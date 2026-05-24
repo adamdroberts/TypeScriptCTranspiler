@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `fs.realpathSync(...)`, `fs.readlinkSync(...)`, `fs.mkdtempSync(...)`, and their immediate `fs.promises` counterparts now accept literal `"hex"` / `"base64"` string and object encodings for string results, including earlier static `const` aliases. Test: `fs_path_result_encoded_options`.
 - `fs.writeFileSync(...)`, `fs.appendFileSync(...)`, and immediate `fs.promises.writeFile(...)` / `appendFile(...)` now accept literal `"hex"` / `"base64"` string and object encodings for string data, including earlier static `const` aliases. Test: `fs_write_append_encoded_options`.
 - `fs.readFileSync(...)` and immediate `fs.promises.readFile(...)` now accept literal `"hex"` / `"base64"` string and object encodings for string results, including earlier static `const` aliases. Test: `fs_read_file_encoded_options`.
 - Generated-C DCE coverage now includes false-valued `process.stdout.readable` / `process.stderr.readable` metadata reads in direct, top-level, local, and `Promise.resolve(...)` forms. Test: `generated_c_dce_const`.
