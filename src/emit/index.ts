@@ -3295,9 +3295,70 @@ class Emitter {
                 seenConsts,
             );
         }
+        if (ts.isCallExpression(unwrapped)) {
+            const result = this.sideEffectFreePrimitiveStaticArrayElementResult(
+                unwrapped,
+                index,
+                seenConsts,
+            );
+            if (result !== null) return result;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init
             ? this.sideEffectFreePrimitiveArrayElementOperandResult(init, index, seenConsts)
+            : "unsafe";
+    }
+
+    private sideEffectFreePrimitiveStaticArrayElementResult(
+        call: ts.CallExpression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" | null {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            !ts.isIdentifier(call.expression.expression) ||
+            !this.isUnshadowedGlobalIdentifier(call.expression.expression, "Array")
+        ) {
+            return null;
+        }
+        const method = call.expression.name.text;
+        if (method === "of") {
+            if (index < 0) return "absent";
+            const arg = call.arguments[index];
+            if (!arg) return "absent";
+            return this.isSideEffectFreePrimitivePromiseResolveValue(arg, new Set(seenConsts))
+                ? "present"
+                : "unsafe";
+        }
+        if (method === "from" && call.arguments.length === 1) {
+            return this.sideEffectFreePrimitiveArrayFromElementResult(
+                call.arguments[0]!,
+                index,
+                seenConsts,
+            );
+        }
+        return null;
+    }
+
+    private sideEffectFreePrimitiveArrayFromElementResult(
+        expr: ts.Expression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
+            return index >= 0 && index < Array.from(unwrapped.text).length ? "present" : "absent";
+        }
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            return this.sideEffectFreePrimitiveArrayLiteralElementResult(
+                unwrapped,
+                index,
+                seenConsts,
+            );
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init
+            ? this.sideEffectFreePrimitiveArrayFromElementResult(init, index, seenConsts)
             : "unsafe";
     }
 
