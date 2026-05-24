@@ -84,6 +84,8 @@ const unused_promise_all_settled_empty_call = Promise.allSettled([] as Promise<s
 const unused_promise_race_empty_call = Promise.race([] as Promise<string>[]);
 const unused_promise_resolve_bigint_call = Promise.resolve(123456789n);
 const unused_promise_resolve_signed_number_call = Promise.resolve(-123456.5);
+const unused_promise_resolve_nan_call = Promise.resolve(NaN, "dead_promise_resolve_nan_ignored");
+const unused_promise_resolve_infinity_call = Promise.resolve(-Infinity, "dead_promise_resolve_infinity_ignored");
 const unused_encode_uri_call = encodeURI("dead encode uri");
 const unused_encode_uri_component_call = encodeURIComponent(unused_uri_source);
 const unused_decode_uri_call = decodeURI("dead-decode-uri");
@@ -296,6 +298,8 @@ Promise.allSettled([] as Promise<string>[]);
 Promise.race([] as Promise<string>[]);
 Promise.resolve(987654321n);
 Promise.resolve(+765432.25);
+Promise.resolve(NaN, "top_level_dead_promise_resolve_nan_ignored");
+Promise.resolve(Infinity, "top_level_dead_promise_resolve_infinity_ignored");
 encodeURI("top level dead encode uri");
 encodeURIComponent("top-level-dead-encode-uri-component");
 decodeURI("top-level-dead-decode-uri");
@@ -519,6 +523,8 @@ function usedLocal(value: number): number {
     Promise.race([] as Promise<string>[]);
     Promise.resolve(234567891n);
     Promise.resolve(-345678.75);
+    Promise.resolve(-NaN, "local_dead_promise_resolve_nan_ignored");
+    Promise.resolve(+Infinity, "local_dead_promise_resolve_infinity_ignored");
     encodeURI("local dead encode uri");
     encodeURIComponent("local-dead-encode-uri-component");
     decodeURI("local-dead-decode-uri");

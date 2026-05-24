@@ -2035,12 +2035,30 @@ class Emitter {
             return true;
         }
         if (
+            ts.isIdentifier(unwrapped) &&
+            (
+                this.isUnshadowedGlobalIdentifier(unwrapped, "NaN") ||
+                this.isUnshadowedGlobalIdentifier(unwrapped, "Infinity")
+            )
+        ) {
+            return true;
+        }
+        if (
             ts.isPrefixUnaryExpression(unwrapped) &&
             (
                 unwrapped.operator === ts.SyntaxKind.PlusToken ||
                 unwrapped.operator === ts.SyntaxKind.MinusToken
             ) &&
-            ts.isNumericLiteral(this.unwrapSideEffectFreeStaticExpression(unwrapped.operand))
+            (
+                ts.isNumericLiteral(this.unwrapSideEffectFreeStaticExpression(unwrapped.operand)) ||
+                (
+                    ts.isIdentifier(this.unwrapSideEffectFreeStaticExpression(unwrapped.operand)) &&
+                    (
+                        this.isUnshadowedGlobalIdentifier(this.unwrapSideEffectFreeStaticExpression(unwrapped.operand) as ts.Identifier, "NaN") ||
+                        this.isUnshadowedGlobalIdentifier(this.unwrapSideEffectFreeStaticExpression(unwrapped.operand) as ts.Identifier, "Infinity")
+                    )
+                )
+            )
         ) {
             return true;
         }

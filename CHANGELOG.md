@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with unshadowed `NaN` and `Infinity` resolved values. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with signed numeric literal resolved values. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with BigInt literal resolved values. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `new Map(...)` / `new Set(...)` calls over side-effect-free literal constructor sources. Test: `generated_c_dce_const`.
