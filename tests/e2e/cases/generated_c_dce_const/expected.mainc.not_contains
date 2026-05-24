@@ -11,6 +11,8 @@ unused_conditional
 unused_satisfies
 unused_non_null
 unused_spread_array
+unused_spread_map_array
+unused_spread_set_array
 unused_spread_object
 unused_spread_source_array
 unused_spread_source_object
@@ -18,6 +20,18 @@ unused_from_entries_source
 unused_string_method_source
 unused_const_spread_array
 unused_const_spread_object
+dead_spread_map_key
+dead_spread_map_value
+dead_spread_set
+dead_spread_set_tail
+top_level_dead_spread_map_key
+top_level_dead_spread_map_value
+top_level_dead_spread_set
+top_level_dead_spread_set_tail
+local_dead_spread_map_key
+local_dead_spread_map_value
+local_dead_spread_set
+local_dead_spread_set_tail
 unused_string_length
 unused_array_length
 unused_const_array_length
