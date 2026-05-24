@@ -1925,6 +1925,13 @@ class Emitter {
                     )
                     : this.sideEffectFreeStringKeyMapConstructorSourceLength(args[0]!, seenConsts);
                 if (exactLiteralLength !== null) return exactLiteralLength;
+                if (globalName === "Set") {
+                    const uniqueObjectEntriesLength = this.sideEffectFreeUniqueObjectEntriesSetSourceLength(
+                        args[0]!,
+                        seenConsts,
+                    );
+                    if (uniqueObjectEntriesLength !== null) return uniqueObjectEntriesLength;
+                }
                 const sourceLength = this.sideEffectFreeArrayLiteralLength(args[0]!, seenConsts);
                 return sourceLength !== null && sourceLength <= 1 ? sourceLength : null;
             }
@@ -2153,6 +2160,25 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeBooleanSetConstructorSourceLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeUniqueObjectEntriesSetSourceLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Object") &&
+            unwrapped.expression.name.text === "entries" &&
+            unwrapped.arguments.length === 1
+        ) {
+            return this.sideEffectFreeObjectEntriesLength(unwrapped.arguments[0]!, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeUniqueObjectEntriesSetSourceLength(init, seenConsts) : null;
     }
 
     private sideEffectFreeBooleanLiteralValue(
