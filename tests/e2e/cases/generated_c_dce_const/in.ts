@@ -143,6 +143,8 @@ const unused_event_emitter_off_call = new EventEmitter().off("dead_event_emitter
 const unused_event_emitter_emit_call = new EventEmitter().emit("dead_event_emitter_emit", "dead_event_emitter_emit_payload");
 const unused_events_namespace_once_call = nodeEvents.once(new EventEmitter(), "dead_events_namespace_once");
 const unused_events_named_once_call = eventsOnce(new EventEmitter(), "dead_events_named_once");
+const unused_events_namespace_once_undefined_options_call = nodeEvents.once(new EventEmitter(), "dead_events_namespace_once_undefined_options", undefined);
+const unused_events_named_once_signal_undefined_call = eventsOnce(new EventEmitter(), "dead_events_named_once_signal_undefined", { signal: undefined });
 const unused_crypto_hash_call = crypto.createHash("sha256");
 const unused_crypto_named_hash_call = createHash("sha1");
 const unused_crypto_namespace_hash_update_call = nodeCrypto.createHash("sha512").update("dead_crypto_namespace_hash_update");
@@ -1183,6 +1185,8 @@ nodeEvents.setMaxListeners(15, new EventEmitter());
 setMaxListeners(16, new EventEmitter());
 nodeEvents.once(new EventEmitter(), "top_level_dead_events_namespace_once");
 eventsOnce(new EventEmitter(), "top_level_dead_events_named_once");
+nodeEvents.once(new EventEmitter(), "top_level_dead_events_namespace_once_undefined_options", undefined);
+eventsOnce(new EventEmitter(), "top_level_dead_events_named_once_signal_undefined", { signal: undefined });
 crypto.createHash("sha256");
 createHash("sha1");
 nodeCrypto.createHash("sha512").update("top_level_dead_crypto_hash_update");
@@ -2151,6 +2155,8 @@ function usedLocal(value: number): number {
     setMaxListeners(21, new EventEmitter());
     const unused_local_events_namespace_once_call = nodeEvents.once(new EventEmitter(), "local_dead_events_namespace_once");
     const unused_local_events_named_once_call = eventsOnce(new EventEmitter(), "local_dead_events_named_once");
+    const unused_local_events_namespace_once_undefined_options_call = nodeEvents.once(new EventEmitter(), "local_dead_events_namespace_once_undefined_options", undefined);
+    const unused_local_events_named_once_signal_undefined_call = eventsOnce(new EventEmitter(), "local_dead_events_named_once_signal_undefined", { signal: undefined });
     crypto.createHash("sha256");
     createHash("sha1");
     nodeCrypto.createHash("sha512").update("local_dead_crypto_hash_update");

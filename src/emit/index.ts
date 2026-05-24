@@ -5848,6 +5848,23 @@ class Emitter {
         });
     }
 
+    private isSideEffectFreeEventEmitterOnceOptions(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.isUndefinedExpression(unwrapped)) return true;
+        if (!ts.isObjectLiteralExpression(unwrapped)) {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+            return !!init && this.isSideEffectFreeEventEmitterOnceOptions(init, seenConsts);
+        }
+        return unwrapped.properties.every((prop) => {
+            if (!ts.isPropertyAssignment(prop)) return false;
+            return this.staticPropertyName(prop.name) === "signal" &&
+                this.isUndefinedExpression(prop.initializer);
+        });
+    }
+
     private isSideEffectFreeFreshEventEmitterOperand(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -6010,9 +6027,11 @@ class Emitter {
                     this.isSideEffectFreePrimitiveNumberCoercion(args[0]!, seenConsts) &&
                     this.isSideEffectFreeDirectFreshEventEmitterOperand(args[1]!, seenConsts);
             case "once":
-                return args.length === 2 &&
+                return args.length >= 2 &&
+                    args.length <= 3 &&
                     this.isSideEffectFreeDirectFreshEventEmitterOperand(args[0]!, seenConsts) &&
-                    this.isSideEffectFreeStringCoercion(args[1]!, seenConsts);
+                    this.isSideEffectFreeStringCoercion(args[1]!, seenConsts) &&
+                    (!args[2] || this.isSideEffectFreeEventEmitterOnceOptions(args[2], seenConsts));
             default:
                 return false;
         }
