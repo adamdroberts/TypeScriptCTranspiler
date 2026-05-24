@@ -715,6 +715,9 @@ unused_promise_resolve_parser_call
 unused_promise_resolve_number_parse_call
 unused_promise_resolve_number_predicate_call
 unused_promise_resolve_uri_call
+unused_promise_resolve_uri_length_read
+unused_promise_resolve_uri_upper_call
+unused_promise_resolve_uri_index_read
 unused_promise_resolve_math_call
 unused_promise_resolve_math_constant_read
 unused_promise_resolve_number_constant_read
@@ -1519,8 +1522,23 @@ top_level_dead_promise_resolve_number_predicate
 local_dead_promise_resolve_number_parse
 local_dead_promise_resolve_number_predicate
 dead promise resolve uri
+dead promise resolve uri length
+dead-promise-resolve-uri-upper
+dead_promise_resolve_uri_upper_call_marker
+dead promise resolve uri index
+dead_promise_resolve_uri_index_read_marker
 top level dead promise resolve uri
+top level dead promise resolve uri length
+top-level-dead-promise-resolve-uri-upper
+top_level_dead_promise_resolve_uri_upper_call_marker
+top level dead promise resolve uri index
+top_level_dead_promise_resolve_uri_index_read_marker
 local-dead-promise-resolve-uri
+local dead promise resolve uri length
+local-dead-promise-resolve-uri-upper
+local_dead_promise_resolve_uri_upper_call_marker
+local dead promise resolve uri index
+local_dead_promise_resolve_uri_index_read_marker
 dead_promise_resolve_math
 top_level_dead_promise_resolve_math
 local_dead_promise_resolve_math
@@ -1765,6 +1783,9 @@ unused_encode_uri_call
 unused_encode_uri_component_call
 unused_decode_uri_call
 unused_decode_uri_component_call
+unused_encode_uri_length_read
+unused_decode_uri_upper_call
+unused_encode_uri_component_index_read
 unused_bigint_constructor_string_call
 unused_bigint_constructor_number_call
 unused_bigint_constructor_boolean_call
@@ -1918,6 +1939,11 @@ dead_uri_source
 dead encode uri
 dead-decode-uri
 dead-decode-uri-component
+dead encode uri length
+dead-decode-uri-upper
+dead_decode_uri_upper_call_marker
+dead encode uri component index
+dead_encode_uri_component_index_read_marker
 123456
 dead_regexp_constructor
 dead_new_regexp_constructor
@@ -2559,6 +2585,11 @@ top level dead encode uri
 top-level-dead-encode-uri-component
 top-level-dead-decode-uri
 top-level-dead-decode-uri-component
+top level dead encode uri length
+top-level-dead-decode-uri-upper
+top_level_dead_decode_uri_upper_call_marker
+top level dead encode uri component index
+top_level_dead_encode_uri_component_index_read_marker
 234567
 top_level_dead_regexp_constructor
 top_level_dead_new_regexp_constructor
@@ -3026,6 +3057,11 @@ local dead encode uri
 local-dead-encode-uri-component
 local-dead-decode-uri
 local-dead-decode-uri-component
+local dead encode uri length
+local-dead-decode-uri-upper
+local_dead_decode_uri_upper_call_marker
+local dead encode uri component index
+local_dead_encode_uri_component_index_read_marker
 345678
 local_dead_regexp_constructor
 local_dead_new_regexp_constructor

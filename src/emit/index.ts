@@ -1037,6 +1037,9 @@ class Emitter {
         if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeUriStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -1168,6 +1171,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeUriStringCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -5010,6 +5016,9 @@ class Emitter {
         if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeUriStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -5059,6 +5068,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeUriStringCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -8115,6 +8127,27 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeUriStringCoercion(init, seenConsts);
+    }
+
+    private isSideEffectFreeUriStringCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            (
+                unwrapped.expression.text === "encodeURI" ||
+                unwrapped.expression.text === "encodeURIComponent" ||
+                unwrapped.expression.text === "decodeURI" ||
+                unwrapped.expression.text === "decodeURIComponent"
+            )
+        ) {
+            return this.isSideEffectFreeGlobalCall(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeUriStringCall(init, seenConsts);
     }
 
     private sideEffectFreeStringLiteralText(
