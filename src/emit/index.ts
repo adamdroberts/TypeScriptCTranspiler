@@ -2632,23 +2632,52 @@ class Emitter {
     ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (ts.isObjectLiteralExpression(unwrapped)) {
-            if (!this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts)) return false;
-            for (let i = unwrapped.properties.length - 1; i >= 0; i--) {
-                const prop = unwrapped.properties[i]!;
-                if (!ts.isPropertyAssignment(prop)) return false;
+            return this.isSideEffectFreePrimitiveObjectLiteralPropertyRead(
+                unwrapped,
+                key,
+                seenConsts,
+            );
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreePrimitiveObjectPropertyOperand(init, key, seenConsts);
+    }
+
+    private isSideEffectFreePrimitiveObjectLiteralPropertyRead(
+        literal: ts.ObjectLiteralExpression,
+        key: string,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        for (let i = literal.properties.length - 1; i >= 0; i--) {
+            const prop = literal.properties[i]!;
+            if (ts.isPropertyAssignment(prop)) {
                 const propKey = this.objectLiteralStaticStringKey(prop.name, seenConsts);
                 if (propKey === null) return false;
+                if (!this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts)) {
+                    return false;
+                }
                 if (propKey === key) {
                     return this.isSideEffectFreePrimitivePromiseResolveValue(
                         prop.initializer,
                         new Set(seenConsts),
                     );
                 }
+                continue;
             }
-            return true;
+            if (ts.isShorthandPropertyAssignment(prop)) {
+                if (!this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts)) {
+                    return false;
+                }
+                if (prop.name.text === key) {
+                    return this.isSideEffectFreePrimitivePromiseResolveValue(
+                        prop.name,
+                        new Set(seenConsts),
+                    );
+                }
+                continue;
+            }
+            return false;
         }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreePrimitiveObjectPropertyOperand(init, key, seenConsts);
+        return true;
     }
 
     private isSideEffectFreePrimitiveArrayElementAccess(
