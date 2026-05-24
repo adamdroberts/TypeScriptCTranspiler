@@ -4,9 +4,11 @@ import { userInfo } from "os";
 const globalInfo: any = os.userInfo();
 const namespaceInfo: any = nodeOs.userInfo();
 const namedInfo: any = userInfo();
-const globalUtf8: any = os.userInfo({ encoding: "utf8" });
-const namespaceUtf8: any = nodeOs.userInfo({ encoding: "utf-8" });
-const namedUtf8: any = userInfo({ encoding: "utf8" });
+const UTF8 = "utf8";
+const UTF8_DASH = "utf-8";
+const globalUtf8: any = os.userInfo({ encoding: UTF8 });
+const namespaceUtf8: any = nodeOs.userInfo({ encoding: UTF8_DASH });
+const namedUtf8: any = userInfo({ encoding: UTF8 });
 
 console.log("global:", typeof globalInfo.username, typeof globalInfo.homedir, typeof globalInfo.shell, globalInfo.uid >= 0, globalInfo.gid >= 0);
 console.log("namespace:", typeof namespaceInfo.username, namespaceInfo.uid >= 0);

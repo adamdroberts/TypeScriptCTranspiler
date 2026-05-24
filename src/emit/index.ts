@@ -31633,7 +31633,8 @@ class Emitter {
             if (this.isUndefinedExpression(prop.initializer)) {
                 continue;
             }
-            if (!ts.isStringLiteralLike(prop.initializer) || (prop.initializer.text !== "utf8" && prop.initializer.text !== "utf-8")) {
+            const encoding = this.sideEffectFreeStringLiteralText(prop.initializer, new Set());
+            if (encoding === null || (encoding !== "utf8" && encoding !== "utf-8")) {
                 unsupported(prop.initializer, "os.userInfo currently supports UTF-8 encoding options only");
             }
         }
