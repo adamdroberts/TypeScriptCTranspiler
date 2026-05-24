@@ -1,3 +1,6 @@
 shape base: base-value
 shape label: shape-b
 shape describe: describe-b
+local shape base: local-base-value
+local shape label: local-shape-a
+local shape describe: local-describe-a

@@ -1426,7 +1426,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_require_manifest` | explicit dynamic require manifest compiles a non-finite `require(variable)` allow-list into the AOT graph and finite runtime dispatch |
 | `dynamic_require_manifest_object` | named dynamic require manifest object maps compile the listed specifiers into the same AOT dispatch path |
 | `dynamic_require_static_collections` | top-level and earlier local const string maps/arrays provide finite AOT alternatives for dynamic require element/property access |
-| `dynamic_require_static_computed_map` | top-level const string maps with computed static keys provide finite AOT alternatives for dynamic require element access |
+| `dynamic_require_static_computed_map` | top-level and earlier local const string maps with computed static keys provide finite AOT alternatives for dynamic require element access |
 | `dynamic_require_unknown` | expected diagnostic for non-finite `require(variable)` |
 | `dynamic_coercions` | `any`/`unknown` unboxing into typed number/boolean/string/array destinations |
 | `dynamic_index_assignment` | dynamic array index writes and compound index writes |

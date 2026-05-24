@@ -1,3 +1,3 @@
 {
-  "description": "finite dynamic require through a top-level const object map with computed static keys"
+  "description": "finite dynamic require through top-level and local const object maps with computed static keys"
 }
