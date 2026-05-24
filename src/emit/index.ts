@@ -1403,6 +1403,11 @@ class Emitter {
             case "toString":
                 return this.isSideEffectFreeStringArrayOperand(recv, seenConsts) &&
                     allArgsPure();
+            case "pop":
+            case "shift":
+            case "reverse":
+                return this.isSideEffectFreeFreshArrayLiteralOperand(recv, seenConsts) &&
+                    allArgsPure();
             default:
                 return false;
         }
@@ -1418,6 +1423,15 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeArrayOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeFreshArrayLiteralOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        return ts.isArrayLiteralExpression(unwrapped) &&
+            this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
     }
 
     private sideEffectFreeArrayLiteralLength(
