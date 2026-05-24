@@ -2660,6 +2660,20 @@ class Emitter {
                 seenConsts,
             );
         }
+        if (ts.isCallExpression(unwrapped) && this.isObjectDefinePropertyCall(unwrapped)) {
+            return this.sideEffectFreePrimitiveObjectDefinePropertyReadResult(
+                unwrapped,
+                key,
+                seenConsts,
+            );
+        }
+        if (ts.isCallExpression(unwrapped) && this.isObjectDefinePropertiesCall(unwrapped)) {
+            return this.sideEffectFreePrimitiveObjectDefinePropertiesReadResult(
+                unwrapped,
+                key,
+                seenConsts,
+            );
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init
             ? this.sideEffectFreePrimitiveObjectPropertyOperandResult(init, key, seenConsts)
@@ -2794,6 +2808,115 @@ class Emitter {
             this.isUnshadowedGlobalIdentifier(expr.expression.expression, "Object") &&
             expr.expression.name.text === "entries" &&
             expr.arguments.length === 1;
+    }
+
+    private sideEffectFreePrimitiveObjectDefinePropertyReadResult(
+        call: ts.CallExpression,
+        key: string,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        if (
+            call.arguments.length !== 3 ||
+            !this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts)
+        ) {
+            return "unsafe";
+        }
+        const propKey = this.sideEffectFreeObjectPropertyReadKey(call.arguments[1]!, seenConsts);
+        if (propKey === null) return "unsafe";
+        if (propKey === key) {
+            return this.sideEffectFreeDataDescriptorPrimitiveValueResult(
+                call.arguments[2]!,
+                seenConsts,
+            );
+        }
+        return this.sideEffectFreePrimitiveObjectPropertyOperandResult(
+            call.arguments[0]!,
+            key,
+            new Set(seenConsts),
+        );
+    }
+
+    private sideEffectFreePrimitiveObjectDefinePropertiesReadResult(
+        call: ts.CallExpression,
+        key: string,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        if (
+            call.arguments.length !== 2 ||
+            !this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts)
+        ) {
+            return "unsafe";
+        }
+        const result = this.sideEffectFreeDataDescriptorMapPrimitiveValueResult(
+            call.arguments[1]!,
+            key,
+            seenConsts,
+        );
+        if (result !== "absent") return result;
+        return this.sideEffectFreePrimitiveObjectPropertyOperandResult(
+            call.arguments[0]!,
+            key,
+            new Set(seenConsts),
+        );
+    }
+
+    private sideEffectFreeDataDescriptorMapPrimitiveValueResult(
+        expr: ts.Expression,
+        key: string,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            for (let i = unwrapped.properties.length - 1; i >= 0; i--) {
+                const prop = unwrapped.properties[i]!;
+                if (!ts.isPropertyAssignment(prop)) return "unsafe";
+                const propKey = this.objectLiteralStaticStringKey(prop.name, seenConsts);
+                if (propKey === null) return "unsafe";
+                if (propKey === key) {
+                    return this.sideEffectFreeDataDescriptorPrimitiveValueResult(
+                        prop.initializer,
+                        new Set(seenConsts),
+                    );
+                }
+                if (!this.isSideEffectFreeDataPropertyDescriptor(prop.initializer, seenConsts)) {
+                    return "unsafe";
+                }
+            }
+            return "absent";
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init
+            ? this.sideEffectFreeDataDescriptorMapPrimitiveValueResult(init, key, seenConsts)
+            : "unsafe";
+    }
+
+    private sideEffectFreeDataDescriptorPrimitiveValueResult(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "unsafe" {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            if (!this.isSideEffectFreeDataPropertyDescriptor(unwrapped, seenConsts)) {
+                return "unsafe";
+            }
+            for (let i = unwrapped.properties.length - 1; i >= 0; i--) {
+                const prop = unwrapped.properties[i]!;
+                if (!ts.isPropertyAssignment(prop)) return "unsafe";
+                const propKey = this.objectLiteralStaticStringKey(prop.name, seenConsts);
+                if (propKey === null) return "unsafe";
+                if (propKey === "value") {
+                    return this.isSideEffectFreePrimitivePromiseResolveValue(
+                        prop.initializer,
+                        new Set(seenConsts),
+                    )
+                        ? "present"
+                        : "unsafe";
+                }
+            }
+            return "present";
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeDataDescriptorPrimitiveValueResult(init, seenConsts) : "unsafe";
     }
 
     private sideEffectFreePrimitiveObjectLiteralPropertyReadResult(
