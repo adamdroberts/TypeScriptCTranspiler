@@ -102,6 +102,8 @@ const unused_promise_resolve_boolean_constructor_call = Promise.resolve(Boolean(
 const unused_promise_resolve_bigint_constructor_call = Promise.resolve(BigInt("456789123"));
 const unused_promise_resolve_symbol_call = Promise.resolve(Symbol("dead_promise_resolve_symbol"));
 const unused_promise_resolve_parser_call = Promise.resolve(parseInt("456789", 10));
+const unused_promise_resolve_number_parse_call = Promise.resolve(Number.parseInt("dead_promise_resolve_number_parse", 10));
+const unused_promise_resolve_number_predicate_call = Promise.resolve(Number.isSafeInteger("dead_promise_resolve_number_predicate".length));
 const unused_promise_resolve_uri_call = Promise.resolve(encodeURIComponent("dead promise resolve uri"));
 const unused_promise_resolve_math_call = Promise.resolve(Math.hypot("dead_promise_resolve_math".length, 4));
 const unused_encode_uri_call = encodeURI("dead encode uri");
@@ -335,6 +337,8 @@ Promise.resolve(Boolean("top_level_dead_promise_resolve_boolean_constructor"));
 Promise.resolve(BigInt(567891234));
 Promise.resolve(Symbol("top_level_dead_promise_resolve_symbol"));
 Promise.resolve(parseFloat("765432.25"));
+Promise.resolve(Number.parseFloat("top_level_dead_promise_resolve_number_parse"));
+Promise.resolve(Number.isInteger("top_level_dead_promise_resolve_number_predicate".length));
 Promise.resolve(encodeURI("top level dead promise resolve uri"));
 Promise.resolve(Math.max("top_level_dead_promise_resolve_math".length, 1));
 encodeURI("top level dead encode uri");
@@ -579,6 +583,8 @@ function usedLocal(value: number): number {
     Promise.resolve(BigInt(true));
     Promise.resolve(Symbol("local_dead_promise_resolve_symbol"));
     Promise.resolve(isFinite("123"));
+    Promise.resolve(Number.parseInt("local_dead_promise_resolve_number_parse", 10));
+    Promise.resolve(Number.isFinite("local_dead_promise_resolve_number_predicate".length));
     Promise.resolve(decodeURIComponent("local-dead-promise-resolve-uri"));
     Promise.resolve(Math.min("local_dead_promise_resolve_math".length, 1));
     encodeURI("local dead encode uri");

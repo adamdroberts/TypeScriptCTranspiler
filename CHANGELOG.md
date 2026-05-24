@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with side-effect-free `Number.parse*` and `Number.is*` primitive results. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure array literals and expression statements with side-effect-free `new Map(...)` / `new Set(...)` spread operands. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Array.from(new Map(), mapper[, thisArg])` calls over empty typed Map sources and tightens empty-Set mapper pruning to actual empty Set sources. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure one-argument `Array.from(new Map(...))` calls over side-effect-free Map constructor sources. Test: `generated_c_dce_const`.
