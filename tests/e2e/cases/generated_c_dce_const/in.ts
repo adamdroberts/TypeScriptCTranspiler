@@ -148,6 +148,8 @@ const dead_promise_resolve_object_shorthand = "dead_promise_resolve_object_short
 const unused_promise_resolve_object_shorthand_call = Promise.resolve({ dead_promise_resolve_object_shorthand }.dead_promise_resolve_object_shorthand);
 const dead_promise_resolve_object_spread_source = { dead_promise_resolve_object_spread: "dead_promise_resolve_object_spread" };
 const unused_promise_resolve_object_spread_call = Promise.resolve({ ...dead_promise_resolve_object_spread_source }.dead_promise_resolve_object_spread);
+const dead_promise_resolve_object_assign_source = { dead_promise_resolve_object_assign: "dead_promise_resolve_object_assign" };
+const unused_promise_resolve_object_assign_call = Promise.resolve(Object.assign({}, dead_promise_resolve_object_assign_source).dead_promise_resolve_object_assign);
 const unused_promise_resolve_object_property_call = Promise.resolve({ dead_promise_resolve_object_property: "dead_promise_resolve_object_property" }.dead_promise_resolve_object_property);
 const unused_promise_resolve_object_property_missing_call = Promise.resolve(({ dead_promise_resolve_object_property_missing_source: 1 } as { [key: string]: number }).dead_promise_resolve_object_property_missing);
 const dead_promise_resolve_array_spread_source = ["dead_promise_resolve_array_spread"];
@@ -441,6 +443,8 @@ const top_level_dead_promise_resolve_object_shorthand = "top_level_dead_promise_
 Promise.resolve({ top_level_dead_promise_resolve_object_shorthand }.top_level_dead_promise_resolve_object_shorthand);
 const top_level_dead_promise_resolve_object_spread_source = { top_level_dead_promise_resolve_object_spread: "top_level_dead_promise_resolve_object_spread" };
 Promise.resolve({ ...top_level_dead_promise_resolve_object_spread_source }.top_level_dead_promise_resolve_object_spread);
+const top_level_dead_promise_resolve_object_assign_source = { top_level_dead_promise_resolve_object_assign: "top_level_dead_promise_resolve_object_assign" };
+Promise.resolve(Object.assign({}, top_level_dead_promise_resolve_object_assign_source).top_level_dead_promise_resolve_object_assign);
 Promise.resolve({ top_level_dead_promise_resolve_object_property: "top_level_dead_promise_resolve_object_property" }.top_level_dead_promise_resolve_object_property);
 Promise.resolve(({ top_level_dead_promise_resolve_object_property_missing_source: 1 } as { [key: string]: number }).top_level_dead_promise_resolve_object_property_missing);
 const top_level_dead_promise_resolve_array_spread_source = ["top_level_dead_promise_resolve_array_spread"];
@@ -745,6 +749,8 @@ function usedLocal(value: number): number {
     Promise.resolve({ local_dead_promise_resolve_object_shorthand }.local_dead_promise_resolve_object_shorthand);
     const local_dead_promise_resolve_object_spread_source = { local_dead_promise_resolve_object_spread: "local_dead_promise_resolve_object_spread" };
     Promise.resolve({ ...local_dead_promise_resolve_object_spread_source }.local_dead_promise_resolve_object_spread);
+    const local_dead_promise_resolve_object_assign_source = { local_dead_promise_resolve_object_assign: "local_dead_promise_resolve_object_assign" };
+    Promise.resolve(Object.assign({}, local_dead_promise_resolve_object_assign_source).local_dead_promise_resolve_object_assign);
     Promise.resolve({ local_dead_promise_resolve_object_property: "local_dead_promise_resolve_object_property" }.local_dead_promise_resolve_object_property);
     Promise.resolve(({ local_dead_promise_resolve_object_property_missing_source: 1 } as { [key: string]: number }).local_dead_promise_resolve_object_property_missing);
     const local_dead_promise_resolve_array_spread_source = ["local_dead_promise_resolve_array_spread"];

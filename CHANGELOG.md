@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive `Object.assign(...)` property-read results. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive array/string-spread element-access results. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive object-spread property-read results. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive shorthand object property-read results. Test: `generated_c_dce_const`.

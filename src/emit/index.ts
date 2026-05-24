@@ -2646,10 +2646,70 @@ class Emitter {
                 seenConsts,
             );
         }
+        if (this.isObjectAssignCall(unwrapped)) {
+            return this.sideEffectFreePrimitiveObjectAssignPropertyReadResult(
+                unwrapped,
+                key,
+                seenConsts,
+            );
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init
             ? this.sideEffectFreePrimitiveObjectPropertyOperandResult(init, key, seenConsts)
             : "unsafe";
+    }
+
+    private sideEffectFreePrimitiveObjectAssignPropertyReadResult(
+        call: ts.CallExpression,
+        key: string,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        if (
+            call.arguments.length < 1 ||
+            !this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts)
+        ) {
+            return "unsafe";
+        }
+        for (let i = call.arguments.length - 1; i >= 0; i--) {
+            const arg = call.arguments[i]!;
+            if (i > 0 && this.isSideEffectFreeNullishObjectAssignSource(arg, seenConsts)) {
+                continue;
+            }
+            const result = this.sideEffectFreePrimitiveObjectPropertyOperandResult(
+                arg,
+                key,
+                new Set(seenConsts),
+            );
+            if (result !== "absent") return result;
+        }
+        return "absent";
+    }
+
+    private isSideEffectFreeNullishObjectAssignSource(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            unwrapped.kind === ts.SyntaxKind.NullKeyword ||
+            unwrapped.kind === ts.SyntaxKind.UndefinedKeyword ||
+            (
+                ts.isIdentifier(unwrapped) &&
+                this.isUnshadowedGlobalIdentifier(unwrapped, "undefined")
+            )
+        ) {
+            return true;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeNullishObjectAssignSource(init, seenConsts);
+    }
+
+    private isObjectAssignCall(expr: ts.Expression): expr is ts.CallExpression {
+        return ts.isCallExpression(expr) &&
+            ts.isPropertyAccessExpression(expr.expression) &&
+            ts.isIdentifier(expr.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(expr.expression.expression, "Object") &&
+            expr.expression.name.text === "assign";
     }
 
     private sideEffectFreePrimitiveObjectLiteralPropertyReadResult(
