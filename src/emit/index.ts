@@ -914,6 +914,9 @@ class Emitter {
             if (this.isSideEffectFreeSymbolDescriptionRead(expr, seenConsts)) {
                 return true;
             }
+            if (this.isSideEffectFreeStaticNumericPropertyRead(expr)) {
+                return true;
+            }
             return this.isSideEffectFreeObjectReadOperand(expr.expression, seenConsts);
         }
         if (ts.isElementAccessExpression(expr) && expr.argumentExpression) {
@@ -4727,6 +4730,9 @@ class Emitter {
         if (this.isSideEffectFreeSymbolDescriptionRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeStaticNumericPropertyRead(unwrapped)) {
+            return true;
+        }
         if (this.isSideEffectFreeStringElementAccess(unwrapped, seenConsts)) {
             return true;
         }
@@ -4940,6 +4946,9 @@ class Emitter {
             unwrapped.name.text === "length" &&
             this.isSideEffectFreeLengthOperand(unwrapped.expression, seenConsts)
         ) {
+            return true;
+        }
+        if (this.isSideEffectFreeStaticNumericPropertyRead(unwrapped)) {
             return true;
         }
         return this.isSideEffectFreePrimitiveNumberCoercion(unwrapped, seenConsts);
@@ -6175,6 +6184,43 @@ class Emitter {
     ): boolean {
         if (!ts.isPropertyAccessExpression(expr) || expr.name.text !== "description") return false;
         return this.isSideEffectFreeFreshSymbolOperand(expr.expression, seenConsts);
+    }
+
+    private isSideEffectFreeStaticNumericPropertyRead(expr: ts.Expression): boolean {
+        if (!ts.isPropertyAccessExpression(expr) || !ts.isIdentifier(expr.expression)) return false;
+        const recv = expr.expression;
+        const name = expr.name.text;
+        if (this.isUnshadowedGlobalIdentifier(recv, "Math")) {
+            switch (name) {
+                case "PI":
+                case "E":
+                case "LN2":
+                case "LN10":
+                case "LOG2E":
+                case "LOG10E":
+                case "SQRT2":
+                case "SQRT1_2":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+        if (this.isUnshadowedGlobalIdentifier(recv, "Number")) {
+            switch (name) {
+                case "EPSILON":
+                case "MAX_SAFE_INTEGER":
+                case "MAX_VALUE":
+                case "MIN_SAFE_INTEGER":
+                case "MIN_VALUE":
+                case "NaN":
+                case "NEGATIVE_INFINITY":
+                case "POSITIVE_INFINITY":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+        return false;
     }
 
     private isSideEffectFreeFreshSymbolOperand(

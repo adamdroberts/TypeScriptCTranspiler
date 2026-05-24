@@ -223,6 +223,7 @@ This is the next item that most directly expands what programs can be written ag
   - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning fresh-Error method results. Test: `generated_c_dce_const`.
   - Generated-C DCE prunes unused fresh-Error `.name` / `.message` reads, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
   - Generated-C DCE prunes unused fresh-Error `.cause` and fresh-AggregateError `.errors` reads when the constructor inputs are side-effect-free. Test: `generated_c_dce_const`.
+  - Generated-C DCE prunes unused `Math` / `Number` static numeric constant reads, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
   - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning fresh-Date method results. Test: `generated_c_dce_const`.
   - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning fresh-array method results. Test: `generated_c_dce_const`.
   - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning string and fresh-RegExp method results. Test: `generated_c_dce_const`.
