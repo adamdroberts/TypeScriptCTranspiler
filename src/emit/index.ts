@@ -31454,7 +31454,13 @@ class Emitter {
             for (const prop of ol.properties) {
                 let fieldName: string;
                 let expr: ts.Expression;
-                if (ts.isPropertyAssignment(prop)) {
+                if (ts.isSpreadAssignment(prop)) {
+                    const value = this.emitExpr(prop.expression);
+                    pieces.push(
+                        `tsc_value_object_assign(tsc_value_object(${obj}), ${this.coerce(value, T_VALUE, prop.expression)})`,
+                    );
+                    continue;
+                } else if (ts.isPropertyAssignment(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
                     if (!staticName) {
                         unsupported(prop.name, "dynamic object key must be a string/number literal");
