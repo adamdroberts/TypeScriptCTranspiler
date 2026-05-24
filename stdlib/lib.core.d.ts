@@ -396,6 +396,7 @@ interface WeakSet<T extends object> {
 }
 interface WeakSetConstructor {
     new <T extends object>(values: T[]): WeakSet<T>;
+    new <T extends object>(values: Set<T>): WeakSet<T>;
     new <T extends object>(): WeakSet<T>;
 }
 declare var WeakSet: WeakSetConstructor;

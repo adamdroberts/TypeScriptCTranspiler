@@ -3947,8 +3947,25 @@ class Emitter {
                 this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(element, seenConsts)
             );
         }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set")
+        ) {
+            return this.isSideEffectFreeWeakSetSetConstructorSource(unwrapped, seenConsts);
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeWeakSetConstructorSource(init, seenConsts);
+    }
+
+    private isSideEffectFreeWeakSetSetConstructorSource(
+        expr: ts.NewExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const args = Array.from(expr.arguments ?? []);
+        if (args.length === 0) return true;
+        if (args.length !== 1) return false;
+        return this.isSideEffectFreeWeakSetConstructorSource(args[0]!, seenConsts);
     }
 
     private isSideEffectFreeErrorOptionsObject(
@@ -31419,20 +31436,23 @@ class Emitter {
             if (args.length === 1) {
                 const values = this.emitExpr(args[0]!);
                 if (
-                    values.ty.kind !== "array" ||
+                    (values.ty.kind !== "array" && values.ty.kind !== "set") ||
                     !values.ty.elem ||
                     !sameCType(values.ty.elem, e)
                 ) {
-                    unsupported(args[0]!, "new WeakSet(values) expects an array whose element type matches the WeakSet");
+                    unsupported(args[0]!, "new WeakSet(values) expects an array or Set whose element type matches the WeakSet");
                 }
                 return this.emitSequencedExpr(mapped, [{ value: values }], ([source]) => {
                     const set = this.freshTemp("_weak_set_init");
+                    const src = this.freshTemp("_weak_set_src");
                     const idx = this.freshTemp("_i");
                     const value = this.freshTemp("_value");
+                    const sourceArray = values.ty.kind === "set" ? `tsc_set_values(${source})` : source;
                     return (
-                        `({ tsc_set_t* ${set} = tsc_set_new(sizeof(${e.c}), ${keyKindOf(e)}, ${source}->len); ` +
-                        `for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { ` +
-                        `${e.c} ${value} = TSC_ARR(${e.c}, ${source}, ${idx}); ` +
+                        `({ tsc_array_t* const ${src} = ${sourceArray}; ` +
+                        `tsc_set_t* ${set} = tsc_set_new(sizeof(${e.c}), ${keyKindOf(e)}, ${src}->len); ` +
+                        `for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { ` +
+                        `${e.c} ${value} = TSC_ARR(${e.c}, ${src}, ${idx}); ` +
                         `tsc_set_add_raw(${set}, &${value}); } ${set}; })`
                     );
                 });

@@ -96,6 +96,7 @@ const unused_new_weak_set_static_source_call = new WeakSet<object>([
     { dead_new_weak_set_static_value: 1 },
     { dead_new_weak_set_static_tail: 2 },
 ]);
+const unused_new_weak_set_set_source_call = new WeakSet<object>(new Set<object>());
 const unused_new_weak_ref_call = new WeakRef<object>({ label: "dead_weak_ref_target" });
 const unused_new_finalization_registry_call = new FinalizationRegistry<string>((held) => {
     "dead_finalization_registry_callback";
@@ -624,6 +625,7 @@ new WeakSet<object>([
     { top_level_dead_new_weak_set_static_value: 1 },
     { top_level_dead_new_weak_set_static_tail: 2 },
 ]);
+new WeakSet<object>(new Set<object>());
 new WeakRef<object>({ label: "top_level_dead_weak_ref_target" });
 new FinalizationRegistry<string>((held) => {
     "top_level_dead_finalization_registry_callback";
@@ -1152,6 +1154,7 @@ function usedLocal(value: number): number {
         { local_dead_new_weak_set_static_value: 1 },
         { local_dead_new_weak_set_static_tail: 2 },
     ]);
+    new WeakSet<object>(new Set<object>());
     new WeakRef<object>({ label: "local_dead_weak_ref_target" });
     new FinalizationRegistry<string>((held) => {
         "local_dead_finalization_registry_callback";
