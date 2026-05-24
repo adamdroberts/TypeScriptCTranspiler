@@ -5,7 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
-- CommonJS package sources now treat read-only `module` metadata destructuring such as `const { filename, path, loaded, paths } = module` as static wrapper metadata. Test: `node_modules_commonjs_module_metadata_destructure`.
+- CommonJS package sources now treat read-only `module` metadata destructuring such as `const { filename, path, loaded, paths, parent, children } = module` as static wrapper metadata. Test: `node_modules_commonjs_module_metadata_destructure`.
 - CommonJS package sources now treat `const { require: req, exports: out } = module` destructuring as static wrapper aliases for AOT require edges and export mutations. Test: `node_modules_commonjs_module_destructure_wrapper`.
 - CommonJS package sources now treat function-scoped `const mod = module` aliases as static wrapper aliases for scoped `mod.require(...)`, `const req = mod.require`, and read-only module metadata. Test: `node_modules_commonjs_function_scope_module_alias`.
 - CommonJS package sources now treat top-level `const mod = module` aliases as static wrapper aliases for `mod.require(...)`, `const req = mod.require`, `mod.exports.*`, and module metadata reads. Test: `node_modules_commonjs_module_alias_wrapper`.
