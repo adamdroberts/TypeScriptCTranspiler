@@ -789,7 +789,13 @@ class Emitter {
             return this.classExpressionHasNoDefinitionSideEffects(expr);
         }
         if (ts.isIdentifier(expr)) {
-            if (this.isUnshadowedGlobalIdentifier(expr, "undefined")) return true;
+            if (
+                this.isUnshadowedGlobalIdentifier(expr, "undefined") ||
+                this.isUnshadowedGlobalIdentifier(expr, "NaN") ||
+                this.isUnshadowedGlobalIdentifier(expr, "Infinity")
+            ) {
+                return true;
+            }
             return this.isSideEffectFreeConstIdentifier(expr, seenConsts);
         }
         if (
@@ -1962,7 +1968,7 @@ class Emitter {
             const values = new Set<string>();
             for (const element of unwrapped.elements) {
                 if (!ts.isExpression(element)) return null;
-                const valueKey = this.sideEffectFreeFiniteNumericSameValueZeroKey(element, seenConsts);
+                const valueKey = this.sideEffectFreeNumericSameValueZeroKey(element, seenConsts);
                 if (valueKey === null) return null;
                 values.add(valueKey);
             }
@@ -1980,20 +1986,28 @@ class Emitter {
         return init ? this.sideEffectFreeNumericSetConstructorSourceLength(init, seenConsts) : null;
     }
 
-    private sideEffectFreeFiniteNumericSameValueZeroKey(
+    private sideEffectFreeNumericSameValueZeroKey(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
     ): string | null {
-        const value = this.sideEffectFreeFiniteNumericLiteralValue(expr, seenConsts);
+        const value = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr, seenConsts);
         if (value === null) return null;
+        if (Number.isNaN(value)) return "number:NaN";
         return Object.is(value, -0) ? "number:0" : `number:${value}`;
     }
 
-    private sideEffectFreeFiniteNumericLiteralValue(
+    private sideEffectFreeNumericLiteralSameValueZeroValue(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
     ): number | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isIdentifier(unwrapped) &&
+            unwrapped.text === "NaN" &&
+            this.isUnshadowedGlobalIdentifier(unwrapped, "NaN")
+        ) {
+            return Number.NaN;
+        }
         if (ts.isNumericLiteral(unwrapped)) {
             const value = Number(unwrapped.text);
             return Number.isFinite(value) ? value : null;
@@ -2005,12 +2019,12 @@ class Emitter {
                 unwrapped.operator === ts.SyntaxKind.MinusToken
             )
         ) {
-            const value = this.sideEffectFreeFiniteNumericLiteralValue(unwrapped.operand, seenConsts);
+            const value = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped.operand, seenConsts);
             if (value === null) return null;
             return unwrapped.operator === ts.SyntaxKind.MinusToken ? -value : value;
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return init ? this.sideEffectFreeFiniteNumericLiteralValue(init, seenConsts) : null;
+        return init ? this.sideEffectFreeNumericLiteralSameValueZeroValue(init, seenConsts) : null;
     }
 
     private sideEffectFreeStringKeyMapConstructorSourceLength(
