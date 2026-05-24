@@ -2379,11 +2379,13 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         const elements = this.sideEffectFreeSetArraySourceExpressions(unwrapped, seenConsts);
         if (elements) {
-            return elements.every((element) =>
-                this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(element, seenConsts)
-            )
-                ? elements.length
-                : null;
+            const values = new Set<ts.Expression | ts.Symbol>();
+            for (const element of elements) {
+                const valueIdentity = this.sideEffectFreeObjectIdentityKey(element, seenConsts);
+                if (!valueIdentity) return null;
+                values.add(valueIdentity);
+            }
+            return values.size;
         }
         const valueSourceLength = this.sideEffectFreeFreshObjectValueArraySourceSetLength(unwrapped, seenConsts);
         if (valueSourceLength !== null) return valueSourceLength;
