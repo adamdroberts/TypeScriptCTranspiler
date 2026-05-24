@@ -3358,6 +3358,14 @@ class Emitter {
             );
             if (result !== null) return result;
         }
+        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
+        if (targetOperand) {
+            return this.sideEffectFreePrimitiveArrayElementOperandResult(
+                targetOperand,
+                index,
+                new Set(seenConsts),
+            );
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init
             ? this.sideEffectFreePrimitiveArrayElementOperandResult(init, index, seenConsts)

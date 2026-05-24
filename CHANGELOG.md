@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now has explicit coverage for unused pure `Promise.resolve(...)` calls with side-effect-free primitive Object/Reflect predicate, get, and descriptor reads through compile-time-proven target-returning Object wrappers. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive `Object.keys(...)`, `Object.getOwnPropertyNames(...)`, and `Reflect.ownKeys(...)` element reads through compile-time-proven target-returning Object wrappers. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive `Object.values(...)` and `Object.entries(...)` reads through compile-time-proven target-returning Object wrappers. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive key/value tuple reads from compile-time-proven `Object.entries(...)` results. Test: `generated_c_dce_const`.

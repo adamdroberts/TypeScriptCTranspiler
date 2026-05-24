@@ -165,6 +165,11 @@ const unused_promise_resolve_reflect_get_call = Promise.resolve(Reflect.get({ de
 const unused_promise_resolve_reflect_get_array_call = Promise.resolve(Reflect.get(["dead_promise_resolve_reflect_get_array"], "0"));
 const unused_promise_resolve_descriptor_value_call = Promise.resolve(Object.getOwnPropertyDescriptor({ dead_promise_resolve_descriptor_value: "dead_promise_resolve_descriptor_value" }, "dead_promise_resolve_descriptor_value")!.value);
 const unused_promise_resolve_reflect_descriptor_value_call = Promise.resolve(Reflect.getOwnPropertyDescriptor(["dead_promise_resolve_reflect_descriptor_value"], "0")!.value);
+const unused_promise_resolve_object_has_own_freeze_call = Promise.resolve(Object.hasOwn(Object.freeze({ dead_promise_resolve_object_has_own_freeze: 1 }), "dead_promise_resolve_object_has_own_freeze"));
+const unused_promise_resolve_reflect_get_freeze_call = Promise.resolve(Reflect.get(Object.freeze({ dead_promise_resolve_reflect_get_freeze: "dead_promise_resolve_reflect_get_freeze" }), "dead_promise_resolve_reflect_get_freeze"));
+const unused_promise_resolve_reflect_has_freeze_call = Promise.resolve(Reflect.has(Object.freeze({ dead_promise_resolve_reflect_has_freeze: 1 }), "dead_promise_resolve_reflect_has_freeze"));
+const unused_promise_resolve_descriptor_value_freeze_call = Promise.resolve(Object.getOwnPropertyDescriptor(Object.freeze({ dead_promise_resolve_descriptor_value_freeze: "dead_promise_resolve_descriptor_value_freeze" }), "dead_promise_resolve_descriptor_value_freeze")!.value);
+const unused_promise_resolve_reflect_descriptor_value_freeze_call = Promise.resolve(Reflect.getOwnPropertyDescriptor(Object.freeze(["dead_promise_resolve_reflect_descriptor_value_freeze"]), "0")!.value);
 const unused_promise_resolve_object_keys_length_call = Promise.resolve(Object.keys({ dead_promise_resolve_object_keys_length: 1 }).length);
 const unused_promise_resolve_reflect_own_keys_length_call = Promise.resolve(Reflect.ownKeys(["dead_promise_resolve_reflect_own_keys_length"]).length);
 const unused_promise_resolve_descriptors_value_call = Promise.resolve(Object.getOwnPropertyDescriptors({ dead_promise_resolve_descriptors_value: "dead_promise_resolve_descriptors_value" }).dead_promise_resolve_descriptors_value.value);
@@ -499,6 +504,11 @@ Promise.resolve(Reflect.get({ top_level_dead_promise_resolve_reflect_get: "top_l
 Promise.resolve(Reflect.get(["top_level_dead_promise_resolve_reflect_get_array"], "0"));
 Promise.resolve(Object.getOwnPropertyDescriptor({ top_level_dead_promise_resolve_descriptor_value: "top_level_dead_promise_resolve_descriptor_value" }, "top_level_dead_promise_resolve_descriptor_value")!.value);
 Promise.resolve(Reflect.getOwnPropertyDescriptor(["top_level_dead_promise_resolve_reflect_descriptor_value"], "0")!.value);
+Promise.resolve(Object.hasOwn(Object.freeze({ top_level_dead_promise_resolve_object_has_own_freeze: 1 }), "top_level_dead_promise_resolve_object_has_own_freeze"));
+Promise.resolve(Reflect.get(Object.freeze({ top_level_dead_promise_resolve_reflect_get_freeze: "top_level_dead_promise_resolve_reflect_get_freeze" }), "top_level_dead_promise_resolve_reflect_get_freeze"));
+Promise.resolve(Reflect.has(Object.freeze({ top_level_dead_promise_resolve_reflect_has_freeze: 1 }), "top_level_dead_promise_resolve_reflect_has_freeze"));
+Promise.resolve(Object.getOwnPropertyDescriptor(Object.freeze({ top_level_dead_promise_resolve_descriptor_value_freeze: "top_level_dead_promise_resolve_descriptor_value_freeze" }), "top_level_dead_promise_resolve_descriptor_value_freeze")!.value);
+Promise.resolve(Reflect.getOwnPropertyDescriptor(Object.freeze(["top_level_dead_promise_resolve_reflect_descriptor_value_freeze"]), "0")!.value);
 Promise.resolve(Object.keys({ top_level_dead_promise_resolve_object_keys_length: 1 }).length);
 Promise.resolve(Reflect.ownKeys(["top_level_dead_promise_resolve_reflect_own_keys_length"]).length);
 Promise.resolve(Object.getOwnPropertyDescriptors({ top_level_dead_promise_resolve_descriptors_value: "top_level_dead_promise_resolve_descriptors_value" }).top_level_dead_promise_resolve_descriptors_value.value);
@@ -844,6 +854,11 @@ function usedLocal(value: number): number {
     Promise.resolve(Reflect.get(["local_dead_promise_resolve_reflect_get_array"], "0"));
     Promise.resolve(Object.getOwnPropertyDescriptor({ local_dead_promise_resolve_descriptor_value: "local_dead_promise_resolve_descriptor_value" }, "local_dead_promise_resolve_descriptor_value")!.value);
     Promise.resolve(Reflect.getOwnPropertyDescriptor(["local_dead_promise_resolve_reflect_descriptor_value"], "0")!.value);
+    Promise.resolve(Object.hasOwn(Object.freeze({ local_dead_promise_resolve_object_has_own_freeze: 1 }), "local_dead_promise_resolve_object_has_own_freeze"));
+    Promise.resolve(Reflect.get(Object.freeze({ local_dead_promise_resolve_reflect_get_freeze: "local_dead_promise_resolve_reflect_get_freeze" }), "local_dead_promise_resolve_reflect_get_freeze"));
+    Promise.resolve(Reflect.has(Object.freeze({ local_dead_promise_resolve_reflect_has_freeze: 1 }), "local_dead_promise_resolve_reflect_has_freeze"));
+    Promise.resolve(Object.getOwnPropertyDescriptor(Object.freeze({ local_dead_promise_resolve_descriptor_value_freeze: "local_dead_promise_resolve_descriptor_value_freeze" }), "local_dead_promise_resolve_descriptor_value_freeze")!.value);
+    Promise.resolve(Reflect.getOwnPropertyDescriptor(Object.freeze(["local_dead_promise_resolve_reflect_descriptor_value_freeze"]), "0")!.value);
     Promise.resolve(Object.keys({ local_dead_promise_resolve_object_keys_length: 1 }).length);
     Promise.resolve(Reflect.ownKeys(["local_dead_promise_resolve_reflect_own_keys_length"]).length);
     Promise.resolve(Object.getOwnPropertyDescriptors({ local_dead_promise_resolve_descriptors_value: "local_dead_promise_resolve_descriptors_value" }).local_dead_promise_resolve_descriptors_value.value);
