@@ -212,6 +212,9 @@ const unused_promise_resolve_object_values_object_element_call = Promise.resolve
 const unused_promise_resolve_object_values_array_join_call = Promise.resolve(Object.values(["dead_promise_resolve_object_values_array_join"]).join("|"));
 const unused_promise_resolve_object_values_string_to_string_call = Promise.resolve(Object.values("dead_promise_resolve_object_values_string_to_string").toString());
 const unused_promise_resolve_object_values_object_join_call = Promise.resolve(Object.values({ dead_promise_resolve_object_values_object_join: "dead_promise_resolve_object_values_object_join" }).join("|"));
+const unused_promise_resolve_object_values_number_join_call = Promise.resolve(Object.values("dead_promise_resolve_object_values_number_join".length).join("|"));
+const unused_promise_resolve_object_values_boolean_to_string_call = Promise.resolve(Object.values(true).toString("dead_promise_resolve_object_values_boolean_to_string"));
+const unused_promise_resolve_object_values_bigint_includes_call = Promise.resolve(Object.values(123n).includes("dead_promise_resolve_object_values_bigint_includes"));
 const unused_promise_resolve_object_values_assign_join_call = Promise.resolve(Object.values(Object.assign({} as { dead_promise_resolve_object_values_assign_join: string }, { dead_promise_resolve_object_values_assign_join: "dead_promise_resolve_object_values_assign_join" })).join("|"));
 const unused_promise_resolve_object_values_from_entries_join_call = Promise.resolve(Object.values(Object.fromEntries<{ dead_promise_resolve_object_values_from_entries_join: string }>([["dead_promise_resolve_object_values_from_entries_join", "dead_promise_resolve_object_values_from_entries_join"]])).join("|"));
 const unused_promise_resolve_object_values_entries_from_entries_join_call = Promise.resolve(Object.values(Object.fromEntries<{ dead_promise_resolve_object_values_entries_from_entries_join: string }>(Object.entries({ dead_promise_resolve_object_values_entries_from_entries_join: "dead_promise_resolve_object_values_entries_from_entries_join" }))).join("|"));
@@ -579,6 +582,9 @@ Promise.resolve(Object.values({ top_level_dead_promise_resolve_object_values_obj
 Promise.resolve(Object.values(["top_level_dead_promise_resolve_object_values_array_join"]).join("|"));
 Promise.resolve(Object.values("top_level_dead_promise_resolve_object_values_string_to_string").toString());
 Promise.resolve(Object.values({ top_level_dead_promise_resolve_object_values_object_join: "top_level_dead_promise_resolve_object_values_object_join" }).join("|"));
+Promise.resolve(Object.values("top_level_dead_promise_resolve_object_values_number_join".length).join("|"));
+Promise.resolve(Object.values(false).toString("top_level_dead_promise_resolve_object_values_boolean_to_string"));
+Promise.resolve(Object.values(456n).includes("top_level_dead_promise_resolve_object_values_bigint_includes"));
 Promise.resolve(Object.values(Object.assign({} as { top_level_dead_promise_resolve_object_values_assign_join: string }, { top_level_dead_promise_resolve_object_values_assign_join: "top_level_dead_promise_resolve_object_values_assign_join" })).join("|"));
 Promise.resolve(Object.values(Object.fromEntries<{ top_level_dead_promise_resolve_object_values_from_entries_join: string }>([["top_level_dead_promise_resolve_object_values_from_entries_join", "top_level_dead_promise_resolve_object_values_from_entries_join"]])).join("|"));
 Promise.resolve(Object.values(Object.fromEntries<{ top_level_dead_promise_resolve_object_values_entries_from_entries_join: string }>(Object.entries({ top_level_dead_promise_resolve_object_values_entries_from_entries_join: "top_level_dead_promise_resolve_object_values_entries_from_entries_join" }))).join("|"));
@@ -957,6 +963,9 @@ function usedLocal(value: number): number {
     Promise.resolve(Object.values(["local_dead_promise_resolve_object_values_array_join"]).join("|"));
     Promise.resolve(Object.values("local_dead_promise_resolve_object_values_string_to_string").toString());
     Promise.resolve(Object.values({ local_dead_promise_resolve_object_values_object_join: "local_dead_promise_resolve_object_values_object_join" }).join("|"));
+    Promise.resolve(Object.values("local_dead_promise_resolve_object_values_number_join".length).join("|"));
+    Promise.resolve(Object.values(true).toString("local_dead_promise_resolve_object_values_boolean_to_string"));
+    Promise.resolve(Object.values(789n).includes("local_dead_promise_resolve_object_values_bigint_includes"));
     Promise.resolve(Object.values(Object.assign({} as { local_dead_promise_resolve_object_values_assign_join: string }, { local_dead_promise_resolve_object_values_assign_join: "local_dead_promise_resolve_object_values_assign_join" })).join("|"));
     Promise.resolve(Object.values(Object.fromEntries<{ local_dead_promise_resolve_object_values_from_entries_join: string }>([["local_dead_promise_resolve_object_values_from_entries_join", "local_dead_promise_resolve_object_values_from_entries_join"]])).join("|"));
     Promise.resolve(Object.values(Object.fromEntries<{ local_dead_promise_resolve_object_values_entries_from_entries_join: string }>(Object.entries({ local_dead_promise_resolve_object_values_entries_from_entries_join: "local_dead_promise_resolve_object_values_entries_from_entries_join" }))).join("|"));

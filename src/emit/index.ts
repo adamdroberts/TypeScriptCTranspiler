@@ -1930,6 +1930,9 @@ class Emitter {
         if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
             return true;
         }
+        if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) {
+            return true;
+        }
         if (ts.isArrayLiteralExpression(unwrapped)) {
             return unwrapped.elements.every((element) =>
                 ts.isExpression(element) &&
@@ -4571,6 +4574,13 @@ class Emitter {
             )
         ) {
             return this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped.operand, seenConsts);
+        }
+        if (
+            ts.isPropertyAccessExpression(unwrapped) &&
+            unwrapped.name.text === "length" &&
+            this.isSideEffectFreeLengthOperand(unwrapped.expression, seenConsts)
+        ) {
+            return true;
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeNonNullishPrimitiveObjectOperand(init, seenConsts);
