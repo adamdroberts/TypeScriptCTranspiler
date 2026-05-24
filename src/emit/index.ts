@@ -1429,6 +1429,14 @@ class Emitter {
             case "sort":
                 return args.length === 0 &&
                     this.isSideEffectFreeFreshStringArrayOperand(recv, seenConsts);
+            case "map":
+            case "filter":
+            case "forEach":
+                return args.length >= 1 &&
+                    args.length <= 2 &&
+                    this.isSideEffectFreeFreshEmptyArrayLiteralOperand(recv, seenConsts) &&
+                    this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts) &&
+                    (!args[1] || this.isSideEffectFreeTopLevelConstInitializer(args[1], seenConsts));
             default:
                 return false;
         }
@@ -1465,6 +1473,16 @@ class Emitter {
             ts.isExpression(element) &&
             this.isSideEffectFreeStringCoercion(element, seenConsts)
         );
+    }
+
+    private isSideEffectFreeFreshEmptyArrayLiteralOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        return ts.isArrayLiteralExpression(unwrapped) &&
+            unwrapped.elements.length === 0 &&
+            this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
     }
 
     private sideEffectFreeArrayLiteralLength(
