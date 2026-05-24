@@ -5,3 +5,4 @@ entry2: 2 6
 names: 0|1|2|length
 own: 0|1|2|length
 words: 0 red 1 blue
+inline sorted keys: 1|0

@@ -27695,6 +27695,11 @@ class Emitter {
             }
             if (mapped.kind === "array") {
                 const value = this.emitExpr(arg);
+                if (value.ty.kind === "value") {
+                    return this.emitSequencedExpr(arrayType(T_STRING), [{ value, target: T_VALUE, node: arg }], ([v]) =>
+                        `tsc_value_object_keys(${v})`,
+                    );
+                }
                 return this.emitSequencedExpr(arrayType(T_STRING), [{ value }], ([arr]) => {
                     const source = this.freshTemp("_oak_src");
                     const out = this.freshTemp("_oak");

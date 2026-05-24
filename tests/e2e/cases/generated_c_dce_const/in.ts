@@ -378,6 +378,7 @@ Object.keys("kept_object_keys_string_map").map((key) => key + "kept_object_keys_
 Object.getOwnPropertyNames("x").map((key) => key + "kept_object_property_names_string_map_callback");
 Object.values("x").map((value) => value + "kept_object_values_string_map_callback");
 Object.entries("x").map((entry) => entry[0] + "kept_object_entries_string_map_callback");
+Object.keys(["kept_object_keys_array_sort_comparator_a", "kept_object_keys_array_sort_comparator_b"]).sort((a, b) => "kept_object_keys_array_sort_comparator_callback".length + a.localeCompare(b));
 Array.from(new Set(["kept_array_from_set_sort_comparator_a", "kept_array_from_set_sort_comparator_b"])).sort((a, b) => "kept_array_from_set_sort_comparator_callback".length + a.localeCompare(b));
 const unused_error_constructor = new Error("dead_error_constructor");
 const unused_type_error_constructor = new TypeError("dead_type_error_constructor");
