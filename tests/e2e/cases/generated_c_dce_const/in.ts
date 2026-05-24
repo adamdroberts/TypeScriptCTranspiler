@@ -1,5 +1,5 @@
 import { ADDRCONFIG, ALL, V4MAPPED as dnsV4Mapped } from "dns";
-import { EventEmitter, EventEmitter as ImportedEventEmitter, defaultMaxListeners, getMaxListeners, listenerCount } from "events";
+import { EventEmitter, EventEmitter as ImportedEventEmitter, defaultMaxListeners, getMaxListeners, listenerCount, setMaxListeners } from "events";
 import { constants as fsConstants } from "fs";
 import * as nodeDns from "node:dns";
 import * as nodeEvents from "node:events";
@@ -112,6 +112,8 @@ const unused_events_namespace_get_max_call = nodeEvents.getMaxListeners(new Even
 const unused_events_named_get_max_call = getMaxListeners(new EventEmitter(), "dead_events_named_get_max_ignored".length);
 const unused_events_named_listener_count_call = listenerCount(new EventEmitter(), "dead_events_named_listener_count");
 const unused_events_namespace_get_event_listeners_call = nodeEvents.getEventListeners(new EventEmitter(), "dead_events_namespace_get_event_listeners");
+const unused_event_emitter_set_max_call = new EventEmitter().setMaxListeners(11);
+const unused_event_emitter_remove_all_call = new EventEmitter().removeAllListeners("dead_event_emitter_remove_all");
 const unused_new_event_target_call = new EventTarget("dead_new_event_target_ignored".length);
 const unused_new_event_call = new Event("dead_new_event_type", { cancelable: true });
 const unused_event_type_read = new Event("dead_event_type_read").type;
@@ -309,6 +311,8 @@ const unused_promise_resolve_event_emitter_to_string_call = Promise.resolve(new 
 const unused_promise_resolve_event_static_listener_count_call = Promise.resolve(EventEmitter.listenerCount(new EventEmitter(), "dead_promise_resolve_event_static_listener_count"));
 const unused_promise_resolve_events_namespace_get_max_call = Promise.resolve(nodeEvents.getMaxListeners(new EventEmitter(), "dead_promise_resolve_events_namespace_get_max_ignored".length));
 const unused_promise_resolve_events_named_get_max_call = Promise.resolve(getMaxListeners(new EventEmitter(), "dead_promise_resolve_events_named_get_max_ignored".length));
+const unused_promise_resolve_events_namespace_set_max_call = Promise.resolve(nodeEvents.setMaxListeners(12, new EventEmitter()));
+const unused_promise_resolve_events_named_set_max_call = Promise.resolve(setMaxListeners(13, new EventEmitter()));
 const unused_promise_resolve_event_prevent_default_call = Promise.resolve(new Event("dead_promise_resolve_event_prevent_default_call", { cancelable: true }).preventDefault("dead_promise_resolve_event_prevent_default_ignored".length));
 const unused_promise_resolve_event_to_string_call = Promise.resolve(new Event("dead_promise_resolve_event_to_string_call").toString("dead_promise_resolve_event_to_string_ignored".length));
 const unused_promise_resolve_event_target_dispatch_call = Promise.resolve(new EventTarget().dispatchEvent(new Event("dead_promise_resolve_event_target_dispatch_call")));
@@ -866,6 +870,10 @@ nodeEvents.getMaxListeners(new EventEmitter(), "top_level_dead_events_namespace_
 getMaxListeners(new EventEmitter(), "top_level_dead_events_named_get_max_ignored".length);
 listenerCount(new EventEmitter(), "top_level_dead_events_named_listener_count");
 nodeEvents.getEventListeners(new EventEmitter(), "top_level_dead_events_namespace_get_event_listeners");
+new EventEmitter().setMaxListeners(14);
+new EventEmitter().removeAllListeners("top_level_dead_event_emitter_remove_all");
+nodeEvents.setMaxListeners(15, new EventEmitter());
+setMaxListeners(16, new EventEmitter());
 new EventTarget("top_level_dead_new_event_target_ignored".length);
 new Event("top_level_dead_new_event_type", { cancelable: true });
 new Event("top_level_dead_event_type_read").type;
@@ -888,6 +896,8 @@ Promise.resolve(new EventEmitter().toString("top_level_dead_promise_resolve_even
 Promise.resolve(EventEmitter.listenerCount(new EventEmitter(), "top_level_dead_promise_resolve_event_static_listener_count"));
 Promise.resolve(nodeEvents.getMaxListeners(new EventEmitter(), "top_level_dead_promise_resolve_events_namespace_get_max_ignored".length));
 Promise.resolve(getMaxListeners(new EventEmitter(), "top_level_dead_promise_resolve_events_named_get_max_ignored".length));
+Promise.resolve(nodeEvents.setMaxListeners(17, new EventEmitter()));
+Promise.resolve(setMaxListeners(18, new EventEmitter()));
 Promise.resolve(new Event("top_level_dead_promise_resolve_event_prevent_default_call", { cancelable: true }).preventDefault("top_level_dead_promise_resolve_event_prevent_default_ignored".length));
 Promise.resolve(new Event("top_level_dead_promise_resolve_event_to_string_call").toString("top_level_dead_promise_resolve_event_to_string_ignored".length));
 Promise.resolve(new EventTarget().dispatchEvent(new Event("top_level_dead_promise_resolve_event_target_dispatch_call")));
@@ -1580,6 +1590,10 @@ function usedLocal(value: number): number {
     getMaxListeners(new EventEmitter(), "local_dead_events_named_get_max_ignored".length);
     listenerCount(new EventEmitter(), "local_dead_events_named_listener_count");
     nodeEvents.getEventListeners(new EventEmitter(), "local_dead_events_namespace_get_event_listeners");
+    new EventEmitter().setMaxListeners(19);
+    new EventEmitter().removeAllListeners("local_dead_event_emitter_remove_all");
+    nodeEvents.setMaxListeners(20, new EventEmitter());
+    setMaxListeners(21, new EventEmitter());
     new EventTarget("local_dead_new_event_target_ignored".length);
     new Event("local_dead_new_event_type", { cancelable: true });
     new Event("local_dead_event_type_read").type;
@@ -1602,6 +1616,8 @@ function usedLocal(value: number): number {
     Promise.resolve(EventEmitter.listenerCount(new EventEmitter(), "local_dead_promise_resolve_event_static_listener_count"));
     Promise.resolve(nodeEvents.getMaxListeners(new EventEmitter(), "local_dead_promise_resolve_events_namespace_get_max_ignored".length));
     Promise.resolve(getMaxListeners(new EventEmitter(), "local_dead_promise_resolve_events_named_get_max_ignored".length));
+    Promise.resolve(nodeEvents.setMaxListeners(22, new EventEmitter()));
+    Promise.resolve(setMaxListeners(23, new EventEmitter()));
     Promise.resolve(new Event("local_dead_promise_resolve_event_prevent_default_call", { cancelable: true }).preventDefault("local_dead_promise_resolve_event_prevent_default_ignored".length));
     Promise.resolve(new Event("local_dead_promise_resolve_event_to_string_call").toString("local_dead_promise_resolve_event_to_string_ignored".length));
     Promise.resolve(new EventTarget().dispatchEvent(new Event("local_dead_promise_resolve_event_target_dispatch_call")));

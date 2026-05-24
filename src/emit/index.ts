@@ -4997,6 +4997,17 @@ class Emitter {
         return !!init && this.isSideEffectFreeFreshEventEmitterOperand(init, seenConsts);
     }
 
+    private isSideEffectFreeDirectFreshEventEmitterOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        return ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isEventEmitterConstructorIdentifier(unwrapped.expression) &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
+    }
+
     private isSideEffectFreeEventEmitterMethodCall(
         recv: ts.Expression,
         method: string,
@@ -5013,6 +5024,19 @@ class Emitter {
                 return Array.from(args).every((arg) =>
                     this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
                 );
+            case "setMaxListeners":
+                return this.isSideEffectFreeDirectFreshEventEmitterOperand(recv, seenConsts) &&
+                    args.length === 1 &&
+                    this.isSideEffectFreePrimitiveNumberCoercion(args[0]!, seenConsts);
+            case "removeAllListeners":
+                return this.isSideEffectFreeDirectFreshEventEmitterOperand(recv, seenConsts) &&
+                    (
+                        args.length === 0 ||
+                        (
+                            args.length === 1 &&
+                            this.isSideEffectFreeStringCoercion(args[0]!, seenConsts)
+                        )
+                    );
             case "listenerCount":
             case "listeners":
             case "rawListeners":
@@ -5081,6 +5105,10 @@ class Emitter {
                     Array.from(args).slice(1).every((arg) =>
                         this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
                     );
+            case "setMaxListeners":
+                return args.length === 2 &&
+                    this.isSideEffectFreePrimitiveNumberCoercion(args[0]!, seenConsts) &&
+                    this.isSideEffectFreeDirectFreshEventEmitterOperand(args[1]!, seenConsts);
             default:
                 return false;
         }
@@ -5093,7 +5121,8 @@ class Emitter {
     ): boolean {
         return (
             method === "listenerCount" ||
-            method === "getMaxListeners"
+            method === "getMaxListeners" ||
+            method === "setMaxListeners"
         ) && this.isSideEffectFreeEventsStaticCall(method, args, seenConsts);
     }
 
