@@ -353,6 +353,8 @@ const unused_array_to_sorted_call = ["dead_array_to_sorted"].toSorted();
 const unused_array_to_sorted_comparator_call = [1].toSorted((a, b) => "dead_array_to_sorted_comparator".length + a - b);
 const unused_array_of_to_sorted_comparator_call = Array.of("dead_array_of_to_sorted_comparator").toSorted((a, b) => "dead_array_of_to_sorted_comparator".length + a.localeCompare(b));
 const unused_array_from_string_to_sorted_comparator_call = Array.from("x").toSorted((a, b) => "dead_array_from_string_to_sorted_comparator".length + a.localeCompare(b));
+const unused_array_from_set_to_sorted_comparator_call = Array.from(new Set(["dead_array_from_set_to_sorted_comparator"])).toSorted((a, b) => "dead_array_from_set_to_sorted_comparator".length + a.localeCompare(b));
+const unused_array_from_map_to_sorted_comparator_call = Array.from(new Map([["dead_array_from_map_to_sorted_comparator_key", "dead_array_from_map_to_sorted_comparator_value"]])).toSorted((a, b) => "dead_array_from_map_to_sorted_comparator".length + a[0].localeCompare(b[0]));
 const unused_array_to_spliced_call = ["dead_array_to_spliced"].toSpliced(0, 0, "dead_array_to_spliced_insert");
 const unused_array_to_reversed_call = ["dead_array_to_reversed"].toReversed();
 const unused_array_with_call = ["dead_array_with", "dead_array_with_tail"].with(1, "dead_array_with_replacement");
@@ -783,6 +785,8 @@ Array.from([] as number[]).reduce((acc: number) => acc + "top_level_dead_array_f
 [1].toSorted((a, b) => "top_level_dead_array_to_sorted_comparator".length + a - b);
 Array.of("top_level_dead_array_of_to_sorted_comparator").toSorted((a, b) => "top_level_dead_array_of_to_sorted_comparator".length + a.localeCompare(b));
 Array.from("x").toSorted((a, b) => "top_level_dead_array_from_string_to_sorted_comparator".length + a.localeCompare(b));
+Array.from(new Set(["top_level_dead_array_from_set_to_sorted_comparator"])).toSorted((a, b) => "top_level_dead_array_from_set_to_sorted_comparator".length + a.localeCompare(b));
+Array.from(new Map([["top_level_dead_array_from_map_to_sorted_comparator_key", "top_level_dead_array_from_map_to_sorted_comparator_value"]])).toSorted((a, b) => "top_level_dead_array_from_map_to_sorted_comparator".length + a[0].localeCompare(b[0]));
 ["top_level_dead_array_to_spliced"].toSpliced(0, 0, "top_level_dead_array_to_spliced_insert");
 ["top_level_dead_array_to_reversed"].toReversed();
 ["top_level_dead_array_with", "top_level_dead_array_with_tail"].with(-1, "top_level_dead_array_with_replacement");
@@ -1222,6 +1226,8 @@ function usedLocal(value: number): number {
     [1].toSorted((a, b) => "local_dead_array_to_sorted_comparator".length + a - b);
     Array.of("local_dead_array_of_to_sorted_comparator").toSorted((a, b) => "local_dead_array_of_to_sorted_comparator".length + a.localeCompare(b));
     Array.from("x").toSorted((a, b) => "local_dead_array_from_string_to_sorted_comparator".length + a.localeCompare(b));
+    Array.from(new Set(["local_dead_array_from_set_to_sorted_comparator"])).toSorted((a, b) => "local_dead_array_from_set_to_sorted_comparator".length + a.localeCompare(b));
+    Array.from(new Map([["local_dead_array_from_map_to_sorted_comparator_key", "local_dead_array_from_map_to_sorted_comparator_value"]])).toSorted((a, b) => "local_dead_array_from_map_to_sorted_comparator".length + a[0].localeCompare(b[0]));
     ["local_dead_array_to_spliced"].toSpliced(0, 0, "local_dead_array_to_spliced_insert");
     ["local_dead_array_with", "local_dead_array_with_tail"].with(0, "local_dead_array_with_replacement");
     Array.of("local_dead_array_of_with").with(0, "local_dead_array_of_with_replacement");
