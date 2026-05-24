@@ -1056,10 +1056,16 @@ class Emitter {
         if (
             ts.isIdentifier(recv) &&
             method === "from" &&
-            call.arguments.length === 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Array")
         ) {
-            return this.isSideEffectFreeArraySpreadOperand(call.arguments[0]!, seenConsts);
+            if (call.arguments.length === 1) {
+                return this.isSideEffectFreeArraySpreadOperand(call.arguments[0]!, seenConsts);
+            }
+            return call.arguments.length >= 2 &&
+                call.arguments.length <= 3 &&
+                this.isSideEffectFreeEmptyArrayFromSource(call.arguments[0]!, seenConsts) &&
+                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts) &&
+                (!call.arguments[2] || this.isSideEffectFreeTopLevelConstInitializer(call.arguments[2], seenConsts));
         }
         if (
             ts.isIdentifier(recv) &&
@@ -1509,6 +1515,16 @@ class Emitter {
         return ts.isArrayLiteralExpression(unwrapped) &&
             unwrapped.elements.length === 0 &&
             this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+    }
+
+    private isSideEffectFreeEmptyArrayFromSource(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const arrayLength = this.sideEffectFreeArrayLiteralLength(expr, seenConsts);
+        if (arrayLength === 0) return true;
+        const stringText = this.sideEffectFreeStringLiteralText(expr, seenConsts);
+        return stringText !== null && stringText.length === 0;
     }
 
     private sideEffectFreeArrayLiteralLength(
