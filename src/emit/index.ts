@@ -821,7 +821,8 @@ class Emitter {
             return this.isSideEffectFreeDeleteExpression(expr, seenConsts);
         }
         if (ts.isCallExpression(expr)) {
-            return this.isSideEffectFreeStaticCall(expr, seenConsts) ||
+            return this.isSideEffectFreeSymbolStringMethodCall(expr, seenConsts) ||
+                this.isSideEffectFreeStaticCall(expr, seenConsts) ||
                 this.isSideEffectFreeGlobalCall(expr, seenConsts);
         }
         if (ts.isNewExpression(expr)) {
@@ -1025,6 +1026,12 @@ class Emitter {
         if (this.isSideEffectFreeRegExpStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeSymbolStringDescriptionRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeSymbolStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -1183,6 +1190,12 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeRegExpStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeSymbolStringDescriptionRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeSymbolStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
@@ -5055,6 +5068,12 @@ class Emitter {
         if (this.isSideEffectFreeRegExpStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeSymbolStringDescriptionRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeSymbolStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -5131,6 +5150,12 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeRegExpStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeSymbolStringDescriptionRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeSymbolStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
@@ -6258,6 +6283,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeSymbolDescriptionRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeSymbolStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeWellKnownSymbolRead(unwrapped)) {
@@ -7830,6 +7858,55 @@ class Emitter {
         if (!ts.isPropertyAccessExpression(expr) || expr.name.text !== "description") return false;
         return this.isSideEffectFreeFreshSymbolOperand(expr.expression, seenConsts) ||
             this.isSideEffectFreeWellKnownSymbolRead(expr.expression);
+    }
+
+    private isSideEffectFreeSymbolStringDescriptionRead(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!ts.isPropertyAccessExpression(expr) || expr.name.text !== "description") return false;
+        const recv = this.unwrapSideEffectFreeStaticExpression(expr.expression);
+        if (this.isSideEffectFreeWellKnownSymbolRead(recv)) return true;
+        if (
+            ts.isCallExpression(recv) &&
+            ts.isIdentifier(recv.expression) &&
+            this.isUnshadowedGlobalIdentifier(recv.expression, "Symbol") &&
+            recv.arguments.length >= 1 &&
+            this.isSideEffectFreeStringCoercion(recv.arguments[0]!, seenConsts) &&
+            Array.from(recv.arguments).slice(1).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            )
+        ) {
+            return true;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(recv, seenConsts);
+        return !!init && this.isSideEffectFreeSymbolStringDescriptionRead(
+            ts.factory.createPropertyAccessExpression(init, "description"),
+            seenConsts,
+        );
+    }
+
+    private isSideEffectFreeSymbolStringMethodCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (!ts.isCallExpression(unwrapped) || !ts.isPropertyAccessExpression(unwrapped.expression)) {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+            return !!init && this.isSideEffectFreeSymbolStringMethodCall(init, seenConsts);
+        }
+        const method = unwrapped.expression.name.text;
+        return (
+            method === "toString" ||
+            method === "toLocaleString"
+        ) &&
+            (
+                this.isSideEffectFreeFreshSymbolOperand(unwrapped.expression.expression, seenConsts) ||
+                this.isSideEffectFreeWellKnownSymbolRead(unwrapped.expression.expression)
+            ) &&
+            Array.from(unwrapped.arguments).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
     }
 
     private isSideEffectFreeWellKnownSymbolRead(expr: ts.Expression): boolean {
