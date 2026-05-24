@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `fs.readFileSync(...)` and immediate `fs.promises.readFile(...)` now accept literal `"hex"` / `"base64"` string and object encodings for string results, including earlier static `const` aliases. Test: `fs_read_file_encoded_options`.
 - Generated-C DCE coverage now includes false-valued `process.stdout.readable` / `process.stderr.readable` metadata reads in direct, top-level, local, and `Promise.resolve(...)` forms. Test: `generated_c_dce_const`.
 - `process.stdout.readable` and `process.stderr.readable` now return `false` in the bounded stdio metadata subset. Test: `process_stdio_readable_writable`.
 - Dynamic `require(...)` finite string proofs now include earlier local static `const` string aliases in the same statement block, compiling those specifiers into the AOT module graph. Test: `dynamic_require`.
