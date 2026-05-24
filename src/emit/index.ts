@@ -1546,7 +1546,10 @@ class Emitter {
             case "split":
                 return args.length >= 1 &&
                     args.length <= 2 &&
-                    this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
+                    (
+                        this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) ||
+                        this.isSideEffectFreeFreshRegExpOperand(args[0]!, seenConsts)
+                    ) &&
                     (!args[1] || this.isSideEffectFreePrimitiveNumberCoercion(args[1], seenConsts));
             case "match":
             case "matchAll":

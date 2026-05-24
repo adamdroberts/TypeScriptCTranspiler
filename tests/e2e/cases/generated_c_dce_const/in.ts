@@ -88,6 +88,7 @@ const unused_string_replace_all_call = "dead_string_replace_all".replaceAll("dea
 const unused_string_replace_regex_call = "dead_string_replace_regex".replace(/replace_regex/, "replacement");
 const unused_string_replace_all_regex_call = "dead_string_replace_all_regex".replaceAll(/replace_all_regex/g, "replacement");
 const unused_string_split_call = "dead_string_split,dead_string_split_tail".split(",", 1);
+const unused_string_split_regex_call = "dead_string_split_regex dead_string_split_regex_tail".split(/\\s+/, 1);
 const unused_string_match_call = "dead_string_match".match("string_match");
 const unused_string_match_all_call = "dead_string_match_all".matchAll("string_match_all");
 const unused_string_search_call = "dead_string_search".search("string_search");
@@ -224,6 +225,7 @@ Symbol("top_level_dead_symbol_constructor");
 "top_level_dead_string_replace_regex".replace(/replace_regex/, "replacement");
 "top_level_dead_string_replace_all_regex".replaceAll(/replace_all_regex/g, "replacement");
 "top_level_dead_string_split/top_level_dead_string_split_tail".split("/");
+"top_level_dead_string_split_regex top_level_dead_string_split_regex_tail".split(/\\s+/);
 "top_level_dead_string_match".match("string_match");
 "top_level_dead_string_match_all".matchAll("string_match_all");
 "top_level_dead_string_search".search("string_search");
@@ -371,6 +373,7 @@ function usedLocal(value: number): number {
     "local_dead_string_replace_regex".replace(/replace_regex/, "replacement");
     "local_dead_string_replace_all_regex".replaceAll(/replace_all_regex/g, "replacement");
     "local_dead_string_split:local_dead_string_split_tail".split(":", 1);
+    "local_dead_string_split_regex local_dead_string_split_regex_tail".split(/\\s+/, 1);
     "local_dead_string_match".match("string_match");
     "local_dead_string_match_all".matchAll("string_match_all");
     "local_dead_string_search".search("string_search");
