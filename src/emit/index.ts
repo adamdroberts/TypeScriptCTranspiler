@@ -1010,6 +1010,9 @@ class Emitter {
         if (this.isSideEffectFreeBuiltinModuleConstantRead(unwrapped)) {
             return true;
         }
+        if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeStringReturningPathCall(unwrapped, seenConsts)) {
             return true;
         }
@@ -1111,6 +1114,9 @@ class Emitter {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
         }
         if (this.isSideEffectFreeStringReturningPathCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeOsUserInfoStringPropertyRead(unwrapped, seenConsts)) {
@@ -4893,6 +4899,9 @@ class Emitter {
         if (this.isSideEffectFreeStringReturningPathCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeOsUserInfoStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -4912,6 +4921,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeStringReturningPathCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeOsUserInfoStringPropertyRead(unwrapped, seenConsts)) {
@@ -7583,6 +7595,45 @@ class Emitter {
             default:
                 return false;
         }
+    }
+
+    private isSideEffectFreeProcessStringOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isPropertyAccessExpression(unwrapped)) {
+            if (
+                ts.isIdentifier(unwrapped.expression) &&
+                this.isUnshadowedGlobalIdentifier(unwrapped.expression, "process")
+            ) {
+                return ["platform", "arch", "version", "title", "argv0", "execPath"].includes(unwrapped.name.text);
+            }
+            if (
+                ts.isPropertyAccessExpression(unwrapped.expression) &&
+                ts.isIdentifier(unwrapped.expression.expression) &&
+                this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "process")
+            ) {
+                const objectName = unwrapped.expression.name.text;
+                return (
+                    objectName === "versions" ||
+                    objectName === "release"
+                ) &&
+                    this.isSideEffectFreeProcessObjectMetadataRead(unwrapped);
+            }
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            unwrapped.expression.name.text === "cwd"
+        ) {
+            const recv = unwrapped.expression.expression;
+            return ts.isIdentifier(recv) &&
+                this.isUnshadowedGlobalIdentifier(recv, "process") &&
+                this.isSideEffectFreeProcessCall(recv, "cwd", unwrapped.arguments, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeProcessStringOperand(init, seenConsts);
     }
 
     private isSideEffectFreeOsUserInfoPropertyRead(
