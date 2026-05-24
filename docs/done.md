@@ -162,14 +162,14 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - `Array.isArray(x)` — resolved at compile time from typed CTypes and at runtime for dynamic values, including direct and nested array Proxy chains with revoked-proxy rejection; the stdlib declaration is a type predicate so guarded `unknown` dynamic values narrow to typed array operations. Tests: `advanced`, `array_static_dynamic`, `array_is_array_narrowing`, `proxy_array_is_array`
 - `Array.from(arr)` — identity copy for typed arrays and dynamic `tsc_value_t` arrays. Tests: `advanced`, `array_static_dynamic`
 - `Array.from(set)` — typed Set value copy preserving insertion order. Test: `array_from_set`
-- `Array.from(map)` — typed `Map<string, V>` entry materialization as `ObjectEntry<V>[]` in insertion order. Test: `array_from_map`
-- `Array.from(items, mapfn)` / `Array.from(items, mapfn, thisArg)` transforms typed arrays, typed Set sources, typed `Map<string, V>` entry sources, string code-point sequences, and boxed dynamic array/string sources into typed `U[]`, accepting inline arrow/function-expression callbacks with expression bodies or single-return block bodies, plus function references (including generic functions where the source is typed). Optional mapper `thisArg` values are evaluated once and bound for callbacks that declare `this: any`. Tests: `array_from_mapper`, `array_from_set`, `array_from_map`, `array_from_dynamic_mapper`, `array_from_mapper_this_arg`
+- `Array.from(map)` — typed `Map<K, V>` entry materialization as `ObjectEntry<V, K>[]` in insertion order, including non-string key entries. Tests: `array_from_map`, `map_object_entry_constructors`
+- `Array.from(items, mapfn)` / `Array.from(items, mapfn, thisArg)` transforms typed arrays, typed Set sources, typed `Map<K, V>` entry sources, string code-point sequences, and boxed dynamic array/string sources into typed `U[]`, accepting inline arrow/function-expression callbacks with expression bodies or single-return block bodies, plus function references (including generic functions where the source is typed). Optional mapper `thisArg` values are evaluated once and bound for callbacks that declare `this: any`. Tests: `array_from_mapper`, `array_from_set`, `array_from_map`, `array_from_dynamic_mapper`, `array_from_mapper_this_arg`
 - `Array.of(...items)` — typed array construction, including `Array.of<any>(...)` followed by dynamic array coercion. Tests: `array_of`, `dynamic_array_of`
 
 ### `Map<K, V>`
-- `new Map<K, V>()`, `new Map(Object.entries(obj))` for string-key `ObjectEntry<V>[]` sources, and `new Map(existingMap)` for typed Map sources — `tsc_map_new(sizeof(K), sizeof(V), keyKind, initialCap)`. Tests: `map_set_constructors`, `map_constructor_from_map`
+- `new Map<K, V>()`, `new Map(Object.entries(obj))`, typed `ObjectEntry<V, K>[]` sources including non-string keys, and `new Map(existingMap)` for typed Map sources — `tsc_map_new(sizeof(K), sizeof(V), keyKind, initialCap)`. Tests: `map_set_constructors`, `map_constructor_from_map`, `map_object_entry_constructors`
 - `.set(k, v)`, `.get(k)`, `.has(k)`, `.delete(k)`, `.clear()`; numeric keys use SameValueZero semantics so `NaN` matches `NaN` and `-0` matches `0`. Tests: `map_set`, `map_set_same_value_zero`
-- `.keys(...ignored)`, `.values(...ignored)` — returns typed array; `.entries(...ignored)` returns a typed `ObjectEntry<V>[]` for `Map<string, V>`. Ignored extra arguments are evaluated before being discarded. Test: `map_entries`
+- `.keys(...ignored)`, `.values(...ignored)` — returns typed array; `.entries(...ignored)` returns a typed `ObjectEntry<V, K>[]`. Ignored extra arguments are evaluated before being discarded. Tests: `map_entries`, `map_object_entry_constructors`
 - `.forEach((value, key, map) => expr, thisArg?)` — inline expression-body or single-return block-body callbacks and named callback references over insertion order; optional `thisArg` values are evaluated once and bound for callbacks that declare `this: any`. Tests: `map_set_for_each`, `map_set_for_each_refs`, `map_set_for_each_this_arg`
 - Direct `for...of` with `[key, value]` destructuring. Test: `map_set_for_of`
 - `.size` property. Test: `map_set`, `wordcount`
@@ -1022,6 +1022,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `line_directives` | generated C contains TS source `#line` markers |
 | `logical_assign` | logical assignment with RHS short-circuiting |
 | `map_constructor_from_map` | typed Map copy construction from another Map |
+| `map_object_entry_constructors` | typed ObjectEntry tuples with non-string keys through Map/WeakMap constructors and Map entry materialization |
 | `map_set` | Map + Set with all methods |
 | `map_set_constructors` | Map from Object.entries and Set from array constructors |
 | `map_set_for_each` | Map and Set forEach inline expression/block-body callbacks |
@@ -1489,7 +1490,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_from_mapper_this_arg` | Array.from(items, mapfn, thisArg) with evaluated and bound mapper thisArg |
 | `array_from_dynamic_mapper` | Array.from(dynamic, mapfn) over boxed dynamic array/string sources |
 | `array_from_set` | Array.from over typed Set sources with and without mapper callbacks |
-| `array_from_map` | Array.from over typed Map<string, V> sources with and without mapper callbacks |
+| `array_from_map` | Array.from over typed Map<K, V> sources with and without mapper callbacks |
 | `for_in` | for-in over typed classes/interfaces, typed arrays, and dynamic objects with continue/break |
-| `map_entries` | typed Map<string, V>.entries() returning ObjectEntry<V>[] |
+| `map_entries` | typed Map<K, V>.entries() returning ObjectEntry<V, K>[] |
 | `wordcount` | real-world: fs + regex + Map + sort + captures + env |

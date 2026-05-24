@@ -40,7 +40,7 @@ export interface CType {
     c: string;
     /** For arrays/sets/object entries: element/value type. For maps: value type. */
     elem?: CType;
-    /** For maps only: key type. */
+    /** For maps and object entries: key type. */
     key?: CType;
     /** For classes only: the C struct base name (e.g. "Point" -> Point_t). */
     className?: string;
@@ -83,8 +83,8 @@ export function arrayType(elem: CType): CType {
     return { kind: "array", c: "tsc_array_t*", elem };
 }
 
-export function entryType(elem: CType): CType {
-    return { kind: "entry", c: "tsc_object_entry_t", elem };
+export function entryType(elem: CType, key: CType = T_STRING): CType {
+    return { kind: "entry", c: "tsc_object_entry_t", key, elem };
 }
 
 export function mapType_(key: CType, value: CType): CType {
@@ -299,10 +299,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
             unsupported(node, "only 2-element tuples are supported");
         }
         const keyType = mapTsType(node, tupleElems[0]!, checker);
-        if (keyType.kind !== "string") {
-            unsupported(node, "only [string, T] tuple entries are supported");
-        }
-        return entryType(mapTsType(node, tupleElems[1]!, checker));
+        return entryType(mapTsType(node, tupleElems[1]!, checker), keyType);
     }
 
     // Array<T> / T[]
@@ -484,7 +481,7 @@ function typeNamePart(t: CType): string {
         case "array":
             return `array_${t.elem ? typeNamePart(t.elem) : "void"}`;
         case "entry":
-            return `entry_${t.elem ? typeNamePart(t.elem) : "void"}`;
+            return `entry_${t.key ? typeNamePart(t.key) : "void"}_${t.elem ? typeNamePart(t.elem) : "void"}`;
         case "map":
             return `map_${t.key ? typeNamePart(t.key) : "void"}_${t.elem ? typeNamePart(t.elem) : "void"}`;
         case "set":

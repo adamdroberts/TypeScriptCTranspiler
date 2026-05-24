@@ -248,7 +248,7 @@ interface Object {
     toString(...ignored: any[]): string;
     valueOf(...ignored: any[]): any;
 }
-type ObjectEntry<T> = [string, T];
+type ObjectEntry<T, K = string> = [K, T];
 interface ObjectConstructor {
     readonly prototype: Object;
     assign<T, U>(target: T, source: U): T & U;
@@ -309,11 +309,11 @@ interface ArrayConstructor {
     from(s: string): string[];
     from<T>(arr: T[]): T[];
     from<T>(set: Set<T>): T[];
-    from<T>(map: Map<string, T>): ObjectEntry<T>[];
+    from<K, T>(map: Map<K, T>): ObjectEntry<T, K>[];
     from<U>(s: string, mapfn: (v: string, k: number) => U, thisArg?: any): U[];
     from<T, U>(arr: T[], mapfn: (v: T, k: number) => U, thisArg?: any): U[];
     from<T, U>(set: Set<T>, mapfn: (v: T, k: number) => U, thisArg?: any): U[];
-    from<T, U>(map: Map<string, T>, mapfn: (v: ObjectEntry<T>, k: number) => U, thisArg?: any): U[];
+    from<K, T, U>(map: Map<K, T>, mapfn: (v: ObjectEntry<T, K>, k: number) => U, thisArg?: any): U[];
     of<T>(...items: T[]): T[];
 }
 declare var Array: ArrayConstructor;
@@ -327,7 +327,7 @@ interface Map<K, V> extends Iterable<[K, V]> {
     clear(): void;
     keys(...ignored: any[]): K[];
     values(...ignored: any[]): V[];
-    entries(...ignored: any[]): ObjectEntry<V>[];
+    entries(...ignored: any[]): ObjectEntry<V, K>[];
     forEach(cb: (value: V, key: K, map: Map<K, V>) => void, thisArg?: any): void;
     toLocaleString(...ignored: any[]): string;
     toString(...ignored: any[]): string;
@@ -335,7 +335,7 @@ interface Map<K, V> extends Iterable<[K, V]> {
     [Symbol.iterator](): IterableIterator<[K, V]>;
 }
 interface MapConstructor {
-    new <V>(entries: ObjectEntry<V>[]): Map<string, V>;
+    new <K, V>(entries: ObjectEntry<V, K>[]): Map<K, V>;
     new <K, V>(entries: Map<K, V>): Map<K, V>;
     new <K, V>(): Map<K, V>;
     groupBy<T, K>(items: T[], callbackfn: (value: T, index: number) => K): Map<K, T[]>;
@@ -380,7 +380,7 @@ interface WeakMap<K extends object, V> {
     valueOf(...ignored: any[]): WeakMap<K, V>;
 }
 interface WeakMapConstructor {
-    new <K extends object, V>(entries: [K, V][]): WeakMap<K, V>;
+    new <K extends object, V>(entries: ObjectEntry<V, K>[]): WeakMap<K, V>;
     new <K extends object, V>(entries: Map<K, V>): WeakMap<K, V>;
     new <K extends object, V>(): WeakMap<K, V>;
 }

@@ -290,6 +290,7 @@ class Emitter {
             case "weakref":
             case "finregistry":
             case "promise":
+                if (type.key) this.prepareType(type.key);
                 if (type.elem) this.prepareType(type.elem);
                 break;
             case "map":
@@ -20387,8 +20388,8 @@ class Emitter {
             });
         }
         if (items.ty.kind !== "array" && items.ty.kind !== "set" && items.ty.kind !== "map")
-            unsupported(itemsArg, "Array.from(items, mapfn) currently supports typed array, Map<string, V>, Set, dynamic, or string sources");
-        const t = items.ty.kind === "map" ? entryType(items.ty.elem!) : items.ty.elem!;
+            unsupported(itemsArg, "Array.from(items, mapfn) currently supports typed array, Map<K, V>, Set, dynamic, or string sources");
+        const t = items.ty.kind === "map" ? entryType(items.ty.elem!, items.ty.key!) : items.ty.elem!;
         const sourceArray = (source: string) => {
             if (items.ty.kind === "set") return `tsc_set_values(${source})`;
             if (items.ty.kind === "map") return this.mapEntriesArrayExpr(itemsArg, source, items.ty).c;
@@ -20786,21 +20787,19 @@ class Emitter {
         const k = mapTy.key;
         const v = mapTy.elem;
         if (!k || !v) unsupported(node, `${feature} needs known Map key/value types`);
-        if (k.kind !== "string")
-            unsupported(node, `${feature} currently supports Map<string, V> only`);
-        const elemType = entryType(v);
+        const elemType = entryType(v, k);
         const mt = this.freshTemp("_me_map");
         const out = this.freshTemp("_me_out");
         const iv = this.freshTemp("_me_i");
         const entry = this.freshTemp("_me_entry");
-        const keyExpr = `*((tsc_str_t**)((char*)${mt}->keys + ${iv} * ${mt}->ks))`;
+        const keyExpr = `*((${k.c}*)((char*)${mt}->keys + ${iv} * ${mt}->ks))`;
         const valueExpr = `*((${v.c}*)((char*)${mt}->values + ${iv} * ${mt}->vs))`;
         return {
             c:
                 `({ tsc_map_t* const ${mt} = ${mapExpr}; ` +
                 `tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${mt}->len ? ${mt}->len : 1); ` +
                 `for (size_t ${iv} = 0; ${iv} < ${mt}->len; ${iv}++) { ` +
-                `${elemType.c} ${entry}; ${entry}.key = ${keyExpr}; ` +
+                `${elemType.c} ${entry}; ${this.objectEntryKeySet(entry, k, keyExpr)}; ` +
                 `${this.objectEntrySet(entry, v, valueExpr)}; ` +
                 `tsc_array_push_raw(${out}, &${entry}); } ${out}; })`,
             ty: arrayType(elemType),
@@ -20898,7 +20897,7 @@ class Emitter {
                 );
             case "entries": {
                 return this.emitSequencedExpr(
-                    arrayType(entryType(v)),
+                    arrayType(entryType(v, k)),
                     [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
                     ([map]) => this.mapEntriesArrayExpr(call, map!, recv.ty, "Map.entries").c,
                 );
@@ -28239,6 +28238,24 @@ class Emitter {
         }
     }
 
+    private objectEntryKeySet(entryVar: string, ty: CType, value: string): string {
+        switch (ty.kind) {
+            case "string": return `${entryVar}.key = ${value}`;
+            case "number": return `${entryVar}.key_num = ${value}`;
+            case "boolean": return `${entryVar}.key_boolean = ${value}`;
+            default: return `${entryVar}.key_ptr = (void*)(${value})`;
+        }
+    }
+
+    private objectEntryKeyValue(entryVar: string, ty: CType): string {
+        switch (ty.kind) {
+            case "string": return `${entryVar}.key`;
+            case "number": return `${entryVar}.key_num`;
+            case "boolean": return `${entryVar}.key_boolean`;
+            default: return `((${ty.c})${entryVar}.key_ptr)`;
+        }
+    }
+
     private staticPropertyName(name: ts.PropertyName): string | null {
         if (ts.isIdentifier(name)) return name.text;
         if (ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)) {
@@ -28429,6 +28446,9 @@ class Emitter {
         }
         if (entries.ty.kind !== "array" || entries.ty.elem?.kind !== "entry") {
             unsupported(arg, "Object.fromEntries expects Object.entries-style tuples");
+        }
+        if ((entries.ty.elem.key ?? T_STRING).kind !== "string") {
+            unsupported(arg, "Object.fromEntries expects string-key entries");
         }
         const entryValueType = entries.ty.elem.elem ?? T_VOID;
         const props = this.objectProperties(targetTsType);
@@ -31318,10 +31338,13 @@ class Emitter {
                         );
                     });
                 }
-                if (k.kind !== "string") unsupported(args[0]!, "new Map(entries) currently supports string keys only");
                 const entryElem = entries.ty.kind === "array" ? entries.ty.elem : undefined;
                 if (!entryElem || entryElem.kind !== "entry") {
                     unsupported(args[0]!, "new Map(entries) expects Object.entries-style tuples or another Map");
+                }
+                const entryKeyType = entryElem.key ?? T_STRING;
+                if (!sameCType(entryKeyType, k)) {
+                    unsupported(args[0]!, `new Map(entries) key type ${entryKeyType.c} does not match map key type ${k.c}`);
                 }
                 const entryValueType = entryElem.elem ?? T_VOID;
                 if (!sameCType(entryValueType, v)) {
@@ -31331,13 +31354,15 @@ class Emitter {
                     const map = this.freshTemp("_map_init");
                     const idx = this.freshTemp("_i");
                     const entry = this.freshTemp("_entry");
+                    const key = this.freshTemp("_key");
                     const value = this.freshTemp("_value");
                     return (
                         `({ tsc_map_t* ${map} = tsc_map_new(sizeof(${k.c}), sizeof(${v.c}), ${keyKindOf(k)}, ${source}->len); ` +
                         `for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { ` +
                         `${entryElem.c} ${entry} = TSC_ARR(${entryElem.c}, ${source}, ${idx}); ` +
+                        `${k.c} ${key} = ${this.objectEntryKeyValue(entry, k)}; ` +
                         `${v.c} ${value} = ${this.objectEntryValue(entry, v)}; ` +
-                        `tsc_map_set_raw(${map}, &${entry}.key, &${value}); } ${map}; })`
+                        `tsc_map_set_raw(${map}, &${key}, &${value}); } ${map}; })`
                     );
                 });
             }
@@ -31395,27 +31420,55 @@ class Emitter {
             requireWeakObjectKey(n, k, "WeakMap");
             if (args.length === 1) {
                 const entries = this.emitExpr(args[0]!);
-                if (
-                    entries.ty.kind !== "map" ||
-                    !entries.ty.key ||
-                    !entries.ty.elem ||
-                    !sameCType(entries.ty.key, k) ||
-                    !sameCType(entries.ty.elem, v)
-                ) {
-                    unsupported(args[0]!, "new WeakMap(entries) expects a Map whose key/value types match the WeakMap");
+                if (entries.ty.kind === "map") {
+                    if (
+                        !entries.ty.key ||
+                        !entries.ty.elem ||
+                        !sameCType(entries.ty.key, k) ||
+                        !sameCType(entries.ty.elem, v)
+                    ) {
+                        unsupported(args[0]!, "new WeakMap(entries) expects entries whose key/value types match the WeakMap");
+                    }
+                    return this.emitSequencedExpr(mapped, [{ value: entries }], ([source]) => {
+                        const map = this.freshTemp("_weak_map_init");
+                        const idx = this.freshTemp("_i");
+                        const keyPtr = this.freshTemp("_key");
+                        const valuePtr = this.freshTemp("_value");
+                        return (
+                            `({ tsc_map_t* const ${source}_src = ${source}; ` +
+                            `tsc_map_t* ${map} = tsc_map_new(sizeof(${k.c}), sizeof(${v.c}), ${keyKindOf(k)}, ${source}_src->len); ` +
+                            `for (size_t ${idx} = 0; ${idx} < ${source}_src->len; ${idx}++) { ` +
+                            `void* ${keyPtr} = (char*)${source}_src->keys + ${idx} * ${source}_src->ks; ` +
+                            `void* ${valuePtr} = (char*)${source}_src->values + ${idx} * ${source}_src->vs; ` +
+                            `tsc_map_set_raw(${map}, ${keyPtr}, ${valuePtr}); } ${map}; })`
+                        );
+                    });
+                }
+                const entryElem = entries.ty.kind === "array" ? entries.ty.elem : undefined;
+                if (!entryElem || entryElem.kind !== "entry") {
+                    unsupported(args[0]!, "new WeakMap(entries) expects entry tuples or a Map whose key/value types match the WeakMap");
+                }
+                const entryKeyType = entryElem.key ?? T_STRING;
+                if (!sameCType(entryKeyType, k)) {
+                    unsupported(args[0]!, `new WeakMap(entries) key type ${entryKeyType.c} does not match WeakMap key type ${k.c}`);
+                }
+                const entryValueType = entryElem.elem ?? T_VOID;
+                if (!sameCType(entryValueType, v)) {
+                    unsupported(args[0]!, `new WeakMap(entries) value type ${entryValueType.c} does not match WeakMap value type ${v.c}`);
                 }
                 return this.emitSequencedExpr(mapped, [{ value: entries }], ([source]) => {
                     const map = this.freshTemp("_weak_map_init");
                     const idx = this.freshTemp("_i");
-                    const keyPtr = this.freshTemp("_key");
-                    const valuePtr = this.freshTemp("_value");
+                    const entry = this.freshTemp("_entry");
+                    const key = this.freshTemp("_key");
+                    const value = this.freshTemp("_value");
                     return (
-                        `({ tsc_map_t* const ${source}_src = ${source}; ` +
-                        `tsc_map_t* ${map} = tsc_map_new(sizeof(${k.c}), sizeof(${v.c}), ${keyKindOf(k)}, ${source}_src->len); ` +
-                        `for (size_t ${idx} = 0; ${idx} < ${source}_src->len; ${idx}++) { ` +
-                        `void* ${keyPtr} = (char*)${source}_src->keys + ${idx} * ${source}_src->ks; ` +
-                        `void* ${valuePtr} = (char*)${source}_src->values + ${idx} * ${source}_src->vs; ` +
-                        `tsc_map_set_raw(${map}, ${keyPtr}, ${valuePtr}); } ${map}; })`
+                        `({ tsc_map_t* ${map} = tsc_map_new(sizeof(${k.c}), sizeof(${v.c}), ${keyKindOf(k)}, ${source}->len); ` +
+                        `for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { ` +
+                        `${entryElem.c} ${entry} = TSC_ARR(${entryElem.c}, ${source}, ${idx}); ` +
+                        `${k.c} ${key} = ${this.objectEntryKeyValue(entry, k)}; ` +
+                        `${v.c} ${value} = ${this.objectEntryValue(entry, v)}; ` +
+                        `tsc_map_set_raw(${map}, &${key}, &${value}); } ${map}; })`
                     );
                 });
             }
@@ -32299,9 +32352,10 @@ class Emitter {
             const idx = Number(ea.argumentExpression.text);
             const tv = this.freshTemp("_entry");
             if (idx === 0) {
+                const keyType = recv.ty.key ?? T_STRING;
                 return {
-                    c: `({ ${recv.ty.c} ${tv} = ${recv.c}; ${tv}.key; })`,
-                    ty: T_STRING,
+                    c: `({ ${recv.ty.c} ${tv} = ${recv.c}; ${this.objectEntryKeyValue(tv, keyType)}; })`,
+                    ty: keyType,
                 };
             }
             if (idx === 1) {
@@ -32610,12 +32664,17 @@ class Emitter {
             unsupported(al, "Object.entries tuple literal cannot be sparse or spread");
         }
         const key = this.emitExpr(keyExpr as ts.Expression);
+        const keyType = mapped.key ?? T_STRING;
         const valueType = mapped.elem ?? T_VOID;
         const value = this.emitExpr(valueExpr as ts.Expression);
         const tmp = this.freshTemp("_entry");
         const pieces = [
             `${mapped.c} ${tmp}`,
-            `${tmp}.key = ${this.coerce(key, T_STRING, keyExpr as ts.Expression)}`,
+            this.objectEntryKeySet(
+                tmp,
+                keyType,
+                this.coerce(key, keyType, keyExpr as ts.Expression),
+            ),
             this.objectEntrySet(
                 tmp,
                 valueType,
@@ -32887,11 +32946,14 @@ function sameCType(a: CType, b: CType): boolean {
         a.kind === "weakset" ||
         a.kind === "weakref" ||
         a.kind === "finregistry" ||
-        a.kind === "promise" ||
-        a.kind === "entry"
+        a.kind === "promise"
     ) {
         if (!a.elem || !b.elem) return a.elem === b.elem;
         return sameCType(a.elem, b.elem);
+    }
+    if (a.kind === "entry") {
+        if (!a.key || !b.key || !a.elem || !b.elem) return false;
+        return sameCType(a.key, b.key) && sameCType(a.elem, b.elem);
     }
     if (a.kind === "map" || a.kind === "weakmap") {
         if (!a.key || !b.key || !a.elem || !b.elem) return false;

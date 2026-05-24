@@ -1,0 +1,5 @@
+object map: alpha beta
+array from object map: true beta
+object entries: secondary alpha
+weak entries: alpha true
+number map: two 2 two

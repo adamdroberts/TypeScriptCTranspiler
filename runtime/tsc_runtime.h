@@ -729,6 +729,9 @@ tsc_value_t tsc_json_parse(tsc_str_t* text);
 
 typedef struct tsc_object_entry {
     tsc_str_t* key;
+    double key_num;
+    bool key_boolean;
+    void* key_ptr;
     double num;
     bool boolean;
     void* ptr;

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Typed `ObjectEntry<V, K>` tuples can now carry non-string keys through `new Map(entries)`, `Map.entries()`, `Array.from(map)`, and direct `new WeakMap(entries)` construction when key/value types match. Test: `map_object_entry_constructors`.
 - `WeakSet<T>` constructor calls can now initialize from typed `Set<T>` sources with matching object element types, and generated-C DCE only prunes typed Set sources when empty or statically object-proven. Tests: `weak_collections`, `generated_c_dce_const`, `weak_set_primitive_set_source_reject`.
 - Generated-C DCE now keeps `WeakMap(...)` constructors over typed `Map` sources unless the Map source is empty or statically object-key-proven, preserving primitive-key rejection. Tests: `generated_c_dce_const`, `weak_map_primitive_map_source_reject`.
 - Custom iterable classes can now be backed by materialized synchronous generator results from `[Symbol.iterator]()` in the eager iterator subset. Test: `generator_backed_iterable`.
