@@ -1466,6 +1466,31 @@ class Emitter {
         const recv = call.expression.expression;
         const method = call.expression.name.text;
         switch (method) {
+            case "includes":
+            case "indexOf":
+            case "lastIndexOf":
+                if (
+                    this.isSideEffectFreeStringMethodCall(recv, method, call.arguments, seenConsts) ||
+                    this.isSideEffectFreeArrayMethodCall(recv, method, call.arguments, seenConsts)
+                ) {
+                    return true;
+                }
+                break;
+            case "toLocaleString":
+            case "toString":
+                if (
+                    this.isSideEffectFreeStringMethodCall(recv, method, call.arguments, seenConsts) ||
+                    this.isSideEffectFreeArrayMethodCall(recv, method, call.arguments, seenConsts) ||
+                    this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts)
+                ) {
+                    return true;
+                }
+                break;
+            case "join":
+                if (this.isSideEffectFreeArrayMethodCall(recv, method, call.arguments, seenConsts)) {
+                    return true;
+                }
+                break;
             case "charAt":
             case "charCodeAt":
             case "at":
@@ -1473,15 +1498,10 @@ class Emitter {
             case "slice":
             case "substring":
             case "substr":
-            case "includes":
-            case "indexOf":
-            case "lastIndexOf":
             case "startsWith":
             case "endsWith":
             case "localeCompare":
             case "concat":
-            case "toLocaleString":
-            case "toString":
             case "valueOf":
             case "toUpperCase":
             case "toLowerCase":
@@ -1504,11 +1524,8 @@ class Emitter {
                 }
                 break;
         }
-        return (
-            method === "test" ||
-            method === "toString" ||
-            method === "toLocaleString"
-        ) && this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts);
+        return method === "test" &&
+            this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts);
     }
 
     private isSideEffectFreeArrayMethodCall(
