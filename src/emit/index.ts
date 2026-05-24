@@ -1954,6 +1954,15 @@ class Emitter {
         if (this.isObjectFromEntriesCall(unwrapped)) {
             return this.isSideEffectFreeObjectFromEntriesStringValuesCall(unwrapped, seenConsts);
         }
+        if (ts.isCallExpression(unwrapped) && this.isObjectCreateCall(unwrapped)) {
+            return this.isSideEffectFreeObjectCreateStringValuesCall(unwrapped, seenConsts);
+        }
+        if (ts.isCallExpression(unwrapped) && this.isObjectDefinePropertyCall(unwrapped)) {
+            return this.isSideEffectFreeObjectDefinePropertyStringValuesCall(unwrapped, seenConsts);
+        }
+        if (ts.isCallExpression(unwrapped) && this.isObjectDefinePropertiesCall(unwrapped)) {
+            return this.isSideEffectFreeObjectDefinePropertiesStringValuesCall(unwrapped, seenConsts);
+        }
         const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
         if (targetOperand) {
             return this.isSideEffectFreeObjectValuesStringCoercionSource(
@@ -2022,6 +2031,76 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeObjectFromEntriesStringValuesOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeObjectCreateStringValuesCall(
+        call: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return (
+            call.arguments.length === 1 ||
+            call.arguments.length === 2
+        ) &&
+            this.isSideEffectFreeObjectCreatePrototypeOperand(call.arguments[0]!, seenConsts) &&
+            (!call.arguments[1] ||
+                this.isSideEffectFreeDataPropertyDescriptorMapStringValues(call.arguments[1], seenConsts));
+    }
+
+    private isSideEffectFreeObjectDefinePropertyStringValuesCall(
+        call: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return call.arguments.length === 3 &&
+            this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) &&
+            this.isSideEffectFreeObjectValuesStringCoercionSource(call.arguments[0]!, new Set(seenConsts)) &&
+            this.isSideEffectFreePropertyKeyCoercion(call.arguments[1]!, seenConsts) &&
+            this.isSideEffectFreeDataPropertyDescriptorStringValue(call.arguments[2]!, seenConsts);
+    }
+
+    private isSideEffectFreeObjectDefinePropertiesStringValuesCall(
+        call: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return call.arguments.length === 2 &&
+            this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) &&
+            this.isSideEffectFreeObjectValuesStringCoercionSource(call.arguments[0]!, new Set(seenConsts)) &&
+            this.isSideEffectFreeDataPropertyDescriptorMapStringValues(call.arguments[1]!, seenConsts);
+    }
+
+    private isSideEffectFreeDataPropertyDescriptorMapStringValues(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            return unwrapped.properties.every((prop) =>
+                ts.isPropertyAssignment(prop) &&
+                this.objectLiteralStaticStringKey(prop.name, seenConsts) !== null &&
+                this.isSideEffectFreeDataPropertyDescriptorStringValue(prop.initializer, seenConsts)
+            );
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeDataPropertyDescriptorMapStringValues(init, seenConsts);
+    }
+
+    private isSideEffectFreeDataPropertyDescriptorStringValue(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            const allowed = new Set(["value", "writable", "enumerable", "configurable"]);
+            return unwrapped.properties.every((prop) => {
+                if (!ts.isPropertyAssignment(prop)) return false;
+                const name = this.objectLiteralStaticStringKey(prop.name, seenConsts);
+                if (name === null || !allowed.has(name)) return false;
+                return name === "value"
+                    ? this.isSideEffectFreeStringCoercion(prop.initializer, seenConsts)
+                    : this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts);
+            });
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeDataPropertyDescriptorStringValue(init, seenConsts);
     }
 
     private isSideEffectFreeStringArrayReturningArrayHelperCall(
@@ -4418,7 +4497,13 @@ class Emitter {
         }
         if (
             ts.isCallExpression(unwrapped) &&
-            (this.isObjectAssignCall(unwrapped) || this.isObjectFromEntriesCall(unwrapped)) &&
+            (
+                this.isObjectAssignCall(unwrapped) ||
+                this.isObjectFromEntriesCall(unwrapped) ||
+                this.isObjectCreateCall(unwrapped) ||
+                this.isObjectDefinePropertyCall(unwrapped) ||
+                this.isObjectDefinePropertiesCall(unwrapped)
+            ) &&
             this.isSideEffectFreeStaticCall(unwrapped, seenConsts)
         ) {
             return true;
