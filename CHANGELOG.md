@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now uses simple `Object.getOwnPropertyNames(...)` and `Reflect.ownKeys(...)` length proofs to prune unused empty-array HOF, singleton comparator `sort(...)`, and in-range `.with(...)` calls while preserving non-empty string primitive property-name arrays. Test: `generated_c_dce_const`.
 - Generated-C DCE now uses simple `Object.entries(...)` length proofs to prune unused empty-array HOF, singleton comparator `sort(...)`, and in-range `.with(...)` calls while preserving non-empty string primitive entry arrays. Test: `generated_c_dce_const`.
 - Generated-C DCE now uses simple `Object.values(...)` length proofs to prune unused empty-array HOF, singleton comparator `sort(...)`, and in-range `.with(...)` calls while preserving non-empty string primitive value arrays. Test: `generated_c_dce_const`.
 - E2E `expected.mainc.contains` assertions now check each non-empty line independently, matching `expected.mainc.not_contains` and allowing multiple generated-C preservation markers per case. Test: `generated_c_dce_const`.

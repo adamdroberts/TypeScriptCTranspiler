@@ -1939,6 +1939,13 @@ class Emitter {
             return this.sideEffectFreeObjectKeysLength(unwrapped.arguments[0]!, seenConsts);
         }
         if (
+            method === "getOwnPropertyNames" &&
+            unwrapped.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Object")
+        ) {
+            return this.sideEffectFreeObjectGetOwnPropertyNamesLength(unwrapped.arguments[0]!, seenConsts);
+        }
+        if (
             method === "values" &&
             unwrapped.arguments.length === 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
@@ -1951,6 +1958,13 @@ class Emitter {
             this.isUnshadowedGlobalIdentifier(recv, "Object")
         ) {
             return this.sideEffectFreeObjectEntriesLength(unwrapped.arguments[0]!, seenConsts);
+        }
+        if (
+            method === "ownKeys" &&
+            unwrapped.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Reflect")
+        ) {
+            return this.sideEffectFreeReflectOwnKeysLength(unwrapped.arguments[0]!, seenConsts);
         }
         return null;
     }
@@ -1993,6 +2007,51 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectKeysLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeObjectGetOwnPropertyNamesLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        const stringText = this.sideEffectFreeStringLiteralText(unwrapped, seenConsts);
+        if (stringText !== null) {
+            return Array.from(stringText).length + 1;
+        }
+        if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) {
+            return 0;
+        }
+        const arrayLength = this.sideEffectFreeArrayLiteralLength(unwrapped, seenConsts);
+        if (arrayLength !== null) return arrayLength + 1;
+        if (this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(unwrapped, seenConsts)) {
+            return 0;
+        }
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            let count = 0;
+            for (const prop of unwrapped.properties) {
+                if (ts.isPropertyAssignment(prop)) {
+                    if (
+                        this.objectLiteralStaticStringKey(prop.name, seenConsts) === null ||
+                        !this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts)
+                    ) {
+                        return null;
+                    }
+                    count++;
+                    continue;
+                }
+                if (ts.isShorthandPropertyAssignment(prop)) {
+                    if (!this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts)) {
+                        return null;
+                    }
+                    count++;
+                    continue;
+                }
+                return null;
+            }
+            return count;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeObjectGetOwnPropertyNamesLength(init, seenConsts) : null;
     }
 
     private sideEffectFreeObjectValuesLength(
@@ -2083,6 +2142,44 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectEntriesLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeReflectOwnKeysLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        const arrayLength = this.sideEffectFreeArrayLiteralLength(unwrapped, seenConsts);
+        if (arrayLength !== null) return arrayLength + 1;
+        if (this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(unwrapped, seenConsts)) {
+            return 0;
+        }
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            let count = 0;
+            for (const prop of unwrapped.properties) {
+                if (ts.isPropertyAssignment(prop)) {
+                    if (
+                        this.objectLiteralStaticStringKey(prop.name, seenConsts) === null ||
+                        !this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts)
+                    ) {
+                        return null;
+                    }
+                    count++;
+                    continue;
+                }
+                if (ts.isShorthandPropertyAssignment(prop)) {
+                    if (!this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts)) {
+                        return null;
+                    }
+                    count++;
+                    continue;
+                }
+                return null;
+            }
+            return count;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeReflectOwnKeysLength(init, seenConsts) : null;
     }
 
     private isSideEffectFreeStringArrayOperand(
