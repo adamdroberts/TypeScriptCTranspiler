@@ -4232,43 +4232,13 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): "present" | "absent" | "unsafe" {
         if (index < 0) return "absent";
-        let offset = 0;
-        for (const prop of literal.properties) {
-            if (ts.isPropertyAssignment(prop)) {
-                const key = this.objectLiteralStaticStringKey(prop.name, seenConsts);
-                if (key === null) return "unsafe";
-                if (offset === index) {
-                    return this.isSideEffectFreePrimitivePromiseResolveValue(
-                        prop.initializer,
-                        new Set(seenConsts),
-                    )
-                        ? "present"
-                        : "unsafe";
-                }
-                if (!this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts)) {
-                    return "unsafe";
-                }
-                offset++;
-                continue;
-            }
-            if (ts.isShorthandPropertyAssignment(prop)) {
-                if (offset === index) {
-                    return this.isSideEffectFreePrimitivePromiseResolveValue(
-                        prop.name,
-                        new Set(seenConsts),
-                    )
-                        ? "present"
-                        : "unsafe";
-                }
-                if (!this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts)) {
-                    return "unsafe";
-                }
-                offset++;
-                continue;
-            }
-            return "unsafe";
-        }
-        return "absent";
+        const entries = this.sideEffectFreeObjectLiteralOwnDataEntries(literal, seenConsts);
+        if (entries === null) return "unsafe";
+        const entry = entries[index];
+        if (!entry) return "absent";
+        return this.isSideEffectFreePrimitivePromiseResolveValue(entry.value, new Set(seenConsts))
+            ? "present"
+            : "unsafe";
     }
 
     private sideEffectFreePrimitiveObjectEntriesTupleElementResult(
@@ -4338,38 +4308,60 @@ class Emitter {
         tupleIndex: 0 | 1,
         seenConsts: Set<ts.Symbol>,
     ): "present" | "absent" | "unsafe" {
-        let offset = 0;
-        for (const prop of literal.properties) {
-            if (ts.isPropertyAssignment(prop)) {
-                const key = this.objectLiteralStaticStringKey(prop.name, seenConsts);
-                if (key === null || !this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts)) {
-                    return "unsafe";
+        const entries = this.sideEffectFreeObjectLiteralOwnDataEntries(literal, seenConsts);
+        if (entries === null) return "unsafe";
+        const entry = entries[entryIndex];
+        if (!entry) return "absent";
+        return tupleIndex === 0 ||
+            this.isSideEffectFreePrimitivePromiseResolveValue(entry.value, new Set(seenConsts))
+            ? "present"
+            : "unsafe";
+    }
+
+    private sideEffectFreeObjectLiteralOwnDataEntries(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): { key: string; value: ts.Expression }[] | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            const entries = new Map<string, ts.Expression>();
+            for (const prop of unwrapped.properties) {
+                if (ts.isPropertyAssignment(prop)) {
+                    const key = this.objectLiteralStaticStringKey(prop.name, seenConsts);
+                    if (
+                        key === null ||
+                        !this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts)
+                    ) {
+                        return null;
+                    }
+                    entries.set(key, prop.initializer);
+                    continue;
                 }
-                if (offset === entryIndex) {
-                    return tupleIndex === 0 ||
-                        this.isSideEffectFreePrimitivePromiseResolveValue(prop.initializer, new Set(seenConsts))
-                        ? "present"
-                        : "unsafe";
+                if (ts.isShorthandPropertyAssignment(prop)) {
+                    if (!this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts)) {
+                        return null;
+                    }
+                    entries.set(prop.name.text, prop.name);
+                    continue;
                 }
-                offset++;
-                continue;
+                if (ts.isSpreadAssignment(prop)) {
+                    if (!this.isSideEffectFreeObjectSpreadOperand(prop.expression, seenConsts)) {
+                        return null;
+                    }
+                    const spreadEntries = this.sideEffectFreeObjectLiteralOwnDataEntries(
+                        prop.expression,
+                        new Set(seenConsts),
+                    );
+                    if (spreadEntries === null) return null;
+                    for (const entry of spreadEntries) entries.set(entry.key, entry.value);
+                    continue;
+                }
+                return null;
             }
-            if (ts.isShorthandPropertyAssignment(prop)) {
-                if (!this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts)) {
-                    return "unsafe";
-                }
-                if (offset === entryIndex) {
-                    return tupleIndex === 0 ||
-                        this.isSideEffectFreePrimitivePromiseResolveValue(prop.name, new Set(seenConsts))
-                        ? "present"
-                        : "unsafe";
-                }
-                offset++;
-                continue;
-            }
-            return "unsafe";
+            return Array.from(entries, ([key, value]) => ({ key, value }));
         }
-        return "absent";
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeObjectLiteralOwnDataEntries(init, seenConsts) : null;
     }
 
     private sideEffectFreePrimitiveArrayEntryKeyElementResult(

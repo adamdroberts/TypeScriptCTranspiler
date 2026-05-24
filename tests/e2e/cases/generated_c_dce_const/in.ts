@@ -209,6 +209,7 @@ const unused_promise_resolve_array_from_set_to_string_call = Promise.resolve(Arr
 const unused_promise_resolve_object_values_array_element_call = Promise.resolve(Object.values(["dead_promise_resolve_object_values_array_element"])[0]);
 const unused_promise_resolve_object_values_string_element_call = Promise.resolve(Object.values("dead_promise_resolve_object_values_string_element")[0]);
 const unused_promise_resolve_object_values_object_element_call = Promise.resolve(Object.values({ dead_promise_resolve_object_values_object_element: "dead_promise_resolve_object_values_object_element" })[0]);
+const unused_promise_resolve_object_values_spread_element_call = Promise.resolve(Object.values({ ...{ dead_promise_resolve_object_values_spread_element: "dead_promise_resolve_object_values_spread_element" }, dead_promise_resolve_object_values_spread_tail: "dead_promise_resolve_object_values_spread_tail" })[1]);
 const unused_promise_resolve_object_values_array_join_call = Promise.resolve(Object.values(["dead_promise_resolve_object_values_array_join"]).join("|"));
 const unused_promise_resolve_object_values_string_to_string_call = Promise.resolve(Object.values("dead_promise_resolve_object_values_string_to_string").toString());
 const unused_promise_resolve_object_values_object_join_call = Promise.resolve(Object.values({ dead_promise_resolve_object_values_object_join: "dead_promise_resolve_object_values_object_join" }).join("|"));
@@ -229,6 +230,7 @@ const unused_promise_resolve_object_values_define_property_join_call = Promise.r
 const unused_promise_resolve_object_values_define_properties_join_call = Promise.resolve(Object.values(Object.defineProperties({} as { dead_promise_resolve_object_values_define_properties_join: string }, { dead_promise_resolve_object_values_define_properties_join: { value: "dead_promise_resolve_object_values_define_properties_join", enumerable: true } })).join("|"));
 const unused_promise_resolve_object_entries_key_call = Promise.resolve(Object.entries({ dead_promise_resolve_object_entries_key: "dead_promise_resolve_object_entries_value" })[0][0]);
 const unused_promise_resolve_object_entries_value_call = Promise.resolve(Object.entries({ dead_promise_resolve_object_entries_value_key: "dead_promise_resolve_object_entries_value" })[0][1]);
+const unused_promise_resolve_object_entries_spread_value_call = Promise.resolve(Object.entries({ ...{ dead_promise_resolve_object_entries_spread_value_key: "dead_promise_resolve_object_entries_spread_value" }, dead_promise_resolve_object_entries_spread_tail_key: "dead_promise_resolve_object_entries_spread_tail_value" })[1][1]);
 const unused_promise_resolve_object_entries_array_value_call = Promise.resolve(Object.entries(["dead_promise_resolve_object_entries_array_value"])[0][1]);
 const unused_promise_resolve_object_entries_string_value_call = Promise.resolve(Object.entries("dead_promise_resolve_object_entries_string_value")[0][1]);
 const unused_promise_resolve_object_entries_map_join_call = Promise.resolve(Object.entries(new Map([["dead_promise_resolve_object_entries_map_join", 1]])).join("|"));
@@ -655,6 +657,7 @@ Promise.resolve(Array.from(new Set(["top_level_dead_promise_resolve_array_from_s
 Promise.resolve(Object.values(["top_level_dead_promise_resolve_object_values_array_element"])[0]);
 Promise.resolve(Object.values("top_level_dead_promise_resolve_object_values_string_element")[0]);
 Promise.resolve(Object.values({ top_level_dead_promise_resolve_object_values_object_element: "top_level_dead_promise_resolve_object_values_object_element" })[0]);
+Promise.resolve(Object.values({ ...{ top_level_dead_promise_resolve_object_values_spread_element: "top_level_dead_promise_resolve_object_values_spread_element" }, top_level_dead_promise_resolve_object_values_spread_tail: "top_level_dead_promise_resolve_object_values_spread_tail" })[1]);
 Promise.resolve(Object.values(["top_level_dead_promise_resolve_object_values_array_join"]).join("|"));
 Promise.resolve(Object.values("top_level_dead_promise_resolve_object_values_string_to_string").toString());
 Promise.resolve(Object.values({ top_level_dead_promise_resolve_object_values_object_join: "top_level_dead_promise_resolve_object_values_object_join" }).join("|"));
@@ -675,6 +678,7 @@ Promise.resolve(Object.values(Object.defineProperty({} as { top_level_dead_promi
 Promise.resolve(Object.values(Object.defineProperties({} as { top_level_dead_promise_resolve_object_values_define_properties_join: string }, { top_level_dead_promise_resolve_object_values_define_properties_join: { value: "top_level_dead_promise_resolve_object_values_define_properties_join", enumerable: true } })).join("|"));
 Promise.resolve(Object.entries({ top_level_dead_promise_resolve_object_entries_key: "top_level_dead_promise_resolve_object_entries_value" })[0][0]);
 Promise.resolve(Object.entries({ top_level_dead_promise_resolve_object_entries_value_key: "top_level_dead_promise_resolve_object_entries_value" })[0][1]);
+Promise.resolve(Object.entries({ ...{ top_level_dead_promise_resolve_object_entries_spread_value_key: "top_level_dead_promise_resolve_object_entries_spread_value" }, top_level_dead_promise_resolve_object_entries_spread_tail_key: "top_level_dead_promise_resolve_object_entries_spread_tail_value" })[1][1]);
 Promise.resolve(Object.entries(["top_level_dead_promise_resolve_object_entries_array_value"])[0][1]);
 Promise.resolve(Object.entries("top_level_dead_promise_resolve_object_entries_string_value")[0][1]);
 Promise.resolve(Object.entries(new Map([["top_level_dead_promise_resolve_object_entries_map_join", 1]])).join("|"));
@@ -1102,6 +1106,7 @@ function usedLocal(value: number): number {
     Promise.resolve(Object.values(["local_dead_promise_resolve_object_values_array_element"])[0]);
     Promise.resolve(Object.values("local_dead_promise_resolve_object_values_string_element")[0]);
     Promise.resolve(Object.values({ local_dead_promise_resolve_object_values_object_element: "local_dead_promise_resolve_object_values_object_element" })[0]);
+    Promise.resolve(Object.values({ ...{ local_dead_promise_resolve_object_values_spread_element: "local_dead_promise_resolve_object_values_spread_element" }, local_dead_promise_resolve_object_values_spread_tail: "local_dead_promise_resolve_object_values_spread_tail" })[1]);
     Promise.resolve(Object.values(["local_dead_promise_resolve_object_values_array_join"]).join("|"));
     Promise.resolve(Object.values("local_dead_promise_resolve_object_values_string_to_string").toString());
     Promise.resolve(Object.values({ local_dead_promise_resolve_object_values_object_join: "local_dead_promise_resolve_object_values_object_join" }).join("|"));
@@ -1122,6 +1127,7 @@ function usedLocal(value: number): number {
     Promise.resolve(Object.values(Object.defineProperties({} as { local_dead_promise_resolve_object_values_define_properties_join: string }, { local_dead_promise_resolve_object_values_define_properties_join: { value: "local_dead_promise_resolve_object_values_define_properties_join", enumerable: true } })).join("|"));
     Promise.resolve(Object.entries({ local_dead_promise_resolve_object_entries_key: "local_dead_promise_resolve_object_entries_value" })[0][0]);
     Promise.resolve(Object.entries({ local_dead_promise_resolve_object_entries_value_key: "local_dead_promise_resolve_object_entries_value" })[0][1]);
+    Promise.resolve(Object.entries({ ...{ local_dead_promise_resolve_object_entries_spread_value_key: "local_dead_promise_resolve_object_entries_spread_value" }, local_dead_promise_resolve_object_entries_spread_tail_key: "local_dead_promise_resolve_object_entries_spread_tail_value" })[1][1]);
     Promise.resolve(Object.entries(["local_dead_promise_resolve_object_entries_array_value"])[0][1]);
     Promise.resolve(Object.entries("local_dead_promise_resolve_object_entries_string_value")[0][1]);
     Promise.resolve(Object.entries(new Map([["local_dead_promise_resolve_object_entries_map_join", 1]])).join("|"));
