@@ -1019,6 +1019,9 @@ class Emitter {
         if (this.isSideEffectFreeRegExpStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -1132,6 +1135,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeRegExpStringPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -4926,6 +4932,9 @@ class Emitter {
         if (this.isSideEffectFreeRegExpStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -4957,6 +4966,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeRegExpStringPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
