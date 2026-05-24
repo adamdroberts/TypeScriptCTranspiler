@@ -1157,7 +1157,7 @@ class Emitter {
             call.arguments.length === 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
         ) {
-            return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts);
+            return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts);
         }
         if (
             ts.isIdentifier(recv) &&
@@ -1165,7 +1165,7 @@ class Emitter {
             call.arguments.length === 2 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
         ) {
-            return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts) &&
+            return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts) &&
                 this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts);
         }
         if (
@@ -1179,7 +1179,7 @@ class Emitter {
             call.arguments.length === 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
         ) {
-            return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts);
+            return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts);
         }
         if (
             ts.isIdentifier(recv) &&
@@ -1191,7 +1191,8 @@ class Emitter {
             call.arguments.length === 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
         ) {
-            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts);
+            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) ||
+                this.isSideEffectFreeNonNullishPrimitiveObjectOperand(call.arguments[0]!, seenConsts);
         }
         if (
             ts.isIdentifier(recv) &&
@@ -1220,7 +1221,7 @@ class Emitter {
             const [target, ...sources] = Array.from(call.arguments);
             return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(target!, seenConsts) &&
                 sources.every((source) =>
-                    this.isSideEffectFreeObjectEnumerationOperand(source, seenConsts)
+                    this.isSideEffectFreeObjectCoercionOperand(source, seenConsts)
                 );
         }
         if (
@@ -1256,7 +1257,7 @@ class Emitter {
             call.arguments.length === 2 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
         ) {
-            return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts) &&
+            return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts) &&
                 this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts);
         }
         if (
@@ -2319,6 +2320,45 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeObjectEnumerationOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeObjectCoercionOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return this.isSideEffectFreeObjectEnumerationOperand(expr, seenConsts) ||
+            this.isSideEffectFreeNonNullishPrimitiveObjectOperand(expr, seenConsts);
+    }
+
+    private isSideEffectFreeNonNullishPrimitiveObjectOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        switch (unwrapped.kind) {
+            case ts.SyntaxKind.TrueKeyword:
+            case ts.SyntaxKind.FalseKeyword:
+                return true;
+        }
+        if (
+            ts.isStringLiteral(unwrapped) ||
+            ts.isNoSubstitutionTemplateLiteral(unwrapped) ||
+            ts.isNumericLiteral(unwrapped) ||
+            ts.isBigIntLiteral(unwrapped)
+        ) {
+            return true;
+        }
+        if (
+            ts.isPrefixUnaryExpression(unwrapped) &&
+            (
+                unwrapped.operator === ts.SyntaxKind.PlusToken ||
+                unwrapped.operator === ts.SyntaxKind.MinusToken
+            )
+        ) {
+            return this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped.operand, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeNonNullishPrimitiveObjectOperand(init, seenConsts);
     }
 
     private isSideEffectFreeMathCall(
