@@ -902,6 +902,10 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-require-package": cjsPackage("tsc2c-cjs-module-require-package", {
         "index.js": 'exports.label = "module-require";\nexports.count = 7;\nexports.add = function add(left, right) { return left + right; };\n',
     }),
+    "tsc2c-cjs-module-alias-wrapper-package": cjsPackage("tsc2c-cjs-module-alias-wrapper-package", {
+        "index.js": 'const mod = module;\nconst req = mod.require;\nconst local = mod.require("./local.js");\nmod.exports.label = local.label;\nmod.exports.count = req("./local.js").count;\nmod.exports.add = local.add;\nmod.exports.filenameMatches = mod.filename.endsWith("index.js");\nmod.exports.pathMatches = mod.path.endsWith("tsc2c-cjs-module-alias-wrapper-package");\nmod.exports.loaded = mod.loaded;\nmod.exports.pathsLength = mod.paths.length;\n',
+        "local.js": 'exports.label = "module-alias";\nexports.count = 11;\nexports.add = function add(left, right) { return left + right; };\n',
+    }),
     "tsc2c-cjs-relative-require": cjsPackage("tsc2c-cjs-relative-require", {
         "index.js": 'const local = require("./local.js");\nexports.sum = local.sum;\n',
         "local.js": "exports.sum = function sum(left, right) { return left + right; };\n",

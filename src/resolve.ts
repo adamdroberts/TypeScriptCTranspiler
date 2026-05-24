@@ -86,7 +86,8 @@ export function buildModuleGraph(
     // Resolve imports per module using TS's resolver.
     const options = program.getCompilerOptions();
     for (const [id, info] of modules) {
-        const requireAliases = commonJsRequireAliases(info.sf);
+        const moduleAliases = commonJsModuleAliases(info.sf);
+        const requireAliases = commonJsRequireAliases(info.sf, moduleAliases);
         for (const stmt of info.sf.statements) {
             const importSpecs: string[] = [];
             const requireSpecs: string[] = [];
@@ -95,7 +96,7 @@ export function buildModuleGraph(
                 const m = stmt.moduleSpecifier;
                 if (m && ts.isStringLiteral(m)) importSpecs.push(m.text);
             }
-            requireSpecs.push(...staticRequireSpecifiers(stmt, requireAliases, options_.dynamicRequires));
+            requireSpecs.push(...staticRequireSpecifiers(stmt, requireAliases, moduleAliases, options_.dynamicRequires));
             for (const spec of importSpecs) {
                 const resolved = ts.resolveModuleName(
                     spec,
@@ -161,11 +162,12 @@ function isTypeOnlyModuleEdge(stmt: ts.ImportDeclaration | ts.ExportDeclaration)
 function staticRequireSpecifiers(
     stmt: ts.Statement,
     requireAliases: Set<string>,
+    moduleAliases: Set<string>,
     dynamicRequires: DynamicRequireManifest | undefined,
 ): string[] {
     const specs: string[] = [];
     const visit = (node: ts.Node): void => {
-        const nodeSpecs = ts.isExpression(node) ? requireCallSpecifiers(node, requireAliases) : null;
+        const nodeSpecs = ts.isExpression(node) ? requireCallSpecifiers(node, requireAliases, moduleAliases) : null;
         if (nodeSpecs) {
             if (nodeSpecs.length > 0) {
                 specs.push(...nodeSpecs);
@@ -179,21 +181,21 @@ function staticRequireSpecifiers(
     return specs;
 }
 
-function requireCallSpecifier(expr: ts.Expression, requireAliases: Set<string>): string | null {
-    return staticRequireCallSpecifier(expr, requireAliases);
+function requireCallSpecifier(expr: ts.Expression, requireAliases: Set<string>, moduleAliases: Set<string>): string | null {
+    return staticRequireCallSpecifier(expr, requireAliases, moduleAliases);
 }
 
-function requireCallSpecifiers(expr: ts.Expression, requireAliases: Set<string>): string[] | null {
-    return staticRequireCallSpecifiers(expr, requireAliases);
+function requireCallSpecifiers(expr: ts.Expression, requireAliases: Set<string>, moduleAliases: Set<string>): string[] | null {
+    return staticRequireCallSpecifiers(expr, requireAliases, moduleAliases);
 }
 
-function commonJsRequireAliases(sf: ts.SourceFile): Set<string> {
+function commonJsModuleAliases(sf: ts.SourceFile): Set<string> {
     const aliases = new Set<string>();
     const visit = (node: ts.Node): void => {
         if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
             let init = node.initializer;
             while (ts.isParenthesizedExpression(init)) init = init.expression;
-            if (isCommonJsRequireAliasInitializer(init)) aliases.add(node.name.text);
+            if (ts.isIdentifier(init) && init.text === "module") aliases.add(node.name.text);
         }
         ts.forEachChild(node, visit);
     };
@@ -201,6 +203,20 @@ function commonJsRequireAliases(sf: ts.SourceFile): Set<string> {
     return aliases;
 }
 
-function isCommonJsRequireAliasInitializer(expr: ts.Expression): boolean {
-    return isCommonJsRequireCallee(expr, new Set());
+function commonJsRequireAliases(sf: ts.SourceFile, moduleAliases: Set<string>): Set<string> {
+    const aliases = new Set<string>();
+    const visit = (node: ts.Node): void => {
+        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+            let init = node.initializer;
+            while (ts.isParenthesizedExpression(init)) init = init.expression;
+            if (isCommonJsRequireAliasInitializer(init, moduleAliases)) aliases.add(node.name.text);
+        }
+        ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    return aliases;
+}
+
+function isCommonJsRequireAliasInitializer(expr: ts.Expression, moduleAliases: Set<string>): boolean {
+    return isCommonJsRequireCallee(expr, new Set(), moduleAliases);
 }

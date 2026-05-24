@@ -8394,7 +8394,7 @@ class Emitter {
 
     private isSideEffectFreeModulePrimitiveMetadataRead(expr: ts.Expression): boolean {
         if (!ts.isPropertyAccessExpression(expr) || !ts.isIdentifier(expr.expression)) return false;
-        if (!this.isUnshadowedGlobalIdentifier(expr.expression, "module")) return false;
+        if (!this.isCommonJsModuleIdentifier(expr.expression)) return false;
         switch (expr.name.text) {
             case "filename":
             case "id":
@@ -12654,9 +12654,7 @@ class Emitter {
         if (
             ts.isPropertyAccessExpression(expr) &&
             ts.isPropertyAccessExpression(expr.expression) &&
-            expr.expression.name.text === "exports" &&
-            ts.isIdentifier(expr.expression.expression) &&
-            expr.expression.expression.text === "module"
+            this.isModuleExportsAccess(expr.expression)
         ) {
             return expr.name.text;
         }
@@ -12679,7 +12677,41 @@ class Emitter {
     private isModuleExportsAccess(expr: ts.PropertyAccessExpression): boolean {
         return expr.name.text === "exports" &&
             ts.isIdentifier(expr.expression) &&
-            expr.expression.text === "module";
+            this.isCommonJsModuleIdentifier(expr.expression);
+    }
+
+    private isCommonJsModuleIdentifier(id: ts.Identifier): boolean {
+        if (id.text === "module" && this.isUnshadowedGlobalIdentifier(id, "module")) return true;
+        const sym = this.symbolForIdentifier(id);
+        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        if (decl && ts.isVariableDeclaration(decl) && this.isCommonJsModuleAliasDeclaration(decl)) {
+            return true;
+        }
+        for (const stmt of id.getSourceFile().statements) {
+            if (!ts.isVariableStatement(stmt)) continue;
+            for (const fallbackDecl of stmt.declarationList.declarations) {
+                if (
+                    ts.isIdentifier(fallbackDecl.name) &&
+                    fallbackDecl.name.text === id.text &&
+                    this.isCommonJsModuleAliasDeclaration(fallbackDecl)
+                ) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private isCommonJsModuleAliasDeclaration(decl: ts.VariableDeclaration): boolean {
+        if (!this.isJavaScriptSourceFile(decl.getSourceFile())) return false;
+        if (!ts.isIdentifier(decl.name) || !decl.initializer) return false;
+        const stmt = decl.parent.parent;
+        if (!ts.isVariableStatement(stmt) || stmt.parent !== decl.getSourceFile()) return false;
+        let init = decl.initializer;
+        while (ts.isParenthesizedExpression(init)) init = init.expression;
+        return ts.isIdentifier(init) &&
+            init.text === "module" &&
+            this.isUnshadowedGlobalIdentifier(init, "module");
     }
 
     private isCommonJsExportsTargetExpression(expr: ts.Expression): boolean {
@@ -12743,7 +12775,7 @@ class Emitter {
         return ts.isPropertyAccessExpression(expr) &&
             expr.name.text === "require" &&
             ts.isIdentifier(expr.expression) &&
-            expr.expression.text === "module";
+            this.isCommonJsModuleIdentifier(expr.expression);
     }
 
     private isCommonJsRequireCallee(expr: ts.Expression): boolean {
@@ -15796,6 +15828,7 @@ class Emitter {
                 this.isCommonJsDefinePropertiesExportSourceDeclaration(d) ||
                 this.isCommonJsDefinePropertiesExportDescriptorDeclaration(d) ||
                 this.isCommonJsDefinePropertyExportSourceDeclaration(d) ||
+                this.isCommonJsModuleAliasDeclaration(d) ||
                 this.isCommonJsExportsAliasDeclaration(d) ||
                 this.isCommonJsRequireAliasDeclaration(d)
             ) {
@@ -16388,6 +16421,7 @@ class Emitter {
                 this.isCommonJsDefinePropertiesExportSourceDeclaration(d) ||
                 this.isCommonJsDefinePropertiesExportDescriptorDeclaration(d) ||
                 this.isCommonJsDefinePropertyExportSourceDeclaration(d) ||
+                this.isCommonJsModuleAliasDeclaration(d) ||
                 this.isCommonJsExportsAliasDeclaration(d) ||
                 this.isCommonJsRequireAliasDeclaration(d)
             ) {
@@ -35466,10 +35500,10 @@ class Emitter {
             if (pa.expression.text === "process" && pa.name.text === "ppid") {
                 return { c: `tsc_process_ppid()`, ty: T_NUMBER };
             }
-            if (pa.expression.text === "module") {
+            if (this.isCommonJsModuleIdentifier(pa.expression)) {
                 const sym = this.symbolForIdentifier(pa.expression);
                 const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
-                if (!decl || decl.getSourceFile().isDeclarationFile) {
+                if (!decl || decl.getSourceFile().isDeclarationFile || this.isCommonJsModuleAliasDeclaration(decl as ts.VariableDeclaration)) {
                     if (pa.name.text === "filename" || pa.name.text === "id") {
                         return { c: this.stringLit(pa.getSourceFile().fileName), ty: T_STRING };
                     }

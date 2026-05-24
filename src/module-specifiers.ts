@@ -187,18 +187,20 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
 export function requireCallSpecifier(
     expr: ts.Expression,
     requireAliases: Set<string>,
+    moduleAliases: Set<string> = new Set(),
 ): string | null {
-    const specs = requireCallSpecifiers(expr, requireAliases);
+    const specs = requireCallSpecifiers(expr, requireAliases, moduleAliases);
     return specs && specs.length === 1 ? specs[0]! : null;
 }
 
 export function requireCallSpecifiers(
     expr: ts.Expression,
     requireAliases: Set<string>,
+    moduleAliases: Set<string> = new Set(),
 ): string[] | null {
     if (
         ts.isCallExpression(expr) &&
-        isCommonJsRequireCallee(expr.expression, requireAliases) &&
+        isCommonJsRequireCallee(expr.expression, requireAliases, moduleAliases) &&
         expr.arguments.length === 1
     ) {
         return staticStringExpressionTexts(expr.arguments[0]!);
@@ -209,13 +211,14 @@ export function requireCallSpecifiers(
 export function isCommonJsRequireCallee(
     expr: ts.Expression,
     requireAliases: Set<string>,
+    moduleAliases: Set<string> = new Set(),
 ): boolean {
     return (ts.isIdentifier(expr) && (expr.text === "require" || requireAliases.has(expr.text))) ||
         (
             ts.isPropertyAccessExpression(expr) &&
             expr.name.text === "require" &&
             ts.isIdentifier(expr.expression) &&
-            expr.expression.text === "module"
+            (expr.expression.text === "module" || moduleAliases.has(expr.expression.text))
         );
 }
 

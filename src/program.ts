@@ -94,9 +94,10 @@ function collectStaticRequireRoots(
             true,
             scriptKindForFile(fileName),
         );
-        const requireAliases = commonJsRequireAliases(sf);
+        const moduleAliases = commonJsModuleAliases(sf);
+        const requireAliases = commonJsRequireAliases(sf, moduleAliases);
         for (const stmt of sf.statements) {
-            for (const spec of staticRequireSpecifiers(stmt, requireAliases, dynamicRequires)) {
+            for (const spec of staticRequireSpecifiers(stmt, requireAliases, moduleAliases, dynamicRequires)) {
                 const resolvedFile = resolveCommonJsRequireModuleName(spec, fileName, compilerOptions);
                 if (!resolvedFile || seen.has(resolvedFile)) continue;
                 seen.add(resolvedFile);
@@ -118,11 +119,12 @@ function scriptKindForFile(fileName: string): ts.ScriptKind {
 function staticRequireSpecifiers(
     stmt: ts.Statement,
     requireAliases: Set<string>,
+    moduleAliases: Set<string>,
     dynamicRequires: DynamicRequireManifest | undefined,
 ): string[] {
     const specs: string[] = [];
     const visit = (node: ts.Node): void => {
-        const nodeSpecs = ts.isExpression(node) ? requireCallSpecifiers(node, requireAliases) : null;
+        const nodeSpecs = ts.isExpression(node) ? requireCallSpecifiers(node, requireAliases, moduleAliases) : null;
         if (nodeSpecs) {
             if (nodeSpecs.length > 0) {
                 specs.push(...nodeSpecs);
@@ -136,21 +138,21 @@ function staticRequireSpecifiers(
     return specs;
 }
 
-function requireCallSpecifier(expr: ts.Expression, requireAliases: Set<string>): string | null {
-    return staticRequireCallSpecifier(expr, requireAliases);
+function requireCallSpecifier(expr: ts.Expression, requireAliases: Set<string>, moduleAliases: Set<string>): string | null {
+    return staticRequireCallSpecifier(expr, requireAliases, moduleAliases);
 }
 
-function requireCallSpecifiers(expr: ts.Expression, requireAliases: Set<string>): string[] | null {
-    return staticRequireCallSpecifiers(expr, requireAliases);
+function requireCallSpecifiers(expr: ts.Expression, requireAliases: Set<string>, moduleAliases: Set<string>): string[] | null {
+    return staticRequireCallSpecifiers(expr, requireAliases, moduleAliases);
 }
 
-function commonJsRequireAliases(sf: ts.SourceFile): Set<string> {
+function commonJsModuleAliases(sf: ts.SourceFile): Set<string> {
     const aliases = new Set<string>();
     const visit = (node: ts.Node): void => {
         if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
             let init = node.initializer;
             while (ts.isParenthesizedExpression(init)) init = init.expression;
-            if (isCommonJsRequireAliasInitializer(init)) aliases.add(node.name.text);
+            if (ts.isIdentifier(init) && init.text === "module") aliases.add(node.name.text);
         }
         ts.forEachChild(node, visit);
     };
@@ -158,6 +160,20 @@ function commonJsRequireAliases(sf: ts.SourceFile): Set<string> {
     return aliases;
 }
 
-function isCommonJsRequireAliasInitializer(expr: ts.Expression): boolean {
-    return isCommonJsRequireCallee(expr, new Set());
+function commonJsRequireAliases(sf: ts.SourceFile, moduleAliases: Set<string>): Set<string> {
+    const aliases = new Set<string>();
+    const visit = (node: ts.Node): void => {
+        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+            let init = node.initializer;
+            while (ts.isParenthesizedExpression(init)) init = init.expression;
+            if (isCommonJsRequireAliasInitializer(init, moduleAliases)) aliases.add(node.name.text);
+        }
+        ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    return aliases;
+}
+
+function isCommonJsRequireAliasInitializer(expr: ts.Expression, moduleAliases: Set<string>): boolean {
+    return isCommonJsRequireCallee(expr, new Set(), moduleAliases);
 }
