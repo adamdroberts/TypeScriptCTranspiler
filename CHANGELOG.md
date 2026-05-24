@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused pure `Object.fromEntries(Object.entries(...))` calls over side-effect-free sources. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Object.assign(...)` calls with nullish sources and fresh object/array targets. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Reflect.get(...)` reads and `Reflect.set(...)` writes over side-effect-free object/array literals. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Object.*` helper calls over non-nullish primitive operands and `Object.assign(...)` calls with primitive sources. Test: `generated_c_dce_const`.

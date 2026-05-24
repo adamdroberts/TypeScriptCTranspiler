@@ -2232,6 +2232,16 @@ class Emitter {
                     this.isSideEffectFreeTopLevelConstInitializer(value, seenConsts);
             });
         }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Object") &&
+            unwrapped.expression.name.text === "entries" &&
+            unwrapped.arguments.length === 1
+        ) {
+            return this.isSideEffectFreeObjectCoercionOperand(unwrapped.arguments[0]!, seenConsts);
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeObjectFromEntriesOperand(init, seenConsts);
     }

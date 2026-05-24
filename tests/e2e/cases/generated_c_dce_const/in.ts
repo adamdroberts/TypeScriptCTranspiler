@@ -205,6 +205,7 @@ const unused_object_define_property_call = Object.defineProperty({ dead_object_d
 const unused_object_define_properties_call = Object.defineProperties({ dead_object_define_properties_target: 1 }, { dead_object_define_properties_key: { value: "dead_object_define_properties_value", configurable: true } });
 const unused_object_from_entries_call = Object.fromEntries([["dead_object_from_entries_key", "dead_object_from_entries_value"]]);
 const unused_object_from_entries_const_call = Object.fromEntries(unused_from_entries_source);
+const unused_object_from_entries_object_entries_call = Object.fromEntries(Object.entries({ dead_object_from_entries_object_entries_key: "dead_object_from_entries_object_entries_value" }));
 const unused_object_group_by_empty_call = Object.groupBy([] as number[], (value) => "dead_object_group_by_empty" + value);
 const unused_map_group_by_empty_call = Map.groupBy([] as number[], (value) => "dead_map_group_by_empty" + value);
 const unused_collection_object_keys_call = Object.keys(new Map<string, number>());
@@ -395,6 +396,7 @@ Object.assign({ top_level_dead_assign_nullish_target: 1 }, null, undefined, "top
 Object.defineProperty({ top_level_dead_define_property_target: 1 }, "top_level_dead_define_property_key", { value: "top_level_dead_define_property_value", writable: true });
 Object.defineProperties({ top_level_dead_define_properties_target: 1 }, { top_level_dead_define_properties_key: { value: "top_level_dead_define_properties_value", enumerable: true } });
 Object.fromEntries([["top_level_dead_from_entries_key", "top_level_dead_from_entries_value"]]);
+Object.fromEntries(Object.entries({ top_level_dead_from_entries_object_entries_key: "top_level_dead_from_entries_object_entries_value" }));
 Object.groupBy([] as number[], (value) => "top_level_dead_object_group_by_empty" + value);
 Map.groupBy([] as number[], (value) => "top_level_dead_map_group_by_empty" + value);
 Object.keys(new WeakMap<object, string>());
@@ -610,6 +612,7 @@ function usedLocal(value: number): number {
     Object.defineProperty({ local_dead_define_property_target: 1 }, "local_dead_define_property_key", { value: "local_dead_define_property_value", enumerable: true });
     Object.defineProperties({ local_dead_define_properties_target: 1 }, { local_dead_define_properties_key: { value: "local_dead_define_properties_value", configurable: true } });
     Object.fromEntries([["local_dead_from_entries_key", "local_dead_from_entries_value"]]);
+    Object.fromEntries(Object.entries({ local_dead_from_entries_object_entries_key: "local_dead_from_entries_object_entries_value" }));
     Object.groupBy([] as number[], (value) => "local_dead_object_group_by_empty" + value);
     Map.groupBy([] as number[], (value) => "local_dead_map_group_by_empty" + value);
     Object.keys(new Set<string>());
