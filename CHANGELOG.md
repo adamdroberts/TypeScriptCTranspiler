@@ -6,6 +6,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Changed
 - `fs.readFileSync(...)`, `fs.writeFileSync(...)`, `fs.appendFileSync(...)`, and their immediate `fs.promises` counterparts now accept earlier static `const` aliases for supported string `encoding` and `flag` option values. Test: `fs_file_flag_options`.
+- `fs.readdirSync(...)`, `fs.realpathSync(...)`, `fs.readlinkSync(...)`, `fs.mkdtempSync(...)`, and their immediate `fs.promises` counterparts now accept earlier static `const` aliases for supported string `encoding` option values. Tests: `fs_readdir_buffer_options`, `fs_link_path_encoding_options`, `fs_mkdtemp_encoding_options`.
 - Event and EventTarget option objects now accept earlier static `const` aliases for supported boolean values such as listener `once`/`capture`/`passive` and Event `cancelable`. Tests: `event_target_options`, `event_target_undefined_options`.
 - `crypto.randomUUID(...)` now accepts earlier static `const` aliases for supported `disableEntropyCache` option values. Test: `crypto_random_uuid`.
 - `fs.writeFileSync(...)`, `fs.appendFileSync(...)`, and their immediate `fs.promises` counterparts now accept earlier static `const` aliases for supported `flush` option values. Test: `fs_write_append_mode_options`.

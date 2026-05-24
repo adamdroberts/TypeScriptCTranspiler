@@ -29946,13 +29946,14 @@ class Emitter {
         if (!options || this.isUndefinedExpression(options)) return { withFileTypes: false, recursive: false, encoding: "string" };
         const checkEncoding = (node: ts.Expression): "string" | "buffer" => {
             if (this.isUndefinedExpression(node)) return "string";
-            if (ts.isStringLiteralLike(node)) {
-                if (node.text === "utf8" || node.text === "utf-8") return "string";
-                if (node.text === "buffer") return "buffer";
+            const text = this.sideEffectFreeStringLiteralText(node, new Set());
+            if (text !== null) {
+                if (text === "utf8" || text === "utf-8") return "string";
+                if (text === "buffer") return "buffer";
             }
             unsupported(node, `${label} only supports UTF-8 or buffer encoding options in this subset`);
         };
-        if (ts.isStringLiteralLike(options)) {
+        if (this.sideEffectFreeStringLiteralText(options, new Set()) !== null) {
             return { withFileTypes: false, recursive: false, encoding: checkEncoding(options) };
         }
         if (!ts.isObjectLiteralExpression(options)) {
