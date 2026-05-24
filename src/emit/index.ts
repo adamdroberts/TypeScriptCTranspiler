@@ -2613,24 +2613,71 @@ class Emitter {
         const key = this.sideEffectFreeObjectPropertyReadKey(call.arguments[1]!, seenConsts);
         if (key === null) return false;
         const target = call.arguments[0]!;
-        if (
-            this.sideEffectFreePrimitiveObjectPropertyOperandResult(
-                target,
-                key,
-                new Set(seenConsts),
-            ) !== "unsafe"
-        ) {
-            return true;
-        }
+        return this.sideEffectFreePrimitiveObjectOrArrayPropertyResult(
+            target,
+            key,
+            new Set(seenConsts),
+        ) !== "unsafe";
+    }
+
+    private sideEffectFreePrimitiveObjectOrArrayPropertyResult(
+        expr: ts.Expression,
+        key: string,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        const objectResult = this.sideEffectFreePrimitiveObjectPropertyOperandResult(
+            expr,
+            key,
+            seenConsts,
+        );
+        if (objectResult !== "unsafe") return objectResult;
         const index = this.sideEffectFreeArrayIndexFromObjectPropertyKey(key);
-        return index !== null &&
-            this.isSideEffectFreePrimitiveArrayElementOperand(target, index, new Set(seenConsts));
+        return index === null
+            ? "unsafe"
+            : this.sideEffectFreePrimitiveArrayElementOperandResult(expr, index, seenConsts);
     }
 
     private sideEffectFreeArrayIndexFromObjectPropertyKey(key: string): number | null {
         if (!/^(?:0|[1-9]\d*)$/.test(key)) return null;
         const index = Number(key);
         return Number.isSafeInteger(index) && String(index) === key ? index : null;
+    }
+
+    private sideEffectFreePrimitiveDescriptorPropertyReadResult(
+        call: ts.CallExpression,
+        descriptorKey: string,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "unsafe" {
+        if (
+            descriptorKey !== "value" &&
+            descriptorKey !== "writable" &&
+            descriptorKey !== "enumerable" &&
+            descriptorKey !== "configurable" &&
+            descriptorKey !== "get" &&
+            descriptorKey !== "set"
+        ) {
+            return "unsafe";
+        }
+        const propertyKey = this.sideEffectFreeObjectPropertyReadKey(call.arguments[1]!, seenConsts);
+        if (propertyKey === null) return "unsafe";
+        return this.sideEffectFreePrimitiveObjectOrArrayPropertyResult(
+            call.arguments[0]!,
+            propertyKey,
+            new Set(seenConsts),
+        ) === "present"
+            ? "present"
+            : "unsafe";
+    }
+
+    private isObjectOrReflectGetOwnPropertyDescriptorCall(expr: ts.CallExpression): boolean {
+        return ts.isPropertyAccessExpression(expr.expression) &&
+            ts.isIdentifier(expr.expression.expression) &&
+            expr.expression.name.text === "getOwnPropertyDescriptor" &&
+            expr.arguments.length === 2 &&
+            (
+                this.isUnshadowedGlobalIdentifier(expr.expression.expression, "Object") ||
+                this.isUnshadowedGlobalIdentifier(expr.expression.expression, "Reflect")
+            );
     }
 
     private sideEffectFreeObjectPropertyReadKey(
@@ -2719,6 +2766,13 @@ class Emitter {
         }
         if (ts.isCallExpression(unwrapped) && this.isObjectCreateCall(unwrapped)) {
             return this.sideEffectFreePrimitiveObjectCreateReadResult(
+                unwrapped,
+                key,
+                seenConsts,
+            );
+        }
+        if (ts.isCallExpression(unwrapped) && this.isObjectOrReflectGetOwnPropertyDescriptorCall(unwrapped)) {
+            return this.sideEffectFreePrimitiveDescriptorPropertyReadResult(
                 unwrapped,
                 key,
                 seenConsts,
