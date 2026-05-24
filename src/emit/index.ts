@@ -1098,6 +1098,9 @@ class Emitter {
         if (this.isSideEffectFreeArrayMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeMapMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeSetMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
@@ -1734,12 +1737,61 @@ class Emitter {
         }
     }
 
+    private isSideEffectFreeMapMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!this.isSideEffectFreeFreshMapOperand(recv, seenConsts)) return false;
+        switch (method) {
+            case "get":
+            case "has":
+                return args.length === 1 &&
+                    this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts);
+            case "keys":
+            case "values":
+            case "entries":
+                return Array.from(args).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+            default:
+                return false;
+        }
+    }
+
+    private isSideEffectFreeFreshMapOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map")
+        ) {
+            return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeFreshMapOperand(init, seenConsts);
+    }
+
     private isSideEffectFreeSetMethodCall(
         recv: ts.Expression,
         method: string,
         args: ts.NodeArray<ts.Expression>,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
+        if (!this.isSideEffectFreeFreshSetOperand(recv, seenConsts)) return false;
+        if (method === "has") {
+            return args.length === 1 &&
+                this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts);
+        }
+        if (method === "keys" || method === "values") {
+            return Array.from(args).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+        }
         if (
             method !== "union" &&
             method !== "intersection" &&
@@ -1752,7 +1804,6 @@ class Emitter {
             return false;
         }
         return args.length === 1 &&
-            this.isSideEffectFreeFreshSetOperand(recv, seenConsts) &&
             this.isSideEffectFreeFreshSetOperand(args[0]!, seenConsts);
     }
 
