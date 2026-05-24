@@ -3,3 +3,4 @@ new function params aot: joined
 local function params aot: local-function
 local new function params aot: local-new-function
 local collection function params aot: local-collection-function
+local array index function params aot: local-array-index-function

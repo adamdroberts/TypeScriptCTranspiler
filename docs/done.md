@@ -1425,7 +1425,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_require_literal_union` | finite string-literal union annotations provide AOT dynamic require alternatives for parameters and top-level variables |
 | `dynamic_require_manifest` | explicit dynamic require manifest compiles a non-finite `require(variable)` allow-list into the AOT graph and finite runtime dispatch |
 | `dynamic_require_manifest_object` | named dynamic require manifest object maps compile the listed specifiers into the same AOT dispatch path |
-| `dynamic_require_static_collections` | top-level and earlier local const string maps/arrays provide finite AOT alternatives for dynamic require element/property access |
+| `dynamic_require_static_collections` | top-level and earlier local const string maps/arrays provide finite AOT alternatives for dynamic require element/property access, including numeric literal array indexes |
 | `dynamic_require_static_computed_map` | top-level and earlier local const string maps with computed static keys provide finite AOT alternatives for dynamic require element access |
 | `dynamic_require_unknown` | expected diagnostic for non-finite `require(variable)` |
 | `dynamic_coercions` | `any`/`unknown` unboxing into typed number/boolean/string/array destinations |
@@ -1528,7 +1528,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `runtime_function_constructor_unknown` | expected diagnostic for unknown-source `new Function(...)` runtime compilation |
 | `runtime_function_manifest` | manifest-listed non-constant `Function(...)` and `new Function(...)` bodies dispatch to generated AOT constants |
 | `runtime_function_manifest_params` | manifest-listed `Function(...)` bodies dispatch from the final argument when parameter names are static, including earlier local static `const` aliases |
-| `runtime_function_params_aot` | constant-body `Function(...)` with static parameter-name strings compiles AOT, including earlier local static `const` aliases and local const string maps/arrays |
+| `runtime_function_params_aot` | constant-body `Function(...)` with static parameter-name strings compiles AOT, including earlier local static `const` aliases, local const string maps/arrays, and numeric literal array indexes |
 | `runtime_function_unsafe_bridge` | `--unsafe-eval --emit-c-only` emits the embedded Node bridge for unknown Function source |
 | `runtime_function_constructor_unsafe_bridge` | `--unsafe-eval --emit-c-only` emits the embedded Node bridge for unknown new Function source |
 | `satisfies_expression` | TypeScript satisfies expressions erase to their runtime operand |

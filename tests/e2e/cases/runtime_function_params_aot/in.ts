@@ -33,6 +33,14 @@ function localCollectionParamFunction(): unknown {
     return makeLocal();
 }
 
+function localArrayIndexParamFunction(): unknown {
+    const names = ["unused", "ignored"] as const;
+    const bodies = ["return 'unused';", "return 'local-array-index-function';"] as const;
+    const makeLocal = Function(names[1], bodies[1]);
+    return makeLocal();
+}
+
 console.log("local function params aot:", localParamFunction());
 console.log("local new function params aot:", localNewParamFunction());
 console.log("local collection function params aot:", localCollectionParamFunction());
+console.log("local array index function params aot:", localArrayIndexParamFunction());

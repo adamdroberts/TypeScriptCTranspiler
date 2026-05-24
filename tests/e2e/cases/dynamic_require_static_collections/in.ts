@@ -26,8 +26,14 @@ function loadFromLocalArray(index: number): void {
     require(localList[index]);
 }
 
+function loadFromLocalLiteralArrayIndex(): any {
+    const localList = ["./literal_array_a", "./literal_array_b"] as const;
+    return require(localList[1]);
+}
+
 loadFromMap("second");
 loadFromArray(1);
 loadFromLocalMap("second");
 loadFromLocalArray(1);
+console.log("literal array index require:", loadFromLocalLiteralArrayIndex().label);
 console.log("static collection requires done");

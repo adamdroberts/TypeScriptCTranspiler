@@ -170,6 +170,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
     };
 
     const resolveStaticNumericKeys = (keyExpr: ts.Expression | ts.Identifier): number[] => {
+        if (ts.isNumericLiteral(keyExpr)) return [Number(keyExpr.text)];
         const texts = resolveKeyTexts(keyExpr);
         if (texts.length === 0) return [];
         const keys: number[] = [];
