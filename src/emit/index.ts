@@ -2029,7 +2029,8 @@ class Emitter {
         if (
             ts.isStringLiteral(unwrapped) ||
             ts.isNoSubstitutionTemplateLiteral(unwrapped) ||
-            ts.isNumericLiteral(unwrapped)
+            ts.isNumericLiteral(unwrapped) ||
+            ts.isBigIntLiteral(unwrapped)
         ) {
             return true;
         }
