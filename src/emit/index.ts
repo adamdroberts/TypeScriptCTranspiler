@@ -1896,6 +1896,29 @@ class Emitter {
         return init ? this.sideEffectFreeArrayLiteralLength(init, seenConsts) : null;
     }
 
+    private sideEffectFreeNewCollectionLength(
+        expr: ts.Expression,
+        globalName: "Map" | "Set",
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, globalName) &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+        ) {
+            const args = Array.from(unwrapped.arguments ?? []);
+            if (args.length === 0) return 0;
+            if (args.length === 1) {
+                const sourceLength = this.sideEffectFreeArrayLiteralLength(args[0]!, seenConsts);
+                return sourceLength !== null && sourceLength <= 1 ? sourceLength : null;
+            }
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeNewCollectionLength(init, globalName, seenConsts) : null;
+    }
+
     private sideEffectFreeFreshOrReturnedArrayLength(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -1929,7 +1952,10 @@ class Emitter {
             const sourceArrayLength = this.sideEffectFreeArrayLiteralLength(source, seenConsts);
             if (sourceArrayLength !== null) return sourceArrayLength;
             const sourceText = this.sideEffectFreeStringLiteralText(source, seenConsts);
-            return sourceText === null ? null : Array.from(sourceText).length;
+            if (sourceText !== null) return Array.from(sourceText).length;
+            const sourceSetLength = this.sideEffectFreeNewCollectionLength(source, "Set", seenConsts);
+            if (sourceSetLength !== null) return sourceSetLength;
+            return this.sideEffectFreeNewCollectionLength(source, "Map", seenConsts);
         }
         if (
             method === "keys" &&

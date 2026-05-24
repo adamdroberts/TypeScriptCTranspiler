@@ -318,6 +318,8 @@ const unused_array_from_set_sort_call = Array.from(new Set(["dead_array_from_set
 const unused_array_sort_comparator_call = [1].sort((a, b) => "dead_array_sort_comparator".length + a - b);
 const unused_array_of_sort_comparator_call = Array.of("dead_array_of_sort_comparator").sort((a, b) => "dead_array_of_sort_comparator".length + a.localeCompare(b));
 const unused_array_from_sort_comparator_call = Array.from(["dead_array_from_sort_comparator"]).sort((a, b) => "dead_array_from_sort_comparator".length + a.localeCompare(b));
+const unused_array_from_set_sort_comparator_call = Array.from(new Set(["dead_array_from_set_sort_comparator"])).sort((a, b) => "dead_array_from_set_sort_comparator".length + a.localeCompare(b));
+const unused_array_from_map_sort_comparator_call = Array.from(new Map([["dead_array_from_map_sort_comparator_key", "dead_array_from_map_sort_comparator_value"]])).sort((a, b) => "dead_array_from_map_sort_comparator".length + a[0].localeCompare(b[0]));
 const unused_object_keys_sort_comparator_call = Object.keys({ dead_object_keys_sort_comparator: 1 }).sort((a, b) => "dead_object_keys_sort_comparator".length + a.localeCompare(b));
 const unused_object_property_names_sort_comparator_call = Object.getOwnPropertyNames({ dead_object_property_names_sort_comparator: 1 }).sort((a, b) => "dead_object_property_names_sort_comparator".length + a.localeCompare(b));
 const unused_object_values_sort_comparator_call = Object.values({ dead_object_values_sort_comparator: "dead_object_values_sort_comparator" }).sort((a, b) => "dead_object_values_sort_comparator".length + a.localeCompare(b));
@@ -326,6 +328,8 @@ const unused_reflect_own_keys_sort_comparator_call = Reflect.ownKeys({ dead_refl
 const unused_empty_array_map_call = [].map(() => "dead_empty_array_map");
 const unused_array_of_empty_map_call = Array.of<string>().map(() => "dead_array_of_empty_map");
 const unused_array_from_empty_filter_call = Array.from([] as string[]).filter(() => "dead_array_from_empty_filter".length > 0);
+const unused_array_from_empty_set_map_call = Array.from(new Set<string>()).map(() => "dead_array_from_empty_set_map");
+const unused_array_from_empty_map_map_call = Array.from(new Map<string, string>()).map(() => "dead_array_from_empty_map_map");
 const unused_object_keys_empty_map_call = Object.keys({}).map(() => "dead_object_keys_empty_map");
 const unused_object_property_names_empty_map_call = Object.getOwnPropertyNames({}).map(() => "dead_object_property_names_empty_map");
 const unused_object_values_empty_map_call = Object.values({}).map(() => "dead_object_values_empty_map");
@@ -354,6 +358,8 @@ const unused_array_to_reversed_call = ["dead_array_to_reversed"].toReversed();
 const unused_array_with_call = ["dead_array_with", "dead_array_with_tail"].with(1, "dead_array_with_replacement");
 const unused_array_of_with_call = Array.of("dead_array_of_with").with(0, "dead_array_of_with_replacement");
 const unused_array_from_with_call = Array.from(["dead_array_from_with"]).with(-1, "dead_array_from_with_replacement");
+const unused_array_from_set_with_call = Array.from(new Set(["dead_array_from_set_with"])).with(0, "dead_array_from_set_with_replacement");
+const unused_array_from_map_with_call = Array.from(new Map([["dead_array_from_map_with", "dead_array_from_map_with_value"]])).with(0, ["dead_array_from_map_with_replacement", "dead_array_from_map_with_replacement_value"]);
 const unused_object_keys_with_call = Object.keys({ dead_object_keys_with: 1 }).with(0, "dead_object_keys_with_replacement");
 const unused_object_property_names_with_call = Object.getOwnPropertyNames({ dead_object_property_names_with: 1 }).with(0, "dead_object_property_names_with_replacement");
 const unused_object_values_with_call = Object.values({ dead_object_values_with: "dead_object_values_with" }).with(0, "dead_object_values_with_replacement");
@@ -366,6 +372,7 @@ Object.keys("kept_object_keys_string_map").map((key) => key + "kept_object_keys_
 Object.getOwnPropertyNames("x").map((key) => key + "kept_object_property_names_string_map_callback");
 Object.values("x").map((value) => value + "kept_object_values_string_map_callback");
 Object.entries("x").map((entry) => entry[0] + "kept_object_entries_string_map_callback");
+Array.from(new Set(["kept_array_from_set_sort_comparator_a", "kept_array_from_set_sort_comparator_b"])).sort((a, b) => "kept_array_from_set_sort_comparator_callback".length + a.localeCompare(b));
 const unused_error_constructor = new Error("dead_error_constructor");
 const unused_type_error_constructor = new TypeError("dead_type_error_constructor");
 const unused_aggregate_error_constructor = new AggregateError(["dead_aggregate_error_item"], "dead_aggregate_error_message", { cause: "dead_aggregate_error_cause" });
@@ -741,6 +748,8 @@ Array.from(new Set(["top_level_dead_array_from_set_sort"])).sort();
 [1].sort((a, b) => "top_level_dead_array_sort_comparator".length + a - b);
 Array.of("top_level_dead_array_of_sort_comparator").sort((a, b) => "top_level_dead_array_of_sort_comparator".length + a.localeCompare(b));
 Array.from(["top_level_dead_array_from_sort_comparator"]).sort((a, b) => "top_level_dead_array_from_sort_comparator".length + a.localeCompare(b));
+Array.from(new Set(["top_level_dead_array_from_set_sort_comparator"])).sort((a, b) => "top_level_dead_array_from_set_sort_comparator".length + a.localeCompare(b));
+Array.from(new Map([["top_level_dead_array_from_map_sort_comparator_key", "top_level_dead_array_from_map_sort_comparator_value"]])).sort((a, b) => "top_level_dead_array_from_map_sort_comparator".length + a[0].localeCompare(b[0]));
 Object.keys({ top_level_dead_object_keys_sort_comparator: 1 }).sort((a, b) => "top_level_dead_object_keys_sort_comparator".length + a.localeCompare(b));
 Object.getOwnPropertyNames({ top_level_dead_object_property_names_sort_comparator: 1 }).sort((a, b) => "top_level_dead_object_property_names_sort_comparator".length + a.localeCompare(b));
 Object.values({ top_level_dead_object_values_sort_comparator: "top_level_dead_object_values_sort_comparator" }).sort((a, b) => "top_level_dead_object_values_sort_comparator".length + a.localeCompare(b));
@@ -749,6 +758,8 @@ Reflect.ownKeys({ top_level_dead_reflect_own_keys_sort_comparator: 1 }).sort((a,
 [].map(() => "top_level_dead_empty_array_map");
 Array.of<string>().map(() => "top_level_dead_array_of_empty_map");
 Array.from([] as string[]).filter(() => "top_level_dead_array_from_empty_filter".length > 0);
+Array.from(new Set<string>()).map(() => "top_level_dead_array_from_empty_set_map");
+Array.from(new Map<string, string>()).map(() => "top_level_dead_array_from_empty_map_map");
 Object.keys({}).map(() => "top_level_dead_object_keys_empty_map");
 Object.getOwnPropertyNames({}).map(() => "top_level_dead_object_property_names_empty_map");
 Object.values({}).map(() => "top_level_dead_object_values_empty_map");
@@ -777,6 +788,8 @@ Array.from("x").toSorted((a, b) => "top_level_dead_array_from_string_to_sorted_c
 ["top_level_dead_array_with", "top_level_dead_array_with_tail"].with(-1, "top_level_dead_array_with_replacement");
 Array.of("top_level_dead_array_of_with").with(0, "top_level_dead_array_of_with_replacement");
 Array.from(["top_level_dead_array_from_with"]).with(-1, "top_level_dead_array_from_with_replacement");
+Array.from(new Set(["top_level_dead_array_from_set_with"])).with(0, "top_level_dead_array_from_set_with_replacement");
+Array.from(new Map([["top_level_dead_array_from_map_with", "top_level_dead_array_from_map_with_value"]])).with(0, ["top_level_dead_array_from_map_with_replacement", "top_level_dead_array_from_map_with_replacement_value"]);
 Object.keys({ top_level_dead_object_keys_with: 1 }).with(0, "top_level_dead_object_keys_with_replacement");
 Object.getOwnPropertyNames({ top_level_dead_object_property_names_with: 1 }).with(0, "top_level_dead_object_property_names_with_replacement");
 Object.values({ top_level_dead_object_values_with: "top_level_dead_object_values_with" }).with(0, "top_level_dead_object_values_with_replacement");
@@ -1174,6 +1187,8 @@ function usedLocal(value: number): number {
     [1].sort((a, b) => "local_dead_array_sort_comparator".length + a - b);
     Array.of("local_dead_array_of_sort_comparator").sort((a, b) => "local_dead_array_of_sort_comparator".length + a.localeCompare(b));
     Array.from(["local_dead_array_from_sort_comparator"]).sort((a, b) => "local_dead_array_from_sort_comparator".length + a.localeCompare(b));
+    Array.from(new Set(["local_dead_array_from_set_sort_comparator"])).sort((a, b) => "local_dead_array_from_set_sort_comparator".length + a.localeCompare(b));
+    Array.from(new Map([["local_dead_array_from_map_sort_comparator_key", "local_dead_array_from_map_sort_comparator_value"]])).sort((a, b) => "local_dead_array_from_map_sort_comparator".length + a[0].localeCompare(b[0]));
     Object.keys({ local_dead_object_keys_sort_comparator: 1 }).sort((a, b) => "local_dead_object_keys_sort_comparator".length + a.localeCompare(b));
     Object.getOwnPropertyNames({ local_dead_object_property_names_sort_comparator: 1 }).sort((a, b) => "local_dead_object_property_names_sort_comparator".length + a.localeCompare(b));
     Object.values({ local_dead_object_values_sort_comparator: "local_dead_object_values_sort_comparator" }).sort((a, b) => "local_dead_object_values_sort_comparator".length + a.localeCompare(b));
@@ -1182,6 +1197,8 @@ function usedLocal(value: number): number {
     [].map(() => "local_dead_empty_array_map");
     Array.of<string>().map(() => "local_dead_array_of_empty_map");
     Array.from([] as string[]).filter(() => "local_dead_array_from_empty_filter".length > 0);
+    Array.from(new Set<string>()).map(() => "local_dead_array_from_empty_set_map");
+    Array.from(new Map<string, string>()).map(() => "local_dead_array_from_empty_map_map");
     Object.keys({}).map(() => "local_dead_object_keys_empty_map");
     Object.getOwnPropertyNames({}).map(() => "local_dead_object_property_names_empty_map");
     Object.values({}).map(() => "local_dead_object_values_empty_map");
@@ -1209,6 +1226,8 @@ function usedLocal(value: number): number {
     ["local_dead_array_with", "local_dead_array_with_tail"].with(0, "local_dead_array_with_replacement");
     Array.of("local_dead_array_of_with").with(0, "local_dead_array_of_with_replacement");
     Array.from(["local_dead_array_from_with"]).with(-1, "local_dead_array_from_with_replacement");
+    Array.from(new Set(["local_dead_array_from_set_with"])).with(0, "local_dead_array_from_set_with_replacement");
+    Array.from(new Map([["local_dead_array_from_map_with", "local_dead_array_from_map_with_value"]])).with(0, ["local_dead_array_from_map_with_replacement", "local_dead_array_from_map_with_replacement_value"]);
     Object.keys({ local_dead_object_keys_with: 1 }).with(0, "local_dead_object_keys_with_replacement");
     Object.getOwnPropertyNames({ local_dead_object_property_names_with: 1 }).with(0, "local_dead_object_property_names_with_replacement");
     Object.values({ local_dead_object_values_with: "local_dead_object_values_with" }).with(0, "local_dead_object_values_with_replacement");
