@@ -166,6 +166,7 @@ unused_object_set_prototype_call
 unused_object_create_null_call
 unused_object_create_object_call
 unused_object_create_const_call
+unused_object_create_descriptors_call
 unused_object_assign_object_call
 unused_object_assign_array_call
 unused_object_assign_const_source_call
@@ -198,6 +199,7 @@ dead_object_freeze
 dead_object_set_prototype
 dead_object_set_prototype_proto
 dead_object_create_object
+dead_object_create_descriptors
 dead_object_assign_target
 dead_object_assign_source
 dead_object_assign_array_target
@@ -310,6 +312,7 @@ top_level_dead_freeze
 top_level_dead_set_prototype
 top_level_dead_set_prototype_proto
 top_level_dead_create_object
+top_level_dead_create_descriptors
 top_level_dead_assign_target
 top_level_dead_assign_source
 top_level_dead_assign_array_target
@@ -416,6 +419,7 @@ local_dead_freeze
 local_dead_set_prototype
 local_dead_set_prototype_proto
 local_dead_create_object
+local_dead_create_descriptors
 local_dead_assign_target
 local_dead_assign_source
 local_dead_assign_array_target

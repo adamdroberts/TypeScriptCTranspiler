@@ -1152,10 +1152,11 @@ class Emitter {
         if (
             ts.isIdentifier(recv) &&
             method === "create" &&
-            call.arguments.length === 1 &&
+            (call.arguments.length === 1 || call.arguments.length === 2) &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
         ) {
-            return this.isSideEffectFreeObjectCreatePrototypeOperand(call.arguments[0]!, seenConsts);
+            return this.isSideEffectFreeObjectCreatePrototypeOperand(call.arguments[0]!, seenConsts) &&
+                (!call.arguments[1] || this.isSideEffectFreeDataPropertyDescriptorMap(call.arguments[1], seenConsts));
         }
         if (
             ts.isIdentifier(recv) &&

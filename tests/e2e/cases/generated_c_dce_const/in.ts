@@ -121,6 +121,7 @@ const unused_object_set_prototype_call = Object.setPrototypeOf({ dead_object_set
 const unused_object_create_null_call = Object.create(null);
 const unused_object_create_object_call = Object.create({ dead_object_create_object: 1 });
 const unused_object_create_const_call = Object.create(unused_spread_source_object);
+const unused_object_create_descriptors_call = Object.create({ dead_object_create_descriptors_proto: 1 }, { dead_object_create_descriptors_key: { value: "dead_object_create_descriptors_value", enumerable: true } });
 const unused_object_assign_object_call = Object.assign({ dead_object_assign_target: 1 }, { dead_object_assign_source: 2 });
 const unused_object_assign_array_call = Object.assign(["dead_object_assign_array_target"], ["dead_object_assign_array_source"]);
 const unused_object_assign_const_source_call = Object.assign({ dead_object_assign_const_target: 1 }, unused_spread_source_object);
@@ -227,6 +228,7 @@ Object.freeze(["top_level_dead_freeze"]);
 Object.setPrototypeOf({ top_level_dead_set_prototype: 1 }, { proto: "top_level_dead_set_prototype_proto" });
 Object.create(null);
 Object.create({ top_level_dead_create_object: 1 });
+Object.create({ top_level_dead_create_descriptors_proto: 1 }, { top_level_dead_create_descriptors_key: { value: "top_level_dead_create_descriptors_value", configurable: true } });
 Object.assign({ top_level_dead_assign_target: 1 }, { top_level_dead_assign_source: 2 });
 Object.assign(["top_level_dead_assign_array_target"], ["top_level_dead_assign_array_source"]);
 Object.defineProperty({ top_level_dead_define_property_target: 1 }, "top_level_dead_define_property_key", { value: "top_level_dead_define_property_value", writable: true });
@@ -356,6 +358,7 @@ function usedLocal(value: number): number {
     Object.setPrototypeOf({ local_dead_set_prototype: 1 }, { proto: "local_dead_set_prototype_proto" });
     Object.create(null);
     Object.create({ local_dead_create_object: 1 });
+    Object.create({ local_dead_create_descriptors_proto: 1 }, { local_dead_create_descriptors_key: { value: "local_dead_create_descriptors_value", writable: true } });
     Object.assign({ local_dead_assign_target: 1 }, { local_dead_assign_source: 2 });
     Object.assign(["local_dead_assign_array_target"], ["local_dead_assign_array_source"]);
     Object.defineProperty({ local_dead_define_property_target: 1 }, "local_dead_define_property_key", { value: "local_dead_define_property_value", enumerable: true });
