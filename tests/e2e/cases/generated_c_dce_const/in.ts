@@ -1,5 +1,5 @@
 import { ADDRCONFIG, ALL, V4MAPPED as dnsV4Mapped } from "dns";
-import { EventEmitter, EventEmitter as ImportedEventEmitter, defaultMaxListeners } from "events";
+import { EventEmitter, EventEmitter as ImportedEventEmitter, defaultMaxListeners, getMaxListeners, listenerCount } from "events";
 import { constants as fsConstants } from "fs";
 import * as nodeDns from "node:dns";
 import * as nodeEvents from "node:events";
@@ -107,6 +107,11 @@ const unused_imported_event_emitter_listener_count_call = new ImportedEventEmitt
 const unused_event_emitter_listeners_call = new EventEmitter().listeners("dead_event_emitter_listeners");
 const unused_event_emitter_event_names_call = new EventEmitter().eventNames("dead_event_emitter_event_names_ignored".length);
 const unused_event_emitter_to_string_call = new EventEmitter().toString("dead_event_emitter_to_string_ignored".length);
+const unused_event_static_listener_count_call = EventEmitter.listenerCount(new EventEmitter(), "dead_event_static_listener_count");
+const unused_events_namespace_get_max_call = nodeEvents.getMaxListeners(new EventEmitter(), "dead_events_namespace_get_max_ignored".length);
+const unused_events_named_get_max_call = getMaxListeners(new EventEmitter(), "dead_events_named_get_max_ignored".length);
+const unused_events_named_listener_count_call = listenerCount(new EventEmitter(), "dead_events_named_listener_count");
+const unused_events_namespace_get_event_listeners_call = nodeEvents.getEventListeners(new EventEmitter(), "dead_events_namespace_get_event_listeners");
 const unused_new_event_target_call = new EventTarget("dead_new_event_target_ignored".length);
 const unused_new_event_call = new Event("dead_new_event_type", { cancelable: true });
 const unused_event_type_read = new Event("dead_event_type_read").type;
@@ -301,6 +306,9 @@ const unused_promise_resolve_event_default_prevented_read = Promise.resolve(new 
 const unused_promise_resolve_event_emitter_get_max_call = Promise.resolve(new EventEmitter().getMaxListeners("dead_promise_resolve_event_emitter_get_max_ignored".length));
 const unused_promise_resolve_imported_event_emitter_listener_count_call = Promise.resolve(new ImportedEventEmitter().listenerCount("dead_promise_resolve_imported_event_emitter_listener_count"));
 const unused_promise_resolve_event_emitter_to_string_call = Promise.resolve(new EventEmitter().toString("dead_promise_resolve_event_emitter_to_string_ignored".length));
+const unused_promise_resolve_event_static_listener_count_call = Promise.resolve(EventEmitter.listenerCount(new EventEmitter(), "dead_promise_resolve_event_static_listener_count"));
+const unused_promise_resolve_events_namespace_get_max_call = Promise.resolve(nodeEvents.getMaxListeners(new EventEmitter(), "dead_promise_resolve_events_namespace_get_max_ignored".length));
+const unused_promise_resolve_events_named_get_max_call = Promise.resolve(getMaxListeners(new EventEmitter(), "dead_promise_resolve_events_named_get_max_ignored".length));
 const unused_promise_resolve_event_prevent_default_call = Promise.resolve(new Event("dead_promise_resolve_event_prevent_default_call", { cancelable: true }).preventDefault("dead_promise_resolve_event_prevent_default_ignored".length));
 const unused_promise_resolve_event_to_string_call = Promise.resolve(new Event("dead_promise_resolve_event_to_string_call").toString("dead_promise_resolve_event_to_string_ignored".length));
 const unused_promise_resolve_event_target_dispatch_call = Promise.resolve(new EventTarget().dispatchEvent(new Event("dead_promise_resolve_event_target_dispatch_call")));
@@ -853,6 +861,11 @@ new ImportedEventEmitter().listenerCount("top_level_dead_imported_event_emitter_
 new EventEmitter().listeners("top_level_dead_event_emitter_listeners");
 new EventEmitter().eventNames("top_level_dead_event_emitter_event_names_ignored".length);
 new EventEmitter().toString("top_level_dead_event_emitter_to_string_ignored".length);
+EventEmitter.listenerCount(new EventEmitter(), "top_level_dead_event_static_listener_count");
+nodeEvents.getMaxListeners(new EventEmitter(), "top_level_dead_events_namespace_get_max_ignored".length);
+getMaxListeners(new EventEmitter(), "top_level_dead_events_named_get_max_ignored".length);
+listenerCount(new EventEmitter(), "top_level_dead_events_named_listener_count");
+nodeEvents.getEventListeners(new EventEmitter(), "top_level_dead_events_namespace_get_event_listeners");
 new EventTarget("top_level_dead_new_event_target_ignored".length);
 new Event("top_level_dead_new_event_type", { cancelable: true });
 new Event("top_level_dead_event_type_read").type;
@@ -872,6 +885,9 @@ Promise.resolve(new Event("top_level_dead_promise_resolve_event_default_prevente
 Promise.resolve(new EventEmitter().getMaxListeners("top_level_dead_promise_resolve_event_emitter_get_max_ignored".length));
 Promise.resolve(new ImportedEventEmitter().listenerCount("top_level_dead_promise_resolve_imported_event_emitter_listener_count"));
 Promise.resolve(new EventEmitter().toString("top_level_dead_promise_resolve_event_emitter_to_string_ignored".length));
+Promise.resolve(EventEmitter.listenerCount(new EventEmitter(), "top_level_dead_promise_resolve_event_static_listener_count"));
+Promise.resolve(nodeEvents.getMaxListeners(new EventEmitter(), "top_level_dead_promise_resolve_events_namespace_get_max_ignored".length));
+Promise.resolve(getMaxListeners(new EventEmitter(), "top_level_dead_promise_resolve_events_named_get_max_ignored".length));
 Promise.resolve(new Event("top_level_dead_promise_resolve_event_prevent_default_call", { cancelable: true }).preventDefault("top_level_dead_promise_resolve_event_prevent_default_ignored".length));
 Promise.resolve(new Event("top_level_dead_promise_resolve_event_to_string_call").toString("top_level_dead_promise_resolve_event_to_string_ignored".length));
 Promise.resolve(new EventTarget().dispatchEvent(new Event("top_level_dead_promise_resolve_event_target_dispatch_call")));
@@ -1559,6 +1575,11 @@ function usedLocal(value: number): number {
     new EventEmitter().listeners("local_dead_event_emitter_listeners");
     new EventEmitter().eventNames("local_dead_event_emitter_event_names_ignored".length);
     new EventEmitter().toString("local_dead_event_emitter_to_string_ignored".length);
+    EventEmitter.listenerCount(new EventEmitter(), "local_dead_event_static_listener_count");
+    nodeEvents.getMaxListeners(new EventEmitter(), "local_dead_events_namespace_get_max_ignored".length);
+    getMaxListeners(new EventEmitter(), "local_dead_events_named_get_max_ignored".length);
+    listenerCount(new EventEmitter(), "local_dead_events_named_listener_count");
+    nodeEvents.getEventListeners(new EventEmitter(), "local_dead_events_namespace_get_event_listeners");
     new EventTarget("local_dead_new_event_target_ignored".length);
     new Event("local_dead_new_event_type", { cancelable: true });
     new Event("local_dead_event_type_read").type;
@@ -1578,6 +1599,9 @@ function usedLocal(value: number): number {
     Promise.resolve(new EventEmitter().getMaxListeners("local_dead_promise_resolve_event_emitter_get_max_ignored".length));
     Promise.resolve(new ImportedEventEmitter().listenerCount("local_dead_promise_resolve_imported_event_emitter_listener_count"));
     Promise.resolve(new EventEmitter().toString("local_dead_promise_resolve_event_emitter_to_string_ignored".length));
+    Promise.resolve(EventEmitter.listenerCount(new EventEmitter(), "local_dead_promise_resolve_event_static_listener_count"));
+    Promise.resolve(nodeEvents.getMaxListeners(new EventEmitter(), "local_dead_promise_resolve_events_namespace_get_max_ignored".length));
+    Promise.resolve(getMaxListeners(new EventEmitter(), "local_dead_promise_resolve_events_named_get_max_ignored".length));
     Promise.resolve(new Event("local_dead_promise_resolve_event_prevent_default_call", { cancelable: true }).preventDefault("local_dead_promise_resolve_event_prevent_default_ignored".length));
     Promise.resolve(new Event("local_dead_promise_resolve_event_to_string_call").toString("local_dead_promise_resolve_event_to_string_ignored".length));
     Promise.resolve(new EventTarget().dispatchEvent(new Event("local_dead_promise_resolve_event_target_dispatch_call")));

@@ -1199,6 +1199,16 @@ class Emitter {
         if (this.isSideEffectFreeEventTargetMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeEventEmitterStaticMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
+        if (
+            ts.isIdentifier(recv) &&
+            this.isNamespaceImportFrom(recv, ["events", "node:events"]) &&
+            this.isSideEffectFreeEventsStaticCall(method, call.arguments, seenConsts)
+        ) {
+            return true;
+        }
         if (
             ts.isIdentifier(recv) &&
             method === "isArray" &&
@@ -1668,6 +1678,15 @@ class Emitter {
             (
                 this.isNetModuleIdentifier(recv) &&
                 this.isSideEffectFreeNetCall(method, call.arguments, seenConsts)
+            ) ||
+            (
+                this.isNamespaceImportFrom(recv, ["events", "node:events"]) &&
+                this.isSideEffectFreePrimitiveEventsStaticCall(method, call.arguments, seenConsts)
+            ) ||
+            (
+                this.isEventEmitterConstructorIdentifier(recv) &&
+                method === "listenerCount" &&
+                this.isSideEffectFreePrimitiveEventsStaticCall(method, call.arguments, seenConsts)
             );
         return isPrimitiveReturningHelper && this.isSideEffectFreeStaticCall(call, seenConsts);
     }
@@ -4652,6 +4671,10 @@ class Emitter {
         if (netExport !== null) {
             return this.isSideEffectFreeNetCall(netExport, call.arguments, seenConsts);
         }
+        const eventsExport = this.namedImportExportName(call.expression, ["events", "node:events"]);
+        if (eventsExport !== null) {
+            return this.isSideEffectFreeEventsStaticCall(eventsExport, call.arguments, seenConsts);
+        }
         if (name === "BigInt") {
             return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
                 call.arguments.length >= 1 &&
@@ -5021,6 +5044,57 @@ class Emitter {
             method === "toLocaleString" ||
             method === "toString"
         ) && this.isSideEffectFreeEventEmitterMethodCall(recv, method, args, seenConsts);
+    }
+
+    private isSideEffectFreeEventEmitterStaticMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return ts.isIdentifier(recv) &&
+            this.isEventEmitterConstructorIdentifier(recv) &&
+            method === "listenerCount" &&
+            this.isSideEffectFreeEventsStaticCall(method, args, seenConsts);
+    }
+
+    private isSideEffectFreeEventsStaticCall(
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        switch (method) {
+            case "listenerCount":
+                return args.length === 2 &&
+                    this.isSideEffectFreeFreshEventEmitterOperand(args[0]!, seenConsts) &&
+                    this.isSideEffectFreeStringCoercion(args[1]!, seenConsts);
+            case "getEventListeners":
+                return args.length >= 2 &&
+                    this.isSideEffectFreeFreshEventEmitterOperand(args[0]!, seenConsts) &&
+                    this.isSideEffectFreeStringCoercion(args[1]!, seenConsts) &&
+                    Array.from(args).slice(2).every((arg) =>
+                        this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                    );
+            case "getMaxListeners":
+                return args.length >= 1 &&
+                    this.isSideEffectFreeFreshEventEmitterOperand(args[0]!, seenConsts) &&
+                    Array.from(args).slice(1).every((arg) =>
+                        this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                    );
+            default:
+                return false;
+        }
+    }
+
+    private isSideEffectFreePrimitiveEventsStaticCall(
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return (
+            method === "listenerCount" ||
+            method === "getMaxListeners"
+        ) && this.isSideEffectFreeEventsStaticCall(method, args, seenConsts);
     }
 
     private isSideEffectFreeDateConstructorArgs(
@@ -5520,6 +5594,13 @@ class Emitter {
             if (
                 netExport !== null &&
                 this.isSideEffectFreeNetCall(netExport, unwrapped.arguments, seenConsts)
+            ) {
+                return true;
+            }
+            const eventsExport = this.namedImportExportName(unwrapped.expression, ["events", "node:events"]);
+            if (
+                eventsExport !== null &&
+                this.isSideEffectFreePrimitiveEventsStaticCall(eventsExport, unwrapped.arguments, seenConsts)
             ) {
                 return true;
             }

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes unused static/module `EventEmitter.listenerCount(...)`, `events.listenerCount(...)`, `events.getMaxListeners(...)`, and `events.getEventListeners(...)` helper calls over fresh empty emitters, including named imports and primitive `Promise.resolve(...)` inputs for primitive-returning calls. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused read-only fresh-`EventEmitter` helper calls such as `getMaxListeners()`, `listenerCount(eventName)`, listener array reads, `eventNames(...)`, and object string helpers, including primitive `Promise.resolve(...)` inputs for primitive-returning calls. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused fresh-`EventTarget` dispatch and object-helper calls when the target and dispatched event are directly fresh and unobserved, including primitive `Promise.resolve(...)` inputs for primitive-returning calls. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused fresh-`Event` field reads and side-effect-free method calls, including primitive `Promise.resolve(...)` inputs for primitive-returning fields/methods. Test: `generated_c_dce_const`.
