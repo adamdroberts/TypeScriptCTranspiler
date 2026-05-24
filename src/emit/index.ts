@@ -929,6 +929,9 @@ class Emitter {
             if (this.isSideEffectFreeProcessPrimitiveMetadataRead(expr)) {
                 return true;
             }
+            if (this.isSideEffectFreeProcessUsagePropertyRead(expr, seenConsts)) {
+                return true;
+            }
             if (this.isSideEffectFreeProcessStdioMetadataRead(expr)) {
                 return true;
             }
@@ -5733,6 +5736,9 @@ class Emitter {
         if (this.isSideEffectFreeProcessPrimitiveMetadataRead(unwrapped)) {
             return true;
         }
+        if (this.isSideEffectFreeProcessUsagePropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStdioMetadataRead(unwrapped)) {
             return true;
         }
@@ -7304,6 +7310,46 @@ class Emitter {
             default:
                 return false;
         }
+    }
+
+    private isSideEffectFreeProcessUsagePropertyRead(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!ts.isPropertyAccessExpression(expr)) return false;
+        const recv = this.unwrapSideEffectFreeStaticExpression(expr.expression);
+        if (!ts.isCallExpression(recv) || !ts.isPropertyAccessExpression(recv.expression)) {
+            return false;
+        }
+        const processExpr = recv.expression.expression;
+        if (!ts.isIdentifier(processExpr) || !this.isUnshadowedGlobalIdentifier(processExpr, "process")) {
+            return false;
+        }
+        const method = recv.expression.name.text;
+        const field = expr.name.text;
+        const memoryFields = new Set(["rss", "heapTotal", "heapUsed", "external", "arrayBuffers"]);
+        const resourceFields = new Set([
+            "userCPUTime",
+            "systemCPUTime",
+            "maxRSS",
+            "sharedMemorySize",
+            "unsharedDataSize",
+            "unsharedStackSize",
+            "minorPageFault",
+            "majorPageFault",
+            "swappedOut",
+            "fsRead",
+            "fsWrite",
+            "ipcSent",
+            "ipcReceived",
+            "signalsCount",
+            "voluntaryContextSwitches",
+            "involuntaryContextSwitches",
+        ]);
+        if (method === "memoryUsage" && !memoryFields.has(field)) return false;
+        if (method === "resourceUsage" && !resourceFields.has(field)) return false;
+        if (method !== "memoryUsage" && method !== "resourceUsage") return false;
+        return this.isSideEffectFreeProcessCall(processExpr, method, recv.arguments, seenConsts);
     }
 
     private isSideEffectFreeProcessStdioMetadataRead(expr: ts.Expression): boolean {
