@@ -3375,6 +3375,17 @@ class Emitter {
             return index < 0 ? "absent" : "present";
         }
         if (
+            method === "values" &&
+            call.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Object")
+        ) {
+            return this.sideEffectFreePrimitiveObjectValuesElementResult(
+                call.arguments[0]!,
+                index,
+                seenConsts,
+            );
+        }
+        if (
             method === "ownKeys" &&
             call.arguments.length === 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Reflect") &&
@@ -3383,6 +3394,31 @@ class Emitter {
             return index < 0 ? "absent" : "present";
         }
         return null;
+    }
+
+    private sideEffectFreePrimitiveObjectValuesElementResult(
+        expr: ts.Expression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            return this.sideEffectFreePrimitiveArrayLiteralElementResult(
+                unwrapped,
+                index,
+                seenConsts,
+            );
+        }
+        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
+            return index >= 0 && index < Array.from(unwrapped.text).length ? "present" : "absent";
+        }
+        if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) {
+            return "absent";
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init
+            ? this.sideEffectFreePrimitiveObjectValuesElementResult(init, index, seenConsts)
+            : "unsafe";
     }
 
     private sideEffectFreePrimitiveArrayFromElementResult(
