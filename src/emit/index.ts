@@ -1537,7 +1537,10 @@ class Emitter {
             case "replace":
             case "replaceAll":
                 return args.length >= 2 &&
-                    this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
+                    (
+                        this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) ||
+                        this.isSideEffectFreeFreshRegExpOperand(args[0]!, seenConsts)
+                    ) &&
                     this.isSideEffectFreeStringCoercion(args[1]!, seenConsts) &&
                     allArgsPure(2);
             case "split":

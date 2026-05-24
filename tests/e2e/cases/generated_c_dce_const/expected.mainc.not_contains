@@ -88,6 +88,8 @@ unused_string_repeat_call
 unused_string_pad_call
 unused_string_replace_call
 unused_string_replace_all_call
+unused_string_replace_regex_call
+unused_string_replace_all_regex_call
 unused_string_split_call
 unused_string_match_call
 unused_string_search_call
@@ -142,6 +144,8 @@ dead_string_repeat
 dead_string_pad
 dead_string_replace
 dead_string_replace_all
+dead_string_replace_regex
+dead_string_replace_all_regex
 dead_string_split
 dead_string_match
 dead_string_search
@@ -314,6 +318,8 @@ top_level_dead_string_repeat
 top_level_dead_string_pad
 top_level_dead_string_replace
 top_level_dead_string_replace_all
+top_level_dead_string_replace_regex
+top_level_dead_string_replace_all_regex
 top_level_dead_string_split
 top_level_dead_string_match
 top_level_dead_string_search
@@ -436,6 +442,8 @@ local_dead_string_repeat
 local_dead_string_pad
 local_dead_string_replace
 local_dead_string_replace_all
+local_dead_string_replace_regex
+local_dead_string_replace_all_regex
 local_dead_string_split
 local_dead_string_match
 local_dead_string_search
