@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- AOT `eval(...)`, `Function(...)`, and `new Function(...)` source extraction now accepts earlier local static `const` string aliases for single-source bodies and parameter-name strings. Tests: `runtime_eval`, `runtime_function_params_aot`.
 - Generated-C DCE now recognizes earlier static `const` aliases for supported Buffer UTF-8 encoding arguments. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes earlier static `const` aliases for supported `os.userInfo(...)` UTF-8 `encoding` option values. Test: `generated_c_dce_const`.
 - `fs.readFileSync(...)`, `fs.writeFileSync(...)`, `fs.appendFileSync(...)`, and their immediate `fs.promises` counterparts now accept earlier static `const` aliases for supported string `encoding` and `flag` option values. Test: `fs_file_flag_options`.

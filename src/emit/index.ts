@@ -20706,7 +20706,7 @@ class Emitter {
     private emitUnsafeEvalCall(call: ts.CallExpression): EmitResult {
         if (call.arguments.length < 1) unsupported(call, "eval expects source text");
         const sourceNode = call.arguments[0]!;
-        const staticSource = staticStringExpressionText(sourceNode);
+        const staticSource = this.aotRuntimeCodeStaticString(sourceNode);
         if (staticSource !== null) {
             const constant = parseAotEvalConstant(staticSource);
             if (constant) {
@@ -20730,7 +20730,7 @@ class Emitter {
         const args = call.arguments ?? [];
         if (args.length < 1) unsupported(call, "Function constructor expects source text");
         const bodyNode = this.functionConstructorBodyArg(call);
-        const bodyText = bodyNode ? staticStringExpressionText(bodyNode) : null;
+        const bodyText = bodyNode ? this.aotRuntimeCodeStaticString(bodyNode) : null;
         if (bodyText !== null) {
             const constant = parseAotFunctionBodyConstant(bodyText);
             if (constant) return this.emitAotFunctionConstructor(call, constant);
@@ -20771,9 +20771,52 @@ class Emitter {
         const args = call.arguments ?? [];
         if (args.length < 1) return null;
         for (let i = 0; i < args.length - 1; i++) {
-            if (staticStringExpressionText(args[i]!) === null) return null;
+            if (this.aotRuntimeCodeStaticString(args[i]!) === null) return null;
         }
         return args[args.length - 1]!;
+    }
+
+    private aotRuntimeCodeStaticString(expr: ts.Expression): string | null {
+        return staticStringExpressionText(expr) ??
+            this.sideEffectFreeStringLiteralText(expr, new Set()) ??
+            this.aotRuntimeCodeEarlierConstString(expr, new Set());
+    }
+
+    private aotRuntimeCodeEarlierConstString(
+        expr: ts.Expression,
+        seenNames: Set<string>,
+    ): string | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
+            return unwrapped.text;
+        }
+        if (!ts.isIdentifier(unwrapped) || seenNames.has(unwrapped.text)) return null;
+        const init = this.earlierConstInitializerInStatementBlock(unwrapped);
+        if (!init) return null;
+        seenNames.add(unwrapped.text);
+        const text = staticStringExpressionText(init) ??
+            this.aotRuntimeCodeEarlierConstString(init, seenNames);
+        seenNames.delete(unwrapped.text);
+        return text;
+    }
+
+    private earlierConstInitializerInStatementBlock(id: ts.Identifier): ts.Expression | null {
+        let cur: ts.Node = id;
+        while (cur.parent && !ts.isStatement(cur)) cur = cur.parent;
+        const stmt = cur;
+        const block = stmt.parent;
+        if (!ts.isBlock(block) && !ts.isSourceFile(block) && !ts.isModuleBlock(block)) return null;
+        for (const sibling of block.statements) {
+            if (sibling === stmt) break;
+            if (!ts.isVariableStatement(sibling)) continue;
+            if ((sibling.declarationList.flags & ts.NodeFlags.Const) === 0) continue;
+            for (const decl of sibling.declarationList.declarations) {
+                if (ts.isIdentifier(decl.name) && decl.name.text === id.text && decl.initializer) {
+                    return decl.initializer;
+                }
+            }
+        }
+        return null;
     }
 
     private emitAotEvalManifestDispatch(
@@ -20854,12 +20897,14 @@ class Emitter {
         const args = ["void* raw_env"];
         if (type.thisParam) args.push("tsc_value_t this_arg");
         args.push(...params.map((param, i) => `${param.c} _p${i}`));
-        this.defs.open(`static ${type.ret!.c} ${name}(${args.join(", ")})`);
-        this.defs.line("(void)raw_env;");
-        if (type.thisParam) this.defs.line("(void)this_arg;");
-        params.forEach((_, i) => this.defs.line(`(void)_p${i};`));
-        this.defs.line(`return ${this.emitAotRuntimeConstant(constant).c};`);
-        this.defs.close();
+        const signature = `static ${type.ret!.c} ${name}(${args.join(", ")})`;
+        this.protos.line(`${signature};`);
+        this.closureDefs.open(signature);
+        this.closureDefs.line("(void)raw_env;");
+        if (type.thisParam) this.closureDefs.line("(void)this_arg;");
+        params.forEach((_, i) => this.closureDefs.line(`(void)_p${i};`));
+        this.closureDefs.line(`return ${this.emitAotRuntimeConstant(constant).c};`);
+        this.closureDefs.close();
         return name;
     }
 
@@ -20919,10 +20964,11 @@ class Emitter {
         this.structDecls.open(`typedef struct ${envType}`);
         this.structDecls.line("tsc_value_t fn;");
         this.structDecls.close(` ${envType};`);
-        this.defs.open(`static tsc_value_t ${name}(void* raw_env, tsc_array_t* args)`);
-        this.defs.line(`${envType}* env = (${envType}*)raw_env;`);
-        this.defs.line("return tsc_node_function_call(env->fn, args);");
-        this.defs.close();
+        this.protos.line(`static tsc_value_t ${name}(void* raw_env, tsc_array_t* args);`);
+        this.closureDefs.open(`static tsc_value_t ${name}(void* raw_env, tsc_array_t* args)`);
+        this.closureDefs.line(`${envType}* env = (${envType}*)raw_env;`);
+        this.closureDefs.line("return tsc_node_function_call(env->fn, args);");
+        this.closureDefs.close();
         return name;
     }
 
