@@ -1527,6 +1527,9 @@ class Emitter {
         if (this.isSideEffectFreeDateMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeErrorMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
         return method === "test" &&
             this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts);
     }
@@ -2167,6 +2170,43 @@ class Emitter {
             Array.from(args).slice(3).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
             );
+    }
+
+    private isSideEffectFreeErrorMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return (
+            method === "toString" ||
+            method === "toLocaleString"
+        ) &&
+            this.isSideEffectFreeFreshErrorOperand(recv, seenConsts) &&
+            Array.from(args).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+    }
+
+    private isSideEffectFreeFreshErrorOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isNewExpression(unwrapped) && ts.isIdentifier(unwrapped.expression)) {
+            const name = unwrapped.expression.text;
+            if (
+                (
+                    this.isErrorConstructorName(name) ||
+                    name === "AggregateError"
+                ) &&
+                this.isUnshadowedGlobalIdentifier(unwrapped.expression, name)
+            ) {
+                return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
+            }
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeFreshErrorOperand(init, seenConsts);
     }
 
     private isSideEffectFreeURLConstructorArgs(

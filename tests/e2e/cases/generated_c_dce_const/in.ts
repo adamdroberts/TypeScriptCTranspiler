@@ -126,6 +126,8 @@ const unused_promise_resolve_array_join_call = Promise.resolve(["dead_promise_re
 const unused_promise_resolve_array_string_call = Promise.resolve(["dead_promise_resolve_array_string"].toString());
 const unused_promise_resolve_date_getter_call = Promise.resolve(new Date("2101-01-02T03:04:05Z").getTime("dead_promise_resolve_date_getter_ignored"));
 const unused_promise_resolve_date_string_call = Promise.resolve(new Date("2101-02-03T04:05:06Z").toUTCString("dead_promise_resolve_date_string_ignored"));
+const unused_promise_resolve_error_string_call = Promise.resolve(new Error("dead_promise_resolve_error_message").toString("dead_promise_resolve_error_ignored"));
+const unused_promise_resolve_aggregate_error_string_call = Promise.resolve(new AggregateError(["dead_promise_resolve_aggregate_error_item"], "dead_promise_resolve_aggregate_error_message").toLocaleString("dead_promise_resolve_aggregate_error_ignored"));
 const unused_promise_resolve_parser_call = Promise.resolve(parseInt("456789", 10));
 const unused_promise_resolve_number_parse_call = Promise.resolve(Number.parseInt("dead_promise_resolve_number_parse", 10));
 const unused_promise_resolve_number_predicate_call = Promise.resolve(Number.isSafeInteger("dead_promise_resolve_number_predicate".length));
@@ -386,6 +388,8 @@ Promise.resolve(["top_level_dead_promise_resolve_array_join"].join("|"));
 Promise.resolve(["top_level_dead_promise_resolve_array_string"].toLocaleString());
 Promise.resolve(new Date("2102-01-02T03:04:05Z").getUTCFullYear("top_level_dead_promise_resolve_date_getter_ignored"));
 Promise.resolve(new Date("2102-02-03T04:05:06Z").toDateString("top_level_dead_promise_resolve_date_string_ignored"));
+Promise.resolve(new TypeError("top_level_dead_promise_resolve_error_message").toLocaleString("top_level_dead_promise_resolve_error_ignored"));
+Promise.resolve(new AggregateError(["top_level_dead_promise_resolve_aggregate_error_item"], "top_level_dead_promise_resolve_aggregate_error_message").toString("top_level_dead_promise_resolve_aggregate_error_ignored"));
 Promise.resolve(parseFloat("765432.25"));
 Promise.resolve(Number.parseFloat("top_level_dead_promise_resolve_number_parse"));
 Promise.resolve(Number.isInteger("top_level_dead_promise_resolve_number_predicate".length));
@@ -657,6 +661,8 @@ function usedLocal(value: number): number {
     Promise.resolve(["local_dead_promise_resolve_array_string"].toString());
     Promise.resolve(new Date("2103-01-02T03:04:05Z").valueOf("local_dead_promise_resolve_date_getter_ignored"));
     Promise.resolve(new Date("2103-02-03T04:05:06Z").toTimeString("local_dead_promise_resolve_date_string_ignored"));
+    Promise.resolve(new RangeError("local_dead_promise_resolve_error_message").toString("local_dead_promise_resolve_error_ignored"));
+    Promise.resolve(new AggregateError(["local_dead_promise_resolve_aggregate_error_item"], "local_dead_promise_resolve_aggregate_error_message").toLocaleString("local_dead_promise_resolve_aggregate_error_ignored"));
     Promise.resolve(isFinite("123"));
     Promise.resolve(Number.parseInt("local_dead_promise_resolve_number_parse", 10));
     Promise.resolve(Number.isFinite("local_dead_promise_resolve_number_predicate".length));
