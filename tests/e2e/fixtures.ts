@@ -914,6 +914,9 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'const { exports: out, require: req } = module;\nconst local = req("./local.js");\nout.label = local.label;\nout.count = local.count;\nout.add = local.add;\nexports.read = function read() {\n  const { require: scopedReq } = module;\n  const scoped = scopedReq("./local.js");\n  return scoped.label + ":" + scoped.add(7, 8);\n};\n',
         "local.js": 'exports.label = "module-destructure";\nexports.count = 23;\nexports.add = function add(left, right) { return left + right; };\n',
     }),
+    "tsc2c-cjs-module-metadata-destructure": cjsPackage("tsc2c-cjs-module-metadata-destructure", {
+        "index.js": 'const { filename, id, path: dir, loaded, paths } = module;\nexports.filenameOk = filename.endsWith("index.js");\nexports.idOk = id.endsWith("index.js");\nexports.pathOk = dir.endsWith("tsc2c-cjs-module-metadata-destructure");\nexports.loadedValue = loaded;\nexports.pathsLength = paths.length;\nexports.firstPathOk = paths[0].endsWith("tsc2c-cjs-module-metadata-destructure/node_modules");\nexports.read = function read() {\n  const { filename: localFile, paths: localPaths, isPreloading } = module;\n  return localFile.endsWith("index.js") + ":" + localPaths.length + ":" + isPreloading;\n};\n',
+    }),
     "tsc2c-cjs-relative-require": cjsPackage("tsc2c-cjs-relative-require", {
         "index.js": 'const local = require("./local.js");\nexports.sum = local.sum;\n',
         "local.js": "exports.sum = function sum(left, right) { return left + right; };\n",

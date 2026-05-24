@@ -12721,9 +12721,15 @@ class Emitter {
         for (const element of decl.name.elements) {
             if (!ts.isIdentifier(element.name) || element.initializer || element.dotDotDotToken) return false;
             const name = this.staticPropertyName(element.propertyName ?? element.name);
-            if (name !== "require" && name !== "exports") return false;
+            if (!name || !this.isSupportedCommonJsModuleDestructureProperty(name)) return false;
         }
         return true;
+    }
+
+    private isSupportedCommonJsModuleDestructureProperty(name: string): boolean {
+        return name === "require" ||
+            name === "exports" ||
+            this.commonJsModuleMetadataValue(name, undefined) !== null;
     }
 
     private isCommonJsExportsTargetExpression(expr: ts.Expression): boolean {
@@ -12850,6 +12856,42 @@ class Emitter {
             ts.isVariableDeclaration(decl) &&
             !!decl.initializer &&
             this.isCommonJsModuleAliasInitializer(decl.initializer);
+    }
+
+    private commonJsModuleMetadataValue(name: string, sf: ts.SourceFile | undefined): EmitResult | null {
+        switch (name) {
+            case "filename":
+            case "id":
+                return sf ? { c: this.stringLit(sf.fileName), ty: T_STRING } : { c: "", ty: T_STRING };
+            case "path":
+                return sf ? { c: this.stringLit(path.dirname(sf.fileName)), ty: T_STRING } : { c: "", ty: T_STRING };
+            case "loaded":
+                return { c: "true", ty: T_BOOLEAN };
+            case "isPreloading":
+                return { c: "false", ty: T_BOOLEAN };
+            case "paths":
+                if (!sf) return { c: "", ty: arrayType(T_STRING) };
+                return this.commonJsModulePathsValue(sf);
+            case "children":
+                return { c: "tsc_array_new(sizeof(tsc_value_t), 1)", ty: arrayType(T_VALUE) };
+            case "parent":
+                return { c: "tsc_value_null()", ty: T_VALUE };
+            default:
+                return null;
+        }
+    }
+
+    private commonJsModulePathsValue(sf: ts.SourceFile): EmitResult {
+        const paths = this.freshTemp("_module_paths");
+        const pathValue = this.freshTemp("_module_path");
+        const modulePath = path.join(path.dirname(sf.fileName), "node_modules");
+        return {
+            c:
+                `({ tsc_array_t* ${paths} = tsc_array_new(sizeof(tsc_str_t*), 1); ` +
+                `tsc_str_t* ${pathValue} = ${this.stringLit(modulePath)}; ` +
+                `tsc_array_push_raw(${paths}, &${pathValue}); ${paths}; })`,
+            ty: arrayType(T_STRING),
+        };
     }
 
     private requireCallSpecifier(expr: ts.Expression): string | null {
@@ -13005,7 +13047,33 @@ class Emitter {
         }
     }
 
+    private emitTopLevelCommonJsModuleDestructuring(
+        initBuf: CBuf,
+        d: ts.VariableDeclaration,
+    ): void {
+        if (!ts.isObjectBindingPattern(d.name)) {
+            unsupported(d.name, "module destructuring at module scope requires an object binding pattern");
+        }
+        for (const element of d.name.elements) {
+            if (!ts.isIdentifier(element.name) || element.initializer || element.dotDotDotToken) {
+                unsupported(element, "CommonJS module destructuring requires identifier bindings without defaults or rest");
+            }
+            const exportName = this.staticPropertyName(element.propertyName ?? element.name);
+            if (!exportName) unsupported(element, "CommonJS module destructuring requires static property names");
+            if (exportName === "require" || exportName === "exports") continue;
+            const value = this.commonJsModuleMetadataValue(exportName, d.getSourceFile());
+            if (!value) unsupported(element, `unsupported CommonJS module destructuring property "${exportName}"`);
+            const localName = this.declaredName(element.name);
+            this.globalDecls.line(`static ${value.ty.c} ${localName};`);
+            initBuf.line(`${localName} = ${value.c};`);
+            const sym = this.symbolForIdentifier(element.name);
+            if (sym) this.requireDestructureTypes.set(sym, value.ty);
+        }
+    }
+
     private requireDestructureBindingType(id: ts.Identifier): CType | null {
+        const raw = this.checker.getSymbolAtLocation(id);
+        if (raw && (raw.flags & ts.SymbolFlags.Alias)) return null;
         const sym = this.symbolForIdentifier(id);
         const cached = sym ? this.requireDestructureTypes.get(sym) : undefined;
         if (cached) return cached;
@@ -15856,7 +15924,10 @@ class Emitter {
         const isConst = (vs.declarationList.flags & ts.NodeFlags.Const) !== 0;
         for (const d of vs.declarationList.declarations) {
             if (!ts.isIdentifier(d.name)) {
-                if (this.isCommonJsModuleDestructureAliasDeclaration(d)) continue;
+                if (this.isCommonJsModuleDestructureAliasDeclaration(d)) {
+                    this.emitTopLevelCommonJsModuleDestructuring(initBuf, d);
+                    continue;
+                }
                 const spec = d.initializer ? this.requireCallSpecifier(d.initializer) : null;
                 if (spec && ts.isObjectBindingPattern(d.name)) {
                     this.emitTopLevelRequireDestructuring(initBuf, d, spec);
@@ -16449,7 +16520,10 @@ class Emitter {
             (vs.declarationList.flags & ts.NodeFlags.Const) !== 0;
         for (const d of vs.declarationList.declarations) {
             if (!ts.isIdentifier(d.name)) {
-                if (this.isCommonJsModuleDestructureAliasDeclaration(d)) continue;
+                if (this.isCommonJsModuleDestructureAliasDeclaration(d)) {
+                    this.emitLocalCommonJsModuleDestructuring(buf, d, isConst);
+                    continue;
+                }
                 const spec = d.initializer ? this.requireCallSpecifier(d.initializer) : null;
                 if (spec && ts.isObjectBindingPattern(d.name)) {
                     this.emitLocalRequireDestructuring(buf, d, spec, isConst);
@@ -16651,6 +16725,37 @@ class Emitter {
             }
             const qual = isConst ? " const" : "";
             buf.line(`${ty.c}${qual} ${localName} = ${cName};`);
+        }
+    }
+
+    private emitLocalCommonJsModuleDestructuring(
+        buf: CBuf,
+        d: ts.VariableDeclaration,
+        isConst: boolean,
+    ): void {
+        if (!ts.isObjectBindingPattern(d.name)) {
+            unsupported(d.name, "module destructuring requires an object binding pattern");
+        }
+        for (const element of d.name.elements) {
+            if (!ts.isIdentifier(element.name) || element.initializer || element.dotDotDotToken) {
+                unsupported(element, "CommonJS module destructuring requires identifier bindings without defaults or rest");
+            }
+            const exportName = this.staticPropertyName(element.propertyName ?? element.name);
+            if (!exportName) unsupported(element, "CommonJS module destructuring requires static property names");
+            if (exportName === "require" || exportName === "exports") continue;
+            const value = this.commonJsModuleMetadataValue(exportName, d.getSourceFile());
+            if (!value) unsupported(element, `unsupported CommonJS module destructuring property "${exportName}"`);
+            const localName = mangleIdent(element.name.text);
+            const sym = this.symbolForIdentifier(element.name);
+            if (sym) this.requireDestructureTypes.set(sym, value.ty);
+            const cell = this.currentFunctionCellForSymbol(sym);
+            if (cell) {
+                buf.line(`${value.ty.c}* ${cell.cellName} = (${value.ty.c}*)TSC_GC_MALLOC(sizeof(${value.ty.c}));`);
+                buf.line(`*${cell.cellName} = ${value.c};`);
+                continue;
+            }
+            const qual = isConst ? " const" : "";
+            buf.line(`${value.ty.c}${qual} ${localName} = ${value.c};`);
         }
     }
 
@@ -35565,16 +35670,7 @@ class Emitter {
                         return { c: "false", ty: T_BOOLEAN };
                     }
                     if (pa.name.text === "paths") {
-                        const paths = this.freshTemp("_module_paths");
-                        const pathValue = this.freshTemp("_module_path");
-                        const modulePath = path.join(path.dirname(pa.getSourceFile().fileName), "node_modules");
-                        return {
-                            c:
-                                `({ tsc_array_t* ${paths} = tsc_array_new(sizeof(tsc_str_t*), 1); ` +
-                                `tsc_str_t* ${pathValue} = ${this.stringLit(modulePath)}; ` +
-                                `tsc_array_push_raw(${paths}, &${pathValue}); ${paths}; })`,
-                            ty: arrayType(T_STRING),
-                        };
+                        return this.commonJsModulePathsValue(pa.getSourceFile());
                     }
                 }
             }
