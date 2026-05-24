@@ -2365,6 +2365,7 @@ class Emitter {
                 unwrapped.expression.text === "Boolean" ||
                 unwrapped.expression.text === "BigInt" ||
                 unwrapped.expression.text === "Symbol" ||
+                unwrapped.expression.text === "Date" ||
                 unwrapped.expression.text === "parseInt" ||
                 unwrapped.expression.text === "parseFloat" ||
                 unwrapped.expression.text === "isNaN" ||

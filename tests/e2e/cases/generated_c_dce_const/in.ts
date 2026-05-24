@@ -101,6 +101,7 @@ const unused_promise_resolve_number_constructor_call = Promise.resolve(Number("d
 const unused_promise_resolve_boolean_constructor_call = Promise.resolve(Boolean("dead_promise_resolve_boolean_constructor"));
 const unused_promise_resolve_bigint_constructor_call = Promise.resolve(BigInt("456789123"));
 const unused_promise_resolve_symbol_call = Promise.resolve(Symbol("dead_promise_resolve_symbol"));
+const unused_promise_resolve_date_callable_call = Promise.resolve(Date("dead_promise_resolve_date_callable_ignored"));
 const unused_promise_resolve_date_now_call = Promise.resolve(Date.now("dead_promise_resolve_date_now_ignored"));
 const unused_promise_resolve_date_parse_call = Promise.resolve(Date.parse("2099-01-02T03:04:05Z"));
 const unused_promise_resolve_date_utc_call = Promise.resolve(Date.UTC(2099, 0, 2, 3, 4, 5, 6));
@@ -363,6 +364,7 @@ Promise.resolve(Number("top_level_dead_promise_resolve_number_constructor"));
 Promise.resolve(Boolean("top_level_dead_promise_resolve_boolean_constructor"));
 Promise.resolve(BigInt(567891234));
 Promise.resolve(Symbol("top_level_dead_promise_resolve_symbol"));
+Promise.resolve(Date("top_level_dead_promise_resolve_date_callable_ignored"));
 Promise.resolve(Date.now("top_level_dead_promise_resolve_date_now_ignored"));
 Promise.resolve(Date.parse("2099-02-03T04:05:06Z"));
 Promise.resolve(Date.UTC(2099, 1, 3, 4, 5, 6, 7));
@@ -636,6 +638,7 @@ function usedLocal(value: number): number {
     Promise.resolve(Boolean("local_dead_promise_resolve_boolean_constructor"));
     Promise.resolve(BigInt(true));
     Promise.resolve(Symbol("local_dead_promise_resolve_symbol"));
+    Promise.resolve(Date("local_dead_promise_resolve_date_callable_ignored"));
     Promise.resolve(Date.now("local_dead_promise_resolve_date_now_ignored"));
     Promise.resolve(Date.parse("2099-03-04T05:06:07Z"));
     Promise.resolve(Date.UTC(2099, 2, 4, 5, 6, 7, 8));
