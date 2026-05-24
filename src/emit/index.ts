@@ -2115,7 +2115,15 @@ class Emitter {
             ts.isIdentifier(unwrapped.expression) &&
             (
                 unwrapped.expression.text === "BigInt" ||
-                unwrapped.expression.text === "Symbol"
+                unwrapped.expression.text === "Symbol" ||
+                unwrapped.expression.text === "parseInt" ||
+                unwrapped.expression.text === "parseFloat" ||
+                unwrapped.expression.text === "isNaN" ||
+                unwrapped.expression.text === "isFinite" ||
+                unwrapped.expression.text === "encodeURI" ||
+                unwrapped.expression.text === "encodeURIComponent" ||
+                unwrapped.expression.text === "decodeURI" ||
+                unwrapped.expression.text === "decodeURIComponent"
             ) &&
             this.isSideEffectFreeGlobalCall(unwrapped, seenConsts)
         ) {
