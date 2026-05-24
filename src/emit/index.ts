@@ -935,6 +935,9 @@ class Emitter {
             if (this.isSideEffectFreeProcessObjectMetadataRead(expr)) {
                 return true;
             }
+            if (this.isSideEffectFreeOsUserInfoPropertyRead(expr, seenConsts)) {
+                return true;
+            }
             if (this.isSideEffectFreeProcessStdioMetadataRead(expr)) {
                 return true;
             }
@@ -1716,6 +1719,10 @@ class Emitter {
         args: ts.NodeArray<ts.Expression>,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
+        if (method === "userInfo") {
+            return args.length <= 1 &&
+                this.isSideEffectFreeOsUserInfoOptions(args[0], seenConsts);
+        }
         return [
             "platform",
             "type",
@@ -1761,6 +1768,26 @@ class Emitter {
             "uptime",
         ].includes(method) &&
             this.isSideEffectFreeOsCall(method, args, seenConsts);
+    }
+
+    private isSideEffectFreeOsUserInfoOptions(
+        expr: ts.Expression | undefined,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!expr || this.isUndefinedExpression(expr)) return true;
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            return unwrapped.properties.every((prop) => {
+                if (!ts.isPropertyAssignment(prop)) return false;
+                const key = this.staticPropertyName(prop.name);
+                if (key !== "encoding") return false;
+                if (this.isUndefinedExpression(prop.initializer)) return true;
+                return ts.isStringLiteralLike(prop.initializer) &&
+                    (prop.initializer.text === "utf8" || prop.initializer.text === "utf-8");
+            });
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeOsUserInfoOptions(init, seenConsts);
     }
 
     private isSideEffectFreePathCall(
@@ -5745,6 +5772,9 @@ class Emitter {
         if (this.isSideEffectFreeProcessObjectMetadataRead(unwrapped)) {
             return true;
         }
+        if (this.isSideEffectFreeOsUserInfoPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStdioMetadataRead(unwrapped)) {
             return true;
         }
@@ -6016,6 +6046,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeProcessUsagePropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeOsUserInfoPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeEventEmitterDefaultMaxListenersRead(unwrapped)) {
@@ -7392,6 +7425,30 @@ class Emitter {
             default:
                 return false;
         }
+    }
+
+    private isSideEffectFreeOsUserInfoPropertyRead(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!ts.isPropertyAccessExpression(expr)) return false;
+        if (!["uid", "gid", "username", "homedir", "shell"].includes(expr.name.text)) {
+            return false;
+        }
+        const recv = this.unwrapSideEffectFreeStaticExpression(expr.expression);
+        if (!ts.isCallExpression(recv)) return false;
+        if (ts.isPropertyAccessExpression(recv.expression)) {
+            const osExpr = recv.expression.expression;
+            return recv.expression.name.text === "userInfo" &&
+                ts.isIdentifier(osExpr) &&
+                this.isOsModuleIdentifier(osExpr) &&
+                this.isSideEffectFreeOsCall("userInfo", recv.arguments, seenConsts);
+        }
+        if (ts.isIdentifier(recv.expression)) {
+            return this.isNamedImportFrom(recv.expression, ["os", "node:os"], "userInfo") &&
+                this.isSideEffectFreeOsCall("userInfo", recv.arguments, seenConsts);
+        }
+        return false;
     }
 
     private isSideEffectFreeProcessStdioMetadataRead(expr: ts.Expression): boolean {

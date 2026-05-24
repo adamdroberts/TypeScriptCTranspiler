@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes unused valid `os.userInfo(...)` calls and direct field reads, including named/namespace imports, literal UTF-8 options, explicit `undefined` defaults, and primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused direct field reads from static `process.versions`, `process.release`, and `process.features` metadata objects, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused direct numeric field reads from pure `process.cpuUsage()`, `process.memoryUsage(...)`, and `process.resourceUsage(...)` calls, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused deterministic `crypto.createHash(...)` allocation, `Hash.update(...)`, and `Hash.digest(...)` chains over directly fresh hash objects with supported static algorithms/encodings, including named and namespace imports plus primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
