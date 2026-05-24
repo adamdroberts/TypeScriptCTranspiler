@@ -72,6 +72,8 @@ unused_new_date_empty_call
 unused_new_date_string_call
 unused_new_date_number_call
 unused_new_date_parts_call
+unused_new_url_call
+unused_new_url_base_call
 unused_new_map_empty_call
 unused_new_map_entries_call
 unused_new_map_object_entries_call
@@ -85,6 +87,12 @@ unused_new_weak_ref_call
 unused_new_finalization_registry_call
 dead_weak_ref_target
 dead_finalization_registry_callback
+dead-new-url
+dead-new-url-base
+top-level-dead-new-url
+top-level-dead-new-url-base
+local-dead-new-url
+local-dead-new-url-base
 dead_new_map_entries_key
 dead_new_map_entries_value
 dead_new_map_object_entries_key

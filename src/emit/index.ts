@@ -1898,6 +1898,7 @@ class Emitter {
             if (name === "RegExp") return this.isSideEffectFreeRegExpConstructorArgs(args, seenConsts);
             if (name === "Date") return this.isSideEffectFreeDateConstructorArgs(args, seenConsts);
             if (name === "AggregateError") return this.isSideEffectFreeAggregateErrorConstructorArgs(args, seenConsts);
+            if (name === "URL") return this.isSideEffectFreeURLConstructorArgs(args, seenConsts);
             if (name === "Map") {
                 return args.length === 0 ||
                     (
@@ -1960,6 +1961,27 @@ class Emitter {
             Array.from(args).slice(3).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
             );
+    }
+
+    private isSideEffectFreeURLConstructorArgs(
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (args.length < 1 || args.length > 2) return false;
+        const input = this.sideEffectFreeStringLiteralText(args[0]!, seenConsts);
+        if (input === null) return false;
+        let base: string | undefined;
+        if (args[1]) {
+            const baseText = this.sideEffectFreeStringLiteralText(args[1], seenConsts);
+            if (baseText === null) return false;
+            base = baseText;
+        }
+        try {
+            new URL(input, base);
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     private isSideEffectFreeMapConstructorSource(
