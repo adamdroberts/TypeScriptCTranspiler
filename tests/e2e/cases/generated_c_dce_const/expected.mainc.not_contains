@@ -882,6 +882,9 @@ unused_array_join_call
 unused_array_pop_call
 unused_array_shift_call
 unused_array_reverse_call
+unused_object_keys_reverse_call
+unused_object_values_pop_call
+unused_array_from_set_shift_call
 unused_array_fill_call
 unused_array_copy_within_call
 unused_array_push_call
@@ -968,6 +971,9 @@ dead_array_join
 dead_array_pop
 dead_array_shift
 dead_array_reverse
+dead_object_keys_reverse
+dead_object_values_pop
+dead_array_from_set_shift
 dead_array_fill
 dead_array_copy_within
 dead_array_push
@@ -1252,6 +1258,9 @@ top_level_dead_array_join
 top_level_dead_array_pop
 top_level_dead_array_shift
 top_level_dead_array_reverse
+top_level_dead_object_keys_reverse
+top_level_dead_object_values_pop
+top_level_dead_array_from_set_shift
 top_level_dead_array_fill
 top_level_dead_array_copy_within
 top_level_dead_array_push
@@ -1421,6 +1430,9 @@ local_dead_array_join
 local_dead_array_pop
 local_dead_array_shift
 local_dead_array_reverse
+local_dead_object_keys_reverse
+local_dead_object_values_pop
+local_dead_array_from_set_shift
 local_dead_array_fill
 local_dead_array_copy_within
 local_dead_array_push

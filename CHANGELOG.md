@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused `pop()` / `shift()` / `reverse()` calls on fresh array results from compile-time-proven pure array and Object helper calls. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused default `sort()` calls on fresh string-array results from compile-time-proven pure array and Object helper calls. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with primitive string-array method results from compile-time-proven stringifiable `Object.entries(...)` receivers. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Promise.resolve(...)` calls with primitive string-array method results from compile-time-proven empty `Object.entries(...)` receivers over side-effect-free non-string primitive sources. Test: `generated_c_dce_const`.
