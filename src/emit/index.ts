@@ -4166,6 +4166,10 @@ class Emitter {
         if (ts.isObjectLiteralExpression(unwrapped) || ts.isArrayLiteralExpression(unwrapped)) {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
         }
+        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
+        if (targetOperand) {
+            return this.isSideEffectFreeObjectEnumerationOperand(targetOperand, new Set(seenConsts));
+        }
         if (
             ts.isNewExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
@@ -4189,8 +4193,13 @@ class Emitter {
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
-        return this.isSideEffectFreeObjectEnumerationOperand(expr, seenConsts) ||
-            this.isSideEffectFreeNonNullishPrimitiveObjectOperand(expr, seenConsts);
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
+        if (targetOperand) {
+            return this.isSideEffectFreeObjectCoercionOperand(targetOperand, new Set(seenConsts));
+        }
+        return this.isSideEffectFreeObjectEnumerationOperand(unwrapped, seenConsts) ||
+            this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts);
     }
 
     private isSideEffectFreeObjectAssignSourceOperand(

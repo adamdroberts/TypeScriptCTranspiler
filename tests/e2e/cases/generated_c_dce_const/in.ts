@@ -176,6 +176,9 @@ const unused_promise_resolve_object_keys_element_call = Promise.resolve(Object.k
 const unused_promise_resolve_object_property_names_element_call = Promise.resolve(Object.getOwnPropertyNames(["dead_promise_resolve_object_property_names_element"])[0]);
 const unused_promise_resolve_array_from_set_element_call = Promise.resolve(Array.from(new Set(["dead_promise_resolve_array_from_set_element"]))[0]);
 const unused_promise_resolve_reflect_own_keys_element_call = Promise.resolve(Reflect.ownKeys({ dead_promise_resolve_reflect_own_keys_element: 1 })[0]);
+const unused_promise_resolve_object_keys_freeze_element_call = Promise.resolve(Object.keys(Object.freeze({ dead_promise_resolve_object_keys_freeze_element: 1 }))[0]);
+const unused_promise_resolve_object_property_names_freeze_element_call = Promise.resolve(Object.getOwnPropertyNames(Object.freeze(["dead_promise_resolve_object_property_names_freeze_element"]))[0]);
+const unused_promise_resolve_reflect_own_keys_freeze_element_call = Promise.resolve(Reflect.ownKeys(Object.freeze({ dead_promise_resolve_reflect_own_keys_freeze_element: 1 }))[0]);
 const unused_promise_resolve_array_of_length_call = Promise.resolve(Array.of("dead_promise_resolve_array_of_length").length);
 const unused_promise_resolve_array_from_length_call = Promise.resolve(Array.from(["dead_promise_resolve_array_from_length"]).length);
 const unused_promise_resolve_array_from_set_length_call = Promise.resolve(Array.from(new Set(["dead_promise_resolve_array_from_set_length"])).length);
@@ -507,6 +510,9 @@ Promise.resolve(Object.keys({ top_level_dead_promise_resolve_object_keys_element
 Promise.resolve(Object.getOwnPropertyNames(["top_level_dead_promise_resolve_object_property_names_element"])[0]);
 Promise.resolve(Array.from(new Set(["top_level_dead_promise_resolve_array_from_set_element"]))[0]);
 Promise.resolve(Reflect.ownKeys({ top_level_dead_promise_resolve_reflect_own_keys_element: 1 })[0]);
+Promise.resolve(Object.keys(Object.freeze({ top_level_dead_promise_resolve_object_keys_freeze_element: 1 }))[0]);
+Promise.resolve(Object.getOwnPropertyNames(Object.freeze(["top_level_dead_promise_resolve_object_property_names_freeze_element"]))[0]);
+Promise.resolve(Reflect.ownKeys(Object.freeze({ top_level_dead_promise_resolve_reflect_own_keys_freeze_element: 1 }))[0]);
 Promise.resolve(Array.of("top_level_dead_promise_resolve_array_of_length").length);
 Promise.resolve(Array.from(["top_level_dead_promise_resolve_array_from_length"]).length);
 Promise.resolve(Array.from(new Set(["top_level_dead_promise_resolve_array_from_set_length"])).length);
@@ -849,6 +855,9 @@ function usedLocal(value: number): number {
     Promise.resolve(Object.getOwnPropertyNames(["local_dead_promise_resolve_object_property_names_element"])[0]);
     Promise.resolve(Array.from(new Set(["local_dead_promise_resolve_array_from_set_element"]))[0]);
     Promise.resolve(Reflect.ownKeys({ local_dead_promise_resolve_reflect_own_keys_element: 1 })[0]);
+    Promise.resolve(Object.keys(Object.freeze({ local_dead_promise_resolve_object_keys_freeze_element: 1 }))[0]);
+    Promise.resolve(Object.getOwnPropertyNames(Object.freeze(["local_dead_promise_resolve_object_property_names_freeze_element"]))[0]);
+    Promise.resolve(Reflect.ownKeys(Object.freeze({ local_dead_promise_resolve_reflect_own_keys_freeze_element: 1 }))[0]);
     Promise.resolve(Array.of("local_dead_promise_resolve_array_of_length").length);
     Promise.resolve(Array.from(["local_dead_promise_resolve_array_from_length"]).length);
     Promise.resolve(Array.from(new Set(["local_dead_promise_resolve_array_from_set_length"])).length);
