@@ -1181,6 +1181,15 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            method === "defineProperties" &&
+            call.arguments.length === 2 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Object")
+        ) {
+            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) &&
+                this.isSideEffectFreeDataPropertyDescriptorMap(call.arguments[1]!, seenConsts);
+        }
+        if (
+            ts.isIdentifier(recv) &&
             method === "fromEntries" &&
             call.arguments.length === 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
@@ -1870,6 +1879,22 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeDataPropertyDescriptor(init, seenConsts);
+    }
+
+    private isSideEffectFreeDataPropertyDescriptorMap(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            return unwrapped.properties.every((prop) => {
+                if (!ts.isPropertyAssignment(prop)) return false;
+                return this.objectLiteralStaticStringKey(prop.name, seenConsts) !== null &&
+                    this.isSideEffectFreeDataPropertyDescriptor(prop.initializer, seenConsts);
+            });
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeDataPropertyDescriptorMap(init, seenConsts);
     }
 
     private objectLiteralStaticStringKey(

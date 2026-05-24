@@ -125,6 +125,7 @@ const unused_object_assign_object_call = Object.assign({ dead_object_assign_targ
 const unused_object_assign_array_call = Object.assign(["dead_object_assign_array_target"], ["dead_object_assign_array_source"]);
 const unused_object_assign_const_source_call = Object.assign({ dead_object_assign_const_target: 1 }, unused_spread_source_object);
 const unused_object_define_property_call = Object.defineProperty({ dead_object_define_property_target: 1 }, "dead_object_define_property_key", { value: "dead_object_define_property_value", enumerable: true });
+const unused_object_define_properties_call = Object.defineProperties({ dead_object_define_properties_target: 1 }, { dead_object_define_properties_key: { value: "dead_object_define_properties_value", configurable: true } });
 const unused_object_from_entries_call = Object.fromEntries([["dead_object_from_entries_key", "dead_object_from_entries_value"]]);
 const unused_object_from_entries_const_call = Object.fromEntries(unused_from_entries_source);
 const unused_reflect_has_call = Reflect.has({ dead_reflect_has: 1 }, "dead_reflect_has");
@@ -229,6 +230,7 @@ Object.create({ top_level_dead_create_object: 1 });
 Object.assign({ top_level_dead_assign_target: 1 }, { top_level_dead_assign_source: 2 });
 Object.assign(["top_level_dead_assign_array_target"], ["top_level_dead_assign_array_source"]);
 Object.defineProperty({ top_level_dead_define_property_target: 1 }, "top_level_dead_define_property_key", { value: "top_level_dead_define_property_value", writable: true });
+Object.defineProperties({ top_level_dead_define_properties_target: 1 }, { top_level_dead_define_properties_key: { value: "top_level_dead_define_properties_value", enumerable: true } });
 Object.fromEntries([["top_level_dead_from_entries_key", "top_level_dead_from_entries_value"]]);
 Reflect.has({ top_level_dead_reflect_has: 1 }, "top_level_dead_reflect_has");
 Reflect.ownKeys({ top_level_dead_reflect_own_keys: 1 });
@@ -357,6 +359,7 @@ function usedLocal(value: number): number {
     Object.assign({ local_dead_assign_target: 1 }, { local_dead_assign_source: 2 });
     Object.assign(["local_dead_assign_array_target"], ["local_dead_assign_array_source"]);
     Object.defineProperty({ local_dead_define_property_target: 1 }, "local_dead_define_property_key", { value: "local_dead_define_property_value", enumerable: true });
+    Object.defineProperties({ local_dead_define_properties_target: 1 }, { local_dead_define_properties_key: { value: "local_dead_define_properties_value", configurable: true } });
     Object.fromEntries([["local_dead_from_entries_key", "local_dead_from_entries_value"]]);
     Reflect.getOwnPropertyDescriptor({ local_dead_reflect_descriptor: 1 }, "local_dead_reflect_descriptor");
     Reflect.ownKeys(["local_dead_reflect_array_keys"]);
