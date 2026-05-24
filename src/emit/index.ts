@@ -3409,6 +3409,13 @@ class Emitter {
                 seenConsts,
             );
         }
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            return this.sideEffectFreePrimitiveObjectValuesLiteralElementResult(
+                unwrapped,
+                index,
+                seenConsts,
+            );
+        }
         if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
             return index >= 0 && index < Array.from(unwrapped.text).length ? "present" : "absent";
         }
@@ -3419,6 +3426,51 @@ class Emitter {
         return init
             ? this.sideEffectFreePrimitiveObjectValuesElementResult(init, index, seenConsts)
             : "unsafe";
+    }
+
+    private sideEffectFreePrimitiveObjectValuesLiteralElementResult(
+        literal: ts.ObjectLiteralExpression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        if (index < 0) return "absent";
+        let offset = 0;
+        for (const prop of literal.properties) {
+            if (ts.isPropertyAssignment(prop)) {
+                const key = this.objectLiteralStaticStringKey(prop.name, seenConsts);
+                if (key === null) return "unsafe";
+                if (offset === index) {
+                    return this.isSideEffectFreePrimitivePromiseResolveValue(
+                        prop.initializer,
+                        new Set(seenConsts),
+                    )
+                        ? "present"
+                        : "unsafe";
+                }
+                if (!this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts)) {
+                    return "unsafe";
+                }
+                offset++;
+                continue;
+            }
+            if (ts.isShorthandPropertyAssignment(prop)) {
+                if (offset === index) {
+                    return this.isSideEffectFreePrimitivePromiseResolveValue(
+                        prop.name,
+                        new Set(seenConsts),
+                    )
+                        ? "present"
+                        : "unsafe";
+                }
+                if (!this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts)) {
+                    return "unsafe";
+                }
+                offset++;
+                continue;
+            }
+            return "unsafe";
+        }
+        return "absent";
     }
 
     private sideEffectFreePrimitiveArrayFromElementResult(
