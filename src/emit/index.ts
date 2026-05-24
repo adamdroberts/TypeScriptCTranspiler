@@ -29713,7 +29713,8 @@ class Emitter {
                 if (this.isUndefinedExpression(prop.initializer)) {
                     continue;
                 }
-                if (this.tryFoldNumericLiteral(prop.initializer) === null) {
+                const value = this.sideEffectFreeNumericLiteralSameValueZeroValue(prop.initializer, new Set());
+                if (value === null || !Number.isFinite(value)) {
                     unsupported(prop.initializer, `${label}.${key} must be a numeric literal in this subset`);
                 }
                 continue;
