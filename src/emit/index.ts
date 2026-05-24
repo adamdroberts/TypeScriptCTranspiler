@@ -2093,6 +2093,16 @@ class Emitter {
         ) {
             return Array.from(unwrapped.arguments);
         }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Array") &&
+            unwrapped.expression.name.text === "from" &&
+            unwrapped.arguments.length === 1
+        ) {
+            return this.sideEffectFreeSetArraySourceExpressions(unwrapped.arguments[0]!);
+        }
         return null;
     }
 
