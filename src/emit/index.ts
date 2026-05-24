@@ -822,6 +822,7 @@ class Emitter {
         }
         if (ts.isCallExpression(expr)) {
             return this.isSideEffectFreeSymbolStringMethodCall(expr, seenConsts) ||
+                this.isSideEffectFreeObjectPrototypeToStringCall(expr, seenConsts) ||
                 this.isSideEffectFreeStaticCall(expr, seenConsts) ||
                 this.isSideEffectFreeGlobalCall(expr, seenConsts);
         }
@@ -1053,6 +1054,9 @@ class Emitter {
         if (this.isSideEffectFreeBuiltinObjectPrototypeStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeObjectPrototypeToStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -1229,6 +1233,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeBuiltinObjectPrototypeStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeObjectPrototypeToStringCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
@@ -2688,6 +2695,40 @@ class Emitter {
                 unwrapped.arguments,
                 seenConsts,
             );
+    }
+
+    private isSideEffectFreeObjectPrototypeToStringCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (!ts.isCallExpression(unwrapped)) {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+            return !!init && this.isSideEffectFreeObjectPrototypeToStringCall(init, seenConsts);
+        }
+        if (!ts.isPropertyAccessExpression(unwrapped.expression) || unwrapped.expression.name.text !== "call") {
+            return false;
+        }
+        const methodAccess = unwrapped.expression.expression;
+        if (
+            !ts.isPropertyAccessExpression(methodAccess) ||
+            methodAccess.name.text !== "toString"
+        ) {
+            return false;
+        }
+        const prototypeAccess = methodAccess.expression;
+        if (
+            !ts.isPropertyAccessExpression(prototypeAccess) ||
+            prototypeAccess.name.text !== "prototype" ||
+            !ts.isIdentifier(prototypeAccess.expression) ||
+            !this.isUnshadowedGlobalIdentifier(prototypeAccess.expression, "Object") ||
+            unwrapped.arguments.length < 1
+        ) {
+            return false;
+        }
+        return Array.from(unwrapped.arguments).every((arg) =>
+            this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+        );
     }
 
     private isSideEffectFreeArrayMethodCall(
@@ -5163,6 +5204,9 @@ class Emitter {
         if (this.isSideEffectFreeBuiltinObjectPrototypeStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeObjectPrototypeToStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -5257,6 +5301,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeBuiltinObjectPrototypeStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeObjectPrototypeToStringCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
@@ -6392,6 +6439,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeBuiltinObjectPrototypeStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeObjectPrototypeToStringCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeRegExpPropertyRead(unwrapped, seenConsts)) {
