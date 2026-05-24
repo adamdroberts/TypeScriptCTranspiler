@@ -2676,7 +2676,10 @@ class Emitter {
         if (
             ts.isNewExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set")
+            (
+                this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map") ||
+                this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set")
+            )
         ) {
             return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
         }

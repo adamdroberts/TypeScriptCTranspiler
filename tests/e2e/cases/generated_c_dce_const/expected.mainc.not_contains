@@ -38,6 +38,7 @@ unused_const_array_is_array
 unused_array_of_call
 unused_array_from_array_call
 unused_array_from_string_call
+unused_array_from_map_call
 unused_array_from_set_call
 unused_array_from_empty_array_mapper_call
 unused_array_from_empty_string_mapper_call
@@ -47,6 +48,12 @@ dead_array_of
 dead_array_of_tail
 dead_array_from_array
 dead_array_from_string
+dead_array_from_map_key
+dead_array_from_map_value
+top_level_dead_array_from_map_key
+top_level_dead_array_from_map_value
+local_dead_array_from_map_key
+local_dead_array_from_map_value
 dead_array_from_set
 dead_array_from_set_tail
 top_level_dead_array_from_set
