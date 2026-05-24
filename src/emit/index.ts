@@ -1938,7 +1938,7 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): number | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        const elements = this.sideEffectFreeSetArraySourceExpressions(unwrapped);
+        const elements = this.sideEffectFreeSetArraySourceExpressions(unwrapped, seenConsts);
         if (elements) {
             const values = new Set<string>();
             for (const element of elements) {
@@ -1965,7 +1965,7 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): number | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        const elements = this.sideEffectFreeSetArraySourceExpressions(unwrapped);
+        const elements = this.sideEffectFreeSetArraySourceExpressions(unwrapped, seenConsts);
         if (elements) {
             const values = new Set<string>();
             for (const element of elements) {
@@ -2041,7 +2041,7 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): number | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        const elements = this.sideEffectFreeSetArraySourceExpressions(unwrapped);
+        const elements = this.sideEffectFreeSetArraySourceExpressions(unwrapped, seenConsts);
         if (elements) {
             const values = new Set<boolean>();
             for (const element of elements) {
@@ -2074,7 +2074,10 @@ class Emitter {
         return init ? this.sideEffectFreeBooleanLiteralValue(init, seenConsts) : null;
     }
 
-    private sideEffectFreeSetArraySourceExpressions(expr: ts.Expression): ts.Expression[] | null {
+    private sideEffectFreeSetArraySourceExpressions(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): ts.Expression[] | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (ts.isArrayLiteralExpression(unwrapped)) {
             const elements: ts.Expression[] = [];
@@ -2101,9 +2104,10 @@ class Emitter {
             unwrapped.expression.name.text === "from" &&
             unwrapped.arguments.length === 1
         ) {
-            return this.sideEffectFreeSetArraySourceExpressions(unwrapped.arguments[0]!);
+            return this.sideEffectFreeSetArraySourceExpressions(unwrapped.arguments[0]!, seenConsts);
         }
-        return null;
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeSetArraySourceExpressions(init, seenConsts) : null;
     }
 
     private sideEffectFreeStringKeyMapConstructorSourceLength(
