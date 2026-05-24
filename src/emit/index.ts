@@ -1171,6 +1171,16 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            method === "defineProperty" &&
+            call.arguments.length === 3 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Object")
+        ) {
+            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) &&
+                this.isSideEffectFreePropertyKeyCoercion(call.arguments[1]!, seenConsts) &&
+                this.isSideEffectFreeDataPropertyDescriptor(call.arguments[2]!, seenConsts);
+        }
+        if (
+            ts.isIdentifier(recv) &&
             method === "fromEntries" &&
             call.arguments.length === 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
@@ -1248,6 +1258,16 @@ class Emitter {
         ) {
             return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) &&
                 this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts);
+        }
+        if (
+            ts.isIdentifier(recv) &&
+            method === "defineProperty" &&
+            call.arguments.length === 3 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Reflect")
+        ) {
+            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) &&
+                this.isSideEffectFreePropertyKeyCoercion(call.arguments[1]!, seenConsts) &&
+                this.isSideEffectFreeDataPropertyDescriptor(call.arguments[2]!, seenConsts);
         }
         if (
             ts.isIdentifier(recv) &&
@@ -1831,6 +1851,38 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreePropertyKeyCoercion(init, seenConsts);
+    }
+
+    private isSideEffectFreeDataPropertyDescriptor(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            const allowed = new Set(["value", "writable", "enumerable", "configurable"]);
+            return unwrapped.properties.every((prop) => {
+                if (!ts.isPropertyAssignment(prop)) return false;
+                const name = this.objectLiteralStaticStringKey(prop.name, seenConsts);
+                return name !== null &&
+                    allowed.has(name) &&
+                    this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts);
+            });
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeDataPropertyDescriptor(init, seenConsts);
+    }
+
+    private objectLiteralStaticStringKey(
+        name: ts.PropertyName,
+        seenConsts: Set<ts.Symbol>,
+    ): string | null {
+        if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
+            return name.text;
+        }
+        if (ts.isComputedPropertyName(name)) {
+            return this.sideEffectFreeStringLiteralText(name.expression, seenConsts);
+        }
+        return null;
     }
 
     private isSideEffectFreeObjectEnumerationOperand(

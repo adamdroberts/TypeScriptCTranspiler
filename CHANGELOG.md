@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused `Object.defineProperty(...)` and `Reflect.defineProperty(...)` calls over fresh object/array literal targets with pure data descriptors as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused `Reflect.deleteProperty(...)` calls over fresh object/array literal targets as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `String.fromCodePoint(...)` calls with statically valid code points as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure bounded string-copy calls such as `normalize(...)`, `repeat(...)`, `padStart(...)`, and `padEnd(...)` on pure string operands as side-effect-free. Test: `generated_c_dce_const`.
