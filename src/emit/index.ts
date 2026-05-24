@@ -1920,7 +1920,8 @@ class Emitter {
                 const exactLiteralLength = globalName === "Set"
                     ? (
                         this.sideEffectFreeStringSetConstructorSourceLength(args[0]!, seenConsts) ??
-                        this.sideEffectFreeNumericSetConstructorSourceLength(args[0]!, seenConsts)
+                        this.sideEffectFreeNumericSetConstructorSourceLength(args[0]!, seenConsts) ??
+                        this.sideEffectFreeBooleanSetConstructorSourceLength(args[0]!, seenConsts)
                     )
                     : this.sideEffectFreeStringKeyMapConstructorSourceLength(args[0]!, seenConsts);
                 if (exactLiteralLength !== null) return exactLiteralLength;
@@ -2033,6 +2034,44 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeNumericLiteralSameValueZeroValue(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeBooleanSetConstructorSourceLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            const values = new Set<boolean>();
+            for (const element of unwrapped.elements) {
+                if (!ts.isExpression(element)) return null;
+                const value = this.sideEffectFreeBooleanLiteralValue(element, seenConsts);
+                if (value === null) return null;
+                values.add(value);
+            }
+            return values.size;
+        }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set") &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+        ) {
+            return this.sideEffectFreeNewCollectionLength(unwrapped, "Set", seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeBooleanSetConstructorSourceLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeBooleanLiteralValue(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (unwrapped.kind === ts.SyntaxKind.TrueKeyword) return true;
+        if (unwrapped.kind === ts.SyntaxKind.FalseKeyword) return false;
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeBooleanLiteralValue(init, seenConsts) : null;
     }
 
     private sideEffectFreeStringKeyMapConstructorSourceLength(
