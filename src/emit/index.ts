@@ -2003,10 +2003,18 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (
             ts.isIdentifier(unwrapped) &&
-            unwrapped.text === "NaN" &&
-            this.isUnshadowedGlobalIdentifier(unwrapped, "NaN")
+            (
+                (
+                    unwrapped.text === "NaN" &&
+                    this.isUnshadowedGlobalIdentifier(unwrapped, "NaN")
+                ) ||
+                (
+                    unwrapped.text === "Infinity" &&
+                    this.isUnshadowedGlobalIdentifier(unwrapped, "Infinity")
+                )
+            )
         ) {
-            return Number.NaN;
+            return unwrapped.text === "NaN" ? Number.NaN : Number.POSITIVE_INFINITY;
         }
         if (ts.isNumericLiteral(unwrapped)) {
             const value = Number(unwrapped.text);

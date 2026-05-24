@@ -372,6 +372,7 @@ const unused_array_from_set_with_call = Array.from(new Set(["dead_array_from_set
 const unused_array_from_set_multi_with_call = Array.from(new Set(["dead_array_from_set_multi_with", "dead_array_from_set_multi_with_tail"])).with(1, "dead_array_from_set_multi_with_replacement");
 const unused_array_from_numeric_set_multi_with_call = Array.from(new Set([1, 1, 2])).with(1, "dead_array_from_numeric_set_multi_with_replacement".length);
 const unused_array_from_nan_set_with_call = Array.from(new Set([NaN, NaN])).with(0, "dead_array_from_nan_set_with_replacement".length);
+const unused_array_from_infinity_set_with_call = Array.from(new Set([Infinity, Infinity])).with(0, "dead_array_from_infinity_set_with_replacement".length);
 const unused_array_from_map_with_call = Array.from(new Map([["dead_array_from_map_with", "dead_array_from_map_with_value"]])).with(0, ["dead_array_from_map_with_replacement", "dead_array_from_map_with_replacement_value"]);
 const unused_array_from_map_multi_with_call = Array.from(new Map([["dead_array_from_map_multi_with", "dead_array_from_map_multi_with_value"], ["dead_array_from_map_multi_with_tail", "dead_array_from_map_multi_with_tail_value"]])).with(1, ["dead_array_from_map_multi_with_replacement", "dead_array_from_map_multi_with_replacement_value"]);
 const unused_object_keys_with_call = Object.keys({ dead_object_keys_with: 1 }).with(0, "dead_object_keys_with_replacement");
@@ -823,6 +824,7 @@ Array.from(new Set(["top_level_dead_array_from_set_with"])).with(0, "top_level_d
 Array.from(new Set(["top_level_dead_array_from_set_multi_with", "top_level_dead_array_from_set_multi_with_tail"])).with(1, "top_level_dead_array_from_set_multi_with_replacement");
 Array.from(new Set([1, 1, 2])).with(1, "top_level_dead_array_from_numeric_set_multi_with_replacement".length);
 Array.from(new Set([NaN, NaN])).with(0, "top_level_dead_array_from_nan_set_with_replacement".length);
+Array.from(new Set([Infinity, Infinity])).with(0, "top_level_dead_array_from_infinity_set_with_replacement".length);
 Array.from(new Map([["top_level_dead_array_from_map_with", "top_level_dead_array_from_map_with_value"]])).with(0, ["top_level_dead_array_from_map_with_replacement", "top_level_dead_array_from_map_with_replacement_value"]);
 Array.from(new Map([["top_level_dead_array_from_map_multi_with", "top_level_dead_array_from_map_multi_with_value"], ["top_level_dead_array_from_map_multi_with_tail", "top_level_dead_array_from_map_multi_with_tail_value"]])).with(1, ["top_level_dead_array_from_map_multi_with_replacement", "top_level_dead_array_from_map_multi_with_replacement_value"]);
 Object.keys({ top_level_dead_object_keys_with: 1 }).with(0, "top_level_dead_object_keys_with_replacement");
@@ -1277,6 +1279,7 @@ function usedLocal(value: number): number {
     Array.from(new Set(["local_dead_array_from_set_multi_with", "local_dead_array_from_set_multi_with_tail"])).with(1, "local_dead_array_from_set_multi_with_replacement");
     Array.from(new Set([1, 1, 2])).with(1, "local_dead_array_from_numeric_set_multi_with_replacement".length);
     Array.from(new Set([NaN, NaN])).with(0, "local_dead_array_from_nan_set_with_replacement".length);
+    Array.from(new Set([Infinity, Infinity])).with(0, "local_dead_array_from_infinity_set_with_replacement".length);
     Array.from(new Map([["local_dead_array_from_map_with", "local_dead_array_from_map_with_value"]])).with(0, ["local_dead_array_from_map_with_replacement", "local_dead_array_from_map_with_replacement_value"]);
     Array.from(new Map([["local_dead_array_from_map_multi_with", "local_dead_array_from_map_multi_with_value"], ["local_dead_array_from_map_multi_with_tail", "local_dead_array_from_map_multi_with_tail_value"]])).with(1, ["local_dead_array_from_map_multi_with_replacement", "local_dead_array_from_map_multi_with_replacement_value"]);
     Object.keys({ local_dead_object_keys_with: 1 }).with(0, "local_dead_object_keys_with_replacement");
