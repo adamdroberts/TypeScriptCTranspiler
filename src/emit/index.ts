@@ -1022,6 +1022,9 @@ class Emitter {
         if (this.isSideEffectFreeRegExpStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeRegExpStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -1177,6 +1180,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeRegExpStringPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeRegExpStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
@@ -5046,6 +5052,9 @@ class Emitter {
         if (this.isSideEffectFreeRegExpStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeRegExpStringMethodCall(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -5119,6 +5128,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeRegExpStringPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeRegExpStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
@@ -6240,6 +6252,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeRegExpPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeRegExpStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeSymbolDescriptionRead(unwrapped, seenConsts)) {
@@ -7784,6 +7799,28 @@ class Emitter {
         return ts.isPropertyAccessExpression(expr) &&
             (expr.name.text === "source" || expr.name.text === "flags") &&
             this.isSideEffectFreeRegExpPropertyRead(expr, seenConsts);
+    }
+
+    private isSideEffectFreeRegExpStringMethodCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (!ts.isCallExpression(unwrapped) || !ts.isPropertyAccessExpression(unwrapped.expression)) {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+            return !!init && this.isSideEffectFreeRegExpStringMethodCall(init, seenConsts);
+        }
+        const method = unwrapped.expression.name.text;
+        return (
+            method === "toString" ||
+            method === "toLocaleString"
+        ) &&
+            this.isSideEffectFreeRegExpMethodCall(
+                unwrapped.expression.expression,
+                method,
+                unwrapped.arguments,
+                seenConsts,
+            );
     }
 
     private isSideEffectFreeSymbolDescriptionRead(
