@@ -1869,7 +1869,8 @@ class Emitter {
             ts.isCallExpression(unwrapped) &&
             (
                 this.isSideEffectFreeStringArrayReturningArrayHelperCall(unwrapped, seenConsts) ||
-                this.isSideEffectFreeStringArrayReturningObjectKeyHelperCall(unwrapped, seenConsts)
+                this.isSideEffectFreeStringArrayReturningObjectKeyHelperCall(unwrapped, seenConsts) ||
+                this.isSideEffectFreeStringArrayReturningObjectValuesCall(unwrapped, seenConsts)
             )
         ) {
             return true;
@@ -1903,6 +1904,59 @@ class Emitter {
         return this.isUnshadowedGlobalIdentifier(recv, "Reflect") &&
             method === "ownKeys" &&
             this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts);
+    }
+
+    private isSideEffectFreeStringArrayReturningObjectValuesCall(
+        call: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            !ts.isIdentifier(call.expression.expression) ||
+            !this.isUnshadowedGlobalIdentifier(call.expression.expression, "Object") ||
+            call.expression.name.text !== "values" ||
+            call.arguments.length !== 1
+        ) {
+            return false;
+        }
+        return this.isSideEffectFreeObjectValuesStringCoercionSource(call.arguments[0]!, seenConsts);
+    }
+
+    private isSideEffectFreeObjectValuesStringCoercionSource(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
+            return true;
+        }
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            return unwrapped.elements.every((element) =>
+                ts.isExpression(element) &&
+                this.isSideEffectFreeStringCoercion(element, seenConsts)
+            );
+        }
+        if (ts.isObjectLiteralExpression(unwrapped)) {
+            return unwrapped.properties.every((prop) => {
+                if (ts.isPropertyAssignment(prop)) {
+                    return this.objectLiteralStaticStringKey(prop.name, seenConsts) !== null &&
+                        this.isSideEffectFreeStringCoercion(prop.initializer, seenConsts);
+                }
+                if (ts.isShorthandPropertyAssignment(prop)) {
+                    return this.isSideEffectFreeStringCoercion(prop.name, seenConsts);
+                }
+                return false;
+            });
+        }
+        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
+        if (targetOperand) {
+            return this.isSideEffectFreeObjectValuesStringCoercionSource(
+                targetOperand,
+                new Set(seenConsts),
+            );
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeObjectValuesStringCoercionSource(init, seenConsts);
     }
 
     private isSideEffectFreeStringArrayReturningArrayHelperCall(

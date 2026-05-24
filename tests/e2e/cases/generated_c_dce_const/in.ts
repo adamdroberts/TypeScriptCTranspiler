@@ -201,6 +201,9 @@ const unused_promise_resolve_array_from_set_to_string_call = Promise.resolve(Arr
 const unused_promise_resolve_object_values_array_element_call = Promise.resolve(Object.values(["dead_promise_resolve_object_values_array_element"])[0]);
 const unused_promise_resolve_object_values_string_element_call = Promise.resolve(Object.values("dead_promise_resolve_object_values_string_element")[0]);
 const unused_promise_resolve_object_values_object_element_call = Promise.resolve(Object.values({ dead_promise_resolve_object_values_object_element: "dead_promise_resolve_object_values_object_element" })[0]);
+const unused_promise_resolve_object_values_array_join_call = Promise.resolve(Object.values(["dead_promise_resolve_object_values_array_join"]).join("|"));
+const unused_promise_resolve_object_values_string_to_string_call = Promise.resolve(Object.values("dead_promise_resolve_object_values_string_to_string").toString());
+const unused_promise_resolve_object_values_object_join_call = Promise.resolve(Object.values({ dead_promise_resolve_object_values_object_join: "dead_promise_resolve_object_values_object_join" }).join("|"));
 const unused_promise_resolve_object_entries_key_call = Promise.resolve(Object.entries({ dead_promise_resolve_object_entries_key: "dead_promise_resolve_object_entries_value" })[0][0]);
 const unused_promise_resolve_object_entries_value_call = Promise.resolve(Object.entries({ dead_promise_resolve_object_entries_value_key: "dead_promise_resolve_object_entries_value" })[0][1]);
 const unused_promise_resolve_object_entries_array_value_call = Promise.resolve(Object.entries(["dead_promise_resolve_object_entries_array_value"])[0][1]);
@@ -551,6 +554,9 @@ Promise.resolve(Array.from(new Set(["top_level_dead_promise_resolve_array_from_s
 Promise.resolve(Object.values(["top_level_dead_promise_resolve_object_values_array_element"])[0]);
 Promise.resolve(Object.values("top_level_dead_promise_resolve_object_values_string_element")[0]);
 Promise.resolve(Object.values({ top_level_dead_promise_resolve_object_values_object_element: "top_level_dead_promise_resolve_object_values_object_element" })[0]);
+Promise.resolve(Object.values(["top_level_dead_promise_resolve_object_values_array_join"]).join("|"));
+Promise.resolve(Object.values("top_level_dead_promise_resolve_object_values_string_to_string").toString());
+Promise.resolve(Object.values({ top_level_dead_promise_resolve_object_values_object_join: "top_level_dead_promise_resolve_object_values_object_join" }).join("|"));
 Promise.resolve(Object.entries({ top_level_dead_promise_resolve_object_entries_key: "top_level_dead_promise_resolve_object_entries_value" })[0][0]);
 Promise.resolve(Object.entries({ top_level_dead_promise_resolve_object_entries_value_key: "top_level_dead_promise_resolve_object_entries_value" })[0][1]);
 Promise.resolve(Object.entries(["top_level_dead_promise_resolve_object_entries_array_value"])[0][1]);
@@ -912,6 +918,9 @@ function usedLocal(value: number): number {
     Promise.resolve(Object.values(["local_dead_promise_resolve_object_values_array_element"])[0]);
     Promise.resolve(Object.values("local_dead_promise_resolve_object_values_string_element")[0]);
     Promise.resolve(Object.values({ local_dead_promise_resolve_object_values_object_element: "local_dead_promise_resolve_object_values_object_element" })[0]);
+    Promise.resolve(Object.values(["local_dead_promise_resolve_object_values_array_join"]).join("|"));
+    Promise.resolve(Object.values("local_dead_promise_resolve_object_values_string_to_string").toString());
+    Promise.resolve(Object.values({ local_dead_promise_resolve_object_values_object_join: "local_dead_promise_resolve_object_values_object_join" }).join("|"));
     Promise.resolve(Object.entries({ local_dead_promise_resolve_object_entries_key: "local_dead_promise_resolve_object_entries_value" })[0][0]);
     Promise.resolve(Object.entries({ local_dead_promise_resolve_object_entries_value_key: "local_dead_promise_resolve_object_entries_value" })[0][1]);
     Promise.resolve(Object.entries(["local_dead_promise_resolve_object_entries_array_value"])[0][1]);
