@@ -940,8 +940,44 @@ class Emitter {
         ) {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
         }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            this.isSideEffectFreeArrayReturningObjectHelperCall(unwrapped, seenConsts)
+        ) {
+            return true;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeLengthOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeArrayReturningObjectHelperCall(
+        call: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            !ts.isIdentifier(call.expression.expression)
+        ) {
+            return false;
+        }
+        const recv = call.expression.expression;
+        const method = call.expression.name.text;
+        if (
+            this.isUnshadowedGlobalIdentifier(recv, "Object") &&
+            (
+                method === "keys" ||
+                method === "values" ||
+                method === "entries" ||
+                method === "getOwnPropertyNames"
+            ) &&
+            call.arguments.length === 1
+        ) {
+            return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts);
+        }
+        return this.isUnshadowedGlobalIdentifier(recv, "Reflect") &&
+            method === "ownKeys" &&
+            call.arguments.length === 1 &&
+            this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts);
     }
 
     private isSideEffectFreeElementAccess(

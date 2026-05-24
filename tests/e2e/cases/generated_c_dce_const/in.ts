@@ -165,6 +165,8 @@ const unused_promise_resolve_reflect_get_call = Promise.resolve(Reflect.get({ de
 const unused_promise_resolve_reflect_get_array_call = Promise.resolve(Reflect.get(["dead_promise_resolve_reflect_get_array"], "0"));
 const unused_promise_resolve_descriptor_value_call = Promise.resolve(Object.getOwnPropertyDescriptor({ dead_promise_resolve_descriptor_value: "dead_promise_resolve_descriptor_value" }, "dead_promise_resolve_descriptor_value")!.value);
 const unused_promise_resolve_reflect_descriptor_value_call = Promise.resolve(Reflect.getOwnPropertyDescriptor(["dead_promise_resolve_reflect_descriptor_value"], "0")!.value);
+const unused_promise_resolve_object_keys_length_call = Promise.resolve(Object.keys({ dead_promise_resolve_object_keys_length: 1 }).length);
+const unused_promise_resolve_reflect_own_keys_length_call = Promise.resolve(Reflect.ownKeys(["dead_promise_resolve_reflect_own_keys_length"]).length);
 const dead_promise_resolve_array_spread_source = ["dead_promise_resolve_array_spread"];
 const unused_promise_resolve_array_spread_call = Promise.resolve([0, ...dead_promise_resolve_array_spread_source][1]);
 const unused_promise_resolve_string_spread_call = Promise.resolve([..."dead_promise_resolve_string_spread"][2]);
@@ -473,6 +475,8 @@ Promise.resolve(Reflect.get({ top_level_dead_promise_resolve_reflect_get: "top_l
 Promise.resolve(Reflect.get(["top_level_dead_promise_resolve_reflect_get_array"], "0"));
 Promise.resolve(Object.getOwnPropertyDescriptor({ top_level_dead_promise_resolve_descriptor_value: "top_level_dead_promise_resolve_descriptor_value" }, "top_level_dead_promise_resolve_descriptor_value")!.value);
 Promise.resolve(Reflect.getOwnPropertyDescriptor(["top_level_dead_promise_resolve_reflect_descriptor_value"], "0")!.value);
+Promise.resolve(Object.keys({ top_level_dead_promise_resolve_object_keys_length: 1 }).length);
+Promise.resolve(Reflect.ownKeys(["top_level_dead_promise_resolve_reflect_own_keys_length"]).length);
 const top_level_dead_promise_resolve_array_spread_source = ["top_level_dead_promise_resolve_array_spread"];
 Promise.resolve([0, ...top_level_dead_promise_resolve_array_spread_source][1]);
 Promise.resolve([..."top_level_dead_promise_resolve_string_spread"][3]);
@@ -792,6 +796,8 @@ function usedLocal(value: number): number {
     Promise.resolve(Reflect.get(["local_dead_promise_resolve_reflect_get_array"], "0"));
     Promise.resolve(Object.getOwnPropertyDescriptor({ local_dead_promise_resolve_descriptor_value: "local_dead_promise_resolve_descriptor_value" }, "local_dead_promise_resolve_descriptor_value")!.value);
     Promise.resolve(Reflect.getOwnPropertyDescriptor(["local_dead_promise_resolve_reflect_descriptor_value"], "0")!.value);
+    Promise.resolve(Object.keys({ local_dead_promise_resolve_object_keys_length: 1 }).length);
+    Promise.resolve(Reflect.ownKeys(["local_dead_promise_resolve_reflect_own_keys_length"]).length);
     const local_dead_promise_resolve_array_spread_source = ["local_dead_promise_resolve_array_spread"];
     Promise.resolve([0, ...local_dead_promise_resolve_array_spread_source][1]);
     Promise.resolve([..."local_dead_promise_resolve_string_spread"][4]);
