@@ -2630,54 +2630,80 @@ class Emitter {
         key: string,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
+        return this.sideEffectFreePrimitiveObjectPropertyOperandResult(expr, key, seenConsts) !== "unsafe";
+    }
+
+    private sideEffectFreePrimitiveObjectPropertyOperandResult(
+        expr: ts.Expression,
+        key: string,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (ts.isObjectLiteralExpression(unwrapped)) {
-            return this.isSideEffectFreePrimitiveObjectLiteralPropertyRead(
+            return this.sideEffectFreePrimitiveObjectLiteralPropertyReadResult(
                 unwrapped,
                 key,
                 seenConsts,
             );
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreePrimitiveObjectPropertyOperand(init, key, seenConsts);
+        return init
+            ? this.sideEffectFreePrimitiveObjectPropertyOperandResult(init, key, seenConsts)
+            : "unsafe";
     }
 
-    private isSideEffectFreePrimitiveObjectLiteralPropertyRead(
+    private sideEffectFreePrimitiveObjectLiteralPropertyReadResult(
         literal: ts.ObjectLiteralExpression,
         key: string,
         seenConsts: Set<ts.Symbol>,
-    ): boolean {
+    ): "present" | "absent" | "unsafe" {
         for (let i = literal.properties.length - 1; i >= 0; i--) {
             const prop = literal.properties[i]!;
             if (ts.isPropertyAssignment(prop)) {
                 const propKey = this.objectLiteralStaticStringKey(prop.name, seenConsts);
-                if (propKey === null) return false;
+                if (propKey === null) return "unsafe";
                 if (!this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts)) {
-                    return false;
+                    return "unsafe";
                 }
                 if (propKey === key) {
                     return this.isSideEffectFreePrimitivePromiseResolveValue(
                         prop.initializer,
                         new Set(seenConsts),
-                    );
+                    )
+                        ? "present"
+                        : "unsafe";
                 }
                 continue;
             }
             if (ts.isShorthandPropertyAssignment(prop)) {
                 if (!this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts)) {
-                    return false;
+                    return "unsafe";
                 }
                 if (prop.name.text === key) {
                     return this.isSideEffectFreePrimitivePromiseResolveValue(
                         prop.name,
                         new Set(seenConsts),
-                    );
+                    )
+                        ? "present"
+                        : "unsafe";
                 }
                 continue;
             }
-            return false;
+            if (ts.isSpreadAssignment(prop)) {
+                if (!this.isSideEffectFreeObjectSpreadOperand(prop.expression, seenConsts)) {
+                    return "unsafe";
+                }
+                const result = this.sideEffectFreePrimitiveObjectPropertyOperandResult(
+                    prop.expression,
+                    key,
+                    new Set(seenConsts),
+                );
+                if (result !== "absent") return result;
+                continue;
+            }
+            return "unsafe";
         }
-        return true;
+        return "absent";
     }
 
     private isSideEffectFreePrimitiveArrayElementAccess(

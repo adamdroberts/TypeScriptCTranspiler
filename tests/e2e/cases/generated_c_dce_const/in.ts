@@ -146,6 +146,8 @@ const unused_promise_resolve_prefix_call = Promise.resolve(!"dead_promise_resolv
 const unused_promise_resolve_bitwise_not_call = Promise.resolve(~"dead_promise_resolve_prefix_tilde".length);
 const dead_promise_resolve_object_shorthand = "dead_promise_resolve_object_shorthand";
 const unused_promise_resolve_object_shorthand_call = Promise.resolve({ dead_promise_resolve_object_shorthand }.dead_promise_resolve_object_shorthand);
+const dead_promise_resolve_object_spread_source = { dead_promise_resolve_object_spread: "dead_promise_resolve_object_spread" };
+const unused_promise_resolve_object_spread_call = Promise.resolve({ ...dead_promise_resolve_object_spread_source }.dead_promise_resolve_object_spread);
 const unused_promise_resolve_object_property_call = Promise.resolve({ dead_promise_resolve_object_property: "dead_promise_resolve_object_property" }.dead_promise_resolve_object_property);
 const unused_promise_resolve_object_property_missing_call = Promise.resolve(({ dead_promise_resolve_object_property_missing_source: 1 } as { [key: string]: number }).dead_promise_resolve_object_property_missing);
 const unused_promise_resolve_array_element_call = Promise.resolve(["dead_promise_resolve_array_element"][0]);
@@ -434,6 +436,8 @@ Promise.resolve(!"top_level_dead_promise_resolve_prefix_bang".length);
 Promise.resolve(~"top_level_dead_promise_resolve_prefix_tilde".length);
 const top_level_dead_promise_resolve_object_shorthand = "top_level_dead_promise_resolve_object_shorthand";
 Promise.resolve({ top_level_dead_promise_resolve_object_shorthand }.top_level_dead_promise_resolve_object_shorthand);
+const top_level_dead_promise_resolve_object_spread_source = { top_level_dead_promise_resolve_object_spread: "top_level_dead_promise_resolve_object_spread" };
+Promise.resolve({ ...top_level_dead_promise_resolve_object_spread_source }.top_level_dead_promise_resolve_object_spread);
 Promise.resolve({ top_level_dead_promise_resolve_object_property: "top_level_dead_promise_resolve_object_property" }.top_level_dead_promise_resolve_object_property);
 Promise.resolve(({ top_level_dead_promise_resolve_object_property_missing_source: 1 } as { [key: string]: number }).top_level_dead_promise_resolve_object_property_missing);
 Promise.resolve(["top_level_dead_promise_resolve_array_element"][0]);
@@ -733,6 +737,8 @@ function usedLocal(value: number): number {
     Promise.resolve(~"local_dead_promise_resolve_prefix_tilde".length);
     const local_dead_promise_resolve_object_shorthand = "local_dead_promise_resolve_object_shorthand";
     Promise.resolve({ local_dead_promise_resolve_object_shorthand }.local_dead_promise_resolve_object_shorthand);
+    const local_dead_promise_resolve_object_spread_source = { local_dead_promise_resolve_object_spread: "local_dead_promise_resolve_object_spread" };
+    Promise.resolve({ ...local_dead_promise_resolve_object_spread_source }.local_dead_promise_resolve_object_spread);
     Promise.resolve({ local_dead_promise_resolve_object_property: "local_dead_promise_resolve_object_property" }.local_dead_promise_resolve_object_property);
     Promise.resolve(({ local_dead_promise_resolve_object_property_missing_source: 1 } as { [key: string]: number }).local_dead_promise_resolve_object_property_missing);
     Promise.resolve(["local_dead_promise_resolve_array_element"][0]);
