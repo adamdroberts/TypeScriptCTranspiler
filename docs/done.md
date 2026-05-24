@@ -673,6 +673,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Generated-C DCE prunes unused fresh-Symbol `.description` reads, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive-returning `Array.isArray(...)`, `Object.is(...)`, `Object.hasOwn(...)`, Object extensibility predicate, `URL.canParse(...)`, and Reflect predicate results. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused readonly URL property reads over valid side-effect-free URL constructor operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
+- Generated-C DCE treats readonly URL string accessors over valid side-effect-free URL constructor operands as side-effect-free `.length`, string-method, and indexable operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused URL object/string helper calls over valid side-effect-free URL constructor operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes unused pure `WeakMap(...)` / `WeakSet(...)` constructors over static object-literal sources. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused inherited object-prototype calls on side-effect-free collection/weak-ref/finalization operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`

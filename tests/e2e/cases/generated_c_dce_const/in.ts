@@ -229,6 +229,9 @@ const unused_url_value_of_call = new URL("https://dead-url-value-of.test/path").
 const unused_url_has_own_call = new URL("https://dead-url-has-own.test/path").hasOwnProperty("dead_url_has_own", "dead_url_has_own_ignored");
 const unused_url_href_read = new URL("https://dead-url-href-read.test/path?q=1#hash").href;
 const unused_url_pathname_read = new URL("https://dead-url-pathname-read.test/path?q=1#hash").pathname;
+const unused_url_href_length_read = new URL("https://dead-url-href-length-read.test/path?q=1").href.length;
+const unused_url_pathname_upper_call = (new URL("https://dead-url-pathname-upper-call.test/path").pathname.toUpperCase(), "dead_url_pathname_upper_call_marker".length);
+const unused_url_host_index_read = (new URL("https://dead-url-host-index-read.test/path").host[0], "dead_url_host_index_read_marker".length);
 const unused_new_map_empty_call = new Map<string, number>();
 const unused_new_map_entries_call = new Map([["dead_new_map_entries_key", "dead_new_map_entries_value"]]);
 const unused_new_map_ignored_extra_entry_call = new Map([
@@ -325,6 +328,9 @@ const unused_promise_resolve_url_to_json_call = Promise.resolve(new URL("https:/
 const unused_promise_resolve_url_has_own_call = Promise.resolve(new URL("https://dead-promise-resolve-url-has-own.test/path").hasOwnProperty("dead_promise_resolve_url_has_own", "dead_promise_resolve_url_has_own_ignored"));
 const unused_promise_resolve_url_href_read = Promise.resolve(new URL("https://dead-promise-resolve-url-href-read.test/path").href);
 const unused_promise_resolve_url_origin_read = Promise.resolve(new URL("https://dead-promise-resolve-url-origin-read.test/path").origin);
+const unused_promise_resolve_url_href_length_read = Promise.resolve(new URL("https://dead-promise-resolve-url-href-length-read.test/path").href.length);
+const unused_promise_resolve_url_pathname_upper_call = Promise.resolve((new URL("https://dead-promise-resolve-url-pathname-upper-call.test/path").pathname.toUpperCase(), "dead_promise_resolve_url_pathname_upper_call_marker"));
+const unused_promise_resolve_url_host_index_read = Promise.resolve((new URL("https://dead-promise-resolve-url-host-index-read.test/path").host[0], "dead_promise_resolve_url_host_index_read_marker"));
 const unused_promise_resolve_string_static_call = Promise.resolve(String.fromCharCode("dead_promise_resolve_string_static".length));
 const unused_promise_resolve_string_code_point_call = Promise.resolve(String.fromCodePoint(0x1f680));
 const unused_promise_resolve_regexp_escape_call = Promise.resolve(RegExp.escape("dead_promise_resolve_regexp_escape"));
@@ -1167,6 +1173,9 @@ new URL("https://top-level-dead-url-value-of.test/path").valueOf("top_level_dead
 new URL("https://top-level-dead-url-has-own.test/path").hasOwnProperty("top_level_dead_url_has_own", "top_level_dead_url_has_own_ignored");
 new URL("https://top-level-dead-url-href-read.test/path?q=1#hash").href;
 new URL("https://top-level-dead-url-origin-read.test/path").origin;
+new URL("https://top-level-dead-url-href-length-read.test/path").href.length;
+(new URL("https://top-level-dead-url-pathname-upper-call.test/path").pathname.toUpperCase(), "top_level_dead_url_pathname_upper_call_marker".length);
+(new URL("https://top-level-dead-url-host-index-read.test/path").host[0], "top_level_dead_url_host_index_read_marker".length);
 new Map<string, number>();
 new Map([["top_level_dead_new_map_entries_key", "top_level_dead_new_map_entries_value"]]);
 new Map([
@@ -1995,6 +2004,9 @@ function usedLocal(value: number): number {
     new URL("https://local-dead-url-has-own.test/path").hasOwnProperty("local_dead_url_has_own", "local_dead_url_has_own_ignored");
     new URL("https://local-dead-url-href-read.test/path?q=1#hash").href;
     new URL("https://local-dead-url-origin-read.test/path").origin;
+    new URL("https://local-dead-url-href-length-read.test/path").href.length;
+    (new URL("https://local-dead-url-pathname-upper-call.test/path").pathname.toUpperCase(), "local_dead_url_pathname_upper_call_marker".length);
+    (new URL("https://local-dead-url-host-index-read.test/path").host[0], "local_dead_url_host_index_read_marker".length);
     new Map<string, number>();
     new Map([["local_dead_new_map_entries_key", "local_dead_new_map_entries_value"]]);
     new Map([

@@ -1025,6 +1025,9 @@ class Emitter {
         if (this.isSideEffectFreeEventTypePropertyRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -1144,6 +1147,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeEventTypePropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
@@ -4944,6 +4950,9 @@ class Emitter {
         if (this.isSideEffectFreeEventTypePropertyRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
             return true;
         }
@@ -4981,6 +4990,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeEventTypePropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStringOperand(unwrapped, seenConsts)) {
