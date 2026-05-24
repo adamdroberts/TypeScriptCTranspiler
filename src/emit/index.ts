@@ -30007,6 +30007,7 @@ class Emitter {
         if (!options || this.isUndefinedExpression(options)) return { withFileTypes: false, recursive: false, encoding: "utf8" };
         const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" | "buffer" => {
             if (this.isUndefinedExpression(node)) return "utf8";
+            if (node.kind === ts.SyntaxKind.NullKeyword) return "utf8";
             const text = this.sideEffectFreeStringLiteralText(node, new Set());
             if (text !== null) {
                 if (text === "utf8" || text === "utf-8") return "utf8";
@@ -30017,6 +30018,9 @@ class Emitter {
         };
         if (this.sideEffectFreeStringLiteralText(options, new Set()) !== null) {
             return { withFileTypes: false, recursive: false, encoding: checkEncoding(options) };
+        }
+        if (options.kind === ts.SyntaxKind.NullKeyword) {
+            return { withFileTypes: false, recursive: false, encoding: "utf8" };
         }
         if (!ts.isObjectLiteralExpression(options)) {
             unsupported(options, `${label} options must be a UTF-8/hex/base64/buffer string literal or object literal in this subset`);

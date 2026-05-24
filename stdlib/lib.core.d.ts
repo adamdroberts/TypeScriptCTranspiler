@@ -1007,12 +1007,13 @@ interface FSAppendFileOptions {
 }
 type FSAppendFileEncodingOptions = FSFileContentEncoding | FSAppendFileOptions;
 interface FSReaddirOptions {
-    encoding?: FSReaddirStringEncoding;
+    encoding?: FSReaddirStringEncoding | null;
     recursive?: boolean;
     withFileTypes?: false;
 }
-type FSReaddirStringOptions = FSReaddirStringEncoding | FSReaddirOptions;
-interface FSReaddirBufferOptions extends FSBufferEncodingOptions {
+type FSReaddirStringOptions = FSReaddirStringEncoding | null | FSReaddirOptions;
+interface FSReaddirBufferOptions {
+    encoding: FSBufferEncoding;
     recursive?: boolean;
     withFileTypes?: false;
 }
