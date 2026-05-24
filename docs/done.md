@@ -185,7 +185,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - ES2025 set composition: `.union(other)`, `.intersection(other)`, `.difference(other)`, `.symmetricDifference(other)`, `.isSubsetOf(other)`, `.isSupersetOf(other)`, `.isDisjointFrom(other)`. The argument must be a `Set<T>` of the same element type; runtime helpers `tsc_set_union`/`tsc_set_intersection`/`tsc_set_difference`/`tsc_set_symmetric_difference`/`tsc_set_is_subset_of`/`tsc_set_is_superset_of`/`tsc_set_is_disjoint_from` honor SameValueZero element matching and insertion order. Test: `set_composition`
 
 ### `WeakMap<K, V>` / `WeakSet<T>`
-- Typed object-key `WeakMap` supports `.set(k, v)`, `.get(k)`, `.has(k)`, `.delete(k)`, and construction from typed `Map<K, V>` sources with matching object-key/value types. Test: `weak_collections`
+- Typed object-key `WeakMap` supports `.set(k, v)`, `.get(k)`, `.has(k)`, `.delete(k)`, and construction from typed `Map<K, V>` or `ObjectEntry<V, K>[]` sources with matching object-key/value types. Tests: `weak_collections`, `map_object_entry_constructors`
 - Typed object-key `WeakSet` supports `.add(v)`, `.has(v)`, `.delete(v)`, and construction from typed `T[]` arrays or matching `Set<T>` sources. Test: `weak_collections`
 - `.toString(...ignored)`, `.toLocaleString(...ignored)`, and `.valueOf(...ignored)` on both weak collections. Test: `collection_object_methods`
 - Runtime storage reuses pointer-key map/set tables; there is no iteration API exposed.
