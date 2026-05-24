@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now treats string fields from pure `os.userInfo(...)` results as side-effect-free `.length`, string-method, and indexable operands, including named imports and primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats pure string-returning `path` helper calls as side-effect-free string/indexable operands for unused `.length`, string methods, and element reads, including named/posix forms and primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats direct string fields from pure `path.parse(...)` results as side-effect-free string/indexable operands for unused string methods and element reads, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats direct string fields from pure `path.parse(...)` results as side-effect-free `.length` operands, including named imports and primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.

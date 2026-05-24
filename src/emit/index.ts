@@ -1013,6 +1013,9 @@ class Emitter {
         if (this.isSideEffectFreeStringReturningPathCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeOsUserInfoStringPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreePathParsePropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -1108,6 +1111,9 @@ class Emitter {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
         }
         if (this.isSideEffectFreeStringReturningPathCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeOsUserInfoStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreePathParsePropertyRead(unwrapped, seenConsts)) {
@@ -4887,6 +4893,9 @@ class Emitter {
         if (this.isSideEffectFreeStringReturningPathCall(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeOsUserInfoStringPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreePathParsePropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -4903,6 +4912,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeStringReturningPathCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeOsUserInfoStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreePathParsePropertyRead(unwrapped, seenConsts)) {
@@ -7595,6 +7607,15 @@ class Emitter {
                 this.isSideEffectFreeOsCall("userInfo", recv.arguments, seenConsts);
         }
         return false;
+    }
+
+    private isSideEffectFreeOsUserInfoStringPropertyRead(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return ts.isPropertyAccessExpression(expr) &&
+            ["username", "homedir", "shell"].includes(expr.name.text) &&
+            this.isSideEffectFreeOsUserInfoPropertyRead(expr, seenConsts);
     }
 
     private isSideEffectFreeProcessStdioMetadataRead(expr: ts.Expression): boolean {
