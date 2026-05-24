@@ -914,6 +914,9 @@ class Emitter {
             if (this.isSideEffectFreeSymbolDescriptionRead(expr, seenConsts)) {
                 return true;
             }
+            if (this.isSideEffectFreeWellKnownSymbolRead(expr)) {
+                return true;
+            }
             if (this.isSideEffectFreeStaticNumericPropertyRead(expr)) {
                 return true;
             }
@@ -4730,6 +4733,9 @@ class Emitter {
         if (this.isSideEffectFreeSymbolDescriptionRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeWellKnownSymbolRead(unwrapped)) {
+            return true;
+        }
         if (this.isSideEffectFreeStaticNumericPropertyRead(unwrapped)) {
             return true;
         }
@@ -6183,7 +6189,14 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): boolean {
         if (!ts.isPropertyAccessExpression(expr) || expr.name.text !== "description") return false;
-        return this.isSideEffectFreeFreshSymbolOperand(expr.expression, seenConsts);
+        return this.isSideEffectFreeFreshSymbolOperand(expr.expression, seenConsts) ||
+            this.isSideEffectFreeWellKnownSymbolRead(expr.expression);
+    }
+
+    private isSideEffectFreeWellKnownSymbolRead(expr: ts.Expression): boolean {
+        if (!ts.isPropertyAccessExpression(expr) || !ts.isIdentifier(expr.expression)) return false;
+        return this.isUnshadowedGlobalIdentifier(expr.expression, "Symbol") &&
+            (expr.name.text === "iterator" || expr.name.text === "asyncIterator");
     }
 
     private isSideEffectFreeStaticNumericPropertyRead(expr: ts.Expression): boolean {
