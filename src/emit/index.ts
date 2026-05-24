@@ -26081,28 +26081,31 @@ class Emitter {
             ) {
                 return { pipe: "true", ignore: "false", capture: "true", inherit: "false" };
             }
-            if (ts.isNumericLiteral(expr)) {
-                if (Number(expr.text) === fd) {
+            const fdValue = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr, new Set());
+            if (fdValue !== null) {
+                if (fdValue === fd) {
                     return { pipe: "false", ignore: "false", capture: "false", inherit: "true" };
                 }
                 unsupported(expr, "child_process.spawnSync numeric stdio entries only support matching fds 0, 1, and 2 in this subset");
             }
-            if (!ts.isStringLiteral(expr)) {
+            const text = this.sideEffectFreeStringLiteralText(expr, new Set());
+            if (text === null) {
                 unsupported(expr, "child_process.spawnSync stdio entries must be literal \"pipe\", \"ignore\", \"inherit\", matching fd number, null, or undefined");
             }
-            if (expr.text === "pipe") return { pipe: "true", ignore: "false", capture: "true", inherit: "false" };
-            if (expr.text === "ignore") return { pipe: "false", ignore: "true", capture: "false", inherit: "false" };
-            if (expr.text === "inherit") return { pipe: "false", ignore: "false", capture: "false", inherit: "true" };
+            if (text === "pipe") return { pipe: "true", ignore: "false", capture: "true", inherit: "false" };
+            if (text === "ignore") return { pipe: "false", ignore: "true", capture: "false", inherit: "false" };
+            if (text === "inherit") return { pipe: "false", ignore: "false", capture: "false", inherit: "true" };
             unsupported(expr, "child_process.spawnSync stdio only supports pipe, ignore, and inherit in this subset");
         };
-        if (ts.isStringLiteral(value)) {
-            if (value.text === "pipe") {
+        const valueText = this.sideEffectFreeStringLiteralText(value, new Set());
+        if (valueText !== null) {
+            if (valueText === "pipe") {
                 return { pipeStdin: "true", ignoreStdin: "false", captureStdout: "true", captureStderr: "true", inheritStdout: "false", inheritStderr: "false" };
             }
-            if (value.text === "ignore") {
+            if (valueText === "ignore") {
                 return { pipeStdin: "false", ignoreStdin: "true", captureStdout: "false", captureStderr: "false", inheritStdout: "false", inheritStderr: "false" };
             }
-            if (value.text === "inherit") {
+            if (valueText === "inherit") {
                 return { pipeStdin: "false", ignoreStdin: "false", captureStdout: "false", captureStderr: "false", inheritStdout: "true", inheritStderr: "true" };
             }
             unsupported(value, "child_process.spawnSync stdio only supports pipe, ignore, and inherit in this subset");
