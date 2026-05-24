@@ -25467,6 +25467,28 @@ class Emitter {
         return null;
     }
 
+    private dnsLookupNumberValue(expr: ts.Expression, seenConsts = new Set<ts.Symbol>()): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isNumericLiteral(unwrapped)) return Number(unwrapped.text);
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.dnsLookupNumberValue(init, seenConsts) : null;
+    }
+
+    private dnsLookupBooleanValue(expr: ts.Expression, seenConsts = new Set<ts.Symbol>()): boolean | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (unwrapped.kind === ts.SyntaxKind.TrueKeyword) return true;
+        if (unwrapped.kind === ts.SyntaxKind.FalseKeyword) return false;
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.dnsLookupBooleanValue(init, seenConsts) : null;
+    }
+
+    private dnsLookupStringValue(expr: ts.Expression, seenConsts = new Set<ts.Symbol>()): string | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) return unwrapped.text;
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.dnsLookupStringValue(init, seenConsts) : null;
+    }
+
     private dnsLookupHintValue(expr: ts.Expression, seenConsts = new Set<ts.Symbol>()): number {
         while (
             ts.isParenthesizedExpression(expr) ||
@@ -25520,8 +25542,9 @@ class Emitter {
         ) {
             options = options.expression;
         }
-        if (ts.isNumericLiteral(options)) {
-            out.family = Number(options.text);
+        const numericFamily = this.dnsLookupNumberValue(options);
+        if (numericFamily !== null) {
+            out.family = numericFamily;
             if (out.family !== 0 && out.family !== 4 && out.family !== 6) {
                 unsupported(options, "dns.lookup family must be 0, 4, or 6 in this subset");
             }
@@ -25542,36 +25565,35 @@ class Emitter {
                 continue;
             }
             if (key === "family") {
-                if (!ts.isNumericLiteral(prop.initializer)) {
+                const family = this.dnsLookupNumberValue(prop.initializer);
+                if (family === null) {
                     unsupported(prop.initializer, "dns.lookup family must be numeric literal 0, 4, or 6 in this subset");
                 }
-                out.family = Number(prop.initializer.text);
+                out.family = family;
                 if (out.family !== 0 && out.family !== 4 && out.family !== 6) {
                     unsupported(prop.initializer, "dns.lookup family must be 0, 4, or 6 in this subset");
                 }
-            } else if (key === "all" && prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
-                out.all = true;
-            } else if (key === "all" && prop.initializer.kind === ts.SyntaxKind.FalseKeyword) {
-                out.all = false;
+            } else if (key === "all") {
+                const all = this.dnsLookupBooleanValue(prop.initializer);
+                if (all === null) {
+                    unsupported(prop.initializer, "dns.lookup all must be a boolean literal in this subset");
+                }
+                out.all = all;
             } else if (key === "verbatim") {
-                if (
-                    prop.initializer.kind !== ts.SyntaxKind.TrueKeyword &&
-                    prop.initializer.kind !== ts.SyntaxKind.FalseKeyword
-                ) {
+                const verbatim = this.dnsLookupBooleanValue(prop.initializer);
+                if (verbatim === null) {
                     unsupported(prop.initializer, "dns.lookup verbatim must be a boolean literal in this subset");
                 }
             } else if (key === "order") {
-                if (!ts.isStringLiteral(prop.initializer)) {
+                const order = this.dnsLookupStringValue(prop.initializer);
+                if (order === null) {
                     unsupported(prop.initializer, "dns.lookup order must be a string literal in this subset");
                 }
-                const order = prop.initializer.text;
                 if (order !== "verbatim" && order !== "ipv4first" && order !== "ipv6first") {
                     unsupported(prop.initializer, "dns.lookup order must be verbatim, ipv4first, or ipv6first");
                 }
             } else if (key === "hints") {
                 out.hints = this.dnsLookupHintValue(prop.initializer);
-            } else {
-                unsupported(prop.initializer, "dns.lookup all must be a boolean literal in this subset");
             }
         }
         return out;
