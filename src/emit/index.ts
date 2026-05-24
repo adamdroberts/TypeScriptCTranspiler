@@ -25928,10 +25928,12 @@ class Emitter {
             const encodingProp = options.properties.find((prop): prop is ts.PropertyAssignment =>
                 ts.isPropertyAssignment(prop) && this.staticPropertyName(prop.name) === "encoding",
             );
-            if (!encodingProp || !ts.isStringLiteral(encodingProp.initializer)) {
+            const encoding = encodingProp
+                ? this.sideEffectFreeStringLiteralText(encodingProp.initializer, new Set())
+                : null;
+            if (!encodingProp || encoding === null) {
                 unsupported(options, "child_process.spawnSync requires literal encoding: \"utf8\"");
             }
-            const encoding = encodingProp.initializer.text;
             if (encoding !== "utf8" && encoding !== "utf-8") {
                 unsupported(encodingProp.initializer, "child_process.spawnSync only supports utf8 encoding");
             }
@@ -26133,10 +26135,10 @@ class Emitter {
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === "encoding",
         );
         if (!prop || this.isUndefinedExpression(prop.initializer)) return null;
-        if (!ts.isStringLiteral(prop.initializer)) {
+        const encoding = this.sideEffectFreeStringLiteralText(prop.initializer, new Set());
+        if (encoding === null) {
             unsupported(prop.initializer, `child_process.${method} requires literal encoding: "utf8"`);
         }
-        const encoding = prop.initializer.text;
         if (encoding === "utf8" || encoding === "utf-8") return "utf8";
         if (encoding === "buffer") return null;
         unsupported(prop.initializer, `child_process.${method} only supports utf8 or buffer encoding`);
