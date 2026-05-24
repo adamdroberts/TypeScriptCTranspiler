@@ -70,6 +70,8 @@ const unused_new_finalization_registry_call = new FinalizationRegistry<string>((
     "dead_finalization_registry_callback";
 });
 const unused_uri_source = "dead_uri_source";
+const unused_url_can_parse_call = URL.canParse("https://dead-url-can-parse.test/path");
+const unused_url_can_parse_base_call = URL.canParse("dead-url-can-parse-child", "https://dead-url-can-parse-base.test/root/");
 const unused_encode_uri_call = encodeURI("dead encode uri");
 const unused_encode_uri_component_call = encodeURIComponent(unused_uri_source);
 const unused_decode_uri_call = decodeURI("dead-decode-uri");
@@ -243,6 +245,8 @@ new WeakRef<object>({ label: "top_level_dead_weak_ref_target" });
 new FinalizationRegistry<string>((held) => {
     "top_level_dead_finalization_registry_callback";
 });
+URL.canParse("https://top-level-dead-url-can-parse.test/path");
+URL.canParse("top-level-dead-url-can-parse-child", "https://top-level-dead-url-can-parse-base.test/root/");
 encodeURI("top level dead encode uri");
 encodeURIComponent("top-level-dead-encode-uri-component");
 decodeURI("top-level-dead-decode-uri");
@@ -427,6 +431,8 @@ function usedLocal(value: number): number {
     new FinalizationRegistry<string>((held) => {
         "local_dead_finalization_registry_callback";
     });
+    URL.canParse("https://local-dead-url-can-parse.test/path");
+    URL.canParse("local-dead-url-can-parse-child", "https://local-dead-url-can-parse-base.test/root/");
     encodeURI("local dead encode uri");
     encodeURIComponent("local-dead-encode-uri-component");
     decodeURI("local-dead-decode-uri");

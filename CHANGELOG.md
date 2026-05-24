@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now recognizes unused pure `URL.canParse(...)` calls with side-effect-free string inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `AggregateError(...)` constructor and callable forms with side-effect-free errors/message/options/ignored inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `WeakRef(...)` and `FinalizationRegistry(...)` constructors when their evaluated constructor inputs are side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure no-argument `Map`, `Set`, `WeakMap`, and `WeakSet` constructors. Test: `generated_c_dce_const`.

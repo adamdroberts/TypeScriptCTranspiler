@@ -1094,6 +1094,16 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            method === "canParse" &&
+            call.arguments.length >= 1 &&
+            call.arguments.length <= 2 &&
+            this.isUnshadowedGlobalIdentifier(recv, "URL")
+        ) {
+            return this.isSideEffectFreeStringCoercion(call.arguments[0]!, seenConsts) &&
+                (!call.arguments[1] || this.isSideEffectFreeStringCoercion(call.arguments[1], seenConsts));
+        }
+        if (
+            ts.isIdentifier(recv) &&
             method === "groupBy" &&
             call.arguments.length === 2 &&
             this.isUnshadowedGlobalIdentifier(recv, "Map")

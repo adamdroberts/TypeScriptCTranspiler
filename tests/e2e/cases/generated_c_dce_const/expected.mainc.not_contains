@@ -75,6 +75,9 @@ unused_new_finalization_registry_call
 dead_weak_ref_target
 dead_finalization_registry_callback
 unused_uri_source
+unused_url_can_parse_call
+unused_url_can_parse_base_call
+dead-url-can-parse
 unused_encode_uri_call
 unused_encode_uri_component_call
 unused_decode_uri_call
@@ -369,6 +372,7 @@ top_level_dead_boolean_constructor
 2020-02-04T05:06:07Z
 top_level_dead_weak_ref_target
 top_level_dead_finalization_registry_callback
+top-level-dead-url-can-parse
 top level dead encode uri
 top-level-dead-encode-uri-component
 top-level-dead-decode-uri
@@ -528,6 +532,7 @@ local_dead_boolean_constructor
 2020-03-05T06:07:08Z
 local_dead_weak_ref_target
 local_dead_finalization_registry_callback
+local-dead-url-can-parse
 local dead encode uri
 local-dead-encode-uri-component
 local-dead-decode-uri
