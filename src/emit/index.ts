@@ -34989,7 +34989,8 @@ class Emitter {
             case "truncateSync": {
                 if (args.length < 1) unsupported(call, "fs.truncateSync needs path and optional length");
                 const p = this.emitExpr(args[0]!);
-                const len = args[1] && !this.isUndefinedExpression(args[1]) ? this.emitExpr(args[1]) : undefined;
+                const lenArg = args[1] ? this.staticOptionValue(args[1]) : undefined;
+                const len = lenArg && !this.isUndefinedExpression(lenArg) ? this.emitExpr(lenArg) : undefined;
                 const specs: SequencedCallArg[] = [
                     this.fsPathSpec(p, args[0]!, "fs.truncateSync path"),
                     {
@@ -35862,7 +35863,8 @@ class Emitter {
             case "truncate": {
                 if (args.length < 1) unsupported(call, "fs.promises.truncate needs path and optional length");
                 const p = this.emitExpr(args[0]!);
-                const len = args[1] && !this.isUndefinedExpression(args[1]) ? this.emitExpr(args[1]) : undefined;
+                const lenArg = args[1] ? this.staticOptionValue(args[1]) : undefined;
+                const len = lenArg && !this.isUndefinedExpression(lenArg) ? this.emitExpr(lenArg) : undefined;
                 const specs: SequencedCallArg[] = [
                     this.fsPathSpec(p, args[0]!, "fs.promises.truncate path"),
                     {

@@ -18,6 +18,7 @@ const promiseHard = path.join(promiseDir, "hard.txt");
 const promiseLink = path.join(promiseDir, "link.txt");
 const promiseEmpty = path.join(promiseDir, "empty");
 const promiseCopyRoot = path.join(copyRoot, "promise");
+const defaultLength = undefined;
 
 function mark(label: string): string {
     events.push(label);
@@ -34,7 +35,7 @@ copyFileSync(syncFile, syncCopy, void 0, mark("copy"));
 renameSync(syncCopy, syncRenamed, mark("rename"));
 linkSync(syncRenamed, syncHard, mark("link"));
 fs.symlinkSync(syncRenamed, syncLink, void 0, mark("symlink"));
-truncateSync(syncRenamed, void 0, mark("truncate"));
+truncateSync(syncRenamed, defaultLength, mark("truncate"));
 fs.utimesSync(syncRenamed, 100, new Date(200000), mark("utimes"));
 fs.lutimesSync(syncLink, 300, new Date(400000), mark("lutimes"));
 chmodSync(syncRenamed, 0o600, mark("chmod"));
@@ -50,7 +51,7 @@ fs.promises.copyFile(promiseFile, promiseCopy, void 0, mark("pcopy"));
 fs.promises.rename(promiseCopy, promiseRenamed, mark("prename"));
 fs.promises.link(promiseRenamed, promiseHard, mark("plink"));
 fs.promises.symlink(promiseRenamed, promiseLink, void 0, mark("psymlink"));
-fs.promises.truncate(promiseRenamed, void 0, mark("ptruncate"));
+fs.promises.truncate(promiseRenamed, defaultLength, mark("ptruncate"));
 fs.promises.utimes(promiseRenamed, 500, new Date(600000), mark("putimes"));
 fs.promises.lutimes(promiseLink, 700, new Date(800000), mark("plutimes"));
 fs.promises.chmod(promiseRenamed, 0o600, mark("pchmod"));
