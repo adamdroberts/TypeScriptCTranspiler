@@ -4290,6 +4290,24 @@ class Emitter {
                 : Math.min(endValue, sourceElements.length);
             return sourceElements.slice(actualStart, actualEnd);
         }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            unwrapped.expression.name.text === "concat"
+        ) {
+            const sourceElements = this.sideEffectFreeSetArraySourceExpressions(
+                unwrapped.expression.expression,
+                seenConsts,
+            );
+            if (sourceElements === null) return null;
+            const elements = [...sourceElements];
+            for (const arg of unwrapped.arguments) {
+                const argElements = this.sideEffectFreeSetArraySourceExpressions(arg, seenConsts);
+                if (argElements === null) return null;
+                elements.push(...argElements);
+            }
+            return elements;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeSetArraySourceExpressions(init, seenConsts) : null;
     }
