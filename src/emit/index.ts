@@ -6715,15 +6715,20 @@ class Emitter {
         if (args.length < 1 || args.length > 2) return false;
         if (!this.isSideEffectFreeStringCoercion(args[0]!, seenConsts)) return false;
         const options = args[1];
-        if (!options || this.isUndefinedExpression(options)) return true;
+        if (!options || this.isSideEffectFreeUndefinedValue(options, seenConsts)) return true;
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(options);
-        if (!ts.isObjectLiteralExpression(unwrapped)) return false;
-        return unwrapped.properties.every((prop) => {
+        let objectSource = unwrapped;
+        if (!ts.isObjectLiteralExpression(objectSource)) {
+            const init = this.sideEffectFreeEarlierConstInitializer(objectSource, seenConsts);
+            if (!init) return false;
+            objectSource = this.unwrapSideEffectFreeStaticExpression(init);
+        }
+        if (!ts.isObjectLiteralExpression(objectSource)) return false;
+        return objectSource.properties.every((prop) => {
             if (!ts.isPropertyAssignment(prop) || !ts.isIdentifier(prop.name)) return false;
             if (prop.name.text !== "cancelable") return false;
-            if (this.isUndefinedExpression(prop.initializer)) return true;
-            return prop.initializer.kind === ts.SyntaxKind.TrueKeyword ||
-                prop.initializer.kind === ts.SyntaxKind.FalseKeyword;
+            if (this.isSideEffectFreeUndefinedValue(prop.initializer, seenConsts)) return true;
+            return this.sideEffectFreeBooleanLiteralValue(prop.initializer, seenConsts) !== null;
         });
     }
 
@@ -6922,7 +6927,7 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (this.isUndefinedExpression(unwrapped)) return true;
+        if (this.isSideEffectFreeUndefinedValue(unwrapped, seenConsts)) return true;
         if (
             unwrapped.kind === ts.SyntaxKind.TrueKeyword ||
             unwrapped.kind === ts.SyntaxKind.FalseKeyword
@@ -6937,9 +6942,8 @@ class Emitter {
             if (!ts.isPropertyAssignment(prop)) return false;
             const key = this.staticPropertyName(prop.name);
             if (key !== "once" && key !== "capture" && key !== "passive") return false;
-            if (this.isUndefinedExpression(prop.initializer)) return true;
-            return prop.initializer.kind === ts.SyntaxKind.TrueKeyword ||
-                prop.initializer.kind === ts.SyntaxKind.FalseKeyword;
+            if (this.isSideEffectFreeUndefinedValue(prop.initializer, seenConsts)) return true;
+            return this.sideEffectFreeBooleanLiteralValue(prop.initializer, seenConsts) !== null;
         });
     }
 
@@ -6948,7 +6952,7 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (this.isUndefinedExpression(unwrapped)) return true;
+        if (this.isSideEffectFreeUndefinedValue(unwrapped, seenConsts)) return true;
         if (!ts.isObjectLiteralExpression(unwrapped)) {
             const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
             return !!init && this.isSideEffectFreeEventEmitterOnceOptions(init, seenConsts);
@@ -6956,8 +6960,18 @@ class Emitter {
         return unwrapped.properties.every((prop) => {
             if (!ts.isPropertyAssignment(prop)) return false;
             return this.staticPropertyName(prop.name) === "signal" &&
-                this.isUndefinedExpression(prop.initializer);
+                this.isSideEffectFreeUndefinedValue(prop.initializer, seenConsts);
         });
+    }
+
+    private isSideEffectFreeUndefinedValue(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.isUndefinedExpression(unwrapped)) return true;
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeUndefinedValue(init, seenConsts);
     }
 
     private isSideEffectFreeFreshEventEmitterOperand(
