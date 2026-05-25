@@ -318,7 +318,7 @@ This is the next item that most directly expands what programs can be written ag
   - Generated-C DCE exposes zero-length proofs for mapped `Array.from(empty, mapper[, thisArg])` results, enabling chained unused array-method pruning. Test: `generated_c_dce_const`.
   - Generated-C DCE treats Map/Set constructor sources with exact zero-length proofs as empty for unused `Array.from(..., mapper)` pruning. Test: `generated_c_dce_const`.
   - Generated-C DCE prunes unused `Object.fromEntries(...)` over earlier-const and copy-constructed empty typed Map sources. Test: `generated_c_dce_const`.
-  - Generated-C DCE treats `Object.fromEntries(...)` over earlier-const and copy-constructed empty typed Map sources as an empty object for unused Object key/value/entry enumeration pruning. Test: `generated_c_dce_const`.
+  - Generated-C DCE treats `Object.fromEntries(...)` over earlier-const and copy-constructed empty typed Map sources as an empty object for unused Object key/value/entry and Object/Reflect own-key enumeration pruning. Test: `generated_c_dce_const`.
   - Generated-C DCE requires ignored extra `Map(...)` / `WeakMap(...)` entry slots to be side-effect-free before pruning static constructor sources. Test: `generated_c_dce_const`.
   - Generated-C DCE preserves `WeakMap(...)` primitive-key rejection by pruning typed `Map` sources only when the source is empty or statically object-key-proven. Tests: `generated_c_dce_const`, `weak_map_primitive_map_source_reject`.
   - Generated-C DCE preserves `WeakSet(...)` primitive-value rejection by pruning typed `Set` sources only when the source is empty or statically object-value-proven. Tests: `generated_c_dce_const`, `weak_set_primitive_set_source_reject`.
