@@ -12139,6 +12139,14 @@ class Emitter {
             while (ts.isParenthesizedExpression(objectSource)) objectSource = objectSource.expression;
             return ts.isIdentifier(objectSource) && objectSource.text === sourceName;
         }
+        if (
+            ts.isNewExpression(cur) &&
+            ts.isIdentifier(cur.expression) &&
+            this.isUnshadowedGlobalIdentifier(cur.expression, "Map")
+        ) {
+            const args = Array.from(cur.arguments ?? []);
+            return args.length === 1 && this.commonJsObjectFromEntriesSourceUsesIdentifier(args[0]!, sourceName);
+        }
         return false;
     }
 
