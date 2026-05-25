@@ -21,6 +21,7 @@ This is the next item that most directly expands what programs can be written ag
   - Additional typed `String.fromCodePoint(...)` coverage routes invalid-code-point failures through catchable runtime exceptions. Test: `string_from_code_point_errors`.
   - Additional typed/dynamic `String.prototype.normalize(form)` coverage routes invalid-form failures through catchable runtime exceptions. Test: `string_normalize_errors`.
   - Additional typed/dynamic string regex/search helper coverage evaluates and ignores trailing arguments for `match(...)`, `matchAll(...)`, `search(...)`, `replace(...)`, and `split(...)`. Test: `string_regex_ignored_arguments`.
+  - Additional dynamic string helper coverage evaluates and ignores trailing arguments for `substring(...)`, `substr(...)`, `localeCompare(...)`, and `toLocaleString(...)`. Test: `dynamic_string_ignored_arguments`.
   - Additional BigInt constructor/operator/radix coverage routes invalid string/number, zero division/modulo, invalid exponent, and invalid radix failures through catchable runtime exceptions. Test: `bigint_errors`.
   - Additional URL constructor/base-resolution and file-URL path coverage routes invalid absolute URLs, invalid bases, non-file URL paths, and remote-host file URLs through catchable runtime exceptions. Test: `url_errors`.
   - Named and default imports from `"buffer"` / `"node:buffer"` route to the supported `Buffer` static helper subset. Test: `buffer_module_import`.

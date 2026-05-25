@@ -27842,7 +27842,7 @@ class Emitter {
                     ([value, key]) => `tsc_value_property_is_enumerable(${value}, ${key})`,
                 );
             case "localeCompare":
-                if (args.length !== 1) unsupported(call, "localeCompare expects 1 arg");
+                if (args.length < 1) unsupported(call, "localeCompare expects at least 1 arg");
                 return oneArg("tsc_value_method_locale_compare");
             case "join":
                 return oneArg("tsc_value_method_join");
@@ -28141,24 +28141,24 @@ class Emitter {
                     ([target]) => `tsc_value_method_entries(${target})`,
                 );
             case "substring": {
-                if (args.length > 2) unsupported(call, "substring expects 0-2 args");
                 const start = args[0] ? this.emitExpr(args[0]) : missing;
                 const end = args[1] ? this.emitExpr(args[1]) : missing;
-                return this.emitSequencedCall("tsc_value_method_substring", T_VALUE, [
+                return this.emitSequencedExpr(T_VALUE, [
                     { value: recv, target: T_VALUE, node: call.expression },
                     { value: start, target: T_VALUE, node: args[0] ?? call.expression },
                     { value: end, target: T_VALUE, node: args[1] ?? call.expression },
-                ]);
+                    ...this.ignoredArgumentSpecs(args, 2),
+                ], ([target, startArg, endArg]) => `tsc_value_method_substring(${target}, ${startArg}, ${endArg})`);
             }
             case "substr": {
-                if (args.length > 2) unsupported(call, "substr expects 0-2 args");
                 const start = args[0] ? this.emitExpr(args[0]) : missing;
                 const length = args[1] ? this.emitExpr(args[1]) : missing;
-                return this.emitSequencedCall("tsc_value_method_substr", T_VALUE, [
+                return this.emitSequencedExpr(T_VALUE, [
                     { value: recv, target: T_VALUE, node: call.expression },
                     { value: start, target: T_VALUE, node: args[0] ?? call.expression },
                     { value: length, target: T_VALUE, node: args[1] ?? call.expression },
-                ]);
+                    ...this.ignoredArgumentSpecs(args, 2),
+                ], ([target, startArg, lengthArg]) => `tsc_value_method_substr(${target}, ${startArg}, ${lengthArg})`);
             }
             case "replace":
             case "replaceAll": {
@@ -28388,10 +28388,14 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(args, 1),
                 ], ([v, digits]) => `tsc_value_method_to_precision(${v}, ${digits})`);
             case "toLocaleString":
-                if (args.length !== 0) unsupported(call, "toLocaleString expects no args");
-                return this.emitSequencedExpr(T_STRING, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                ], ([v]) => `tsc_value_to_string(${v})`);
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        ...this.ignoredArgumentSpecs(args, 0),
+                    ],
+                    ([v]) => `tsc_value_to_string(${v})`,
+                );
             case "valueOf":
                 return this.emitSequencedExpr(
                     T_VALUE,

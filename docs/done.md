@@ -1751,6 +1751,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_string_at` | dynamic String.at positive and negative index lookup |
 | `dynamic_string_code_point_at` | dynamic String.codePointAt UTF-16 code-point lookup |
 | `dynamic_string_concat` | dynamic string concat |
+| `dynamic_string_ignored_arguments` | dynamic string substring/substr/localeCompare/toLocaleString evaluate and ignore trailing arguments |
 | `dynamic_string_locale_compare` | dynamic string localeCompare |
 | `dynamic_string_normalize` | dynamic string Unicode normalization |
 | `string_normalize_errors` | typed and dynamic String.normalize invalid-form failures are catchable |

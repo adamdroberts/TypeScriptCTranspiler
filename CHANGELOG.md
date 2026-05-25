@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic string helpers now evaluate and ignore trailing arguments for `substring(...)`, `substr(...)`, `localeCompare(...)`, and `toLocaleString(...)`. Test: `dynamic_string_ignored_arguments`.
 - Typed and dynamic string regex/search helpers now evaluate and ignore trailing arguments for `match(...)`, `matchAll(...)`, `search(...)`, `replace(...)`, and `split(...)`. Test: `string_regex_ignored_arguments`.
 - Expanded `process_stdin_noop_methods` coverage for consumed `setEncoding(...)` arguments, ignored trailing arguments, and global/named/default process stdin no-op paths.
 - Direct typed-array `.hasOwnProperty(...)` and `.propertyIsEnumerable(...)` calls now evaluate and ignore trailing arguments, matching the dynamic-array and Object helper paths. Test: `array_object_method_ignored_arguments`.
