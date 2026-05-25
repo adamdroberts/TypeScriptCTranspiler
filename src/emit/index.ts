@@ -4562,6 +4562,38 @@ class Emitter {
                     return receiverLength;
                 }
                 if (
+                    method === "toSpliced" &&
+                    unwrapped.arguments.length >= 1 &&
+                    Array.from(unwrapped.arguments).slice(2).every((arg) =>
+                        this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                    )
+                ) {
+                    const startValue = this.sideEffectFreePrimitiveNumberValue(
+                        unwrapped.arguments[0]!,
+                        seenConsts,
+                    );
+                    const deleteValue = unwrapped.arguments[1]
+                        ? this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[1], seenConsts)
+                        : null;
+                    if (
+                        startValue !== null &&
+                        Number.isFinite(startValue) &&
+                        Number.isInteger(startValue) &&
+                        (!unwrapped.arguments[1] ||
+                            (deleteValue !== null &&
+                                Number.isFinite(deleteValue) &&
+                                Number.isInteger(deleteValue)))
+                    ) {
+                        const actualStart = startValue < 0
+                            ? Math.max(receiverLength + startValue, 0)
+                            : Math.min(startValue, receiverLength);
+                        const actualDelete = unwrapped.arguments[1]
+                            ? Math.min(Math.max(deleteValue!, 0), receiverLength - actualStart)
+                            : receiverLength - actualStart;
+                        return receiverLength - actualDelete + Math.max(unwrapped.arguments.length - 2, 0);
+                    }
+                }
+                if (
                     method === "flat" &&
                     receiverLength === 0 &&
                     unwrapped.arguments.length <= 1 &&
