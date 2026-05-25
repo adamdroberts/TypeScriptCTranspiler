@@ -4405,6 +4405,17 @@ function doExit(value: boolean): number {
     return do_after_exit;
 }
 
+function observedMutatingCollectionSources(): string {
+    const setSource = ["kept_mutating_set_source_head", "kept_mutating_set_source_tail"];
+    new Set(setSource.reverse());
+    const mapSource: ObjectEntry<string>[] = [
+        ["kept_mutating_map_source_head", "kept_mutating_map_source_head_value"],
+        ["kept_mutating_map_source_tail", "kept_mutating_map_source_tail_value"],
+    ];
+    new Map(mapSource.reverse());
+    return setSource[0] + " " + mapSource[0]![0];
+}
+
 console.log(
     usedLocal(used_count),
     constantBranch(used_count),
@@ -4422,5 +4433,6 @@ console.log(
     whileExit(),
     forExit(),
     doExit(false),
+    observedMutatingCollectionSources(),
     DceNamespace.kept,
 );

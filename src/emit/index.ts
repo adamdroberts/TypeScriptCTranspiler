@@ -4396,6 +4396,12 @@ class Emitter {
             unwrapped.arguments.length >= 1 &&
             unwrapped.arguments.length <= 3
         ) {
+            if (!this.isSideEffectFreeFreshOrReturnedArrayOperand(
+                unwrapped.expression.expression,
+                seenConsts,
+            )) {
+                return null;
+            }
             const sourceElements = this.sideEffectFreeSetArraySourceExpressions(
                 unwrapped.expression.expression,
                 seenConsts,
@@ -4437,6 +4443,12 @@ class Emitter {
             unwrapped.arguments.length >= 2 &&
             unwrapped.arguments.length <= 3
         ) {
+            if (!this.isSideEffectFreeFreshOrReturnedArrayOperand(
+                unwrapped.expression.expression,
+                seenConsts,
+            )) {
+                return null;
+            }
             const sourceElements = this.sideEffectFreeSetArraySourceExpressions(
                 unwrapped.expression.expression,
                 seenConsts,
@@ -4488,6 +4500,15 @@ class Emitter {
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
             )
         ) {
+            if (
+                unwrapped.expression.name.text === "reverse" &&
+                !this.isSideEffectFreeFreshOrReturnedArrayOperand(
+                    unwrapped.expression.expression,
+                    seenConsts,
+                )
+            ) {
+                return null;
+            }
             const sourceElements = this.sideEffectFreeSetArraySourceExpressions(
                 unwrapped.expression.expression,
                 seenConsts,
@@ -4503,6 +4524,15 @@ class Emitter {
             ) &&
             unwrapped.arguments.length === 0
         ) {
+            if (
+                unwrapped.expression.name.text === "sort" &&
+                !this.isSideEffectFreeFreshOrReturnedArrayOperand(
+                    unwrapped.expression.expression,
+                    seenConsts,
+                )
+            ) {
+                return null;
+            }
             return this.sideEffectFreeSetArraySourceExpressions(
                 unwrapped.expression.expression,
                 seenConsts,
@@ -4900,6 +4930,12 @@ class Emitter {
             unwrapped.arguments.length >= 1 &&
             unwrapped.arguments.length <= 3
         ) {
+            if (!this.isSideEffectFreeFreshOrReturnedArrayOperand(
+                unwrapped.expression.expression,
+                seenConsts,
+            )) {
+                return null;
+            }
             const sourceElements = this.sideEffectFreeMapArraySourceExpressions(
                 unwrapped.expression.expression,
                 seenConsts,
@@ -4941,6 +4977,12 @@ class Emitter {
             unwrapped.arguments.length >= 2 &&
             unwrapped.arguments.length <= 3
         ) {
+            if (!this.isSideEffectFreeFreshOrReturnedArrayOperand(
+                unwrapped.expression.expression,
+                seenConsts,
+            )) {
+                return null;
+            }
             const sourceElements = this.sideEffectFreeMapArraySourceExpressions(
                 unwrapped.expression.expression,
                 seenConsts,
@@ -4992,6 +5034,15 @@ class Emitter {
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
             )
         ) {
+            if (
+                unwrapped.expression.name.text === "reverse" &&
+                !this.isSideEffectFreeFreshOrReturnedArrayOperand(
+                    unwrapped.expression.expression,
+                    seenConsts,
+                )
+            ) {
+                return null;
+            }
             const sourceElements = this.sideEffectFreeMapArraySourceExpressions(
                 unwrapped.expression.expression,
                 seenConsts,
@@ -5007,6 +5058,15 @@ class Emitter {
             ) &&
             unwrapped.arguments.length === 0
         ) {
+            if (
+                unwrapped.expression.name.text === "sort" &&
+                !this.isSideEffectFreeFreshOrReturnedArrayOperand(
+                    unwrapped.expression.expression,
+                    seenConsts,
+                )
+            ) {
+                return null;
+            }
             return this.sideEffectFreeMapArraySourceExpressions(
                 unwrapped.expression.expression,
                 seenConsts,
@@ -7304,6 +7364,9 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.isMutatingArraySourceTransformOnNonFreshReceiver(unwrapped, seenConsts)) {
+            return false;
+        }
         const elements = this.sideEffectFreeMapArraySourceExpressions(unwrapped, seenConsts);
         if (elements) {
             return elements.every((element) => {
@@ -7349,6 +7412,9 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.isMutatingArraySourceTransformOnNonFreshReceiver(unwrapped, seenConsts)) {
+            return false;
+        }
         if (this.isSideEffectFreeArrayOperand(unwrapped, seenConsts)) return true;
         if (
             ts.isNewExpression(unwrapped) &&
@@ -7360,6 +7426,32 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeSetConstructorSource(init, seenConsts);
+    }
+
+    private isMutatingArraySourceTransformOnNonFreshReceiver(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            !ts.isCallExpression(unwrapped) ||
+            !ts.isPropertyAccessExpression(unwrapped.expression)
+        ) {
+            return false;
+        }
+        const method = unwrapped.expression.name.text;
+        if (
+            method !== "reverse" &&
+            method !== "sort" &&
+            method !== "fill" &&
+            method !== "copyWithin"
+        ) {
+            return false;
+        }
+        return !this.isSideEffectFreeFreshOrReturnedArrayOperand(
+            unwrapped.expression.expression,
+            seenConsts,
+        );
     }
 
     private isSideEffectFreeWeakMapConstructorSource(
