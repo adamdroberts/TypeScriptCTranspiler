@@ -1185,6 +1185,20 @@ class Emitter {
         expr: ts.ElementAccessExpression,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
+        if (expr.argumentExpression) {
+            const index = this.sideEffectFreePrimitiveNumberValue(expr.argumentExpression, seenConsts);
+            if (
+                index !== null &&
+                Number.isInteger(index) &&
+                this.sideEffectFreePrimitiveArrayElementOperandResult(
+                    expr.expression,
+                    index,
+                    seenConsts,
+                ) !== "unsafe"
+            ) {
+                return true;
+            }
+        }
         return this.isSideEffectFreeIndexableOperand(expr.expression, seenConsts) &&
             !!expr.argumentExpression &&
             this.isSideEffectFreeTopLevelConstInitializer(expr.argumentExpression, seenConsts);
@@ -8724,6 +8738,17 @@ class Emitter {
             this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts)
         ) {
             return index < 0 ? "absent" : "present";
+        }
+        if (
+            method === "getOwnPropertySymbols" &&
+            call.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Object")
+        ) {
+            const length = this.sideEffectFreeObjectGetOwnPropertySymbolsLength(
+                call.arguments[0]!,
+                seenConsts,
+            );
+            return length === null ? "unsafe" : "absent";
         }
         if (
             method === "values" &&

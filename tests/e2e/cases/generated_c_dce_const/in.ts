@@ -479,6 +479,7 @@ const unused_promise_resolve_finregistry_object_to_string_index_read = Promise.r
 }).toString()[0], "dead_promise_resolve_finregistry_object_to_string_index_read_marker"));
 const unused_promise_resolve_object_has_own_call = Promise.resolve(Object.hasOwn({ dead_promise_resolve_object_has_own: 1 }, "dead_promise_resolve_object_has_own"));
 const unused_promise_resolve_object_symbols_length = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols: 1 }).length);
+const unused_promise_resolve_object_symbols_element = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_element: 1 })[0]);
 const unused_promise_resolve_object_extensible_call = Promise.resolve(Object.isExtensible({ dead_promise_resolve_object_extensible: 1 }));
 const unused_promise_resolve_object_sealed_call = Promise.resolve(Object.isSealed({ dead_promise_resolve_object_sealed: 1 }));
 const unused_promise_resolve_object_frozen_call = Promise.resolve(Object.isFrozen({ dead_promise_resolve_object_frozen: 1 }));
@@ -3843,6 +3844,7 @@ function usedLocal(value: number): number {
     Object.getOwnPropertyNames("local_dead_object_primitive_property_names");
     Object.getOwnPropertySymbols({ local_dead_object_symbols: 1 });
     Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_freeze: 1 })).length;
+    Object.getOwnPropertySymbols(Object.setPrototypeOf({ local_dead_object_symbols_set_prototype: 1 }, null))[0];
     Object.getOwnPropertySymbols(Object.assign({}, { local_dead_object_symbols_assign: 1 })).map(() => "local_dead_object_symbols_empty_map_callback");
     Object.getOwnPropertyDescriptor("local_dead_object_primitive_descriptor", "0");
     Object.getOwnPropertyDescriptors("local_dead_object_primitive_descriptors");

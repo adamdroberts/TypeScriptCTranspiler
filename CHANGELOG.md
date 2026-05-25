@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now treats element reads from statically empty `Object.getOwnPropertySymbols(...)` results as absent, enabling unused `Promise.resolve(...)` and direct expression pruning. Test: `generated_c_dce_const`.
 - `Object.getOwnPropertySymbols(...)` is now declared in the local stdlib shim so supported user code no longer needs a type-check bypass. Tests: `object_get_own_property_symbols`, `generated_c_dce_const`.
 - `Object.getOwnPropertySymbols(...)` now evaluates/coerces supported typed and dynamic targets and returns an empty `symbol[]` in the current string-key-only object model, with catchable nullish target rejection. Test: `object_get_own_property_symbols`.
 - Generated-C DCE now prunes unused pure `Object.getOwnPropertySymbols(...)` calls, treats `.length` reads on their results as pure, and proves empty callback paths for statically symbol-free operands. Test: `generated_c_dce_const`.
