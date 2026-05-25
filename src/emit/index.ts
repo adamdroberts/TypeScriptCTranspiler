@@ -8829,6 +8829,12 @@ class Emitter {
                 seenConsts,
             );
             if (result !== null) return result;
+            const toSplicedResult = this.sideEffectFreePrimitiveEmptyToSplicedElementResult(
+                unwrapped,
+                index,
+                seenConsts,
+            );
+            if (toSplicedResult !== null) return toSplicedResult;
         }
         const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts);
         if (returnedArrayLength !== null && (index < 0 || index >= returnedArrayLength)) {
@@ -8845,6 +8851,40 @@ class Emitter {
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init
             ? this.sideEffectFreePrimitiveArrayElementOperandResult(init, index, seenConsts)
+            : "unsafe";
+    }
+
+    private sideEffectFreePrimitiveEmptyToSplicedElementResult(
+        call: ts.CallExpression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" | null {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            call.expression.name.text !== "toSpliced" ||
+            call.arguments.length < 2
+        ) {
+            return null;
+        }
+        const receiverLength = this.sideEffectFreeFreshOrReturnedArrayLength(
+            call.expression.expression,
+            seenConsts,
+        );
+        if (receiverLength !== 0) return null;
+        if (
+            !this.isSideEffectFreePrimitiveNumberCoercion(call.arguments[0]!, seenConsts) ||
+            !this.isSideEffectFreePrimitiveNumberCoercion(call.arguments[1]!, seenConsts) ||
+            !Array.from(call.arguments).slice(2).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            )
+        ) {
+            return "unsafe";
+        }
+        if (index < 0) return "absent";
+        const inserted = call.arguments[index + 2];
+        if (!inserted) return "absent";
+        return this.isSideEffectFreePrimitivePromiseResolveValue(inserted, new Set(seenConsts))
+            ? "present"
             : "unsafe";
     }
 
