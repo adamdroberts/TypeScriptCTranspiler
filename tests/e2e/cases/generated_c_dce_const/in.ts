@@ -1156,6 +1156,8 @@ const unused_promise_resolve_array_of_with_element = Promise.resolve(Array.of("d
 const unused_promise_resolve_array_of_with_retained_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_with_retained_element", "dead_promise_resolve_array_of_with_retained_element_old").with(1, "dead_promise_resolve_array_of_with_retained_element_replacement")[0]);
 const unused_promise_resolve_array_of_keys_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_keys_element", "dead_promise_resolve_array_of_keys_element_tail").keys()[1]);
 const unused_promise_resolve_array_of_values_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_values_element", "dead_promise_resolve_array_of_values_element_hit").values()[1]);
+const unused_promise_resolve_array_of_entries_key = Promise.resolve(Array.of("dead_promise_resolve_array_of_entries_key", "dead_promise_resolve_array_of_entries_key_tail").entries()[1][0]);
+const unused_promise_resolve_array_of_entries_value = Promise.resolve(Array.of("dead_promise_resolve_array_of_entries_value", "dead_promise_resolve_array_of_entries_value_hit").entries()[1][1]);
 const unused_array_push_call = ["dead_array_push"].push("dead_array_push_value");
 const unused_array_unshift_call = ["dead_array_unshift"].unshift("dead_array_unshift_value");
 const unused_object_keys_fill_call = Object.keys({ dead_object_keys_fill: 1 }).fill("dead_object_keys_fill_value");
@@ -3705,6 +3707,8 @@ function usedLocal(value: number): number {
     Array.of("local_dead_array_of_with_retained_element", "local_dead_array_of_with_retained_element_old").with(1, "local_dead_array_of_with_retained_element_replacement")[0];
     Array.of("local_dead_array_of_keys_element", "local_dead_array_of_keys_element_tail").keys()[1];
     Array.of("local_dead_array_of_values_element", "local_dead_array_of_values_element_hit").values()[1];
+    Array.of("local_dead_array_of_entries_key", "local_dead_array_of_entries_key_tail").entries()[1][0];
+    Array.of("local_dead_array_of_entries_value", "local_dead_array_of_entries_value_hit").entries()[1][1];
     ["local_dead_array_push"].push("local_dead_array_push_value");
     ["local_dead_array_unshift"].unshift("local_dead_array_unshift_value");
     Object.keys({ local_dead_object_keys_fill: 1 }).fill("local_dead_object_keys_fill_value");

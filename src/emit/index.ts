@@ -1202,6 +1202,9 @@ class Emitter {
                 return true;
             }
         }
+        if (this.isSideEffectFreePrimitiveObjectEntriesTupleElementAccess(expr, seenConsts)) {
+            return true;
+        }
         return this.isSideEffectFreeIndexableOperand(expr.expression, seenConsts) &&
             !!expr.argumentExpression &&
             this.isSideEffectFreeTopLevelConstInitializer(expr.argumentExpression, seenConsts);
@@ -8305,17 +8308,29 @@ class Emitter {
         if (entryIndex === null || !Number.isInteger(entryIndex)) return false;
         const entriesCall = this.unwrapSideEffectFreeStaticExpression(entryAccess.expression);
         if (
+            ts.isCallExpression(entriesCall) &&
+            ts.isPropertyAccessExpression(entriesCall.expression) &&
+            ts.isIdentifier(entriesCall.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(entriesCall.expression.expression, "Object") &&
+            entriesCall.expression.name.text === "entries" &&
+            entriesCall.arguments.length === 1
+        ) {
+            return this.sideEffectFreePrimitiveObjectEntriesTupleElementResult(
+                entriesCall.arguments[0]!,
+                entryIndex,
+                tupleIndex,
+                seenConsts,
+            ) !== "unsafe";
+        }
+        if (
             !ts.isCallExpression(entriesCall) ||
             !ts.isPropertyAccessExpression(entriesCall.expression) ||
-            !ts.isIdentifier(entriesCall.expression.expression) ||
-            !this.isUnshadowedGlobalIdentifier(entriesCall.expression.expression, "Object") ||
-            entriesCall.expression.name.text !== "entries" ||
-            entriesCall.arguments.length !== 1
+            entriesCall.expression.name.text !== "entries"
         ) {
             return false;
         }
-        return this.sideEffectFreePrimitiveObjectEntriesTupleElementResult(
-            entriesCall.arguments[0]!,
+        return this.sideEffectFreePrimitiveArrayEntriesTupleElementResult(
+            entriesCall,
             entryIndex,
             tupleIndex,
             seenConsts,
@@ -9742,6 +9757,33 @@ class Emitter {
                 seenConsts,
             )
             : "unsafe";
+    }
+
+    private sideEffectFreePrimitiveArrayEntriesTupleElementResult(
+        call: ts.CallExpression,
+        entryIndex: number,
+        tupleIndex: 0 | 1,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            !Array.from(call.arguments).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            )
+        ) {
+            return "unsafe";
+        }
+        const receiver = call.expression.expression;
+        const receiverLength = this.sideEffectFreeFreshOrReturnedArrayLength(receiver, seenConsts);
+        if (receiverLength === null) return "unsafe";
+        if (entryIndex < 0 || entryIndex >= receiverLength) return "absent";
+        return tupleIndex === 0
+            ? "present"
+            : this.sideEffectFreePrimitiveArrayElementOperandResult(
+                receiver,
+                entryIndex,
+                new Set(seenConsts),
+            );
     }
 
     private sideEffectFreeObjectTargetReturningOperand(
