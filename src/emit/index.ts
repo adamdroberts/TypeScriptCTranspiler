@@ -4506,6 +4506,7 @@ class Emitter {
                 );
                 if (method === "slice" && unwrapped.arguments.length === 0) return receiverLength;
                 if (method === "concat" && unwrapped.arguments.length === 0) return receiverLength;
+                if (method === "reverse" && allArgsPure) return receiverLength;
                 if (
                     method === "flat" &&
                     receiverLength === 0 &&
@@ -4516,6 +4517,12 @@ class Emitter {
                     return 0;
                 }
                 if (receiverLength === 0) {
+                    if (
+                        (method === "sort" || method === "toSorted") &&
+                        unwrapped.arguments.length === 0
+                    ) {
+                        return 0;
+                    }
                     if (
                         method === "copyWithin" &&
                         unwrapped.arguments.length >= 2 &&

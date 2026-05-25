@@ -505,6 +505,12 @@ const unused_promise_resolve_object_symbols_copy_within_length = Promise.resolve
 const unused_promise_resolve_object_symbols_fill_length = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_fill_length: 1 }).fill(Symbol("dead_promise_resolve_object_symbols_fill_value")).length);
 const unused_promise_resolve_object_symbols_to_spliced_insert_length = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_to_spliced_insert_length: 1 }).toSpliced(0, 0, Symbol("dead_promise_resolve_object_symbols_to_spliced_insert_value")).length);
 const unused_promise_resolve_object_symbols_to_spliced_insert_element = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_to_spliced_insert_element: 1 }).toSpliced(0, 0, Symbol("dead_promise_resolve_object_symbols_to_spliced_insert_element_value"))[0]);
+const unused_promise_resolve_object_symbols_reverse_length = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_reverse_length: 1 }).reverse().length);
+const unused_promise_resolve_object_symbols_sort_length = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_sort_length: 1 }).sort().length);
+const unused_promise_resolve_object_symbols_to_sorted_length = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_to_sorted_length: 1 }).toSorted().length);
+const unused_promise_resolve_object_symbols_reverse_element = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_reverse_element: 1 }).reverse()[0]);
+const unused_promise_resolve_object_symbols_sort_element = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_sort_element: 1 }).sort()[0]);
+const unused_promise_resolve_object_symbols_to_sorted_element = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_to_sorted_element: 1 }).toSorted()[0]);
 const unused_promise_resolve_object_extensible_call = Promise.resolve(Object.isExtensible({ dead_promise_resolve_object_extensible: 1 }));
 const unused_promise_resolve_object_sealed_call = Promise.resolve(Object.isSealed({ dead_promise_resolve_object_sealed: 1 }));
 const unused_promise_resolve_object_frozen_call = Promise.resolve(Object.isFrozen({ dead_promise_resolve_object_frozen: 1 }));
@@ -3884,6 +3890,12 @@ function usedLocal(value: number): number {
     Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_to_spliced_element: 1 })).toSpliced(0)[0];
     Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_to_spliced_insert_length: 1 })).toSpliced(0, 0, Symbol("local_dead_object_symbols_to_spliced_insert_value")).length;
     Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_to_spliced_insert_absent: 1 })).toSpliced(0, 0, Symbol("local_dead_object_symbols_to_spliced_insert_absent_value"))[1];
+    Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_reverse_length: 1 })).reverse().length;
+    Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_sort_length: 1 })).sort().length;
+    Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_to_sorted_length: 1 })).toSorted().length;
+    Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_reverse_element: 1 })).reverse()[0];
+    Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_sort_element: 1 })).sort()[0];
+    Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_to_sorted_element: 1 })).toSorted()[0];
     Object.getOwnPropertyDescriptor("local_dead_object_primitive_descriptor", "0");
     Object.getOwnPropertyDescriptors("local_dead_object_primitive_descriptors");
     Object.hasOwn("local_dead_object_primitive_has_own", "0");
