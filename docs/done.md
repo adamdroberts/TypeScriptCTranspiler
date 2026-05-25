@@ -1307,6 +1307,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generic_functions` | direct generic function calls specialize concrete argument and return types |
 | `generic_methods` | generic instance and static method calls specialize concrete argument and return types |
 | `generated_c_dce` | unreferenced non-exported top-level functions are omitted from generated C |
+| `generated_c_dce_class` | unreferenced no-side-effect class declarations and class-expression constants are omitted from generated C |
+| `generated_c_dce_const` | generated-C DCE prunes broad pure static expression, helper, Promise, collection, and object-operation trees |
 | `generated_c_dce_lifted_arrow` | unreferenced non-exported lifted top-level arrow constants are omitted from generated C |
 | `global_number_predicates` | global isNaN/isFinite coercion for typed and dynamic values |
 | `group_by_this_param` | Object.groupBy and Map.groupBy callbacks with explicit this parameters |
@@ -1601,7 +1603,10 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `reflect_construct_dynamic_function` | dynamic Reflect.construct over boxed function values creates a dynamic receiver and honors object or primitive constructor returns |
 | `reflect_construct_validation` | dynamic Reflect.construct catchable target, argumentsList, and newTarget validation |
 | `reflect_construct_new_target_validation` | dynamic Reflect.construct validates explicit constructable newTarget values |
+| `proxy` | dynamic Proxy construction, object traps, and revoked proxy basics |
+| `proxy-ownkeys` | Proxy ownKeys trap result filtering and basic invariant coverage |
 | `proxy_traps` | dynamic Proxy object traps plus function apply trap and enumerable ownKeys filtering |
+| `proxy_apply_forward` | trapless callable Proxy values forward dynamic Reflect.apply, direct calls, and method calls to function targets |
 | `proxy_array_mutation_forward` | trapless array Proxy dynamic writes, Reflect.set, descriptor definitions, length updates, and deletes forward to the array target |
 | `proxy_array_extensibility_forward` | trapless array Proxy extensibility checks and preventExtensions forward to the array target |
 | `proxy_array_seal_freeze_forward` | trapless array Proxy seal/freeze operations and sealed/frozen checks forward to the array target |
@@ -1620,13 +1625,21 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_direct_construct` | direct dynamic new calls through constructable Proxy values and property-access constructors |
 | `proxy_newable_identity` | nested constructable Proxy direct/property/parenthesized/spread newable identity |
 | `proxy_callable_identity` | callable and constructable Proxy typeof identity for function targets |
+| `proxy_callable_json` | callable Proxy values stringify like functions in object, array, and top-level JSON positions |
+| `proxy_callable_string` | callable Proxy values preserve function-style string coercion |
 | `proxy_callable_to_string_tag` | Object.prototype.toString.call tags callable Proxy chains as Function |
 | `proxy_function_prototype_invariants` | function Proxy prototype/extensibility forwarding, extensibility trap invariants, and non-extensible prototype invariants |
 | `proxy_callable_target_validation` | Proxy apply and construct reject non-callable object targets before trap dispatch |
+| `proxy_callable_trap_validation` | Proxy apply and construct traps must be callable before dispatch |
 | `proxy_object_trap_callable_validation` | Proxy object traps reject non-callable trap values before dispatch |
 | `proxy_define_accessor` | Proxy defineProperty trap and invariant handling for accessor descriptors, including fixed accessor getter/setter identity |
 | `proxy_nested_callable_identity` | nested callable Proxy typeof/string/JSON/apply/construct identity |
+| `proxy_construct_forward` | trapless constructable Proxy values forward dynamic construction to function targets |
+| `proxy_construct_new_target` | Proxy construct traps receive the normalized newTarget identity |
+| `proxy_constructor_validation` | Proxy constructor validates target and handler object operands |
 | `proxy_revocable_identity` | revoked callable Proxy typeof identity plus String and JSON revoked-get errors |
+| `proxy_revocable_callable` | revoked callable and constructable Proxy values throw through call and construct paths |
+| `proxy_ownkeys_result_validation` | Proxy ownKeys trap results must be arrays without duplicate keys |
 | `proxy_ownkeys_entry_validation` | Proxy ownKeys non-string entry validation |
 | `proxy_ownkeys_invariants` | Proxy ownKeys duplicate, non-configurable, and non-extensible target invariant checks |
 | `proxy_descriptor_invariants` | Proxy getOwnPropertyDescriptor non-configurable descriptor, enumerable flag, accessor identity, and non-extensible target invariant checks |
