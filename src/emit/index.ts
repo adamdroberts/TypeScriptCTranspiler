@@ -11314,18 +11314,10 @@ class Emitter {
 
     private isSideEffectFreeProcessStdioMetadataRead(expr: ts.Expression): boolean {
         if (!ts.isPropertyAccessExpression(expr)) return false;
-        const stream = this.unwrapSideEffectFreeStaticExpression(expr.expression);
-        if (
-            !ts.isPropertyAccessExpression(stream) ||
-            !ts.isIdentifier(stream.expression) ||
-            !this.isUnshadowedGlobalIdentifier(stream.expression, "process")
-        ) {
-            return false;
-        }
-        const streamName = stream.name.text;
-        if (streamName !== "stdin" && streamName !== "stdout" && streamName !== "stderr") {
-            return false;
-        }
+        const streamName = this.processStdioStreamReceiverName(
+            this.unwrapSideEffectFreeStaticExpression(expr.expression),
+        );
+        if (!streamName) return false;
         switch (expr.name.text) {
             case "fd":
             case "isTTY":
@@ -17073,21 +17065,27 @@ class Emitter {
             this.isProcessModuleIdentifier(expr.expression);
     }
 
-    private processWritableStreamReceiverName(expr: ts.Expression): "stdout" | "stderr" | null {
+    private processStdioStreamReceiverName(expr: ts.Expression): "stdin" | "stdout" | "stderr" | null {
         if (ts.isIdentifier(expr)) {
+            if (this.isNamedImportFrom(expr, ["process", "node:process"], "stdin")) return "stdin";
             if (this.isNamedImportFrom(expr, ["process", "node:process"], "stdout")) return "stdout";
             if (this.isNamedImportFrom(expr, ["process", "node:process"], "stderr")) return "stderr";
             return null;
         }
         if (
             ts.isPropertyAccessExpression(expr) &&
-            (expr.name.text === "stdout" || expr.name.text === "stderr") &&
+            (expr.name.text === "stdin" || expr.name.text === "stdout" || expr.name.text === "stderr") &&
             ts.isIdentifier(expr.expression) &&
             this.isProcessModuleIdentifier(expr.expression)
         ) {
             return expr.name.text;
         }
         return null;
+    }
+
+    private processWritableStreamReceiverName(expr: ts.Expression): "stdout" | "stderr" | null {
+        const stream = this.processStdioStreamReceiverName(expr);
+        return stream === "stdout" || stream === "stderr" ? stream : null;
     }
 
     private isProcessEnvObject(expr: ts.Expression): boolean {
@@ -40161,31 +40159,23 @@ class Emitter {
             }
         }
 
-        const stdioStreamExpr = this.unwrapSideEffectFreeStaticExpression(pa.expression);
-        if (
-            ts.isPropertyAccessExpression(stdioStreamExpr) &&
-            ts.isIdentifier(stdioStreamExpr.expression) &&
-            stdioStreamExpr.expression.text === "process" &&
-            (
-                stdioStreamExpr.name.text === "stdin" ||
-                stdioStreamExpr.name.text === "stdout" ||
-                stdioStreamExpr.name.text === "stderr"
-            )
-        ) {
-            const stream = stdioStreamExpr;
-            const fd = stream.name.text === "stdin"
+        const stdioStreamName = this.processStdioStreamReceiverName(
+            this.unwrapSideEffectFreeStaticExpression(pa.expression),
+        );
+        if (stdioStreamName) {
+            const fd = stdioStreamName === "stdin"
                 ? "0"
-                : stream.name.text === "stdout"
+                : stdioStreamName === "stdout"
                     ? "1"
                     : "2";
             switch (pa.name.text) {
                 case "fd": return { c: `${fd}.0`, ty: T_NUMBER };
                 case "isTTY": return { c: `tsc_process_stdio_is_tty(${fd})`, ty: T_BOOLEAN };
                 case "readable":
-                    if (stream.name.text === "stdin") return { c: "true", ty: T_BOOLEAN };
+                    if (stdioStreamName === "stdin") return { c: "true", ty: T_BOOLEAN };
                     return { c: "false", ty: T_BOOLEAN };
                 case "writable":
-                    if (stream.name.text !== "stdin") return { c: "true", ty: T_BOOLEAN };
+                    if (stdioStreamName !== "stdin") return { c: "true", ty: T_BOOLEAN };
                     break;
             }
         }

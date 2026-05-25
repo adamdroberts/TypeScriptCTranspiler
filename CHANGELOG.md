@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Named and namespace process stdio imports from `"process"` and `"node:process"` now expose existing `fd` / `isTTY` / `readable` / `writable` metadata. Test: `process_stdio_metadata_import`.
 - Named and namespace `stdout` / `stderr` imports from `"process"` and `"node:process"` now lower `.write(...)` calls to the existing process stdio helpers. Test: `process_stdio_import`.
 - Named and namespace `umask` imports from `"process"` and `"node:process"` now lower to the existing process umask helper. Test: `process_umask_import`.
 - Named and namespace `hrtime` imports from `"process"` and `"node:process"` now lower to the existing process high-resolution timer helpers, including `.bigint()`. Test: `process_hrtime_import`.

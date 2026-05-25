@@ -659,6 +659,7 @@ interface ProcessHrtime {
 interface ProcessWritableStream {
     readonly fd: number;
     readonly isTTY: boolean;
+    readonly readable: boolean;
     readonly writable: boolean;
     write(chunk: string | Buffer, callback?: () => void): boolean;
     write(chunk: string | Buffer, encoding?: string, callback?: () => void): boolean;
@@ -725,6 +726,7 @@ declare module "process" {
     export const nextTick: Process["nextTick"];
     export const resourceUsage: Process["resourceUsage"];
     export const stderr: Process["stderr"];
+    export const stdin: Process["stdin"];
     export const stdout: Process["stdout"];
     export const umask: Process["umask"];
     export const uptime: Process["uptime"];
@@ -743,6 +745,7 @@ declare module "node:process" {
     export const nextTick: Process["nextTick"];
     export const resourceUsage: Process["resourceUsage"];
     export const stderr: Process["stderr"];
+    export const stdin: Process["stdin"];
     export const stdout: Process["stdout"];
     export const umask: Process["umask"];
     export const uptime: Process["uptime"];
