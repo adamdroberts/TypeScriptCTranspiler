@@ -46,9 +46,21 @@ Promise.all([Promise.resolve(3, mark("d")), Promise.resolve(4, mark("e"))])
         return values;
     });
 
+Promise.all(new Set([Promise.resolve(11, mark("l")), Promise.resolve(12, mark("m"))]))
+    .then((values: number[]) => {
+        console.log("all set:", values.join(","));
+        return values;
+    });
+
 Promise.race([Promise.resolve("first", mark("f")), Promise.resolve("second", mark("g"))])
     .then((value: string) => {
         console.log("race:", value);
+        return value;
+    });
+
+Promise.race(new Set([Promise.resolve("set-first", mark("n")), Promise.resolve("set-second", mark("o"))]))
+    .then((value: string) => {
+        console.log("race set:", value);
         return value;
     });
 
@@ -58,11 +70,25 @@ Promise.any([Promise.reject<string>("skip", mark("h")), Promise.resolve("kept", 
         return value;
     });
 
+Promise.any(new Set([Promise.reject<string>("set-skip", mark("p")), Promise.resolve("set-kept", mark("q"))]))
+    .then((value: string) => {
+        console.log("any set:", value);
+        return value;
+    });
+
 Promise.allSettled([Promise.resolve(9, mark("j")), Promise.reject<number>("nope", mark("k"))])
     .then((items: any[]) => {
         const first: any = items[0];
         const second: any = items[1];
         console.log("settled:", first.status, first.value, second.status, second.reason);
+        return items;
+    });
+
+Promise.allSettled(new Set([Promise.resolve(13, mark("r")), Promise.reject<number>("set-nope", mark("s"))]))
+    .then((items: any[]) => {
+        const first: any = items[0];
+        const second: any = items[1];
+        console.log("settled set:", first.status, first.value, second.status, second.reason);
         return items;
     });
 

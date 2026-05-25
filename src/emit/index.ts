@@ -27277,10 +27277,20 @@ class Emitter {
 
     private emitPromiseArrayArg(call: ts.CallExpression, label: string): EmitResult {
         const arg = call.arguments[0];
-        if (!arg) unsupported(call, `${label} expects an array`);
+        if (!arg) unsupported(call, `${label} expects an array or Set`);
         const source = this.emitExpr(arg);
-        if (source.ty.kind !== "array" || !source.ty.elem || source.ty.elem.kind !== "promise") {
-            unsupported(arg, `${label} expects Promise<T>[]`);
+        if (
+            (source.ty.kind !== "array" && source.ty.kind !== "set") ||
+            !source.ty.elem ||
+            source.ty.elem.kind !== "promise"
+        ) {
+            unsupported(arg, `${label} expects Promise<T>[] or Set<Promise<T>>`);
+        }
+        if (source.ty.kind === "set") {
+            return {
+                c: `tsc_set_values(${source.c})`,
+                ty: arrayType(source.ty.elem),
+            };
         }
         return source;
     }

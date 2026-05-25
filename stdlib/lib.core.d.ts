@@ -49,9 +49,13 @@ interface PromiseConstructor {
     resolve(): Promise<void>;
     reject<T = never>(reason?: any, ...ignored: any[]): Promise<T>;
     all<T>(values: Promise<T>[]): Promise<T[]>;
+    all<T>(values: Set<Promise<T>>): Promise<T[]>;
     allSettled<T>(values: Promise<T>[]): Promise<any[]>;
+    allSettled<T>(values: Set<Promise<T>>): Promise<any[]>;
     race<T>(values: Promise<T>[]): Promise<T>;
+    race<T>(values: Set<Promise<T>>): Promise<T>;
     any<T>(values: Promise<T>[]): Promise<T>;
+    any<T>(values: Set<Promise<T>>): Promise<T>;
     try<T>(callback: () => T | Promise<T>): Promise<T>;
 }
 declare var Promise: PromiseConstructor;

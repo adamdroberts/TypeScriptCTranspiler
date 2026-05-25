@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Immediate `Promise.all`, `Promise.allSettled`, `Promise.race`, and `Promise.any` now accept typed `Set<Promise<T>>` sources in addition to promise arrays, preserving Set insertion order. Test: `promise_settled`.
 - Generated-C DCE coverage now proves unused `Object.groupBy(...)` / `Map.groupBy(...)` pruning over statically empty typed Set sources. Test: `generated_c_dce_const`.
 - `Object.groupBy` and `Map.groupBy` now accept typed `Set<T>` sources as well as typed arrays, preserving Set insertion order through the grouping callback index. Tests: `object_group_by`, `map_group_by`.
 - Generated-C DCE now prunes unused pure `Object.prototype.hasOwnProperty.call(...)`, `propertyIsEnumerable.call(...)`, `isPrototypeOf.call(...)`, and `valueOf.call(...)` forms, including primitive Promise resolutions for boolean call-form results and primitive property/element reads through fresh-object, pure object-builder, or target-returning-wrapper `valueOf.call(...)` receiver results. Test: `generated_c_dce_const`.
