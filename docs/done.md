@@ -1199,7 +1199,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_commonjs_computed_string_exports` | narrow CommonJS package string-concatenated/template-literal computed bracket export assignments |
 | `node_modules_commonjs_object_assign_require_exports` | narrow CommonJS package `Object.assign(exports, require("./local.js"))` re-export mutation |
 | `node_modules_commonjs_object_assign_exports` | narrow CommonJS package `Object.assign(exports/module.exports, object)` data/default export mutation |
-| `node_modules_commonjs_object_assign_from_entries_exports` | narrow CommonJS package `Object.assign(exports, Object.fromEntries(...))` static default/named metadata from inline entries and wrapped declared `Object.entries(api)` sources |
+| `node_modules_commonjs_object_assign_from_entries_exports` | narrow CommonJS package `Object.assign(exports, Object.fromEntries(...))` static default/named metadata from inline entries, wrapped declared `Object.entries(api)` sources, and finite Map-backed `Object.fromEntries(new Map(Object.entries(api)))` sources |
 | `node_modules_commonjs_object_assign_identifier_exports` | narrow CommonJS package `Object.assign(exports, declaredObject)` data/default export mutation |
 | `node_modules_commonjs_object_assign_spread_exports` | narrow CommonJS package `Object.assign(exports, { ...declaredObject, extra })` static spread export metadata |
 | `node_modules_commonjs_object_literal_computed_exports` | narrow CommonJS package statically computed object-literal keys in `Object.assign(exports/module.exports, object)` and `module.exports = object` export metadata |

@@ -694,6 +694,9 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "assign-from-entries-object-id-default",\n  label: local.label,\n  count: 128,\n  enabled: true\n};\nconst entries = Object.entries(api);\nObject.assign(module.exports, Object.freeze(Object.fromEntries(entries)));\n',
         "local.js": 'exports.label = "assign-from-entries-object-id";\n',
     }),
+    "tsc2c-cjs-object-assign-from-entries-map": cjsPackage("tsc2c-cjs-object-assign-from-entries-map", {
+        "index.js": 'const api = {\n  default: "assign-from-entries-map-default",\n  label: "assign-from-entries-map",\n  count: 141,\n  enabled: true\n};\nObject.assign(exports, Object.fromEntries(new Map(Object.entries(api))));\n',
+    }),
     "tsc2c-cjs-module-object-assign-exports-target": cjsPackage("tsc2c-cjs-module-object-assign-exports-target", {
         "index.js": 'exports.seed = "assign-exports-target-seed";\nmodule.exports = Object.assign(exports, {\n  default: function greet(name) { return "assign-exports-target " + name; },\n  label: "assign-exports-target",\n  count: 129,\n  double: function double(value) { return value * 29; }\n});\n',
     }),
