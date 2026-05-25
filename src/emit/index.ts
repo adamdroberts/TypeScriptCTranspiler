@@ -10099,6 +10099,13 @@ class Emitter {
         if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
             return index >= 0 && index < Array.from(unwrapped.text).length ? "present" : "absent";
         }
+        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(
+            unwrapped,
+            seenConsts,
+        );
+        if (returnedArrayLength !== null) {
+            return index >= 0 && index < returnedArrayLength ? "present" : "absent";
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init
             ? this.sideEffectFreeArraySpreadElementPresenceResult(init, index, seenConsts)
@@ -10245,6 +10252,18 @@ class Emitter {
         if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
             return index >= 0 && index < Array.from(unwrapped.text).length ? "present" : "absent";
         }
+        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(
+            unwrapped,
+            seenConsts,
+        );
+        if (returnedArrayLength !== null) {
+            if (index < 0 || index >= returnedArrayLength) return "absent";
+            return this.sideEffectFreePrimitiveArrayElementOperandResult(
+                unwrapped,
+                index,
+                new Set(seenConsts),
+            );
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init
             ? this.sideEffectFreePrimitiveArraySpreadElementResult(init, index, seenConsts)
@@ -10276,6 +10295,11 @@ class Emitter {
             }
             return count;
         }
+        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(
+            unwrapped,
+            seenConsts,
+        );
+        if (returnedArrayLength !== null) return returnedArrayLength;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeArraySpreadElementCount(init, seenConsts) : null;
     }
