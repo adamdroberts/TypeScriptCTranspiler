@@ -1,0 +1,4 @@
+template a init
+template b init
+template first: template-b
+template second: template-a

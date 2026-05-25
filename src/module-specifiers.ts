@@ -325,6 +325,9 @@ function stringLiteralUnionTypeTexts(
         seenAliases.delete(aliasName);
         return values;
     }
+    if (ts.isTemplateLiteralTypeNode(typeNode)) {
+        return templateLiteralTypeTexts(typeNode, seenAliases);
+    }
     if (ts.isLiteralTypeNode(typeNode) && ts.isStringLiteral(typeNode.literal)) {
         return [typeNode.literal.text];
     }
@@ -341,6 +344,46 @@ function stringLiteralUnionTypeTexts(
         }
     }
     return values;
+}
+
+function templateLiteralTypeTexts(
+    typeNode: ts.TemplateLiteralTypeNode,
+    seenAliases: Set<string>,
+): string[] {
+    let values = [typeNode.head.text];
+    for (const span of typeNode.templateSpans) {
+        const spanValues = stringLiteralUnionTypeTexts(span.type, seenAliases);
+        if (spanValues.length === 0) return [];
+        values = concatStringAlternatives(values, spanValues);
+        if (values.length === 0) return [];
+        values = concatStringAlternatives(values, [span.literal.text]);
+        if (values.length === 0) return [];
+    }
+    return dedupeStringAlternatives(values);
+}
+
+function concatStringAlternatives(left: string[], right: string[]): string[] {
+    if (left.length === 0 || right.length === 0) return [];
+    const out: string[] = [];
+    for (const l of left) {
+        for (const r of right) {
+            out.push(l + r);
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+    }
+    return dedupeStringAlternatives(out);
+}
+
+function dedupeStringAlternatives(values: string[]): string[] {
+    const out: string[] = [];
+    const seenValues = new Set<string>();
+    for (const value of values) {
+        if (seenValues.has(value)) continue;
+        seenValues.add(value);
+        out.push(value);
+        if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+    }
+    return out;
 }
 
 function visibleTypeAliasDeclaration(id: ts.Identifier, context: ts.Node): ts.TypeAliasDeclaration | null {
