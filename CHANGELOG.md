@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now derives static `Set` constructor source entries through pure `slice(...)` calls on known value arrays, enabling unused `Promise.resolve(...)`, direct `.with(...)`, and `Object.entries(...)` key-read pruning through `Array.from(new Set(...))` results. Test: `generated_c_dce_const`.
 - Generated-C DCE now derives static `Map` constructor source entries through pure `slice(...)` calls on known entry arrays, enabling unused `Promise.resolve(...)`, direct `.with(...)`, and `Object.entries(...)` key-read pruning through `Array.from(new Map(...))` results. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats empty returned arrays as side-effect-free `Map` constructor sources, enabling unused `Promise.resolve(...)`, direct expression, and `Object.entries(...)` key-read pruning through empty `Array.from(new Map(...))` results. Test: `generated_c_dce_const`.
 - Generated-C DCE now conservatively reuses returned-array first-element and absence proofs through `Array.from(new Set(...))` sources, enabling unused `Promise.resolve(...)`, direct expression, and `Object.entries(...)` key-read pruning for empty and first-entry transformed fresh arrays. Test: `generated_c_dce_const`.
