@@ -698,9 +698,9 @@ interface ProcessWritableStream {
     readonly writableNeedDrain: boolean;
     addListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     cork(...ignored: any[]): void;
-    end(callback?: () => void): void;
-    end(chunk: string | Buffer, callback?: () => void): void;
-    end(chunk: string | Buffer, encoding?: string, callback?: () => void): void;
+    end(callback?: () => void, ...ignored: any[]): void;
+    end(chunk: string | Buffer, callback?: () => void, ...ignored: any[]): void;
+    end(chunk: string | Buffer, encoding?: string, callback?: () => void, ...ignored: any[]): void;
     off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     once(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;

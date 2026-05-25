@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `process.stdout.end(...)` / `process.stderr.end(...)` now evaluate and ignore trailing arguments after the consumed chunk, encoding, and callback slots across global, named, namespace, and default process references. Test: `process_stdio_end_ignored_arguments`.
 - `process.stdout.write(...)` / `process.stderr.write(...)` now evaluate and ignore trailing arguments after the consumed chunk, encoding, and callback slots across global, named, namespace, and default process references. Test: `process_stdio_write_ignored_arguments`.
 - `process.exit(code?, ...ignored)` now evaluates and ignores trailing arguments across global, named, namespace, and default process references. Test: `process_exit_ignored_arguments`.
 - `process.chdir(directory, ...ignored)` now evaluates and ignores trailing arguments across global, named, namespace, and default process references. Test: `process_chdir_ignored_arguments`.

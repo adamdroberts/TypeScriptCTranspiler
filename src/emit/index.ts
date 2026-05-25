@@ -27087,9 +27087,6 @@ class Emitter {
             : null;
         if (processWritableEndStreamName) {
             const streamName = processWritableEndStreamName;
-            if (call.arguments.length > 3) {
-                unsupported(call, `process.${streamName}.end expects an optional string or Buffer chunk, encoding, and callback`);
-            }
             let chunk: { value: EmitResult; node: ts.Expression } | null = null;
             let encoding: { value: EmitResult; node: ts.Expression } | null = null;
             let callback: { value: EmitResult; node: ts.Expression } | null = null;
@@ -27124,7 +27121,7 @@ class Emitter {
                     }
                 }
             }
-            if (call.arguments.length === 3) {
+            if (call.arguments.length >= 3) {
                 const thirdNode = call.arguments[2]!;
                 if (!this.isUndefinedExpression(thirdNode)) {
                     const third = this.emitExpr(thirdNode);
@@ -27142,9 +27139,10 @@ class Emitter {
             if (chunk) specs.push({ value: chunk.value, target: chunk.value.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: chunk.node });
             if (encoding) specs.push({ value: encoding.value, target: T_STRING, node: encoding.node });
             if (callback) specs.push({ value: callback.value, target: callback.value.ty, node: callback.node });
+            specs.push(...this.ignoredArgumentSpecs(call.arguments, Math.min(call.arguments.length, 3)));
             const callbackTy = callback?.value.ty ?? null;
             return this.emitSequencedExpr(T_VOID, specs, (vals) => {
-                const callbackC = callback ? vals[vals.length - 1]! : null;
+                const callbackC = callback ? vals[(chunk ? 1 : 0) + (encoding ? 1 : 0)]! : null;
                 const writeCall = chunk ? `${fn}(${vals[0]!});` : "";
                 const callbackCall = callbackC
                     ? `${callbackC}->fn(${[`${callbackC}->env`, ...(callbackTy?.thisParam ? ["tsc_value_undefined()"] : [])].join(", ")});`
