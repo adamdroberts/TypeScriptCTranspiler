@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Object.fromEntries(entries, ...ignored)` now evaluates and ignores trailing arguments across typed entry-array, typed `Map`, and dynamic entry-array paths. Test: `object_from_entries_ignored_arguments`.
 - `Object.keys(...)`, `Object.values(...)`, and `Object.entries(...)` now evaluate and ignore trailing arguments across typed object, array, string, primitive, and dynamic-object paths. Test: `object_enumeration_ignored_arguments`.
 - `Object.create(proto, descriptors, ...ignored)` and `Object.is(left, right, ...ignored)` now evaluate and ignore trailing arguments. Test: `object_create_is_ignored_arguments`.
 - `Object.defineProperty(...)` and `Object.defineProperties(...)` now evaluate and ignore trailing arguments across dynamic object, array, and function paths. Test: `object_define_property_ignored_arguments`.

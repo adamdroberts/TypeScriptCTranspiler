@@ -37581,6 +37581,7 @@ class Emitter {
     private emitObjectFromEntries(
         call: ts.CallExpression,
         arg: ts.Expression,
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         const targetTsType =
             this.checker.getContextualType(call) ??
@@ -37622,7 +37623,6 @@ class Emitter {
         const idx = this.freshTemp("_of_i");
         const entry = this.freshTemp("_of_entry");
         const pieces: string[] = [
-            `tsc_array_t* ${arr} = ${entries.c}`,
             `${target.c} ${obj} = (${target.c})TSC_GC_MALLOC(sizeof(${target.className!}_t))`,
         ];
         for (const p of props) {
@@ -37641,7 +37641,9 @@ class Emitter {
             `for (size_t ${idx} = 0; ${idx} < ${arr}->len; ${idx}++) { ${entries.ty.elem.c} ${entry} = TSC_ARR(${entries.ty.elem.c}, ${arr}, ${idx}); ${assigns}; }`,
         );
         pieces.push(obj);
-        return { c: `({ ${pieces.join("; ")}; })`, ty: target };
+        return this.emitSequencedExpr(target, [{ value: entries, node: arg }, ...ignored], ([entriesC]) =>
+            `({ tsc_array_t* ${arr} = ${entriesC}; ${pieces.join("; ")}; })`,
+        );
     }
 
     private emitObjectCall(call: ts.CallExpression, name: string): EmitResult {
@@ -37926,6 +37928,7 @@ class Emitter {
             return this.emitObjectEntries(call, arg, mapped, tsType, ignored);
         }
         if (name === "fromEntries") {
+            const ignored = this.ignoredArgumentSpecs(args, 1);
             const entries = this.emitExpr(arg);
             const declaredDynamic = ts.isIdentifier(arg) && (
                 this.identifierDeclaredType(arg)?.kind === "value" ||
@@ -37937,11 +37940,12 @@ class Emitter {
                 (entries.ty.kind === "array" && entries.ty.elem?.kind === "value")
             ) {
                 const dynamicEntries: EmitResult = declaredDynamic ? { c: entries.c, ty: T_VALUE } : entries;
-                return this.emitSequencedCall("tsc_value_object_from_entries", T_VALUE, [
+                return this.emitSequencedExpr(T_VALUE, [
                     { value: dynamicEntries, target: T_VALUE, node: arg },
-                ]);
+                    ...ignored,
+                ], ([e]) => `tsc_value_object_from_entries(${e})`);
             }
-            return this.emitObjectFromEntries(call, arg);
+            return this.emitObjectFromEntries(call, arg, ignored);
         }
         if (name === "create") {
             if (args.length < 1) unsupported(call, "Object.create expects prototype and optional descriptor map");
