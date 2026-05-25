@@ -483,6 +483,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-exports-define-properties-from-entries": cjsPackage("tsc2c-cjs-module-exports-define-properties-from-entries", {
         "index.js": 'const defaultKey = "def" + "ault";\nconst labelKey = `label`;\nconst descriptors = {\n  [defaultKey]: { value: function greet(name) { return "whole-from-entries " + name; }, enumerable: true },\n  [labelKey]: { value: "module-define-properties-from-entries", enumerable: true },\n  count: { value: 93, enumerable: true },\n  double: { value: function double(value) { return value * 5; }, enumerable: true }\n};\nmodule.exports = Object.defineProperties({}, Object.fromEntries(Object.entries(descriptors)));\n',
     }),
+    "tsc2c-cjs-module-exports-create-from-entries": cjsPackage("tsc2c-cjs-module-exports-create-from-entries", {
+        "index.js": 'const proto = { inherited: "create-from-entries-base" };\nconst defaultKey = "def" + "ault";\nconst descriptors = {\n  [defaultKey]: { value: function greet(name) { return "create-from-entries " + name; }, enumerable: true },\n  label: { value: "module-create-from-entries", enumerable: true },\n  count: { value: 123, enumerable: true },\n  double: { value: function double(value) { return value * 6; }, enumerable: true }\n};\nmodule.exports = Object.create(proto, Object.fromEntries(Object.entries(descriptors)));\n',
+    }),
     "tsc2c-cjs-define-property-exports": cjsPackage("tsc2c-cjs-define-property-exports", {
         "index.js": 'Object.defineProperty(exports, "label", { value: "defined", enumerable: true });\nObject.defineProperty(exports, "count", { value: 42, enumerable: true });\nObject.defineProperty(exports, "double", { value: function double(value) { return value * 2; }, enumerable: true });\n',
     }),
