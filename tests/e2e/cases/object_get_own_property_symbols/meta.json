@@ -1,0 +1,3 @@
+{
+  "description": "Object.getOwnPropertySymbols returns an empty symbol array and ignores trailing arguments"
+}

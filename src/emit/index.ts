@@ -38024,15 +38024,17 @@ class Emitter {
             );
         }
         if (name === "getOwnPropertySymbols") {
-            if (args.length !== 1) unsupported(call, "Object.getOwnPropertySymbols expects object");
+            if (args.length < 1) unsupported(call, "Object.getOwnPropertySymbols expects object");
+            const ignored = this.ignoredArgumentSpecs(args, 1);
             if (mapped.kind === "value") {
                 const obj = this.emitExpr(arg);
-                return this.emitSequencedCall("tsc_value_get_own_property_symbols", arrayType(T_SYMBOL), [
+                return this.emitSequencedExpr(arrayType(T_SYMBOL), [
                     { value: obj, target: T_VALUE, node: arg },
-                ]);
+                    ...ignored,
+                ], ([o]) => `tsc_value_get_own_property_symbols(${o})`);
             }
             const obj = this.emitExpr(arg);
-            return this.emitSequencedExpr(arrayType(T_SYMBOL), [{ value: obj, node: arg }], ([o]) =>
+            return this.emitSequencedExpr(arrayType(T_SYMBOL), [{ value: obj, node: arg }, ...ignored], ([o]) =>
                 `({ (void)${o}; tsc_array_new(sizeof(tsc_symbol_t*), 1); })`,
             );
         }

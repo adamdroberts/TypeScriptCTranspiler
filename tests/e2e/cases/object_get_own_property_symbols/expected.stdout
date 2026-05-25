@@ -3,4 +3,5 @@ array: 0
 string: 0
 dynamic: 0
 side: 0 1
+ignored: 0 ab
 null: Object.getOwnPropertySymbols target must not be null or undefined
