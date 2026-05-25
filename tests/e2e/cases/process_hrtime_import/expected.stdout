@@ -1,0 +1,4 @@
+named: 2 true true 2
+namespace: 2 true true 2
+bigint: bigint bigint
+ignored: np

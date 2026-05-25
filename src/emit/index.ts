@@ -17063,6 +17063,16 @@ class Emitter {
         return id.text === "process" || this.isNamespaceImportFrom(id, ["process", "node:process"]);
     }
 
+    private isProcessHrtimeReceiver(expr: ts.Expression): boolean {
+        if (ts.isIdentifier(expr)) {
+            return this.isNamedImportFrom(expr, ["process", "node:process"], "hrtime");
+        }
+        return ts.isPropertyAccessExpression(expr) &&
+            expr.name.text === "hrtime" &&
+            ts.isIdentifier(expr.expression) &&
+            this.isProcessModuleIdentifier(expr.expression);
+    }
+
     private isProcessEnvObject(expr: ts.Expression): boolean {
         return ts.isPropertyAccessExpression(expr) &&
             expr.name.text === "env" &&
@@ -24871,6 +24881,7 @@ class Emitter {
             "getegid",
             "getgroups",
             "cpuUsage",
+            "hrtime",
             "kill",
             "memoryUsage",
             "resourceUsage",
@@ -26569,10 +26580,7 @@ class Emitter {
             return this.emitProcessModuleCall(call, "uptime");
         }
         if (
-            ts.isPropertyAccessExpression(recvExpr) &&
-            ts.isIdentifier(recvExpr.expression) &&
-            recvExpr.expression.text === "process" &&
-            recvExpr.name.text === "hrtime" &&
+            this.isProcessHrtimeReceiver(recvExpr) &&
             memberName === "bigint"
         ) {
             return this.emitSequencedExpr(
@@ -26644,6 +26652,8 @@ class Emitter {
             switch (memberName) {
                 case "nextTick":
                     return this.emitProcessNextTickCall(call);
+                case "hrtime":
+                    return this.emitProcessModuleCall(call, "hrtime");
                 case "getuid":
                     return this.emitSequencedExpr(
                         T_NUMBER,
@@ -26710,18 +26720,7 @@ class Emitter {
             recvExpr.text === "process" &&
             memberName === "hrtime"
         ) {
-            if (call.arguments.length === 0) {
-                return { c: `tsc_process_hrtime(NULL)`, ty: arrayType(T_NUMBER) };
-            }
-            const previous = this.emitExpr(call.arguments[0]!);
-            if (previous.ty.kind !== "array" || previous.ty.elem?.kind !== "number") {
-                unsupported(call.arguments[0]!, "process.hrtime previous value must be number[]");
-            }
-            return this.emitSequencedExpr(
-                arrayType(T_NUMBER),
-                [{ value: previous }, ...this.ignoredArgumentSpecs(call.arguments, 1)],
-                ([time]) => `tsc_process_hrtime(${time})`,
-            );
+            return this.emitProcessModuleCall(call, "hrtime");
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Math") {
             return this.emitMathCall(call, memberName);
@@ -27068,6 +27067,20 @@ class Emitter {
             case "cpuUsage":
                 if (call.arguments.length !== 0) unsupported(call, "process.cpuUsage expects no args in this subset");
                 return { c: `tsc_process_cpu_usage()`, ty: T_VALUE };
+            case "hrtime": {
+                if (call.arguments.length === 0) {
+                    return { c: `tsc_process_hrtime(NULL)`, ty: arrayType(T_NUMBER) };
+                }
+                const previous = this.emitExpr(call.arguments[0]!);
+                if (previous.ty.kind !== "array" || previous.ty.elem?.kind !== "number") {
+                    unsupported(call.arguments[0]!, "process.hrtime previous value must be number[]");
+                }
+                return this.emitSequencedExpr(
+                    arrayType(T_NUMBER),
+                    [{ value: previous }, ...this.ignoredArgumentSpecs(call.arguments, 1)],
+                    ([time]) => `tsc_process_hrtime(${time})`,
+                );
+            }
             case "kill": {
                 if (call.arguments.length < 1 || call.arguments.length > 2) unsupported(call, "process.kill expects pid and optional signal");
                 const signal = this.processSignalArgument(call.arguments[1]);

@@ -719,6 +719,7 @@ declare module "process" {
     export const getgid: Process["getgid"];
     export const getgroups: Process["getgroups"];
     export const getuid: Process["getuid"];
+    export const hrtime: Process["hrtime"];
     export const kill: Process["kill"];
     export const memoryUsage: Process["memoryUsage"];
     export const nextTick: Process["nextTick"];
@@ -733,6 +734,7 @@ declare module "node:process" {
     export const getgid: Process["getgid"];
     export const getgroups: Process["getgroups"];
     export const getuid: Process["getuid"];
+    export const hrtime: Process["hrtime"];
     export const kill: Process["kill"];
     export const memoryUsage: Process["memoryUsage"];
     export const nextTick: Process["nextTick"];
