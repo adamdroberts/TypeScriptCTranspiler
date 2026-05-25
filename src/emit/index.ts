@@ -15581,6 +15581,13 @@ class Emitter {
                 if (ts.isCallExpression(parent) && this.nonEscapingObjectSafeCallArgument(parent, n)) {
                     return;
                 }
+                if (
+                    ts.isCallExpression(parent) &&
+                    this.nonEscapingObjectPrototypeValueOfCallArgument(parent, n) &&
+                    this.nonEscapingObjectValueOfResultUseIsSafe(parent)
+                ) {
+                    return;
+                }
                 escapes = true;
                 return;
             }
@@ -15637,6 +15644,13 @@ class Emitter {
                 if (ts.isCallExpression(parent) && this.nonEscapingObjectSafeCallArgument(parent, n)) {
                     return;
                 }
+                if (
+                    ts.isCallExpression(parent) &&
+                    this.nonEscapingObjectPrototypeValueOfCallArgument(parent, n) &&
+                    this.nonEscapingObjectValueOfResultUseIsSafe(parent)
+                ) {
+                    return;
+                }
                 escapes = true;
                 return;
             }
@@ -15689,7 +15703,12 @@ class Emitter {
         ) {
             return true;
         }
-        return ts.isCallExpression(parent) && this.nonEscapingObjectSafeCallArgument(parent, n);
+        if (ts.isCallExpression(parent) && this.nonEscapingObjectSafeCallArgument(parent, n)) {
+            return true;
+        }
+        return ts.isCallExpression(parent) &&
+            this.nonEscapingObjectPrototypeValueOfCallArgument(parent, n) &&
+            this.nonEscapingObjectValueOfResultUseIsSafe(parent);
     }
 
     private nonEscapingObjectSafeCallArgument(call: ts.CallExpression, arg: ts.Expression): boolean {
@@ -15749,6 +15768,47 @@ class Emitter {
             "toLocaleString",
             "toString",
         ].includes(methodAccess.name.text);
+    }
+
+    private nonEscapingObjectPrototypeValueOfCallArgument(call: ts.CallExpression, arg: ts.Expression): boolean {
+        if (call.arguments[0] !== arg) return false;
+        const callee = call.expression;
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "call") {
+            return false;
+        }
+        const methodAccess = callee.expression;
+        if (!ts.isPropertyAccessExpression(methodAccess) || methodAccess.name.text !== "valueOf") {
+            return false;
+        }
+        const prototypeAccess = methodAccess.expression;
+        return (
+            ts.isPropertyAccessExpression(prototypeAccess) &&
+            prototypeAccess.name.text === "prototype" &&
+            ts.isIdentifier(prototypeAccess.expression) &&
+            prototypeAccess.expression.text === "Object"
+        );
+    }
+
+    private nonEscapingObjectValueOfResultUseIsSafe(expr: ts.Expression): boolean {
+        const parent = expr.parent;
+        if (
+            ts.isVariableDeclaration(parent) &&
+            parent.initializer === expr &&
+            this.nonEscapingObjectAliasUsesAreSafe(parent)
+        ) {
+            return true;
+        }
+        if (ts.isPropertyAccessExpression(parent) && parent.expression === expr) {
+            return true;
+        }
+        if (
+            ts.isBinaryExpression(parent) &&
+            parent.right === expr &&
+            parent.operatorToken.kind === ts.SyntaxKind.InKeyword
+        ) {
+            return true;
+        }
+        return ts.isCallExpression(parent) && this.nonEscapingObjectSafeCallArgument(parent, expr);
     }
 
     private nonEscapingLocalArrayLiteral(
