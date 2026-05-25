@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now proves primitive element reads through pure `keys()` and `values()` array results, enabling unused `Promise.resolve(...)` and direct expression pruning for in-range fresh arrays. Test: `generated_c_dce_const`.
 - Generated-C DCE now proves primitive element reads through pure integer-bound `copyWithin(...)` results, enabling unused `Promise.resolve(...)` and direct expression pruning for copied and retained elements in fresh arrays. Test: `generated_c_dce_const`.
 - Generated-C DCE now proves primitive element reads through pure integer-bound `fill(...)` results, enabling unused `Promise.resolve(...)` and direct expression pruning for replacement and retained elements in fresh arrays. Test: `generated_c_dce_const`.
 - Generated-C DCE now proves primitive element reads through in-range pure `with(...)` results, enabling unused `Promise.resolve(...)` and direct expression pruning for replacement and retained elements in fresh arrays. Test: `generated_c_dce_const`.

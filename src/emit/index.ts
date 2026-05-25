@@ -9059,6 +9059,12 @@ class Emitter {
                 seenConsts,
             );
             if (copyWithinResult !== null) return copyWithinResult;
+            const keyValueResult = this.sideEffectFreePrimitiveKeyValueElementResult(
+                unwrapped,
+                index,
+                seenConsts,
+            );
+            if (keyValueResult !== null) return keyValueResult;
         }
         const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts);
         if (returnedArrayLength !== null && (index < 0 || index >= returnedArrayLength)) {
@@ -9506,6 +9512,41 @@ class Emitter {
         return this.sideEffectFreePrimitiveArrayElementOperandResult(
             call.expression.expression,
             sourceIndex,
+            new Set(seenConsts),
+        );
+    }
+
+    private sideEffectFreePrimitiveKeyValueElementResult(
+        call: ts.CallExpression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" | null {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            (
+                call.expression.name.text !== "keys" &&
+                call.expression.name.text !== "values"
+            )
+        ) {
+            return null;
+        }
+        if (
+            !Array.from(call.arguments).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            )
+        ) {
+            return "unsafe";
+        }
+        const receiverLength = this.sideEffectFreeFreshOrReturnedArrayLength(
+            call.expression.expression,
+            seenConsts,
+        );
+        if (receiverLength === null) return null;
+        if (index < 0 || index >= receiverLength) return "absent";
+        if (call.expression.name.text === "keys") return "present";
+        return this.sideEffectFreePrimitiveArrayElementOperandResult(
+            call.expression.expression,
+            index,
             new Set(seenConsts),
         );
     }
