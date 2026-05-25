@@ -955,6 +955,7 @@ const unused_promise_resolve_object_entries_key_call = Promise.resolve(Object.en
 const unused_promise_resolve_object_entries_array_object_key_call = Promise.resolve(Object.entries([{ label: "dead_promise_resolve_object_entries_array_object_key" }])[0][0]);
 const unused_promise_resolve_object_entries_array_of_object_key_call = Promise.resolve(Object.entries(Array.of({ label: "dead_promise_resolve_object_entries_array_of_object_key" }))[0][0]);
 const unused_promise_resolve_object_entries_array_from_object_key_call = Promise.resolve(Object.entries(Array.from([{ label: "dead_promise_resolve_object_entries_array_from_object_key" }]))[0][0]);
+const unused_promise_resolve_object_entries_array_from_set_object_key_call = Promise.resolve(Object.entries(Array.from(new Set<object>([{ label: "dead_promise_resolve_object_entries_array_from_set_object_key" }])))[0][0]);
 const unused_promise_resolve_object_entries_value_call = Promise.resolve(Object.entries({ dead_promise_resolve_object_entries_value_key: "dead_promise_resolve_object_entries_value" })[0][1]);
 const unused_promise_resolve_object_entries_spread_value_call = Promise.resolve(Object.entries({ ...{ dead_promise_resolve_object_entries_spread_value_key: "dead_promise_resolve_object_entries_spread_value" }, dead_promise_resolve_object_entries_spread_tail_key: "dead_promise_resolve_object_entries_spread_tail_value" })[1][1]);
 const unused_promise_resolve_object_entries_array_value_call = Promise.resolve(Object.entries(["dead_promise_resolve_object_entries_array_value"])[0][1]);
