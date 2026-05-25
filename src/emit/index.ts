@@ -30892,16 +30892,17 @@ class Emitter {
                 ], ([ee, event]) => `tsc_event_emitter_listeners(${ee}, ${event})`);
             }
             case "once": {
-                if (args.length < 2 || args.length > 3) unsupported(call, "events.once expects emitter, eventName, and optional options");
+                if (args.length < 2) unsupported(call, "events.once expects emitter, eventName, and optional options");
                 this.eventEmitterOnceOptions(args[2], "events.once");
                 const emitter = this.emitExpr(args[0]!);
                 const eventName = this.emitExpr(args[1]!);
                 const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
                 if (mapped.kind !== "promise") unsupported(call, "events.once result must be Promise<any[]>");
-                return this.emitSequencedCall("tsc_event_emitter_once_promise", mapped, [
+                return this.emitSequencedExpr(mapped, [
                     { value: emitter, target: T_EVENT_EMITTER, node: args[0]! },
                     { value: eventName, target: T_STRING, node: args[1]! },
-                ]);
+                    ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
+                ], ([ee, event]) => `tsc_event_emitter_once_promise(${ee}, ${event})`);
             }
             case "setMaxListeners": {
                 if (args.length !== 2) unsupported(call, "events.setMaxListeners expects count and emitter");

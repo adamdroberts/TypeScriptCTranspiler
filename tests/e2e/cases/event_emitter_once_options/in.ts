@@ -1,8 +1,14 @@
 import { EventEmitter, once } from "events";
 import * as events from "node:events";
 
+let ignoredSeen = "";
+function mark(label: string): string {
+    ignoredSeen += label;
+    return label;
+}
+
 const first = new EventEmitter();
-const firstReady = once(first, "ready", void 0);
+const firstReady = once(first, "ready", void 0, mark("a"));
 first.emit("ready", "alpha", 1);
 firstReady.then((args) => {
     console.log("undefined options:", args[0], args[1]);
@@ -10,8 +16,10 @@ firstReady.then((args) => {
 
 const second = new events.EventEmitter();
 const ONCE_OPTIONS = { signal: void 0 } as const;
-const secondReady = events.once(second, "ready", ONCE_OPTIONS);
+const secondReady = events.once(second, "ready", ONCE_OPTIONS, mark("b"));
 second.emit("ready", "beta", 2);
 secondReady.then((args) => {
     console.log("signal undefined:", args[0], args[1]);
 });
+
+console.log("ignored:", ignoredSeen);

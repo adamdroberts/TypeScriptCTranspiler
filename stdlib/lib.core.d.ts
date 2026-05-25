@@ -1806,7 +1806,7 @@ interface EventsModule {
     defaultMaxListeners: number;
     listenerCount(emitter: EventEmitter, eventName: string, listener?: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): number;
     getEventListeners(emitter: EventEmitter, eventName: string, ...ignored: any[]): any[];
-    once(emitter: EventEmitter, eventName: string, options?: EventEmitterOnceOptions): Promise<any[]>;
+    once(emitter: EventEmitter, eventName: string, options?: EventEmitterOnceOptions, ...ignored: any[]): Promise<any[]>;
     setMaxListeners(n: number, emitter: EventEmitter): void;
     getMaxListeners(emitter: EventEmitter, ...ignored: any[]): number;
 }
@@ -1815,7 +1815,7 @@ declare module "events" {
     export let defaultMaxListeners: number;
     export function listenerCount(emitter: EventEmitter, eventName: string, listener?: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): number;
     export function getEventListeners(emitter: EventEmitter, eventName: string, ...ignored: any[]): any[];
-    export function once(emitter: EventEmitter, eventName: string, options?: EventEmitterOnceOptions): Promise<any[]>;
+    export function once(emitter: EventEmitter, eventName: string, options?: EventEmitterOnceOptions, ...ignored: any[]): Promise<any[]>;
     export function setMaxListeners(n: number, emitter: EventEmitter): void;
     export function getMaxListeners(emitter: EventEmitter, ...ignored: any[]): number;
     const defaultEvents: EventsModule;
@@ -1826,7 +1826,7 @@ declare module "node:events" {
     export let defaultMaxListeners: number;
     export function listenerCount(emitter: EventEmitter, eventName: string, listener?: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): number;
     export function getEventListeners(emitter: EventEmitter, eventName: string, ...ignored: any[]): any[];
-    export function once(emitter: EventEmitter, eventName: string, options?: EventEmitterOnceOptions): Promise<any[]>;
+    export function once(emitter: EventEmitter, eventName: string, options?: EventEmitterOnceOptions, ...ignored: any[]): Promise<any[]>;
     export function setMaxListeners(n: number, emitter: EventEmitter): void;
     export function getMaxListeners(emitter: EventEmitter, ...ignored: any[]): number;
     const defaultEvents: EventsModule;
