@@ -1,0 +1,3 @@
+{
+  "description": "process.kill evaluates and ignores trailing arguments"
+}

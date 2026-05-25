@@ -782,7 +782,7 @@ interface Process {
     memoryUsage: ProcessMemoryUsageFn;
     cpuUsage(previousValue?: any, ...ignored: any[]): any;
     resourceUsage(...ignored: any[]): any;
-    kill(pid: number, signal?: 0 | 9 | 15 | "SIGTERM" | "SIGKILL"): boolean;
+    kill(pid: number, signal?: 0 | 9 | 15 | "SIGTERM" | "SIGKILL", ...ignored: any[]): boolean;
 }
 declare const process: Process;
 declare module "stream" {

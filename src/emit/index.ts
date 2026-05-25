@@ -27270,12 +27270,13 @@ class Emitter {
                         () => `tsc_process_resource_usage()`,
                     );
                 case "kill": {
-                    if (call.arguments.length < 1 || call.arguments.length > 2) unsupported(call, "process.kill expects pid and optional signal");
+                    if (call.arguments.length < 1) unsupported(call, "process.kill expects pid and optional signal");
                     const signal = this.processSignalArgument(call.arguments[1]);
-                    return this.emitSequencedCall("tsc_process_kill", T_BOOLEAN, [
+                    return this.emitSequencedExpr(T_BOOLEAN, [
                         { value: this.emitExpr(call.arguments[0]!), target: T_NUMBER, node: call.arguments[0]! },
                         { value: { c: signal, ty: T_NUMBER } },
-                    ]);
+                        ...this.ignoredArgumentSpecs(call.arguments, call.arguments.length > 1 ? 2 : 1),
+                    ], ([pid, sig]) => `tsc_process_kill(${pid}, ${sig})`);
                 }
             }
         }
@@ -27658,12 +27659,13 @@ class Emitter {
                 );
             }
             case "kill": {
-                if (call.arguments.length < 1 || call.arguments.length > 2) unsupported(call, "process.kill expects pid and optional signal");
+                if (call.arguments.length < 1) unsupported(call, "process.kill expects pid and optional signal");
                 const signal = this.processSignalArgument(call.arguments[1]);
-                return this.emitSequencedCall("tsc_process_kill", T_BOOLEAN, [
+                return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: this.emitExpr(call.arguments[0]!), target: T_NUMBER, node: call.arguments[0]! },
                     { value: { c: signal, ty: T_NUMBER } },
-                ]);
+                    ...this.ignoredArgumentSpecs(call.arguments, call.arguments.length > 1 ? 2 : 1),
+                ], ([pid, sig]) => `tsc_process_kill(${pid}, ${sig})`);
             }
             case "memoryUsage":
                 return this.emitSequencedExpr(
