@@ -1,0 +1,3 @@
+{
+  "description": "Proxy direct construction and nested forwarding preserve newTarget identity"
+}
