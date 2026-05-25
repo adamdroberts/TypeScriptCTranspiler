@@ -15614,7 +15614,7 @@ class Emitter {
 
     private nonEscapingLocalArrayLiteral(
         d: ts.VariableDeclaration,
-    ): { init: ts.ArrayLiteralExpression; ty: CType } | null {
+    ): { init: ts.ArrayLiteralExpression; ty: CType; cap: number } | null {
         if (!ts.isIdentifier(d.name) || !d.initializer || !ts.isArrayLiteralExpression(d.initializer)) {
             return null;
         }
@@ -15635,6 +15635,7 @@ class Emitter {
         if (!scope || !ts.isBlock(scope)) return null;
 
         let escapes = false;
+        let extraCapacity = 0;
         const visit = (n: ts.Node): void => {
             if (escapes) return;
             if (n !== scope && ts.isFunctionLike(n)) return;
@@ -15665,6 +15666,17 @@ class Emitter {
                     ts.isCallExpression(parent.parent) &&
                     parent.parent.expression === parent
                 ) {
+                    if (this.nonEscapingArrayGrowingMethod(parent.name.text)) {
+                        if (
+                            parent.parent.arguments.some(ts.isSpreadElement) ||
+                            this.hasLoopAncestorBeforeScope(parent.parent, scope)
+                        ) {
+                            escapes = true;
+                            return;
+                        }
+                        extraCapacity += parent.parent.arguments.length;
+                        return;
+                    }
                     if (this.nonEscapingArrayReceiverMethod(parent.name.text)) {
                         return;
                     }
@@ -15681,7 +15693,7 @@ class Emitter {
             ts.forEachChild(n, visit);
         };
         visit(scope);
-        return escapes ? null : { init, ty: mapped };
+        return escapes ? null : { init, ty: mapped, cap: Math.max(1, init.elements.length + extraCapacity) };
     }
 
     private nonEscapingArrayReceiverMethod(method: string): boolean {
@@ -15705,6 +15717,10 @@ class Emitter {
         ].includes(method);
     }
 
+    private nonEscapingArrayGrowingMethod(method: string): boolean {
+        return method === "push" || method === "unshift";
+    }
+
     private nonEscapingArrayIgnoredReceiverMethod(method: string): boolean {
         return [
             "copyWithin",
@@ -15712,6 +15728,21 @@ class Emitter {
             "reverse",
             "sort",
         ].includes(method);
+    }
+
+    private hasLoopAncestorBeforeScope(node: ts.Node, scope: ts.Node): boolean {
+        for (let cur = node.parent; cur && cur !== scope; cur = cur.parent) {
+            if (
+                ts.isDoStatement(cur) ||
+                ts.isWhileStatement(cur) ||
+                ts.isForStatement(cur) ||
+                ts.isForInStatement(cur) ||
+                ts.isForOfStatement(cur)
+            ) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private emitClassBodies(cd: ts.ClassDeclaration): void {
@@ -17902,7 +17933,7 @@ class Emitter {
                 const elemType = stackArray.ty.elem!;
                 const storage = this.freshTemp(`_${name}_stack`);
                 const data = this.freshTemp(`_${name}_stack_data`);
-                const cap = Math.max(1, stackArray.init.elements.length);
+                const cap = stackArray.cap;
                 const qual = isConst ? " const" : "";
                 buf.line(`${elemType.c} ${data}[${cap}];`);
                 buf.line(`tsc_array_t ${storage} = {0};`);
