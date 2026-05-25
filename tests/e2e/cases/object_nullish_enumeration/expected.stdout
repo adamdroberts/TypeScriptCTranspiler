@@ -1,0 +1,4 @@
+keys null: Object.keys target must not be null or undefined
+values undefined: Object.values target must not be null or undefined
+entries null: Object.entries target must not be null or undefined
+number keys: 0

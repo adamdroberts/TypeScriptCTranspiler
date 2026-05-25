@@ -37676,7 +37676,7 @@ class Emitter {
             if (mapped.kind === "value") {
                 const value = this.emitExpr(arg);
                 return this.emitSequencedExpr(arrayType(T_STRING), [{ value }], ([v]) =>
-                    `tsc_value_object_keys(${v!})`,
+                    `({ if (tsc_value_is_nullish(${v!})) tsc_throw_str(tsc_str_from_cstr("Object.keys target must not be null or undefined")); tsc_value_object_keys(${v!}); })`,
                 );
             }
             if (nonStringPrimitiveObjectArg) {
@@ -37711,7 +37711,7 @@ class Emitter {
                 const value = this.emitExpr(arg);
                 if (value.ty.kind === "value") {
                     return this.emitSequencedExpr(arrayType(T_STRING), [{ value, target: T_VALUE, node: arg }], ([v]) =>
-                        `tsc_value_object_keys(${v})`,
+                        `({ if (tsc_value_is_nullish(${v})) tsc_throw_str(tsc_str_from_cstr("Object.keys target must not be null or undefined")); tsc_value_object_keys(${v}); })`,
                     );
                 }
                 return this.emitSequencedExpr(arrayType(T_STRING), [{ value }], ([arr]) => {
@@ -37747,7 +37747,7 @@ class Emitter {
             if (mapped.kind === "value") {
                 const value = this.emitExpr(arg);
                 return this.emitSequencedExpr(arrayType(T_VALUE), [{ value }], ([v]) =>
-                    `tsc_value_object_values(${v!})`,
+                    `({ if (tsc_value_is_nullish(${v!})) tsc_throw_str(tsc_str_from_cstr("Object.values target must not be null or undefined")); tsc_value_object_values(${v!}); })`,
                 );
             }
             if (nonStringPrimitiveObjectArg) {
@@ -37877,7 +37877,7 @@ class Emitter {
             if (value.ty.kind === "value" || declaredDynamic) {
                 const dynamicValue: EmitResult = declaredDynamic ? { c: value.c, ty: T_VALUE } : value;
                 return this.emitSequencedExpr(arrayType(T_VALUE), [{ value: dynamicValue }], ([v]) =>
-                    `tsc_value_object_entries(${v!})`,
+                    `({ if (tsc_value_is_nullish(${v!})) tsc_throw_str(tsc_str_from_cstr("Object.entries target must not be null or undefined")); tsc_value_object_entries(${v!}); })`,
                 );
             }
             return this.emitObjectEntries(call, arg, mapped, tsType);
