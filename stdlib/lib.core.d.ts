@@ -713,8 +713,14 @@ interface Process {
 }
 declare const process: Process;
 declare module "process" {
+    export const arch: Process["arch"];
+    export const argv: Process["argv"];
+    export const argv0: Process["argv0"];
     export const cpuUsage: Process["cpuUsage"];
     export const cwd: Process["cwd"];
+    export const execArgv: Process["execArgv"];
+    export const execPath: Process["execPath"];
+    export const features: Process["features"];
     export const getegid: Process["getegid"];
     export const geteuid: Process["geteuid"];
     export const getgid: Process["getgid"];
@@ -724,16 +730,29 @@ declare module "process" {
     export const kill: Process["kill"];
     export const memoryUsage: Process["memoryUsage"];
     export const nextTick: Process["nextTick"];
+    export const pid: Process["pid"];
+    export const platform: Process["platform"];
+    export const ppid: Process["ppid"];
+    export const release: Process["release"];
     export const resourceUsage: Process["resourceUsage"];
     export const stderr: Process["stderr"];
     export const stdin: Process["stdin"];
     export const stdout: Process["stdout"];
+    export const title: Process["title"];
     export const umask: Process["umask"];
     export const uptime: Process["uptime"];
+    export const version: Process["version"];
+    export const versions: Process["versions"];
 }
 declare module "node:process" {
+    export const arch: Process["arch"];
+    export const argv: Process["argv"];
+    export const argv0: Process["argv0"];
     export const cpuUsage: Process["cpuUsage"];
     export const cwd: Process["cwd"];
+    export const execArgv: Process["execArgv"];
+    export const execPath: Process["execPath"];
+    export const features: Process["features"];
     export const getegid: Process["getegid"];
     export const geteuid: Process["geteuid"];
     export const getgid: Process["getgid"];
@@ -743,12 +762,19 @@ declare module "node:process" {
     export const kill: Process["kill"];
     export const memoryUsage: Process["memoryUsage"];
     export const nextTick: Process["nextTick"];
+    export const pid: Process["pid"];
+    export const platform: Process["platform"];
+    export const ppid: Process["ppid"];
+    export const release: Process["release"];
     export const resourceUsage: Process["resourceUsage"];
     export const stderr: Process["stderr"];
     export const stdin: Process["stdin"];
     export const stdout: Process["stdout"];
+    export const title: Process["title"];
     export const umask: Process["umask"];
     export const uptime: Process["uptime"];
+    export const version: Process["version"];
+    export const versions: Process["versions"];
 }
 
 declare function parseInt(value: any, radix?: number, ...ignored: any[]): number;

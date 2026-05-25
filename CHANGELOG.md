@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Named and namespace read-only process metadata imports from `"process"` and `"node:process"` now expose the existing `argv` / `argv0` / `execArgv` / `execPath` / `title` / `version` / `versions` / `release` / `features` / `platform` / `arch` / `pid` / `ppid` helpers. Test: `process_metadata_value_import`.
 - Named and namespace process stdio imports from `"process"` and `"node:process"` now expose existing `fd` / `isTTY` / `readable` / `writable` metadata. Test: `process_stdio_metadata_import`.
 - Named and namespace `stdout` / `stderr` imports from `"process"` and `"node:process"` now lower `.write(...)` calls to the existing process stdio helpers. Test: `process_stdio_import`.
 - Named and namespace `umask` imports from `"process"` and `"node:process"` now lower to the existing process umask helper. Test: `process_umask_import`.

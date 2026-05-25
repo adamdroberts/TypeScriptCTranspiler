@@ -22522,6 +22522,11 @@ class Emitter {
             if (this.untypedJsArrayLiteralVariableDeclaration(expr)) {
                 return { c: this.identifierRead(expr), ty: T_VALUE };
             }
+            const processNamedImport = this.namedImportExportName(expr, ["process", "node:process"]);
+            const processProp = processNamedImport
+                ? this.emitProcessPropertyRead(processNamedImport)
+                : null;
+            if (processProp) return processProp;
             const ty = this.prepareType(mapType(expr, this.checker));
             const declaredTy = this.identifierDeclaredType(expr);
             if (declaredTy?.kind === "value" && ty.kind === "void") {
@@ -27123,6 +27128,36 @@ class Emitter {
                 ], ([mask]) => `tsc_process_umask_set(${mask})`);
         }
         unsupported(call, `process.${name}`);
+    }
+
+    private emitProcessPropertyRead(name: string): EmitResult | null {
+        switch (name) {
+            case "argv":
+                return { c: `tsc_process_argv()`, ty: arrayType(T_STRING) };
+            case "argv0":
+            case "execPath":
+            case "title":
+                return { c: `tsc_process_argv0()`, ty: T_STRING };
+            case "execArgv":
+                return { c: `tsc_process_exec_argv()`, ty: arrayType(T_STRING) };
+            case "version":
+                return { c: `tsc_process_version()`, ty: T_STRING };
+            case "versions":
+                return { c: `tsc_process_versions()`, ty: T_VALUE };
+            case "release":
+                return { c: `tsc_process_release()`, ty: T_VALUE };
+            case "features":
+                return { c: `tsc_process_features()`, ty: T_VALUE };
+            case "platform":
+                return { c: `tsc_os_platform()`, ty: T_STRING };
+            case "arch":
+                return { c: `tsc_os_arch()`, ty: T_STRING };
+            case "pid":
+                return { c: `tsc_process_pid()`, ty: T_NUMBER };
+            case "ppid":
+                return { c: `tsc_process_ppid()`, ty: T_NUMBER };
+        }
+        return null;
     }
 
     private emitDynamicMethod(
@@ -40228,44 +40263,9 @@ class Emitter {
                     return { c: this.stringLit("/dev/null"), ty: T_STRING };
                 }
             }
-            if (pa.expression.text === "process" && pa.name.text === "argv") {
-                return { c: `tsc_process_argv()`, ty: arrayType(T_STRING) };
-            }
-            if (pa.expression.text === "process" && pa.name.text === "argv0") {
-                return { c: `tsc_process_argv0()`, ty: T_STRING };
-            }
-            if (pa.expression.text === "process" && pa.name.text === "execPath") {
-                return { c: `tsc_process_argv0()`, ty: T_STRING };
-            }
-            if (pa.expression.text === "process" && pa.name.text === "title") {
-                return { c: `tsc_process_argv0()`, ty: T_STRING };
-            }
-            if (pa.expression.text === "process" && pa.name.text === "execArgv") {
-                return { c: `tsc_process_exec_argv()`, ty: arrayType(T_STRING) };
-            }
-            if (pa.expression.text === "process" && pa.name.text === "version") {
-                return { c: `tsc_process_version()`, ty: T_STRING };
-            }
-            if (pa.expression.text === "process" && pa.name.text === "versions") {
-                return { c: `tsc_process_versions()`, ty: T_VALUE };
-            }
-            if (pa.expression.text === "process" && pa.name.text === "release") {
-                return { c: `tsc_process_release()`, ty: T_VALUE };
-            }
-            if (pa.expression.text === "process" && pa.name.text === "features") {
-                return { c: `tsc_process_features()`, ty: T_VALUE };
-            }
-            if (pa.expression.text === "process" && pa.name.text === "platform") {
-                return { c: `tsc_os_platform()`, ty: T_STRING };
-            }
-            if (pa.expression.text === "process" && pa.name.text === "arch") {
-                return { c: `tsc_os_arch()`, ty: T_STRING };
-            }
-            if (pa.expression.text === "process" && pa.name.text === "pid") {
-                return { c: `tsc_process_pid()`, ty: T_NUMBER };
-            }
-            if (pa.expression.text === "process" && pa.name.text === "ppid") {
-                return { c: `tsc_process_ppid()`, ty: T_NUMBER };
+            if (this.isProcessModuleIdentifier(pa.expression)) {
+                const processProp = this.emitProcessPropertyRead(pa.name.text);
+                if (processProp) return processProp;
             }
             if (this.isCommonJsModuleIdentifier(pa.expression)) {
                 const sym = this.symbolForIdentifier(pa.expression);
