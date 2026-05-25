@@ -6,9 +6,12 @@ const namespaceInfo: any = nodeOs.userInfo();
 const namedInfo: any = userInfo();
 const UTF8 = "utf8";
 const UTF8_DASH = "utf-8";
-const globalUtf8: any = os.userInfo({ encoding: UTF8 });
-const namespaceUtf8: any = nodeOs.userInfo({ encoding: UTF8_DASH });
-const namedUtf8: any = userInfo({ encoding: UTF8 });
+const GLOBAL_OPTIONS = { encoding: UTF8 } as const;
+const NAMESPACE_OPTIONS = { encoding: UTF8_DASH } as const;
+const NAMED_OPTIONS = { encoding: UTF8 } as const;
+const globalUtf8: any = os.userInfo(GLOBAL_OPTIONS);
+const namespaceUtf8: any = nodeOs.userInfo(NAMESPACE_OPTIONS);
+const namedUtf8: any = userInfo(NAMED_OPTIONS);
 
 console.log("global:", typeof globalInfo.username, typeof globalInfo.homedir, typeof globalInfo.shell, globalInfo.uid >= 0, globalInfo.gid >= 0);
 console.log("namespace:", typeof namespaceInfo.username, namespaceInfo.uid >= 0);

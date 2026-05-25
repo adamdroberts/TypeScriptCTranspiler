@@ -37211,10 +37211,12 @@ class Emitter {
 
     private validateOsUserInfoOptions(options: ts.Expression | undefined): void {
         if (!options || this.isUndefinedExpression(options)) return;
-        if (!ts.isObjectLiteralExpression(options)) {
+        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedExpression(resolvedOptions)) return;
+        if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, "os.userInfo options must be an object literal in this subset");
         }
-        for (const prop of options.properties) {
+        for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
                 unsupported(prop, "os.userInfo options only support encoding property assignments");
             }
@@ -37222,10 +37224,11 @@ class Emitter {
             if (key !== "encoding") {
                 unsupported(prop.name, `os.userInfo unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
-            if (this.isUndefinedExpression(prop.initializer)) {
+            const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+            if (this.isUndefinedExpression(valueNode)) {
                 continue;
             }
-            const encoding = this.sideEffectFreeStringLiteralText(prop.initializer, new Set());
+            const encoding = this.sideEffectFreeStringLiteralText(valueNode, new Set());
             if (encoding === null || (encoding !== "utf8" && encoding !== "utf-8")) {
                 unsupported(prop.initializer, "os.userInfo currently supports UTF-8 encoding options only");
             }
