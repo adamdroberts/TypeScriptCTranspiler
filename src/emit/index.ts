@@ -24909,6 +24909,7 @@ class Emitter {
             return this.emitProcessNextTickCall(call);
         }
         const processNamed = [
+            "chdir",
             "cwd",
             "uptime",
             "getuid",
@@ -26600,14 +26601,10 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recvExpr) &&
-            recvExpr.text === "process" &&
+            this.isProcessModuleIdentifier(recvExpr) &&
             memberName === "chdir"
         ) {
-            if (call.arguments.length !== 1) unsupported(call, "process.chdir expects directory");
-            const directory = this.emitExpr(call.arguments[0]!);
-            return this.emitSequencedCall("tsc_process_chdir", T_VOID, [
-                { value: directory, target: T_STRING, node: call.arguments[0]! },
-            ]);
+            return this.emitProcessModuleCall(call, "chdir");
         }
         if (
             ts.isIdentifier(recvExpr) &&
@@ -27063,6 +27060,13 @@ class Emitter {
                     this.ignoredArgumentSpecs(call.arguments, 0),
                     () => `tsc_process_cwd()`,
                 );
+            case "chdir": {
+                if (call.arguments.length !== 1) unsupported(call, "process.chdir expects directory");
+                const directory = this.emitExpr(call.arguments[0]!);
+                return this.emitSequencedCall("tsc_process_chdir", T_VOID, [
+                    { value: directory, target: T_STRING, node: call.arguments[0]! },
+                ]);
+            }
             case "uptime":
                 return this.emitSequencedExpr(
                     T_NUMBER,

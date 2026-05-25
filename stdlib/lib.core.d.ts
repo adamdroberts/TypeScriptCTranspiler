@@ -716,6 +716,7 @@ declare module "process" {
     export const arch: Process["arch"];
     export const argv: Process["argv"];
     export const argv0: Process["argv0"];
+    export const chdir: Process["chdir"];
     export const cpuUsage: Process["cpuUsage"];
     export const cwd: Process["cwd"];
     export const env: Process["env"];
@@ -751,6 +752,7 @@ declare module "node:process" {
     export const arch: Process["arch"];
     export const argv: Process["argv"];
     export const argv0: Process["argv0"];
+    export const chdir: Process["chdir"];
     export const cpuUsage: Process["cpuUsage"];
     export const cwd: Process["cwd"];
     export const env: Process["env"];

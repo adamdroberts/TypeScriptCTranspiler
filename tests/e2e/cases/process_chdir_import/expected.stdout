@@ -1,0 +1,4 @@
+named: /tmp
+namespace restored: true
+default: /tmp
+default restored: true

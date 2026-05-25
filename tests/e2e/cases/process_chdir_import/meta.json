@@ -1,0 +1,3 @@
+{
+  "description": "named, namespace, and default process chdir imports route to the existing cwd/chdir helpers"
+}
