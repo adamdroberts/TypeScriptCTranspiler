@@ -607,6 +607,18 @@ const unused_promise_race_empty_finally_call = Promise.race([] as Promise<string
     .finally(() => "dead_promise_race_empty_finally_callback");
 const unused_promise_resolve_adopt_pending_finally_call = Promise.resolve(Promise.race([] as Promise<string>[]))
     .finally(() => "dead_promise_resolve_adopt_pending_finally_callback");
+const unused_promise_resolve_adopt_then_passthrough_call = Promise.resolve(
+    Promise.resolve("dead_promise_resolve_adopt_then_passthrough_source").then(),
+)
+    .then((value) => "dead_promise_resolve_adopt_then_passthrough_callback");
+const unused_promise_resolve_adopt_catch_passthrough_call = Promise.resolve(
+    Promise.reject<string>("dead_promise_resolve_adopt_catch_passthrough_source").catch(),
+)
+    .catch((reason) => "dead_promise_resolve_adopt_catch_passthrough_callback");
+const unused_promise_resolve_adopt_pending_then_call = Promise.resolve(
+    Promise.race([] as Promise<string>[]).then(() => "dead_promise_resolve_adopt_pending_then_unreached"),
+)
+    .finally(() => "dead_promise_resolve_adopt_pending_then_finally_callback");
 const unused_promise_try_pending_then_call = Promise.try(() => Promise.race([] as Promise<string>[]))
     .then(() => "dead_promise_try_pending_then_callback");
 const unused_new_promise_empty_then_call = new Promise<string>(() => {
@@ -1756,6 +1768,18 @@ Promise.race([] as Promise<string>[])
     .finally(() => "top_level_dead_promise_race_empty_finally_callback");
 Promise.resolve(Promise.race([] as Promise<string>[]))
     .finally(() => "top_level_dead_promise_resolve_adopt_pending_finally_callback");
+Promise.resolve(
+    Promise.resolve("top_level_dead_promise_resolve_adopt_then_passthrough_source").then(),
+)
+    .then((value) => "top_level_dead_promise_resolve_adopt_then_passthrough_callback");
+Promise.resolve(
+    Promise.reject<string>("top_level_dead_promise_resolve_adopt_catch_passthrough_source").catch(),
+)
+    .catch((reason) => "top_level_dead_promise_resolve_adopt_catch_passthrough_callback");
+Promise.resolve(
+    Promise.race([] as Promise<string>[]).then(() => "top_level_dead_promise_resolve_adopt_pending_then_unreached"),
+)
+    .finally(() => "top_level_dead_promise_resolve_adopt_pending_then_finally_callback");
 Promise.try(() => Promise.race([] as Promise<string>[]))
     .then(() => "top_level_dead_promise_try_pending_then_callback");
 new Promise<string>(() => {
@@ -2864,6 +2888,18 @@ function usedLocal(value: number): number {
         .finally(() => "local_dead_promise_race_empty_finally_callback");
     Promise.resolve(Promise.race([] as Promise<string>[]))
         .finally(() => "local_dead_promise_resolve_adopt_pending_finally_callback");
+    Promise.resolve(
+        Promise.resolve("local_dead_promise_resolve_adopt_then_passthrough_source").then(),
+    )
+        .then((value) => "local_dead_promise_resolve_adopt_then_passthrough_callback");
+    Promise.resolve(
+        Promise.reject<string>("local_dead_promise_resolve_adopt_catch_passthrough_source").catch(),
+    )
+        .catch((reason) => "local_dead_promise_resolve_adopt_catch_passthrough_callback");
+    Promise.resolve(
+        Promise.race([] as Promise<string>[]).then(() => "local_dead_promise_resolve_adopt_pending_then_unreached"),
+    )
+        .finally(() => "local_dead_promise_resolve_adopt_pending_then_finally_callback");
     Promise.try(() => Promise.race([] as Promise<string>[]))
         .then(() => "local_dead_promise_try_pending_then_callback");
     new Promise<string>(() => {

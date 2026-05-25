@@ -7421,6 +7421,8 @@ class Emitter {
         if (tryState) return tryState;
         const combinatorState = this.sideEffectFreePromiseStaticCombinatorState(unwrapped, seenConsts);
         if (combinatorState) return combinatorState;
+        const instanceState = this.sideEffectFreePromiseInstanceChainState(unwrapped, seenConsts);
+        if (instanceState) return instanceState;
         if (
             ts.isCallExpression(unwrapped) &&
             ts.isPropertyAccessExpression(unwrapped.expression) &&
