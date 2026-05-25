@@ -1,0 +1,3 @@
+{
+  "description": "Object.assign throws when a Proxy target set trap returns false"
+}

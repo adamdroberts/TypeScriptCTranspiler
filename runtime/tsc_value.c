@@ -1377,6 +1377,11 @@ tsc_value_t tsc_value_get_own_property_descriptors(tsc_value_t v) {
     return tsc_value_object(out);
 }
 
+static void object_assign_set_or_throw(tsc_value_t target, tsc_object_t* dst, tsc_str_t* key, tsc_value_t value) {
+    bool ok = dst ? tsc_object_set(dst, key, value) : tsc_value_set_prop(target, key, value);
+    if (!ok) tsc_throw_str(tsc_str_from_cstr("Object.assign target set failed"));
+}
+
 tsc_value_t tsc_value_object_assign(tsc_value_t target, tsc_value_t source) {
     if (!value_is_box(target)) return target;
     bool target_is_object = value_tag(target) == TSC_VALUE_TAG_OBJECT;
@@ -1391,22 +1396,14 @@ tsc_value_t tsc_value_object_assign(tsc_value_t target, tsc_value_t source) {
             for (size_t i = 0; i < keys->len; i++) {
                 tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
                 tsc_value_t value = tsc_value_get_prop(source, key);
-                if (dst) {
-                    tsc_object_set(dst, key, value);
-                } else {
-                    tsc_value_set_prop(target, key, value);
-                }
+                object_assign_set_or_throw(target, dst, key, value);
             }
             return target;
         }
         for (size_t i = 0; i < src->len; i++) {
             if (!src->props[i].enumerable) continue;
             tsc_value_t value = tsc_object_get(src, src->props[i].key);
-            if (dst) {
-                tsc_object_set(dst, src->props[i].key, value);
-            } else {
-                tsc_value_set_prop(target, src->props[i].key, value);
-            }
+            object_assign_set_or_throw(target, dst, src->props[i].key, value);
         }
         return target;
     }
@@ -1415,11 +1412,7 @@ tsc_value_t tsc_value_object_assign(tsc_value_t target, tsc_value_t source) {
         for (size_t i = 0; i < keys->len; i++) {
             tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
             tsc_value_t value = tsc_value_get_prop(source, key);
-            if (dst) {
-                tsc_object_set(dst, key, value);
-            } else {
-                tsc_value_set_prop(target, key, value);
-            }
+            object_assign_set_or_throw(target, dst, key, value);
         }
     }
     return target;
