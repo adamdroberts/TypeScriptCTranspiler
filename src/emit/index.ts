@@ -26845,6 +26845,28 @@ class Emitter {
                 () => "((void)0)",
             );
         }
+        const processWritableNoopStreamName = (
+            memberName === "setDefaultEncoding" ||
+            memberName === "cork" ||
+            memberName === "uncork"
+        )
+            ? this.processWritableStreamReceiverName(recvExpr)
+            : null;
+        if (processWritableNoopStreamName) {
+            if (memberName === "setDefaultEncoding") {
+                if (call.arguments.length < 1) unsupported(call, `process.${processWritableNoopStreamName}.setDefaultEncoding expects an encoding`);
+                const encoding = this.emitExpr(call.arguments[0]!);
+                return this.emitSequencedExpr(T_VOID, [
+                    { value: encoding, target: T_STRING, node: call.arguments[0]! },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ], ([enc]) => `({ (void)${enc}; })`);
+            }
+            return this.emitSequencedExpr(
+                T_VOID,
+                this.ignoredArgumentSpecs(call.arguments, 0),
+                () => "((void)0)",
+            );
+        }
         const processWritableStreamName = memberName === "write"
             ? this.processWritableStreamReceiverName(recvExpr)
             : null;

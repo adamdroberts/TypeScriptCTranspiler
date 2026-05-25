@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `process.stdout` / `process.stderr` now accept no-op `setDefaultEncoding(...)`, `cork(...)`, and `uncork(...)` compatibility methods across global, named, namespace, and default process references. Test: `process_stdout_noop_methods`.
 - `"timers/promises"` and `"node:timers/promises"` imports now expose immediate-settled `scheduler.wait(0 | undefined)` and `scheduler.yield()` across named, namespace, and default import forms. Test: `timers_promises_scheduler`.
 - Direct `"path/posix"` and `"node:path/posix"` imports now route to the supported POSIX path subset across named, namespace, and default import forms. Test: `path_posix_subpath_import`.
 - `process.stdin.setEncoding(...)`, `process.stdin.resume(...)`, and `process.stdin.pause(...)` now act as no-op compatibility methods in the bounded process stdio subset across global, named, namespace, and default process references. Test: `process_stdin_noop_methods`.

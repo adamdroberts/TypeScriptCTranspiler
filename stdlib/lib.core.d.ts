@@ -677,6 +677,9 @@ interface ProcessWritableStream {
     readonly isTTY: boolean;
     readonly readable: boolean;
     readonly writable: boolean;
+    cork(...ignored: any[]): void;
+    setDefaultEncoding(encoding: string, ...ignored: any[]): void;
+    uncork(...ignored: any[]): void;
     write(chunk: string | Buffer, callback?: () => void): boolean;
     write(chunk: string | Buffer, encoding?: string, callback?: () => void): boolean;
 }
