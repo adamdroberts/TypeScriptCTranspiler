@@ -1,8 +1,8 @@
 import * as nodeOs from "node:os";
 import { userInfo } from "os";
 
-const globalInfo: any = os.userInfo(undefined);
-const namespaceInfo: any = nodeOs.userInfo({ encoding: undefined });
+const globalInfo: any = os.userInfo(void 0);
+const namespaceInfo: any = nodeOs.userInfo({ encoding: void 0 });
 const namedInfo: any = userInfo({ encoding: undefined });
 
 console.log("global:", typeof globalInfo.username, typeof globalInfo.homedir, globalInfo.uid >= 0);
