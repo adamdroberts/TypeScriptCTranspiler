@@ -7180,11 +7180,7 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (
             unwrapped.kind === ts.SyntaxKind.NullKeyword ||
-            unwrapped.kind === ts.SyntaxKind.UndefinedKeyword ||
-            (
-                ts.isIdentifier(unwrapped) &&
-                this.isUnshadowedGlobalIdentifier(unwrapped, "undefined")
-            )
+            this.isUnshadowedUndefinedExpression(unwrapped)
         ) {
             return true;
         }
@@ -9179,11 +9175,7 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (
             unwrapped.kind === ts.SyntaxKind.NullKeyword ||
-            unwrapped.kind === ts.SyntaxKind.UndefinedKeyword ||
-            (
-                ts.isIdentifier(unwrapped) &&
-                this.isUnshadowedGlobalIdentifier(unwrapped, "undefined")
-            )
+            this.isUnshadowedUndefinedExpression(unwrapped)
         ) {
             return true;
         }
@@ -17707,13 +17699,7 @@ class Emitter {
         if (unwrapped.kind === ts.SyntaxKind.FalseKeyword) return false;
         if (
             unwrapped.kind === ts.SyntaxKind.NullKeyword ||
-            unwrapped.kind === ts.SyntaxKind.UndefinedKeyword
-        ) {
-            return false;
-        }
-        if (
-            ts.isIdentifier(unwrapped) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped, "undefined")
+            this.isUnshadowedUndefinedExpression(unwrapped)
         ) {
             return false;
         }
@@ -17758,13 +17744,7 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (
             unwrapped.kind === ts.SyntaxKind.NullKeyword ||
-            unwrapped.kind === ts.SyntaxKind.UndefinedKeyword
-        ) {
-            return "nullish";
-        }
-        if (
-            ts.isIdentifier(unwrapped) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped, "undefined")
+            this.isUnshadowedUndefinedExpression(unwrapped)
         ) {
             return "nullish";
         }
@@ -34539,6 +34519,13 @@ class Emitter {
 
     private isUndefinedExpression(expr: ts.Expression): boolean {
         if (ts.isIdentifier(expr) && expr.text === "undefined") return true;
+        return ts.isVoidExpression(expr) &&
+            this.isSideEffectFreeTopLevelConstInitializer(expr.expression);
+    }
+
+    private isUnshadowedUndefinedExpression(expr: ts.Expression): boolean {
+        if (expr.kind === ts.SyntaxKind.UndefinedKeyword) return true;
+        if (ts.isIdentifier(expr)) return this.isUnshadowedGlobalIdentifier(expr, "undefined");
         return ts.isVoidExpression(expr) &&
             this.isSideEffectFreeTopLevelConstInitializer(expr.expression);
     }

@@ -45,6 +45,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - Pre/post `++` `--`; local dynamic `any` variables plus dynamic property and index lvalues use JS-style numeric coercion and preserve prefix/postfix expression results. Test: `dynamic_update_ops`
 - `typeof` in typed code — JS type string with operand side effects preserved. Nullable pointer unions such as `string | null` and `string | undefined` produce the nullish runtime result and work in equality/inequality guards; dynamic primitive unions such as `string | number | boolean` narrow through the existing unbox bridge. Tests: `typeof`, `typeof_guards`, `typeof_boolean_union`
 - `void expr` evaluates `expr` for side effects and yields `undefined`. Test: `void_operator`
+- Side-effect-free `void` expressions participate in the static undefined/nullish/falsy analysis used by generated-C DCE. Test: `static_void_analysis`
 - Comma operator expressions evaluate left-to-right and return the right-hand value. Test: `comma_operator`
 - TypeScript-only `expr satisfies T`, `expr as T`, `<T>expr`, and `expr!` assertions erase to the runtime operand. Test: `satisfies_expression`
 - Ternary `a ? b : c`
