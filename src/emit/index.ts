@@ -16998,6 +16998,7 @@ class Emitter {
             "child_process",
             "crypto",
             "dns",
+            "dns/promises",
             "events",
             "fs",
             "fs/promises",
@@ -17049,7 +17050,15 @@ class Emitter {
             this.isDefaultImportFrom(id, ["dns", "node:dns"]);
     }
 
+    private isDnsPromisesModuleIdentifier(id: ts.Identifier): boolean {
+        return this.isNamespaceImportFrom(id, ["dns/promises", "node:dns/promises"]) ||
+            this.isDefaultImportFrom(id, ["dns/promises", "node:dns/promises"]);
+    }
+
     private isDnsPromisesReceiver(expr: ts.Expression): boolean {
+        if (ts.isIdentifier(expr) && this.isDnsPromisesModuleIdentifier(expr)) {
+            return true;
+        }
         if (
             ts.isPropertyAccessExpression(expr) &&
             expr.name.text === "promises" &&
@@ -24985,6 +24994,9 @@ class Emitter {
         }
         if (this.isNamedImportFrom(calleeId, ["dns", "node:dns"], "lookup")) {
             return this.emitDnsCall(call, "lookup");
+        }
+        if (this.isNamedImportFrom(calleeId, ["dns/promises", "node:dns/promises"], "lookup")) {
+            return this.emitDnsPromisesCall(call, "lookup");
         }
         if (this.isNamedImportFrom(calleeId, ["process", "node:process"], "nextTick")) {
             return this.emitProcessNextTickCall(call);

@@ -472,6 +472,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 
 ### `dns`
 - `dns.lookup(hostname, callback)`, `dns.lookup(hostname, 4|6|0, callback)`, `dns.lookup(hostname, { family, all, hints, verbatim, order }, callback)`, and `dns.promises.lookup(hostname[, 4|6|0 | { family, all, hints, verbatim, order }])` are implemented as immediate subsets for global `dns`, default imports, named imports, named `promises` imports, and namespace imports from `"dns"` / `"node:dns"`. They resolve through host `getaddrinfo`, support bounded literal family selection for `0`, `4`, or `6`, including earlier static `const` aliases for numeric family shorthand and option values, expose `dns.ADDRCONFIG`, `dns.V4MAPPED`, and `dns.ALL` hint constants including static `const` aliases of DNS hint expressions, pass `null`, the first IPv4/IPv6 address, and family `4` or `6` on single callback success, and pass an error string as the first callback argument on callback failure. `{ all: true }` returns an array of dynamic `{ address, family }` result objects for callback and Promise forms. Literal `verbatim` / `order` options are accepted in this immediate subset without adding libuv scheduling, and supported option-object properties explicitly set to `undefined` or side-effect-free `void` use their defaults. The single-result Promise form returns a fulfilled dynamic `{ address, family }` object or a rejected Promise with the lookup error string. Tests: `dns_lookup`, `dns_default_import`, `dns_lookup_options`, `dns_lookup_option_forms`, `dns_lookup_option_property_undefined`, `dns_promises_lookup`, `dns_lookup_all`, `dns_lookup_hints`
+- Direct named, namespace, and default imports from `"dns/promises"` / `"node:dns/promises"` route to the same immediate `dns.promises.lookup` subset. Test: `dns_promises_subpath_import`
 - Aliased named imports for DNS hint constants such as `V4MAPPED as hint` lower correctly in expressions and DNS lookup options. Test: `dns_lookup_hints`
 
 ### `net`
@@ -1047,6 +1048,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dns_lookup_option_forms` | dns.lookup numeric family shorthand plus literal/const option forms |
 | `dns_lookup_options` | immediate dns.lookup family option support |
 | `dns_promises_lookup` | immediate dns.promises.lookup fulfilled result objects |
+| `dns_promises_subpath_import` | direct dns/promises named, namespace, and default imports |
 | `enums` | numeric enum constants |
 | `error_constructors` | TypeError, RangeError, and SyntaxError constructors share Error object behavior and ignored extra args |
 | `error_cause` | Error-family and AggregateError literal cause options exposed through .cause |

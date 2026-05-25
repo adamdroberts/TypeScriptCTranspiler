@@ -1747,6 +1747,16 @@ declare module "node:dns" {
     const defaultDns: DNS;
     export default defaultDns;
 }
+declare module "dns/promises" {
+    export const lookup: DnsPromises["lookup"];
+    const defaultDnsPromises: DnsPromises;
+    export default defaultDnsPromises;
+}
+declare module "node:dns/promises" {
+    export const lookup: DnsPromises["lookup"];
+    const defaultDnsPromises: DnsPromises;
+    export default defaultDnsPromises;
+}
 
 interface Net {
     isIP(input: string, ...ignored: any[]): number;
