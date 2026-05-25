@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Map.prototype.forEach(...)` and `Set.prototype.forEach(...)` now evaluate and ignore trailing arguments after the optional `thisArg`. Test: `map_set_for_each`.
 - `RegExp.escape(text, ...ignored)` now evaluates and ignores trailing arguments after the escaped text. Test: `regexp_escape`.
 - `URL.canParse(input, base?, ...ignored)` now evaluates and ignores trailing arguments after the optional base, including explicit `undefined` base defaults. Test: `url_can_parse`.
 - `Function.apply(...)` now evaluates and ignores trailing arguments after the optional argument list on dynamic and statically known function values, and the core shim declares the supported method. Test: `function_call_apply_defaults`.

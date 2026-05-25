@@ -29541,12 +29541,13 @@ class Emitter {
         const k = recv.ty.key!;
         const v = recv.ty.elem!;
         const args = call.arguments;
-        if (args.length < 1 || args.length > 2) unsupported(call, "Map.forEach expects callback and optional thisArg");
+        if (args.length < 1) unsupported(call, "Map.forEach expects callback and optional thisArg");
         const cb = args[0]!;
         const specs: SequencedCallArg[] = [{ value: recv }];
         if (args[1]) {
             specs.push({ value: this.emitExpr(args[1]), target: T_VALUE, node: args[1] });
         }
+        specs.push(...this.ignoredArgumentSpecs(args, 2));
         return this.emitSequencedExpr(T_VOID, specs, ([map, thisArg]) => {
             const callbackThisArg = thisArg ?? "tsc_value_undefined()";
             const mt = this.freshTemp("_map_each");
@@ -29780,12 +29781,13 @@ class Emitter {
     private emitSetForEach(call: ts.CallExpression, recv: EmitResult): EmitResult {
         const e = recv.ty.elem!;
         const args = call.arguments;
-        if (args.length < 1 || args.length > 2) unsupported(call, "Set.forEach expects callback and optional thisArg");
+        if (args.length < 1) unsupported(call, "Set.forEach expects callback and optional thisArg");
         const cb = args[0]!;
         const specs: SequencedCallArg[] = [{ value: recv }];
         if (args[1]) {
             specs.push({ value: this.emitExpr(args[1]), target: T_VALUE, node: args[1] });
         }
+        specs.push(...this.ignoredArgumentSpecs(args, 2));
         return this.emitSequencedExpr(T_VOID, specs, ([set, thisArg]) => {
             const callbackThisArg = thisArg ?? "tsc_value_undefined()";
             const st = this.freshTemp("_set_each");

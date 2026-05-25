@@ -1,4 +1,8 @@
+ignored: map-extra
+ignored: set-extra
 map total: 12
 map block total: 12
+map extra: 5
 set total: 18
 set block total: 18
+set extra: 7

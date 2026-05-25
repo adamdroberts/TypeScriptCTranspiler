@@ -373,7 +373,7 @@ interface Map<K, V> extends Iterable<[K, V]> {
     keys(...ignored: any[]): K[];
     values(...ignored: any[]): V[];
     entries(...ignored: any[]): ObjectEntry<V, K>[];
-    forEach(cb: (value: V, key: K, map: Map<K, V>) => void, thisArg?: any): void;
+    forEach(cb: (value: V, key: K, map: Map<K, V>) => void, thisArg?: any, ...ignored: any[]): void;
     toLocaleString(...ignored: any[]): string;
     toString(...ignored: any[]): string;
     valueOf(...ignored: any[]): Map<K, V>;
@@ -399,7 +399,7 @@ interface Set<T> extends Iterable<T> {
     clear(): void;
     keys(...ignored: any[]): T[];
     values(...ignored: any[]): T[];
-    forEach(cb: (value: T, value2: T, set: Set<T>) => void, thisArg?: any): void;
+    forEach(cb: (value: T, value2: T, set: Set<T>) => void, thisArg?: any, ...ignored: any[]): void;
     union(other: Set<T>): Set<T>;
     intersection(other: Set<T>): Set<T>;
     difference(other: Set<T>): Set<T>;
