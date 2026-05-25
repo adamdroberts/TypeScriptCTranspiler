@@ -9003,6 +9003,26 @@ class Emitter {
         if (
             ts.isNewExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
+            (
+                this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map") ||
+                this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set")
+            )
+        ) {
+            const collectionName = this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map")
+                ? "Map"
+                : "Set";
+            const exactLength = this.sideEffectFreeNewCollectionLength(
+                unwrapped,
+                collectionName,
+                seenConsts,
+            );
+            if (exactLength !== null) {
+                return index >= 0 && index < exactLength ? "present" : "absent";
+            }
+        }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
             this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set") &&
             this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
         ) {
