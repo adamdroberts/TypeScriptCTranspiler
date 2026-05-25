@@ -4325,6 +4325,20 @@ class Emitter {
             );
             return sourceElements ? [...sourceElements].reverse() : null;
         }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            (
+                unwrapped.expression.name.text === "sort" ||
+                unwrapped.expression.name.text === "toSorted"
+            ) &&
+            unwrapped.arguments.length === 0
+        ) {
+            return this.sideEffectFreeSetArraySourceExpressions(
+                unwrapped.expression.expression,
+                seenConsts,
+            );
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeSetArraySourceExpressions(init, seenConsts) : null;
     }
@@ -4645,6 +4659,20 @@ class Emitter {
                 seenConsts,
             );
             return sourceElements ? [...sourceElements].reverse() : null;
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            (
+                unwrapped.expression.name.text === "sort" ||
+                unwrapped.expression.name.text === "toSorted"
+            ) &&
+            unwrapped.arguments.length === 0
+        ) {
+            return this.sideEffectFreeMapArraySourceExpressions(
+                unwrapped.expression.expression,
+                seenConsts,
+            );
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeMapArraySourceExpressions(init, seenConsts) : null;
