@@ -6963,6 +6963,9 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.sideEffectFreeNewPromiseState(unwrapped, seenConsts) === "fulfilled") {
+            return true;
+        }
         if (
             ts.isCallExpression(unwrapped) &&
             ts.isPropertyAccessExpression(unwrapped.expression) &&
@@ -6987,6 +6990,9 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.sideEffectFreeNewPromiseState(unwrapped, seenConsts) === "rejected") {
+            return true;
+        }
         if (
             ts.isCallExpression(unwrapped) &&
             ts.isPropertyAccessExpression(unwrapped.expression) &&
@@ -7010,8 +7016,116 @@ class Emitter {
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
+        const state = this.sideEffectFreeNewPromiseState(expr, seenConsts);
+        if (state === "fulfilled" || state === "rejected") return true;
         return this.isSideEffectFreeFulfilledPromiseOperand(expr, seenConsts) ||
             this.isSideEffectFreeRejectedPromiseOperand(expr, seenConsts);
+    }
+
+    private sideEffectFreeNewPromiseState(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): "fulfilled" | "rejected" | "pending" | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Promise")
+        ) {
+            const args = Array.from(unwrapped.arguments ?? []);
+            return args.length === 1
+                ? this.sideEffectFreePromiseExecutorOperandState(args[0]!, seenConsts)
+                : null;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeNewPromiseState(init, seenConsts) : null;
+    }
+
+    private sideEffectFreePromiseExecutorOperandState(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): "fulfilled" | "rejected" | "pending" | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrowFunction(unwrapped) || ts.isFunctionExpression(unwrapped)) {
+            return this.sideEffectFreePromiseExecutorState(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreePromiseExecutorOperandState(init, seenConsts) : null;
+    }
+
+    private sideEffectFreePromiseExecutorState(
+        fn: ts.ArrowFunction | ts.FunctionExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): "fulfilled" | "rejected" | "pending" | null {
+        const params = fn.parameters.filter((param) =>
+            !(ts.isIdentifier(param.name) && param.name.text === "this")
+        );
+        if (params.length > 2 || params.some((param) => !ts.isIdentifier(param.name))) {
+            return null;
+        }
+        const resolveName = params[0] && ts.isIdentifier(params[0].name)
+            ? params[0].name.text
+            : null;
+        const rejectName = params[1] && ts.isIdentifier(params[1].name)
+            ? params[1].name.text
+            : null;
+        if (ts.isExpression(fn.body)) {
+            return this.sideEffectFreePromiseExecutorExpressionState(
+                fn.body,
+                seenConsts,
+                resolveName,
+                rejectName,
+            );
+        }
+        const statements = Array.from(fn.body.statements);
+        if (statements.length === 0) return "pending";
+        if (statements.length !== 1) return null;
+        const stmt = statements[0]!;
+        if (ts.isExpressionStatement(stmt)) {
+            return this.sideEffectFreePromiseExecutorExpressionState(
+                stmt.expression,
+                seenConsts,
+                resolveName,
+                rejectName,
+            );
+        }
+        if (ts.isReturnStatement(stmt)) {
+            return !stmt.expression ||
+                this.isSideEffectFreeTopLevelConstInitializer(stmt.expression, seenConsts)
+                ? "pending"
+                : null;
+        }
+        return null;
+    }
+
+    private sideEffectFreePromiseExecutorExpressionState(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+        resolveName: string | null,
+        rejectName: string | null,
+    ): "fulfilled" | "rejected" | "pending" | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            (
+                unwrapped.expression.text === resolveName ||
+                unwrapped.expression.text === rejectName
+            )
+        ) {
+            const argsArePure = (
+                unwrapped.arguments.length === 0 ||
+                this.isSideEffectFreePrimitivePromiseResolveValue(unwrapped.arguments[0]!, seenConsts)
+            ) &&
+                Array.from(unwrapped.arguments).slice(1).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+            if (!argsArePure) return null;
+            return unwrapped.expression.text === rejectName ? "rejected" : "fulfilled";
+        }
+        return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts)
+            ? "pending"
+            : null;
     }
 
     private isSideEffectFreePrimitiveTemplateExpression(

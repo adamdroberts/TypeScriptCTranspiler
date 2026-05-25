@@ -567,6 +567,14 @@ const unused_new_promise_resolve_call = new Promise<string>((resolve) => resolve
 const unused_new_promise_reject_call = new Promise<string>((resolve, reject) => {
     reject("dead_new_promise_reject");
 });
+const unused_new_promise_then_resolve_call = new Promise<string>((resolve) => resolve("dead_new_promise_then_resolve_source"))
+    .then(() => "dead_new_promise_then_resolve_callback");
+const unused_new_promise_catch_reject_call = new Promise<string>((resolve, reject) => reject("dead_new_promise_catch_reject_source"))
+    .catch(() => "dead_new_promise_catch_reject_callback");
+const unused_new_promise_finally_resolve_call = new Promise<string>((resolve) => resolve("dead_new_promise_finally_resolve_source"))
+    .finally(() => "dead_new_promise_finally_resolve_callback");
+const unused_new_promise_finally_reject_call = new Promise<string>((resolve, reject) => reject("dead_new_promise_finally_reject_source"))
+    .finally(() => "dead_new_promise_finally_reject_callback");
 const unused_promise_then_call = Promise.resolve("dead_promise_then_source").then(() => "dead_promise_then_callback");
 const unused_promise_then_fulfilled_two_arg_call = Promise.resolve("dead_promise_then_fulfilled_two_arg_source").then(
     () => "dead_promise_then_fulfilled_two_arg_callback",
@@ -1593,6 +1601,14 @@ new Promise<string>((resolve) => resolve("top_level_dead_new_promise_resolve"));
 new Promise<string>((resolve, reject) => {
     reject("top_level_dead_new_promise_reject");
 });
+new Promise<string>((resolve) => resolve("top_level_dead_new_promise_then_resolve_source"))
+    .then(() => "top_level_dead_new_promise_then_resolve_callback");
+new Promise<string>((resolve, reject) => reject("top_level_dead_new_promise_catch_reject_source"))
+    .catch(() => "top_level_dead_new_promise_catch_reject_callback");
+new Promise<string>((resolve) => resolve("top_level_dead_new_promise_finally_resolve_source"))
+    .finally(() => "top_level_dead_new_promise_finally_resolve_callback");
+new Promise<string>((resolve, reject) => reject("top_level_dead_new_promise_finally_reject_source"))
+    .finally(() => "top_level_dead_new_promise_finally_reject_callback");
 Promise.resolve("top_level_dead_promise_then_source").then(() => "top_level_dead_promise_then_callback");
 Promise.resolve("top_level_dead_promise_then_fulfilled_two_arg_source").then(
     () => "top_level_dead_promise_then_fulfilled_two_arg_callback",
@@ -2596,6 +2612,14 @@ function usedLocal(value: number): number {
     new Promise<string>((resolve, reject) => {
         reject("local_dead_new_promise_reject");
     });
+    new Promise<string>((resolve) => resolve("local_dead_new_promise_then_resolve_source"))
+        .then(() => "local_dead_new_promise_then_resolve_callback");
+    new Promise<string>((resolve, reject) => reject("local_dead_new_promise_catch_reject_source"))
+        .catch(() => "local_dead_new_promise_catch_reject_callback");
+    new Promise<string>((resolve) => resolve("local_dead_new_promise_finally_resolve_source"))
+        .finally(() => "local_dead_new_promise_finally_resolve_callback");
+    new Promise<string>((resolve, reject) => reject("local_dead_new_promise_finally_reject_source"))
+        .finally(() => "local_dead_new_promise_finally_reject_callback");
     Promise.resolve("local_dead_promise_then_source").then(() => "local_dead_promise_then_callback");
     Promise.resolve("local_dead_promise_then_fulfilled_two_arg_source").then(
         () => "local_dead_promise_then_fulfilled_two_arg_callback",
