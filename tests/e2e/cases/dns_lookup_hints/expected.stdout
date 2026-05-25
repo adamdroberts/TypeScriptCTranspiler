@@ -3,3 +3,5 @@ callback hints: true true 6
 promise hints: true 6
 callback const hints: true true 6
 promise const hints: true 6
+callback order alias: true true 4
+promise verbatim alias: true 4

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `dns.lookup(...)` and immediate `dns.promises.lookup(...)` now have focused coverage for earlier static `const` aliases on supported `verbatim` / `order` option values. Test: `dns_lookup_hints`.
 - `fs.truncateSync(...)` and immediate `fs.promises.truncate(...)` now treat earlier static `const` aliases for `undefined` length values as the default zero-length truncate while still evaluating ignored trailing arguments. Test: `fs_mutation_ignored_arguments`.
 - `fs.accessSync(...)` and immediate `fs.promises.access(...)` now treat earlier static `const` aliases for `undefined` mode values as the default access mode while still evaluating ignored trailing arguments. Tests: `fs_access_ignored_arguments`, `fs_promises_stat_access_ignored_arguments`.
 - Process stdin `read(...)` size and `unpipe(...)` destination defaults now accept earlier static `const` aliases for `undefined` while still evaluating ignored trailing arguments. Tests: `process_stdin_read_null`, `process_stdin_pipe_noop_methods`.
