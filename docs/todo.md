@@ -91,6 +91,7 @@ This is the next item that most directly expands what programs can be written ag
   - Generated-C DCE derives empty returned-array lengths through pure `map(...)`, `filter(...)`, and `flatMap(...)` calls on statically empty receivers, including unused `Promise.resolve(...)` length and absent element reads. Test: `generated_c_dce_const`.
   - Generated-C DCE preserves empty returned-array lengths through numeric-argument `slice(...)` calls, including unused `Promise.resolve(...)` length and absent element reads. Test: `generated_c_dce_const`.
   - Generated-C DCE treats `pop()` and `shift()` on statically empty returned arrays as primitive `undefined` results for unused `Promise.resolve(...)` pruning. Test: `generated_c_dce_const`.
+  - Generated-C DCE preserves exact returned-array lengths through in-range pure `with(...)` calls, enabling unused `Promise.resolve(...)` length and absent element reads to prune. Test: `generated_c_dce_const`.
   - Still missing: hidden classes / shape trees, inline caches and diagnostics, complete built-in object/array prototype behavior, broader prototype method coverage, and remaining descriptor/prototype edge cases.
   - Still blocks: production-quality untyped npm packages, remaining `Proxy` construct/invariant coverage, full `Reflect`, remaining property descriptor edge cases, and high-performance dynamic property access.
 

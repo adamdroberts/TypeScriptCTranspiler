@@ -1182,6 +1182,8 @@ const unused_array_with_call = ["dead_array_with", "dead_array_with_tail"].with(
 const unused_array_of_with_call = Array.of("dead_array_of_with").with(0, "dead_array_of_with_replacement");
 const unused_array_from_with_call = Array.from(["dead_array_from_with"]).with(-1, "dead_array_from_with_replacement");
 const unused_array_from_set_with_call = Array.from(new Set(["dead_array_from_set_with"])).with(0, "dead_array_from_set_with_replacement");
+const unused_promise_resolve_array_of_with_length = Promise.resolve(Array.of("dead_promise_resolve_array_of_with_length").with(0, "dead_promise_resolve_array_of_with_length_replacement").length);
+const unused_promise_resolve_array_of_with_absent_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_with_absent_element").with(0, "dead_promise_resolve_array_of_with_absent_element_replacement")[1]);
 const unused_array_from_set_multi_with_call = Array.from(new Set(["dead_array_from_set_multi_with", "dead_array_from_set_multi_with_tail"])).with(1, "dead_array_from_set_multi_with_replacement");
 const unused_array_from_object_set_multi_with_call = Array.from(new Set<object>([{ label: "dead_array_from_object_set_multi_with" }, { label: "dead_array_from_object_set_multi_with_tail" }])).with(1, { label: "dead_array_from_object_set_multi_with_replacement" });
 const dead_array_from_const_object_set_multi_with_value = { label: "dead_array_from_const_object_set_multi_with_value" };
@@ -3695,6 +3697,8 @@ function usedLocal(value: number): number {
     Array.of("local_dead_array_of_with").with(0, "local_dead_array_of_with_replacement");
     Array.from(["local_dead_array_from_with"]).with(-1, "local_dead_array_from_with_replacement");
     Array.from(new Set(["local_dead_array_from_set_with"])).with(0, "local_dead_array_from_set_with_replacement");
+    Array.of("local_dead_array_of_with_length").with(0, "local_dead_array_of_with_length_replacement").length;
+    Array.of("local_dead_array_of_with_absent_element").with(0, "local_dead_array_of_with_absent_element_replacement")[1];
     Array.from(new Set(["local_dead_array_from_set_multi_with", "local_dead_array_from_set_multi_with_tail"])).with(1, "local_dead_array_from_set_multi_with_replacement");
     Array.from(new Set<object>([{ label: "local_dead_array_from_object_set_multi_with" }, { label: "local_dead_array_from_object_set_multi_with_tail" }])).with(1, { label: "local_dead_array_from_object_set_multi_with_replacement" });
     const local_dead_array_from_const_object_set_multi_with_value = { label: "local_dead_array_from_const_object_set_multi_with_value" };

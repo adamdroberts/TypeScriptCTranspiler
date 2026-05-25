@@ -4516,6 +4516,17 @@ class Emitter {
                 if (method === "slice" && unwrapped.arguments.length === 0) return receiverLength;
                 if (method === "concat" && unwrapped.arguments.length === 0) return receiverLength;
                 if (method === "reverse" && allArgsPure) return receiverLength;
+                if (method === "with" && unwrapped.arguments.length === 2) {
+                    const index = this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[0]!, seenConsts);
+                    if (
+                        index !== null &&
+                        Number.isInteger(index) &&
+                        this.isSideEffectFreeTopLevelConstInitializer(unwrapped.arguments[1]!, seenConsts)
+                    ) {
+                        const actualIndex = index < 0 ? receiverLength + index : index;
+                        if (actualIndex >= 0 && actualIndex < receiverLength) return receiverLength;
+                    }
+                }
                 if (
                     method === "flat" &&
                     receiverLength === 0 &&
