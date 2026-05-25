@@ -1288,6 +1288,8 @@ const unused_object_from_entries_call = Object.fromEntries([["dead_object_from_e
 const unused_object_from_entries_const_call = Object.fromEntries(unused_from_entries_source);
 const unused_object_from_entries_object_entries_call = Object.fromEntries(Object.entries({ dead_object_from_entries_object_entries_key: "dead_object_from_entries_object_entries_value" }));
 const unused_object_from_entries_empty_map_call = Object.fromEntries(new Map<string, string>());
+const unused_group_by_empty_map_source = new Map<string, number>();
+const unused_group_by_empty_map_copy_source = new Map(unused_group_by_empty_map_source);
 const unused_object_group_by_empty_call = Object.groupBy([] as number[], (value) => "dead_object_group_by_empty" + value);
 const unused_map_group_by_empty_call = Map.groupBy([] as number[], (value) => "dead_map_group_by_empty" + value);
 const unused_object_group_by_array_from_empty_call = Object.groupBy(Array.from(""), (value) => "dead_object_group_by_array_from_empty" + value);
@@ -1298,6 +1300,8 @@ const unused_object_group_by_empty_string_call = Object.groupBy("", (value) => "
 const unused_map_group_by_empty_string_call = Map.groupBy("", (value) => "dead_map_group_by_empty_string" + value);
 const unused_object_group_by_empty_map_call = Object.groupBy(new Map<string, number>(), (entry) => "dead_object_group_by_empty_map" + entry[0] + entry[1]);
 const unused_map_group_by_empty_map_call = Map.groupBy(new Map<string, number>(), (entry) => "dead_map_group_by_empty_map" + entry[0] + entry[1]);
+const unused_object_group_by_empty_map_const_call = Object.groupBy(unused_group_by_empty_map_source, (entry) => "dead_object_group_by_empty_map_const" + entry[0] + entry[1]);
+const unused_map_group_by_empty_map_copy_call = Map.groupBy(unused_group_by_empty_map_copy_source, (entry) => "dead_map_group_by_empty_map_copy" + entry[0] + entry[1]);
 const unused_collection_object_keys_call = Object.keys(new Map<string, number>());
 const unused_collection_object_has_own_call = Object.hasOwn(new Set<string>(), "dead_collection_has_own");
 const unused_collection_reflect_own_keys_call = Reflect.ownKeys(new WeakRef<object>({ label: "dead_collection_reflect_weak_ref" }));
@@ -2483,6 +2487,8 @@ Object.groupBy("", (value) => "top_level_dead_object_group_by_empty_string" + va
 Map.groupBy("", (value) => "top_level_dead_map_group_by_empty_string" + value);
 Object.groupBy(new Map<string, number>(), (entry) => "top_level_dead_object_group_by_empty_map" + entry[0] + entry[1]);
 Map.groupBy(new Map<string, number>(), (entry) => "top_level_dead_map_group_by_empty_map" + entry[0] + entry[1]);
+Object.groupBy(new Map(unused_group_by_empty_map_source), (entry) => "top_level_dead_object_group_by_empty_map_copy" + entry[0] + entry[1]);
+Map.groupBy(new Map(unused_group_by_empty_map_source), (entry) => "top_level_dead_map_group_by_empty_map_copy" + entry[0] + entry[1]);
 Object.keys(new WeakMap<object, string>());
 Object.hasOwn(new FinalizationRegistry<string>(() => "top_level_dead_collection_finregistry"), "top_level_dead_collection_has_own");
 Reflect.ownKeys(new WeakRef<object>({ label: "top_level_dead_collection_reflect_weak_ref" }));
@@ -3695,6 +3701,8 @@ function usedLocal(value: number): number {
     Map.groupBy("", (value) => "local_dead_map_group_by_empty_string" + value);
     Object.groupBy(new Map<string, number>(), (entry) => "local_dead_object_group_by_empty_map" + entry[0] + entry[1]);
     Map.groupBy(new Map<string, number>(), (entry) => "local_dead_map_group_by_empty_map" + entry[0] + entry[1]);
+    Object.groupBy(new Map(unused_group_by_empty_map_source), (entry) => "local_dead_object_group_by_empty_map_copy" + entry[0] + entry[1]);
+    Map.groupBy(new Map(unused_group_by_empty_map_source), (entry) => "local_dead_map_group_by_empty_map_copy" + entry[0] + entry[1]);
     Object.keys(new Set<string>());
     Object.hasOwn(new FinalizationRegistry<string>(() => "local_dead_collection_finregistry"), "local_dead_collection_has_own");
     Reflect.ownKeys(new WeakRef<object>({ label: "local_dead_collection_reflect_weak_ref" }));

@@ -736,7 +736,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Generated-C DCE prunes unused ES2025 Set composition and predicate calls over side-effect-free Set operands. Test: `generated_c_dce_const`
 - Generated-C DCE carries exact length proofs through nested one-argument `Array.from(...)` over returned array sources. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused `Promise.all(...)` / `Promise.allSettled(...)` / `Promise.any(...)` / `Promise.race(...)` over statically empty returned array and typed Set sources. Test: `generated_c_dce_const`
-- Generated-C DCE prunes unused `Object.groupBy(...)` / `Map.groupBy(...)` over statically empty returned array, typed Set, string, and typed Map sources. Test: `generated_c_dce_const`
+- Generated-C DCE prunes unused `Object.groupBy(...)` / `Map.groupBy(...)` over statically empty returned array, typed Set, string, and typed Map sources, including earlier-const and copy-constructed typed Map sources. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused `Promise.try(...)` calls when the direct callback is empty or returns a side-effect-free primitive or pure Promise value. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused `new Promise(...)` calls when the direct executor is empty or only resolves/rejects a side-effect-free primitive reason. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused immediate Promise chains for mixed pending/settled Promise combinator receivers when the immediate runtime result is still statically known. Test: `generated_c_dce_const`
