@@ -1263,6 +1263,15 @@ interface FSConstants {
     readonly R_OK: number;
     readonly W_OK: number;
     readonly X_OK: number;
+    readonly O_RDONLY: number;
+    readonly O_WRONLY: number;
+    readonly O_RDWR: number;
+    readonly O_CREAT: number;
+    readonly O_EXCL: number;
+    readonly O_TRUNC: number;
+    readonly O_APPEND: number;
+    readonly O_DIRECTORY: number;
+    readonly O_NOFOLLOW: number;
     readonly COPYFILE_EXCL: number;
     readonly COPYFILE_FICLONE: number;
     readonly COPYFILE_FICLONE_FORCE: number;

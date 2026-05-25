@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `fs.constants` now exposes common POSIX open flags `O_RDONLY`, `O_WRONLY`, `O_RDWR`, `O_CREAT`, `O_EXCL`, `O_TRUNC`, `O_APPEND`, `O_DIRECTORY`, and `O_NOFOLLOW` across default, namespace, and named constants imports. Test: `fs_open_flag_constants`.
 - `process.stdout` / `process.stderr` now accept no-op `setDefaultEncoding(...)`, `cork(...)`, and `uncork(...)` compatibility methods across global, named, namespace, and default process references. Test: `process_stdout_noop_methods`.
 - `"timers/promises"` and `"node:timers/promises"` imports now expose immediate-settled `scheduler.wait(0 | undefined)` and `scheduler.yield()` across named, namespace, and default import forms. Test: `timers_promises_scheduler`.
 - Direct `"path/posix"` and `"node:path/posix"` imports now route to the supported POSIX path subset across named, namespace, and default import forms. Test: `path_posix_subpath_import`.

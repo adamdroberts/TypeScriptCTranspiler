@@ -11418,18 +11418,26 @@ class Emitter {
         ) || this.isNamedImportFrom(expr, ["events", "node:events"], "defaultMaxListeners");
     }
 
-    private isFsAccessConstantName(name: string): boolean {
+    private fsNumericConstantValue(name: string): string | null {
         switch (name) {
-            case "F_OK":
-            case "R_OK":
-            case "W_OK":
-            case "X_OK":
-            case "COPYFILE_EXCL":
-            case "COPYFILE_FICLONE":
-            case "COPYFILE_FICLONE_FORCE":
-                return true;
+            case "F_OK": return "0.0";
+            case "R_OK": return "4.0";
+            case "W_OK": return "2.0";
+            case "X_OK": return "1.0";
+            case "O_RDONLY": return "0.0";
+            case "O_WRONLY": return "1.0";
+            case "O_RDWR": return "2.0";
+            case "O_CREAT": return "64.0";
+            case "O_EXCL": return "128.0";
+            case "O_TRUNC": return "512.0";
+            case "O_APPEND": return "1024.0";
+            case "O_DIRECTORY": return "65536.0";
+            case "O_NOFOLLOW": return "131072.0";
+            case "COPYFILE_EXCL": return "1.0";
+            case "COPYFILE_FICLONE": return "2.0";
+            case "COPYFILE_FICLONE_FORCE": return "4.0";
             default:
-                return false;
+                return null;
         }
     }
 
@@ -11437,7 +11445,7 @@ class Emitter {
         if (!ts.isPropertyAccessExpression(expr)) return false;
         const name = expr.name.text;
         if (
-            this.isFsAccessConstantName(name) &&
+            this.fsNumericConstantValue(name) !== null &&
             ts.isPropertyAccessExpression(expr.expression) &&
             expr.expression.name.text === "constants" &&
             ts.isIdentifier(expr.expression.expression) &&
@@ -11446,7 +11454,7 @@ class Emitter {
             return true;
         }
         if (
-            this.isFsAccessConstantName(name) &&
+            this.fsNumericConstantValue(name) !== null &&
             ts.isIdentifier(expr.expression) &&
             this.isNamedImportFrom(expr.expression, ["fs", "node:fs"], "constants")
         ) {
@@ -40594,20 +40602,7 @@ class Emitter {
         if (typeof enumValue === "number") {
             return { c: enumValue.toString(), ty: T_NUMBER };
         }
-        const fsAccessConstant = (name: string): string | null => {
-            switch (name) {
-                case "F_OK": return "0.0";
-                case "R_OK": return "4.0";
-                case "W_OK": return "2.0";
-                case "X_OK": return "1.0";
-                case "COPYFILE_EXCL": return "1.0";
-                case "COPYFILE_FICLONE": return "2.0";
-                case "COPYFILE_FICLONE_FORCE": return "4.0";
-            }
-            return null;
-        };
-
-        const fsConst = fsAccessConstant(pa.name.text);
+        const fsConst = this.fsNumericConstantValue(pa.name.text);
         if (
             fsConst &&
             ts.isPropertyAccessExpression(pa.expression) &&
