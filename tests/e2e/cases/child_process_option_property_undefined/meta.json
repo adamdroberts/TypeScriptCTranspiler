@@ -1,3 +1,3 @@
 {
-  "description": "child_process option objects treat explicit undefined property values as defaults"
+  "description": "child_process option objects treat explicit undefined and side-effect-free void property values as defaults"
 }

@@ -1,7 +1,7 @@
 import { exec, execFile, execFileSync, execSync, spawnSync } from "child_process";
 
 const syncOut = execSync("printf sync", {
-    cwd: undefined,
+    cwd: void 0,
     input: undefined,
     encoding: undefined,
     env: undefined,
@@ -17,7 +17,7 @@ console.log("sync:", syncOut.toString());
 
 const fileSyncOut = execFileSync("/bin/printf", ["file-sync"], {
     cwd: undefined,
-    input: undefined,
+    input: void 0,
     encoding: undefined,
     env: undefined,
     shell: undefined,
@@ -38,7 +38,7 @@ const spawned: any = spawnSync("/bin/printf", ["spawn"], {
     input: undefined,
     env: undefined,
     shell: undefined,
-    stdio: undefined,
+    stdio: void 0,
     argv0: undefined,
     detached: undefined,
     windowsHide: undefined,
@@ -53,7 +53,7 @@ console.log("spawn:", spawned.status, spawned.stdout, spawned.stderr.length, spa
 
 exec("printf cb-exec", {
     cwd: undefined,
-    encoding: undefined,
+    encoding: void 0,
     env: undefined,
     shell: undefined,
     windowsHide: undefined,
@@ -70,7 +70,7 @@ execFile("/bin/printf", ["file-cb"], {
     cwd: undefined,
     encoding: undefined,
     env: undefined,
-    shell: undefined,
+    shell: void 0,
     argv0: undefined,
     windowsHide: undefined,
     windowsVerbatimArguments: undefined,
