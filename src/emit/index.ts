@@ -4526,6 +4526,37 @@ class Emitter {
                     this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
                 );
                 if (method === "slice" && unwrapped.arguments.length === 0) return receiverLength;
+                if (
+                    method === "slice" &&
+                    unwrapped.arguments.length >= 1 &&
+                    unwrapped.arguments.length <= 2
+                ) {
+                    const startValue = this.sideEffectFreePrimitiveNumberValue(
+                        unwrapped.arguments[0]!,
+                        seenConsts,
+                    );
+                    const endValue = unwrapped.arguments[1]
+                        ? this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[1], seenConsts)
+                        : null;
+                    if (
+                        startValue !== null &&
+                        Number.isFinite(startValue) &&
+                        Number.isInteger(startValue) &&
+                        (!unwrapped.arguments[1] ||
+                            (endValue !== null &&
+                                Number.isFinite(endValue) &&
+                                Number.isInteger(endValue)))
+                    ) {
+                        const actualStart = startValue < 0
+                            ? Math.max(receiverLength + startValue, 0)
+                            : Math.min(startValue, receiverLength);
+                        const rawEnd = unwrapped.arguments[1] ? endValue! : receiverLength;
+                        const actualEnd = rawEnd < 0
+                            ? Math.max(receiverLength + rawEnd, 0)
+                            : Math.min(rawEnd, receiverLength);
+                        return Math.max(actualEnd - actualStart, 0);
+                    }
+                }
                 if (method === "concat" && unwrapped.arguments.length === 0) return receiverLength;
                 if (method === "reverse" && allArgsPure) return receiverLength;
                 if (method === "with" && unwrapped.arguments.length === 2) {
