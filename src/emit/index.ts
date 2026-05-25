@@ -27238,8 +27238,11 @@ class Emitter {
                         () => `tsc_process_memory_usage()`,
                     );
                 case "cpuUsage":
-                    if (call.arguments.length !== 0) unsupported(call, "process.cpuUsage expects no args in this subset");
-                    return { c: `tsc_process_cpu_usage()`, ty: T_VALUE };
+                    if (call.arguments.length === 0) return { c: `tsc_process_cpu_usage()`, ty: T_VALUE };
+                    return this.emitSequencedExpr(T_VALUE, [
+                        { value: this.emitExpr(call.arguments[0]!), target: T_VALUE, node: call.arguments[0]! },
+                        ...this.ignoredArgumentSpecs(call.arguments, 1),
+                    ], ([previous]) => `tsc_process_cpu_usage_diff(${previous!})`);
                 case "resourceUsage":
                     return this.emitSequencedExpr(
                         T_VALUE,
@@ -27615,8 +27618,11 @@ class Emitter {
                     () => `tsc_process_getgroups()`,
                 );
             case "cpuUsage":
-                if (call.arguments.length !== 0) unsupported(call, "process.cpuUsage expects no args in this subset");
-                return { c: `tsc_process_cpu_usage()`, ty: T_VALUE };
+                if (call.arguments.length === 0) return { c: `tsc_process_cpu_usage()`, ty: T_VALUE };
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: this.emitExpr(call.arguments[0]!), target: T_VALUE, node: call.arguments[0]! },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ], ([previous]) => `tsc_process_cpu_usage_diff(${previous!})`);
             case "hrtime": {
                 if (call.arguments.length === 0) {
                     return { c: `tsc_process_hrtime(NULL)`, ty: arrayType(T_NUMBER) };

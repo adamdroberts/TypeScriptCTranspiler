@@ -568,7 +568,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `process.getuid(...ignored)`, `process.getgid(...ignored)`, `process.geteuid(...ignored)`, `process.getegid(...ignored)`, and `process.getgroups(...ignored)` expose POSIX process identity values. Named and namespace imports from `"process"` / `"node:process"` route to the same helpers.
 - `process.umask(mask?, ...ignored)` reads or updates the native process file mode creation mask. Named and namespace imports from `"process"` / `"node:process"` route to the same helper.
 - `process.memoryUsage(...ignored)` returns a Node-shaped dynamic object with numeric `rss`, `heapTotal`, `heapUsed`, `external`, and `arrayBuffers` fields. RSS is populated from `getrusage` where available; heap fields are placeholders until a tracked allocator lands. Named and namespace imports from `"process"` / `"node:process"` route to the same helper.
-- `process.cpuUsage()` returns a Node-shaped dynamic object with numeric `user` and `system` microsecond counters populated from `getrusage`. Named and namespace imports from `"process"` / `"node:process"` route to the same helper.
+- `process.cpuUsage(previousValue?, ...ignored)` returns a Node-shaped dynamic object with numeric `user` and `system` microsecond counters populated from `getrusage`; when a previous usage object is supplied it returns elapsed user/system CPU deltas. Named and namespace imports from `"process"` / `"node:process"` route to the same helper. Tests: `process_cpu_usage`, `process_cpu_usage_previous`
 - `process.resourceUsage(...ignored)` returns a Node-shaped dynamic object with numeric `getrusage` counters for CPU time, RSS, page faults, filesystem I/O, IPC, signals, and context switches. Named and namespace imports from `"process"` / `"node:process"` route to the same helper.
 - `process.kill(pid, signal?)` supports a narrow POSIX signal subset: omitted signal / `SIGTERM` / `15`, `SIGKILL` / `9`, and numeric signal `0` existence probes; supported signal values can use earlier static `const` aliases. Named and namespace imports from `"process"` / `"node:process"` route to the same helper.
 - `process.exit(code)` → `tsc_process_exit`; named, namespace, and default `exit` process imports route to the same helper.
@@ -1185,6 +1185,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `process_chdir_import` | named, namespace, and default process chdir imports use cwd/chdir helpers |
 | `process_control_import` | named and namespace process cpuUsage/kill imports use existing runtime helpers |
 | `process_cpu_usage` | process.cpuUsage numeric user/system fields |
+| `process_cpu_usage_previous` | process.cpuUsage previous-value deltas and ignored extras |
 | `process_default_import` | default process imports use existing process helpers |
 | `process_env_import` | named and namespace process env imports use process.env helpers |
 | `process_env_mutation` | process.env property/element reads, writes, and deletes |

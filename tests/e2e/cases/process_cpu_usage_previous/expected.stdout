@@ -1,0 +1,6 @@
+total: true
+direct: number number true true
+named: number number true true
+undefined: number number true true
+seen: dnu
+bad: process.cpuUsage previous value must contain numeric user and system fields

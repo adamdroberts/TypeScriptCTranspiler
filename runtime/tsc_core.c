@@ -402,18 +402,51 @@ tsc_value_t tsc_process_memory_usage(void) {
     return tsc_value_object(out);
 }
 
-tsc_value_t tsc_process_cpu_usage(void) {
-    double user = 0.0;
-    double system = 0.0;
+static void process_cpu_usage_raw(double* user, double* system) {
+    *user = 0.0;
+    *system = 0.0;
     struct rusage usage;
     if (getrusage(RUSAGE_SELF, &usage) == 0) {
-        user = (double)usage.ru_utime.tv_sec * 1000000.0 + (double)usage.ru_utime.tv_usec;
-        system = (double)usage.ru_stime.tv_sec * 1000000.0 + (double)usage.ru_stime.tv_usec;
+        *user = (double)usage.ru_utime.tv_sec * 1000000.0 + (double)usage.ru_utime.tv_usec;
+        *system = (double)usage.ru_stime.tv_sec * 1000000.0 + (double)usage.ru_stime.tv_usec;
     }
+}
+
+static double process_cpu_previous_field(tsc_value_t previous, const char* key, size_t key_len) {
+    if (!value_is_box(previous) || value_tag(previous) != TSC_VALUE_TAG_OBJECT) {
+        tsc_throw_str(tsc_str_from_cstr("process.cpuUsage previous value must be an object"));
+    }
+    tsc_value_t value = tsc_object_get((tsc_object_t*)value_ptr(previous), tsc_str_from_lit(key, key_len));
+    if (value_is_box(value)) {
+        tsc_throw_str(tsc_str_from_cstr("process.cpuUsage previous value must contain numeric user and system fields"));
+    }
+    return value_as_num(value);
+}
+
+static tsc_value_t process_cpu_usage_object(double user, double system) {
     tsc_object_t* out = tsc_object_new();
     tsc_object_set(out, tsc_str_from_lit("user", 4), tsc_value_num(user));
     tsc_object_set(out, tsc_str_from_lit("system", 6), tsc_value_num(system));
     return tsc_value_object(out);
+}
+
+tsc_value_t tsc_process_cpu_usage(void) {
+    double user = 0.0;
+    double system = 0.0;
+    process_cpu_usage_raw(&user, &system);
+    return process_cpu_usage_object(user, system);
+}
+
+tsc_value_t tsc_process_cpu_usage_diff(tsc_value_t previous) {
+    if (tsc_value_is_nullish(previous)) {
+        return tsc_process_cpu_usage();
+    }
+    double user = 0.0;
+    double system = 0.0;
+    process_cpu_usage_raw(&user, &system);
+    user -= process_cpu_previous_field(previous, "user", 4);
+    system -= process_cpu_previous_field(previous, "system", 6);
+    return process_cpu_usage_object(user, system);
 }
 
 tsc_value_t tsc_process_resource_usage(void) {

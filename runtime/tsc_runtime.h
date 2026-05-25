@@ -841,6 +841,7 @@ double tsc_process_umask_set(double mask);
 double tsc_process_uptime(void);
 tsc_value_t tsc_process_memory_usage(void);
 tsc_value_t tsc_process_cpu_usage(void);
+tsc_value_t tsc_process_cpu_usage_diff(tsc_value_t previous);
 tsc_value_t tsc_process_resource_usage(void);
 bool tsc_process_kill(double pid, double signal);
 tsc_array_t* tsc_process_hrtime(tsc_array_t* previous);
