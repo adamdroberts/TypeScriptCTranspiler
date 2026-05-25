@@ -824,6 +824,7 @@ class Emitter {
             return this.isSideEffectFreeSymbolStringMethodCall(expr, seenConsts) ||
                 this.isSideEffectFreeObjectPrototypeToStringCall(expr, seenConsts) ||
                 this.isSideEffectFreeObjectPrototypeToLocaleStringCall(expr, seenConsts) ||
+                this.isSideEffectFreeObjectPrototypeReadonlyCall(expr, seenConsts) ||
                 this.isSideEffectFreeStaticCall(expr, seenConsts) ||
                 this.isSideEffectFreeGlobalCall(expr, seenConsts);
         }
@@ -1059,6 +1060,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeObjectPrototypeToLocaleStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeObjectPrototypeReadonlyCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
@@ -2806,6 +2810,60 @@ class Emitter {
             Array.from(unwrapped.arguments).slice(1).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
             );
+    }
+
+    private isSideEffectFreeObjectPrototypeReadonlyCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (!ts.isCallExpression(unwrapped)) {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+            return !!init && this.isSideEffectFreeObjectPrototypeReadonlyCall(init, seenConsts);
+        }
+        if (!ts.isPropertyAccessExpression(unwrapped.expression) || unwrapped.expression.name.text !== "call") {
+            return false;
+        }
+        const methodAccess = unwrapped.expression.expression;
+        if (!ts.isPropertyAccessExpression(methodAccess)) {
+            return false;
+        }
+        const prototypeAccess = methodAccess.expression;
+        if (
+            !ts.isPropertyAccessExpression(prototypeAccess) ||
+            prototypeAccess.name.text !== "prototype" ||
+            !ts.isIdentifier(prototypeAccess.expression) ||
+            !this.isUnshadowedGlobalIdentifier(prototypeAccess.expression, "Object") ||
+            unwrapped.arguments.length < 1
+        ) {
+            return false;
+        }
+        const method = methodAccess.name.text;
+        const receiver = unwrapped.arguments[0]!;
+        const extras = Array.from(unwrapped.arguments).slice(1);
+        switch (method) {
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+                return extras.length >= 1 &&
+                    this.isSideEffectFreeObjectCoercionOperand(receiver, seenConsts) &&
+                    this.isSideEffectFreePropertyKeyCoercion(extras[0]!, seenConsts) &&
+                    extras.slice(1).every((arg) =>
+                        this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                    );
+            case "isPrototypeOf":
+                return extras.length >= 1 &&
+                    this.isSideEffectFreeObjectCoercionOperand(receiver, seenConsts) &&
+                    extras.every((arg) =>
+                        this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                    );
+            case "valueOf":
+                return this.isSideEffectFreeObjectCoercionOperand(receiver, seenConsts) &&
+                    extras.every((arg) =>
+                        this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                    );
+            default:
+                return false;
+        }
     }
 
     private isSideEffectFreeArrayMethodCall(
@@ -6554,6 +6612,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeObjectPrototypeToLocaleStringCall(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeObjectPrototypeReadonlyCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeRegExpPropertyRead(unwrapped, seenConsts)) {

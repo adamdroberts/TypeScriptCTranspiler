@@ -658,6 +658,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive conditional-expression results. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive template-expression results. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive object-literal property-read results. Test: `generated_c_dce_const`
+- Generated-C DCE recognizes unused pure `Object.prototype.hasOwnProperty.call(...)`, `propertyIsEnumerable.call(...)`, `isPrototypeOf.call(...)`, and `valueOf.call(...)` forms, plus unused `Promise.resolve(...)` calls over the primitive boolean Object-prototype call-form results. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free primitive array element-access results. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free string element-access primitive results. Test: `generated_c_dce_const`
 - Generated-C DCE recognizes unused pure `Promise.resolve(...)` calls with side-effect-free string/array `.length` numeric results. Test: `generated_c_dce_const`
