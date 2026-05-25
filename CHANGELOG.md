@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Wrapped CommonJS `module.exports = Object.freeze(Object.fromEntries(...))` metadata now accepts finite Map-backed `Object.fromEntries(new Map(Object.entries(api)))` sources. Test: `node_modules_commonjs_module_exports_object_wrapper_from_entries_variants_named`.
 - CommonJS `Object.assign(exports, Object.fromEntries(...))` export metadata now accepts finite Map-backed `Object.fromEntries(new Map(Object.entries(api)))` sources. Test: `node_modules_commonjs_object_assign_from_entries_exports`.
 - CommonJS package sources now support static default/named export metadata from `module.exports = Object.fromEntries(new Map(entries))` when the Map source is finite and statically keyed. Test: `node_modules_commonjs_module_exports_object_from_entries_map_named`.
 - Generated-C DCE now reuses exact Map/Set constructor lengths as array-builder element-existence proofs for primitive entry-key reads over `Array.from(...)` results. Test: `generated_c_dce_const`.

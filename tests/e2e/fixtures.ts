@@ -1044,6 +1044,9 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "wrapped-entries-id-default",\n  label: local.label,\n  count: 123,\n  enabled: false\n};\nconst entries = Object.entries(api);\nmodule.exports = Object.freeze(Object.fromEntries(entries));\n',
         "local.js": 'exports.label = "wrapper-from-entries-object-entries-id";\n',
     }),
+    "tsc2c-cjs-object-wrapper-from-entries-map-named": cjsPackage("tsc2c-cjs-object-wrapper-from-entries-map-named", {
+        "index.js": 'const api = {\n  default: "wrapped-entries-map-default",\n  label: "wrapper-from-entries-map",\n  count: 142,\n  enabled: false\n};\nmodule.exports = Object.freeze(Object.fromEntries(new Map(Object.entries(api))));\n',
+    }),
     "tsc2c-cjs-object-wrapper-seal-from-entries-object-entries-identifier-named": cjsPackage("tsc2c-cjs-object-wrapper-seal-from-entries-object-entries-identifier-named", {
         "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "sealed-entries-id-default",\n  label: local.label,\n  count: 124,\n  enabled: true\n};\nconst entries = Object.entries(api);\nmodule.exports = Object.seal(Object.fromEntries(entries));\n',
         "local.js": 'exports.label = "seal-from-entries-object-entries-id";\n',
