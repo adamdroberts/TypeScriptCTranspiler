@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Basic escape analysis now stack-allocates non-escaping typed array literal locals used through receiver-safe readonly/copying array methods such as `join(...)`. Test: `array_literal_stack_alloc_method`.
 - Basic escape analysis now stack-allocates non-escaping typed array literal locals that only flow through same-block element reads/writes and readonly `.length` reads. Test: `array_literal_stack_alloc`.
 - Generated-C DCE coverage now proves `Promise.allSettled(...)` element-state pruning through side-effect-free Promise instance-chain elements. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now proves `Promise.any(...)` / `Promise.race(...)` element-state pruning through side-effect-free Promise instance-chain elements. Test: `generated_c_dce_const`.

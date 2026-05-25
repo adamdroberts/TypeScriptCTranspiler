@@ -15647,12 +15647,24 @@ class Emitter {
                 if (
                     ts.isPropertyAccessExpression(parent) &&
                     parent.expression === n &&
-                    parent.name.text === "length" &&
-                    !(
-                        ts.isBinaryExpression(parent.parent) &&
-                        parent.parent.left === parent &&
-                        parent.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
-                    )
+                    parent.name.text === "length"
+                ) {
+                    if (
+                        !(
+                            ts.isBinaryExpression(parent.parent) &&
+                            parent.parent.left === parent &&
+                            parent.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
+                        )
+                    ) {
+                        return;
+                    }
+                }
+                if (
+                    ts.isPropertyAccessExpression(parent) &&
+                    parent.expression === n &&
+                    ts.isCallExpression(parent.parent) &&
+                    parent.parent.expression === parent &&
+                    this.nonEscapingArrayReceiverMethod(parent.name.text)
                 ) {
                     return;
                 }
@@ -15663,6 +15675,25 @@ class Emitter {
         };
         visit(scope);
         return escapes ? null : { init, ty: mapped };
+    }
+
+    private nonEscapingArrayReceiverMethod(method: string): boolean {
+        return [
+            "at",
+            "concat",
+            "flat",
+            "includes",
+            "indexOf",
+            "join",
+            "lastIndexOf",
+            "slice",
+            "toLocaleString",
+            "toReversed",
+            "toSorted",
+            "toSpliced",
+            "toString",
+            "with",
+        ].includes(method);
     }
 
     private emitClassBodies(cd: ts.ClassDeclaration): void {
