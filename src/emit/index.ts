@@ -15564,6 +15564,16 @@ class Emitter {
                 if (ts.isPropertyAccessExpression(parent) && parent.expression === n) {
                     return;
                 }
+                if (
+                    ts.isBinaryExpression(parent) &&
+                    parent.right === n &&
+                    parent.operatorToken.kind === ts.SyntaxKind.InKeyword
+                ) {
+                    return;
+                }
+                if (ts.isCallExpression(parent) && this.nonEscapingObjectSafeCallArgument(parent, n)) {
+                    return;
+                }
                 escapes = true;
                 return;
             }
@@ -15603,6 +15613,16 @@ class Emitter {
                 if (ts.isPropertyAccessExpression(parent) && parent.expression === n) {
                     return;
                 }
+                if (
+                    ts.isBinaryExpression(parent) &&
+                    parent.right === n &&
+                    parent.operatorToken.kind === ts.SyntaxKind.InKeyword
+                ) {
+                    return;
+                }
+                if (ts.isCallExpression(parent) && this.nonEscapingObjectSafeCallArgument(parent, n)) {
+                    return;
+                }
                 escapes = true;
                 return;
             }
@@ -15610,6 +15630,65 @@ class Emitter {
         };
         visit(scope);
         return escapes ? null : { cls: mapped.className, init, targetType };
+    }
+
+    private nonEscapingObjectSafeCallArgument(call: ts.CallExpression, arg: ts.Expression): boolean {
+        if (call.arguments[0] !== arg) return false;
+        const callee = call.expression;
+        if (!ts.isPropertyAccessExpression(callee)) {
+            return false;
+        }
+        if (this.nonEscapingObjectPrototypeReadOnlyCallArgument(callee)) {
+            return true;
+        }
+        if (!ts.isIdentifier(callee.expression)) {
+            return false;
+        }
+        const receiver = callee.expression.text;
+        const method = callee.name.text;
+        if (receiver === "Object") {
+            return [
+                "entries",
+                "getOwnPropertyDescriptor",
+                "getOwnPropertyDescriptors",
+                "getOwnPropertyNames",
+                "hasOwn",
+                "keys",
+                "values",
+            ].includes(method);
+        }
+        if (receiver === "Reflect") {
+            return [
+                "get",
+                "getOwnPropertyDescriptor",
+                "has",
+                "ownKeys",
+            ].includes(method);
+        }
+        return false;
+    }
+
+    private nonEscapingObjectPrototypeReadOnlyCallArgument(callee: ts.PropertyAccessExpression): boolean {
+        if (callee.name.text !== "call" || !ts.isPropertyAccessExpression(callee.expression)) {
+            return false;
+        }
+        const methodAccess = callee.expression;
+        const prototypeAccess = methodAccess.expression;
+        if (
+            !ts.isPropertyAccessExpression(prototypeAccess) ||
+            prototypeAccess.name.text !== "prototype" ||
+            !ts.isIdentifier(prototypeAccess.expression) ||
+            prototypeAccess.expression.text !== "Object"
+        ) {
+            return false;
+        }
+        return [
+            "hasOwnProperty",
+            "isPrototypeOf",
+            "propertyIsEnumerable",
+            "toLocaleString",
+            "toString",
+        ].includes(methodAccess.name.text);
     }
 
     private nonEscapingLocalArrayLiteral(
