@@ -638,6 +638,12 @@ const unused_promise_race_pending_rejected_catch_call = Promise.race([
 const unused_promise_then_passthrough_then_call = Promise.resolve("dead_promise_then_passthrough_source")
     .then()
     .then(() => "dead_promise_then_passthrough_callback");
+const kept_promise_then_passthrough_unreached_reject_arg = Promise.resolve("kept_promise_then_passthrough_unreached_reject_source")
+    .then(undefined, (Math.random(), (reason: any) => "kept_promise_then_passthrough_unreached_reject_handler"))
+    .then((value) => "kept_promise_then_passthrough_unreached_reject_callback");
+const kept_promise_then_rejected_passthrough_unreached_fulfill_arg = Promise.reject<string>("kept_promise_then_rejected_passthrough_unreached_fulfill_source")
+    .then((Math.random(), (value: string) => "kept_promise_then_rejected_passthrough_unreached_fulfill_handler"))
+    .catch((reason) => "kept_promise_then_rejected_passthrough_unreached_fulfill_callback");
 const unused_promise_catch_passthrough_catch_call = Promise.reject<string>("dead_promise_catch_passthrough_source")
     .catch()
     .catch((reason) => "dead_promise_catch_passthrough_callback");
