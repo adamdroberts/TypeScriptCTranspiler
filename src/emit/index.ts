@@ -15672,6 +15672,13 @@ class Emitter {
 
     private nonEscapingObjectAliasUseIsSafe(n: ts.Identifier): boolean {
         const parent = n.parent;
+        if (
+            ts.isVariableDeclaration(parent) &&
+            parent.initializer === n &&
+            this.nonEscapingObjectAliasUsesAreSafe(parent)
+        ) {
+            return true;
+        }
         if (ts.isPropertyAccessExpression(parent) && parent.expression === n) {
             return true;
         }

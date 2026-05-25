@@ -14,19 +14,21 @@ class Box {
 function describe(): string {
     const point: Point = { x: 3, y: 4 };
     const alias = point;
-    alias.y = alias.y + 2;
+    const second = alias;
+    second.y = second.y + 2;
 
     const box = new Box(8);
     const boxAlias = box;
+    const boxSecond = boxAlias;
 
     return [
-        alias.x + alias.y,
-        Object.keys(alias).join("|"),
-        Reflect.get(alias, "y"),
-        Object.prototype.propertyIsEnumerable.call(alias, "x"),
-        Object.keys(boxAlias).join("|"),
-        Reflect.get(boxAlias, "value"),
-        Object.prototype.hasOwnProperty.call(boxAlias, "value"),
+        second.x + second.y,
+        Object.keys(second).join("|"),
+        Reflect.get(second, "y"),
+        Object.prototype.propertyIsEnumerable.call(second, "x"),
+        Object.keys(boxSecond).join("|"),
+        Reflect.get(boxSecond, "value"),
+        Object.prototype.hasOwnProperty.call(boxSecond, "value"),
         point.y,
     ].join(":");
 }
