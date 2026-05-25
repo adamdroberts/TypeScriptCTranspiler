@@ -6765,7 +6765,7 @@ class Emitter {
             return false;
         }
         if (ts.isExpression(fn.body)) {
-            return this.isSideEffectFreePrimitivePromiseResolveValue(fn.body, seenConsts);
+            return this.isSideEffectFreePromiseTryReturnValue(fn.body, seenConsts);
         }
         const statements = Array.from(fn.body.statements);
         if (statements.length === 0) return true;
@@ -6773,10 +6773,50 @@ class Emitter {
         const stmt = statements[0]!;
         if (ts.isReturnStatement(stmt)) {
             return !stmt.expression ||
-                this.isSideEffectFreePrimitivePromiseResolveValue(stmt.expression, seenConsts);
+                this.isSideEffectFreePromiseTryReturnValue(stmt.expression, seenConsts);
         }
         return ts.isExpressionStatement(stmt) &&
             this.isSideEffectFreeTopLevelConstInitializer(stmt.expression, seenConsts);
+    }
+
+    private isSideEffectFreePromiseTryReturnValue(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.isSideEffectFreePrimitivePromiseResolveValue(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Promise")
+        ) {
+            const method = unwrapped.expression.name.text;
+            if (method === "resolve" || method === "reject") {
+                return (
+                    unwrapped.arguments.length === 0 ||
+                    this.isSideEffectFreePrimitivePromiseResolveValue(unwrapped.arguments[0]!, seenConsts)
+                ) &&
+                    Array.from(unwrapped.arguments).slice(1).every((arg) =>
+                        this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                    );
+            }
+            if (
+                (
+                    method === "all" ||
+                    method === "allSettled" ||
+                    method === "any" ||
+                    method === "race"
+                ) &&
+                unwrapped.arguments.length === 1
+            ) {
+                return this.isSideEffectFreeFreshOrReturnedEmptyArrayOperand(unwrapped.arguments[0]!, seenConsts);
+            }
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreePromiseTryReturnValue(init, seenConsts);
     }
 
     private isSideEffectFreePrimitiveTemplateExpression(

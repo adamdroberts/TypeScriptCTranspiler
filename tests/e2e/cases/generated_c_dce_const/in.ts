@@ -558,6 +558,9 @@ const unused_promise_try_function_call = Promise.try(function () {
 });
 const unused_promise_try_empty_call = Promise.try(() => {
 });
+const unused_promise_try_resolve_call = Promise.try(() => Promise.resolve("dead_promise_try_resolve"));
+const unused_promise_try_reject_call = Promise.try(() => Promise.reject("dead_promise_try_reject"));
+const unused_promise_try_all_empty_call = Promise.try(() => Promise.all([] as Promise<string>[]));
 const dead_promise_resolve_object_shorthand = "dead_promise_resolve_object_shorthand";
 const unused_promise_resolve_object_shorthand_call = Promise.resolve({ dead_promise_resolve_object_shorthand }.dead_promise_resolve_object_shorthand);
 const dead_promise_resolve_object_spread_source = { dead_promise_resolve_object_spread: "dead_promise_resolve_object_spread" };
@@ -1559,6 +1562,9 @@ Promise.try(function () {
 });
 Promise.try(() => {
 });
+Promise.try(() => Promise.resolve("top_level_dead_promise_try_resolve"));
+Promise.try(() => Promise.reject("top_level_dead_promise_try_reject"));
+Promise.try(() => Promise.any([] as Promise<string>[]));
 const top_level_dead_promise_resolve_object_shorthand = "top_level_dead_promise_resolve_object_shorthand";
 Promise.resolve({ top_level_dead_promise_resolve_object_shorthand }.top_level_dead_promise_resolve_object_shorthand);
 const top_level_dead_promise_resolve_object_spread_source = { top_level_dead_promise_resolve_object_spread: "top_level_dead_promise_resolve_object_spread" };
@@ -2540,6 +2546,9 @@ function usedLocal(value: number): number {
     });
     Promise.try(() => {
     });
+    Promise.try(() => Promise.resolve("local_dead_promise_try_resolve"));
+    Promise.try(() => Promise.reject("local_dead_promise_try_reject"));
+    Promise.try(() => Promise.race([] as Promise<string>[]));
     const local_dead_promise_resolve_object_shorthand = "local_dead_promise_resolve_object_shorthand";
     Promise.resolve({ local_dead_promise_resolve_object_shorthand }.local_dead_promise_resolve_object_shorthand);
     const local_dead_promise_resolve_object_spread_source = { local_dead_promise_resolve_object_spread: "local_dead_promise_resolve_object_spread" };
