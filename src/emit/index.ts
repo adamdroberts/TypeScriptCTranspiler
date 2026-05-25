@@ -29309,9 +29309,10 @@ class Emitter {
         const validItems =
             ((items.ty.kind === "array" || items.ty.kind === "set") && sameCType(items.ty.elem!, t)) ||
             (items.ty.kind === "map" && !!items.ty.key && !!items.ty.elem && sameCType(entryType(items.ty.elem, items.ty.key), t)) ||
-            (items.ty.kind === "string" && sameCType(t, T_STRING));
+            (items.ty.kind === "string" && sameCType(t, T_STRING)) ||
+            (items.ty.kind === "value" && sameCType(t, T_VALUE));
         if (!validItems) {
-            unsupported(itemsArg, "Map.groupBy items must be an array, Set, Map, or string matching the result element type T[]");
+            unsupported(itemsArg, "Map.groupBy items must be an array, Set, Map, string, or dynamic iterable matching the result element type T[]");
         }
 
         return this.emitSequencedExpr(callType, [{ value: items }], ([itemsExpr]) => {
@@ -29327,6 +29328,8 @@ class Emitter {
                     ? this.mapEntriesArrayExpr(itemsArg, itemsExpr, items.ty, "Map.groupBy(Map)").c
                 : items.ty.kind === "string"
                     ? `tsc_str_chars(${itemsExpr})`
+                : items.ty.kind === "value"
+                    ? `tsc_value_iter_values(${itemsExpr})`
                     : itemsExpr;
             const itemExpr = `TSC_ARR(${t.c}, ${src}, ${iv})`;
 
@@ -38664,9 +38667,11 @@ class Emitter {
         const itemsArg = call.arguments[0]!;
         const keyArg = call.arguments[1]!;
         const items = this.emitExpr(itemsArg);
-        if (items.ty.kind !== "array" && items.ty.kind !== "set" && items.ty.kind !== "map" && items.ty.kind !== "string")
-            unsupported(itemsArg, "Object.groupBy expects an array, Set, Map, or string");
-        const t = items.ty.kind === "string"
+        if (items.ty.kind !== "array" && items.ty.kind !== "set" && items.ty.kind !== "map" && items.ty.kind !== "string" && items.ty.kind !== "value")
+            unsupported(itemsArg, "Object.groupBy expects an array, Set, Map, string, or dynamic iterable");
+        const t = items.ty.kind === "value"
+            ? T_VALUE
+            : items.ty.kind === "string"
             ? T_STRING
             : items.ty.kind === "map"
                 ? entryType(items.ty.elem!, items.ty.key!)
@@ -38687,6 +38692,8 @@ class Emitter {
                     ? this.mapEntriesArrayExpr(itemsArg, itemsExpr, items.ty, "Object.groupBy(Map)").c
                 : items.ty.kind === "string"
                     ? `tsc_str_chars(${itemsExpr})`
+                : items.ty.kind === "value"
+                    ? `tsc_value_iter_values(${itemsExpr})`
                     : itemsExpr;
             const itemExpr = `TSC_ARR(${t.c}, ${src}, ${iv})`;
 

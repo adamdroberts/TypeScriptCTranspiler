@@ -299,6 +299,7 @@ interface ObjectConstructor {
     groupBy<T>(items: Set<T>, keyFn: (item: T, index: number) => string): unknown;
     groupBy<MK, MV>(items: Map<MK, MV>, keyFn: (item: ObjectEntry<MV, MK>, index: number) => string): unknown;
     groupBy(items: string, keyFn: (item: string, index: number) => string): unknown;
+    groupBy(items: any, keyFn: (item: any, index: number) => string): unknown;
 }
 declare var Object: ObjectConstructor;
 
@@ -386,6 +387,7 @@ interface MapConstructor {
     groupBy<T, K>(items: Set<T>, callbackfn: (value: T, index: number) => K): Map<K, T[]>;
     groupBy<MK, MV, K>(items: Map<MK, MV>, callbackfn: (value: ObjectEntry<MV, MK>, index: number) => K): Map<K, ObjectEntry<MV, MK>[]>;
     groupBy<K>(items: string, callbackfn: (value: string, index: number) => K): Map<K, string[]>;
+    groupBy<K>(items: any, callbackfn: (value: any, index: number) => K): Map<K, any[]>;
 }
 declare var Map: MapConstructor;
 

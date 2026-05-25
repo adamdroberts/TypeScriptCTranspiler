@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Object.groupBy(...)` and `Map.groupBy(...)` now accept boxed dynamic array and string sources, grouping over the same AOT iterable values used by `Array.from(dynamic, ...)`. Tests: `object_group_by_dynamic_source`, `map_group_by_dynamic_source`.
 - `process.stdout.end(...)` / `process.stderr.end(...)` now evaluate and ignore trailing arguments after the consumed chunk, encoding, and callback slots across global, named, namespace, and default process references. Test: `process_stdio_end_ignored_arguments`.
 - `process.stdout.write(...)` / `process.stderr.write(...)` now evaluate and ignore trailing arguments after the consumed chunk, encoding, and callback slots across global, named, namespace, and default process references. Test: `process_stdio_write_ignored_arguments`.
 - Stdio `write(chunk, callback, ...ignored)` and `end(callback, ...ignored)` callback-short forms now evaluate trailing ignored arguments without misclassifying them as encoding/callback slots. Tests: `process_stdio_write_ignored_arguments`, `process_stdio_end_ignored_arguments`.

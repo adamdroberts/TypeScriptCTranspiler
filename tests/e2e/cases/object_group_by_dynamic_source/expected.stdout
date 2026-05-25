@@ -1,0 +1,7 @@
+array front: [1,"two"]
+array boolean: [true]
+array number: [4]
+string front: ["a","b","a"]
+string a: ["a"]
+string c: ["c"]
+string d: ["d"]
