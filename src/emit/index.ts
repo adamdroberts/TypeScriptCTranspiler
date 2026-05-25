@@ -4054,6 +4054,7 @@ class Emitter {
         if (this.isObjectEntriesCall(unwrapped)) {
             return this.sideEffectFreeObjectLiteralOwnDataEntries(unwrapped.arguments[0]!, seenConsts);
         }
+        if (this.isSideEffectFreeEmptyMapSource(unwrapped, seenConsts)) return [];
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectFromEntriesOwnDataEntries(init, seenConsts) : null;
     }
