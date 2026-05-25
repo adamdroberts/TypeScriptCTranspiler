@@ -38237,7 +38237,7 @@ class Emitter {
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(mapped, [
                 { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
-            ], ([o]) => `({ tsc_value_seal(${dynamicObjectArg(o!)}); ${o}; })`);
+            ], ([o]) => `({ if (!tsc_value_seal(${dynamicObjectArg(o!)})) tsc_throw_str(tsc_str_from_cstr("Object.seal failed")); ${o}; })`);
         }
         if (name === "setPrototypeOf") {
             if (args.length !== 2) unsupported(call, "Object.setPrototypeOf expects object and prototype");
@@ -38263,7 +38263,7 @@ class Emitter {
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(mapped, [
                 { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
-            ], ([o]) => `({ tsc_value_freeze(${dynamicObjectArg(o!)}); ${o}; })`);
+            ], ([o]) => `({ if (!tsc_value_freeze(${dynamicObjectArg(o!)})) tsc_throw_str(tsc_str_from_cstr("Object.freeze failed")); ${o}; })`);
         }
         if (name === "defineProperty") {
             if (args.length !== 3) unsupported(call, "Object.defineProperty expects object, key, descriptor");

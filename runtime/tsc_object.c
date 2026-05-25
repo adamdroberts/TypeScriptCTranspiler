@@ -1155,6 +1155,7 @@ bool tsc_object_seal(tsc_object_t* o) {
     if (o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'seal' on a proxy that has been revoked"));
         if (proxy_has_no_integrity_traps(o, true)) return tsc_value_seal(o->proxy_target);
+        if (!tsc_object_prevent_extensions(o)) return false;
     }
     o->extensible = false;
     for (size_t i = 0; i < o->len; i++) {
