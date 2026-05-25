@@ -8295,6 +8295,7 @@ class Emitter {
                 new Set(seenConsts),
             );
         }
+        if (this.isSideEffectFreeEmptyMapSource(unwrapped, seenConsts)) return "absent";
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init
             ? this.sideEffectFreeObjectFromEntriesPropertyReadResult(init, key, seenConsts)
