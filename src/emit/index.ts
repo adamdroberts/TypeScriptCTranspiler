@@ -15646,6 +15646,12 @@ class Emitter {
                     return;
                 }
                 if (
+                    (ts.isForOfStatement(parent) || ts.isForInStatement(parent)) &&
+                    parent.expression === n
+                ) {
+                    return;
+                }
+                if (
                     ts.isPropertyAccessExpression(parent) &&
                     parent.expression === n &&
                     parent.name.text === "length"
