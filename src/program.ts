@@ -166,7 +166,7 @@ function commonJsRequireAliases(sf: ts.SourceFile, moduleAliases: Set<string>): 
         if (ts.isVariableDeclaration(node) && node.initializer) {
             let init: ts.Expression = node.initializer;
             while (ts.isParenthesizedExpression(init)) init = init.expression;
-            if (ts.isIdentifier(node.name) && isCommonJsRequireAliasInitializer(init, moduleAliases)) {
+            if (ts.isIdentifier(node.name) && isCommonJsRequireAliasInitializer(init, moduleAliases, aliases)) {
                 aliases.add(node.name.text);
             }
             if (ts.isObjectBindingPattern(node.name) && isCommonJsModuleAliasInitializer(init, moduleAliases)) {
@@ -184,8 +184,12 @@ function commonJsRequireAliases(sf: ts.SourceFile, moduleAliases: Set<string>): 
     return aliases;
 }
 
-function isCommonJsRequireAliasInitializer(expr: ts.Expression, moduleAliases: Set<string>): boolean {
-    return isCommonJsRequireCallee(expr, new Set(), moduleAliases);
+function isCommonJsRequireAliasInitializer(
+    expr: ts.Expression,
+    moduleAliases: Set<string>,
+    requireAliases: Set<string>,
+): boolean {
+    return isCommonJsRequireCallee(expr, requireAliases, moduleAliases);
 }
 
 function isCommonJsModuleAliasInitializer(expr: ts.Expression, moduleAliases: Set<string>): boolean {

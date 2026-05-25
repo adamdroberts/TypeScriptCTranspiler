@@ -235,13 +235,17 @@ function isCommonJsModuleRequireBindExpression(
     if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "bind") return false;
     let target: ts.Expression = callee.expression;
     while (ts.isParenthesizedExpression(target)) target = target.expression;
-    if (
-        !ts.isPropertyAccessExpression(target) ||
-        target.name.text !== "require" ||
-        !ts.isIdentifier(target.expression) ||
-        (target.expression.text !== "module" && !moduleAliases.has(target.expression.text))
-    ) {
-        return false;
+    if (ts.isIdentifier(target)) {
+        if (target.text !== "require" && !requireAliases.has(target.text)) return false;
+    } else {
+        if (
+            !ts.isPropertyAccessExpression(target) ||
+            target.name.text !== "require" ||
+            !ts.isIdentifier(target.expression) ||
+            (target.expression.text !== "module" && !moduleAliases.has(target.expression.text))
+        ) {
+            return false;
+        }
     }
     let thisArg: ts.Expression = unwrapped.arguments[0]!;
     while (ts.isParenthesizedExpression(thisArg)) thisArg = thisArg.expression;

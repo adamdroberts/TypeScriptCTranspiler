@@ -5,7 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
-- CommonJS `module.require.bind(module)` aliases and module-alias forms such as `mod.require.bind(mod)` now preserve static AOT require metadata for package-local member exports. Tests: `node_modules_commonjs_module_require_bind_alias`, `node_modules_commonjs_module_alias_require_bind_alias`.
+- CommonJS `module.require.bind(module)` aliases, module-alias forms such as `mod.require.bind(mod)`, and already-static require alias forms such as `req.bind(module)` now preserve static AOT require metadata for package-local member exports. Tests: `node_modules_commonjs_module_require_bind_alias`, `node_modules_commonjs_module_alias_require_bind_alias`, `node_modules_commonjs_require_alias_bind_alias`.
 - Process stdio streams now expose inert state flags such as `destroyed`, `closed`, `readableEnded`, `writableEnded`, `writableFinished`, and `writableCorked` in the bounded stdio subset. Test: `process_stdio_state_flags`.
 - `process.stdout.end(...)` and `process.stderr.end(...)` now accept optional string/Buffer chunks and optional callbacks in the bounded stdio stream subset. Test: `process_stdio_end`.
 - `process.stdin.isPaused(...)` now returns `false` in the bounded stdio stream subset while evaluating ignored arguments. Test: `process_stdin_is_paused`.

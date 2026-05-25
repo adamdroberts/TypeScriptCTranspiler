@@ -16166,7 +16166,11 @@ class Emitter {
         if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "bind") return false;
         let target: ts.Expression = callee.expression;
         while (ts.isParenthesizedExpression(target)) target = target.expression;
-        if (!ts.isPropertyAccessExpression(target) || !this.isModuleRequireAccess(target)) return false;
+        if (ts.isIdentifier(target)) {
+            if (target.text !== "require" && !this.isCommonJsRequireAliasIdentifier(target)) return false;
+        } else if (!ts.isPropertyAccessExpression(target) || !this.isModuleRequireAccess(target)) {
+            return false;
+        }
         const thisArg = this.unwrapSideEffectFreeStaticExpression(init.arguments[0]!);
         return ts.isIdentifier(thisArg) && this.isCommonJsModuleIdentifier(thisArg);
     }
