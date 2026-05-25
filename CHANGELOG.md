@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Default imports from `"fs"` and `"node:fs"` now route to the supported sync fs and immediate `fs.promises` subsets. Test: `fs_default_import`.
 - Default imports from `"dns"` and `"node:dns"` now route to immediate `lookup`, `promises.lookup`, and DNS hint constants. Test: `dns_default_import`.
 - Default imports from `"crypto"` and `"node:crypto"` now route to the supported crypto helper subset. Test: `crypto_default_import`.
 - Default imports from `"net"` and `"node:net"` now route to the supported address-classification subset. Test: `net_default_import`.

@@ -1,0 +1,2 @@
+default sync: true default fs import
+default promise: default fs import

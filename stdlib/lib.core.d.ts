@@ -1278,6 +1278,8 @@ declare module "fs" {
     export function cpSync(src: FSPathLike, dest: FSPathLike, options?: FSCpOptions, ...ignored: any[]): void;
     export function copyFileSync(src: FSPathLike, dest: FSPathLike, mode?: number, ...ignored: any[]): void;
     export function renameSync(oldPath: FSPathLike, newPath: FSPathLike, ...ignored: any[]): void;
+    const defaultFs: FS;
+    export default defaultFs;
 }
 declare module "node:fs" {
     export const constants: FSConstants;
@@ -1316,6 +1318,8 @@ declare module "node:fs" {
     export function cpSync(src: FSPathLike, dest: FSPathLike, options?: FSCpOptions, ...ignored: any[]): void;
     export function copyFileSync(src: FSPathLike, dest: FSPathLike, mode?: number, ...ignored: any[]): void;
     export function renameSync(oldPath: FSPathLike, newPath: FSPathLike, ...ignored: any[]): void;
+    const defaultFs: FS;
+    export default defaultFs;
 }
 
 interface Path {

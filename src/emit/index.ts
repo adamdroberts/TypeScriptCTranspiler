@@ -17011,7 +17011,9 @@ class Emitter {
     }
 
     private isFsModuleIdentifier(id: ts.Identifier): boolean {
-        return id.text === "fs" || this.isNamespaceImportFrom(id, ["fs", "node:fs"]);
+        return id.text === "fs" ||
+            this.isNamespaceImportFrom(id, ["fs", "node:fs"]) ||
+            this.isDefaultImportFrom(id, ["fs", "node:fs"]);
     }
 
     private isPathModuleIdentifier(id: ts.Identifier): boolean {
