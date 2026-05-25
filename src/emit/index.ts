@@ -9047,6 +9047,12 @@ class Emitter {
                 seenConsts,
             );
             if (withResult !== null) return withResult;
+            const fillResult = this.sideEffectFreePrimitiveFillElementResult(
+                unwrapped,
+                index,
+                seenConsts,
+            );
+            if (fillResult !== null) return fillResult;
         }
         const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts);
         if (returnedArrayLength !== null && (index < 0 || index >= returnedArrayLength)) {
@@ -9372,6 +9378,63 @@ class Emitter {
         if (index === actualReplacementIndex) {
             return this.isSideEffectFreePrimitivePromiseResolveValue(
                 call.arguments[1]!,
+                new Set(seenConsts),
+            )
+                ? "present"
+                : "unsafe";
+        }
+        return this.sideEffectFreePrimitiveArrayElementOperandResult(
+            call.expression.expression,
+            index,
+            new Set(seenConsts),
+        );
+    }
+
+    private sideEffectFreePrimitiveFillElementResult(
+        call: ts.CallExpression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" | null {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            call.expression.name.text !== "fill" ||
+            call.arguments.length < 1 ||
+            call.arguments.length > 3 ||
+            !this.isSideEffectFreeTopLevelConstInitializer(call.arguments[0]!, seenConsts)
+        ) {
+            return null;
+        }
+        const receiverLength = this.sideEffectFreeFreshOrReturnedArrayLength(
+            call.expression.expression,
+            seenConsts,
+        );
+        if (receiverLength === null) return null;
+        if (index < 0 || index >= receiverLength) return "absent";
+        const startValue = call.arguments[1]
+            ? this.sideEffectFreePrimitiveNumberValue(call.arguments[1], seenConsts)
+            : 0;
+        const endValue = call.arguments[2]
+            ? this.sideEffectFreePrimitiveNumberValue(call.arguments[2], seenConsts)
+            : receiverLength;
+        if (
+            startValue === null ||
+            endValue === null ||
+            !Number.isFinite(startValue) ||
+            !Number.isFinite(endValue) ||
+            !Number.isInteger(startValue) ||
+            !Number.isInteger(endValue)
+        ) {
+            return "unsafe";
+        }
+        const actualStart = startValue < 0
+            ? Math.max(receiverLength + startValue, 0)
+            : Math.min(startValue, receiverLength);
+        const actualEnd = endValue < 0
+            ? Math.max(receiverLength + endValue, 0)
+            : Math.min(endValue, receiverLength);
+        if (index >= actualStart && index < actualEnd) {
+            return this.isSideEffectFreePrimitivePromiseResolveValue(
+                call.arguments[0]!,
                 new Set(seenConsts),
             )
                 ? "present"
