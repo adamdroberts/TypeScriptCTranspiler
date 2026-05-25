@@ -737,6 +737,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Generated-C DCE propagates `Promise.resolve(...)` adoption state through side-effect-free Promise instance chains before pruning deeper unused chains. Test: `generated_c_dce_const`
 - Generated-C DCE propagates `Promise.try(...)` callback return state through side-effect-free Promise instance chains before pruning deeper unused chains. Test: `generated_c_dce_const`
 - Generated-C DCE propagates `new Promise(...)` executor state through side-effect-free resolved/rejected Promise instance-chain arguments. Test: `generated_c_dce_const`
+- Generated-C DCE coverage proves `Promise.all(...)` element-state pruning through side-effect-free Promise instance-chain elements. Test: `generated_c_dce_const`
 - Generated-C DCE exposes zero-length proofs for mapped `Array.from(empty, mapper[, thisArg])` results, enabling chained unused array-method pruning. Test: `generated_c_dce_const`
 - Generated-C DCE treats Map/Set constructor sources with exact zero-length proofs as empty for unused `Array.from(..., mapper)` pruning. Test: `generated_c_dce_const`
 - Generated-C DCE requires ignored extra `Map(...)` / `WeakMap(...)` entry slots to be side-effect-free before pruning static constructor sources. Test: `generated_c_dce_const`

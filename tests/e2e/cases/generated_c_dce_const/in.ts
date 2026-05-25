@@ -644,6 +644,18 @@ const unused_promise_all_pending_rejected_catch_call = Promise.all([
     Promise.reject<string>("dead_promise_all_pending_rejected_source"),
 ])
     .catch(() => "dead_promise_all_pending_rejected_catch_callback");
+const unused_promise_all_then_passthrough_element_call = Promise.all([
+    Promise.resolve("dead_promise_all_then_passthrough_element_source").then(),
+])
+    .then((value) => "dead_promise_all_then_passthrough_element_callback");
+const unused_promise_all_rejected_then_passthrough_element_call = Promise.all([
+    Promise.reject<string>("dead_promise_all_rejected_then_passthrough_element_source").then(undefined),
+])
+    .catch((reason) => "dead_promise_all_rejected_then_passthrough_element_callback");
+const unused_promise_all_pending_then_element_call = Promise.all([
+    Promise.race([] as Promise<string>[]).then((value) => "dead_promise_all_pending_then_element_unreached"),
+])
+    .finally(() => "dead_promise_all_pending_then_element_finally_callback");
 const unused_promise_any_pending_fulfilled_then_call = Promise.any([
     Promise.race([] as Promise<string>[]),
     Promise.resolve("dead_promise_any_pending_fulfilled_source"),
@@ -1829,6 +1841,18 @@ Promise.all([
     Promise.reject<string>("top_level_dead_promise_all_pending_rejected_source"),
 ])
     .catch(() => "top_level_dead_promise_all_pending_rejected_catch_callback");
+Promise.all([
+    Promise.resolve("top_level_dead_promise_all_then_passthrough_element_source").then(),
+])
+    .then((value) => "top_level_dead_promise_all_then_passthrough_element_callback");
+Promise.all([
+    Promise.reject<string>("top_level_dead_promise_all_rejected_then_passthrough_element_source").then(undefined),
+])
+    .catch((reason) => "top_level_dead_promise_all_rejected_then_passthrough_element_callback");
+Promise.all([
+    Promise.race([] as Promise<string>[]).then((value) => "top_level_dead_promise_all_pending_then_element_unreached"),
+])
+    .finally(() => "top_level_dead_promise_all_pending_then_element_finally_callback");
 Promise.any([
     Promise.race([] as Promise<string>[]),
     Promise.resolve("top_level_dead_promise_any_pending_fulfilled_source"),
@@ -2973,6 +2997,18 @@ function usedLocal(value: number): number {
         Promise.reject<string>("local_dead_promise_all_pending_rejected_source"),
     ])
         .catch(() => "local_dead_promise_all_pending_rejected_catch_callback");
+    Promise.all([
+        Promise.resolve("local_dead_promise_all_then_passthrough_element_source").then(),
+    ])
+        .then((value) => "local_dead_promise_all_then_passthrough_element_callback");
+    Promise.all([
+        Promise.reject<string>("local_dead_promise_all_rejected_then_passthrough_element_source").then(undefined),
+    ])
+        .catch((reason) => "local_dead_promise_all_rejected_then_passthrough_element_callback");
+    Promise.all([
+        Promise.race([] as Promise<string>[]).then((value) => "local_dead_promise_all_pending_then_element_unreached"),
+    ])
+        .finally(() => "local_dead_promise_all_pending_then_element_finally_callback");
     Promise.any([
         Promise.race([] as Promise<string>[]),
         Promise.resolve("local_dead_promise_any_pending_fulfilled_source"),
