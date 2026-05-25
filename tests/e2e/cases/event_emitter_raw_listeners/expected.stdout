@@ -9,3 +9,4 @@ emit: true
 seen: normal:x|once:x|once:x
 after: 1 true
 missing: 0
+ignored: ram

@@ -30695,20 +30695,22 @@ class Emitter {
                 );
             }
             case "listeners": {
-                if (args.length !== 1) unsupported(call, "EventEmitter.listeners expects eventName");
+                if (args.length < 1) unsupported(call, "EventEmitter.listeners expects eventName");
                 const eventName = this.emitExpr(args[0]!);
-                return this.emitSequencedCall("tsc_event_emitter_listeners", arrayType(T_VALUE), [
+                return this.emitSequencedExpr(arrayType(T_VALUE), [
                     { value: recv },
                     { value: eventName, target: T_STRING, node: args[0]! },
-                ]);
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ], ([ee, event]) => `tsc_event_emitter_listeners(${ee}, ${event})`);
             }
             case "rawListeners": {
-                if (args.length !== 1) unsupported(call, "EventEmitter.rawListeners expects eventName");
+                if (args.length < 1) unsupported(call, "EventEmitter.rawListeners expects eventName");
                 const eventName = this.emitExpr(args[0]!);
-                return this.emitSequencedCall("tsc_event_emitter_raw_listeners", arrayType(T_VALUE), [
+                return this.emitSequencedExpr(arrayType(T_VALUE), [
                     { value: recv },
                     { value: eventName, target: T_STRING, node: args[0]! },
-                ]);
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ], ([ee, event]) => `tsc_event_emitter_raw_listeners(${ee}, ${event})`);
             }
             case "eventNames": {
                 return this.emitSequencedExpr(
@@ -30718,11 +30720,12 @@ class Emitter {
                 );
             }
             case "setMaxListeners": {
-                if (args.length !== 1) unsupported(call, "EventEmitter.setMaxListeners expects count");
+                if (args.length < 1) unsupported(call, "EventEmitter.setMaxListeners expects count");
                 const count = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(T_EVENT_EMITTER, [
                     { value: recv },
                     { value: count, target: T_NUMBER, node: args[0]! },
+                    ...this.ignoredArgumentSpecs(args, 1),
                 ], ([ee, n]) => `({ tsc_event_emitter_set_max_listeners(${ee}, ${n}); ${ee}; })`);
             }
             case "getMaxListeners": {

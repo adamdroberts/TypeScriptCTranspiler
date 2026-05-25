@@ -21,7 +21,7 @@ emitter.on("data", named);
 emitter.prependListener("data", early);
 emitter.once("data", named);
 
-const first = emitter.listeners("data");
+const first = emitter.listeners("data", mark("i"));
 const fromModule = getEventListeners(emitter, "data", mark("e"));
 const fromNamespace = nodeEvents.getEventListeners(emitter, "data", mark("n"));
 
@@ -39,5 +39,5 @@ console.log("seen:", seen.join("|"));
 
 const after = emitter.listeners("data");
 console.log("after once:", after.length, Object.is(after[1], fromModule[1]));
-console.log("missing:", getEventListeners(emitter, "missing").length);
+console.log("missing:", emitter.listeners("missing", mark("s")).length, getEventListeners(emitter, "missing").length);
 console.log("ignored:", ignoredSeen);

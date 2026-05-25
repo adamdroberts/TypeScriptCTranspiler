@@ -2,4 +2,4 @@ default: 10
 chain: 2
 static: 4
 namespace: 6
-ignored: 4 6 cnmkgh
+ignored: 4 6 cnsmktgh

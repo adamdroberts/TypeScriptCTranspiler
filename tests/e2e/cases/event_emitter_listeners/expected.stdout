@@ -7,5 +7,5 @@ copy: 4 3
 emit: true
 seen: early:x|named:x|named:x
 after once: 2 true
-missing: 0
-ignored: enlc
+missing: 0 0
+ignored: ienlcs

@@ -10,9 +10,9 @@ const emitter = new EventEmitter(mark("c"));
 const other = new nodeEvents.EventEmitter(mark("n"));
 
 console.log("default:", emitter.getMaxListeners());
-console.log("chain:", emitter.setMaxListeners(2).getMaxListeners());
+console.log("chain:", emitter.setMaxListeners(2, mark("s")).getMaxListeners());
 setMaxListeners(4, emitter);
 console.log("static:", getMaxListeners(emitter, mark("m")));
 nodeEvents.setMaxListeners(6, other);
 console.log("namespace:", nodeEvents.getMaxListeners(other, mark("k")));
-console.log("ignored:", emitter.getMaxListeners(mark("g")), other.getMaxListeners(mark("h")), ignoredSeen);
+console.log("ignored:", emitter.setMaxListeners(4, mark("t")).getMaxListeners(mark("g")), other.getMaxListeners(mark("h")), ignoredSeen);

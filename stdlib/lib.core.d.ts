@@ -1786,10 +1786,10 @@ interface EventEmitter {
     removeAllListeners(eventName?: string, ...ignored: any[]): this;
     emit(eventName: string, ...args: any[]): boolean;
     listenerCount(eventName: string, listener?: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): number;
-    listeners(eventName: string): any[];
-    rawListeners(eventName: string): any[];
+    listeners(eventName: string, ...ignored: any[]): any[];
+    rawListeners(eventName: string, ...ignored: any[]): any[];
     eventNames(...ignored: any[]): string[];
-    setMaxListeners(n: number): this;
+    setMaxListeners(n: number, ...ignored: any[]): this;
     getMaxListeners(...ignored: any[]): number;
 }
 interface EventEmitterConstructor {
