@@ -50,6 +50,14 @@ Array.fromAsync([new Promise<number>(() => {})]).then((_values) => {
     console.log("pending should not run");
 });
 
+Array.fromAsync([7, 8], undefined).then((values) => {
+    console.log("undefined mapper array:", values.join("|"));
+});
+
+Array.fromAsync("uv", undefined, (console.log("undefined mapper thisArg evaluated"), { unused: true })).then((values) => {
+    console.log("undefined mapper string:", values.join("|"));
+});
+
 const dynamicArraySource: any = [9, "ten", true];
 Array.fromAsync(dynamicArraySource).then((values) => {
     console.log("dynamic array:", values.join("|"));

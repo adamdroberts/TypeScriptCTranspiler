@@ -7,6 +7,9 @@ thisArg: 21|22
 promise array: 3|4
 promise set: left|right
 promise reject: bad
+undefined mapper array: 7|8
+undefined mapper thisArg evaluated
+undefined mapper string: u|v
 dynamic array: 9|ten|true
 dynamic string: x|y
 async mapper array: 10|20

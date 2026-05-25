@@ -26855,7 +26855,15 @@ class Emitter {
             const a = call.arguments[0];
             if (!a) unsupported(call, "Array.fromAsync needs an argument");
             const mapfn = call.arguments[1];
-            if (!mapfn) return this.emitArrayFromAsyncWithoutMapper(call, a, promiseType);
+            if (!mapfn || this.isUndefinedExpression(mapfn)) {
+                if (call.arguments.length > 3) unsupported(call, "Array.fromAsync(items, mapfn) expects optional thisArg");
+                return this.emitArrayFromAsyncWithoutMapper(
+                    call,
+                    a,
+                    promiseType,
+                    mapfn ? call.arguments.slice(1) : [],
+                );
+            }
             if (call.arguments.length > 3) unsupported(call, "Array.fromAsync(items, mapfn) expects optional thisArg");
             return this.emitArrayFromAsyncWithMapper(call, a, mapfn, call.arguments[2], promiseType);
         }
@@ -28341,38 +28349,50 @@ class Emitter {
         call: ts.CallExpression,
         itemsArg: ts.Expression,
         resultArrayType?: CType,
+        ignoredArgs: readonly ts.Expression[] = [],
     ): EmitResult {
         const r = this.emitExpr(itemsArg);
+        const ignored = this.ignoredArgumentSpecs(ignoredArgs, 0);
         if (r.ty.kind === "value") {
             if (resultArrayType) unsupported(itemsArg, "Array.fromAsync currently requires a typed array, Map, Set, or string source");
             const missing: EmitResult = { c: "tsc_value_undefined()", ty: T_VALUE };
             return this.emitSequencedCall("tsc_value_method_slice", T_VALUE, [
                 { value: r, target: T_VALUE, node: itemsArg },
+                ...ignored,
                 { value: missing, target: T_VALUE, node: itemsArg },
                 { value: missing, target: T_VALUE, node: itemsArg },
             ]);
         }
         if (r.ty.kind === "string") {
-            return this.emitSequencedCall("tsc_str_chars", resultArrayType ?? arrayType(T_STRING), [
-                { value: r, target: T_STRING, node: itemsArg },
-            ]);
+            return this.emitSequencedExpr(
+                resultArrayType ?? arrayType(T_STRING),
+                [{ value: r, target: T_STRING, node: itemsArg }, ...ignored],
+                ([s]) => `tsc_str_chars(${s})`,
+            );
         }
         if (r.ty.kind === "set") {
             const elem = r.ty.elem ?? T_VALUE;
-            return this.emitSequencedCall("tsc_set_values", resultArrayType ?? arrayType(elem), [
-                { value: r },
-            ]);
+            return this.emitSequencedExpr(
+                resultArrayType ?? arrayType(elem),
+                [{ value: r, node: itemsArg }, ...ignored],
+                ([set]) => `tsc_set_values(${set})`,
+            );
         }
         if (r.ty.kind === "map") {
-            const entries = this.emitMapEntriesArray(itemsArg, r, "Array.from(Map)");
-            return resultArrayType ? { c: entries.c, ty: resultArrayType } : entries;
+            const entryArrayType = resultArrayType ?? arrayType(entryType(r.ty.elem!, r.ty.key!));
+            return this.emitSequencedExpr(
+                entryArrayType,
+                [{ value: r, node: itemsArg }, ...ignored],
+                ([map]) => this.mapEntriesArrayExpr(itemsArg, map, r.ty, "Array.from(Map)").c,
+            );
         }
         if (r.ty.kind !== "array")
             unsupported(itemsArg, "Array.from on non-array");
-        return {
-            c: `tsc_array_slice(${r.c}, 0, (double)${r.c}->len)`,
-            ty: resultArrayType ?? r.ty,
-        };
+        return this.emitSequencedExpr(
+            resultArrayType ?? r.ty,
+            [{ value: r, node: itemsArg }, ...ignored],
+            ([arr]) => `tsc_array_slice(${arr}, 0, (double)${arr}->len)`,
+        );
     }
 
     private emitArrayFromAsyncWithMapper(
@@ -28458,6 +28478,7 @@ class Emitter {
         call: ts.CallExpression,
         itemsArg: ts.Expression,
         promiseType: CType,
+        ignoredArgs: readonly ts.Expression[] = [],
     ): EmitResult {
         if (promiseType.kind !== "promise" || !promiseType.elem || promiseType.elem.kind !== "array" || !promiseType.elem.elem) {
             unsupported(call, "Array.fromAsync result must be Promise<T[]>");
@@ -28467,20 +28488,25 @@ class Emitter {
         if (!resultElem) unsupported(call, "Array.fromAsync result must be Promise<T[]>");
         const elem = this.prepareType(resultElem);
         const source = this.emitExpr(itemsArg);
+        const ignored = this.ignoredArgumentSpecs(ignoredArgs, 0);
         const sourceElem = source.ty.kind === "array" || source.ty.kind === "set"
             ? source.ty.elem
             : null;
         if (source.ty.kind === "value") {
             if (!sameCType(elem, T_VALUE)) unsupported(itemsArg, "Array.fromAsync(dynamic) result must be Promise<any[]>");
-            return this.emitSequencedExpr(promiseType, [{ value: source, target: T_VALUE, node: itemsArg }], ([items]) =>
+            return this.emitSequencedExpr(promiseType, [
+                { value: source, target: T_VALUE, node: itemsArg },
+                ...ignored,
+            ], ([items]) =>
                 `tsc_promise_resolve_array(tsc_value_iter_values(${items}))`,
             );
         }
         if (sourceElem?.kind === "promise") {
-            const sourceArray = source.ty.kind === "set"
-                ? { c: `tsc_set_values(${source.c})`, ty: arrayType(sourceElem) }
-                : source;
-            return this.emitSequencedExpr(promiseType, [{ value: sourceArray, node: itemsArg }], ([src]) => {
+            return this.emitSequencedExpr(promiseType, [
+                { value: source, node: itemsArg },
+                ...ignored,
+            ], ([sourceExpr]) => {
+                const srcExpr = source.ty.kind === "set" ? `tsc_set_values(${sourceExpr})` : sourceExpr!;
                 const out = this.freshTemp("_from_async");
                 const result = this.freshTemp("_from_async_result");
                 const pending = this.freshTemp("_from_async_pending");
@@ -28489,7 +28515,7 @@ class Emitter {
                 const value = this.freshTemp("_from_async_value");
                 const pushed = this.coerce(this.promiseFulfilledValue(elem, item), elem, call);
                 return (
-                    `({ tsc_array_t* const _src = ${src}; ` +
+                    `({ tsc_array_t* const _src = ${srcExpr}; ` +
                     `tsc_array_t* ${out} = tsc_array_new(sizeof(${elem.c}), _src->len); ` +
                     `tsc_promise_t* ${result} = NULL; bool ${pending} = false; ` +
                     `for (size_t ${i} = 0; ${i} < _src->len; ${i}++) { ` +
@@ -28501,7 +28527,7 @@ class Emitter {
                 );
             });
         }
-        const arrayResult = this.emitArrayFromWithoutMapper(call, itemsArg, resultArrayType);
+        const arrayResult = this.emitArrayFromWithoutMapper(call, itemsArg, resultArrayType, ignoredArgs);
         return { c: `tsc_promise_resolve_array(${arrayResult.c})`, ty: promiseType };
     }
 
