@@ -148,6 +148,7 @@ This is the next item that most directly expands what programs can be written ag
   - `fs.symlinkSync` and immediate `fs.promises.symlink` support earlier static `const` aliases for supported string symlink `type` arguments. Test: `fs_symlink_type_options`.
   - `fs.rmSync`/`rmdirSync` and immediate `fs.promises.rm`/`rmdir` support earlier static `const` aliases for supported numeric `maxRetries` / `retryDelay` compatibility options. Test: `fs_recursive_options`.
   - `os.userInfo(...)` supports literal UTF-8 option objects, earlier static `const` aliases for supported UTF-8 `encoding` option values, and explicit `undefined` defaults for the existing string-valued dynamic result subset. Tests: `os_user_info`, `os_user_info_undefined_options`.
+  - Event option surfaces now cover side-effect-free `void` defaults for `events.once(...)`, `{ signal }`, `Event` options, and `EventTarget` listener option properties while preserving the existing explicit-`undefined` behavior. Tests: `event_emitter_once_options`, `event_target_undefined_options`.
   - Generated-C DCE recognizes earlier static `const` aliases for supported `os.userInfo(...)` UTF-8 `encoding` option values. Test: `generated_c_dce_const`.
   - Generated-C DCE recognizes earlier static `const` aliases for supported Buffer UTF-8 encoding arguments. Test: `generated_c_dce_const`.
   - `process.kill(pid, signal?)` supports earlier static `const` aliases for supported numeric and string signal values in the existing narrow POSIX signal subset. Test: `process_kill_signal_zero`.

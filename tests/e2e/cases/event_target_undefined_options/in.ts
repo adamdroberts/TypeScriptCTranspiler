@@ -12,21 +12,21 @@ function once(event: Event): void {
 }
 
 target.addEventListener("save", first, {
-    once: undefined,
+    once: void 0,
     capture: undefined,
     passive: undefined,
 });
 target.addEventListener("save", once, {
     once: ONCE_TRUE,
-    capture: undefined,
+    capture: void 0,
     passive: undefined,
 });
 
-console.log("default event:", target.dispatchEvent(new Event("save", undefined)));
-console.log("undefined cancelable:", target.dispatchEvent(new Event("save", { cancelable: undefined })));
+console.log("default event:", target.dispatchEvent(new Event("save", void 0)));
+console.log("undefined cancelable:", target.dispatchEvent(new Event("save", { cancelable: void 0 })));
 
 target.removeEventListener("save", first, {
-    capture: undefined,
+    capture: void 0,
 });
 console.log("removed:", target.dispatchEvent(new Event("save", { cancelable: CANCELABLE_TRUE })));
 console.log("seen:", seen.join("|"));
