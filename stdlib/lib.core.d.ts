@@ -1577,6 +1577,8 @@ declare module "dns" {
     export function lookup(hostname: string, callback: DnsLookupCallback): void;
     export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupCallback): void;
     export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupAllCallback): void;
+    const defaultDns: DNS;
+    export default defaultDns;
 }
 declare module "node:dns" {
     export const ADDRCONFIG: number;
@@ -1586,6 +1588,8 @@ declare module "node:dns" {
     export function lookup(hostname: string, callback: DnsLookupCallback): void;
     export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupCallback): void;
     export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupAllCallback): void;
+    const defaultDns: DNS;
+    export default defaultDns;
 }
 
 interface Net {

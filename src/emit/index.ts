@@ -17039,7 +17039,9 @@ class Emitter {
     }
 
     private isDnsModuleIdentifier(id: ts.Identifier): boolean {
-        return id.text === "dns" || this.isNamespaceImportFrom(id, ["dns", "node:dns"]);
+        return id.text === "dns" ||
+            this.isNamespaceImportFrom(id, ["dns", "node:dns"]) ||
+            this.isDefaultImportFrom(id, ["dns", "node:dns"]);
     }
 
     private isDnsPromisesReceiver(expr: ts.Expression): boolean {
