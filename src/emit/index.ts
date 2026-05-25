@@ -2620,11 +2620,17 @@ class Emitter {
                 break;
             case "pop":
             case "shift":
-                if (
-                    this.isSideEffectFreeArrayMethodCall(recv, method, call.arguments, seenConsts) &&
-                    this.sideEffectFreeFreshOrReturnedArrayLength(recv, seenConsts) === 0
-                ) {
-                    return true;
+                if (this.isSideEffectFreeArrayMethodCall(recv, method, call.arguments, seenConsts)) {
+                    const length = this.sideEffectFreeFreshOrReturnedArrayLength(recv, seenConsts);
+                    if (length === 0) return true;
+                    if (length !== null) {
+                        const index = method === "pop" ? length - 1 : 0;
+                        return this.sideEffectFreePrimitiveArrayElementOperandResult(
+                            recv,
+                            index,
+                            seenConsts,
+                        ) !== "unsafe";
+                    }
                 }
                 break;
             case "push":

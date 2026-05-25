@@ -2590,6 +2590,8 @@ unused_array_flat_call
 unused_array_join_call
 unused_array_pop_call
 unused_array_shift_call
+unused_promise_resolve_array_of_pop_call
+unused_promise_resolve_array_from_shift_call
 unused_array_reverse_call
 unused_object_keys_reverse_call
 unused_object_values_pop_call
@@ -2826,6 +2828,8 @@ dead_array_flat
 dead_array_join
 dead_array_pop
 dead_array_shift
+dead_promise_resolve_array_of_pop
+dead_promise_resolve_array_from_shift
 dead_array_reverse
 dead_object_keys_reverse
 dead_object_values_pop
@@ -4165,6 +4169,8 @@ local_dead_array_flat
 local_dead_array_join
 local_dead_array_pop
 local_dead_array_shift
+local_dead_array_of_pop
+local_dead_array_from_shift
 local_dead_array_reverse
 local_dead_object_keys_reverse
 local_dead_object_values_pop

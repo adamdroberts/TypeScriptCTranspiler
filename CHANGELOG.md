@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now proves primitive `pop()` and `shift()` results from non-empty fresh returned arrays, enabling unused `Promise.resolve(...)` calls to prune. Test: `generated_c_dce_const`.
 - Generated-C DCE now preserves exact returned-array lengths through pure `fill(...)` and `copyWithin(...)` chains, enabling unused `Promise.resolve(...)` length and absent element reads to prune for non-empty fresh arrays. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats `push(...)` and `unshift(...)` on fresh returned arrays as primitive numeric results for unused `Promise.resolve(...)` pruning when inserted values are pure. Test: `generated_c_dce_const`.
 - Generated-C DCE now preserves exact returned-array lengths through in-range pure `with(...)` calls, enabling unused `Promise.resolve(...)` length and absent element reads to prune. Test: `generated_c_dce_const`.

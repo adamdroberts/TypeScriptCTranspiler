@@ -1117,6 +1117,8 @@ const unused_array_flat_call = [["dead_array_flat"]].flat();
 const unused_array_join_call = ["dead_array_join", "dead_array_join_tail"].join("|");
 const unused_array_pop_call = ["dead_array_pop"].pop();
 const unused_array_shift_call = ["dead_array_shift"].shift();
+const unused_promise_resolve_array_of_pop_call = Promise.resolve(Array.of("dead_promise_resolve_array_of_pop").pop());
+const unused_promise_resolve_array_from_shift_call = Promise.resolve(Array.from(["dead_promise_resolve_array_from_shift"]).shift());
 const unused_array_reverse_call = ["dead_array_reverse"].reverse();
 const unused_object_keys_reverse_call = Object.keys({ dead_object_keys_reverse: 1 }).reverse();
 const unused_object_values_pop_call = Object.values({ dead_object_values_pop: "dead_object_values_pop" }).pop();
@@ -3637,6 +3639,8 @@ function usedLocal(value: number): number {
     ["local_dead_array_join", "local_dead_array_join_tail"].join(":");
     ["local_dead_array_pop"].pop();
     ["local_dead_array_shift"].shift();
+    Array.of("local_dead_array_of_pop").pop();
+    Array.from(["local_dead_array_from_shift"]).shift();
     ["local_dead_array_reverse"].reverse();
     Object.keys({ local_dead_object_keys_reverse: 1 }).reverse();
     Object.values({ local_dead_object_values_pop: "local_dead_object_values_pop" }).pop();
