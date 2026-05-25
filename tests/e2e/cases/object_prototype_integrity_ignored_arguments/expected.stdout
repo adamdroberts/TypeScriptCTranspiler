@@ -1,0 +1,10 @@
+proto: proto
+ext before: true
+prevent: true false
+seal: true true
+freeze: true true
+primitive: false true true 7
+set proto: true next
+array: true true
+function: true
+marks: abcdefghijklmno
