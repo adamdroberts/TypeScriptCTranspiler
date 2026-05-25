@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `dns.lookup(...)` and `dns.promises.lookup(...)` option objects now treat side-effect-free `void` expressions such as `void 0` as default values for supported properties. Test: `dns_lookup_option_property_undefined`.
 - Supported `child_process` option objects now treat side-effect-free `void` expressions such as `void 0` as default property values across callback, sync, and `spawnSync` subsets. Test: `child_process_option_property_undefined`.
 - `process.stdout.write(...)` and `process.stderr.write(...)` now treat side-effect-free `void` expressions such as `void 0` as default optional encoding/callback slots. Test: `process_stdio_write_undefined_options`.
 - Static optional-default checks now treat side-effect-free `void` expressions such as `void 0` as `undefined`, including `fs.accessSync(...)`, immediate `fs.promises.access/stat/lstat(...)`, `fs.copyFileSync(...)`, and immediate `fs.promises.copyFile(...)` optional slots. Tests: `fs_access_ignored_arguments`, `fs_promises_stat_access_ignored_arguments`, `fs_copy_flags`.
