@@ -1783,9 +1783,9 @@ interface EventEmitter {
     prependOnceListener(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void): this;
     off(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void): this;
     removeListener(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void): this;
-    removeAllListeners(eventName?: string): this;
+    removeAllListeners(eventName?: string, ...ignored: any[]): this;
     emit(eventName: string, ...args: any[]): boolean;
-    listenerCount(eventName: string, listener?: (this: EventEmitter, ...args: any[]) => void): number;
+    listenerCount(eventName: string, listener?: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): number;
     listeners(eventName: string): any[];
     rawListeners(eventName: string): any[];
     eventNames(...ignored: any[]): string[];

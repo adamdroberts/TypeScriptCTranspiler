@@ -1,5 +1,11 @@
 const emitter = new EventEmitter();
 const seen: string[] = [];
+let ignored = "";
+
+function mark(label: string): string {
+    ignored += label;
+    return label;
+}
 
 function named(label: string, count: number): void {
     seen.push("named:" + label + ":" + count);
@@ -16,7 +22,7 @@ emitter.once("data", (label: string, count: number): void => {
     seen.push("once:" + label + ":" + count);
 });
 
-console.log("count before:", emitter.listenerCount("data"));
+console.log("count before:", emitter.listenerCount("data", undefined, mark("c")));
 console.log("emit1:", emitter.emit("data", "alpha", 1));
 console.log("count after once:", emitter.listenerCount("data"));
 
@@ -24,7 +30,8 @@ emitter.off("data", listener);
 console.log("count after off:", emitter.listenerCount("data"));
 console.log("emit2:", emitter.emit("data", "beta", 2));
 
-emitter.removeAllListeners("data");
+emitter.removeAllListeners("data", mark("r"));
 console.log("count after remove:", emitter.listenerCount("data"));
 console.log("emit3:", emitter.emit("data", "gamma", 3));
 console.log("seen:", seen.join("|"));
+console.log("ignored:", ignored);

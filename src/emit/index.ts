@@ -30629,12 +30629,12 @@ class Emitter {
                 );
             }
             case "removeAllListeners": {
-                if (args.length > 1) unsupported(call, "EventEmitter.removeAllListeners expects 0 or 1 args");
                 const specs: SequencedCallArg[] = [{ value: recv }];
-                if (args[0]) {
+                if (args[0] && !this.isUndefinedExpression(args[0])) {
                     const eventName = this.emitExpr(args[0]);
                     specs.push({ value: eventName, target: T_STRING, node: args[0] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, args[0] ? 1 : 0));
                 return this.emitSequencedExpr(T_EVENT_EMITTER, specs, (vals) => {
                     const ee = vals[0]!;
                     const event = vals[1] ?? "NULL";
@@ -30665,22 +30665,28 @@ class Emitter {
                 });
             }
             case "listenerCount": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "EventEmitter.listenerCount expects eventName and optional listener");
+                if (args.length < 1) unsupported(call, "EventEmitter.listenerCount expects eventName and optional listener");
                 const eventName = this.emitExpr(args[0]!);
-                if (args[1]) {
+                if (args[1] && !this.isUndefinedExpression(args[1])) {
                     const listener = this.emitEventListenerExpression(args[1]);
                     return this.emitSequencedExpr(T_NUMBER, [
                         { value: recv },
                         { value: eventName, target: T_STRING, node: args[0]! },
                         { value: listener, target: listener.ty, node: args[1] },
+                        ...this.ignoredArgumentSpecs(args, 2),
                     ], ([ee, event, fn]) =>
                         `tsc_event_emitter_listener_count_identity(${ee}, ${event}, ${this.eventListenerIdentity(args[1]!, fn!)})`,
                     );
                 }
-                return this.emitSequencedCall("tsc_event_emitter_listener_count", T_NUMBER, [
-                    { value: recv },
-                    { value: eventName, target: T_STRING, node: args[0]! },
-                ]);
+                return this.emitSequencedExpr(
+                    T_NUMBER,
+                    [
+                        { value: recv },
+                        { value: eventName, target: T_STRING, node: args[0]! },
+                        ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
+                    ],
+                    ([ee, event]) => `tsc_event_emitter_listener_count(${ee}, ${event})`,
+                );
             }
             case "listeners": {
                 if (args.length !== 1) unsupported(call, "EventEmitter.listeners expects eventName");
