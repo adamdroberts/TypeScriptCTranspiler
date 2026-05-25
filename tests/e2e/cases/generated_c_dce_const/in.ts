@@ -1142,6 +1142,8 @@ const unused_promise_resolve_array_of_flat_zero_absent_element = Promise.resolve
 const unused_promise_resolve_array_of_flat_zero_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_flat_zero_element", "dead_promise_resolve_array_of_flat_zero_element_hit").flat(0)[1]);
 const unused_promise_resolve_array_of_sort_length = Promise.resolve(Array.of("dead_promise_resolve_array_of_sort_length_b", "dead_promise_resolve_array_of_sort_length_a").sort().length);
 const unused_promise_resolve_array_of_to_sorted_absent_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_to_sorted_absent_element_b", "dead_promise_resolve_array_of_to_sorted_absent_element_a").toSorted()[2]);
+const unused_promise_resolve_array_of_sort_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_sort_element_b", "dead_promise_resolve_array_of_sort_element_a").sort()[0]);
+const unused_promise_resolve_array_of_to_sorted_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_to_sorted_element_b", "dead_promise_resolve_array_of_to_sorted_element_a").toSorted()[0]);
 const unused_array_push_call = ["dead_array_push"].push("dead_array_push_value");
 const unused_array_unshift_call = ["dead_array_unshift"].unshift("dead_array_unshift_value");
 const unused_object_keys_fill_call = Object.keys({ dead_object_keys_fill: 1 }).fill("dead_object_keys_fill_value");
@@ -3677,6 +3679,8 @@ function usedLocal(value: number): number {
     Array.of("local_dead_array_of_flat_zero_element", "local_dead_array_of_flat_zero_element_hit").flat(0)[1];
     Array.of("local_dead_array_of_sort_length_b", "local_dead_array_of_sort_length_a").sort().length;
     Array.of("local_dead_array_of_to_sorted_absent_element_b", "local_dead_array_of_to_sorted_absent_element_a").toSorted()[2];
+    Array.of("local_dead_array_of_sort_element_b", "local_dead_array_of_sort_element_a").sort()[0];
+    Array.of("local_dead_array_of_to_sorted_element_b", "local_dead_array_of_to_sorted_element_a").toSorted()[0];
     ["local_dead_array_push"].push("local_dead_array_push_value");
     ["local_dead_array_unshift"].unshift("local_dead_array_unshift_value");
     Object.keys({ local_dead_object_keys_fill: 1 }).fill("local_dead_object_keys_fill_value");

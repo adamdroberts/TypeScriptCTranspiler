@@ -9023,6 +9023,12 @@ class Emitter {
                 seenConsts,
             );
             if (flatResult !== null) return flatResult;
+            const sortedResult = this.sideEffectFreePrimitiveSortedElementResult(
+                unwrapped,
+                index,
+                seenConsts,
+            );
+            if (sortedResult !== null) return sortedResult;
         }
         const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts);
         if (returnedArrayLength !== null && (index < 0 || index >= returnedArrayLength)) {
@@ -9183,6 +9189,35 @@ class Emitter {
             index,
             new Set(seenConsts),
         );
+    }
+
+    private sideEffectFreePrimitiveSortedElementResult(
+        call: ts.CallExpression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" | null {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            (
+                call.expression.name.text !== "sort" &&
+                call.expression.name.text !== "toSorted"
+            ) ||
+            call.arguments.length !== 0
+        ) {
+            return null;
+        }
+        const length = this.sideEffectFreeFreshOrReturnedArrayLength(
+            call.expression.expression,
+            seenConsts,
+        );
+        if (length === null) return "unsafe";
+        if (index < 0 || index >= length) return "absent";
+        return this.isSideEffectFreeFreshOrReturnedStringArrayOperand(
+            call.expression.expression,
+            seenConsts,
+        )
+            ? "present"
+            : "unsafe";
     }
 
     private sideEffectFreePrimitiveStaticArrayElementResult(
