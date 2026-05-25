@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `new Promise(executor, ...ignored)` now evaluates and ignores trailing constructor arguments before invoking the synchronous executor. Test: `promise_constructor_ignored_arguments`.
 - `new Proxy(target, handler, ...ignored)` and `Proxy.revocable(target, handler, ...ignored)` now evaluate and ignore trailing arguments after the required target and handler. Test: `proxy_constructor_ignored_arguments`.
 - `new WeakRef(target, ...ignored)` and `new FinalizationRegistry(cleanupCallback, ...ignored)` now evaluate and ignore trailing constructor arguments. Test: `weak_ref_finalization_constructor_ignored_arguments`.
 - `new Map(source, ...ignored)`, `new Set(source, ...ignored)`, `new WeakMap(source, ...ignored)`, and `new WeakSet(source, ...ignored)` now evaluate and ignore trailing constructor arguments after supported typed source inputs. Test: `collection_constructor_ignored_arguments`.

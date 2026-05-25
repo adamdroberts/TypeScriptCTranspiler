@@ -43,7 +43,7 @@ interface Promise<T> {
     finally(onfinally?: (() => void) | undefined): Promise<T>;
 }
 interface PromiseConstructor {
-    new<T>(executor: (resolve: (value: T) => void, reject: (reason: any) => void) => void): Promise<T>;
+    new<T>(executor: (resolve: (value: T) => void, reject: (reason: any) => void) => void, ...ignored: any[]): Promise<T>;
     resolve<T>(value: Promise<T>, ...ignored: any[]): Promise<T>;
     resolve<T>(value: T, ...ignored: any[]): Promise<T>;
     resolve(): Promise<void>;

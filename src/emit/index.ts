@@ -40909,7 +40909,7 @@ class Emitter {
         }
         if (cls === "Promise") {
             const args = n.arguments ?? [];
-            if (args.length !== 1) unsupported(n, "new Promise() expects an executor");
+            if (args.length < 1) unsupported(n, "new Promise() expects an executor");
             const mapped = this.prepareType(mapTsType(n, this.checker.getTypeAtLocation(n), this.checker));
             if (mapped.kind !== "promise") unsupported(n, "new Promise<T>() result must be Promise<T>");
             const executorArg = args[0]!;
@@ -40923,6 +40923,7 @@ class Emitter {
             const envType = this.ensurePromiseExecutorEnv();
             return this.emitSequencedExpr(mapped, [
                 { value: executor, target: executorType, node: executorArg },
+                ...this.ignoredArgumentSpecs(args, 1),
             ], ([exec]) => {
                 const result = this.freshTemp("_promise_executor_result");
                 const state = this.freshTemp("_promise_executor_env");
