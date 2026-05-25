@@ -48,6 +48,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - Side-effect-free `void` expressions participate in the static undefined/nullish/falsy analysis used by generated-C DCE. Test: `static_void_analysis`
 - Comma operator expressions evaluate left-to-right and return the right-hand value. Test: `comma_operator`
 - TypeScript-only `expr satisfies T`, `expr as T`, `<T>expr`, and `expr!` assertions erase to the runtime operand. Test: `satisfies_expression`
+- The local no-lib TypeScript shim declares the standard `Record<K, T>` utility type, which erases to ordinary object runtime behavior. Test: `utility_record_type`
 - Ternary `a ? b : c`
 - Nullish coalescing `??` — null-aware for pointer types. Test: `nullish`
 - Optional chaining `?.` — null-aware for class fields with zero-sentinel fallback. Test: `nullish`
@@ -1872,6 +1873,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `url_errors` | URL constructor/base/file-path validation failures are catchable |
 | `url_object_methods` | URL toString/toJSON/toLocaleString/valueOf |
 | `url_parse` | URL parsing fields |
+| `utility_record_type` | standard Record utility type in the no-lib shim erases to ordinary object runtime behavior |
 | `weak_collections` | typed WeakMap/WeakSet with object keys |
 | `weak_map_primitive_map_source_reject` | WeakMap constructor preserves primitive-key rejection for non-object typed Map sources |
 | `weak_set_primitive_set_source_reject` | WeakSet constructor preserves primitive-value rejection for non-object typed Set sources |

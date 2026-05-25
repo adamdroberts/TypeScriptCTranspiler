@@ -6,7 +6,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 - `Object.seal(proxy)` and `Object.freeze(proxy)` now have focused coverage for failing when proxy integrity `defineProperty` traps return `false` after successful extension prevention. Test: `proxy_integrity_define_failure`.
-- The local no-lib TypeScript shim now declares the standard `Record<K, T>` utility type for user programs and compiler-facing fixtures that reference it during checking.
+- The local no-lib TypeScript shim now declares the standard `Record<K, T>` utility type for user programs and compiler-facing fixtures that reference it during checking. Test: `utility_record_type`.
 - `Object.seal(proxy)` and `Object.freeze(proxy)` now drive proxy integrity traps through `preventExtensions`, `ownKeys`, `getOwnPropertyDescriptor`, and `defineProperty` so forwarding handlers seal or freeze the underlying target. Test: `proxy_integrity_forward`.
 - `Object.seal(proxy)` and `Object.freeze(proxy)` now fail through catchable errors when a proxy `preventExtensions` trap reports `false`, matching the Object integrity-operation failure path. Test: `proxy_integrity_falsy_trap_results`.
 - Proxy traps that report ordinary falsy results now have focused coverage for `Reflect.set`, `Reflect.defineProperty`, `Reflect.deleteProperty`, `Reflect.preventExtensions`, and `Reflect.setPrototypeOf` returning `false`, while `Object.preventExtensions` and `Object.setPrototypeOf` throw on failed proxy trap results. Test: `proxy_falsy_trap_results`.

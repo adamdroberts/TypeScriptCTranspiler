@@ -1,0 +1,3 @@
+{
+  "description": "standard Record utility type in the no-lib shim erases to ordinary object runtime behavior"
+}
