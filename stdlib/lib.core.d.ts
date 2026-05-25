@@ -318,6 +318,11 @@ interface ArrayConstructor {
     from<T>(arr: T[]): T[];
     from<T>(set: Set<T>): T[];
     from<K, T>(map: Map<K, T>): ObjectEntry<T, K>[];
+    from<T>(arr: T[], mapfn: undefined, thisArg?: any): T[];
+    from<T>(set: Set<T>, mapfn: undefined, thisArg?: any): T[];
+    from<K, T>(map: Map<K, T>, mapfn: undefined, thisArg?: any): ObjectEntry<T, K>[];
+    from(s: string, mapfn: undefined, thisArg?: any): string[];
+    from(items: any, mapfn: undefined, thisArg?: any): any[];
     from<U>(s: string, mapfn: (v: string, k: number) => U, thisArg?: any): U[];
     from<T, U>(arr: T[], mapfn: (v: T, k: number) => U, thisArg?: any): U[];
     from<T, U>(set: Set<T>, mapfn: (v: T, k: number) => U, thisArg?: any): U[];

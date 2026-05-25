@@ -26841,11 +26841,12 @@ class Emitter {
             const a = call.arguments[0];
             if (!a) unsupported(call, "Array.from needs an argument");
             const mapfn = call.arguments[1];
-            if (mapfn) {
+            if (mapfn && !this.isUndefinedExpression(mapfn)) {
                 if (call.arguments.length > 3) unsupported(call, "Array.from(items, mapfn) expects optional thisArg");
                 return this.emitArrayFromWithMapper(call, a, mapfn, call.arguments[2]);
             }
-            return this.emitArrayFromWithoutMapper(call, a);
+            if (call.arguments.length > 3) unsupported(call, "Array.from(items, mapfn) expects optional thisArg");
+            return this.emitArrayFromWithoutMapper(call, a, undefined, mapfn ? call.arguments.slice(1) : []);
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Array" && memberName === "fromAsync") {
             const promiseType = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));

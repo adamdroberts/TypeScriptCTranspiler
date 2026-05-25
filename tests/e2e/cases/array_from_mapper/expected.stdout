@@ -4,3 +4,6 @@ labels: n=1|n=2|n=3|n=4
 tagged: first:1;rest:2;rest:3;rest:4
 letters: a0,b1,c2
 sizes: 1,1,1,1,1
+undefined mapper array: 1,2,3,4
+undefined mapper thisArg evaluated
+undefined mapper string: x|y

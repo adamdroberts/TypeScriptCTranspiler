@@ -21,3 +21,9 @@ console.log("letters:", letters.join(","));
 
 const sizes = Array.from("hello", (c) => c.length);
 console.log("sizes:", sizes.join(","));
+
+const unchanged = Array.from(nums, undefined);
+console.log("undefined mapper array:", unchanged.join(","));
+
+const chars = Array.from("xy", undefined, (console.log("undefined mapper thisArg evaluated"), { unused: true }));
+console.log("undefined mapper string:", chars.join("|"));
