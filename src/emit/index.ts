@@ -4392,6 +4392,47 @@ class Emitter {
         if (
             ts.isCallExpression(unwrapped) &&
             ts.isPropertyAccessExpression(unwrapped.expression) &&
+            unwrapped.expression.name.text === "fill" &&
+            unwrapped.arguments.length >= 1 &&
+            unwrapped.arguments.length <= 3
+        ) {
+            const sourceElements = this.sideEffectFreeSetArraySourceExpressions(
+                unwrapped.expression.expression,
+                seenConsts,
+            );
+            const startValue = unwrapped.arguments[1]
+                ? this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[1], seenConsts)
+                : 0;
+            const endValue = unwrapped.arguments[2]
+                ? this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[2], seenConsts)
+                : sourceElements?.length ?? null;
+            if (
+                sourceElements === null ||
+                startValue === null ||
+                endValue === null ||
+                !Number.isFinite(startValue) ||
+                !Number.isFinite(endValue) ||
+                !Number.isInteger(startValue) ||
+                !Number.isInteger(endValue) ||
+                !this.isSideEffectFreeTopLevelConstInitializer(unwrapped.arguments[0]!, seenConsts)
+            ) {
+                return null;
+            }
+            const actualStart = startValue < 0
+                ? Math.max(sourceElements.length + startValue, 0)
+                : Math.min(startValue, sourceElements.length);
+            const actualEnd = endValue < 0
+                ? Math.max(sourceElements.length + endValue, 0)
+                : Math.min(endValue, sourceElements.length);
+            const elements = [...sourceElements];
+            for (let i = actualStart; i < actualEnd; i++) {
+                elements[i] = unwrapped.arguments[0]!;
+            }
+            return elements;
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
             (
                 unwrapped.expression.name.text === "reverse" ||
                 unwrapped.expression.name.text === "toReversed"
@@ -4804,6 +4845,47 @@ class Emitter {
                 ...insertedElements,
                 ...sourceElements.slice(actualStart + actualDelete),
             ];
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            unwrapped.expression.name.text === "fill" &&
+            unwrapped.arguments.length >= 1 &&
+            unwrapped.arguments.length <= 3
+        ) {
+            const sourceElements = this.sideEffectFreeMapArraySourceExpressions(
+                unwrapped.expression.expression,
+                seenConsts,
+            );
+            const startValue = unwrapped.arguments[1]
+                ? this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[1], seenConsts)
+                : 0;
+            const endValue = unwrapped.arguments[2]
+                ? this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[2], seenConsts)
+                : sourceElements?.length ?? null;
+            if (
+                sourceElements === null ||
+                startValue === null ||
+                endValue === null ||
+                !Number.isFinite(startValue) ||
+                !Number.isFinite(endValue) ||
+                !Number.isInteger(startValue) ||
+                !Number.isInteger(endValue) ||
+                !this.isSideEffectFreeTopLevelConstInitializer(unwrapped.arguments[0]!, seenConsts)
+            ) {
+                return null;
+            }
+            const actualStart = startValue < 0
+                ? Math.max(sourceElements.length + startValue, 0)
+                : Math.min(startValue, sourceElements.length);
+            const actualEnd = endValue < 0
+                ? Math.max(sourceElements.length + endValue, 0)
+                : Math.min(endValue, sourceElements.length);
+            const elements = [...sourceElements];
+            for (let i = actualStart; i < actualEnd; i++) {
+                elements[i] = unwrapped.arguments[0]!;
+            }
+            return elements;
         }
         if (
             ts.isCallExpression(unwrapped) &&
