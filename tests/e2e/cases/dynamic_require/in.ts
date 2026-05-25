@@ -47,6 +47,15 @@ const bareReflectModuleArgs = [bareReflectModuleName];
 const bareReflectModule: any = Reflect.apply(require, module, bareReflectModuleArgs);
 console.log("dynamic require bare reflect:", bareReflectModule.name);
 
+const boundModuleName = "./other_bound";
+const boundRequire = require.bind(module);
+const boundModule: any = boundRequire(boundModuleName);
+console.log("dynamic require bound:", boundModule.name);
+
+const inlineBoundModuleName = "./other_inline_bound";
+const inlineBoundModule: any = module.require.bind(module)(inlineBoundModuleName);
+console.log("dynamic require inline bound:", inlineBoundModule.name);
+
 function loadLocal(): any {
     const localModuleName = "./other_local";
     return require(localModuleName);
