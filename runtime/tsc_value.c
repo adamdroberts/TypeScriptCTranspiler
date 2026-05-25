@@ -1386,6 +1386,19 @@ tsc_value_t tsc_value_object_assign(tsc_value_t target, tsc_value_t source) {
     if (!value_is_box(source)) return target;
     if (value_tag(source) == TSC_VALUE_TAG_OBJECT) {
         tsc_object_t* src = (tsc_object_t*)value_ptr(source);
+        if (src && src->is_proxy) {
+            tsc_array_t* keys = tsc_value_object_keys(source);
+            for (size_t i = 0; i < keys->len; i++) {
+                tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
+                tsc_value_t value = tsc_value_get_prop(source, key);
+                if (dst) {
+                    tsc_object_set(dst, key, value);
+                } else {
+                    tsc_value_set_prop(target, key, value);
+                }
+            }
+            return target;
+        }
         for (size_t i = 0; i < src->len; i++) {
             if (!src->props[i].enumerable) continue;
             tsc_value_t value = tsc_object_get(src, src->props[i].key);

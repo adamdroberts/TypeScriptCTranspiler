@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Object.assign(target, proxySource)` now enumerates object Proxy sources through `ownKeys` and `getOwnPropertyDescriptor`, reads copied values through `get`, and preserves target proxy `set` dispatch. Test: `proxy_object_assign_source`.
 - `Object.values(proxy)` and `Object.entries(proxy)` now have focused coverage for `ownKeys`, `getOwnPropertyDescriptor`, and `get` trap dispatch over object proxies. Test: `proxy_object_values_entries`.
 - `Object.getOwnPropertyDescriptors(proxy)` now drives proxy `ownKeys` and `getOwnPropertyDescriptor` traps instead of bypassing the proxy target. Test: `proxy_get_own_property_descriptors`.
 - `Object.create(proto, descriptors)` now accepts runtime descriptor maps for newly created dynamic objects. Test: `object_dynamic_create_descriptors`.

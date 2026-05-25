@@ -1666,6 +1666,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_descriptor_invariants` | Proxy getOwnPropertyDescriptor non-configurable descriptor, enumerable flag, accessor identity, and non-extensible target invariant checks |
 | `proxy_get_own_property_descriptors` | Object.getOwnPropertyDescriptors on Proxy uses ownKeys and descriptor traps |
 | `proxy_object_values_entries` | Object.values and Object.entries on Proxy use ownKeys, descriptor, and get traps |
+| `proxy_object_assign_source` | Object.assign over Proxy sources uses ownKeys, descriptor, get, and target set traps |
 | `proxy_get_set_define_invariants` | Proxy get/set/defineProperty non-configurable and non-extensible target invariant checks |
 | `proxy_has_delete_invariants` | Proxy has/deleteProperty non-configurable and non-extensible target invariant checks |
 | `proxy_prototype_extensibility_invariants` | Proxy get/set prototype and extensibility trap invariant checks |
