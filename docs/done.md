@@ -1567,6 +1567,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `advanced` | spread + Object.keys + Array.from + padStart + replace |
 | `object_array_enumeration` | Object keys/values/entries/property names over typed arrays |
 | `object_assign_array_target` | Object.assign into dynamic array targets |
+| `object_assign_set_failure` | Object.assign throws when dynamic target property setting fails |
 | `object_assign_typed_target` | Object.assign into typed interface/class targets |
 | `object_assign_typed_array_target` | Object.assign into typed array targets from typed, dynamic, and primitive sources |
 | `object_assign_array_string` | Object.assign from dynamic array and string sources |
