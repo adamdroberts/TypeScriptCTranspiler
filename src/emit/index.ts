@@ -1547,7 +1547,7 @@ class Emitter {
             call.arguments.length === 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Promise")
         ) {
-            return this.isSideEffectFreeFreshOrReturnedEmptyArrayOperand(call.arguments[0]!, seenConsts);
+            return this.isSideEffectFreeEmptyPromiseCombinatorSource(call.arguments[0]!, seenConsts);
         }
         if (
             ts.isIdentifier(recv) &&
@@ -3371,6 +3371,17 @@ class Emitter {
         return (stringText !== null && stringText.length === 0) ||
             this.isSideEffectFreeEmptyMapSource(expr, seenConsts) ||
             this.isSideEffectFreeEmptySetSource(expr, seenConsts);
+    }
+
+    private isSideEffectFreeEmptyPromiseCombinatorSource(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const arrayLength = this.sideEffectFreeArrayLiteralLength(expr, seenConsts);
+        if (arrayLength === 0) return true;
+        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(expr, seenConsts);
+        if (returnedArrayLength === 0) return true;
+        return this.isSideEffectFreeEmptySetSource(expr, seenConsts);
     }
 
     private isSideEffectFreeEmptyMapSource(
