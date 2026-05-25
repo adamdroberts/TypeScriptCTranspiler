@@ -331,6 +331,33 @@ const packages: Record<string, PackageFixture> = {
             "src/flavor-sync.cjs": 'exports.label = "imports-module-sync";\n',
         },
     },
+    "tsc2c-require-external-imports-package": {
+        packageJson: {
+            name: "tsc2c-require-external-imports-package",
+            version: "1.0.0",
+            type: "module",
+            exports: "./src/index.cjs",
+            imports: {
+                "#dep": {
+                    require: "tsc2c-require-external-imports-dep",
+                    default: "./src/wrong-default.cjs",
+                },
+                "#feature/*": {
+                    require: "tsc2c-require-external-imports-dep/*",
+                    default: "./src/wrong/*.cjs",
+                },
+            },
+        },
+        files: {
+            "src/index.cjs": 'const dep = require("#dep");\nconst math = require("#feature/math");\nexports.label = "external:" + dep.label;\nexports.pick = dep.pick;\nexports.scale = math.scale;\n',
+            "src/wrong-default.cjs": 'exports.label = "wrong-default";\nexports.pick = function pick(value) { return "wrong:" + value; };\n',
+            "src/wrong/math.cjs": "exports.scale = function scale(value) { return value * 99; };\n",
+        },
+    },
+    "tsc2c-require-external-imports-dep": cjsPackage("tsc2c-require-external-imports-dep", {
+        "index.js": 'exports.label = "external-dep";\nexports.pick = function pick(value) { return "external-entry:" + value; };\n',
+        "math.js": "exports.scale = function scale(value) { return value * 13; };\n",
+    }),
     "tsc2c-require-node-addons-conditions-package": {
         packageJson: {
             name: "tsc2c-require-node-addons-conditions-package",

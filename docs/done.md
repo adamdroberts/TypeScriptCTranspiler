@@ -1303,6 +1303,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_package_require_conditions` | CommonJS require package edges through package exports/imports condition maps selecting require branches |
 | `node_modules_package_require_node_addons_conditions` | CommonJS require package edges through package exports/imports condition maps selecting node-addons branches |
 | `node_modules_package_require_module_sync_conditions` | CommonJS require package edges through package exports/imports condition maps selecting module-sync branches |
+| `node_modules_package_require_external_imports` | CommonJS package-private imports resolving external package targets and wildcard subpaths into the AOT require graph |
 | `node_modules_package_require_pattern_conditions` | CommonJS require package edges through wildcard package exports/imports condition maps |
 | `node_modules_package_require_array_conditions` | CommonJS require package edges through package exports/imports condition arrays with fallback targets |
 | `node_modules_package_imports` | TypeScript package source imports through package imports |

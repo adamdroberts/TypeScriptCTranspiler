@@ -10,14 +10,18 @@ export function resolveCommonJsRequireModuleName(
     containingFile: string,
     compilerOptions: ts.CompilerOptions,
 ): string | null {
-    const packageResolved = resolvePackageTarget(spec, containingFile);
+    const packageResolved = resolvePackageTarget(spec, containingFile, compilerOptions);
     if (packageResolved) return packageResolved;
     return ts.resolveModuleName(spec, containingFile, compilerOptions, ts.sys).resolvedModule?.resolvedFileName ?? null;
 }
 
-function resolvePackageTarget(spec: string, containingFile: string): string | null {
+function resolvePackageTarget(
+    spec: string,
+    containingFile: string,
+    compilerOptions: ts.CompilerOptions,
+): string | null {
     if (spec.startsWith("#")) {
-        return resolvePackageImportsTarget(spec, containingFile);
+        return resolvePackageImportsTarget(spec, containingFile, compilerOptions);
     }
     if (spec.startsWith(".") || spec.startsWith("/") || spec.startsWith("node:")) {
         return null;
@@ -37,14 +41,24 @@ function resolvePackageTarget(spec: string, containingFile: string): string | nu
     return null;
 }
 
-function resolvePackageImportsTarget(spec: string, containingFile: string): string | null {
+function resolvePackageImportsTarget(
+    spec: string,
+    containingFile: string,
+    compilerOptions: ts.CompilerOptions,
+): string | null {
     const packageRoot = findNearestPackageRoot(path.dirname(containingFile));
     if (!packageRoot) return null;
     const pkg = readPackageJson(packageRoot);
     const imports = pkg?.imports;
     if (!imports || typeof imports !== "object" || Array.isArray(imports)) return null;
     const target = lookupSubpathTarget(imports as Record<string, unknown>, spec);
-    return target ? resolveConditionalPackageTarget(packageRoot, target) : null;
+    return target
+        ? resolveConditionalPackageTarget(packageRoot, target, {
+            allowExternal: true,
+            containingFile,
+            compilerOptions,
+        })
+        : null;
 }
 
 function resolveExportsMap(packageRoot: string, exportsField: unknown, subpath: string): string | null {
@@ -90,11 +104,19 @@ function substitutePatternTarget(target: unknown, matched: string): unknown {
     return target;
 }
 
-function resolveConditionalPackageTarget(packageRoot: string, target: unknown): string | null {
-    if (typeof target === "string") return resolvePackageTargetString(packageRoot, target);
+function resolveConditionalPackageTarget(
+    packageRoot: string,
+    target: unknown,
+    options: {
+        allowExternal?: boolean;
+        containingFile?: string;
+        compilerOptions?: ts.CompilerOptions;
+    } = {},
+): string | null {
+    if (typeof target === "string") return resolvePackageTargetString(packageRoot, target, options);
     if (Array.isArray(target)) {
         for (const entry of target) {
-            const resolved = resolveConditionalPackageTarget(packageRoot, entry);
+            const resolved = resolveConditionalPackageTarget(packageRoot, entry, options);
             if (resolved) return resolved;
         }
         return null;
@@ -102,14 +124,34 @@ function resolveConditionalPackageTarget(packageRoot: string, target: unknown): 
     if (!target || typeof target !== "object") return null;
     for (const [condition, value] of Object.entries(target)) {
         if (!COMMONJS_CONDITIONS.has(condition)) continue;
-        const resolved = resolveConditionalPackageTarget(packageRoot, value);
+        const resolved = resolveConditionalPackageTarget(packageRoot, value, options);
         if (resolved) return resolved;
     }
     return null;
 }
 
-function resolvePackageTargetString(packageRoot: string, target: string): string | null {
-    if (!target.startsWith("./")) return null;
+function resolvePackageTargetString(
+    packageRoot: string,
+    target: string,
+    options: {
+        allowExternal?: boolean;
+        containingFile?: string;
+        compilerOptions?: ts.CompilerOptions;
+    } = {},
+): string | null {
+    if (!target.startsWith("./")) {
+        if (
+            !options.allowExternal ||
+            !options.containingFile ||
+            !options.compilerOptions ||
+            target.startsWith("#") ||
+            target.startsWith("/") ||
+            target.startsWith("node:")
+        ) {
+            return null;
+        }
+        return resolveCommonJsRequireModuleName(target, options.containingFile, options.compilerOptions);
+    }
     return resolveSourceFile(path.resolve(packageRoot, target));
 }
 
