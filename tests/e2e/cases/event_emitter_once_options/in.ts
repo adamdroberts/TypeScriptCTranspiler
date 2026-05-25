@@ -9,7 +9,8 @@ firstReady.then((args) => {
 });
 
 const second = new events.EventEmitter();
-const secondReady = events.once(second, "ready", { signal: void 0 });
+const ONCE_OPTIONS = { signal: void 0 } as const;
+const secondReady = events.once(second, "ready", ONCE_OPTIONS);
 second.emit("ready", "beta", 2);
 secondReady.then((args) => {
     console.log("signal undefined:", args[0], args[1]);

@@ -30573,15 +30573,8 @@ class Emitter {
     private eventTargetListenerOptions(options: ts.Expression | undefined, label: string): { once: boolean } {
         const out = { once: false };
         if (!options || this.isUndefinedExpression(options)) return out;
-        while (
-            ts.isParenthesizedExpression(options) ||
-            ts.isAsExpression(options) ||
-            ts.isTypeAssertionExpression(options) ||
-            ts.isNonNullExpression(options) ||
-            ts.isSatisfiesExpression(options)
-        ) {
-            options = options.expression;
-        }
+        options = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedExpression(options)) return out;
         if (this.sideEffectFreeBooleanLiteralValue(options, new Set()) !== null) {
             return out;
         }
@@ -30596,10 +30589,11 @@ class Emitter {
             if (key !== "once" && key !== "capture" && key !== "passive") {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
-            if (this.isUndefinedExpression(prop.initializer)) {
+            const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+            if (this.isUndefinedExpression(valueNode)) {
                 continue;
             }
-            const value = this.sideEffectFreeBooleanLiteralValue(prop.initializer, new Set());
+            const value = this.sideEffectFreeBooleanLiteralValue(valueNode, new Set());
             if (value === null) {
                 unsupported(prop.initializer, `${label}.${key} must be a boolean literal in this subset`);
             }
@@ -30731,15 +30725,8 @@ class Emitter {
 
     private eventEmitterOnceOptions(options: ts.Expression | undefined, label: string): void {
         if (!options || this.isUndefinedExpression(options)) return;
-        while (
-            ts.isParenthesizedExpression(options) ||
-            ts.isAsExpression(options) ||
-            ts.isTypeAssertionExpression(options) ||
-            ts.isNonNullExpression(options) ||
-            ts.isSatisfiesExpression(options)
-        ) {
-            options = options.expression;
-        }
+        options = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedExpression(options)) return;
         if (!ts.isObjectLiteralExpression(options)) {
             unsupported(options, `${label} options must be an object literal in this subset`);
         }
@@ -30751,7 +30738,8 @@ class Emitter {
             if (key !== "signal") {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
-            if (!this.isUndefinedExpression(prop.initializer)) {
+            const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+            if (!this.isUndefinedExpression(valueNode)) {
                 unsupported(prop.initializer, `${label}.signal requires AbortSignal support`);
             }
         }
@@ -31612,16 +31600,8 @@ class Emitter {
 
     private eventInitCancelable(options: ts.Expression | undefined): string {
         if (!options || this.isUndefinedExpression(options)) return "false";
-        let cur = options;
-        while (
-            ts.isParenthesizedExpression(cur) ||
-            ts.isAsExpression(cur) ||
-            ts.isTypeAssertionExpression(cur) ||
-            ts.isNonNullExpression(cur) ||
-            ts.isSatisfiesExpression(cur)
-        ) {
-            cur = cur.expression;
-        }
+        const cur = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedExpression(cur)) return "false";
         if (!ts.isObjectLiteralExpression(cur)) {
             unsupported(options, "Event options must be an object literal in this subset");
         }
@@ -31633,10 +31613,11 @@ class Emitter {
             if (prop.name.text !== "cancelable") {
                 unsupported(prop.name, "Event options only support cancelable");
             }
-            if (this.isUndefinedExpression(prop.initializer)) {
+            const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+            if (this.isUndefinedExpression(valueNode)) {
                 continue;
             }
-            const value = this.sideEffectFreeBooleanLiteralValue(prop.initializer, new Set());
+            const value = this.sideEffectFreeBooleanLiteralValue(valueNode, new Set());
             if (value === null) {
                 unsupported(prop.initializer, "Event cancelable option must be a boolean literal");
             }

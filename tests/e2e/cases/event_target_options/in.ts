@@ -4,6 +4,8 @@ const ONCE_TRUE = true;
 const CAPTURE_FALSE = false;
 const PASSIVE_TRUE = true;
 const REMOVE_CAPTURE_TRUE = true;
+const ONCE_OPTIONS = { once: ONCE_TRUE } as const;
+const NORMAL_OPTIONS = { capture: CAPTURE_FALSE, passive: PASSIVE_TRUE } as const;
 
 function onceListener(event: Event): void {
     seen.push("once:" + event.type);
@@ -14,9 +16,9 @@ function normal(event: Event): void {
     seen.push("normal:" + event.type + ":" + event.defaultPrevented);
 }
 
-target.addEventListener("save", onceListener, { once: ONCE_TRUE });
-target.addEventListener("save", onceListener, { once: ONCE_TRUE });
-target.addEventListener("save", normal, { capture: CAPTURE_FALSE, passive: PASSIVE_TRUE });
+target.addEventListener("save", onceListener, ONCE_OPTIONS);
+target.addEventListener("save", onceListener, ONCE_OPTIONS);
+target.addEventListener("save", normal, NORMAL_OPTIONS);
 
 console.log("first:", target.dispatchEvent(new Event("save")));
 console.log("second:", target.dispatchEvent(new Event("save")));
