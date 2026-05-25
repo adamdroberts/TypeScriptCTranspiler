@@ -19,12 +19,13 @@ function second(event: Event): void {
 target.addEventListener("save", first);
 target.addEventListener("save", second);
 target.addEventListener("save", first);
+target.addEventListener("save", second, undefined, mark("a"));
 
 const event = new Event("save", { cancelable: true });
 console.log("dispatch1:", target.dispatchEvent(event));
 console.log("after1:", event.defaultPrevented);
 
-target.removeEventListener("save", first);
+target.removeEventListener("save", first, undefined, mark("r"));
 
 const plain = new Event("save");
 console.log("dispatch2:", target.dispatchEvent(plain));

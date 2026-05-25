@@ -30744,7 +30744,7 @@ class Emitter {
         const args = call.arguments;
         switch (method) {
             case "addEventListener": {
-                if (args.length < 2 || args.length > 3) unsupported(call, "EventTarget.addEventListener expects type, listener, and optional options");
+                if (args.length < 2) unsupported(call, "EventTarget.addEventListener expects type, listener, and optional options");
                 const options = this.eventTargetListenerOptions(args[2], "EventTarget.addEventListener");
                 const type = this.emitExpr(args[0]!);
                 const listener = this.emitEventListenerExpression(args[1]!);
@@ -30753,12 +30753,13 @@ class Emitter {
                     { value: recv },
                     { value: type, target: T_STRING, node: args[0]! },
                     { value: listener, target: listener.ty, node: args[1]! },
+                    ...this.ignoredArgumentSpecs(args, 3),
                 ], ([target, eventType, fn]) =>
                     `tsc_event_target_add(${target}, ${eventType}, ${adapter}, (void*)${fn}, ${this.eventListenerIdentity(args[1]!, fn)}, ${options.once ? "true" : "false"})`,
                 );
             }
             case "removeEventListener": {
-                if (args.length < 2 || args.length > 3) unsupported(call, "EventTarget.removeEventListener expects type, listener, and optional options");
+                if (args.length < 2) unsupported(call, "EventTarget.removeEventListener expects type, listener, and optional options");
                 this.eventTargetListenerOptions(args[2], "EventTarget.removeEventListener");
                 const type = this.emitExpr(args[0]!);
                 const listener = this.emitEventListenerExpression(args[1]!);
@@ -30767,6 +30768,7 @@ class Emitter {
                     { value: recv },
                     { value: type, target: T_STRING, node: args[0]! },
                     { value: listener, target: listener.ty, node: args[1]! },
+                    ...this.ignoredArgumentSpecs(args, 3),
                 ], ([target, eventType, fn]) =>
                     `tsc_event_target_remove(${target}, ${eventType}, ${adapter}, ${this.eventListenerIdentity(args[1]!, fn)})`,
                 );
