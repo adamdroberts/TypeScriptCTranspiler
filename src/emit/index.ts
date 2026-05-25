@@ -1168,7 +1168,8 @@ class Emitter {
                 method === "keys" ||
                 method === "values" ||
                 method === "entries" ||
-                method === "getOwnPropertyNames"
+                method === "getOwnPropertyNames" ||
+                method === "getOwnPropertySymbols"
             ) &&
             call.arguments.length === 1
         ) {
@@ -1595,6 +1596,7 @@ class Emitter {
                 method === "values" ||
                 method === "entries" ||
                 method === "getOwnPropertyNames" ||
+                method === "getOwnPropertySymbols" ||
                 method === "getOwnPropertyDescriptors"
             ) &&
             call.arguments.length === 1 &&
@@ -4468,6 +4470,13 @@ class Emitter {
             return this.sideEffectFreeObjectGetOwnPropertyNamesLength(unwrapped.arguments[0]!, seenConsts);
         }
         if (
+            method === "getOwnPropertySymbols" &&
+            unwrapped.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Object")
+        ) {
+            return this.sideEffectFreeObjectGetOwnPropertySymbolsLength(unwrapped.arguments[0]!, seenConsts);
+        }
+        if (
             method === "values" &&
             unwrapped.arguments.length === 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
@@ -4556,6 +4565,38 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectGetOwnPropertyNamesLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeObjectGetOwnPropertySymbolsLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) {
+            return 0;
+        }
+        if (
+            ts.isArrayLiteralExpression(unwrapped) &&
+            this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts)
+        ) {
+            return 0;
+        }
+        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts);
+        if (returnedArrayLength !== null) return 0;
+        const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
+        if (objectLength !== null) return 0;
+        const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(
+            unwrapped,
+            seenConsts,
+            false,
+        );
+        if (staticBuiltObjectLength !== null) return 0;
+        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
+        if (targetOperand) {
+            return this.sideEffectFreeObjectGetOwnPropertySymbolsLength(targetOperand, new Set(seenConsts));
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeObjectGetOwnPropertySymbolsLength(init, seenConsts) : null;
     }
 
     private sideEffectFreeObjectValuesLength(
