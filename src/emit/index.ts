@@ -1300,8 +1300,12 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isObjectLiteralExpression(unwrapped)) {
+        if (ts.isObjectLiteralExpression(unwrapped) || ts.isArrayLiteralExpression(unwrapped)) {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+        }
+        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
+        if (targetOperand) {
+            return this.isSideEffectFreeObjectReadOperand(targetOperand, new Set(seenConsts));
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeObjectReadOperand(init, seenConsts);
@@ -8083,11 +8087,12 @@ class Emitter {
                 seenConsts,
             );
         }
-        if (this.isObjectTargetReturningCall(unwrapped)) {
-            return this.sideEffectFreePrimitiveObjectTargetReturningReadResult(
-                unwrapped,
+        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
+        if (targetOperand) {
+            return this.sideEffectFreePrimitiveObjectPropertyOperandResult(
+                targetOperand,
                 key,
-                seenConsts,
+                new Set(seenConsts),
             );
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
@@ -8747,14 +8752,56 @@ class Emitter {
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
     ): ts.Expression | null {
+        if (ts.isCallExpression(expr)) {
+            if (
+                this.isObjectTargetReturningCall(expr) &&
+                this.isSideEffectFreeStaticCall(expr, seenConsts)
+            ) {
+                return expr.arguments[0] ?? null;
+            }
+            const valueOfReceiver = this.sideEffectFreeObjectPrototypeValueOfTargetReturningOperand(
+                expr,
+                seenConsts,
+            );
+            if (valueOfReceiver) return valueOfReceiver;
+        }
+        return null;
+    }
+
+    private sideEffectFreeObjectPrototypeValueOfTargetReturningOperand(
+        expr: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): ts.Expression | null {
         if (
-            !ts.isCallExpression(expr) ||
-            !this.isObjectTargetReturningCall(expr) ||
-            !this.isSideEffectFreeStaticCall(expr, seenConsts)
+            !ts.isPropertyAccessExpression(expr.expression) ||
+            expr.expression.name.text !== "call"
         ) {
             return null;
         }
-        return expr.arguments[0] ?? null;
+        const methodAccess = expr.expression.expression;
+        if (
+            !ts.isPropertyAccessExpression(methodAccess) ||
+            methodAccess.name.text !== "valueOf"
+        ) {
+            return null;
+        }
+        const prototypeAccess = methodAccess.expression;
+        if (
+            !ts.isPropertyAccessExpression(prototypeAccess) ||
+            prototypeAccess.name.text !== "prototype" ||
+            !ts.isIdentifier(prototypeAccess.expression) ||
+            !this.isUnshadowedGlobalIdentifier(prototypeAccess.expression, "Object") ||
+            expr.arguments.length < 1
+        ) {
+            return null;
+        }
+        const receiver = expr.arguments[0]!;
+        return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(receiver, seenConsts) &&
+            Array.from(expr.arguments).slice(1).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            )
+            ? receiver
+            : null;
     }
 
     private sideEffectFreePrimitiveObjectEntriesLiteralTupleElementResult(
