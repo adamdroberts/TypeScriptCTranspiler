@@ -212,12 +212,12 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - Runtime storage reuses pointer-key map/set tables; there is no iteration API exposed.
 
 ### `WeakRef<T>`
-- `new WeakRef(target)` creates a typed weak-reference wrapper, and `.deref(...ignored)` returns `T | undefined` after evaluating ignored extra arguments. Test: `weak_ref`
+- `new WeakRef(target, ...ignored)` creates a typed weak-reference wrapper after evaluating ignored trailing constructor arguments, and `.deref(...ignored)` returns `T | undefined` after evaluating ignored extra arguments. Tests: `weak_ref`, `weak_ref_finalization_constructor_ignored_arguments`
 - `.toString(...ignored)`, `.toLocaleString(...ignored)`, and `.valueOf(...ignored)`. Tests: `collection_object_methods`, `weak_ref`
 - Runtime storage is a small pointer wrapper.
 
 ### `FinalizationRegistry<T>`
-- `new FinalizationRegistry<T>(cleanupCallback)` is constructible against any cleanup-callback signature; the callback value is evaluated for side effects and discarded. Test: `finalization_registry`
+- `new FinalizationRegistry<T>(cleanupCallback, ...ignored)` is constructible against any cleanup-callback signature; the callback value and ignored trailing constructor arguments are evaluated for side effects and discarded. Tests: `finalization_registry`, `weak_ref_finalization_constructor_ignored_arguments`
 - `.register(target, heldValue, unregisterToken?, ...ignored)` evaluates target, held value, token, and ignored extras, records the optional token entry, and `.unregister(unregisterToken, ...ignored)` removes any matching entries after evaluating ignored extras, returning whether anything was removed. Test: `finalization_registry`
 - `.toString(...ignored)` and `.toLocaleString(...ignored)` return `"[object FinalizationRegistry]"`, and `.valueOf(...ignored)` returns the receiver. Test: `finalization_registry`
 - This AOT runtime has no GC-finalizer plumbing, so the cleanup callback is never invoked. The behavior matches WeakRef in spirit: type-correct API surface without observable garbage-collection callbacks.
@@ -1922,6 +1922,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `weak_map_primitive_map_source_reject` | WeakMap constructor preserves primitive-key rejection for non-object typed Map sources |
 | `weak_set_primitive_set_source_reject` | WeakSet constructor preserves primitive-value rejection for non-object typed Set sources |
 | `weak_ref` | typed WeakRef construction and deref |
+| `weak_ref_finalization_constructor_ignored_arguments` | WeakRef and FinalizationRegistry constructors evaluate and ignore trailing arguments |
 | `finalization_registry` | FinalizationRegistry register/unregister with optional unregister tokens |
 | `set_composition` | ES2025 Set union/intersection/difference/symmetricDifference and subset/superset/disjoint predicates |
 | `set_constructor_from_set` | typed Set copy construction from another Set |

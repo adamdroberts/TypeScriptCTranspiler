@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `new WeakRef(target, ...ignored)` and `new FinalizationRegistry(cleanupCallback, ...ignored)` now evaluate and ignore trailing constructor arguments. Test: `weak_ref_finalization_constructor_ignored_arguments`.
 - `new Map(source, ...ignored)`, `new Set(source, ...ignored)`, `new WeakMap(source, ...ignored)`, and `new WeakSet(source, ...ignored)` now evaluate and ignore trailing constructor arguments after supported typed source inputs. Test: `collection_constructor_ignored_arguments`.
 - `Object.fromEntries(entries, ...ignored)` now evaluates and ignores trailing arguments across typed entry-array, typed `Map`, and dynamic entry-array paths. Test: `object_from_entries_ignored_arguments`.
 - `Object.keys(...)`, `Object.values(...)`, and `Object.entries(...)` now evaluate and ignore trailing arguments across typed object, array, string, primitive, and dynamic-object paths. Test: `object_enumeration_ignored_arguments`.

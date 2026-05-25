@@ -40883,6 +40883,7 @@ class Emitter {
             const r = this.emitExpr(target);
             return this.emitSequencedExpr(mapped, [
                 { value: r, target: mapped.elem, node: target },
+                ...this.ignoredArgumentSpecs(n.arguments ?? [], 1),
             ], ([value]) => `tsc_weakref_new((void*)${value!})`);
         }
         if (cls === "FinalizationRegistry") {
@@ -40899,7 +40900,7 @@ class Emitter {
             const r = this.emitExpr(cb);
             return this.emitSequencedExpr(
                 mapped,
-                [{ value: r }],
+                [{ value: r, node: cb }, ...this.ignoredArgumentSpecs(n.arguments ?? [], 1)],
                 ([_v]) => `((void)${_v!}, tsc_finregistry_new())`,
             );
         }

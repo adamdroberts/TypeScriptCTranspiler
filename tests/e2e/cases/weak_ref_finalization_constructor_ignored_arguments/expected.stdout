@@ -1,0 +1,3 @@
+weak: 7
+registry: [object FinalizationRegistry] true
+marks: abc

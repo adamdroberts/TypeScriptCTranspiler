@@ -457,7 +457,7 @@ interface WeakRef<T extends object> {
     valueOf(...ignored: any[]): WeakRef<T>;
 }
 interface WeakRefConstructor {
-    new <T extends object>(target: T): WeakRef<T>;
+    new <T extends object>(target: T, ...ignored: any[]): WeakRef<T>;
 }
 declare var WeakRef: WeakRefConstructor;
 
@@ -506,7 +506,7 @@ interface FinalizationRegistry<T> {
     valueOf(...ignored: any[]): FinalizationRegistry<T>;
 }
 interface FinalizationRegistryConstructor {
-    new <T>(cleanupCallback: (heldValue: T) => void): FinalizationRegistry<T>;
+    new <T>(cleanupCallback: (heldValue: T) => void, ...ignored: any[]): FinalizationRegistry<T>;
 }
 declare var FinalizationRegistry: FinalizationRegistryConstructor;
 interface Function {
