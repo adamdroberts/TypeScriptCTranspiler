@@ -1,0 +1,3 @@
+{
+  "description": "Object.values and Object.entries on Proxy use ownKeys, descriptor, and get traps"
+}

@@ -1,0 +1,3 @@
+values: value:visible
+entries: visible:value:visible 1
+events: ownKeys|desc:visible|desc:hidden|desc:skip|get:visible|ownKeys|desc:visible|desc:hidden|desc:skip|get:visible
