@@ -2067,7 +2067,7 @@ class Emitter {
                 if (!ts.isPropertyAssignment(prop)) return false;
                 const key = this.staticPropertyName(prop.name);
                 if (key !== "encoding") return false;
-                if (this.isUndefinedExpression(prop.initializer)) return true;
+                if (this.isSideEffectFreeUndefinedValue(prop.initializer, seenConsts)) return true;
                 const encoding = this.sideEffectFreeStringLiteralText(prop.initializer, seenConsts);
                 return encoding === "utf8" || encoding === "utf-8";
             });

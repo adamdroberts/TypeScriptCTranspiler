@@ -197,6 +197,7 @@ const unused_os_named_arch_call = osArch("dead_os_named_arch_ignored".length);
 const unused_os_loadavg_call = nodeOs.loadavg("dead_os_loadavg_ignored".length);
 const unused_os_user_info_call = nodeOs.userInfo({ encoding: unused_utf8 });
 const unused_os_user_info_username_read = os.userInfo({ encoding: undefined }).username + "dead_os_user_info_username_read";
+const unused_os_user_info_alias_undefined_read = os.userInfo({ encoding: unused_default_option }).username + "dead_os_user_info_alias_undefined_read";
 const unused_os_named_user_info_uid_read = osUserInfo().uid + "dead_os_named_user_info_uid_read".length;
 const unused_os_user_info_username_length_read = nodeOs.userInfo().username.length + "dead_os_user_info_username_length_read".length;
 const unused_os_named_user_info_shell_upper_call = osUserInfo({ encoding: unused_utf8 }).shell.toUpperCase();
