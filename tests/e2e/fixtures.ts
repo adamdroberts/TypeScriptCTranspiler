@@ -729,6 +729,10 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'const req = module.require.bind(module);\nconst local = req("./local.js");\nexports.default = function greet(name) { return "hello " + name; };\nexports.label = local.label;\nexports.count = req("./local.js").count;\nexports.double = function double(value) { return value * 3; };\n',
         "local.js": 'exports.label = "require-bind-alias";\nexports.count = 75;\n',
     }),
+    "tsc2c-cjs-module-alias-require-bind-alias": cjsPackage("tsc2c-cjs-module-alias-require-bind-alias", {
+        "index.js": 'const mod = module;\nconst req = mod.require.bind(mod);\nconst local = req("./local.js");\nexports.default = function greet(name) { return "hello " + name; };\nexports.label = local.label;\nexports.count = req("./local.js").count;\nexports.double = function double(value) { return value * 4; };\n',
+        "local.js": 'exports.label = "module-alias-require-bind";\nexports.count = 76;\n',
+    }),
     "tsc2c-cjs-module-array": cjsPackage("tsc2c-cjs-module-array", {
         "index.js": "module.exports = [2, 4, 8];\n",
     }),
