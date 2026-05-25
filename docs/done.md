@@ -496,7 +496,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `process.env.VAR = value`, `process.env["VAR"] = value`, and `delete process.env[...]` mutate the local process environment through `setenv` / `unsetenv`.
 - `process.stdin.fd` exposes `0`, `process.stdin.isTTY` uses `isatty(0)`, and `process.stdin.readable` returns `true` in the bounded stdio subset. Tests: `process_stdin_metadata`, `process_stdio_readable_writable`
 - `process.stdout.fd` / `process.stderr.fd` expose `1` / `2`, `process.stdout.isTTY` / `process.stderr.isTTY` use `isatty` for the corresponding descriptor, `process.stdout.readable` / `process.stderr.readable` return `false`, and `process.stdout.writable` / `process.stderr.writable` return `true` in the bounded stdio subset. Tests: `process_stdio_metadata`, `process_stdio_readable_writable`
-- `process.stdout.write(string | Buffer, encodingOrCallback?, callback?)` and `process.stderr.write(string | Buffer, encodingOrCallback?, callback?)` write directly to stdout/stderr, evaluate optional encoding arguments, treat explicit `undefined` optional encoding/callback slots as defaults, invoke optional zero-argument callbacks after the write, and return a boolean write-success flag. Tests: `process_stdio_write`, `process_stdio_write_buffer`, `process_stdio_write_callback`, `process_stdio_write_undefined_options`
+- `process.stdout.write(string | Buffer, encodingOrCallback?, callback?)` and `process.stderr.write(string | Buffer, encodingOrCallback?, callback?)` write directly to stdout/stderr, evaluate optional encoding arguments, treat explicit `undefined` and side-effect-free `void` optional encoding/callback slots as defaults, invoke optional zero-argument callbacks after the write, and return a boolean write-success flag. Tests: `process_stdio_write`, `process_stdio_write_buffer`, `process_stdio_write_callback`, `process_stdio_write_undefined_options`
 - `process.cwd()` → `tsc_process_cwd`
 - `process.chdir(directory)` → `tsc_process_chdir`
 - `process.platform`, `process.arch`, `process.pid`, `process.ppid`, `process.version`, `process.versions`, `process.release`, `process.features`, and `process.uptime(...ignored)` expose synchronous process metadata, with ignored extra-argument evaluation where Node ignores extras.
@@ -1035,7 +1035,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `process_stdio_write` | process.stdout.write and process.stderr.write string subset, including optional encoding/callback forms |
 | `process_stdio_write_buffer` | process.stdout.write and process.stderr.write Buffer subset, including optional encoding/callback forms |
 | `process_stdio_write_callback` | process stdout/stderr write optional encoding and callback subset |
-| `process_stdio_write_undefined_options` | process stdout/stderr write treats explicit undefined optional encoding and callback slots as defaults |
+| `process_stdio_write_undefined_options` | process stdout/stderr write treats explicit undefined and side-effect-free void optional encoding/callback slots as defaults |
 | `process_title` | process.title readonly argv0-backed metadata |
 | `process_umask` | process.umask read/update/restore behavior |
 | `process_versions` | process.version and process.versions metadata |

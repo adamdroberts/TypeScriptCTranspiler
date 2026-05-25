@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `process.stdout.write(...)` and `process.stderr.write(...)` now treat side-effect-free `void` expressions such as `void 0` as default optional encoding/callback slots. Test: `process_stdio_write_undefined_options`.
 - Static optional-default checks now treat side-effect-free `void` expressions such as `void 0` as `undefined`, including `fs.accessSync(...)`, immediate `fs.promises.access/stat/lstat(...)`, `fs.copyFileSync(...)`, and immediate `fs.promises.copyFile(...)` optional slots. Tests: `fs_access_ignored_arguments`, `fs_promises_stat_access_ignored_arguments`, `fs_copy_flags`.
 - `child_process.spawnSync(...)` stdio tuple entries now treat side-effect-free `void` expressions such as `void 0` as default pipe entries, including earlier static `const` aliases. Tests: `child_process_spawn_sync_stdio_default_entries`, `child_process_spawn_sync_stdio_aliases`.
 - `fs.copyFileSync(...)` and immediate `fs.promises.copyFile(...)` now treat earlier static `const` aliases for `undefined` flags as default copy mode while preserving static numeric flag aliases. Test: `fs_copy_flags`.
