@@ -480,8 +480,11 @@ const unused_promise_resolve_finregistry_object_to_string_index_read = Promise.r
 const unused_promise_resolve_object_has_own_call = Promise.resolve(Object.hasOwn({ dead_promise_resolve_object_has_own: 1 }, "dead_promise_resolve_object_has_own"));
 const unused_promise_resolve_object_symbols_length = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols: 1 }).length);
 const unused_promise_resolve_object_symbols_element = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_element: 1 })[0]);
+const unused_promise_resolve_object_symbols_at = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_at: 1 }).at(0));
 const unused_promise_resolve_object_symbols_join = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_join: 1 }).join("dead_promise_resolve_object_symbols_join_separator"));
 const unused_promise_resolve_object_symbols_to_string = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_to_string: 1 }).toString());
+const unused_promise_resolve_array_of_at_call = Promise.resolve(Array.of("dead_promise_resolve_array_of_at").at(0));
+const unused_promise_resolve_array_of_negative_at_call = Promise.resolve(Array.of("dead_promise_resolve_array_of_negative_at_head", "dead_promise_resolve_array_of_negative_at").at(-1));
 const unused_array_from_object_symbols_set_empty_map_call = Array.from(new Set(Object.getOwnPropertySymbols({ dead_array_from_object_symbols_set_empty_map: 1 }))).map(() => "dead_array_from_object_symbols_set_empty_map_callback");
 const unused_promise_resolve_object_extensible_call = Promise.resolve(Object.isExtensible({ dead_promise_resolve_object_extensible: 1 }));
 const unused_promise_resolve_object_sealed_call = Promise.resolve(Object.isSealed({ dead_promise_resolve_object_sealed: 1 }));
@@ -3849,6 +3852,7 @@ function usedLocal(value: number): number {
     Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_freeze: 1 })).length;
     Object.getOwnPropertySymbols(Object.setPrototypeOf({ local_dead_object_symbols_set_prototype: 1 }, null))[0];
     Object.getOwnPropertySymbols(Object.assign({}, { local_dead_object_symbols_assign: 1 })).map(() => "local_dead_object_symbols_empty_map_callback");
+    Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_at: 1 })).at(-1);
     Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_to_locale_string: 1 })).toLocaleString("local_dead_object_symbols_to_locale_ignored");
     Array.from(new Set(Object.getOwnPropertySymbols(Object.freeze({ local_dead_array_from_object_symbols_set_empty_for_each: 1 })))).forEach(() => "local_dead_array_from_object_symbols_set_empty_for_each_callback");
     Object.getOwnPropertyDescriptor("local_dead_object_primitive_descriptor", "0");

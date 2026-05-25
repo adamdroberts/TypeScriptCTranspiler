@@ -2636,6 +2636,12 @@ class Emitter {
                 if (this.isSideEffectFreeStringMethodCall(recv, method, call.arguments, seenConsts)) {
                     return true;
                 }
+                if (
+                    method === "at" &&
+                    this.isSideEffectFreePrimitiveArrayAtMethodCall(recv, call.arguments, seenConsts)
+                ) {
+                    return true;
+                }
                 break;
             case "hasOwnProperty":
             case "propertyIsEnumerable":
@@ -2667,6 +2673,32 @@ class Emitter {
         }
         return method === "test" &&
             this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts);
+    }
+
+    private isSideEffectFreePrimitiveArrayAtMethodCall(
+        recv: ts.Expression,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (
+            args.length !== 1 ||
+            !this.isSideEffectFreeArrayMethodCall(recv, "at", args, seenConsts)
+        ) {
+            return false;
+        }
+        const rawIndex = this.sideEffectFreePrimitiveNumberValue(args[0]!, seenConsts);
+        if (rawIndex === null || !Number.isInteger(rawIndex)) return false;
+        let index = rawIndex;
+        if (index < 0) {
+            const length = this.sideEffectFreeFreshOrReturnedArrayLength(recv, seenConsts);
+            if (length === null) return false;
+            index += length;
+        }
+        return this.sideEffectFreePrimitiveArrayElementOperandResult(
+            recv,
+            index,
+            seenConsts,
+        ) !== "unsafe";
     }
 
     private isSideEffectFreeURLMethodCall(
