@@ -38343,6 +38343,13 @@ class Emitter {
                 unsupported(arg, "Object.defineProperties currently supports dynamic objects and arrays only");
             }
             const obj = this.emitExpr(arg);
+            if (!ts.isObjectLiteralExpression(args[1]!)) {
+                const descriptors = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: obj, target: T_VALUE, node: arg },
+                    { value: descriptors, target: T_VALUE, node: args[1]! },
+                ], ([o, d]) => `({ if (!tsc_value_define_properties_descriptor_map(${o}, ${d})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperties failed")); ${o}; })`);
+            }
             return this.emitObjectDefineProperties(arg, obj, args[1]!);
         }
         if (name === "groupBy") {

@@ -1,0 +1,3 @@
+{
+  "description": "Object.defineProperties accepts runtime descriptor maps on dynamic objects"
+}

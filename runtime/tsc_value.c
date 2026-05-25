@@ -607,6 +607,19 @@ bool tsc_value_define_property_descriptor(tsc_value_t v, tsc_str_t* key, tsc_val
     );
 }
 
+bool tsc_value_define_properties_descriptor_map(tsc_value_t v, tsc_value_t descriptors) {
+    if (!value_is_box(descriptors) || value_tag(descriptors) != TSC_VALUE_TAG_OBJECT) {
+        tsc_throw_str(tsc_str_from_cstr("Object.defineProperties descriptor map must be an object"));
+    }
+    tsc_array_t* keys = tsc_value_object_keys(descriptors);
+    for (size_t i = 0; i < keys->len; i++) {
+        tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
+        tsc_value_t desc = tsc_value_get_prop(descriptors, key);
+        if (!tsc_value_define_property_descriptor(v, key, desc)) return false;
+    }
+    return true;
+}
+
 bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_getter_t getter, void* getter_env, bool has_getter, tsc_accessor_setter_t setter, void* setter_env, bool has_setter, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_define_accessor((tsc_object_t*)value_ptr(v), key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
