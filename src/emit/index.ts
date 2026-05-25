@@ -32465,8 +32465,7 @@ class Emitter {
     }
 
     private emitErrorCauseOption(options: ts.Expression): EmitResult {
-        let cur = options;
-        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        const cur = this.resolveSideEffectFreeEarlierConstExpression(options);
         if (!ts.isObjectLiteralExpression(cur)) {
             unsupported(options, "Error options must be an object literal in this subset");
         }

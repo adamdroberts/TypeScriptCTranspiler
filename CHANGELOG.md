@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Error`-family and `AggregateError` constructors now accept earlier static `const` aliases for supported `{ cause }` option objects. Test: `error_cause`.
 - `fs.stat` / `fs.lstat` sync and immediate-promise forms now accept earlier static `const` aliases for supported `{ bigint: false, throwIfNoEntry }` option objects, not just the boolean property values. Test: `fs_stat_options`.
 - `fs.writeFile` / `fs.appendFile` sync and immediate-promise forms now accept earlier static `const` aliases for supported object `mode` values, alongside existing encoding, flag, and flush aliases. Test: `fs_write_append_mode_options`.
 - `fs.readdir` sync and immediate-promise forms now accept earlier static `const` aliases for supported string/null encodings, object `encoding`, `recursive`, and `withFileTypes` options. Tests: `fs_readdir_buffer_options`, `fs_readdir_null_encoding_options`.
