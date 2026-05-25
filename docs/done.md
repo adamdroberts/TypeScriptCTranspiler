@@ -415,6 +415,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `Object.seal(proxy)` and `Object.freeze(proxy)` fail through catchable errors when a proxy `preventExtensions` trap reports `false`, preserving the Object integrity-operation failure path. Test: `proxy_integrity_falsy_trap_results`
 - `Object.seal(proxy)` and `Object.freeze(proxy)` drive proxy integrity traps through `preventExtensions`, `ownKeys`, `getOwnPropertyDescriptor`, and `defineProperty` so forwarding handlers seal or freeze the underlying target. Test: `proxy_integrity_forward`
 - `Object.seal(proxy)` and `Object.freeze(proxy)` fail through catchable errors when proxy integrity `defineProperty` traps return `false` after successful extension prevention. Test: `proxy_integrity_define_failure`
+- `Object.isSealed(proxy)` and `Object.isFrozen(proxy)` drive proxy integrity traps after forwarded `Object.seal(proxy)` / `Object.freeze(proxy)` operations. Test: `proxy_integrity_state_checks`
 - Proxy `defineProperty` result validation rejects successful trap reports that would replace the getter or setter identity of a non-configurable accessor property. Test: `proxy_define_accessor`
 - Proxy `getOwnPropertyDescriptor` result validation rejects trap results that report a different getter or setter identity for a non-configurable accessor property. Test: `proxy_descriptor_invariants`
 - Proxy `getOwnPropertyDescriptor` result validation rejects trap results that change the `enumerable` flag of a non-configurable target property. Test: `proxy_descriptor_invariants`
@@ -1663,6 +1664,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_integrity_falsy_trap_results` | Proxy falsy preventExtensions trap results make Object.seal and Object.freeze fail |
 | `proxy_integrity_forward` | Proxy Object.seal/Object.freeze forward integrity traps to the target |
 | `proxy_integrity_define_failure` | Proxy Object.seal/Object.freeze fail when integrity defineProperty traps return false |
+| `proxy_integrity_state_checks` | Proxy Object.isSealed/Object.isFrozen drive integrity traps after forwarded seal/freeze |
 | `proxy_construct` | bounded Proxy construct trap dispatch through dynamic Reflect.construct |
 | `proxy_construct_return_objects` | Proxy construct traps accept returned arrays, functions, and ordinary objects while rejecting primitive results |
 | `object_accessor_arrows` | dynamic lifted-arrow accessor descriptors |

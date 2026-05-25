@@ -1182,6 +1182,29 @@ static bool tsc_object_set_proxy_integrity(tsc_object_t* o, bool frozen) {
     return true;
 }
 
+static bool tsc_object_test_proxy_integrity(tsc_object_t* o, bool frozen) {
+    if (tsc_object_is_extensible(o)) return false;
+    tsc_array_t* keys = tsc_object_own_keys_dyn(o);
+    for (size_t i = 0; i < keys->len; i++) {
+        tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
+        tsc_value_t desc_value = tsc_value_get_own_property_descriptor(tsc_value_object(o), key);
+        if (tsc_value_is_undefined(desc_value)) continue;
+        if (!value_is_box(desc_value) || value_tag(desc_value) != TSC_VALUE_TAG_OBJECT) return false;
+        const tsc_object_t* desc = (const tsc_object_t*)value_ptr(desc_value);
+        tsc_value_t configurable_value = tsc_value_undefined();
+        if (descriptor_has_prop(desc, "configurable", 12, &configurable_value) && tsc_value_is_truthy(configurable_value)) {
+            return false;
+        }
+        if (frozen) {
+            tsc_value_t writable_value = tsc_value_undefined();
+            if (descriptor_has_prop(desc, "writable", 8, &writable_value) && tsc_value_is_truthy(writable_value)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 
 bool tsc_object_seal(tsc_object_t* o) {
     if (!o) return false;
@@ -1216,6 +1239,7 @@ bool tsc_object_is_sealed(const tsc_object_t* o) {
     if (o && o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'isSealed' on a proxy that has been revoked"));
         if (proxy_has_no_integrity_traps(o, false)) return tsc_value_is_sealed(o->proxy_target);
+        return tsc_object_test_proxy_integrity((tsc_object_t*)o, false);
     }
     if (!o || o->extensible) return false;
     for (size_t i = 0; i < o->len; i++) {
@@ -1228,6 +1252,7 @@ bool tsc_object_is_frozen(const tsc_object_t* o) {
     if (o && o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'isFrozen' on a proxy that has been revoked"));
         if (proxy_has_no_integrity_traps(o, false)) return tsc_value_is_frozen(o->proxy_target);
+        return tsc_object_test_proxy_integrity((tsc_object_t*)o, true);
     }
     if (!tsc_object_is_sealed(o)) return false;
     for (size_t i = 0; i < o->len; i++) {
