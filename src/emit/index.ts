@@ -35513,7 +35513,9 @@ class Emitter {
         label: string,
     ): { withFileTypes: boolean; recursive: boolean; encoding: "utf8" | "hex" | "base64" | "buffer" } {
         if (!options || this.isUndefinedExpression(options)) return { withFileTypes: false, recursive: false, encoding: "utf8" };
+        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
         const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" | "buffer" => {
+            node = this.resolveSideEffectFreeEarlierConstExpression(node);
             if (this.isUndefinedExpression(node)) return "utf8";
             if (node.kind === ts.SyntaxKind.NullKeyword) return "utf8";
             const text = this.sideEffectFreeStringLiteralText(node, new Set());
@@ -35524,19 +35526,19 @@ class Emitter {
             }
             unsupported(node, `${label} only supports UTF-8, hex, base64, or buffer encoding options in this subset`);
         };
-        if (this.sideEffectFreeStringLiteralText(options, new Set()) !== null) {
-            return { withFileTypes: false, recursive: false, encoding: checkEncoding(options) };
+        if (this.sideEffectFreeStringLiteralText(resolvedOptions, new Set()) !== null) {
+            return { withFileTypes: false, recursive: false, encoding: checkEncoding(resolvedOptions) };
         }
-        if (options.kind === ts.SyntaxKind.NullKeyword) {
+        if (resolvedOptions.kind === ts.SyntaxKind.NullKeyword) {
             return { withFileTypes: false, recursive: false, encoding: "utf8" };
         }
-        if (!ts.isObjectLiteralExpression(options)) {
+        if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, `${label} options must be a UTF-8/hex/base64/buffer string literal or object literal in this subset`);
         }
         let withFileTypes = false;
         let recursive = false;
         let encoding: "utf8" | "hex" | "base64" | "buffer" = "utf8";
-        for (const prop of options.properties) {
+        for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
                 unsupported(prop, `${label} options only support encoding, withFileTypes, and recursive property assignments`);
             }

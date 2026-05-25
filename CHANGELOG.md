@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `fs.readdir` sync and immediate-promise forms now accept earlier static `const` aliases for supported string/null encodings, object `encoding`, `recursive`, and `withFileTypes` options. Tests: `fs_readdir_buffer_options`, `fs_readdir_null_encoding_options`.
 - `fs.realpath` / `fs.readlink` / `fs.mkdtemp` sync and immediate-promise forms now accept earlier static `const` aliases for supported string/null encodings and object `encoding` options. Tests: `fs_link_path_encoding_options`, `fs_mkdtemp_encoding_options`.
 - `fs.readFileSync` and immediate `fs.promises.readFile` now accept earlier static `const` aliases for supported string/null encodings, object `encoding`, and object `flag` options. Tests: `fs_read_file_buffer_options`, `fs_read_file_null_buffer_options`.
 - CommonJS `module.require.call(module, spec)`, `module.require.apply(module, [spec])`, static require-alias `apply(module, [spec])`, and `Reflect.apply(module.require, module, [spec])` wrappers now preserve static AOT require metadata. Test: `node_modules_commonjs_module_require_call_wrapper`.
