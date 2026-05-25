@@ -142,7 +142,7 @@ flowchart TD
     D <--> B
 ```
 
-The current bridge boxes specialized primitives/arrays into `tsc_value_t` and supports dynamic JSON/object/array access, dynamic arithmetic/equality/relational/logical/nullish operators, common string/array method dispatch, and unboxing into typed destinations. Remaining Phase 3 work includes hidden classes / shape trees, inline caches, broader prototype method coverage, and descriptor-aware property semantics. See [`todo.md`](todo.md#1-next-up-unblockers) for impact and effort.
+The current bridge boxes specialized primitives/arrays into `tsc_value_t` and supports dynamic JSON/object/array access, dynamic arithmetic/equality/relational/logical/nullish operators, common string/array method dispatch, per-site shape-validated caches for selected object property and Reflect get/set operations, and unboxing into typed destinations. Remaining Phase 3 work includes hidden classes / shape trees, broader polymorphic inline caches, broader prototype method coverage, and descriptor-aware property semantics. See [`todo.md`](todo.md#1-next-up-unblockers) for impact and effort.
 
 ## Runtime layer
 

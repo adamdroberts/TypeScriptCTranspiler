@@ -5,6 +5,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Two-argument dynamic `Reflect.get(target, key)` now uses the same per-site shape-validated property cache path as receiver-aware Reflect reads. Test: `dynamic_runtime_stats`.
+- Generated-C DCE no longer prunes expression-statement `delete` operations on earlier const object/array aliases, preserving later dynamic `in` checks and delete statistics while keeping unused delete-valued const initializers prunable. Tests: `dynamic_runtime_stats`, `generated_c_dce_const`.
 - AOT `Function(...)` and `new Function(...)` parameter-name extraction now accepts single-valued template-literal type aliases. Test: `runtime_function_template_literal_params_aot`.
 - AOT `eval(...)`, `Function(...)`, and `new Function(...)` source extraction now accepts single-valued template-literal type aliases. Test: `runtime_code_template_literal_type_aot`.
 - Finite dynamic `require(...)` proofs now resolve bigint, null, and undefined literal placeholders inside finite template-literal string type aliases. Test: `dynamic_require_template_literal_primitive_type`.

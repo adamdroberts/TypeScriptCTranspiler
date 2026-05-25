@@ -641,6 +641,11 @@ tsc_value_t tsc_reflect_get_prop(tsc_value_t v, const tsc_str_t* key) {
     return tsc_value_get_prop(v, key);
 }
 
+tsc_value_t tsc_reflect_get_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_cache_t* cache) {
+    require_reflect_object_target(v, "Reflect.get target must be an object");
+    return tsc_value_get_prop_cached(v, key, cache);
+}
+
 tsc_value_t tsc_reflect_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc_value_t receiver) {
     require_reflect_object_target(v, "Reflect.get target must be an object");
     return tsc_value_get_prop_receiver(v, key, receiver);

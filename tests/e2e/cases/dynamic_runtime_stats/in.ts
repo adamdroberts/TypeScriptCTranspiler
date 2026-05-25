@@ -12,6 +12,9 @@ for (let i = 0; i < 2; i++) {
     console.log("reflect:", Reflect.get(obj, key, receiver));
 }
 for (let i = 0; i < 2; i++) {
+    console.log("reflect direct:", Reflect.get(obj, key));
+}
+for (let i = 0; i < 2; i++) {
     obj.cached = i;
 }
 for (let i = 0; i < 2; i++) {

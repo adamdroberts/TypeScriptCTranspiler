@@ -436,7 +436,7 @@ class Emitter {
             }
             if (
                 ts.isExpressionStatement(node) &&
-                this.isSideEffectFreeTopLevelConstInitializer(node.expression)
+                this.isPrunableExpressionStatementExpression(node.expression)
             ) {
                 return;
             }
@@ -1340,6 +1340,25 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeDeleteTargetOperand(init, seenConsts);
+    }
+
+    private isPrunableExpressionStatementExpression(expr: ts.Expression): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isDeleteExpression(unwrapped) && this.deleteTargetsEarlierConstAlias(unwrapped)) {
+            return false;
+        }
+        return this.isSideEffectFreeTopLevelConstInitializer(expr);
+    }
+
+    private deleteTargetsEarlierConstAlias(expr: ts.DeleteExpression): boolean {
+        const target = this.unwrapSideEffectFreeStaticExpression(expr.expression);
+        const recv = ts.isPropertyAccessExpression(target)
+            ? target.expression
+            : ts.isElementAccessExpression(target)
+                ? target.expression
+                : null;
+        if (!recv) return false;
+        return this.sideEffectFreeEarlierConstInitializer(recv, new Set()) !== null;
     }
 
     private isSideEffectFreeStaticCall(
@@ -16133,7 +16152,7 @@ class Emitter {
             this.emitYieldStmt(buf, es.expression);
             return;
         }
-        if (this.isSideEffectFreeTopLevelConstInitializer(es.expression)) return;
+        if (this.isPrunableExpressionStatementExpression(es.expression)) return;
         const r = this.emitExpr(es.expression);
         buf.line(r.c + ";");
     }
@@ -34518,10 +34537,15 @@ class Emitter {
                         ([t, k, r]) => `({ static tsc_prop_cache_t ${cache}; tsc_reflect_get_prop_receiver_cached(${t}, ${k}, ${r}, &${cache}); })`,
                     );
                 }
-                return this.emitSequencedCall("tsc_reflect_get_prop", T_VALUE, [
-                    { value: target, target: T_VALUE, node: args[0]! },
-                    { value: key, target: T_STRING, node: args[1]! },
-                ]);
+                const cache = this.freshTemp("_prop_cache");
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: target, target: T_VALUE, node: args[0]! },
+                        { value: key, target: T_STRING, node: args[1]! },
+                    ],
+                    ([t, k]) => `({ static tsc_prop_cache_t ${cache}; tsc_reflect_get_prop_cached(${t}, ${k}, &${cache}); })`,
+                );
             }
             case "getOwnPropertyDescriptor": {
                 if (args.length !== 2) unsupported(call, "Reflect.getOwnPropertyDescriptor expects target and key");
