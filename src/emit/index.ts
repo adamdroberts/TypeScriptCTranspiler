@@ -1494,7 +1494,7 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
-            method === "resolve" &&
+            (method === "resolve" || method === "reject") &&
             this.isUnshadowedGlobalIdentifier(recv, "Promise")
         ) {
             return (
