@@ -762,7 +762,7 @@ interface Process {
     readonly stderr: ProcessWritableStream;
     exit(code?: number): never;
     cwd(...ignored: any[]): string;
-    chdir(directory: string): void;
+    chdir(directory: string, ...ignored: any[]): void;
     uptime(...ignored: any[]): number;
     hrtime: ProcessHrtime;
     nextTick(callback: (this: any) => void): void;

@@ -27594,11 +27594,12 @@ class Emitter {
                     () => `tsc_process_cwd()`,
                 );
             case "chdir": {
-                if (call.arguments.length !== 1) unsupported(call, "process.chdir expects directory");
+                if (call.arguments.length < 1) unsupported(call, "process.chdir expects directory");
                 const directory = this.emitExpr(call.arguments[0]!);
-                return this.emitSequencedCall("tsc_process_chdir", T_VOID, [
+                return this.emitSequencedExpr(T_VOID, [
                     { value: directory, target: T_STRING, node: call.arguments[0]! },
-                ]);
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ], ([dir]) => `tsc_process_chdir(${dir})`);
             }
             case "exit":
                 return this.emitProcessExit(call);
