@@ -5580,6 +5580,13 @@ class Emitter {
         ) {
             return this.isSideEffectFreeEventConstructorArgs(args, seenConsts);
         }
+        if (
+            name === "Promise" &&
+            this.isUnshadowedGlobalIdentifier(expr.expression, "Promise")
+        ) {
+            return args.length === 1 &&
+                this.isSideEffectFreePromiseExecutorOperand(args[0]!, seenConsts);
+        }
         const pureErrorConstructors = new Set([
             "Error",
             "TypeError",
@@ -6817,6 +6824,87 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreePromiseTryReturnValue(init, seenConsts);
+    }
+
+    private isSideEffectFreePromiseExecutorOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrowFunction(unwrapped) || ts.isFunctionExpression(unwrapped)) {
+            return this.isSideEffectFreePromiseExecutor(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreePromiseExecutorOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreePromiseExecutor(
+        fn: ts.ArrowFunction | ts.FunctionExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const params = fn.parameters.filter((param) =>
+            !(ts.isIdentifier(param.name) && param.name.text === "this")
+        );
+        if (params.length > 2 || params.some((param) => !ts.isIdentifier(param.name))) {
+            return false;
+        }
+        const resolveName = params[0] && ts.isIdentifier(params[0].name)
+            ? params[0].name.text
+            : null;
+        const rejectName = params[1] && ts.isIdentifier(params[1].name)
+            ? params[1].name.text
+            : null;
+        if (ts.isExpression(fn.body)) {
+            return this.isSideEffectFreePromiseExecutorExpression(
+                fn.body,
+                seenConsts,
+                resolveName,
+                rejectName,
+            );
+        }
+        const statements = Array.from(fn.body.statements);
+        if (statements.length === 0) return true;
+        if (statements.length !== 1) return false;
+        const stmt = statements[0]!;
+        if (ts.isExpressionStatement(stmt)) {
+            return this.isSideEffectFreePromiseExecutorExpression(
+                stmt.expression,
+                seenConsts,
+                resolveName,
+                rejectName,
+            );
+        }
+        if (ts.isReturnStatement(stmt)) {
+            return !stmt.expression ||
+                this.isSideEffectFreeTopLevelConstInitializer(stmt.expression, seenConsts);
+        }
+        return false;
+    }
+
+    private isSideEffectFreePromiseExecutorExpression(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+        resolveName: string | null,
+        rejectName: string | null,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            (
+                unwrapped.expression.text === resolveName ||
+                unwrapped.expression.text === rejectName
+            )
+        ) {
+            return (
+                unwrapped.arguments.length === 0 ||
+                this.isSideEffectFreePrimitivePromiseResolveValue(unwrapped.arguments[0]!, seenConsts)
+            ) &&
+                Array.from(unwrapped.arguments).slice(1).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+        }
+        return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
     }
 
     private isSideEffectFreePrimitiveTemplateExpression(

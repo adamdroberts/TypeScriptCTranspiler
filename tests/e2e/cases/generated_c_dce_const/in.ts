@@ -561,6 +561,12 @@ const unused_promise_try_empty_call = Promise.try(() => {
 const unused_promise_try_resolve_call = Promise.try(() => Promise.resolve("dead_promise_try_resolve"));
 const unused_promise_try_reject_call = Promise.try(() => Promise.reject("dead_promise_try_reject"));
 const unused_promise_try_all_empty_call = Promise.try(() => Promise.all([] as Promise<string>[]));
+const unused_new_promise_empty_executor_call = new Promise<string>(() => {
+});
+const unused_new_promise_resolve_call = new Promise<string>((resolve) => resolve("dead_new_promise_resolve"));
+const unused_new_promise_reject_call = new Promise<string>((resolve, reject) => {
+    reject("dead_new_promise_reject");
+});
 const dead_promise_resolve_object_shorthand = "dead_promise_resolve_object_shorthand";
 const unused_promise_resolve_object_shorthand_call = Promise.resolve({ dead_promise_resolve_object_shorthand }.dead_promise_resolve_object_shorthand);
 const dead_promise_resolve_object_spread_source = { dead_promise_resolve_object_spread: "dead_promise_resolve_object_spread" };
@@ -1565,6 +1571,12 @@ Promise.try(() => {
 Promise.try(() => Promise.resolve("top_level_dead_promise_try_resolve"));
 Promise.try(() => Promise.reject("top_level_dead_promise_try_reject"));
 Promise.try(() => Promise.any([] as Promise<string>[]));
+new Promise<string>(() => {
+});
+new Promise<string>((resolve) => resolve("top_level_dead_new_promise_resolve"));
+new Promise<string>((resolve, reject) => {
+    reject("top_level_dead_new_promise_reject");
+});
 const top_level_dead_promise_resolve_object_shorthand = "top_level_dead_promise_resolve_object_shorthand";
 Promise.resolve({ top_level_dead_promise_resolve_object_shorthand }.top_level_dead_promise_resolve_object_shorthand);
 const top_level_dead_promise_resolve_object_spread_source = { top_level_dead_promise_resolve_object_spread: "top_level_dead_promise_resolve_object_spread" };
@@ -2549,6 +2561,12 @@ function usedLocal(value: number): number {
     Promise.try(() => Promise.resolve("local_dead_promise_try_resolve"));
     Promise.try(() => Promise.reject("local_dead_promise_try_reject"));
     Promise.try(() => Promise.race([] as Promise<string>[]));
+    new Promise<string>(() => {
+    });
+    new Promise<string>((resolve) => resolve("local_dead_new_promise_resolve"));
+    new Promise<string>((resolve, reject) => {
+        reject("local_dead_new_promise_reject");
+    });
     const local_dead_promise_resolve_object_shorthand = "local_dead_promise_resolve_object_shorthand";
     Promise.resolve({ local_dead_promise_resolve_object_shorthand }.local_dead_promise_resolve_object_shorthand);
     const local_dead_promise_resolve_object_spread_source = { local_dead_promise_resolve_object_spread: "local_dead_promise_resolve_object_spread" };
