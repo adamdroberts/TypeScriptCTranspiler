@@ -4505,6 +4505,8 @@ class Emitter {
         }
         const arrayLength = this.sideEffectFreeArrayLiteralLength(unwrapped, seenConsts);
         if (arrayLength !== null) return arrayLength;
+        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts);
+        if (returnedArrayLength !== null) return returnedArrayLength;
         const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
         if (objectLength !== null) return objectLength;
         const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(
@@ -4535,6 +4537,8 @@ class Emitter {
         }
         const arrayLength = this.sideEffectFreeArrayLiteralLength(unwrapped, seenConsts);
         if (arrayLength !== null) return arrayLength + 1;
+        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts);
+        if (returnedArrayLength !== null) return returnedArrayLength + 1;
         if (this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(unwrapped, seenConsts)) {
             return 0;
         }
@@ -4568,6 +4572,8 @@ class Emitter {
         }
         const arrayLength = this.sideEffectFreeArrayLiteralLength(unwrapped, seenConsts);
         if (arrayLength !== null) return arrayLength;
+        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts);
+        if (returnedArrayLength !== null) return returnedArrayLength;
         if (this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(unwrapped, seenConsts)) {
             return 0;
         }
@@ -4601,6 +4607,8 @@ class Emitter {
         }
         const arrayLength = this.sideEffectFreeArrayLiteralLength(unwrapped, seenConsts);
         if (arrayLength !== null) return arrayLength;
+        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts);
+        if (returnedArrayLength !== null) return returnedArrayLength;
         if (this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(unwrapped, seenConsts)) {
             return 0;
         }
@@ -4627,6 +4635,8 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         const arrayLength = this.sideEffectFreeArrayLiteralLength(unwrapped, seenConsts);
         if (arrayLength !== null) return arrayLength + 1;
+        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts);
+        if (returnedArrayLength !== null) return returnedArrayLength + 1;
         if (this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(unwrapped, seenConsts)) {
             return 0;
         }
@@ -10251,6 +10261,9 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (ts.isObjectLiteralExpression(unwrapped) || ts.isArrayLiteralExpression(unwrapped)) {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+        }
+        if (this.isSideEffectFreeArrayOperand(unwrapped, new Set(seenConsts))) {
+            return true;
         }
         const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
         if (targetOperand) {
