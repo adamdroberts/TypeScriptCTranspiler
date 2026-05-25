@@ -630,8 +630,14 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-define-properties-create-from-entries": cjsPackage("tsc2c-cjs-module-define-properties-create-from-entries", {
         "index.js": 'const base = { inherited: "define-properties-create-from-entries-base" };\nconst defaultKey = "def" + "ault";\nconst descriptors = {\n  [defaultKey]: { value: function greet(name) { return "define-properties-create-from-entries " + name; }, enumerable: true },\n  label: { get() { return "module-define-properties-create-from-entries"; }, enumerable: true },\n  count: { value: 132, enumerable: true },\n  double: { value: function double(value) { return value * 7; }, enumerable: true }\n};\nconst entries = Object.entries(descriptors);\nmodule.exports = Object.defineProperties(Object.create(base), Object.fromEntries(entries));\n',
     }),
+    "tsc2c-cjs-module-define-properties-create-from-entries-map": cjsPackage("tsc2c-cjs-module-define-properties-create-from-entries-map", {
+        "index.js": 'const base = { inherited: "define-properties-create-from-entries-map-base" };\nconst descriptors = {\n  default: { value: function greet(name) { return "define-properties-create-from-entries-map " + name; }, enumerable: true },\n  label: { get() { return "module-define-properties-create-from-entries-map"; }, enumerable: true },\n  count: { value: 153, enumerable: true },\n  double: { value: function double(value) { return value * 19; }, enumerable: true }\n};\nmodule.exports = Object.defineProperties(Object.create(base), Object.fromEntries(new Map(Object.entries(descriptors))));\n',
+    }),
     "tsc2c-cjs-module-exports-create-from-entries": cjsPackage("tsc2c-cjs-module-exports-create-from-entries", {
         "index.js": 'const proto = { inherited: "create-from-entries-base" };\nconst defaultKey = "def" + "ault";\nconst descriptors = {\n  [defaultKey]: { value: function greet(name) { return "create-from-entries " + name; }, enumerable: true },\n  label: { value: "module-create-from-entries", enumerable: true },\n  count: { value: 123, enumerable: true },\n  double: { value: function double(value) { return value * 6; }, enumerable: true }\n};\nmodule.exports = Object.create(proto, Object.fromEntries(Object.entries(descriptors)));\n',
+    }),
+    "tsc2c-cjs-module-exports-create-from-entries-map": cjsPackage("tsc2c-cjs-module-exports-create-from-entries-map", {
+        "index.js": 'const proto = { inherited: "create-from-entries-map-base" };\nconst descriptors = {\n  default: { value: function greet(name) { return "create-from-entries-map " + name; }, enumerable: true },\n  label: { value: "module-create-from-entries-map", enumerable: true },\n  count: { value: 154, enumerable: true },\n  double: { value: function double(value) { return value * 20; }, enumerable: true }\n};\nmodule.exports = Object.create(proto, Object.fromEntries(new Map(Object.entries(descriptors))));\n',
     }),
     "tsc2c-cjs-define-property-exports": cjsPackage("tsc2c-cjs-define-property-exports", {
         "index.js": 'Object.defineProperty(exports, "label", { value: "defined", enumerable: true });\nObject.defineProperty(exports, "count", { value: 42, enumerable: true });\nObject.defineProperty(exports, "double", { value: function double(value) { return value * 2; }, enumerable: true });\n',
@@ -1143,11 +1149,18 @@ const packages: Record<string, PackageFixture> = {
         "local.js": 'exports.count = 124;\nexports.double = function double(value) { return value * 17; };\n',
         "index.js": 'const local = require("./local.js");\nconst base = { inherited: "wrapper-create-from-entries-base" };\nconst defaultKey = "def" + "ault";\nconst descriptors = {\n  [defaultKey]: { value: function greet(name) { return "wrapped-create-from-entries " + name; }, enumerable: true },\n  label: { value: "wrapper-create-from-entries", enumerable: true },\n  count: { value: local.count, enumerable: true },\n  double: { get() { return local.double; }, enumerable: true },\n  extra: { value: true, enumerable: true }\n};\nconst entries = Object.entries(descriptors);\nmodule.exports = Object.freeze(Object.create(base, Object.fromEntries(entries)));\n',
     }),
+    "tsc2c-cjs-object-wrapper-create-from-entries-map": cjsPackage("tsc2c-cjs-object-wrapper-create-from-entries-map", {
+        "local.js": 'exports.count = 155;\nexports.double = function double(value) { return value * 21; };\n',
+        "index.js": 'const local = require("./local.js");\nconst base = { inherited: "wrapper-create-from-entries-map-base" };\nconst descriptors = {\n  default: { value: function greet(name) { return "wrapped-create-from-entries-map " + name; }, enumerable: true },\n  label: { value: "wrapper-create-from-entries-map", enumerable: true },\n  count: { value: local.count, enumerable: true },\n  double: { get() { return local.double; }, enumerable: true },\n  extra: { value: true, enumerable: true }\n};\nmodule.exports = Object.freeze(Object.create(base, Object.fromEntries(new Map(Object.entries(descriptors)))));\n',
+    }),
     "tsc2c-cjs-object-wrapper-seal-create-descriptors-named": cjsPackage("tsc2c-cjs-object-wrapper-seal-create-descriptors-named", {
         "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "sealed " + name; }, enumerable: true },\n  label: { value: "seal-create-descriptors", enumerable: true },\n  count: { value: 104, enumerable: true }\n};\nmodule.exports = Object.seal(Object.create({ inherited: true }, descriptors));\n',
     }),
     "tsc2c-cjs-object-wrapper-seal-create-from-entries": cjsPackage("tsc2c-cjs-object-wrapper-seal-create-from-entries", {
         "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "sealed-create-from-entries " + name; }, enumerable: true },\n  label: { value: "seal-create-from-entries", enumerable: true },\n  count: { value: 125, enumerable: true }\n};\nmodule.exports = Object.seal(Object.create({ inherited: true }, Object.fromEntries(Object.entries(descriptors))));\n',
+    }),
+    "tsc2c-cjs-object-wrapper-seal-create-from-entries-map": cjsPackage("tsc2c-cjs-object-wrapper-seal-create-from-entries-map", {
+        "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "sealed-create-from-entries-map " + name; }, enumerable: true },\n  label: { value: "seal-create-from-entries-map", enumerable: true },\n  count: { value: 156, enumerable: true }\n};\nmodule.exports = Object.seal(Object.create({ inherited: true }, Object.fromEntries(new Map(Object.entries(descriptors)))));\n',
     }),
     "tsc2c-cjs-object-wrapper-prevent-create-descriptors-named": cjsPackage("tsc2c-cjs-object-wrapper-prevent-create-descriptors-named", {
         "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "prevented " + name; }, enumerable: true },\n  label: { value: "prevent-create-descriptors", enumerable: true },\n  count: { value: 105, enumerable: true }\n};\nmodule.exports = Object.preventExtensions(Object.create({ inherited: true }, descriptors));\n',
@@ -1155,11 +1168,17 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-object-wrapper-prevent-create-from-entries": cjsPackage("tsc2c-cjs-object-wrapper-prevent-create-from-entries", {
         "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "prevented-create-from-entries " + name; }, enumerable: true },\n  label: { value: "prevent-create-from-entries", enumerable: true },\n  count: { value: 126, enumerable: true }\n};\nconst entries = Object.entries(descriptors);\nmodule.exports = Object.preventExtensions(Object.create({ inherited: true }, Object.fromEntries(entries)));\n',
     }),
+    "tsc2c-cjs-object-wrapper-prevent-create-from-entries-map": cjsPackage("tsc2c-cjs-object-wrapper-prevent-create-from-entries-map", {
+        "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "prevented-create-from-entries-map " + name; }, enumerable: true },\n  label: { value: "prevent-create-from-entries-map", enumerable: true },\n  count: { value: 157, enumerable: true }\n};\nmodule.exports = Object.preventExtensions(Object.create({ inherited: true }, Object.fromEntries(new Map(Object.entries(descriptors)))));\n',
+    }),
     "tsc2c-cjs-object-wrapper-set-prototype-create-descriptors-named": cjsPackage("tsc2c-cjs-object-wrapper-set-prototype-create-descriptors-named", {
         "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "reproto " + name; }, enumerable: true },\n  label: { value: "set-prototype-create-descriptors", enumerable: true },\n  count: { value: 106, enumerable: true }\n};\nmodule.exports = Object.setPrototypeOf(Object.create(null, descriptors), { inherited: true });\n',
     }),
     "tsc2c-cjs-object-wrapper-set-prototype-create-from-entries": cjsPackage("tsc2c-cjs-object-wrapper-set-prototype-create-from-entries", {
         "index.js": 'const labelKey = "la" + "bel";\nconst descriptors = {\n  default: { value: function greet(name) { return "reproto-create-from-entries " + name; }, enumerable: true },\n  [labelKey]: { value: "set-prototype-create-from-entries", enumerable: true },\n  count: { value: 127, enumerable: true }\n};\nmodule.exports = Object.setPrototypeOf(Object.create(null, Object.fromEntries(Object.entries(descriptors))), { inherited: true });\n',
+    }),
+    "tsc2c-cjs-object-wrapper-set-prototype-create-from-entries-map": cjsPackage("tsc2c-cjs-object-wrapper-set-prototype-create-from-entries-map", {
+        "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "reproto-create-from-entries-map " + name; }, enumerable: true },\n  label: { value: "set-prototype-create-from-entries-map", enumerable: true },\n  count: { value: 158, enumerable: true }\n};\nmodule.exports = Object.setPrototypeOf(Object.create(null, Object.fromEntries(new Map(Object.entries(descriptors)))), { inherited: true });\n',
     }),
     "tsc2c-cjs-object-set-prototype-named": cjsPackage("tsc2c-cjs-object-set-prototype-named", {
         "index.js": 'module.exports = Object.setPrototypeOf({\n  default: function greet(name) { return "hello " + name; },\n  label: "set-prototype-named",\n  count: 74,\n  double(value) { return value * 2; }\n}, { inherited: "base" });\n',
