@@ -1,23 +1,34 @@
 import { exec, execFile, execFileSync, execSync, spawnSync } from "child_process";
 
-const spawned: any = spawnSync("/bin/sh", ["-c", "printf $TSC2C_CHILD_ENV"], {
+const SPAWN_ENV = { TSC2C_CHILD_ENV: "spawn" } as const;
+const EXEC_ENV = { TSC2C_CHILD_ENV: "exec" } as const;
+const FILE_ENV = { TSC2C_CHILD_ENV: "file" } as const;
+const EXEC_CB_ENV = { TSC2C_CHILD_ENV: "exec-cb" } as const;
+const FILE_CB_ENV = { TSC2C_CHILD_ENV: "file-cb" } as const;
+const SPAWN_OPTIONS = {
     encoding: "utf8",
-    env: { TSC2C_CHILD_ENV: "spawn" },
-});
-const execOut: string = execSync("printf $TSC2C_CHILD_ENV", {
+    env: SPAWN_ENV,
+} as const;
+const EXEC_OPTIONS = {
     encoding: "utf8",
-    env: { TSC2C_CHILD_ENV: "exec" },
-});
-const fileOut: string = execFileSync("/bin/sh", ["-c", "printf $TSC2C_CHILD_ENV"], {
+    env: EXEC_ENV,
+} as const;
+const FILE_OPTIONS = {
     encoding: "utf8",
-    env: { TSC2C_CHILD_ENV: "file" },
-});
+    env: FILE_ENV,
+} as const;
+const EXEC_CB_OPTIONS = { env: EXEC_CB_ENV } as const;
+const FILE_CB_OPTIONS = { env: FILE_CB_ENV } as const;
+
+const spawned: any = spawnSync("/bin/sh", ["-c", "printf $TSC2C_CHILD_ENV"], SPAWN_OPTIONS);
+const execOut: string = execSync("printf $TSC2C_CHILD_ENV", EXEC_OPTIONS);
+const fileOut: string = execFileSync("/bin/sh", ["-c", "printf $TSC2C_CHILD_ENV"], FILE_OPTIONS);
 
 let callbacks = "";
-exec("printf $TSC2C_CHILD_ENV", { env: { TSC2C_CHILD_ENV: "exec-cb" } }, (error: any, stdout: string) => {
+exec("printf $TSC2C_CHILD_ENV", EXEC_CB_OPTIONS, (error: any, stdout: string) => {
     callbacks += (error === null ? "ok" : "bad") + ":" + stdout;
 });
-execFile("/bin/sh", ["-c", "printf $TSC2C_CHILD_ENV"], { env: { TSC2C_CHILD_ENV: "file-cb" } }, (error: any, stdout: string) => {
+execFile("/bin/sh", ["-c", "printf $TSC2C_CHILD_ENV"], FILE_CB_OPTIONS, (error: any, stdout: string) => {
     callbacks += "|" + (error === null ? "ok" : "bad") + ":" + stdout;
 });
 

@@ -31060,7 +31060,7 @@ class Emitter {
                 unsupported(call, "child_process.execFile expects file, args, optional options, and callback");
             }
             const file = this.emitExpr(call.arguments[0]!);
-            const optionsAsSecondArg = call.arguments.length === 3 && ts.isObjectLiteralExpression(call.arguments[1]!);
+            const optionsAsSecondArg = call.arguments.length === 3 && this.isStaticObjectLiteralExpression(call.arguments[1]!);
             const argsNode = optionsAsSecondArg || call.arguments.length === 2 ? undefined : call.arguments[1]!;
             const args = argsNode ? this.emitExpr(argsNode) : { c: "NULL", ty: arrayType(T_STRING) };
             if (argsNode && (args.ty.kind !== "array" || args.ty.elem?.kind !== "string")) {
@@ -31171,7 +31171,7 @@ class Emitter {
                 unsupported(call, "child_process.execFileSync expects file, optional args, and optional { cwd }");
             }
             const file = this.emitExpr(call.arguments[0]!);
-            const optionsAsSecondArg = call.arguments.length === 2 && ts.isObjectLiteralExpression(call.arguments[1]!);
+            const optionsAsSecondArg = call.arguments.length === 2 && this.isStaticObjectLiteralExpression(call.arguments[1]!);
             const argsNode = optionsAsSecondArg ? undefined : call.arguments[1];
             const optionsNode = optionsAsSecondArg ? call.arguments[1] : call.arguments[2];
             const fileOptions = this.childProcessFileOptions(optionsNode);
@@ -31258,24 +31258,25 @@ class Emitter {
                 unsupported(call, "child_process.spawnSync expects file, optional args, and { encoding: \"utf8\" }");
             }
             const file = this.emitExpr(call.arguments[0]!);
-            const optionsAsSecondArg = call.arguments.length === 2 && ts.isObjectLiteralExpression(call.arguments[1]!);
+            const optionsAsSecondArg = call.arguments.length === 2 && this.isStaticObjectLiteralExpression(call.arguments[1]!);
             const argsNode = optionsAsSecondArg ? undefined : call.arguments[1]!;
             const args = argsNode ? this.emitExpr(argsNode) : { c: "NULL", ty: arrayType(T_STRING) };
             if (argsNode && (args.ty.kind !== "array" || args.ty.elem?.kind !== "string")) {
                 unsupported(argsNode, "child_process.spawnSync args must be string[]");
             }
-            const options = optionsAsSecondArg ? call.arguments[1]! : call.arguments[2]!;
+            const optionsNode = optionsAsSecondArg ? call.arguments[1]! : call.arguments[2]!;
+            const options = this.resolveSideEffectFreeEarlierConstExpression(optionsNode);
             if (!ts.isObjectLiteralExpression(options)) {
-                unsupported(options, "child_process.spawnSync options must be an object literal");
+                unsupported(optionsNode, "child_process.spawnSync options must be an object literal");
             }
             const encodingProp = options.properties.find((prop): prop is ts.PropertyAssignment =>
                 ts.isPropertyAssignment(prop) && this.staticPropertyName(prop.name) === "encoding",
             );
             const encoding = encodingProp
-                ? this.sideEffectFreeStringLiteralText(encodingProp.initializer, new Set())
+                ? this.sideEffectFreeStringLiteralText(this.resolveSideEffectFreeEarlierConstExpression(encodingProp.initializer), new Set())
                 : null;
             if (!encodingProp || encoding === null) {
-                unsupported(options, "child_process.spawnSync requires literal encoding: \"utf8\"");
+                unsupported(optionsNode, "child_process.spawnSync requires literal encoding: \"utf8\"");
             }
             if (encoding !== "utf8" && encoding !== "utf-8") {
                 unsupported(encodingProp.initializer, "child_process.spawnSync only supports utf8 encoding");
@@ -31335,33 +31336,42 @@ class Emitter {
         unsupported(call, `child_process.${method}`);
     }
 
+    private isStaticObjectLiteralExpression(expr: ts.Expression | undefined): boolean {
+        return !!expr && ts.isObjectLiteralExpression(this.resolveSideEffectFreeEarlierConstExpression(expr));
+    }
+
     private childProcessOptionString(options: ts.ObjectLiteralExpression, key: string): (EmitResult & { node: ts.Expression }) | null {
         const prop = options.properties.find((entry): entry is ts.PropertyAssignment =>
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === key,
         );
         if (!prop) return null;
-        if (this.isUndefinedExpression(prop.initializer)) return null;
-        const value = this.emitExpr(prop.initializer);
+        const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+        if (this.isUndefinedExpression(valueNode)) return null;
+        const value = this.emitExpr(valueNode);
         if (value.ty.kind !== "string") unsupported(prop.initializer, `child_process ${key} must be a string`);
-        return { ...value, node: prop.initializer };
+        return { ...value, node: valueNode };
     }
 
     private childProcessNumberOption(options: ts.ObjectLiteralExpression, key: string): (EmitResult & { node: ts.Expression }) | null {
         const prop = options.properties.find((entry): entry is ts.PropertyAssignment =>
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === key,
         );
-        if (!prop || this.isUndefinedExpression(prop.initializer)) return null;
-        const value = this.emitExpr(prop.initializer);
+        if (!prop) return null;
+        const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+        if (this.isUndefinedExpression(valueNode)) return null;
+        const value = this.emitExpr(valueNode);
         if (value.ty.kind !== "number") unsupported(prop.initializer, `child_process ${key} must be a number`);
-        return { ...value, node: prop.initializer };
+        return { ...value, node: valueNode };
     }
 
     private childProcessBooleanOption(options: ts.ObjectLiteralExpression, key: string): string {
         const prop = options.properties.find((entry): entry is ts.PropertyAssignment =>
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === key,
         );
-        if (!prop || this.isUndefinedExpression(prop.initializer)) return "false";
-        const value = this.sideEffectFreeBooleanLiteralValue(prop.initializer, new Set());
+        if (!prop) return "false";
+        const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+        if (this.isUndefinedExpression(valueNode)) return "false";
+        const value = this.sideEffectFreeBooleanLiteralValue(valueNode, new Set());
         if (value !== null) return value ? "true" : "false";
         unsupported(prop.initializer, `child_process ${key} must be a literal boolean`);
     }
@@ -31370,14 +31380,16 @@ class Emitter {
         const prop = options.properties.find((entry): entry is ts.PropertyAssignment =>
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === "killSignal",
         );
-        if (!prop || this.isUndefinedExpression(prop.initializer)) return "15.0";
-        const numericSignal = this.sideEffectFreeNumericLiteralSameValueZeroValue(prop.initializer, new Set());
+        if (!prop) return "15.0";
+        const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+        if (this.isUndefinedExpression(valueNode)) return "15.0";
+        const numericSignal = this.sideEffectFreeNumericLiteralSameValueZeroValue(valueNode, new Set());
         if (numericSignal !== null) {
             const signal = numericSignal;
             if (signal === 9 || signal === 15) return `${signal}.0`;
             unsupported(prop.initializer, "child_process killSignal only supports SIGTERM, SIGKILL, 9, and 15");
         }
-        const signalText = this.sideEffectFreeStringLiteralText(prop.initializer, new Set());
+        const signalText = this.sideEffectFreeStringLiteralText(valueNode, new Set());
         if (signalText === null) {
             unsupported(prop.initializer, "child_process killSignal must be a literal signal string or numeric signal in this subset");
         }
@@ -31480,14 +31492,18 @@ class Emitter {
 
     private childProcessEncodingOption(options: ts.Expression | undefined, method: string): "utf8" | null {
         if (!options) return null;
-        if (!ts.isObjectLiteralExpression(options)) {
+        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedExpression(resolvedOptions)) return null;
+        if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, "child_process options must be an object literal in this subset");
         }
-        const prop = options.properties.find((entry): entry is ts.PropertyAssignment =>
+        const prop = resolvedOptions.properties.find((entry): entry is ts.PropertyAssignment =>
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === "encoding",
         );
-        if (!prop || this.isUndefinedExpression(prop.initializer)) return null;
-        const encoding = this.sideEffectFreeStringLiteralText(prop.initializer, new Set());
+        if (!prop) return null;
+        const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+        if (this.isUndefinedExpression(valueNode)) return null;
+        const encoding = this.sideEffectFreeStringLiteralText(valueNode, new Set());
         if (encoding === null) {
             unsupported(prop.initializer, `child_process.${method} requires literal encoding: "utf8"`);
         }
@@ -31500,8 +31516,9 @@ class Emitter {
         const prop = options.properties.find((entry): entry is ts.PropertyAssignment =>
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === "env",
         );
-        if (!prop || this.isUndefinedExpression(prop.initializer)) return null;
-        const env = prop.initializer;
+        if (!prop) return null;
+        const env = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+        if (this.isUndefinedExpression(env)) return null;
         if (!ts.isObjectLiteralExpression(env)) {
             unsupported(env, "child_process env must be an object literal in this subset");
         }
@@ -31515,8 +31532,9 @@ class Emitter {
             if (name == null) {
                 unsupported(entry.name, "child_process env keys must be statically known strings");
             }
-            if (this.isUndefinedExpression(entry.initializer)) continue;
-            const value = this.emitExpr(entry.initializer);
+            const valueNode = this.resolveSideEffectFreeEarlierConstExpression(entry.initializer);
+            if (this.isUndefinedExpression(valueNode)) continue;
+            const value = this.emitExpr(valueNode);
             if (value.ty.kind !== "string") {
                 unsupported(entry.initializer, "child_process env values must be strings");
             }
@@ -31537,16 +31555,18 @@ class Emitter {
         const prop = options.properties.find((entry): entry is ts.PropertyAssignment =>
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === "shell",
         );
-        if (!prop || this.isUndefinedExpression(prop.initializer)) return null;
-        const bool = this.sideEffectFreeBooleanLiteralValue(prop.initializer, new Set());
+        if (!prop) return null;
+        const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+        if (this.isUndefinedExpression(valueNode)) return null;
+        const bool = this.sideEffectFreeBooleanLiteralValue(valueNode, new Set());
         if (bool !== null) {
             return bool
-                ? { c: `tsc_str_from_lit("/bin/sh", 7)`, ty: T_STRING, node: prop.initializer }
-                : { c: "NULL", ty: T_STRING, node: prop.initializer };
+                ? { c: `tsc_str_from_lit("/bin/sh", 7)`, ty: T_STRING, node: valueNode }
+                : { c: "NULL", ty: T_STRING, node: valueNode };
         }
-        const value = this.emitExpr(prop.initializer);
+        const value = this.emitExpr(valueNode);
         if (value.ty.kind !== "string") unsupported(prop.initializer, "child_process shell must be a boolean or string");
-        return { ...value, node: prop.initializer };
+        return { ...value, node: valueNode };
     }
 
     private childProcessFileOptions(options: ts.Expression | undefined): {
@@ -31562,20 +31582,22 @@ class Emitter {
         killSignal: string;
     } {
         if (!options || this.isUndefinedExpression(options)) return this.emptyChildProcessFileOptions();
-        if (!ts.isObjectLiteralExpression(options)) {
+        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedExpression(resolvedOptions)) return this.emptyChildProcessFileOptions();
+        if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, "child_process options must be an object literal in this subset");
         }
         return {
-            cwd: this.childProcessOptionString(options, "cwd"),
-            input: this.childProcessOptionString(options, "input"),
-            env: this.childProcessEnvOption(options),
-            shell: this.childProcessShellOption(options),
-            argv0: this.childProcessOptionString(options, "argv0"),
-            uid: this.childProcessNumberOption(options, "uid"),
-            gid: this.childProcessNumberOption(options, "gid"),
-            maxBuffer: this.childProcessNumberOption(options, "maxBuffer"),
-            timeout: this.childProcessNumberOption(options, "timeout"),
-            killSignal: this.childProcessKillSignalOption(options),
+            cwd: this.childProcessOptionString(resolvedOptions, "cwd"),
+            input: this.childProcessOptionString(resolvedOptions, "input"),
+            env: this.childProcessEnvOption(resolvedOptions),
+            shell: this.childProcessShellOption(resolvedOptions),
+            argv0: this.childProcessOptionString(resolvedOptions, "argv0"),
+            uid: this.childProcessNumberOption(resolvedOptions, "uid"),
+            gid: this.childProcessNumberOption(resolvedOptions, "gid"),
+            maxBuffer: this.childProcessNumberOption(resolvedOptions, "maxBuffer"),
+            timeout: this.childProcessNumberOption(resolvedOptions, "timeout"),
+            killSignal: this.childProcessKillSignalOption(resolvedOptions),
         };
     }
 
