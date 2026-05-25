@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now propagates `new Promise(...)` executor state through side-effect-free resolved/rejected Promise instance-chain arguments. Test: `generated_c_dce_const`.
 - Generated-C DCE now propagates `Promise.try(...)` callback return state through side-effect-free Promise instance chains before pruning deeper unused chains. Test: `generated_c_dce_const`.
 - Generated-C DCE now propagates `Promise.resolve(...)` adoption state through side-effect-free Promise instance chains before pruning deeper unused chains. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused direct `Promise.resolve(...).catch(...)` calls when the catch handler expression is side-effect-free and therefore only evaluated, not invoked. Test: `generated_c_dce_const`.

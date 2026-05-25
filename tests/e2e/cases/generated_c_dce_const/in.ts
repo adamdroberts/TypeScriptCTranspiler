@@ -712,6 +712,18 @@ const unused_new_promise_finally_resolve_call = new Promise<string>((resolve) =>
     .finally(() => "dead_new_promise_finally_resolve_callback");
 const unused_new_promise_finally_reject_call = new Promise<string>((resolve, reject) => reject("dead_new_promise_finally_reject_source"))
     .finally(() => "dead_new_promise_finally_reject_callback");
+const unused_new_promise_resolve_adopt_then_passthrough_call = new Promise<Promise<string>>((resolve) =>
+    resolve(Promise.resolve("dead_new_promise_resolve_adopt_then_passthrough_source").then()),
+)
+    .then((value) => "dead_new_promise_resolve_adopt_then_passthrough_callback");
+const unused_new_promise_reject_reason_then_passthrough_call = new Promise<string>((resolve, reject) =>
+    reject(Promise.resolve("dead_new_promise_reject_reason_then_passthrough_source").then()),
+)
+    .catch((reason) => "dead_new_promise_reject_reason_then_passthrough_callback");
+const unused_new_promise_resolve_pending_then_call = new Promise<Promise<string>>((resolve) =>
+    resolve(Promise.race([] as Promise<string>[]).then((value) => "dead_new_promise_resolve_pending_then_unreached")),
+)
+    .finally(() => "dead_new_promise_resolve_pending_then_finally_callback");
 const unused_promise_then_call = Promise.resolve("dead_promise_then_source").then(() => "dead_promise_then_callback");
 const unused_promise_then_fulfilled_two_arg_call = Promise.resolve("dead_promise_then_fulfilled_two_arg_source").then(
     () => "dead_promise_then_fulfilled_two_arg_callback",
@@ -1867,6 +1879,18 @@ new Promise<string>((resolve) => resolve("top_level_dead_new_promise_finally_res
     .finally(() => "top_level_dead_new_promise_finally_resolve_callback");
 new Promise<string>((resolve, reject) => reject("top_level_dead_new_promise_finally_reject_source"))
     .finally(() => "top_level_dead_new_promise_finally_reject_callback");
+new Promise<Promise<string>>((resolve) =>
+    resolve(Promise.resolve("top_level_dead_new_promise_resolve_adopt_then_passthrough_source").then()),
+)
+    .then((value) => "top_level_dead_new_promise_resolve_adopt_then_passthrough_callback");
+new Promise<string>((resolve, reject) =>
+    reject(Promise.resolve("top_level_dead_new_promise_reject_reason_then_passthrough_source").then()),
+)
+    .catch((reason) => "top_level_dead_new_promise_reject_reason_then_passthrough_callback");
+new Promise<Promise<string>>((resolve) =>
+    resolve(Promise.race([] as Promise<string>[]).then((value) => "top_level_dead_new_promise_resolve_pending_then_unreached")),
+)
+    .finally(() => "top_level_dead_new_promise_resolve_pending_then_finally_callback");
 Promise.resolve("top_level_dead_promise_then_source").then(() => "top_level_dead_promise_then_callback");
 Promise.resolve("top_level_dead_promise_then_fulfilled_two_arg_source").then(
     () => "top_level_dead_promise_then_fulfilled_two_arg_callback",
@@ -2999,6 +3023,18 @@ function usedLocal(value: number): number {
         .finally(() => "local_dead_new_promise_finally_resolve_callback");
     new Promise<string>((resolve, reject) => reject("local_dead_new_promise_finally_reject_source"))
         .finally(() => "local_dead_new_promise_finally_reject_callback");
+    new Promise<Promise<string>>((resolve) =>
+        resolve(Promise.resolve("local_dead_new_promise_resolve_adopt_then_passthrough_source").then()),
+    )
+        .then((value) => "local_dead_new_promise_resolve_adopt_then_passthrough_callback");
+    new Promise<string>((resolve, reject) =>
+        reject(Promise.resolve("local_dead_new_promise_reject_reason_then_passthrough_source").then()),
+    )
+        .catch((reason) => "local_dead_new_promise_reject_reason_then_passthrough_callback");
+    new Promise<Promise<string>>((resolve) =>
+        resolve(Promise.race([] as Promise<string>[]).then((value) => "local_dead_new_promise_resolve_pending_then_unreached")),
+    )
+        .finally(() => "local_dead_new_promise_resolve_pending_then_finally_callback");
     Promise.resolve("local_dead_promise_then_source").then(() => "local_dead_promise_then_callback");
     Promise.resolve("local_dead_promise_then_fulfilled_two_arg_source").then(
         () => "local_dead_promise_then_fulfilled_two_arg_callback",

@@ -6899,13 +6899,19 @@ class Emitter {
                 unwrapped.expression.text === rejectName
             )
         ) {
-            return (
-                unwrapped.arguments.length === 0 ||
-                this.isSideEffectFreePrimitivePromiseResolveValue(unwrapped.arguments[0]!, seenConsts)
-            ) &&
-                Array.from(unwrapped.arguments).slice(1).every((arg) =>
+            if (
+                !Array.from(unwrapped.arguments).slice(1).every((arg) =>
                     this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
+                )
+            ) {
+                return false;
+            }
+            if (unwrapped.arguments.length === 0) return true;
+            if (unwrapped.expression.text === resolveName) {
+                return this.sideEffectFreePromiseResolveArgumentState(unwrapped.arguments[0]!, seenConsts) !== null;
+            }
+            return this.isSideEffectFreePrimitivePromiseResolveValue(unwrapped.arguments[0]!, seenConsts) ||
+                this.sideEffectFreePromiseKnownState(unwrapped.arguments[0]!, seenConsts) !== null;
         }
         return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
     }
@@ -7631,15 +7637,20 @@ class Emitter {
                 unwrapped.expression.text === rejectName
             )
         ) {
-            const argsArePure = (
-                unwrapped.arguments.length === 0 ||
-                this.isSideEffectFreePrimitivePromiseResolveValue(unwrapped.arguments[0]!, seenConsts)
-            ) &&
-                Array.from(unwrapped.arguments).slice(1).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
-            if (!argsArePure) return null;
-            return unwrapped.expression.text === rejectName ? "rejected" : "fulfilled";
+            const extraArgsArePure = Array.from(unwrapped.arguments).slice(1).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+            if (!extraArgsArePure) return null;
+            if (unwrapped.arguments.length === 0) {
+                return unwrapped.expression.text === rejectName ? "rejected" : "fulfilled";
+            }
+            if (unwrapped.expression.text === resolveName) {
+                return this.sideEffectFreePromiseResolveArgumentState(unwrapped.arguments[0]!, seenConsts);
+            }
+            return this.isSideEffectFreePrimitivePromiseResolveValue(unwrapped.arguments[0]!, seenConsts) ||
+                this.sideEffectFreePromiseKnownState(unwrapped.arguments[0]!, seenConsts) !== null
+                ? "rejected"
+                : null;
         }
         return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts)
             ? "pending"
