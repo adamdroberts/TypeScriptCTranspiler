@@ -4324,6 +4324,32 @@ class Emitter {
         if (
             ts.isCallExpression(unwrapped) &&
             ts.isPropertyAccessExpression(unwrapped.expression) &&
+            unwrapped.expression.name.text === "with" &&
+            unwrapped.arguments.length === 2
+        ) {
+            const sourceElements = this.sideEffectFreeSetArraySourceExpressions(
+                unwrapped.expression.expression,
+                seenConsts,
+            );
+            const index = this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[0]!, seenConsts);
+            if (
+                sourceElements === null ||
+                index === null ||
+                !Number.isFinite(index) ||
+                !Number.isInteger(index) ||
+                !this.isSideEffectFreeTopLevelConstInitializer(unwrapped.arguments[1]!, seenConsts)
+            ) {
+                return null;
+            }
+            const actualIndex = index < 0 ? sourceElements.length + index : index;
+            if (actualIndex < 0 || actualIndex >= sourceElements.length) return null;
+            const elements = [...sourceElements];
+            elements[actualIndex] = unwrapped.arguments[1]!;
+            return elements;
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
             (
                 unwrapped.expression.name.text === "reverse" ||
                 unwrapped.expression.name.text === "toReversed"
@@ -4668,6 +4694,32 @@ class Emitter {
                 unwrapped.expression.expression,
                 seenConsts,
             );
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            unwrapped.expression.name.text === "with" &&
+            unwrapped.arguments.length === 2
+        ) {
+            const sourceElements = this.sideEffectFreeMapArraySourceExpressions(
+                unwrapped.expression.expression,
+                seenConsts,
+            );
+            const index = this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[0]!, seenConsts);
+            if (
+                sourceElements === null ||
+                index === null ||
+                !Number.isFinite(index) ||
+                !Number.isInteger(index) ||
+                !this.isSideEffectFreeTopLevelConstInitializer(unwrapped.arguments[1]!, seenConsts)
+            ) {
+                return null;
+            }
+            const actualIndex = index < 0 ? sourceElements.length + index : index;
+            if (actualIndex < 0 || actualIndex >= sourceElements.length) return null;
+            const elements = [...sourceElements];
+            elements[actualIndex] = unwrapped.arguments[1]!;
+            return elements;
         }
         if (
             ts.isCallExpression(unwrapped) &&
