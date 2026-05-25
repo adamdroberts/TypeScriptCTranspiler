@@ -27117,6 +27117,7 @@ class Emitter {
             const fn = streamName === "stdout"
                 ? (chunk?.value.ty.kind === "buffer" ? "tsc_process_stdout_write_buffer" : "tsc_process_stdout_write")
                 : (chunk?.value.ty.kind === "buffer" ? "tsc_process_stderr_write_buffer" : "tsc_process_stderr_write");
+            const endFn = streamName === "stdout" ? "tsc_process_stdout_end" : "tsc_process_stderr_end";
             const specs: SequencedCallArg[] = [];
             if (chunk) specs.push({ value: chunk.value, target: chunk.value.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: chunk.node });
             if (encoding) specs.push({ value: encoding.value, target: T_STRING, node: encoding.node });
@@ -27128,7 +27129,7 @@ class Emitter {
                 const callbackCall = callbackC
                     ? `${callbackC}->fn(${[`${callbackC}->env`, ...(callbackTy?.thisParam ? ["tsc_value_undefined()"] : [])].join(", ")});`
                     : "";
-                return `({ ${writeCall} ${callbackCall} })`;
+                return `({ ${writeCall} ${endFn}(); ${callbackCall} })`;
             });
         }
         const processWritableStreamName = memberName === "write"
@@ -41016,7 +41017,8 @@ class Emitter {
                     break;
                 case "writableEnded":
                 case "writableFinished":
-                    if (stdioStreamName !== "stdin") return { c: "false", ty: T_BOOLEAN };
+                    if (stdioStreamName === "stdout") return { c: "tsc_process_stdout_writable_ended()", ty: T_BOOLEAN };
+                    if (stdioStreamName === "stderr") return { c: "tsc_process_stderr_writable_ended()", ty: T_BOOLEAN };
                     break;
                 case "writableLength":
                     if (stdioStreamName !== "stdin") return { c: "0.0", ty: T_NUMBER };

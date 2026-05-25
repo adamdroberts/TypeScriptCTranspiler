@@ -518,6 +518,25 @@ bool tsc_process_stderr_write_buffer(const tsc_buffer_t* data) {
     return data ? process_stream_write_bytes(stderr, data->data, data->len) : process_stream_write_bytes(stderr, NULL, 0);
 }
 
+static bool g_stdout_ended = false;
+static bool g_stderr_ended = false;
+
+void tsc_process_stdout_end(void) {
+    g_stdout_ended = true;
+}
+
+void tsc_process_stderr_end(void) {
+    g_stderr_ended = true;
+}
+
+bool tsc_process_stdout_writable_ended(void) {
+    return g_stdout_ended;
+}
+
+bool tsc_process_stderr_writable_ended(void) {
+    return g_stderr_ended;
+}
+
 bool tsc_process_stdio_is_tty(int fd) {
     return isatty(fd) == 1;
 }

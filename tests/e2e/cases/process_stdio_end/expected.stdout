@@ -1,2 +1,4 @@
-end:bufend:seen eddd
+before false false
+end:bufend:seen eddd true
 writable true true
+after true true true true
