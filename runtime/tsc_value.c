@@ -522,6 +522,24 @@ static bool descriptor_field(tsc_value_t desc, const char* name, size_t len, tsc
     return true;
 }
 
+static void* dynamic_accessor_env(tsc_value_t fn) {
+    tsc_value_t* env = (tsc_value_t*)TSC_GC_MALLOC(sizeof(tsc_value_t));
+    *env = fn;
+    return env;
+}
+
+tsc_value_t tsc_value_dynamic_accessor_getter(void* env, tsc_value_t receiver) {
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
+    return tsc_value_apply_function(*(tsc_value_t*)env, receiver, tsc_value_array(args));
+}
+
+bool tsc_value_dynamic_accessor_setter(void* env, tsc_value_t receiver, tsc_value_t value) {
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_array_push_value(args, value);
+    tsc_value_apply_function(*(tsc_value_t*)env, receiver, tsc_value_array(args));
+    return true;
+}
+
 bool tsc_value_define_property_descriptor(tsc_value_t v, tsc_str_t* key, tsc_value_t desc) {
     if (!value_is_box(desc) || value_tag(desc) != TSC_VALUE_TAG_OBJECT) {
         tsc_throw_str(tsc_str_from_cstr("Object.defineProperty descriptor must be an object"));
@@ -542,20 +560,32 @@ bool tsc_value_define_property_descriptor(tsc_value_t v, tsc_str_t* key, tsc_val
         if (has_value || has_writable) {
             tsc_throw_str(tsc_str_from_cstr("Object.defineProperty descriptor cannot mix value with get/set"));
         }
-        if (
-            (has_getter && !tsc_value_is_undefined(getter_value)) ||
-            (has_setter && !tsc_value_is_undefined(setter_value))
-        ) {
-            tsc_throw_str(tsc_str_from_cstr("Object.defineProperty dynamic accessor descriptors are not supported"));
+        tsc_accessor_getter_t getter = NULL;
+        void* getter_env = NULL;
+        tsc_accessor_setter_t setter = NULL;
+        void* setter_env = NULL;
+        if (has_getter && !tsc_value_is_undefined(getter_value)) {
+            if (!value_is_callable_function(getter_value)) {
+                tsc_throw_str(tsc_str_from_cstr("Object.defineProperty getter must be callable"));
+            }
+            getter = tsc_value_dynamic_accessor_getter;
+            getter_env = dynamic_accessor_env(getter_value);
+        }
+        if (has_setter && !tsc_value_is_undefined(setter_value)) {
+            if (!value_is_callable_function(setter_value)) {
+                tsc_throw_str(tsc_str_from_cstr("Object.defineProperty setter must be callable"));
+            }
+            setter = tsc_value_dynamic_accessor_setter;
+            setter_env = dynamic_accessor_env(setter_value);
         }
         return tsc_value_define_accessor_desc(
             v,
             key,
-            NULL,
-            NULL,
+            getter,
+            getter_env,
             has_getter,
-            NULL,
-            NULL,
+            setter,
+            setter_env,
             has_setter,
             has_enumerable ? tsc_value_is_truthy(enumerable_value) : false,
             has_enumerable,

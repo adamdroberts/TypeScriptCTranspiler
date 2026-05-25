@@ -1,0 +1,8 @@
+object define: true
+object get: target:initial
+object set: target:set target:target:set
+identity: true true
+apply getter: apply:target:set
+apply setter: apply:next
+reflect define: true
+reflect get: reflect:apply:next marker,value

@@ -28,9 +28,5 @@ report("reflect bad descriptor", (): any => Reflect.defineProperty(reflectTarget
 const mixedDesc: any = { value: 1, get: undefined };
 report("mixed descriptor", (): any => Object.defineProperty(objectTarget, "mixed", mixedDesc));
 
-function getValue(this: any): any {
-    return 1;
-}
-
-const accessorDesc: any = { get: getValue as any };
+const accessorDesc: any = { get: 1 };
 report("dynamic accessor", (): any => Object.defineProperty(objectTarget, "accessor", accessorDesc));

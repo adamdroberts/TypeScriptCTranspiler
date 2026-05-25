@@ -453,6 +453,8 @@ int tsc_dns_lookup_ai_flags(double hints);
 void event_target_reserve(tsc_event_target_t* target, size_t cap);
 tsc_value_t value_accessor_getter_identity(tsc_accessor_getter_t getter, void* env);
 tsc_value_t value_accessor_setter_identity(tsc_accessor_setter_t setter, void* env);
+tsc_value_t tsc_value_dynamic_accessor_getter(void* env, tsc_value_t receiver);
+bool tsc_value_dynamic_accessor_setter(void* env, tsc_value_t receiver, tsc_value_t value);
 double value_as_num(tsc_value_t v);
 void console_write_str(FILE* f, const tsc_str_t* s);
 void console_write(FILE* f, size_t n, va_list ap);

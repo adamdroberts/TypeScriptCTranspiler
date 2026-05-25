@@ -1342,6 +1342,7 @@ bool tsc_event_target_dispatch(tsc_event_target_t* target, tsc_event_t* event) {
 
 tsc_value_t value_accessor_getter_identity(tsc_accessor_getter_t getter, void* env) {
     if (!getter) return tsc_value_undefined();
+    if (getter == tsc_value_dynamic_accessor_getter && env) return *(tsc_value_t*)env;
     for (tsc_function_identity_t* cur = g_function_identities; cur; cur = cur->next) {
         if (cur->kind == TSC_FUNCTION_IDENTITY_GETTER && cur->code.getter == getter && cur->env == env) {
             return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cur);
@@ -1364,6 +1365,7 @@ tsc_value_t value_accessor_getter_identity(tsc_accessor_getter_t getter, void* e
 
 tsc_value_t value_accessor_setter_identity(tsc_accessor_setter_t setter, void* env) {
     if (!setter) return tsc_value_undefined();
+    if (setter == tsc_value_dynamic_accessor_setter && env) return *(tsc_value_t*)env;
     for (tsc_function_identity_t* cur = g_function_identities; cur; cur = cur->next) {
         if (cur->kind == TSC_FUNCTION_IDENTITY_SETTER && cur->code.setter == setter && cur->env == env) {
             return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cur);
