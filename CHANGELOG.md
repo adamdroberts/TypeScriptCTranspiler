@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- AOT `eval(...)`, `Function(...)`, and `new Function(...)` source extraction now accepts single-valued template-literal type aliases. Test: `runtime_code_template_literal_type_aot`.
 - Finite dynamic `require(...)` proofs now resolve bigint, null, and undefined literal placeholders inside finite template-literal string type aliases. Test: `dynamic_require_template_literal_primitive_type`.
 - Finite dynamic `require(...)` proofs now resolve numeric and boolean literal placeholders inside finite template-literal string type aliases. Test: `dynamic_require_template_literal_numeric_type`.
 - Finite dynamic `require(...)` proofs now resolve variables and parameters annotated with finite template-literal string type aliases. Test: `dynamic_require_template_literal_type`.
