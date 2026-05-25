@@ -117,6 +117,36 @@ const packages: Record<string, PackageFixture> = {
             "src/math.ts": "export function triple(value: number): number {\n    return value * 3;\n}\n",
         },
     },
+    "tsc2c-import-external-imports-package": {
+        packageJson: {
+            name: "tsc2c-import-external-imports-package",
+            version: "1.0.0",
+            type: "module",
+            exports: "./src/index.ts",
+            imports: {
+                "#dep": "tsc2c-import-external-imports-dep",
+                "#feature/*": "tsc2c-import-external-imports-dep/*",
+            },
+        },
+        files: {
+            "src/index.ts": 'import { label, pick } from "#dep";\nimport { scale } from "#feature/math";\nexport const summary = "external:" + label;\nexport function describe(value: number): string {\n    return pick(value) + ":" + scale(value);\n}\n',
+        },
+    },
+    "tsc2c-import-external-imports-dep": {
+        packageJson: {
+            name: "tsc2c-import-external-imports-dep",
+            version: "1.0.0",
+            type: "module",
+            exports: {
+                ".": "./index.ts",
+                "./math": "./math.ts",
+            },
+        },
+        files: {
+            "index.ts": 'export const label = "external-dep";\nexport function pick(value: number): string {\n    return "external-entry:" + value;\n}\n',
+            "math.ts": "export function scale(value: number): number {\n    return value * 14;\n}\n",
+        },
+    },
     "tsc2c-conditional-exports-package": {
         packageJson: {
             name: "tsc2c-conditional-exports-package",
