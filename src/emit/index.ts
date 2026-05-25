@@ -7041,16 +7041,57 @@ class Emitter {
             ts.isPropertyAccessExpression(unwrapped.expression) &&
             ts.isIdentifier(unwrapped.expression.expression) &&
             this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Promise") &&
-            unwrapped.arguments.length === 1 &&
-            this.isSideEffectFreeFreshOrReturnedEmptyArrayOperand(unwrapped.arguments[0]!, seenConsts)
+            unwrapped.arguments.length === 1
         ) {
             const method = unwrapped.expression.name.text;
-            if (method === "all" || method === "allSettled") return "fulfilled";
-            if (method === "any") return "rejected";
-            if (method === "race") return "pending";
+            if (
+                method === "all" ||
+                method === "allSettled" ||
+                method === "any" ||
+                method === "race"
+            ) {
+                const states = this.sideEffectFreePromiseCombinatorElementStates(
+                    unwrapped.arguments[0]!,
+                    seenConsts,
+                );
+                if (states === null) return null;
+                if (states.length === 0) {
+                    if (method === "any") return "rejected";
+                    if (method === "race") return "pending";
+                    return "fulfilled";
+                }
+                if (states.some((state) => state === "pending")) return "pending";
+                if (method === "all") {
+                    return states.some((state) => state === "rejected")
+                        ? "rejected"
+                        : "fulfilled";
+                }
+                if (method === "allSettled") return "fulfilled";
+                if (method === "any") {
+                    return states.some((state) => state === "fulfilled")
+                        ? "fulfilled"
+                        : "rejected";
+                }
+                return states[0]!;
+            }
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreePromiseStaticCombinatorState(init, seenConsts) : null;
+    }
+
+    private sideEffectFreePromiseCombinatorElementStates(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): Array<"fulfilled" | "rejected" | "pending"> | null {
+        const elements = this.sideEffectFreeMapArraySourceExpressions(expr, seenConsts);
+        if (elements === null) return null;
+        const states: Array<"fulfilled" | "rejected" | "pending"> = [];
+        for (const element of elements) {
+            const state = this.sideEffectFreePromiseResolveArgumentState(element, new Set(seenConsts));
+            if (state === null) return null;
+            states.push(state);
+        }
+        return states;
     }
 
     private sideEffectFreePromiseResolveState(

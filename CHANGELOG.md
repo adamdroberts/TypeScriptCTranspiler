@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes unused immediate Promise chains whose direct Promise combinator receiver is statically settled from side-effect-free known element states. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused immediate Promise chains whose direct `Promise.resolve(...)` receiver adopts a statically settled side-effect-free native Promise record. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused immediate Promise chains whose direct `Promise.all([])`, `Promise.allSettled([])`, or `Promise.any([])` receiver is statically settled. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused immediate Promise chains whose direct `Promise.try(...)` receiver is statically fulfilled or rejected by a side-effect-free callback. Test: `generated_c_dce_const`.
