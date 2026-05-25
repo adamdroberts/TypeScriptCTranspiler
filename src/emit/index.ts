@@ -26398,9 +26398,10 @@ class Emitter {
         const items = this.emitExpr(itemsArg);
         const validItems =
             ((items.ty.kind === "array" || items.ty.kind === "set") && sameCType(items.ty.elem!, t)) ||
+            (items.ty.kind === "map" && !!items.ty.key && !!items.ty.elem && sameCType(entryType(items.ty.elem, items.ty.key), t)) ||
             (items.ty.kind === "string" && sameCType(t, T_STRING));
         if (!validItems) {
-            unsupported(itemsArg, "Map.groupBy items must be an array, Set, or string matching the result element type T[]");
+            unsupported(itemsArg, "Map.groupBy items must be an array, Set, Map, or string matching the result element type T[]");
         }
 
         return this.emitSequencedExpr(callType, [{ value: items }], ([itemsExpr]) => {
@@ -26412,6 +26413,8 @@ class Emitter {
             const group = this.freshTemp("_gb_group");
             const sourceArray = items.ty.kind === "set"
                 ? `tsc_set_values(${itemsExpr})`
+                : items.ty.kind === "map"
+                    ? this.mapEntriesArrayExpr(itemsArg, itemsExpr, items.ty, "Map.groupBy(Map)").c
                 : items.ty.kind === "string"
                     ? `tsc_str_chars(${itemsExpr})`
                     : itemsExpr;

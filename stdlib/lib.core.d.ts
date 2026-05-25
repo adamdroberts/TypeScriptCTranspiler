@@ -346,6 +346,7 @@ interface MapConstructor {
     new <K, V>(): Map<K, V>;
     groupBy<T, K>(items: T[], callbackfn: (value: T, index: number) => K): Map<K, T[]>;
     groupBy<T, K>(items: Set<T>, callbackfn: (value: T, index: number) => K): Map<K, T[]>;
+    groupBy<MK, MV, K>(items: Map<MK, MV>, callbackfn: (value: ObjectEntry<MV, MK>, index: number) => K): Map<K, ObjectEntry<MV, MK>[]>;
     groupBy<K>(items: string, callbackfn: (value: string, index: number) => K): Map<K, string[]>;
 }
 declare var Map: MapConstructor;

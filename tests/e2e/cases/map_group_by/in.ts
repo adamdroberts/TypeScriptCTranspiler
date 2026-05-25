@@ -30,6 +30,16 @@ function joinStrings(group: string[]): string {
     return parts;
 }
 
+function joinEntries(group: ObjectEntry<number, string>[]): string {
+    let parts = "";
+    for (let i = 0; i < group.length; i++) {
+        if (i > 0) parts = parts + ",";
+        const entry = group[i]!;
+        parts = parts + entry[0] + ":" + entry[1];
+    }
+    return parts;
+}
+
 function printPersonGroup(map: Map<string, Person[]>, key: string): void {
     const group = map.get(key);
     if (group === undefined) {
@@ -102,3 +112,19 @@ const dChars = charBuckets.get("d");
 console.log("string front:", frontChars === undefined ? "(none)" : joinStrings(frontChars));
 console.log("string a:", aChars === undefined ? "(none)" : joinStrings(aChars));
 console.log("string d:", dChars === undefined ? "(none)" : joinStrings(dChars));
+
+const sourceMap = new Map<string, number>([
+    ["red", 1],
+    ["blue", 2],
+    ["green", 3],
+    ["gold", 4],
+    ["gray", 0],
+]);
+const entryBuckets = Map.groupBy(sourceMap, (entry, index) => index < 2 ? "front" : entry[1] >= 3 ? "large" : "small");
+console.log("map-source buckets:", entryBuckets.size);
+const frontEntries = entryBuckets.get("front");
+const largeEntries = entryBuckets.get("large");
+const smallEntries = entryBuckets.get("small");
+console.log("map-source front:", frontEntries === undefined ? "(none)" : joinEntries(frontEntries));
+console.log("map-source large:", largeEntries === undefined ? "(none)" : joinEntries(largeEntries));
+console.log("map-source small:", smallEntries === undefined ? "(none)" : joinEntries(smallEntries));

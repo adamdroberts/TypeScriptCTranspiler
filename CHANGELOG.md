@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `Map.groupBy` now accepts typed `Map<K, V>` sources, grouping insertion-ordered `ObjectEntry<V, K>` pairs by callback result. Test: `map_group_by`.
 - Generated-C DCE now prunes unused `Object.groupBy(...)` / `Map.groupBy(...)` calls over statically empty string sources. Test: `generated_c_dce_const`.
 - `Object.groupBy` and `Map.groupBy` now accept string sources, grouping code-point strings by callback result through the existing string character materialization path. Tests: `object_group_by`, `map_group_by`.
 - `Promise.any` aggregate rejection and empty `Promise.race` pending behavior are now covered for typed Set sources in the immediate Promise subset. Tests: `promise_any_aggregate`, `promise_race_empty_pending`.

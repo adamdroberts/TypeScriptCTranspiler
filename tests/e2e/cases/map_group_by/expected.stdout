@@ -19,3 +19,7 @@ string buckets: 4
 string front: a,b
 string a: a,a
 string d: d
+map-source buckets: 3
+map-source front: red:1,blue:2
+map-source large: green:3,gold:4
+map-source small: gray:0
