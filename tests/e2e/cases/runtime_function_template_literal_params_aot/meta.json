@@ -1,0 +1,3 @@
+{
+  "description": "AOT Function parameter-name extraction resolves single-valued template literal type aliases"
+}
