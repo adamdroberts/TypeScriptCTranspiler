@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE coverage now proves `Array.from(empty, mapper)` pruning through earlier-const and copy-constructed empty typed Set and Map sources. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now proves `Array.from(empty, mapper)` pruning through earlier-const and copied empty typed array sources. Test: `generated_c_dce_const`.
 - Generated-C DCE now propagates exact empty-array length proofs through earlier-const array-returning sources, proving `Object.groupBy(...)` / `Map.groupBy(...)` pruning through earlier-const and copied empty typed array sources. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now proves `Object.groupBy(...)` / `Map.groupBy(...)` pruning through earlier-const empty string sources. Test: `generated_c_dce_const`.
