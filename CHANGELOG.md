@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Revoked object `Proxy` values now have focused coverage for `Reflect.*` helper paths including get, set, has, deleteProperty, ownKeys, descriptor, prototype, and extensibility helpers. Test: `proxy_revocable_reflect_ops`.
 - Revoked object `Proxy` values now have focused coverage for object-operation paths including set, has, delete, own-key, descriptor, prototype, extensibility, seal, and freeze helpers. Test: `proxy_revocable_object_ops`.
 - `dns.lookup(...)` and immediate `dns.promises.lookup(...)` now have focused coverage for earlier static `const` aliases on supported `verbatim` / `order` option values. Test: `dns_lookup_hints`.
 - `fs.truncateSync(...)` and immediate `fs.promises.truncate(...)` now treat earlier static `const` aliases for `undefined` length values as the default zero-length truncate while still evaluating ignored trailing arguments. Test: `fs_mutation_ignored_arguments`.
