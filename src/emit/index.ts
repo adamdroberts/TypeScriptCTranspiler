@@ -4515,6 +4515,39 @@ class Emitter {
                 ) {
                     return 0;
                 }
+                if (receiverLength === 0) {
+                    if (
+                        method === "copyWithin" &&
+                        unwrapped.arguments.length >= 2 &&
+                        unwrapped.arguments.length <= 3 &&
+                        Array.from(unwrapped.arguments).every((arg) =>
+                            this.isSideEffectFreePrimitiveNumberCoercion(arg, seenConsts)
+                        )
+                    ) {
+                        return 0;
+                    }
+                    if (
+                        method === "fill" &&
+                        unwrapped.arguments.length >= 1 &&
+                        unwrapped.arguments.length <= 3 &&
+                        this.isSideEffectFreeTopLevelConstInitializer(unwrapped.arguments[0]!, seenConsts) &&
+                        (!unwrapped.arguments[1] ||
+                            this.isSideEffectFreePrimitiveNumberCoercion(unwrapped.arguments[1], seenConsts)) &&
+                        (!unwrapped.arguments[2] ||
+                            this.isSideEffectFreePrimitiveNumberCoercion(unwrapped.arguments[2], seenConsts))
+                    ) {
+                        return 0;
+                    }
+                    if (
+                        method === "toSpliced" &&
+                        unwrapped.arguments.length <= 2 &&
+                        Array.from(unwrapped.arguments).every((arg) =>
+                            this.isSideEffectFreePrimitiveNumberCoercion(arg, seenConsts)
+                        )
+                    ) {
+                        return 0;
+                    }
+                }
                 if (
                     (
                         method === "toReversed" ||

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now preserves empty returned-array lengths through pure `copyWithin(...)`, `fill(...)`, and insert-free `toSpliced(...)` chains, including absent element reads from empty `Object.getOwnPropertySymbols(...)` results. Test: `generated_c_dce_const`.
 - Generated-C DCE now preserves exact returned-array lengths through no-argument `.concat()` and empty returned-array `.flat(...)` chains, including absent element reads from empty `Object.getOwnPropertySymbols(...)` results. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats out-of-range element reads from exact-length returned-array chains as absent, enabling empty `Object.getOwnPropertySymbols(...).slice()[0]`-style reads to prune. Test: `generated_c_dce_const`.
 - Generated-C DCE now preserves exact returned-array lengths through pure `.slice()`, `.toReversed(...)`, `.keys(...)`, `.values(...)`, and `.entries(...)` chains, enabling empty `Object.getOwnPropertySymbols(...)` length reads to prune. Test: `generated_c_dce_const`.
