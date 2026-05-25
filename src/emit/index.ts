@@ -2145,7 +2145,7 @@ class Emitter {
                 if (!ts.isPropertyAssignment(prop)) return false;
                 const key = this.objectLiteralStaticStringKey(prop.name, seenConsts);
                 if (key === null) return false;
-                if (this.isUndefinedExpression(prop.initializer)) return true;
+                if (this.isSideEffectFreeUndefinedValue(prop.initializer, seenConsts)) return true;
                 return this.isSideEffectFreeStringCoercion(prop.initializer, seenConsts);
             });
         }

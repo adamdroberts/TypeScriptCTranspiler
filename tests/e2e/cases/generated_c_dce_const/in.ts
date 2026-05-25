@@ -209,6 +209,7 @@ const unused_path_posix_join_call = nodePath.posix.join("dead_path_posix_join_ig
 const unused_path_named_posix_normalize_call = pathPosix.normalize("dead_path_named_posix_normalize_ignored/..");
 const unused_path_global_posix_parse_call = path.posix.parse("dead_path_global_posix_parse_ignored");
 const unused_path_format_call = pathFormat({ dir: "/dead_path_format_dir", name: "dead_path_format_name", ext: ".txt" }, "dead_path_format_ignored".length);
+const unused_path_format_alias_default_call = pathFormat({ dir: "/dead_path_format_alias_default_dir", name: unused_default_option, ext: ".txt" });
 const unused_path_posix_format_call = pathPosix.format({ root: "/", base: "dead_path_posix_format_base.txt" });
 const unused_path_parse_base_read = nodePath.parse("dead_path_parse_base_read.txt").base;
 const unused_path_named_parse_ext_read = pathParse("dead_path_named_parse_ext_read.txt").ext;
