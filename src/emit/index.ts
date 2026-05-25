@@ -26908,6 +26908,19 @@ class Emitter {
             specs.push(...this.ignoredArgumentSpecs(call.arguments, call.arguments.length > 0 ? 1 : 0));
             return this.emitSequencedExpr(T_BUFFER, specs, () => "NULL");
         }
+        const processStdinIsPausedStreamName = memberName === "isPaused"
+            ? this.processStdioStreamReceiverName(recvExpr)
+            : null;
+        if (processStdinIsPausedStreamName) {
+            if (processStdinIsPausedStreamName !== "stdin") {
+                unsupported(call, `process.${processStdinIsPausedStreamName}.isPaused is not supported in this stdio subset`);
+            }
+            return this.emitSequencedExpr(
+                T_BOOLEAN,
+                this.ignoredArgumentSpecs(call.arguments, 0),
+                () => "false",
+            );
+        }
         const processStdinStreamName = (
             memberName === "setEncoding" ||
             memberName === "pause" ||

@@ -527,6 +527,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `process.stdin.setEncoding(...)`, `process.stdin.resume(...)`, and `process.stdin.pause(...)` are accepted as no-op compatibility methods in the bounded stdio subset while evaluating consumed and ignored arguments. Named, namespace, and default process imports route to the same helpers. Test: `process_stdin_noop_methods`
 - `process.stdin.pipe(process.stdout|process.stderr, ...ignored)` and `process.stdin.unpipe(process.stdout|process.stderr?, ...ignored)` are accepted as no-op compatibility methods in the bounded stdio subset while evaluating ignored trailing arguments. Named, namespace, and default process imports route to the same helpers. Test: `process_stdin_pipe_noop_methods`
 - `process.stdin.read(size?, ...ignored)` returns `null` in the bounded no-input stdio subset while evaluating optional size and ignored arguments. Named, namespace, and default process imports route to the same helper. Test: `process_stdin_read_null`
+- `process.stdin.isPaused(...ignored)` returns `false` in the bounded stdio subset while evaluating ignored arguments. Named, namespace, and default process imports route to the same helper. Test: `process_stdin_is_paused`
 - `process.stdout.fd` / `process.stderr.fd` expose `1` / `2`, `process.stdout.isTTY` / `process.stderr.isTTY` use `isatty` for the corresponding descriptor, `process.stdout.readable` / `process.stderr.readable` return `false`, and `process.stdout.writable` / `process.stderr.writable` return `true` in the bounded stdio subset. Named and namespace `stdout` / `stderr` imports from `"process"` / `"node:process"` expose the same metadata. Tests: `process_stdio_metadata`, `process_stdio_readable_writable`, `process_stdio_metadata_import`
 - `process.stdout.setDefaultEncoding(...)` / `stderr.setDefaultEncoding(...)`, `cork(...)`, and `uncork(...)` are accepted as no-op compatibility methods in the bounded stdio subset while evaluating consumed and ignored arguments. Named, namespace, and default process imports route to the same helpers. Test: `process_stdout_noop_methods`
 - Process stdio streams accept no-op `on(...)`, `once(...)`, `addListener(...)`, `off(...)`, `removeListener(...)`, and `removeAllListeners(...)` compatibility methods while evaluating supplied arguments and leaving listener callbacks inert in this bounded stream subset. Test: `process_stdio_event_noop_methods`
@@ -1181,6 +1182,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `process_release` | process.release Node-shaped metadata object |
 | `process_resource_usage` | process.resourceUsage numeric getrusage fields |
 | `process_stdin_metadata` | process stdin fd and isTTY metadata |
+| `process_stdin_is_paused` | process stdin isPaused returns false |
 | `process_stdin_noop_methods` | process stdin no-op setEncoding, resume, and pause methods |
 | `process_stdin_pipe_noop_methods` | process stdin no-op pipe and unpipe methods |
 | `process_stdin_read_null` | process stdin read returns null in the bounded no-input stream subset |

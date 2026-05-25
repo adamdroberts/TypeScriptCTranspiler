@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `process.stdin.isPaused(...)` now returns `false` in the bounded stdio stream subset while evaluating ignored arguments. Test: `process_stdin_is_paused`.
 - `process.stdin.read(...)` now returns `null` in the bounded no-input stdio stream subset while evaluating optional size and ignored arguments. Test: `process_stdin_read_null`.
 - `process.stdin.pipe(...)` and `process.stdin.unpipe(...)` now act as no-op compatibility methods for process stdout/stderr destinations while evaluating ignored arguments. Test: `process_stdin_pipe_noop_methods`.
 - Process stdio streams now accept no-op `on(...)`, `once(...)`, `addListener(...)`, `off(...)`, `removeListener(...)`, and `removeAllListeners(...)` compatibility methods while evaluating supplied arguments. Test: `process_stdio_event_noop_methods`.
