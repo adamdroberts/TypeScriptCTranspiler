@@ -9029,6 +9029,12 @@ class Emitter {
                 seenConsts,
             );
             if (sortedResult !== null) return sortedResult;
+            const reversedResult = this.sideEffectFreePrimitiveReversedElementResult(
+                unwrapped,
+                index,
+                seenConsts,
+            );
+            if (reversedResult !== null) return reversedResult;
         }
         const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts);
         if (returnedArrayLength !== null && (index < 0 || index >= returnedArrayLength)) {
@@ -9218,6 +9224,36 @@ class Emitter {
         )
             ? "present"
             : "unsafe";
+    }
+
+    private sideEffectFreePrimitiveReversedElementResult(
+        call: ts.CallExpression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" | null {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            (
+                call.expression.name.text !== "reverse" &&
+                call.expression.name.text !== "toReversed"
+            ) ||
+            !Array.from(call.arguments).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            )
+        ) {
+            return null;
+        }
+        const length = this.sideEffectFreeFreshOrReturnedArrayLength(
+            call.expression.expression,
+            seenConsts,
+        );
+        if (length === null) return null;
+        if (index < 0 || index >= length) return "absent";
+        return this.sideEffectFreePrimitiveArrayElementOperandResult(
+            call.expression.expression,
+            length - 1 - index,
+            new Set(seenConsts),
+        );
     }
 
     private sideEffectFreePrimitiveStaticArrayElementResult(

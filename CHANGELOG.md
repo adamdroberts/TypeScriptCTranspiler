@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now proves primitive element reads through pure `reverse()` and `toReversed(...)` results, enabling unused `Promise.resolve(...)` and direct expression pruning for in-range reversed fresh arrays. Test: `generated_c_dce_const`.
 - Generated-C DCE now proves primitive element reads through no-argument string-array `sort()` and `toSorted()` calls, enabling unused `Promise.resolve(...)` and direct expression pruning for in-range sorted fresh arrays. Test: `generated_c_dce_const`.
 - Generated-C DCE now proves primitive element reads through pure zero-depth `flat(...)` results, enabling unused `Promise.resolve(...)` and direct expression pruning for in-range flattened fresh arrays. Test: `generated_c_dce_const`.
 - Generated-C DCE now proves primitive element reads through pure array-result `concat(...)` calls, enabling unused `Promise.resolve(...)` and direct expression pruning for in-range concatenated fresh arrays. Test: `generated_c_dce_const`.
