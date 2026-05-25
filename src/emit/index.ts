@@ -17147,6 +17147,15 @@ class Emitter {
         );
     }
 
+    private isTimersPromisesSchedulerReceiver(expr: ts.Expression): boolean {
+        if (ts.isIdentifier(expr)) {
+            return this.isNamedImportFrom(expr, ["timers/promises", "node:timers/promises"], "scheduler");
+        }
+        return ts.isPropertyAccessExpression(expr) &&
+            expr.name.text === "scheduler" &&
+            this.isTimersPromisesModuleIdentifier(expr.expression);
+    }
+
     private isConsoleModuleIdentifier(expr: ts.Expression): boolean {
         return ts.isIdentifier(expr) && (
             this.isNamespaceImportFrom(expr, ["console", "node:console"]) ||
@@ -26497,6 +26506,10 @@ class Emitter {
             return this.emitTimersPromisesCall(call, memberName);
         }
 
+        if (this.isTimersPromisesSchedulerReceiver(recvExpr)) {
+            return this.emitTimersPromisesSchedulerCall(call, memberName);
+        }
+
         if (this.isBufferModuleIdentifier(recvExpr) && (memberName === "atob" || memberName === "btoa")) {
             return this.emitBase64Call(call, memberName);
         }
@@ -31623,6 +31636,30 @@ class Emitter {
             }
         }
         unsupported(call, `timers/promises.${name}`);
+    }
+
+    private emitTimersPromisesSchedulerCall(call: ts.CallExpression, name: string): EmitResult {
+        const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
+        if (mapped.kind !== "promise") unsupported(call, `timers/promises.scheduler.${name} result must be Promise<T>`);
+        switch (name) {
+            case "wait": {
+                if (call.arguments.length > 2) unsupported(call, "timers/promises.scheduler.wait expects optional delay and options");
+                const delay = call.arguments[0];
+                if (delay && !this.isZeroDelayLiteral(delay)) {
+                    unsupported(delay, "timers/promises.scheduler.wait in this subset requires an omitted delay or literal 0 delay");
+                }
+                const options = call.arguments[1];
+                if (options && !this.isUndefinedExpression(options)) {
+                    unsupported(options, "timers/promises.scheduler.wait options are not supported in this immediate subset");
+                }
+                return { c: "tsc_promise_resolve(tsc_value_undefined())", ty: mapped };
+            }
+            case "yield": {
+                if (call.arguments.length > 0) unsupported(call, "timers/promises.scheduler.yield expects no arguments");
+                return { c: "tsc_promise_resolve(tsc_value_undefined())", ty: mapped };
+            }
+        }
+        unsupported(call, `timers/promises.scheduler.${name}`);
     }
 
     private ensureImmediateAdapter(expr: ts.Expression, type: CType, argTypes: readonly CType[]): string {

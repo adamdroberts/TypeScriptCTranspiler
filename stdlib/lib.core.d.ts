@@ -876,6 +876,11 @@ interface TimersModule {
 interface TimersPromisesModule {
     setTimeout<T = void>(delay?: number, value?: T, options?: undefined): Promise<T>;
     setImmediate<T = void>(value?: T, options?: undefined): Promise<T>;
+    scheduler: TimersPromisesScheduler;
+}
+interface TimersPromisesScheduler {
+    wait(delay?: number, options?: undefined): Promise<void>;
+    yield(): Promise<void>;
 }
 declare module "timers" {
     export const setTimeout: SetTimeoutFunction;
@@ -898,12 +903,14 @@ declare module "node:timers" {
 declare module "timers/promises" {
     export function setTimeout<T = void>(delay?: number, value?: T, options?: undefined): Promise<T>;
     export function setImmediate<T = void>(value?: T, options?: undefined): Promise<T>;
+    export const scheduler: TimersPromisesScheduler;
     const defaultTimersPromises: TimersPromisesModule;
     export default defaultTimersPromises;
 }
 declare module "node:timers/promises" {
     export function setTimeout<T = void>(delay?: number, value?: T, options?: undefined): Promise<T>;
     export function setImmediate<T = void>(value?: T, options?: undefined): Promise<T>;
+    export const scheduler: TimersPromisesScheduler;
     const defaultTimersPromises: TimersPromisesModule;
     export default defaultTimersPromises;
 }
