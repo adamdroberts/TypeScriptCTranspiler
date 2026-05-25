@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `new Event(type, options?, ...ignored)` now evaluates and ignores trailing constructor arguments after the supported options slot. Test: `event_constructor_ignored_arguments`.
 - `RegExp(pattern, flags?, ...ignored)` and `new RegExp(pattern, flags?, ...ignored)` now evaluate and ignore trailing arguments after the optional flags argument. Test: `regexp_constructor_ignored_arguments`.
 - `new Promise(executor, ...ignored)` now evaluates and ignores trailing constructor arguments before invoking the synchronous executor. Test: `promise_constructor_ignored_arguments`.
 - `new Proxy(target, handler, ...ignored)` and `Proxy.revocable(target, handler, ...ignored)` now evaluate and ignore trailing arguments after the required target and handler. Test: `proxy_constructor_ignored_arguments`.

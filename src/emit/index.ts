@@ -40973,13 +40973,13 @@ class Emitter {
         }
         if (cls === "Event") {
             const args = n.arguments ?? [];
-            if (args.length < 1 || args.length > 2) unsupported(n, "new Event() expects type and optional options");
+            if (args.length < 1) unsupported(n, "new Event() expects type and optional options");
             const type = this.emitExpr(args[0]!);
             const cancelable = this.eventInitCancelable(args[1]);
-            return this.emitSequencedCall("tsc_event_new", T_EVENT, [
+            return this.emitSequencedExpr(T_EVENT, [
                 { value: type, target: T_STRING, node: args[0]! },
-                { value: { c: cancelable, ty: T_BOOLEAN } },
-            ]);
+                ...this.ignoredArgumentSpecs(args, 2),
+            ], ([eventType]) => `tsc_event_new(${eventType}, ${cancelable})`);
         }
         if (cls === "Date") {
             const args = n.arguments ?? [];

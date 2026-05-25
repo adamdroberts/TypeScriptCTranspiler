@@ -1752,7 +1752,7 @@ interface EventInit {
     cancelable?: boolean;
 }
 interface EventConstructor {
-    new(type: string, eventInitDict?: EventInit): Event;
+    new(type: string, eventInitDict?: EventInit, ...ignored: any[]): Event;
 }
 declare var Event: EventConstructor;
 
