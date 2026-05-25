@@ -80,6 +80,12 @@ Array.fromAsync(dynamicArraySource, (value: any) => Promise.resolve("dyn:" + val
     console.log("async mapper dynamic:", values.join("|"));
 });
 
+Array.fromAsync([1, 2], function (this: any, value: number): Promise<number> {
+    return Promise.resolve(value + (this.offset as number));
+}, { offset: 30 }).then((values) => {
+    console.log("async mapper thisArg:", values.join("|"));
+});
+
 Array.fromAsync([1, 2], (value) => value === 2 ? Promise.reject<number>("mapper bad") : Promise.resolve(value)).catch((reason) => {
     console.log("async mapper reject:", reason);
 });
