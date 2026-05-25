@@ -899,6 +899,10 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'const base = { inherited: "assign-define-properties-create-from-entries-base" };\nconst local = require("./local.js");\nconst labelKey = "la" + "bel";\nconst descriptors = {\n  default: { value: "assign-define-properties-create-from-entries-default", enumerable: true },\n  [labelKey]: { get() { return "assign-define-properties-create-from-entries-target"; }, enumerable: true },\n  count: { value: local.count, enumerable: true }\n};\nconst entries = Object.entries(descriptors);\nmodule.exports = Object.assign(Object.defineProperties(Object.create(base), Object.fromEntries(entries)), { extra: true });\n',
         "local.js": 'exports.count = 131;\n',
     }),
+    "tsc2c-cjs-module-object-assign-define-properties-create-from-entries-map-target-named": cjsPackage("tsc2c-cjs-module-object-assign-define-properties-create-from-entries-map-target-named", {
+        "index.js": 'const base = { inherited: "assign-define-properties-create-from-entries-map-base" };\nconst local = require("./local.js");\nconst descriptors = {\n  default: { value: "assign-define-properties-create-from-entries-map-default", enumerable: true },\n  label: { get() { return "assign-define-properties-create-from-entries-map-target"; }, enumerable: true },\n  count: { value: local.count, enumerable: true }\n};\nmodule.exports = Object.assign(Object.defineProperties(Object.create(base), Object.fromEntries(new Map(Object.entries(descriptors)))), { extra: true });\n',
+        "local.js": 'exports.count = 144;\n',
+    }),
     "tsc2c-cjs-module-object-assign-freeze-target-named": cjsPackage("tsc2c-cjs-module-object-assign-freeze-target-named", {
         "index.js": 'const local = require("./local.js");\nmodule.exports = Object.assign(Object.freeze({\n  default: "assign-freeze-default",\n  label: "assign-freeze-target",\n  count: local.count\n}), { extra: true });\n',
         "local.js": 'exports.count = 84;\n',

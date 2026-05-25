@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- CommonJS package metadata now recognizes `Object.assign(Object.defineProperties(Object.create(proto), Object.fromEntries(new Map(Object.entries(descriptors)))), { ... })` whole-value exports with finite descriptor maps. Test: `node_modules_commonjs_module_exports_object_assign_define_properties_create_from_entries_target_named`.
 - CommonJS package metadata now recognizes `Object.assign(Object.create(proto, Object.fromEntries(new Map(Object.entries(descriptors)))), { ... })` whole-value exports with finite descriptor maps. Test: `node_modules_commonjs_module_exports_object_assign_create_from_entries_target_named`.
 - Wrapped CommonJS `module.exports = Object.freeze(Object.fromEntries(...))` metadata now accepts finite Map-backed `Object.fromEntries(new Map(Object.entries(api)))` sources. Test: `node_modules_commonjs_module_exports_object_wrapper_from_entries_variants_named`.
 - CommonJS `Object.assign(exports, Object.fromEntries(...))` export metadata now accepts finite Map-backed `Object.fromEntries(new Map(Object.entries(api)))` sources. Test: `node_modules_commonjs_object_assign_from_entries_exports`.
