@@ -170,7 +170,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - `.toString(...ignored)` / `.toLocaleString(...ignored)` — typed arrays reuse comma-join stringification after evaluating ignored extra arguments. Test: `array_to_string`
 - `.valueOf(...ignored)` — returns the typed array receiver unchanged after evaluating ignored extra arguments. Test: `array_value_of`
 - `.keys(...ignored)` / `.values(...ignored)` / `.entries(...ignored)` — returns a number-index array, a shallow value copy, or `[string, value]` entry arrays after evaluating ignored extra arguments. Tests: `array_keys_values`, `array_entries`
-- `.hasOwnProperty(key)` / `.propertyIsEnumerable(key)` plus `Object.hasOwn(array, key)`, `Reflect.has(array, key)`, and the `in` operator check typed array indexes and the non-enumerable `length` own property. Test: `array_own_properties`
+- `.hasOwnProperty(key, ...ignored)` / `.propertyIsEnumerable(key, ...ignored)` plus `Object.hasOwn(array, key)`, `Reflect.has(array, key)`, and the `in` operator check typed array indexes and the non-enumerable `length` own property. Direct inherited calls evaluate ignored extra arguments. Tests: `array_own_properties`, `array_object_method_ignored_arguments`
 - `Object.getOwnPropertyDescriptor(array, key)`, `Object.getOwnPropertyDescriptors(array)`, and `Reflect.getOwnPropertyDescriptor(array, key)` return typed array index and `length` data descriptors. Test: `array_property_descriptors`
 - `Array.from(string)` — returns an array of one-code-point strings via `tsc_str_chars`. Test: `array_from_string`
 - `.indexOf(x, fromIndex?, ...ignored)`, `.lastIndexOf(x, fromIndex?, ...ignored)`, `.includes(x, fromIndex?, ...ignored)` — with proper per-element-type equality, SameValueZero `includes(NaN)` behavior, JS-style from-index clamping, and ignored extra-argument evaluation. Tests: `array_last_index_of`, `array_search_from_index`, `array_includes_same_value_zero`, `array_read_ignored_arguments`
@@ -1783,6 +1783,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_at` | Array.at positive and negative index lookup |
 | `array_hof_ignored_arguments` | Array non-reduce HOFs evaluate ignored trailing arguments |
 | `array_mutator_ignored_arguments` | Array fill/copyWithin/with helpers evaluate ignored trailing arguments |
+| `array_object_method_ignored_arguments` | Array inherited object methods evaluate ignored trailing arguments |
 | `array_read_ignored_arguments` | Array read/search helpers evaluate ignored trailing arguments |
 | `array_reduce_ignored_arguments` | Array reduce/reduceRight explicit-initial-value forms evaluate ignored trailing arguments |
 | `array_sort_ignored_arguments` | Array sort/toSorted helpers evaluate ignored trailing arguments |

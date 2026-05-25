@@ -1,0 +1,8 @@
+typed-has-extra:1
+typed has:true
+typed-enum-extra:2
+typed enum:false
+dynamic-has-extra:3
+dynamic has:true
+dynamic-enum-extra:4
+dynamic enum:false

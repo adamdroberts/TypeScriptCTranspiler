@@ -33045,15 +33045,20 @@ class Emitter {
             }
             case "hasOwnProperty":
             case "propertyIsEnumerable": {
-                if (args.length !== 1) unsupported(call, `${method} expects 1 arg`);
+                if (args.length < 1) unsupported(call, `${method} expects at least 1 arg`);
                 const key = this.emitExpr(args[0]!);
                 const fn = method === "hasOwnProperty"
                     ? "tsc_array_has_own_key"
                     : "tsc_array_property_is_enumerable_key";
-                return this.emitSequencedCall(fn, T_BOOLEAN, [
-                    { value: recv },
-                    { value: key, target: T_STRING, node: args[0]! },
-                ]);
+                return this.emitSequencedExpr(
+                    T_BOOLEAN,
+                    [
+                        { value: recv },
+                        { value: key, target: T_STRING, node: args[0]! },
+                        ...this.ignoredArgumentSpecs(args, 1),
+                    ],
+                    ([array, prop]) => `${fn}(${array}, ${prop})`,
+                );
             }
             case "toLocaleString":
             case "toString":
