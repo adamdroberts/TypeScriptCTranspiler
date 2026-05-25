@@ -8796,7 +8796,7 @@ class Emitter {
             return null;
         }
         const receiver = expr.arguments[0]!;
-        return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(receiver, seenConsts) &&
+        return this.isSideEffectFreeObjectReadOperand(receiver, seenConsts) &&
             Array.from(expr.arguments).slice(1).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
             )
