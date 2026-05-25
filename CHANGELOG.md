@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Bounded zero-delay timer helpers now accept earlier static `const` aliases for supported `undefined` delay values alongside zero and negative-zero delay aliases. Tests: `set_timeout_zero`, `timers_promises_import`, `timers_promises_scheduler`.
 - `Error`-family and `AggregateError` constructors now accept earlier static `const` aliases for supported `{ cause }` option objects. Test: `error_cause`.
 - `fs.stat` / `fs.lstat` sync and immediate-promise forms now accept earlier static `const` aliases for supported `{ bigint: false, throwIfNoEntry }` option objects, not just the boolean property values. Test: `fs_stat_options`.
 - `fs.writeFile` / `fs.appendFile` sync and immediate-promise forms now accept earlier static `const` aliases for supported object `mode` values, alongside existing encoding, flag, and flush aliases. Test: `fs_write_append_mode_options`.

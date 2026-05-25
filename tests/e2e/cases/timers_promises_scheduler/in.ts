@@ -10,6 +10,7 @@ const noSignal = undefined;
 const refDisabled = false;
 const schedulerOptions = { signal: noSignal, ref: refDisabled };
 const schedulerVoidOptions = { ref: undefined, signal: void 0 };
+const undefinedDelay = undefined;
 
 scheduler.wait(0, schedulerOptions).then((_value: any): void => {
     namedWait = "settled";
@@ -19,7 +20,7 @@ timersPromises.scheduler.yield().then((_value: any): void => {
     defaultYield = "settled";
 });
 
-timersPromisesNs.scheduler.wait(undefined).then((_value: any): void => {
+timersPromisesNs.scheduler.wait(undefinedDelay).then((_value: any): void => {
     namespaceWait = "settled";
 });
 

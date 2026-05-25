@@ -32028,9 +32028,10 @@ class Emitter {
     }
 
     private isZeroDelayLiteral(expr: ts.Expression): boolean {
-        const cur = this.unwrapTransparentExpression(expr);
+        const resolved = this.resolveSideEffectFreeEarlierConstExpression(expr);
+        const cur = this.unwrapTransparentExpression(resolved);
         if (this.isUndefinedLikeExpression(cur)) return true;
-        const value = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr, new Set());
+        const value = this.sideEffectFreeNumericLiteralSameValueZeroValue(resolved, new Set());
         return value !== null && value === 0;
     }
 

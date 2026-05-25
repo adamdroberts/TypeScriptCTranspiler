@@ -1,6 +1,7 @@
 const events: string[] = [];
 const ZERO_DELAY = 0;
 const NEGATIVE_ZERO_DELAY = -0;
+const UNDEFINED_DELAY = undefined;
 
 setTimeout((label: string, count: number) => {
     events.push(label + ":" + count);
@@ -21,7 +22,7 @@ setTimeout(() => {
 
 setTimeout(() => {
     events.push("undefined-timeout");
-}, undefined);
+}, UNDEFINED_DELAY);
 
 setTimeout(() => {
     events.push("void-timeout");

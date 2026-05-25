@@ -15,6 +15,7 @@ const refEnabled = true;
 const delayOptions = { signal: noSignal, ref: refDisabled };
 const immediateOptions = { ref: refEnabled, signal: noSignal };
 const noOptions = undefined;
+const undefinedDelay = undefined;
 const voidOptions = { ref: undefined, signal: void 0 };
 
 delay(0, "named delay", delayOptions).then((value: string): void => {
@@ -25,7 +26,7 @@ setImmediate("named immediate", immediateOptions).then((value: string): void => 
     namedImmediate = value;
 });
 
-nodeTimersPromises.setTimeout(undefined, "namespace delay", noOptions).then((value: string): void => {
+nodeTimersPromises.setTimeout(undefinedDelay, "namespace delay", noOptions).then((value: string): void => {
     namespaceDelay = value;
 });
 
