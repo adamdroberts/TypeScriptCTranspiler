@@ -27,6 +27,7 @@ registry.register(b, "b", tokenA);
 registry.register(c, "c", tokenB);
 registry.register(a, "a-again", tokenA);
 registry.register(new Box(4), mark("h"), new Box(-4), mark("x"));
+registry.register(new Box(5), mark("n"), undefined, mark("z"));
 
 console.log("unreg-known:", registry.unregister(tokenA, mark("u")));
 console.log("unreg-other:", registry.unregister(tokenB));

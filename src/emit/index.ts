@@ -30074,6 +30074,18 @@ class Emitter {
                 const heldValue = this.emitExpr(args[1]!);
                 // target and heldValue are accepted but ignored after evaluation — cleanup callback never fires.
                 // Only unregisterToken is tracked so that unregister(token) returns the right boolean.
+                if (args.length >= 3 && this.isUndefinedExpression(args[2]!)) {
+                    return this.emitSequencedExpr(
+                        T_VOID,
+                        [
+                            { value: recv },
+                            { value: targetRes },
+                            { value: heldValue },
+                            ...this.ignoredArgumentSpecs(args, 3),
+                        ],
+                        ([r]) => `(tsc_finregistry_register(${r!}, NULL), (void)0)`,
+                    );
+                }
                 if (args.length === 3) {
                     const tokenArg = args[2]!;
                     const tokenRes = this.emitExpr(tokenArg);

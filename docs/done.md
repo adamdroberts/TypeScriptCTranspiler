@@ -220,7 +220,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 
 ### `FinalizationRegistry<T>`
 - `new FinalizationRegistry<T>(cleanupCallback, ...ignored)` is constructible against any cleanup-callback signature; the callback value and ignored trailing constructor arguments are evaluated for side effects and discarded. Tests: `finalization_registry`, `weak_ref_finalization_constructor_ignored_arguments`
-- `.register(target, heldValue, unregisterToken?, ...ignored)` evaluates target, held value, token, and ignored extras, records the optional token entry, and `.unregister(unregisterToken, ...ignored)` removes any matching entries after evaluating ignored extras, returning whether anything was removed. Test: `finalization_registry`
+- `.register(target, heldValue, unregisterToken?, ...ignored)` evaluates target, held value, token, and ignored extras, treats explicit `undefined` unregister tokens as omitted, records the optional token entry, and `.unregister(unregisterToken, ...ignored)` removes any matching entries after evaluating ignored extras, returning whether anything was removed. Test: `finalization_registry`
 - `.toString(...ignored)` and `.toLocaleString(...ignored)` return `"[object FinalizationRegistry]"`, and `.valueOf(...ignored)` returns the receiver. Test: `finalization_registry`
 - This AOT runtime has no GC-finalizer plumbing, so the cleanup callback is never invoked. The behavior matches WeakRef in spirit: type-correct API surface without observable garbage-collection callbacks.
 
