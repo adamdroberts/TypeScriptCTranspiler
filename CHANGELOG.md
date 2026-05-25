@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic `Object.isSealed(...)` / `Object.isFrozen(...)` now report primitive targets as sealed/frozen, and `Object.preventExtensions(...)`, `Object.seal(...)`, and `Object.freeze(...)` return dynamic primitive targets unchanged, including `null` and `undefined`, while preserving dynamic object integrity updates. Test: `object_dynamic_primitive_integrity`.
 - `Object.getPrototypeOf(null | undefined)` now rejects dynamic nullish targets through the catchable runtime exception path. Test: `object_get_prototype_of_nullish`.
 - `Object.getOwnPropertyNames(...)`, `Object.getOwnPropertyDescriptor(s)(...)`, and `Object.hasOwn(...)` now reject dynamic `null` / `undefined` targets while preserving non-nullish primitive compatibility. Test: `object_nullish_own_helpers`.
 - `Object.keys(...)`, `Object.values(...)`, and `Object.entries(...)` now reject dynamic `null` / `undefined` targets while preserving empty results for non-nullish primitive targets. Test: `object_nullish_enumeration`.

@@ -990,7 +990,7 @@ bool tsc_value_prevent_extensions(tsc_value_t v) {
         ((tsc_function_identity_t*)value_ptr(v))->extensible = false;
         return true;
     }
-    return false;
+    return true;
 }
 
 bool tsc_reflect_is_extensible(tsc_value_t v) {
@@ -1019,7 +1019,7 @@ bool tsc_value_seal(tsc_value_t v) {
         fn->sealed = true;
         return true;
     }
-    return false;
+    return true;
 }
 
 bool tsc_value_freeze(tsc_value_t v) {
@@ -1040,7 +1040,7 @@ bool tsc_value_freeze(tsc_value_t v) {
         fn->frozen = true;
         return true;
     }
-    return false;
+    return true;
 }
 
 bool tsc_value_is_sealed(tsc_value_t v) {
@@ -1053,7 +1053,7 @@ bool tsc_value_is_sealed(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         return ((tsc_function_identity_t*)value_ptr(v))->sealed;
     }
-    return false;
+    return true;
 }
 
 bool tsc_value_is_frozen(tsc_value_t v) {
@@ -1066,7 +1066,7 @@ bool tsc_value_is_frozen(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         return ((tsc_function_identity_t*)value_ptr(v))->frozen;
     }
-    return false;
+    return true;
 }
 
 tsc_array_t* value_array_keys(const tsc_array_t* src, bool include_length) {
