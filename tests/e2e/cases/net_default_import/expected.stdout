@@ -1,0 +1,3 @@
+default: 4 6 0
+default bool: true true false false
+default ignored: 4 true true dvs

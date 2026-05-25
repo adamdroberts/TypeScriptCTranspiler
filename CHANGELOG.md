@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Default imports from `"net"` and `"node:net"` now route to the supported address-classification subset. Test: `net_default_import`.
 - Default imports from `"os"` and `"node:os"` now route to the supported OS metadata subset. Test: `os_default_import`.
 - Default imports from `"path"` and `"node:path"` now route to the supported POSIX path subset, including constants and `posix`. Test: `path_default_import`.
 - Named, namespace, and default `exit` process imports from `"process"` and `"node:process"` now route to the existing process exit helper. Test: `process_exit_import`.

@@ -1594,11 +1594,15 @@ declare module "net" {
     export function isIP(input: string, ...ignored: any[]): number;
     export function isIPv4(input: string, ...ignored: any[]): boolean;
     export function isIPv6(input: string, ...ignored: any[]): boolean;
+    const defaultNet: Net;
+    export default defaultNet;
 }
 declare module "node:net" {
     export function isIP(input: string, ...ignored: any[]): number;
     export function isIPv4(input: string, ...ignored: any[]): boolean;
     export function isIPv6(input: string, ...ignored: any[]): boolean;
+    const defaultNet: Net;
+    export default defaultNet;
 }
 
 type ChildProcessExecCallback = (error: any, stdout: string, stderr: string) => void;

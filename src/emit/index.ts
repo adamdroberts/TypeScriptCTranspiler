@@ -17055,7 +17055,9 @@ class Emitter {
     }
 
     private isNetModuleIdentifier(id: ts.Identifier): boolean {
-        return id.text === "net" || this.isNamespaceImportFrom(id, ["net", "node:net"]);
+        return id.text === "net" ||
+            this.isNamespaceImportFrom(id, ["net", "node:net"]) ||
+            this.isDefaultImportFrom(id, ["net", "node:net"]);
     }
 
     private isCryptoModuleIdentifier(id: ts.Identifier): boolean {
