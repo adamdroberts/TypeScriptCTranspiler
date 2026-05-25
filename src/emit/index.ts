@@ -36142,10 +36142,12 @@ class Emitter {
 
     private validateCryptoRandomUUIDOptions(options: ts.Expression, label: string): void {
         if (this.isUndefinedExpression(options)) return;
-        if (!ts.isObjectLiteralExpression(options)) {
+        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedExpression(resolvedOptions)) return;
+        if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, `${label} options must be an object literal in this subset`);
         }
-        for (const prop of options.properties) {
+        for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
                 unsupported(prop, `${label} options only support disableEntropyCache property assignments`);
             }
@@ -36153,7 +36155,7 @@ class Emitter {
             if (key !== "disableEntropyCache") {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
-            const value = prop.initializer;
+            const value = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
             if (!this.isUndefinedExpression(value) && this.sideEffectFreeBooleanLiteralValue(value, new Set()) === null) {
                 unsupported(value, `${label}.disableEntropyCache must be a boolean literal in this subset`);
             }
