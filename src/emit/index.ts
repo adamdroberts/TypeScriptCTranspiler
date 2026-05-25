@@ -16287,9 +16287,7 @@ class Emitter {
             this.isCommonJsModuleThisArg(expr.arguments[0]!)
         ) {
             const specList = expr.arguments[1]!;
-            if (ts.isArrayLiteralExpression(specList) && specList.elements.length === 1) {
-                return specList.elements[0]!;
-            }
+            return this.staticSingleRequireApplySpecifierArgument(specList);
         }
         if (
             ts.isPropertyAccessExpression(callee) &&
@@ -16301,11 +16299,18 @@ class Emitter {
             this.isCommonJsModuleThisArg(expr.arguments[1]!)
         ) {
             const specList = expr.arguments[2]!;
-            if (ts.isArrayLiteralExpression(specList) && specList.elements.length === 1) {
-                return specList.elements[0]!;
-            }
+            return this.staticSingleRequireApplySpecifierArgument(specList);
         }
         return null;
+    }
+
+    private staticSingleRequireApplySpecifierArgument(expr: ts.Expression): ts.Expression | null {
+        const unwrapped = this.resolveSideEffectFreeEarlierConstExpression(expr);
+        if (!ts.isArrayLiteralExpression(unwrapped) || unwrapped.elements.length !== 1) {
+            return null;
+        }
+        const element = unwrapped.elements[0]!;
+        return ts.isSpreadElement(element) ? null : element;
     }
 
     private isCommonJsModuleThisArg(expr: ts.Expression): boolean {

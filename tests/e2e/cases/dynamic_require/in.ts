@@ -28,11 +28,13 @@ console.log("dynamic require call:", callModule.name);
 
 const chooseApply: boolean = true;
 const applyModuleName = chooseApply ? "./other_apply_a" : "./other_apply_b";
-const applyModule: any = module.require.apply(module, [applyModuleName]);
+const applyModuleArgs = [applyModuleName];
+const applyModule: any = module.require.apply(module, applyModuleArgs);
 console.log("dynamic require apply:", applyModule.name);
 
 const reflectModuleName = "./other_reflect";
-const reflectModule: any = Reflect.apply(module.require, module, [reflectModuleName]);
+const reflectModuleArgs = [reflectModuleName];
+const reflectModule: any = Reflect.apply(module.require, module, reflectModuleArgs);
 console.log("dynamic require reflect:", reflectModule.name);
 
 function loadLocal(): any {

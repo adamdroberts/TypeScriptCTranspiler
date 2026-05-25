@@ -63,7 +63,7 @@ declare var Promise: PromiseConstructor;
 interface CommonJsRequireFunction {
     (specifier: string): any;
     call(thisArg: any, specifier: string): any;
-    apply(thisArg: any, args: [string]): any;
+    apply(thisArg: any, args: string[]): any;
     bind(thisArg: any): CommonJsRequireFunction;
 }
 declare const require: CommonJsRequireFunction;

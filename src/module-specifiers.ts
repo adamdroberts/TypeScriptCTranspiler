@@ -233,9 +233,7 @@ function commonJsRequireSpecifierArgument(
         isCommonJsModuleThisArg(expr.arguments[0]!, moduleAliases)
     ) {
         const specList = expr.arguments[1]!;
-        if (ts.isArrayLiteralExpression(specList) && specList.elements.length === 1) {
-            return specList.elements[0]!;
-        }
+        return staticSingleRequireApplySpecifierArgument(specList);
     }
     if (
         ts.isPropertyAccessExpression(callee) &&
@@ -247,16 +245,31 @@ function commonJsRequireSpecifierArgument(
         isCommonJsModuleThisArg(expr.arguments[1]!, moduleAliases)
     ) {
         const specList = expr.arguments[2]!;
-        if (ts.isArrayLiteralExpression(specList) && specList.elements.length === 1) {
-            return specList.elements[0]!;
-        }
+        return staticSingleRequireApplySpecifierArgument(specList);
     }
     return null;
 }
 
+function staticSingleRequireApplySpecifierArgument(expr: ts.Expression): ts.Expression | null {
+    const unwrapped = unwrapStaticExpression(expr);
+    if (ts.isArrayLiteralExpression(unwrapped)) {
+        return singleArraySpecifier(unwrapped);
+    }
+    if (!ts.isIdentifier(unwrapped)) return null;
+    const decl = earlierConstStringDeclaration(unwrapped) ?? topLevelConstStringDeclaration(unwrapped);
+    if (!decl?.initializer) return null;
+    const init = unwrapStaticExpression(decl.initializer);
+    return ts.isArrayLiteralExpression(init) ? singleArraySpecifier(init) : null;
+}
+
+function singleArraySpecifier(array: ts.ArrayLiteralExpression): ts.Expression | null {
+    if (array.elements.length !== 1) return null;
+    const element = array.elements[0]!;
+    return ts.isSpreadElement(element) ? null : element;
+}
+
 function isCommonJsModuleThisArg(expr: ts.Expression, moduleAliases: Set<string>): boolean {
-    let unwrapped: ts.Expression = expr;
-    while (ts.isParenthesizedExpression(unwrapped)) unwrapped = unwrapped.expression;
+    const unwrapped = unwrapStaticExpression(expr);
     return ts.isIdentifier(unwrapped) && (unwrapped.text === "module" || moduleAliases.has(unwrapped.text));
 }
 
@@ -543,4 +556,16 @@ function staticPropertyName(name: ts.PropertyName): string | null {
         return staticStringExpressionText(name.expression);
     }
     return null;
+}
+
+function unwrapStaticExpression(expr: ts.Expression): ts.Expression {
+    while (
+        ts.isParenthesizedExpression(expr) ||
+        ts.isAsExpression(expr) ||
+        ts.isTypeAssertionExpression(expr) ||
+        ts.isSatisfiesExpression(expr)
+    ) {
+        expr = expr.expression;
+    }
+    return expr;
 }
