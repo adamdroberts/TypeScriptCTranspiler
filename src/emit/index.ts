@@ -17033,7 +17033,9 @@ class Emitter {
     }
 
     private isOsModuleIdentifier(id: ts.Identifier): boolean {
-        return id.text === "os" || this.isNamespaceImportFrom(id, ["os", "node:os"]);
+        return id.text === "os" ||
+            this.isNamespaceImportFrom(id, ["os", "node:os"]) ||
+            this.isDefaultImportFrom(id, ["os", "node:os"]);
     }
 
     private isDnsModuleIdentifier(id: ts.Identifier): boolean {

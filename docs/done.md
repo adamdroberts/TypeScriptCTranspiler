@@ -453,8 +453,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Test: `fs_roundtrip`
 
 ### `os`
-- `os.platform(...ignored)` / `type(...ignored)` / `release(...ignored)` / `version(...ignored)` / `endianness(...ignored)` / `machine(...ignored)` / `arch(...ignored)` / `hostname(...ignored)` / `tmpdir(...ignored)` / `homedir(...ignored)` / `cpus(...ignored)` / `availableParallelism(...ignored)` / `totalmem(...ignored)` / `freemem(...ignored)` / `uptime(...ignored)` / `loadavg(...ignored)` / `userInfo({ encoding: "utf8" | "utf-8" | undefined | void }?)`, `os.EOL`, and `os.devNull`, with namespace and named imports from `"os"` / `"node:os"` for the supported subset. `os.userInfo(...)` accepts earlier static `const` aliases for supported UTF-8 `encoding` option values.
-- Runtime: `tsc_os_*`. Tests: `stdlib_os`, `os_more`, `os_dev_null`, `os_host_more`, `os_system_stats`, `os_user_info`, `os_user_info_undefined_options`
+- `os.platform(...ignored)` / `type(...ignored)` / `release(...ignored)` / `version(...ignored)` / `endianness(...ignored)` / `machine(...ignored)` / `arch(...ignored)` / `hostname(...ignored)` / `tmpdir(...ignored)` / `homedir(...ignored)` / `cpus(...ignored)` / `availableParallelism(...ignored)` / `totalmem(...ignored)` / `freemem(...ignored)` / `uptime(...ignored)` / `loadavg(...ignored)` / `userInfo({ encoding: "utf8" | "utf-8" | undefined | void }?)`, `os.EOL`, and `os.devNull`, with default, namespace, and named imports from `"os"` / `"node:os"` for the supported subset. `os.userInfo(...)` accepts earlier static `const` aliases for supported UTF-8 `encoding` option values.
+- Runtime: `tsc_os_*`. Tests: `stdlib_os`, `os_more`, `os_default_import`, `os_dev_null`, `os_host_more`, `os_system_stats`, `os_user_info`, `os_user_info_undefined_options`
 
 ### `crypto`
 - `crypto.createHash("sha1" | "sha256" | "sha512").update(data).digest("hex" | "base64")` backed by OpenSSL SHA helpers from the global `crypto` object, named imports, and namespace imports from `"crypto"` / `"node:crypto"`, with catchable validation failures for unsupported algorithms and digest encodings. `Hash.update(...)` accepts strings and Buffers. Tests: `crypto_sha256`, `crypto_hash_more`, `crypto_import`, `crypto_digest_base64`, `crypto_errors`
@@ -1108,6 +1108,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `function_this_void` | explicit this: void function parameters are compile-time-only |
 | `optional_parameters` | omitted optional pointer and function parameters lower to undefined/null sentinels |
 | `os_more` | os.type/release/endianness/EOL through global, namespace, and named imports |
+| `os_default_import` | default os imports route to the supported os metadata subset |
 | `os_host_more` | os.availableParallelism/machine/version through global, namespace, and named imports |
 | `os_dev_null` | os.devNull constant for global, namespace, and named import forms |
 | `os_system_stats` | os.totalmem/freemem/uptime/loadavg through global, namespace, and named imports |

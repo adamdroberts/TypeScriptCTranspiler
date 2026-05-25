@@ -1,0 +1,4 @@
+default basics: true true true
+default host: true true true
+default stats: true true true 3
+default paths: /tmp true

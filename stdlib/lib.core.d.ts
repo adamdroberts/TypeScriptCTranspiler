@@ -919,6 +919,8 @@ declare module "os" {
     export function uptime(...ignored: any[]): number;
     export function loadavg(...ignored: any[]): number[];
     export function userInfo(options?: OSUserInfoOptions): any;
+    const defaultOs: OS;
+    export default defaultOs;
 }
 declare module "node:os" {
     export const EOL: string;
@@ -940,6 +942,8 @@ declare module "node:os" {
     export function uptime(...ignored: any[]): number;
     export function loadavg(...ignored: any[]): number[];
     export function userInfo(options?: OSUserInfoOptions): any;
+    const defaultOs: OS;
+    export default defaultOs;
 }
 
 interface Date {
