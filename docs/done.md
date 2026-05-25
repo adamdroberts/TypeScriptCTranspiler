@@ -1052,6 +1052,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `crypto_errors` | crypto validation failures are catchable |
 | `crypto_random_bytes` | crypto.randomBytes Buffer creation |
 | `crypto_random_uuid` | crypto.randomUUID version 4 UUID strings with bounded const-capable/defaultable options and ignored extra arguments |
+| `custom_iterable` | typed custom iterable class whose Symbol.iterator returns an array-backed IterableIterator |
 | `custom_iterator_entry_destructure` | custom iterator yielding ObjectEntry values with `[key, value]` destructuring |
 | `custom_iterator_object` | class `[Symbol.iterator]()` returning an iterator object with `next()` |
 | `custom_iterator_inherited_next` | custom iterator object whose `next()` method is inherited from a base class |
@@ -1283,6 +1284,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `function_prototypes` | boxed function Object/Reflect prototype and extensibility state |
 | `function_value_spread` | spread calls through first-class function values |
 | `generator_functions` | synchronous function* materialized Iterator/IterableIterator lowering with yield, bounded yield*, next, return, and throw |
+| `generator_backed_iterable` | typed custom iterable class whose Symbol.iterator returns a materialized generator-backed IterableIterator |
 | `generator_next_argument` | array-backed generator next(value) evaluates and ignores the optional input value |
 | `generator_return_value` | materialized generator return values are exposed once by completed next() |
 | `generic_class_accessors` | erased generic class getter/setter accessors |
@@ -1583,6 +1585,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `reflect_object_target_validation` | dynamic Reflect prototype/extensibility helpers reject non-object targets |
 | `reflect_property_target_validation` | dynamic Reflect property helpers reject non-object targets |
 | `reflect_construct` | Reflect.construct over statically known class constructors and array/spread argument lists |
+| `reflect_construct_dynamic_function` | dynamic Reflect.construct over boxed function values creates a dynamic receiver and honors object or primitive constructor returns |
 | `reflect_construct_validation` | dynamic Reflect.construct catchable target, argumentsList, and newTarget validation |
 | `reflect_construct_new_target_validation` | dynamic Reflect.construct validates explicit constructable newTarget values |
 | `proxy_traps` | dynamic Proxy object traps plus function apply trap and enumerable ownKeys filtering |
