@@ -1,0 +1,20 @@
+typed-sort-default-extra:1
+typed sort default:1,10,2
+typed-tosorted-default-extra:2
+typed toSorted default:1,10,2
+typed toSorted original:10,2,1
+typed-sort-cmp-extra:3
+typed sort cmp:1,2,3
+typed-tosorted-cmp-extra:4
+typed toSorted cmp:3,2,1
+typed cmp original:3,1,2
+dynamic-sort-default-extra:5
+dynamic sort default:1,10,2
+dynamic-tosorted-default-extra:6
+dynamic toSorted default:1,10,2
+dynamic toSorted original:10,2,1
+dynamic-sort-cmp-extra:7
+dynamic sort cmp:1,2,3
+dynamic-tosorted-cmp-extra:8
+dynamic toSorted cmp:3,2,1
+dynamic cmp original:3,1,2

@@ -27989,14 +27989,34 @@ class Emitter {
                 });
             }
             case "sort":
-                if (args.length > 1) unsupported(call, "dynamic sort expects 0-1 args");
-                if (args.length === 1) return this.emitDynamicArraySort(call, recv, false);
+                if (args[0] && !this.isUndefinedExpression(args[0])) return this.emitDynamicArraySort(call, recv, false);
+                if (args[0]) {
+                    return this.emitSequencedExpr(
+                        T_VALUE,
+                        [
+                            { value: recv, target: T_VALUE, node: call.expression },
+                            { value: this.emitExpr(args[0]), node: args[0] },
+                            ...this.ignoredArgumentSpecs(args, 1),
+                        ],
+                        ([target]) => `tsc_value_method_sort(${target})`,
+                    );
+                }
                 return this.emitSequencedCall("tsc_value_method_sort", T_VALUE, [
                     { value: recv, target: T_VALUE, node: call.expression },
                 ]);
             case "toSorted":
-                if (args.length > 1) unsupported(call, "dynamic toSorted expects 0-1 args");
-                if (args.length === 1) return this.emitDynamicArraySort(call, recv, true);
+                if (args[0] && !this.isUndefinedExpression(args[0])) return this.emitDynamicArraySort(call, recv, true);
+                if (args[0]) {
+                    return this.emitSequencedExpr(
+                        T_VALUE,
+                        [
+                            { value: recv, target: T_VALUE, node: call.expression },
+                            { value: this.emitExpr(args[0]), node: args[0] },
+                            ...this.ignoredArgumentSpecs(args, 1),
+                        ],
+                        ([target]) => `tsc_value_method_to_sorted(${target})`,
+                    );
+                }
                 return this.emitSequencedCall("tsc_value_method_to_sorted", T_VALUE, [
                     { value: recv, target: T_VALUE, node: call.expression },
                 ]);
@@ -28397,7 +28417,6 @@ class Emitter {
     ): EmitResult {
         const cb = call.arguments[0];
         if (!cb) unsupported(call, "dynamic sort comparator missing");
-        if (call.arguments.length !== 1) unsupported(call, "dynamic sort expects exactly one comparator");
 
         const av = this.freshTemp("_dynsort");
         const src = this.freshTemp("_dynsort_src");
@@ -28483,6 +28502,7 @@ class Emitter {
         const cmpExpr = this.coerce(body, T_NUMBER, bodyNode);
         return this.emitSequencedExpr(T_VALUE, [
             { value: recv, target: T_VALUE, node: call.expression },
+            ...this.ignoredArgumentSpecs(call.arguments, 1),
         ], ([value]) => {
             const init = copyFirst
                 ? `tsc_value_t const ${base} = ${value}; tsc_array_t* const ${src} = tsc_value_as_array(${base}); ` +
@@ -33569,6 +33589,8 @@ class Emitter {
     private emitArraySort(call: ts.CallExpression, recv: EmitResult): EmitResult {
         const et = recv.ty.elem!;
         const cb = call.arguments[0];
+        const consumed = cb ? 1 : 0;
+        const specs: SequencedCallArg[] = [{ value: recv }];
         const av = this.freshTemp("_a");
         const iv = this.freshTemp("_i");
         const jv = this.freshTemp("_j");
@@ -33577,9 +33599,8 @@ class Emitter {
         let bName = "_sb";
         let cmpExpr = "";
         let comparatorSetup = "";
-        if (!cb) {
-            if (call.arguments.length !== 0)
-                unsupported(call, "sort default form takes no arguments");
+        if (!cb || this.isUndefinedExpression(cb)) {
+            if (cb) specs.push({ value: this.emitExpr(cb), node: cb });
             cmpExpr = `tsc_str_cmp(${this.stringifyForDefaultSort(et, aName, call)}, ${this.stringifyForDefaultSort(et, bName, call)})`;
         } else if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
             if (cb.parameters.length !== 2)
@@ -33626,9 +33647,9 @@ class Emitter {
         } else {
             unsupported(cb, "sort comparator must be inline arrow or function reference");
         }
-        return {
-            c:
-                `({ tsc_array_t* const ${av} = ${recv.c}; ` +
+        specs.push(...this.ignoredArgumentSpecs(call.arguments, consumed));
+        return this.emitSequencedExpr(recv.ty, specs, ([arr]) =>
+            `({ tsc_array_t* const ${av} = ${arr}; ` +
                 comparatorSetup +
                 `if (!${av}->frozen) { ` +
                 `for (size_t ${iv} = 1; ${iv} < ${av}->len; ${iv}++) { ` +
@@ -33642,8 +33663,7 @@ class Emitter {
                 `TSC_ARR(${et.c}, ${av}, ${jv}) = TSC_ARR(${et.c}, ${av}, ${jv} - 1); ` +
                 `${jv}--; } ` +
                 `TSC_ARR(${et.c}, ${av}, ${jv}) = ${kv}; } } ${av}; })`,
-            ty: recv.ty,
-        };
+        );
     }
 
     private stringifyForDefaultSort(ty: CType, exprC: string, node: ts.Node): string {

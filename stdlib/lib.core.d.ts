@@ -177,8 +177,8 @@ interface Array<T> extends Iterable<T> {
     at(index: number, ...ignored: any[]): T | undefined;
     reverse(...ignored: any[]): T[];
     toReversed(...ignored: any[]): T[];
-    sort(cmp?: (a: T, b: T) => number): T[];
-    toSorted(cmp?: (a: T, b: T) => number): T[];
+    sort(cmp?: (a: T, b: T) => number, ...ignored: any[]): T[];
+    toSorted(cmp?: (a: T, b: T) => number, ...ignored: any[]): T[];
     with(index: number, value: T, ...ignored: any[]): T[];
     toSpliced(start?: number, deleteCount?: number, ...items: T[]): T[];
     fill(value: T, start?: number, end?: number, ...ignored: any[]): T[];
@@ -221,7 +221,7 @@ interface ReadonlyArray<T> extends Iterable<T> {
     includes(searchElement: T, fromIndex?: number, ...ignored: any[]): boolean;
     at(index: number, ...ignored: any[]): T | undefined;
     toReversed(...ignored: any[]): T[];
-    toSorted(cmp?: (a: T, b: T) => number): T[];
+    toSorted(cmp?: (a: T, b: T) => number, ...ignored: any[]): T[];
     with(index: number, value: T, ...ignored: any[]): T[];
     toSpliced(start?: number, deleteCount?: number, ...items: T[]): T[];
     slice(start?: number, end?: number, ...ignored: any[]): T[];

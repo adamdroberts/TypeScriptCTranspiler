@@ -174,8 +174,8 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - `Object.getOwnPropertyDescriptor(array, key)`, `Object.getOwnPropertyDescriptors(array)`, and `Reflect.getOwnPropertyDescriptor(array, key)` return typed array index and `length` data descriptors. Test: `array_property_descriptors`
 - `Array.from(string)` — returns an array of one-code-point strings via `tsc_str_chars`. Test: `array_from_string`
 - `.indexOf(x, fromIndex?, ...ignored)`, `.lastIndexOf(x, fromIndex?, ...ignored)`, `.includes(x, fromIndex?, ...ignored)` — with proper per-element-type equality, SameValueZero `includes(NaN)` behavior, JS-style from-index clamping, and ignored extra-argument evaluation. Tests: `array_last_index_of`, `array_search_from_index`, `array_includes_same_value_zero`, `array_read_ignored_arguments`
-- `.sort()` / `.toSorted()` — JS-style default string-conversion sort; `toSorted` returns a sorted copy. Tests: `array_sort_default`, `array_to_sorted`
-- `.sort((a, b) => cmp)` / `.toSorted((a, b) => cmp)` — inline insertion sort; accepts inline expression-body and single-return block-body callbacks, named function references, and first-class closure comparator values. Tests: `wordcount`, `array_to_sorted`
+- `.sort(cmp?, ...ignored)` / `.toSorted(cmp?, ...ignored)` — JS-style default string-conversion sort for omitted or explicit `undefined` comparators after evaluating ignored extra arguments; `toSorted` returns a sorted copy. Tests: `array_sort_default`, `array_to_sorted`, `array_sort_ignored_arguments`
+- `.sort((a, b) => cmp, ...ignored)` / `.toSorted((a, b) => cmp, ...ignored)` — inline insertion sort after evaluating ignored extra arguments; accepts inline expression-body and single-return block-body callbacks, named function references, and first-class closure comparator values. Tests: `wordcount`, `array_to_sorted`, `array_sort_ignored_arguments`
 - `.flat(depth?, ...ignored)` for compile-time numeric depths after evaluating ignored extra arguments and `.flatMap(cb)` for array-returning or scalar callbacks. Tests: `array_flat`, `array_read_ignored_arguments`
 - `.forEach(cb)` / `.map(cb)` / `.filter(cb)` / `.reduce(cb[, init])` / `.reduceRight(cb[, init])`; callbacks receive the standard receiver array argument and inline callbacks may use expression bodies or single-return block bodies. Tests: `array_hof`, `array_reduce_no_initial`, `array_reduce_right`
 - `.find(cb)` / `.findIndex(cb)` / `.findLast(cb)` / `.findLastIndex(cb)` / `.some(cb)` / `.every(cb)`; callbacks receive the standard receiver array argument and inline callbacks may use expression bodies or single-return block bodies. `find` / `findLast` return `undefined` when no element matches for element types that can flow through `tsc_value_t`, including inferred numeric/boolean nullish locals assigned from the result. Tests: `array_hof`, `array_find_last`
@@ -1783,6 +1783,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_at` | Array.at positive and negative index lookup |
 | `array_mutator_ignored_arguments` | Array fill/copyWithin/with helpers evaluate ignored trailing arguments |
 | `array_read_ignored_arguments` | Array read/search helpers evaluate ignored trailing arguments |
+| `array_sort_ignored_arguments` | Array sort/toSorted helpers evaluate ignored trailing arguments |
 | `array_find_last` | Array.findLast and Array.findLastIndex reverse callback scan |
 | `array_includes_same_value_zero` | typed and dynamic Array.includes SameValueZero behavior |
 | `array_reduce_right` | Array.reduceRight reverse accumulation with explicit initial value |
