@@ -9,3 +9,7 @@ promise set: left|right
 promise reject: bad
 dynamic array: 9|ten|true
 dynamic string: x|y
+async mapper array: 10|20
+async mapper string: p:0|q:1
+async mapper set: 4|5
+async mapper reject: mapper bad

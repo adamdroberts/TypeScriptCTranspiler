@@ -1,3 +1,3 @@
 {
-  "description": "Array.fromAsync immediate subset over typed, dynamic, and Promise element sources"
+  "description": "Array.fromAsync immediate subset over typed, dynamic, Promise element, and Promise mapper sources"
 }

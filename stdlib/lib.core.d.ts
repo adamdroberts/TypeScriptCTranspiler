@@ -329,10 +329,16 @@ interface ArrayConstructor {
     fromAsync<T>(set: Set<T>): Promise<T[]>;
     fromAsync<K, T>(map: Map<K, T>): Promise<ObjectEntry<T, K>[]>;
     fromAsync(items: any): Promise<any[]>;
+    fromAsync<U>(s: string, mapfn: (v: string, k: number) => Promise<U>, thisArg?: any): Promise<U[]>;
+    fromAsync<T, U>(arr: T[], mapfn: (v: T, k: number) => Promise<U>, thisArg?: any): Promise<U[]>;
+    fromAsync<T, U>(set: Set<T>, mapfn: (v: T, k: number) => Promise<U>, thisArg?: any): Promise<U[]>;
+    fromAsync<K, T, U>(map: Map<K, T>, mapfn: (v: ObjectEntry<T, K>, k: number) => Promise<U>, thisArg?: any): Promise<U[]>;
+    fromAsync<U>(items: any, mapfn: (v: any, k: number) => Promise<U>, thisArg?: any): Promise<U[]>;
     fromAsync<U>(s: string, mapfn: (v: string, k: number) => U, thisArg?: any): Promise<U[]>;
     fromAsync<T, U>(arr: T[], mapfn: (v: T, k: number) => U, thisArg?: any): Promise<U[]>;
     fromAsync<T, U>(set: Set<T>, mapfn: (v: T, k: number) => U, thisArg?: any): Promise<U[]>;
     fromAsync<K, T, U>(map: Map<K, T>, mapfn: (v: ObjectEntry<T, K>, k: number) => U, thisArg?: any): Promise<U[]>;
+    fromAsync<U>(items: any, mapfn: (v: any, k: number) => U, thisArg?: any): Promise<U[]>;
     of<T>(...items: T[]): T[];
 }
 declare var Array: ArrayConstructor;

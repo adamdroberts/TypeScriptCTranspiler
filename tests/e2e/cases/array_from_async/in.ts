@@ -59,3 +59,23 @@ const dynamicStringSource: any = "xy";
 Array.fromAsync(dynamicStringSource).then((values) => {
     console.log("dynamic string:", values.join("|"));
 });
+
+Array.fromAsync([1, 2], (value) => Promise.resolve(value * 10)).then((values) => {
+    console.log("async mapper array:", values.join("|"));
+});
+
+Array.fromAsync("pq", (value, index) => Promise.resolve(value + ":" + index)).then((values) => {
+    console.log("async mapper string:", values.join("|"));
+});
+
+Array.fromAsync(new Set([3, 4]), (value) => Promise.resolve(value + 1)).then((values) => {
+    console.log("async mapper set:", values.join("|"));
+});
+
+Array.fromAsync([1, 2], (value) => value === 2 ? Promise.reject<number>("mapper bad") : Promise.resolve(value)).catch((reason) => {
+    console.log("async mapper reject:", reason);
+});
+
+Array.fromAsync([1], (_value) => new Promise<number>(() => {})).then((_values) => {
+    console.log("async mapper pending should not run");
+});
