@@ -7212,7 +7212,14 @@ class Emitter {
                         ? "pending"
                         : null;
                 }
-                return this.isUndefinedOrOmittedPromiseHandler(unwrapped.arguments[0])
+                if (this.isUndefinedOrOmittedPromiseHandler(unwrapped.arguments[0])) {
+                    return recvState;
+                }
+                return this.sideEffectFreePromiseHandlerCallbackOperandState(
+                    unwrapped.arguments[0]!,
+                    seenConsts,
+                    0,
+                ) === "fulfilled"
                     ? recvState
                     : null;
             }

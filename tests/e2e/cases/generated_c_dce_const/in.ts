@@ -644,6 +644,12 @@ const unused_promise_catch_passthrough_catch_call = Promise.reject<string>("dead
 const unused_promise_finally_passthrough_then_call = Promise.resolve("dead_promise_finally_passthrough_source")
     .finally(undefined)
     .then(() => "dead_promise_finally_passthrough_callback");
+const unused_promise_finally_callback_then_call = Promise.resolve("dead_promise_finally_callback_source")
+    .finally(() => "dead_promise_finally_callback_passthrough")
+    .then(() => "dead_promise_finally_callback_then_callback");
+const unused_promise_reject_finally_callback_catch_call = Promise.reject<string>("dead_promise_reject_finally_callback_source")
+    .finally(() => "dead_promise_reject_finally_callback_passthrough")
+    .catch((reason) => "dead_promise_reject_finally_callback_catch_callback");
 const unused_promise_catch_fulfilled_passthrough_then_call = Promise.resolve("dead_promise_catch_fulfilled_passthrough_source")
     .catch((reason) => "dead_promise_catch_fulfilled_unreached")
     .then(() => "dead_promise_catch_fulfilled_passthrough_callback");
@@ -1767,6 +1773,12 @@ Promise.reject<string>("top_level_dead_promise_catch_passthrough_source")
 Promise.resolve("top_level_dead_promise_finally_passthrough_source")
     .finally(undefined)
     .then(() => "top_level_dead_promise_finally_passthrough_callback");
+Promise.resolve("top_level_dead_promise_finally_callback_source")
+    .finally(() => "top_level_dead_promise_finally_callback_passthrough")
+    .then(() => "top_level_dead_promise_finally_callback_then_callback");
+Promise.reject<string>("top_level_dead_promise_reject_finally_callback_source")
+    .finally(() => "top_level_dead_promise_reject_finally_callback_passthrough")
+    .catch((reason) => "top_level_dead_promise_reject_finally_callback_catch_callback");
 Promise.resolve("top_level_dead_promise_catch_fulfilled_passthrough_source")
     .catch((reason) => "top_level_dead_promise_catch_fulfilled_unreached")
     .then(() => "top_level_dead_promise_catch_fulfilled_passthrough_callback");
@@ -2867,6 +2879,12 @@ function usedLocal(value: number): number {
     Promise.resolve("local_dead_promise_finally_passthrough_source")
         .finally(undefined)
         .then(() => "local_dead_promise_finally_passthrough_callback");
+    Promise.resolve("local_dead_promise_finally_callback_source")
+        .finally(() => "local_dead_promise_finally_callback_passthrough")
+        .then(() => "local_dead_promise_finally_callback_then_callback");
+    Promise.reject<string>("local_dead_promise_reject_finally_callback_source")
+        .finally(() => "local_dead_promise_reject_finally_callback_passthrough")
+        .catch((reason) => "local_dead_promise_reject_finally_callback_catch_callback");
     Promise.resolve("local_dead_promise_catch_fulfilled_passthrough_source")
         .catch((reason) => "local_dead_promise_catch_fulfilled_unreached")
         .then(() => "local_dead_promise_catch_fulfilled_passthrough_callback");
