@@ -3506,7 +3506,12 @@ class Emitter {
                     if (uniqueObjectEntriesLength !== null) return uniqueObjectEntriesLength;
                 }
                 const sourceLength = this.sideEffectFreeArrayLiteralLength(args[0]!, seenConsts);
-                return sourceLength !== null && sourceLength <= 1 ? sourceLength : null;
+                if (sourceLength !== null && sourceLength <= 1) return sourceLength;
+                if (globalName === "Set") {
+                    const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(args[0]!, seenConsts);
+                    if (returnedArrayLength !== null && returnedArrayLength <= 1) return returnedArrayLength;
+                }
+                return null;
             }
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
