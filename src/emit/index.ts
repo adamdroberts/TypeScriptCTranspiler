@@ -35473,9 +35473,13 @@ class Emitter {
         const itemsArg = call.arguments[0]!;
         const keyArg = call.arguments[1]!;
         const items = this.emitExpr(itemsArg);
-        if (items.ty.kind !== "array" && items.ty.kind !== "set" && items.ty.kind !== "string")
-            unsupported(itemsArg, "Object.groupBy expects an array, Set, or string");
-        const t = items.ty.kind === "string" ? T_STRING : items.ty.elem!;
+        if (items.ty.kind !== "array" && items.ty.kind !== "set" && items.ty.kind !== "map" && items.ty.kind !== "string")
+            unsupported(itemsArg, "Object.groupBy expects an array, Set, Map, or string");
+        const t = items.ty.kind === "string"
+            ? T_STRING
+            : items.ty.kind === "map"
+                ? entryType(items.ty.elem!, items.ty.key!)
+                : items.ty.elem!;
 
         return this.emitSequencedExpr(T_VALUE, [{ value: items }], ([itemsExpr]) => {
             const src = this.freshTemp("_ogb_src");
@@ -35488,6 +35492,8 @@ class Emitter {
             const boxed = this.freshTemp("_ogb_box");
             const sourceArray = items.ty.kind === "set"
                 ? `tsc_set_values(${itemsExpr})`
+                : items.ty.kind === "map"
+                    ? this.mapEntriesArrayExpr(itemsArg, itemsExpr, items.ty, "Object.groupBy(Map)").c
                 : items.ty.kind === "string"
                     ? `tsc_str_chars(${itemsExpr})`
                     : itemsExpr;
@@ -38825,6 +38831,35 @@ class Emitter {
                         return `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(tsc_value_t), ${tmpIn}->len ? ${tmpIn}->len : 1); for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { ${r.ty.elem.c} ${elem} = TSC_ARR(${r.ty.elem.c}, ${tmpIn}, ${idx}); tsc_value_t _boxed = ${boxed}; tsc_array_push_raw(${tmpOut}, &_boxed); } tsc_value_array(${tmpOut}); })`;
                     }
                     return `tsc_value_array(${r.c})`;
+                }
+                case "entry": {
+                    const keyType = r.ty.key ?? T_STRING;
+                    const valueType = r.ty.elem ?? T_VOID;
+                    const tmpEntry = this.freshTemp("_entryBox");
+                    const tmpOut = this.freshTemp("_entryArr");
+                    const tmpKey = this.freshTemp("_entryKey");
+                    const tmpValue = this.freshTemp("_entryValue");
+                    const tmpKeyBox = this.freshTemp("_entryKeyBox");
+                    const tmpValueBox = this.freshTemp("_entryValueBox");
+                    const boxedKey = this.coerce({ c: tmpKey, ty: keyType }, T_VALUE, node);
+                    const valueDecl = valueType.kind === "void"
+                        ? ""
+                        : `${valueType.c} ${tmpValue} = ${this.objectEntryValue(tmpEntry, valueType)}; `;
+                    const valueSource: EmitResult = valueType.kind === "void"
+                        ? { c: "NULL", ty: T_VOID }
+                        : { c: tmpValue, ty: valueType };
+                    const boxedValue = this.coerce(valueSource, T_VALUE, node);
+                    return (
+                        `({ ${r.ty.c} ${tmpEntry} = ${r.c}; ` +
+                        `tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(tsc_value_t), 2); ` +
+                        `${keyType.c} ${tmpKey} = ${this.objectEntryKeyValue(tmpEntry, keyType)}; ` +
+                        `tsc_value_t ${tmpKeyBox} = ${boxedKey}; ` +
+                        `tsc_array_push_raw(${tmpOut}, &${tmpKeyBox}); ` +
+                        `${valueDecl}` +
+                        `tsc_value_t ${tmpValueBox} = ${boxedValue}; ` +
+                        `tsc_array_push_raw(${tmpOut}, &${tmpValueBox}); ` +
+                        `tsc_value_array(${tmpOut}); })`
+                    );
                 }
                 case "function":
                     return `tsc_value_function_generic_named(${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${r.c}, ${(r.ty.params ?? []).length}.0, ${this.functionValueNameLiteral(node)})`;

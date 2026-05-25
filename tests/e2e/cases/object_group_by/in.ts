@@ -36,3 +36,17 @@ const charGroups = Object.groupBy("abacad", (ch, index) => {
 console.log("string front:", JSON.stringify(charGroups.front));
 console.log("string a:", JSON.stringify(charGroups.a));
 console.log("string d:", JSON.stringify(charGroups.d));
+
+const sourceMap = new Map<string, number>([
+    ["red", 1],
+    ["blue", 2],
+    ["green", 3],
+    ["gold", 4],
+    ["gray", 0],
+]);
+const mapGroups = Object.groupBy(sourceMap, (entry, index) => {
+    return index < 2 ? "front" : entry[1] >= 3 ? "large" : "small";
+}) as any;
+console.log("map front:", JSON.stringify(mapGroups.front));
+console.log("map large:", JSON.stringify(mapGroups.large));
+console.log("map small:", JSON.stringify(mapGroups.small));

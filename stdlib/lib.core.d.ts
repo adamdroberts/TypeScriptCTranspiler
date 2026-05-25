@@ -289,6 +289,7 @@ interface ObjectConstructor {
     setPrototypeOf<T>(o: T, proto: any): T;
     groupBy<T>(items: T[], keyFn: (item: T, index: number) => string): unknown;
     groupBy<T>(items: Set<T>, keyFn: (item: T, index: number) => string): unknown;
+    groupBy<MK, MV>(items: Map<MK, MV>, keyFn: (item: ObjectEntry<MV, MK>, index: number) => string): unknown;
     groupBy(items: string, keyFn: (item: string, index: number) => string): unknown;
 }
 declare var Object: ObjectConstructor;
