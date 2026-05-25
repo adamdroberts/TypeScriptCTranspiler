@@ -6,7 +6,9 @@ let defaultYield = "pending";
 let namespaceWait = "pending";
 let optionWait = "pending";
 
-const schedulerOptions = { signal: undefined, ref: false };
+const noSignal = undefined;
+const refDisabled = false;
+const schedulerOptions = { signal: noSignal, ref: refDisabled };
 const schedulerVoidOptions = { ref: undefined, signal: void 0 };
 
 scheduler.wait(0, schedulerOptions).then((_value: any): void => {

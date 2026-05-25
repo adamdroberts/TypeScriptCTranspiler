@@ -31931,8 +31931,9 @@ class Emitter {
             if (key !== "signal" && key !== "ref") {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
-            if (this.isUndefinedExpression(prop.initializer)) continue;
-            if (key === "ref" && this.sideEffectFreeBooleanLiteralValue(prop.initializer, new Set()) !== null) continue;
+            const value = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+            if (this.isUndefinedExpression(value)) continue;
+            if (key === "ref" && this.sideEffectFreeBooleanLiteralValue(value, new Set()) !== null) continue;
             unsupported(prop.initializer, `${label}.${key} must be undefined${key === "ref" ? " or a boolean literal" : ""} in this immediate subset`);
         }
     }

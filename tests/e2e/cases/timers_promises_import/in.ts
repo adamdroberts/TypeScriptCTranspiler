@@ -9,8 +9,11 @@ let defaultImmediate = "";
 let optionDelay = "";
 let optionImmediate = "";
 
-const delayOptions = { signal: undefined, ref: false };
-const immediateOptions = { ref: true, signal: undefined };
+const noSignal = undefined;
+const refDisabled = false;
+const refEnabled = true;
+const delayOptions = { signal: noSignal, ref: refDisabled };
+const immediateOptions = { ref: refEnabled, signal: noSignal };
 const noOptions = undefined;
 const voidOptions = { ref: undefined, signal: void 0 };
 
