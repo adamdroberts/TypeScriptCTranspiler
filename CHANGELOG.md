@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `process.exit(code?, ...ignored)` now evaluates and ignores trailing arguments across global, named, namespace, and default process references. Test: `process_exit_ignored_arguments`.
 - `process.chdir(directory, ...ignored)` now evaluates and ignores trailing arguments across global, named, namespace, and default process references. Test: `process_chdir_ignored_arguments`.
 - `process.kill(pid, signal?, ...ignored)` now evaluates and ignores trailing arguments across global, named, namespace, and default process references. Test: `process_kill_ignored_arguments`.
 - `process.memoryUsage.rss(...ignored)` now returns the RSS counter directly across global, named, and namespace process references while preserving ignored extra-argument evaluation. Test: `process_memory_usage_rss`.

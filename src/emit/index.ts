@@ -40367,7 +40367,10 @@ class Emitter {
         }
         const r = this.emitExpr(call.arguments[0]!);
         requireNumber(call.arguments[0]!, r.ty);
-        return { c: `tsc_process_exit(${r.c})`, ty: T_VOID };
+        return this.emitSequencedExpr(T_VOID, [
+            { value: r, target: T_NUMBER, node: call.arguments[0]! },
+            ...this.ignoredArgumentSpecs(call.arguments, 1),
+        ], ([code]) => `tsc_process_exit(${code})`);
     }
 
     private emitRegExpConstructor(call: ts.CallExpression | ts.NewExpression): EmitResult {

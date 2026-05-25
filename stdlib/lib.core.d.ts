@@ -760,7 +760,7 @@ interface Process {
     readonly stdin: ProcessReadableStream;
     readonly stdout: ProcessWritableStream;
     readonly stderr: ProcessWritableStream;
-    exit(code?: number): never;
+    exit(code?: number, ...ignored: any[]): never;
     cwd(...ignored: any[]): string;
     chdir(directory: string, ...ignored: any[]): void;
     uptime(...ignored: any[]): number;
