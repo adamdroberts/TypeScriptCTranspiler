@@ -17073,6 +17073,23 @@ class Emitter {
             this.isProcessModuleIdentifier(expr.expression);
     }
 
+    private processWritableStreamReceiverName(expr: ts.Expression): "stdout" | "stderr" | null {
+        if (ts.isIdentifier(expr)) {
+            if (this.isNamedImportFrom(expr, ["process", "node:process"], "stdout")) return "stdout";
+            if (this.isNamedImportFrom(expr, ["process", "node:process"], "stderr")) return "stderr";
+            return null;
+        }
+        if (
+            ts.isPropertyAccessExpression(expr) &&
+            (expr.name.text === "stdout" || expr.name.text === "stderr") &&
+            ts.isIdentifier(expr.expression) &&
+            this.isProcessModuleIdentifier(expr.expression)
+        ) {
+            return expr.name.text;
+        }
+        return null;
+    }
+
     private isProcessEnvObject(expr: ts.Expression): boolean {
         return ts.isPropertyAccessExpression(expr) &&
             expr.name.text === "env" &&
@@ -26590,19 +26607,17 @@ class Emitter {
                 () => `tsc_process_hrtime_bigint()`,
             );
         }
-        if (
-            ts.isPropertyAccessExpression(recvExpr) &&
-            ts.isIdentifier(recvExpr.expression) &&
-            recvExpr.expression.text === "process" &&
-            (recvExpr.name.text === "stdout" || recvExpr.name.text === "stderr") &&
-            memberName === "write"
-        ) {
+        const processWritableStreamName = memberName === "write"
+            ? this.processWritableStreamReceiverName(recvExpr)
+            : null;
+        if (processWritableStreamName) {
+            const streamName = processWritableStreamName;
             if (call.arguments.length < 1 || call.arguments.length > 3) {
-                unsupported(call, `process.${recvExpr.name.text}.write expects a string or Buffer with optional encoding/callback`);
+                unsupported(call, `process.${streamName}.write expects a string or Buffer with optional encoding/callback`);
             }
             const chunk = this.emitExpr(call.arguments[0]!);
             if (chunk.ty.kind !== "string" && chunk.ty.kind !== "buffer") {
-                unsupported(call.arguments[0]!, `process.${recvExpr.name.text}.write expects a string or Buffer`);
+                unsupported(call.arguments[0]!, `process.${streamName}.write expects a string or Buffer`);
             }
             let encoding: { value: EmitResult; node: ts.Expression } | null = null;
             let callback: { value: EmitResult; node: ts.Expression } | null = null;
@@ -26627,9 +26642,9 @@ class Emitter {
                 }
             }
             if (callback && callback.value.ty.kind !== "function") {
-                unsupported(callback.node, `process.${recvExpr.name.text}.write callback must be a function`);
+                unsupported(callback.node, `process.${streamName}.write callback must be a function`);
             }
-            const fn = recvExpr.name.text === "stdout"
+            const fn = streamName === "stdout"
                 ? (chunk.ty.kind === "buffer" ? "tsc_process_stdout_write_buffer" : "tsc_process_stdout_write")
                 : (chunk.ty.kind === "buffer" ? "tsc_process_stderr_write_buffer" : "tsc_process_stderr_write");
             const specs: SequencedCallArg[] = [

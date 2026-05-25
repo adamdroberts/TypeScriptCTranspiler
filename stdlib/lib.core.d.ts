@@ -724,6 +724,8 @@ declare module "process" {
     export const memoryUsage: Process["memoryUsage"];
     export const nextTick: Process["nextTick"];
     export const resourceUsage: Process["resourceUsage"];
+    export const stderr: Process["stderr"];
+    export const stdout: Process["stdout"];
     export const umask: Process["umask"];
     export const uptime: Process["uptime"];
 }
@@ -740,6 +742,8 @@ declare module "node:process" {
     export const memoryUsage: Process["memoryUsage"];
     export const nextTick: Process["nextTick"];
     export const resourceUsage: Process["resourceUsage"];
+    export const stderr: Process["stderr"];
+    export const stdout: Process["stdout"];
     export const umask: Process["umask"];
     export const uptime: Process["uptime"];
 }
