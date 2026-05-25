@@ -6937,6 +6937,9 @@ class Emitter {
             if (this.isSideEffectFreePendingPromiseOperand(recv, seenConsts)) {
                 return this.isSideEffectFreeUnevaluatedPromiseCallback(args[0], seenConsts);
             }
+            if (this.isSideEffectFreeFulfilledPromiseOperand(recv, seenConsts)) {
+                return this.isSideEffectFreeUnevaluatedPromiseCallback(args[0], seenConsts);
+            }
             return this.isSideEffectFreeRejectedPromiseOperand(recv, seenConsts) &&
                 this.isSideEffectFreeOptionalPromiseCallback(args[0], seenConsts, 1);
         }

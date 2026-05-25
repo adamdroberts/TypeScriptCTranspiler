@@ -698,6 +698,8 @@ const unused_promise_then_rejected_two_arg_call = Promise.reject<string>("dead_p
     () => "dead_promise_then_rejected_two_arg_callback",
 );
 const unused_promise_catch_call = Promise.reject<string>("dead_promise_catch_source").catch(() => "dead_promise_catch_callback");
+const unused_promise_catch_fulfilled_direct_call = Promise.resolve("dead_promise_catch_fulfilled_direct_source")
+    .catch((reason) => "dead_promise_catch_fulfilled_direct_callback");
 const unused_promise_finally_resolve_call = Promise.resolve("dead_promise_finally_resolve_source").finally(() => {
     String("dead_promise_finally_resolve_callback");
 });
@@ -1827,6 +1829,8 @@ Promise.reject<string>("top_level_dead_promise_then_rejected_two_arg_source").th
     () => "top_level_dead_promise_then_rejected_two_arg_callback",
 );
 Promise.reject<string>("top_level_dead_promise_catch_source").catch(() => "top_level_dead_promise_catch_callback");
+Promise.resolve("top_level_dead_promise_catch_fulfilled_direct_source")
+    .catch((reason) => "top_level_dead_promise_catch_fulfilled_direct_callback");
 Promise.resolve("top_level_dead_promise_finally_source").finally(() => {
     String("top_level_dead_promise_finally_callback");
 });
@@ -2933,6 +2937,8 @@ function usedLocal(value: number): number {
         () => "local_dead_promise_then_rejected_two_arg_callback",
     );
     Promise.reject<string>("local_dead_promise_catch_source").catch(() => "local_dead_promise_catch_callback");
+    Promise.resolve("local_dead_promise_catch_fulfilled_direct_source")
+        .catch((reason) => "local_dead_promise_catch_fulfilled_direct_callback");
     Promise.resolve("local_dead_promise_finally_source").finally(() => {
         String("local_dead_promise_finally_callback");
     });
