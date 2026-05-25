@@ -304,19 +304,19 @@ interface ObjectConstructor {
 declare var Object: ObjectConstructor;
 
 interface ReflectConstructor {
-    apply(target: any, thisArgument: any, argumentsList: any[]): any;
-    construct(target: any, argumentsList: any[], newTarget?: any): any;
-    defineProperty(target: any, propertyKey: string, attributes: any): boolean;
-    deleteProperty(target: any, propertyKey: string): boolean;
-    get(target: any, propertyKey: string, receiver?: any): any;
-    getPrototypeOf(target: any): any;
-    getOwnPropertyDescriptor(target: any, propertyKey: string): any;
-    has(target: any, propertyKey: string): boolean;
-    isExtensible(target: any): boolean;
-    ownKeys(target: any): string[];
-    preventExtensions(target: any): boolean;
-    set(target: any, propertyKey: string, value: any, receiver?: any): boolean;
-    setPrototypeOf(target: any, proto: any): boolean;
+    apply(target: any, thisArgument: any, argumentsList: any[], ...ignored: any[]): any;
+    construct(target: any, argumentsList: any[], newTarget?: any, ...ignored: any[]): any;
+    defineProperty(target: any, propertyKey: string, attributes: any, ...ignored: any[]): boolean;
+    deleteProperty(target: any, propertyKey: string, ...ignored: any[]): boolean;
+    get(target: any, propertyKey: string, receiver?: any, ...ignored: any[]): any;
+    getPrototypeOf(target: any, ...ignored: any[]): any;
+    getOwnPropertyDescriptor(target: any, propertyKey: string, ...ignored: any[]): any;
+    has(target: any, propertyKey: string, ...ignored: any[]): boolean;
+    isExtensible(target: any, ...ignored: any[]): boolean;
+    ownKeys(target: any, ...ignored: any[]): string[];
+    preventExtensions(target: any, ...ignored: any[]): boolean;
+    set(target: any, propertyKey: string, value: any, receiver?: any, ...ignored: any[]): boolean;
+    setPrototypeOf(target: any, proto: any, ...ignored: any[]): boolean;
 }
 declare var Reflect: ReflectConstructor;
 

@@ -36895,6 +36895,7 @@ class Emitter {
         obj: EmitResult,
         keyExpr: ts.Expression,
         receiver?: { value: EmitResult; node: ts.Expression },
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer Reflect.get on non-buffer");
         const key = this.emitExpr(keyExpr);
@@ -36903,6 +36904,7 @@ class Emitter {
             { value: key, target: T_STRING, node: keyExpr },
         ];
         if (receiver) specs.push({ value: receiver.value, target: T_VALUE, node: receiver.node });
+        specs.push(...ignored);
         return this.emitSequencedExpr(T_VALUE, specs, ([buffer, keyC, receiverC]) => {
             const source = this.freshTemp("_bget_src");
             const out = this.freshTemp("_bget_out");
@@ -38905,6 +38907,7 @@ class Emitter {
         keyExpr: ts.Expression,
         tsType: ts.Type,
         receiver?: { value: EmitResult; node: ts.Expression },
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         if (obj.ty.kind !== "class") unsupported(objExpr, "Reflect.get on non-object");
         const key = this.emitExpr(keyExpr);
@@ -38914,6 +38917,7 @@ class Emitter {
             { value: key, target: T_STRING, node: keyExpr },
         ];
         if (receiver) specs.push({ value: receiver.value, target: T_VALUE, node: receiver.node });
+        specs.push(...ignored);
         return this.emitSequencedExpr(T_VALUE, specs, ([objC, keyC, receiverC]) => {
             const out = this.freshTemp("_rget");
             const checks: string[] = [
@@ -39213,6 +39217,7 @@ class Emitter {
         obj: EmitResult,
         keyExpr: ts.Expression,
         receiver?: { value: EmitResult; node: ts.Expression },
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         if (obj.ty.kind !== "array") unsupported(objExpr, "typed array Reflect.get on non-array");
         const elem = obj.ty.elem ?? T_VALUE;
@@ -39222,6 +39227,7 @@ class Emitter {
             { value: key, target: T_STRING, node: keyExpr },
         ];
         if (receiver) specs.push({ value: receiver.value, target: T_VALUE, node: receiver.node });
+        specs.push(...ignored);
         return this.emitSequencedExpr(T_VALUE, specs, ([arrC, keyC, receiverC]) => {
             const out = this.freshTemp("_aget");
             const idx = this.freshTemp("_aget_i");
@@ -39248,6 +39254,7 @@ class Emitter {
         obj: EmitResult,
         keyExpr: ts.Expression,
         valueExpr: ts.Expression,
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         if (obj.ty.kind !== "array") unsupported(objExpr, "typed array Reflect.set on non-array");
         const elem = obj.ty.elem ?? T_VALUE;
@@ -39257,6 +39264,7 @@ class Emitter {
             { value: obj, node: objExpr },
             { value: key, target: T_STRING, node: keyExpr },
             { value, target: elem, node: valueExpr },
+            ...ignored,
         ], ([arrC, keyC, valueC]) => {
             const out = this.freshTemp("_aset");
             const idx = this.freshTemp("_aset_i");
@@ -39293,10 +39301,11 @@ class Emitter {
         objExpr: ts.Expression,
         obj: EmitResult,
         keyExpr: ts.Expression,
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         if (obj.ty.kind !== "array") unsupported(objExpr, "typed array Reflect.deleteProperty on non-array");
         const key = this.emitExpr(keyExpr);
-        return this.emitTypedArrayDeleteProperty(objExpr, obj, key, keyExpr);
+        return this.emitTypedArrayDeleteProperty(objExpr, obj, key, keyExpr, ignored);
     }
 
     private emitTypedArrayDeleteProperty(
@@ -39304,11 +39313,13 @@ class Emitter {
         obj: EmitResult,
         key: EmitResult,
         keyExpr: ts.Expression,
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         if (obj.ty.kind !== "array") unsupported(objExpr, "typed array delete on non-array");
         return this.emitSequencedExpr(T_BOOLEAN, [
             { value: obj, node: objExpr },
             { value: key, target: T_STRING, node: keyExpr },
+            ...ignored,
         ], ([arrC, keyC]) => {
             const out = this.freshTemp("_adel");
             const idx = this.freshTemp("_adel_i");
@@ -39410,6 +39421,7 @@ class Emitter {
         keyExpr: ts.Expression,
         valueExpr: ts.Expression,
         tsType: ts.Type,
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         if (obj.ty.kind !== "class") unsupported(objExpr, "Reflect.set on non-object");
         const key = this.emitExpr(keyExpr);
@@ -39419,6 +39431,7 @@ class Emitter {
             { value: obj, node: objExpr },
             { value: key, target: T_STRING, node: keyExpr },
             { value, target: T_VALUE, node: valueExpr },
+            ...ignored,
         ], ([objC, keyC, valueC]) => {
             const ok = this.freshTemp("_rset");
             const checks: string[] = [`bool ${ok} = false`];
@@ -39469,18 +39482,20 @@ class Emitter {
 
     private emitReflectApply(call: ts.CallExpression): EmitResult {
         const args = call.arguments;
-        if (args.length !== 3) unsupported(call, "Reflect.apply expects target, thisArg, and argumentsList");
+        if (args.length < 3) unsupported(call, "Reflect.apply expects target, thisArg, and argumentsList");
+        const ignored = this.ignoredArgumentSpecs(args, 3);
         const target = this.emitExpr(args[0]!);
         if (target.ty.kind === "value") {
             const list = this.emitReflectArgumentsListExpr(args[2]!);
             if (list.ty.kind !== "array" && list.ty.kind !== "value") {
                 unsupported(args[2]!, "Reflect.apply argumentsList must be an array literal, typed array, or dynamic array");
             }
-            return this.emitSequencedCall("tsc_value_apply_function", T_VALUE, [
+            return this.emitSequencedExpr(T_VALUE, [
                 { value: target, target: T_VALUE, node: args[0]! },
                 { value: this.emitExpr(args[1]!), target: T_VALUE, node: args[1]! },
                 { value: list, target: T_VALUE, node: args[2]! },
-            ]);
+                ...ignored,
+            ], ([fn, thisArg, listC]) => `tsc_value_apply_function(${fn}, ${thisArg}, ${listC})`);
         }
         if (target.ty.kind !== "function" || !target.ty.ret) {
             unsupported(args[0]!, "Reflect.apply target must be a function value");
@@ -39506,6 +39521,7 @@ class Emitter {
                 { value: target, target: target.ty, node: args[0]! },
                 { value: this.emitExpr(args[1]!), target: T_VALUE, node: args[1]! },
                 { value: list, node: args[2]! },
+                ...ignored,
             ], (vals) => {
                 const fn = vals[0]!;
                 const thisArg = vals[1]!;
@@ -39537,6 +39553,7 @@ class Emitter {
                 { value: target, target: target.ty, node: args[0]! },
                 { value: this.emitExpr(args[1]!), target: T_VALUE, node: args[1]! },
                 { value: list, node: args[2]! },
+                ...ignored,
             ], (vals) => {
                 const fn = vals[0]!;
                 const thisArg = vals[1]!;
@@ -39567,18 +39584,20 @@ class Emitter {
                 node: element,
             });
         }
+        specs.push(...ignored);
         const ret = this.prepareType(target.ty.ret);
         return this.emitSequencedExpr(ret, specs, (vals) => {
             const fn = vals[0]!;
             const thisArg = vals[1]!;
-            const callArgs = vals.slice(2);
+            const callArgs = vals.slice(2, 2 + params.length);
             return `({ ${fn}->fn(${[`${fn}->env`, ...(target.ty.thisParam ? [thisArg] : []), ...callArgs].join(", ")}); })`;
         });
     }
 
     private emitReflectConstruct(call: ts.CallExpression): EmitResult {
         const args = call.arguments;
-        if (args.length < 2 || args.length > 3) unsupported(call, "Reflect.construct expects target and argumentsList");
+        if (args.length < 2) unsupported(call, "Reflect.construct expects target and argumentsList");
+        const ignored = this.ignoredArgumentSpecs(args, args[2] ? 3 : 2);
         const targetDecl = ts.isIdentifier(args[0]!)
             ? this.classDeclForConstructorIdentifier(args[0]!)
             : null;
@@ -39595,16 +39614,25 @@ class Emitter {
                 ];
                 if (args[2]) {
                     specs.push({ value: this.emitExpr(args[2]), target: T_VALUE, node: args[2] });
-                    return this.emitSequencedCall("tsc_value_construct_with_new_target", T_VALUE, specs);
+                    specs.push(...ignored);
+                    return this.emitSequencedExpr(
+                        T_VALUE,
+                        specs,
+                        ([targetC, listC, newTargetC]) => `tsc_value_construct_with_new_target(${targetC}, ${listC}, ${newTargetC})`,
+                    );
                 }
-                return this.emitSequencedCall("tsc_value_construct", T_VALUE, specs);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    specs,
+                    ([targetC, listC]) => `tsc_value_construct(${targetC}, ${listC})`,
+                );
             }
             if (!ts.isIdentifier(args[0]!)) {
                 unsupported(args[0]!, "Reflect.construct target must be a class identifier");
             }
             unsupported(args[0]!, "Reflect.construct target must be a supported class");
         }
-        if (args.length === 3) unsupported(args[2]!, "Reflect.construct newTarget is supported only for dynamic targets");
+        if (args[2]) unsupported(args[2], "Reflect.construct newTarget is supported only for dynamic targets");
         const decl = targetDecl;
         const cls = decl.name?.text;
         if (!cls) unsupported(args[0]!, "Reflect.construct target must be a supported class");
@@ -39757,20 +39785,22 @@ class Emitter {
             case "construct":
                 return this.emitReflectConstruct(call);
             case "defineProperty": {
-                if (args.length !== 3) unsupported(call, "Reflect.defineProperty expects target, key, and descriptor");
+                if (args.length < 3) unsupported(call, "Reflect.defineProperty expects target, key, and descriptor");
+                const ignored = this.ignoredArgumentSpecs(args, 3);
                 const target = this.emitExpr(args[0]!);
                 if (target.ty.kind === "array" && ts.isObjectLiteralExpression(args[2]!)) {
                     const desc = this.descriptorData(args[2]!);
-                    return this.emitTypedArrayDefineProperty(args[0]!, target, args[1]!, desc, false);
+                    return this.emitTypedArrayDefineProperty(args[0]!, target, args[1]!, desc, false, ignored);
                 }
                 const key = this.emitExpr(args[1]!);
                 if (!ts.isObjectLiteralExpression(args[2]!)) {
                     const descValue = this.emitExpr(args[2]!);
-                    return this.emitSequencedCall("tsc_reflect_define_property_descriptor", T_BOOLEAN, [
+                    return this.emitSequencedExpr(T_BOOLEAN, [
                         { value: target, target: T_VALUE, node: args[0]! },
                         { value: key, target: T_STRING, node: args[1]! },
                         { value: descValue, target: T_VALUE, node: args[2]! },
-                    ]);
+                        ...ignored,
+                    ], ([t, k, desc]) => `tsc_reflect_define_property_descriptor(${t}, ${k}, ${desc})`);
                 }
                 const desc = this.descriptorData(args[2]!);
                 if (desc.kind === "accessor") {
@@ -39786,6 +39816,7 @@ class Emitter {
                     if (desc.setter?.env) {
                         specs.push({ value: desc.setter.env, node: desc.setter.node, pass: (tmp) => `(void*)${tmp}` });
                     }
+                    specs.push(...ignored);
                     return this.emitSequencedExpr(
                         T_BOOLEAN,
                         specs,
@@ -39807,41 +39838,46 @@ class Emitter {
                         { value: target, target: T_VALUE, node: args[0]! },
                         { value: key, target: T_STRING, node: args[1]! },
                         { value, target: T_VALUE, node: desc.value ?? args[2]! },
+                        ...ignored,
                     ],
                     ([t, k, v]) => `tsc_reflect_define_property_desc(${t}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})`,
                 );
             }
             case "deleteProperty": {
-                if (args.length !== 2) unsupported(call, "Reflect.deleteProperty expects target and key");
+                if (args.length < 2) unsupported(call, "Reflect.deleteProperty expects target and key");
+                const ignored = this.ignoredArgumentSpecs(args, 2);
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
                 if (mapped.kind === "array") {
-                    return this.emitTypedArrayReflectDelete(args[0]!, target, args[1]!);
+                    return this.emitTypedArrayReflectDelete(args[0]!, target, args[1]!, ignored);
                 }
                 const key = this.emitExpr(args[1]!);
-                return this.emitSequencedCall("tsc_reflect_delete_prop", T_BOOLEAN, [
+                return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: target, target: T_VALUE, node: args[0]! },
                     { value: key, target: T_STRING, node: args[1]! },
-                ]);
+                    ...ignored,
+                ], ([t, k]) => `tsc_reflect_delete_prop(${t}, ${k})`);
             }
             case "get": {
-                if (args.length !== 2 && args.length !== 3) unsupported(call, "Reflect.get expects target, key, and optional receiver");
+                if (args.length < 2) unsupported(call, "Reflect.get expects target, key, and optional receiver");
+                const consumed = args[2] ? 3 : 2;
+                const ignored = this.ignoredArgumentSpecs(args, consumed);
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
                 const receiver = args[2] ? { value: this.emitExpr(args[2]), node: args[2] } : undefined;
                 if (mapped.kind === "array") {
-                    return this.emitTypedArrayReflectGet(args[0]!, target, args[1]!, receiver);
+                    return this.emitTypedArrayReflectGet(args[0]!, target, args[1]!, receiver, ignored);
                 }
                 if (mapped.kind === "buffer") {
-                    return this.emitBufferReflectGet(args[0]!, target, args[1]!, receiver);
+                    return this.emitBufferReflectGet(args[0]!, target, args[1]!, receiver, ignored);
                 }
                 if (mapped.kind === "class") {
-                    return this.emitTypedReflectGet(args[0]!, target, args[1]!, targetType, receiver);
+                    return this.emitTypedReflectGet(args[0]!, target, args[1]!, targetType, receiver, ignored);
                 }
                 const key = this.emitExpr(args[1]!);
-                if (args.length === 3) {
+                if (args[2]) {
                     const receiver = this.emitExpr(args[2]!);
                     const cache = this.freshTemp("_prop_cache");
                     return this.emitSequencedExpr(
@@ -39850,6 +39886,7 @@ class Emitter {
                             { value: target, target: T_VALUE, node: args[0]! },
                             { value: key, target: T_STRING, node: args[1]! },
                             { value: receiver, target: T_VALUE, node: args[2]! },
+                            ...ignored,
                         ],
                         ([t, k, r]) => `({ static tsc_prop_cache_t ${cache}; tsc_reflect_get_prop_receiver_cached(${t}, ${k}, ${r}, &${cache}); })`,
                     );
@@ -39857,15 +39894,17 @@ class Emitter {
                 const cache = this.freshTemp("_prop_cache");
                 return this.emitSequencedExpr(
                     T_VALUE,
-                    [
-                        { value: target, target: T_VALUE, node: args[0]! },
-                        { value: key, target: T_STRING, node: args[1]! },
-                    ],
+                        [
+                            { value: target, target: T_VALUE, node: args[0]! },
+                            { value: key, target: T_STRING, node: args[1]! },
+                            ...ignored,
+                        ],
                     ([t, k]) => `({ static tsc_prop_cache_t ${cache}; tsc_reflect_get_prop_cached(${t}, ${k}, &${cache}); })`,
                 );
             }
             case "getOwnPropertyDescriptor": {
-                if (args.length !== 2) unsupported(call, "Reflect.getOwnPropertyDescriptor expects target and key");
+                if (args.length < 2) unsupported(call, "Reflect.getOwnPropertyDescriptor expects target and key");
+                const ignored = this.ignoredArgumentSpecs(args, 2);
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
@@ -39882,44 +39921,50 @@ class Emitter {
                     return this.emitSequencedExpr(T_VALUE, [
                         { value: target, node: args[0]! },
                         { value: key, target: T_STRING, node: args[1]! },
+                        ...ignored,
                     ], ([t, k]) => `({ (void)${t}; (void)${k}; tsc_value_undefined(); })`);
                 }
                 if (mapped.kind === "buffer") {
-                    return this.emitBufferGetOwnPropertyDescriptor(args[0]!, target, args[1]!);
+                    return this.emitBufferGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
                 }
                 if (mapped.kind === "array") {
-                    return this.emitTypedArrayGetOwnPropertyDescriptor(args[0]!, target, args[1]!);
+                    return this.emitTypedArrayGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
                 }
                 if (mapped.kind === "class") {
-                    return this.emitTypedGetOwnPropertyDescriptor(args[0]!, target, args[1]!, targetType);
+                    return this.emitTypedGetOwnPropertyDescriptor(args[0]!, target, args[1]!, targetType, ignored);
                 }
                 const key = this.emitExpr(args[1]!);
-                return this.emitSequencedCall("tsc_reflect_get_own_property_descriptor", T_VALUE, [
+                return this.emitSequencedExpr(T_VALUE, [
                     { value: target, target: T_VALUE, node: args[0]! },
                     { value: key, target: T_STRING, node: args[1]! },
-                ]);
+                    ...ignored,
+                ], ([t, k]) => `tsc_reflect_get_own_property_descriptor(${t}, ${k})`);
             }
             case "getPrototypeOf": {
-                if (args.length !== 1) unsupported(call, "Reflect.getPrototypeOf expects target");
+                if (args.length < 1) unsupported(call, "Reflect.getPrototypeOf expects target");
+                const ignored = this.ignoredArgumentSpecs(args, 1);
                 const target = this.emitExpr(args[0]!);
-                return this.emitSequencedCall("tsc_reflect_get_prototype_of", T_VALUE, [
+                return this.emitSequencedExpr(T_VALUE, [
                     { value: target, target: T_VALUE, node: args[0]! },
-                ]);
+                    ...ignored,
+                ], ([t]) => `tsc_reflect_get_prototype_of(${t})`);
             }
             case "has": {
-                if (args.length !== 2) unsupported(call, "Reflect.has expects target and key");
+                if (args.length < 2) unsupported(call, "Reflect.has expects target and key");
+                const ignored = this.ignoredArgumentSpecs(args, 2);
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
                 if (mapped.kind === "array") {
                     const key = this.emitExpr(args[1]!);
-                    return this.emitSequencedCall("tsc_array_has_own_key", T_BOOLEAN, [
+                    return this.emitSequencedExpr(T_BOOLEAN, [
                         { value: target },
                         { value: key, target: T_STRING, node: args[1]! },
-                    ]);
+                        ...ignored,
+                    ], ([t, k]) => `tsc_array_has_own_key(${t}, ${k})`);
                 }
                 if (mapped.kind === "buffer") {
-                    return this.emitBufferPropertyKeyCheck(args[0]!, target, args[1]!, true);
+                    return this.emitBufferPropertyKeyCheck(args[0]!, target, args[1]!, true, ignored);
                 }
                 if (mapped.kind === "class") {
                     return this.emitTypedObjectHasOwn(
@@ -39928,25 +39973,30 @@ class Emitter {
                         args[1]!,
                         targetType,
                         "Reflect.has",
+                        ignored,
                     );
                 }
                 const key = this.emitExpr(args[1]!);
-                return this.emitSequencedCall("tsc_reflect_has_prop", T_BOOLEAN, [
+                return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: target, target: T_VALUE, node: args[0]! },
                     { value: key, target: T_STRING, node: args[1]! },
-                ]);
+                    ...ignored,
+                ], ([t, k]) => `tsc_reflect_has_prop(${t}, ${k})`);
             }
             case "isExtensible": {
-                if (args.length !== 1) unsupported(call, "Reflect.isExtensible expects target");
+                if (args.length < 1) unsupported(call, "Reflect.isExtensible expects target");
+                const ignored = this.ignoredArgumentSpecs(args, 1);
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: target, target: (mapped.kind === "value" || mapped.kind === "function") ? T_VALUE : undefined, node: args[0]! },
+                    ...ignored,
                 ], ([t]) => `tsc_reflect_is_extensible(${mapped.kind === "array" ? `tsc_value_array(${t})` : t})`);
             }
             case "ownKeys": {
-                if (args.length !== 1) unsupported(call, "Reflect.ownKeys expects target");
+                if (args.length < 1) unsupported(call, "Reflect.ownKeys expects target");
+                const ignored = this.ignoredArgumentSpecs(args, 1);
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 if (
@@ -39959,13 +40009,13 @@ class Emitter {
                     mapped.kind === "url"
                 ) {
                     const target = this.emitExpr(args[0]!);
-                    return this.emitSequencedExpr(arrayType(T_STRING), [{ value: target, node: args[0]! }], ([t]) =>
+                    return this.emitSequencedExpr(arrayType(T_STRING), [{ value: target, node: args[0]! }, ...ignored], ([t]) =>
                         `({ (void)${t}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
                     );
                 }
                 if (mapped.kind === "buffer") {
                     const target = this.emitExpr(args[0]!);
-                    return this.emitBufferOwnKeys(args[0]!, target);
+                    return this.emitBufferOwnKeys(args[0]!, target, ignored);
                 }
                 if (mapped.kind === "class") {
                     const target = this.emitExpr(args[0]!);
@@ -39983,40 +40033,45 @@ class Emitter {
                         pieces.push(`tsc_array_push_raw(${av}, &${kv})`);
                     }
                     pieces.push(av);
-                    return this.emitSequencedExpr(arrayType(T_STRING), [{ value: target, node: args[0]! }], ([t]) =>
+                    return this.emitSequencedExpr(arrayType(T_STRING), [{ value: target, node: args[0]! }, ...ignored], ([t]) =>
                         `({ (void)${t}; ${pieces.join("; ")}; })`,
                     );
                 }
                 const target = this.emitExpr(args[0]!);
-                return this.emitSequencedCall("tsc_reflect_own_keys", arrayType(T_STRING), [
+                return this.emitSequencedExpr(arrayType(T_STRING), [
                     { value: target, target: T_VALUE, node: args[0]! },
-                ]);
+                    ...ignored,
+                ], ([t]) => `tsc_reflect_own_keys(${t})`);
             }
             case "preventExtensions": {
-                if (args.length !== 1) unsupported(call, "Reflect.preventExtensions expects target");
+                if (args.length < 1) unsupported(call, "Reflect.preventExtensions expects target");
+                const ignored = this.ignoredArgumentSpecs(args, 1);
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: target, target: (mapped.kind === "value" || mapped.kind === "function") ? T_VALUE : undefined, node: args[0]! },
+                    ...ignored,
                 ], ([t]) => `tsc_reflect_prevent_extensions(${mapped.kind === "array" ? `tsc_value_array(${t})` : t})`);
             }
             case "set": {
-                if (args.length !== 3 && args.length !== 4) unsupported(call, "Reflect.set expects target, key, value, and optional receiver");
+                if (args.length < 3) unsupported(call, "Reflect.set expects target, key, value, and optional receiver");
+                const consumed = args[3] ? 4 : 3;
+                const ignored = this.ignoredArgumentSpecs(args, consumed);
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
                 if (mapped.kind === "array") {
-                    if (args.length === 4) unsupported(call, "Reflect.set receiver for typed arrays requires a dynamic target");
-                    return this.emitTypedArrayReflectSet(args[0]!, target, args[1]!, args[2]!);
+                    if (args[3]) unsupported(call, "Reflect.set receiver for typed arrays requires a dynamic target");
+                    return this.emitTypedArrayReflectSet(args[0]!, target, args[1]!, args[2]!, ignored);
                 }
                 if (mapped.kind === "class") {
-                    if (args.length === 4) unsupported(call, "Reflect.set receiver for typed objects requires a dynamic target");
-                    return this.emitTypedReflectSet(args[0]!, target, args[1]!, args[2]!, targetType);
+                    if (args[3]) unsupported(call, "Reflect.set receiver for typed objects requires a dynamic target");
+                    return this.emitTypedReflectSet(args[0]!, target, args[1]!, args[2]!, targetType, ignored);
                 }
                 const key = this.emitExpr(args[1]!);
                 const value = this.emitExpr(args[2]!);
-                if (args.length === 4) {
+                if (args[3]) {
                     const receiver = this.emitExpr(args[3]!);
                     const cache = this.freshTemp("_prop_cache");
                     return this.emitSequencedExpr(
@@ -40026,6 +40081,7 @@ class Emitter {
                             { value: key, target: T_STRING, node: args[1]! },
                             { value, target: T_VALUE, node: args[2]! },
                             { value: receiver, target: T_VALUE, node: args[3]! },
+                            ...ignored,
                         ],
                         ([t, k, v, r]) => `({ static tsc_prop_cache_t ${cache}; tsc_reflect_set_prop_receiver_cached(${t}, ${k}, ${v}, ${r}, &${cache}); })`,
                     );
@@ -40033,22 +40089,25 @@ class Emitter {
                 const cache = this.freshTemp("_prop_cache");
                 return this.emitSequencedExpr(
                     T_BOOLEAN,
-                    [
-                        { value: target, target: T_VALUE, node: args[0]! },
-                        { value: key, target: T_STRING, node: args[1]! },
-                        { value, target: T_VALUE, node: args[2]! },
-                    ],
+                        [
+                            { value: target, target: T_VALUE, node: args[0]! },
+                            { value: key, target: T_STRING, node: args[1]! },
+                            { value, target: T_VALUE, node: args[2]! },
+                            ...ignored,
+                        ],
                     ([t, k, v]) => `({ static tsc_prop_cache_t ${cache}; tsc_reflect_set_prop_cached(${t}, ${k}, ${v}, &${cache}); })`,
                 );
             }
             case "setPrototypeOf": {
-                if (args.length !== 2) unsupported(call, "Reflect.setPrototypeOf expects target and prototype");
+                if (args.length < 2) unsupported(call, "Reflect.setPrototypeOf expects target and prototype");
+                const ignored = this.ignoredArgumentSpecs(args, 2);
                 const target = this.emitExpr(args[0]!);
                 const proto = this.emitExpr(args[1]!);
-                return this.emitSequencedCall("tsc_reflect_set_prototype_of", T_BOOLEAN, [
+                return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: target, target: T_VALUE, node: args[0]! },
                     { value: proto, target: T_VALUE, node: args[1]! },
-                ]);
+                    ...ignored,
+                ], ([t, p]) => `tsc_reflect_set_prototype_of(${t}, ${p})`);
             }
         }
         unsupported(call, `Reflect.${name}`);

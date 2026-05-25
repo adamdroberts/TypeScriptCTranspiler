@@ -1,0 +1,26 @@
+get: 3
+has: true
+desc: 3 true
+keys: fixed
+ext: true
+define: true
+set: true 5
+delete: true false
+proto: true
+set proto: true true
+prevent: true false
+apply: 5
+dynamic apply: 9
+construct: box
+array get: 10
+array has: true
+array desc: 20
+array keys: 0|1|length
+array define: true 3
+array delete: true
+array prevent: true false
+typed get: 7
+typed has: true
+typed desc: 7
+typed keys: value|label
+marks: abcdefghijklmnopqrstuvwxy
