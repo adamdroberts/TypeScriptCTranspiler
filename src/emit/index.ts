@@ -30783,12 +30783,13 @@ class Emitter {
                 );
             }
             case "dispatchEvent": {
-                if (args.length !== 1) unsupported(call, "EventTarget.dispatchEvent expects event");
+                if (args.length < 1) unsupported(call, "EventTarget.dispatchEvent expects event");
                 const event = this.emitExpr(args[0]!);
-                return this.emitSequencedCall("tsc_event_target_dispatch", T_BOOLEAN, [
+                return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: recv },
                     { value: event, target: T_EVENT, node: args[0]! },
-                ]);
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ], ([target, eventC]) => `tsc_event_target_dispatch(${target}, ${eventC})`);
             }
             case "hasOwnProperty":
             case "propertyIsEnumerable":
