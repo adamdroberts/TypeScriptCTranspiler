@@ -6916,11 +6916,19 @@ class Emitter {
         args: ts.NodeArray<ts.Expression>,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
-        if (args.length > 1) return false;
         if (method === "then") {
-            return this.isSideEffectFreeFulfilledPromiseOperand(recv, seenConsts) &&
-                this.isSideEffectFreeOptionalPromiseCallback(args[0], seenConsts);
+            if (args.length > 2) return false;
+            if (this.isSideEffectFreeFulfilledPromiseOperand(recv, seenConsts)) {
+                return this.isSideEffectFreeOptionalPromiseCallback(args[0], seenConsts) &&
+                    this.isSideEffectFreeUnevaluatedPromiseCallback(args[1], seenConsts);
+            }
+            if (this.isSideEffectFreeRejectedPromiseOperand(recv, seenConsts)) {
+                return this.isSideEffectFreeUnevaluatedPromiseCallback(args[0], seenConsts) &&
+                    this.isSideEffectFreeOptionalPromiseCallback(args[1], seenConsts);
+            }
+            return false;
         }
+        if (args.length > 1) return false;
         if (method === "catch") {
             return this.isSideEffectFreeRejectedPromiseOperand(recv, seenConsts) &&
                 this.isSideEffectFreeOptionalPromiseCallback(args[0], seenConsts);
@@ -6939,6 +6947,15 @@ class Emitter {
         return !expr ||
             this.isUndefinedExpression(expr) ||
             this.isSideEffectFreePromiseTryCallbackOperand(expr, seenConsts);
+    }
+
+    private isSideEffectFreeUnevaluatedPromiseCallback(
+        expr: ts.Expression | undefined,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return !expr ||
+            this.isUndefinedExpression(expr) ||
+            this.isSideEffectFreeTopLevelConstInitializer(expr, seenConsts);
     }
 
     private isSideEffectFreeFulfilledPromiseOperand(

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes unused immediate two-argument `Promise.then(...)` chains when the statically reachable callback is side-effect-free and the unreached handler expression is pure. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused immediate `Promise.resolve(...).then(...)`, `Promise.reject(...).catch(...)`, and settled `finally(...)` chains when their direct callbacks are side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused `new Promise(...)` calls when the direct executor is empty or only resolves/rejects a side-effect-free primitive reason. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused `Promise.try(...)` calls when the direct callback is empty or returns a side-effect-free primitive or pure Promise value. Test: `generated_c_dce_const`.

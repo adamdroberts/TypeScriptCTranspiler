@@ -568,6 +568,14 @@ const unused_new_promise_reject_call = new Promise<string>((resolve, reject) => 
     reject("dead_new_promise_reject");
 });
 const unused_promise_then_call = Promise.resolve("dead_promise_then_source").then(() => "dead_promise_then_callback");
+const unused_promise_then_fulfilled_two_arg_call = Promise.resolve("dead_promise_then_fulfilled_two_arg_source").then(
+    () => "dead_promise_then_fulfilled_two_arg_callback",
+    () => "dead_promise_then_fulfilled_two_arg_unreached",
+);
+const unused_promise_then_rejected_two_arg_call = Promise.reject<string>("dead_promise_then_rejected_two_arg_source").then(
+    () => "dead_promise_then_rejected_two_arg_unreached",
+    () => "dead_promise_then_rejected_two_arg_callback",
+);
 const unused_promise_catch_call = Promise.reject<string>("dead_promise_catch_source").catch(() => "dead_promise_catch_callback");
 const unused_promise_finally_resolve_call = Promise.resolve("dead_promise_finally_resolve_source").finally(() => {
     String("dead_promise_finally_resolve_callback");
@@ -1586,6 +1594,14 @@ new Promise<string>((resolve, reject) => {
     reject("top_level_dead_new_promise_reject");
 });
 Promise.resolve("top_level_dead_promise_then_source").then(() => "top_level_dead_promise_then_callback");
+Promise.resolve("top_level_dead_promise_then_fulfilled_two_arg_source").then(
+    () => "top_level_dead_promise_then_fulfilled_two_arg_callback",
+    () => "top_level_dead_promise_then_fulfilled_two_arg_unreached",
+);
+Promise.reject<string>("top_level_dead_promise_then_rejected_two_arg_source").then(
+    () => "top_level_dead_promise_then_rejected_two_arg_unreached",
+    () => "top_level_dead_promise_then_rejected_two_arg_callback",
+);
 Promise.reject<string>("top_level_dead_promise_catch_source").catch(() => "top_level_dead_promise_catch_callback");
 Promise.resolve("top_level_dead_promise_finally_source").finally(() => {
     String("top_level_dead_promise_finally_callback");
@@ -2581,6 +2597,14 @@ function usedLocal(value: number): number {
         reject("local_dead_new_promise_reject");
     });
     Promise.resolve("local_dead_promise_then_source").then(() => "local_dead_promise_then_callback");
+    Promise.resolve("local_dead_promise_then_fulfilled_two_arg_source").then(
+        () => "local_dead_promise_then_fulfilled_two_arg_callback",
+        () => "local_dead_promise_then_fulfilled_two_arg_unreached",
+    );
+    Promise.reject<string>("local_dead_promise_then_rejected_two_arg_source").then(
+        () => "local_dead_promise_then_rejected_two_arg_unreached",
+        () => "local_dead_promise_then_rejected_two_arg_callback",
+    );
     Promise.reject<string>("local_dead_promise_catch_source").catch(() => "local_dead_promise_catch_callback");
     Promise.resolve("local_dead_promise_finally_source").finally(() => {
         String("local_dead_promise_finally_callback");
