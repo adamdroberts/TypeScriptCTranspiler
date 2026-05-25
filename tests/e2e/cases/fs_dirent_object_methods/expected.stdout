@@ -1,0 +1,9 @@
+enum: name file.txt
+entries: 1 name file.txt
+names: name name
+desc: file.txt true true true undefined
+descs: name file.txt file.txt
+own: true false true true
+call: true true
+tag: [object Dirent] [object Dirent]
+trace: edmDRkvnrhHpicqt

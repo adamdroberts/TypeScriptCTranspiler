@@ -25373,6 +25373,9 @@ class Emitter {
         if (mapped.kind === "buffer") {
             return this.emitBufferOwnKeyCheck(targetNode, target, keyNode);
         }
+        if (mapped.kind === "fsdirent") {
+            return this.emitFsDirentOwnKeyCheck(targetNode, target, keyNode, ignored);
+        }
         if (mapped.kind === "regexp") {
             const key = this.emitExpr(keyNode);
             return this.emitSequencedExpr(T_BOOLEAN, [
@@ -25418,6 +25421,8 @@ class Emitter {
             case "eventemitter": return "EventEmitter";
             case "eventtarget": return "EventTarget";
             case "finregistry": return "FinalizationRegistry";
+            case "fsdirent": return "Dirent";
+            case "fsstats": return "Stats";
             case "function": return "Function";
             case "map": return "Map";
             case "number": return "Number";
@@ -36706,6 +36711,10 @@ class Emitter {
             );
         }
         switch (method) {
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+                if (args.length < 1) unsupported(call, `Dirent.${method} expects at least 1 arg`);
+                return this.emitFsDirentOwnKeyCheck(call.expression, recv, args[0]!, this.ignoredArgumentSpecs(args, 1));
             case "toLocaleString":
             case "toString":
                 return this.emitSequencedExpr(
@@ -37967,6 +37976,10 @@ class Emitter {
                 const value = this.emitExpr(arg);
                 return this.emitBufferOwnKeys(arg, value, ignored);
             }
+            if (mapped.kind === "fsdirent") {
+                const value = this.emitExpr(arg);
+                return this.emitFsDirentOwnPropertyNames(arg, value, ignored);
+            }
             if (mapped.kind === "string") {
                 const value = this.emitExpr(arg);
                 return this.emitSequencedExpr(arrayType(T_STRING), [
@@ -38042,6 +38055,10 @@ class Emitter {
                 const value = this.emitExpr(arg);
                 return this.emitBufferObjectValues(arg, value, ignored);
             }
+            if (mapped.kind === "fsdirent") {
+                const value = this.emitExpr(arg);
+                return this.emitFsDirentObjectValues(arg, value, ignored);
+            }
             if (mapped.kind === "string") {
                 const value = this.emitExpr(arg);
                 return this.emitSequencedExpr(arrayType(T_STRING), [{ value, node: arg }, ...ignored], ([str]) => {
@@ -38111,6 +38128,10 @@ class Emitter {
             if (mapped.kind === "buffer") {
                 const value = this.emitExpr(arg);
                 return this.emitBufferObjectEntries(arg, value, ignored);
+            }
+            if (mapped.kind === "fsdirent") {
+                const value = this.emitExpr(arg);
+                return this.emitFsDirentObjectEntries(arg, value, ignored);
             }
             if (mapped.kind === "string") {
                 const value = this.emitExpr(arg);
@@ -38215,6 +38236,10 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 return this.emitBufferOwnKeys(arg, obj, ignored);
             }
+            if (mapped.kind === "fsdirent") {
+                const obj = this.emitExpr(arg);
+                return this.emitFsDirentOwnPropertyNames(arg, obj, ignored);
+            }
             if (mapped.kind === "string") {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(arrayType(T_STRING), [
@@ -38315,6 +38340,10 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 return this.emitBufferGetOwnPropertyDescriptor(arg, obj, args[1]!, ignored);
             }
+            if (mapped.kind === "fsdirent") {
+                const obj = this.emitExpr(arg);
+                return this.emitFsDirentGetOwnPropertyDescriptor(arg, obj, args[1]!, ignored);
+            }
             if (mapped.kind === "string") {
                 const obj = this.emitExpr(arg);
                 const key = this.emitExpr(args[1]!);
@@ -38379,6 +38408,10 @@ class Emitter {
             if (mapped.kind === "buffer") {
                 const obj = this.emitExpr(arg);
                 return this.emitBufferGetOwnPropertyDescriptors(arg, obj, ignored);
+            }
+            if (mapped.kind === "fsdirent") {
+                const obj = this.emitExpr(arg);
+                return this.emitFsDirentGetOwnPropertyDescriptors(arg, obj, ignored);
             }
             if (mapped.kind === "string") {
                 const obj = this.emitExpr(arg);
@@ -38463,6 +38496,10 @@ class Emitter {
             if (mapped.kind === "buffer") {
                 const obj = this.emitExpr(arg);
                 return this.emitBufferOwnKeyCheck(arg, obj, args[1]!, ignored);
+            }
+            if (mapped.kind === "fsdirent") {
+                const obj = this.emitExpr(arg);
+                return this.emitFsDirentOwnKeyCheck(arg, obj, args[1]!, ignored);
             }
             if (mapped.kind === "string") {
                 const obj = this.emitExpr(arg);
@@ -39236,6 +39273,87 @@ class Emitter {
             const desc = this.freshTemp("_re_desc");
             return `({ (void)${regexp}; tsc_object_t* ${out} = tsc_object_new(); { ${this.typedArrayDescriptorInit(desc, "tsc_value_num(0.0)", "true", "false", "false")}; tsc_object_set(${out}, tsc_str_from_lit("lastIndex", 9), tsc_value_object(${desc})); } tsc_value_object(${out}); })`;
         });
+    }
+
+    private emitFsDirentOwnPropertyNames(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: objExpr }, ...ignored], ([dirent]) => {
+            const out = this.freshTemp("_dirent_keys");
+            const key = this.freshTemp("_dirent_key");
+            return `({ (void)${dirent}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), 1); tsc_str_t* ${key} = tsc_str_from_lit("name", 4); tsc_array_push_raw(${out}, &${key}); ${out}; })`;
+        });
+    }
+
+    private emitFsDirentObjectValues(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        return this.emitSequencedExpr(arrayType(T_VALUE), [{ value: obj, node: objExpr }, ...ignored], ([dirent]) => {
+            const out = this.freshTemp("_dirent_values");
+            const value = this.freshTemp("_dirent_value");
+            return `({ tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), 1); tsc_value_t ${value} = tsc_value_string(tsc_fs_dirent_name(${dirent})); tsc_array_push_raw(${out}, &${value}); ${out}; })`;
+        });
+    }
+
+    private emitFsDirentObjectEntries(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const elemType = entryType(T_VALUE);
+        return this.emitSequencedExpr(arrayType(elemType), [{ value: obj, node: objExpr }, ...ignored], ([dirent]) => {
+            const out = this.freshTemp("_dirent_entries");
+            const entry = this.freshTemp("_dirent_entry");
+            return `({ tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), 1); ${elemType.c} ${entry}; ${entry}.key = tsc_str_from_lit("name", 4); ${this.objectEntrySet(entry, T_VALUE, `tsc_value_string(tsc_fs_dirent_name(${dirent}))`)}; tsc_array_push_raw(${out}, &${entry}); ${out}; })`;
+        });
+    }
+
+    private emitFsDirentGetOwnPropertyDescriptor(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const key = this.emitExpr(keyExpr);
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+            ...ignored,
+        ], ([dirent, keyC]) => {
+            const out = this.freshTemp("_dirent_desc_out");
+            const desc = this.freshTemp("_dirent_desc");
+            return `({ tsc_value_t ${out} = tsc_value_undefined(); if (tsc_str_eq(${keyC}, tsc_str_from_lit("name", 4))) { ${this.typedArrayDescriptorInit(desc, `tsc_value_string(tsc_fs_dirent_name(${dirent}))`, "true", "true", "true")}; ${out} = tsc_value_object(${desc}); } ${out}; })`;
+        });
+    }
+
+    private emitFsDirentGetOwnPropertyDescriptors(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }, ...ignored], ([dirent]) => {
+            const out = this.freshTemp("_dirent_descs");
+            const desc = this.freshTemp("_dirent_desc");
+            return `({ tsc_object_t* ${out} = tsc_object_new(); { ${this.typedArrayDescriptorInit(desc, `tsc_value_string(tsc_fs_dirent_name(${dirent}))`, "true", "true", "true")}; tsc_object_set(${out}, tsc_str_from_lit("name", 4), tsc_value_object(${desc})); } tsc_value_object(${out}); })`;
+        });
+    }
+
+    private emitFsDirentOwnKeyCheck(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const key = this.emitExpr(keyExpr);
+        return this.emitSequencedExpr(T_BOOLEAN, [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+            ...ignored,
+        ], ([dirent, keyC]) => `({ (void)${dirent}; tsc_str_eq(${keyC}, tsc_str_from_lit("name", 4)); })`);
     }
 
     private emitTypedArrayGetOwnPropertyDescriptor(
@@ -40212,6 +40330,9 @@ class Emitter {
                 if (mapped.kind === "buffer") {
                     return this.emitBufferGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
                 }
+                if (mapped.kind === "fsdirent") {
+                    return this.emitFsDirentGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
+                }
                 if (mapped.kind === "regexp") {
                     return this.emitRegExpGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
                 }
@@ -40308,6 +40429,10 @@ class Emitter {
                 if (mapped.kind === "buffer") {
                     const target = this.emitExpr(args[0]!);
                     return this.emitBufferOwnKeys(args[0]!, target, ignored);
+                }
+                if (mapped.kind === "fsdirent") {
+                    const target = this.emitExpr(args[0]!);
+                    return this.emitFsDirentOwnPropertyNames(args[0]!, target, ignored);
                 }
                 if (mapped.kind === "regexp") {
                     const target = this.emitExpr(args[0]!);
