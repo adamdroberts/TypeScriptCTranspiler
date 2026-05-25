@@ -10076,14 +10076,15 @@ class Emitter {
                 new Set(seenConsts),
             );
         }
-        return ts.isCallExpression(unwrapped) &&
-            (
-                this.isObjectAssignCall(unwrapped) ||
-                this.isObjectFromEntriesCall(unwrapped) ||
-                this.isObjectCreateCall(unwrapped) ||
-                this.isObjectDefinePropertyCall(unwrapped) ||
-                this.isObjectDefinePropertiesCall(unwrapped)
-            ) &&
+        if (!ts.isCallExpression(unwrapped)) return false;
+        return (
+            this.isObjectAssignCall(unwrapped) ||
+            this.isObjectFromEntriesCall(unwrapped) ||
+            this.isObjectCreateCall(unwrapped) ||
+            this.isObjectDefinePropertyCall(unwrapped) ||
+            this.isObjectDefinePropertiesCall(unwrapped) ||
+            this.isFreshArrayBuilderCall(unwrapped)
+        ) &&
             this.isSideEffectFreeStaticCall(unwrapped, seenConsts);
     }
 
@@ -10099,6 +10100,17 @@ class Emitter {
             return expr.arguments[0] ?? null;
         }
         return this.sideEffectFreeObjectPrototypeValueOfTargetReturningOperand(expr, seenConsts);
+    }
+
+    private isFreshArrayBuilderCall(expr: ts.Expression): expr is ts.CallExpression {
+        return ts.isCallExpression(expr) &&
+            ts.isPropertyAccessExpression(expr.expression) &&
+            ts.isIdentifier(expr.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(expr.expression.expression, "Array") &&
+            (
+                expr.expression.name.text === "of" ||
+                expr.expression.name.text === "from"
+            );
     }
 
     private isSideEffectFreeObjectCreatePrototypeOperand(
