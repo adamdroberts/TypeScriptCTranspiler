@@ -1,0 +1,3 @@
+null: Object.getPrototypeOf target must not be null or undefined
+undefined: Object.getPrototypeOf target must not be null or undefined
+object: proto

@@ -38119,7 +38119,9 @@ class Emitter {
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(T_VALUE, [
                 { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
-            ], ([o]) => `tsc_value_get_prototype_of(${dynamicObjectArg(o!)})`);
+            ], ([o]) =>
+                `({ if (tsc_value_is_nullish(${dynamicObjectArg(o!)})) tsc_throw_str(tsc_str_from_cstr("Object.getPrototypeOf target must not be null or undefined")); tsc_value_get_prototype_of(${dynamicObjectArg(o!)}); })`,
+            );
         }
         if (name === "hasOwn") {
             if (args.length !== 2) unsupported(call, "Object.hasOwn expects object and key");
