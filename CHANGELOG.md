@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Pending Promise records now propagate through immediate `Promise.all`, `Promise.allSettled`, `Promise.race`, and `Promise.any` over typed Set sources without synchronously invoking chained callbacks. Test: `promise_pending_combinators`.
 - Generated-C DCE now prunes unused `Promise.all(...)`, `Promise.allSettled(...)`, `Promise.any(...)`, and `Promise.race(...)` calls over statically empty typed Set sources. Test: `generated_c_dce_const`.
 - Immediate `Promise.all`, `Promise.allSettled`, `Promise.race`, and `Promise.any` now accept typed `Set<Promise<T>>` sources in addition to promise arrays, preserving Set insertion order. Test: `promise_settled`.
 - Generated-C DCE coverage now proves unused `Object.groupBy(...)` / `Map.groupBy(...)` pruning over statically empty typed Set sources. Test: `generated_c_dce_const`.

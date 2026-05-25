@@ -60,4 +60,62 @@ Promise.race([pending, Promise.reject<string>("bad")])
         return value;
     });
 
+Promise.all(new Set([Promise.resolve("set-ready"), pending]))
+    .then((values: string[]) => {
+        callbacks.push("set all:" + values.join(","));
+        return values;
+    })
+    .catch((reason: any) => {
+        callbacks.push("set all catch:" + String(reason));
+        return [String(reason)];
+    })
+    .finally(() => {
+        callbacks.push("set all finally");
+    });
+
+Promise.allSettled(new Set([Promise.resolve("set-done"), pending]))
+    .then((items: any[]) => {
+        callbacks.push("set settled:" + items.length);
+        return items;
+    })
+    .finally(() => {
+        callbacks.push("set settled finally");
+    });
+
+Promise.any(new Set([Promise.reject<string>("set-skip"), pending]))
+    .then((value: string) => {
+        callbacks.push("set any:" + value);
+        return value;
+    })
+    .catch((reason: any) => {
+        callbacks.push("set any catch:" + String(reason));
+        return String(reason);
+    });
+
+Promise.race(new Set([pending]))
+    .then((value: string) => {
+        callbacks.push("set race pending:" + value);
+        return value;
+    })
+    .catch((reason: any) => {
+        callbacks.push("set race pending catch:" + String(reason));
+        return String(reason);
+    });
+
+Promise.race(new Set([pending, Promise.resolve("set-later")]))
+    .then((value: string) => {
+        console.log("race set later:", value);
+        return value;
+    });
+
+Promise.race(new Set([pending, Promise.reject<string>("set-bad")]))
+    .catch((reason: any) => {
+        console.log("race set reject:", String(reason));
+        return "set-handled";
+    })
+    .then((value: string) => {
+        console.log("race set recovered:", value);
+        return value;
+    });
+
 console.log("pending callbacks:", callbacks.length, callbacks.join("|"));
