@@ -1579,11 +1579,10 @@ class Emitter {
             return this.isSideEffectFreePromiseTryCallbackOperand(call.arguments[0]!, seenConsts);
         }
         if (
-            ts.isIdentifier(recv) &&
+            this.isUrlConstructorExpression(recv) &&
             method === "canParse" &&
             call.arguments.length >= 1 &&
-            call.arguments.length <= 2 &&
-            this.isUnshadowedGlobalIdentifier(recv, "URL")
+            call.arguments.length <= 2
         ) {
             return this.isSideEffectFreeStringCoercion(call.arguments[0]!, seenConsts) &&
                 (!call.arguments[1] || this.isSideEffectFreeStringCoercion(call.arguments[1], seenConsts));
@@ -1941,7 +1940,7 @@ class Emitter {
                 method === "isArray"
             ) ||
             (
-                this.isUnshadowedGlobalIdentifier(recv, "URL") &&
+                this.isUrlConstructorExpression(recv) &&
                 method === "canParse"
             ) ||
             (
@@ -24172,6 +24171,24 @@ class Emitter {
         );
     }
 
+    private isUrlModuleIdentifier(expr: ts.Expression): boolean {
+        return ts.isIdentifier(expr) && (
+            this.isNamespaceImportFrom(expr, ["url", "node:url"]) ||
+            this.isDefaultImportFrom(expr, ["url", "node:url"])
+        );
+    }
+
+    private isUrlConstructorExpression(expr: ts.Expression): boolean {
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        if (ts.isIdentifier(unwrapped)) {
+            return unwrapped.text === "URL" ||
+                this.isNamedImportFrom(unwrapped, ["url", "node:url"], "URL");
+        }
+        return ts.isPropertyAccessExpression(unwrapped) &&
+            unwrapped.name.text === "URL" &&
+            this.isUrlModuleIdentifier(unwrapped.expression);
+    }
+
     private isEventEmitterConstructorIdentifier(id: ts.Identifier): boolean {
         return (
             id.text === "EventEmitter" &&
@@ -26784,7 +26801,7 @@ class Emitter {
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "JSON") {
             return this.emitJsonCall(call, memberName);
         }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "URL") {
+        if (this.isUrlConstructorExpression(recvExpr)) {
             if (memberName === "canParse") {
                 if (call.arguments.length < 1 || call.arguments.length > 2) unsupported(call, "URL.canParse expects input and optional base");
                 const input = this.emitExpr(call.arguments[0]!);
@@ -39667,6 +39684,30 @@ class Emitter {
         });
     }
 
+    private emitUrlConstructor(n: ts.NewExpression): EmitResult {
+        const input = n.arguments?.[0];
+        if (!input) unsupported(n, "new URL() expects input");
+        if ((n.arguments?.length ?? 0) > 2) unsupported(n, "new URL() expects input and optional base");
+        const r = this.emitExpr(input);
+        const base = n.arguments?.[1];
+        if (base) {
+            const b = this.emitExpr(base);
+            return this.emitSequencedCall(
+                "tsc_url_new_base",
+                T_URL,
+                [
+                    { value: r, target: T_STRING, node: input },
+                    { value: b, target: T_STRING, node: base },
+                ],
+            );
+        }
+        return this.emitSequencedCall(
+            "tsc_url_new",
+            T_URL,
+            [{ value: r, target: T_STRING, node: input }],
+        );
+    }
+
     private emitNew(n: ts.NewExpression): EmitResult {
         if (
             ts.isPropertyAccessExpression(n.expression) &&
@@ -39679,6 +39720,9 @@ class Emitter {
                 this.ignoredArgumentSpecs(n.arguments ?? [], 0),
                 () => "tsc_event_emitter_new()",
             );
+        }
+        if (this.isUrlConstructorExpression(n.expression)) {
+            return this.emitUrlConstructor(n);
         }
         const ctorExpr = this.unwrapTransparentExpression(n.expression);
         if (!ts.isIdentifier(ctorExpr)) {
@@ -40061,29 +40105,7 @@ class Emitter {
         if (cls === "RegExp") {
             return this.emitRegExpConstructor(n);
         }
-        if (cls === "URL") {
-            const input = n.arguments?.[0];
-            if (!input) unsupported(n, "new URL() expects input");
-            if ((n.arguments?.length ?? 0) > 2) unsupported(n, "new URL() expects input and optional base");
-            const r = this.emitExpr(input);
-            const base = n.arguments?.[1];
-            if (base) {
-                const b = this.emitExpr(base);
-                return this.emitSequencedCall(
-                    "tsc_url_new_base",
-                    T_URL,
-                    [
-                        { value: r, target: T_STRING, node: input },
-                        { value: b, target: T_STRING, node: base },
-                    ],
-                );
-            }
-            return this.emitSequencedCall(
-                "tsc_url_new",
-                T_URL,
-                [{ value: r, target: T_STRING, node: input }],
-            );
-        }
+        if (cls === "URL") return this.emitUrlConstructor(n);
         const classDecl = targetClassDecl ?? this.findClassDecl(cls);
         if (!classDecl) {
             const ctor = this.emitExpr(n.expression);

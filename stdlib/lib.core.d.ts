@@ -1798,3 +1798,16 @@ interface URLConstructor {
     canParse(input: string, base?: string): boolean;
 }
 declare var URL: URLConstructor;
+interface UrlModule {
+    URL: URLConstructor;
+}
+declare module "url" {
+    export const URL: URLConstructor;
+    const defaultUrl: UrlModule;
+    export default defaultUrl;
+}
+declare module "node:url" {
+    export const URL: URLConstructor;
+    const defaultUrl: UrlModule;
+    export default defaultUrl;
+}

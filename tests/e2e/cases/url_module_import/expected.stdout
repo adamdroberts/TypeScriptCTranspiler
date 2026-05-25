@@ -1,0 +1,3 @@
+direct: https://example.com/root/child?q=1 /root/child ?q=1
+default: https://example.com/other#frag /other #frag
+can: true true false
