@@ -2627,6 +2627,12 @@ class Emitter {
                     return true;
                 }
                 break;
+            case "push":
+            case "unshift":
+                if (this.isSideEffectFreeArrayMethodCall(recv, method, call.arguments, seenConsts)) {
+                    return true;
+                }
+                break;
             case "reduce":
             case "reduceRight":
                 if (

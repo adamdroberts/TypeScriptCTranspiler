@@ -521,6 +521,8 @@ const unused_promise_resolve_object_symbols_slice_from_length = Promise.resolve(
 const unused_promise_resolve_object_symbols_slice_range_element = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_slice_range_element: 1 }).slice(1, 2)[0]);
 const unused_promise_resolve_object_symbols_pop_call = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_pop: 1 }).pop());
 const unused_promise_resolve_object_symbols_shift_call = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_shift: 1 }).shift());
+const unused_promise_resolve_object_symbols_push_call = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_push: 1 }).push(Symbol("dead_promise_resolve_object_symbols_push_value")));
+const unused_promise_resolve_object_symbols_unshift_call = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_unshift: 1 }).unshift(Symbol("dead_promise_resolve_object_symbols_unshift_value")));
 const unused_promise_resolve_object_extensible_call = Promise.resolve(Object.isExtensible({ dead_promise_resolve_object_extensible: 1 }));
 const unused_promise_resolve_object_sealed_call = Promise.resolve(Object.isSealed({ dead_promise_resolve_object_sealed: 1 }));
 const unused_promise_resolve_object_frozen_call = Promise.resolve(Object.isFrozen({ dead_promise_resolve_object_frozen: 1 }));
@@ -3920,6 +3922,8 @@ function usedLocal(value: number): number {
     Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_slice_range_element: 1 })).slice(1, 2)[0];
     Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_pop: 1 })).pop();
     Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_shift: 1 })).shift();
+    Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_push: 1 })).push(Symbol("local_dead_object_symbols_push_value"));
+    Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_unshift: 1 })).unshift(Symbol("local_dead_object_symbols_unshift_value"));
     Object.getOwnPropertyDescriptor("local_dead_object_primitive_descriptor", "0");
     Object.getOwnPropertyDescriptors("local_dead_object_primitive_descriptors");
     Object.hasOwn("local_dead_object_primitive_has_own", "0");
