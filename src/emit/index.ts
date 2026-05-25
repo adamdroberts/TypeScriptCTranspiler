@@ -4433,6 +4433,53 @@ class Emitter {
         if (
             ts.isCallExpression(unwrapped) &&
             ts.isPropertyAccessExpression(unwrapped.expression) &&
+            unwrapped.expression.name.text === "copyWithin" &&
+            unwrapped.arguments.length >= 2 &&
+            unwrapped.arguments.length <= 3
+        ) {
+            const sourceElements = this.sideEffectFreeSetArraySourceExpressions(
+                unwrapped.expression.expression,
+                seenConsts,
+            );
+            const targetValue = this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[0]!, seenConsts);
+            const startValue = this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[1]!, seenConsts);
+            const endValue = unwrapped.arguments[2]
+                ? this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[2], seenConsts)
+                : sourceElements?.length ?? null;
+            if (
+                sourceElements === null ||
+                targetValue === null ||
+                startValue === null ||
+                endValue === null ||
+                !Number.isFinite(targetValue) ||
+                !Number.isFinite(startValue) ||
+                !Number.isFinite(endValue) ||
+                !Number.isInteger(targetValue) ||
+                !Number.isInteger(startValue) ||
+                !Number.isInteger(endValue)
+            ) {
+                return null;
+            }
+            const to = targetValue < 0
+                ? Math.max(sourceElements.length + targetValue, 0)
+                : Math.min(targetValue, sourceElements.length);
+            const from = startValue < 0
+                ? Math.max(sourceElements.length + startValue, 0)
+                : Math.min(startValue, sourceElements.length);
+            const final = endValue < 0
+                ? Math.max(sourceElements.length + endValue, 0)
+                : Math.min(endValue, sourceElements.length);
+            const count = Math.min(final - from, sourceElements.length - to);
+            const elements = [...sourceElements];
+            const copied = sourceElements.slice(from, from + Math.max(count, 0));
+            for (let i = 0; i < copied.length; i++) {
+                elements[to + i] = copied[i]!;
+            }
+            return elements;
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
             (
                 unwrapped.expression.name.text === "reverse" ||
                 unwrapped.expression.name.text === "toReversed"
@@ -4884,6 +4931,53 @@ class Emitter {
             const elements = [...sourceElements];
             for (let i = actualStart; i < actualEnd; i++) {
                 elements[i] = unwrapped.arguments[0]!;
+            }
+            return elements;
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            unwrapped.expression.name.text === "copyWithin" &&
+            unwrapped.arguments.length >= 2 &&
+            unwrapped.arguments.length <= 3
+        ) {
+            const sourceElements = this.sideEffectFreeMapArraySourceExpressions(
+                unwrapped.expression.expression,
+                seenConsts,
+            );
+            const targetValue = this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[0]!, seenConsts);
+            const startValue = this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[1]!, seenConsts);
+            const endValue = unwrapped.arguments[2]
+                ? this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[2], seenConsts)
+                : sourceElements?.length ?? null;
+            if (
+                sourceElements === null ||
+                targetValue === null ||
+                startValue === null ||
+                endValue === null ||
+                !Number.isFinite(targetValue) ||
+                !Number.isFinite(startValue) ||
+                !Number.isFinite(endValue) ||
+                !Number.isInteger(targetValue) ||
+                !Number.isInteger(startValue) ||
+                !Number.isInteger(endValue)
+            ) {
+                return null;
+            }
+            const to = targetValue < 0
+                ? Math.max(sourceElements.length + targetValue, 0)
+                : Math.min(targetValue, sourceElements.length);
+            const from = startValue < 0
+                ? Math.max(sourceElements.length + startValue, 0)
+                : Math.min(startValue, sourceElements.length);
+            const final = endValue < 0
+                ? Math.max(sourceElements.length + endValue, 0)
+                : Math.min(endValue, sourceElements.length);
+            const count = Math.min(final - from, sourceElements.length - to);
+            const elements = [...sourceElements];
+            const copied = sourceElements.slice(from, from + Math.max(count, 0));
+            for (let i = 0; i < copied.length; i++) {
+                elements[to + i] = copied[i]!;
             }
             return elements;
         }
