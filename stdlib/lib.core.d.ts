@@ -677,7 +677,13 @@ interface ProcessWritableStream {
     readonly isTTY: boolean;
     readonly readable: boolean;
     readonly writable: boolean;
+    addListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     cork(...ignored: any[]): void;
+    off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
+    on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
+    once(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
+    removeAllListeners(eventName?: string, ...ignored: any[]): void;
+    removeListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     setDefaultEncoding(encoding: string, ...ignored: any[]): void;
     uncork(...ignored: any[]): void;
     write(chunk: string | Buffer, callback?: () => void): boolean;
@@ -687,7 +693,13 @@ interface ProcessReadableStream {
     readonly fd: number;
     readonly isTTY: boolean;
     readonly readable: boolean;
+    addListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
+    off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
+    on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
+    once(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     pause(...ignored: any[]): void;
+    removeAllListeners(eventName?: string, ...ignored: any[]): void;
+    removeListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     resume(...ignored: any[]): void;
     setEncoding(encoding: string, ...ignored: any[]): void;
 }

@@ -26828,6 +26828,35 @@ class Emitter {
                 () => `tsc_process_hrtime_bigint()`,
             );
         }
+        const processStdioNoopEventStreamName = (
+            memberName === "addListener" ||
+            memberName === "off" ||
+            memberName === "on" ||
+            memberName === "once" ||
+            memberName === "removeAllListeners" ||
+            memberName === "removeListener"
+        )
+            ? this.processStdioStreamReceiverName(recvExpr)
+            : null;
+        if (processStdioNoopEventStreamName) {
+            if (memberName !== "removeAllListeners" && call.arguments.length < 2) {
+                unsupported(call, `process.${processStdioNoopEventStreamName}.${memberName} expects an event name and listener`);
+            }
+            if (memberName !== "removeAllListeners") {
+                const eventName = this.emitExpr(call.arguments[0]!);
+                const listener = this.emitEventListenerExpression(call.arguments[1]!);
+                return this.emitSequencedExpr(T_VOID, [
+                    { value: eventName, target: T_STRING, node: call.arguments[0]! },
+                    { value: listener, node: call.arguments[1]! },
+                    ...this.ignoredArgumentSpecs(call.arguments, 2),
+                ], () => "((void)0)");
+            }
+            return this.emitSequencedExpr(
+                T_VOID,
+                this.ignoredArgumentSpecs(call.arguments, 0),
+                () => "((void)0)",
+            );
+        }
         const processStdinStreamName = (
             memberName === "setEncoding" ||
             memberName === "pause" ||
