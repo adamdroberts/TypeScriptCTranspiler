@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Named, namespace, and default imports from `"timers"` and `"node:timers"` now route to the bounded zero-delay `setTimeout` / `clearTimeout` / `clearInterval` and before-exit `setImmediate` / `clearImmediate` scheduler helpers. Test: `timers_module_import`.
 - Named and default imports from `"buffer"` and `"node:buffer"` now route to the supported `Buffer` static helper subset. Test: `buffer_module_import`.
 - `stream.isReadable(...)` / `stream.isWritable(...)` from `"stream"` and `"node:stream"` now classify the bounded process stdio stream subset across named, namespace, and default imports. Test: `stream_stdio_predicates`.
 - Named and default imports from `"url"` and `"node:url"` now route to the supported `URL` constructor and `URL.canParse(...)` helpers. Test: `url_module_import`.

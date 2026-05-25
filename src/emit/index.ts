@@ -17118,6 +17118,13 @@ class Emitter {
         );
     }
 
+    private isTimersModuleIdentifier(expr: ts.Expression): boolean {
+        return ts.isIdentifier(expr) && (
+            this.isNamespaceImportFrom(expr, ["timers", "node:timers"]) ||
+            this.isDefaultImportFrom(expr, ["timers", "node:timers"])
+        );
+    }
+
     private isBufferModuleIdentifier(expr: ts.Expression): boolean {
         return ts.isIdentifier(expr) && (
             this.isNamespaceImportFrom(expr, ["buffer", "node:buffer"]) ||
@@ -24854,63 +24861,21 @@ class Emitter {
             });
         }
         if (name === "setImmediate") {
-            if (call.arguments.length < 1) unsupported(call, "setImmediate expects a callback");
-            const callbackNode = call.arguments[0]!;
-            const callback = this.emitExpr(callbackNode);
-            const argNodes = Array.from(call.arguments.slice(1));
-            const argValues = argNodes.map((arg) => this.emitExpr(arg));
-            const adapter = this.ensureImmediateAdapter(callbackNode, callback.ty, argValues.map((arg) => arg.ty));
-            const prepared = this.prepareType(callback.ty);
-            const params = prepared.kind === "function" ? prepared.params ?? [] : [];
-            return this.emitSequencedExpr(T_NUMBER, [
-                { value: callback, target: callback.ty, node: callbackNode },
-                ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
-            ], ([fn, ...args]) => {
-                const envType = `${adapter}_env_t`;
-                const env = this.freshTemp("_immediate_env");
-                const pieces = [
-                    `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
-                    `${env}->fn = ${fn}`,
-                ];
-                args.forEach((arg, i) => pieces.push(`${env}->arg${i} = ${arg}`));
-                pieces.push(`tsc_set_immediate(${adapter}, ${env})`);
-                return `({ ${pieces.join("; ")}; })`;
-            });
+            return this.emitSetImmediateCall(call);
         }
         if (name === "clearImmediate") {
             return this.emitClearTimerCall(call, "tsc_clear_immediate");
         }
         if (name === "setTimeout") {
-            if (call.arguments.length < 1) unsupported(call, "setTimeout expects a callback and optional literal 0 delay");
-            const callbackNode = call.arguments[0]!;
-            const callback = this.emitExpr(callbackNode);
-            if (call.arguments.length >= 2 && !this.isZeroDelayLiteral(call.arguments[1]!)) {
-                unsupported(call.arguments[1]!, "setTimeout in this subset requires an omitted delay or literal 0 delay");
-            }
-            const argNodes = call.arguments.length >= 2
-                ? Array.from(call.arguments.slice(2))
-                : [];
-            const argValues = argNodes.map((arg) => this.emitExpr(arg));
-            const adapter = this.ensureTimeoutAdapter(callbackNode, callback.ty, argValues.map((arg) => arg.ty));
-            const prepared = this.prepareType(callback.ty);
-            const params = prepared.kind === "function" ? prepared.params ?? [] : [];
-            return this.emitSequencedExpr(T_NUMBER, [
-                { value: callback, target: callback.ty, node: callbackNode },
-                ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
-            ], ([fn, ...args]) => {
-                const envType = `${adapter}_env_t`;
-                const env = this.freshTemp("_timeout_env");
-                const pieces = [
-                    `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
-                    `${env}->fn = ${fn}`,
-                ];
-                args.forEach((arg, i) => pieces.push(`${env}->arg${i} = ${arg}`));
-                pieces.push(`tsc_set_timeout(${adapter}, ${env})`);
-                return `({ ${pieces.join("; ")}; })`;
-            });
+            return this.emitSetTimeoutCall(call);
         }
         if (name === "clearTimeout" || name === "clearInterval") {
             return this.emitClearTimerCall(call, "tsc_clear_timeout");
+        }
+        const timersNamed = ["setTimeout", "clearTimeout", "clearInterval", "setImmediate", "clearImmediate"]
+            .find((exported) => this.isNamedImportFrom(calleeId, ["timers", "node:timers"], exported));
+        if (timersNamed) {
+            return this.emitTimersCall(call, timersNamed);
         }
         if (
             this.isNamedImportFrom(calleeId, ["events", "node:events"], "listenerCount") ||
@@ -26408,6 +26373,10 @@ class Emitter {
 
         if (ts.isIdentifier(recvExpr) && this.isFsModuleIdentifier(recvExpr)) {
             return this.emitFsCall(call, memberName);
+        }
+
+        if (this.isTimersModuleIdentifier(recvExpr)) {
+            return this.emitTimersCall(call, memberName);
         }
 
         if (this.isStreamModuleIdentifier(recvExpr)) {
@@ -31361,6 +31330,76 @@ class Emitter {
         return this.emitSequencedExpr(T_VOID, specs, (args) =>
             `${runtime}(${args[0] ?? "0.0"})`,
         );
+    }
+
+    private emitSetImmediateCall(call: ts.CallExpression): EmitResult {
+        if (call.arguments.length < 1) unsupported(call, "setImmediate expects a callback");
+        const callbackNode = call.arguments[0]!;
+        const callback = this.emitExpr(callbackNode);
+        const argNodes = Array.from(call.arguments.slice(1));
+        const argValues = argNodes.map((arg) => this.emitExpr(arg));
+        const adapter = this.ensureImmediateAdapter(callbackNode, callback.ty, argValues.map((arg) => arg.ty));
+        const prepared = this.prepareType(callback.ty);
+        const params = prepared.kind === "function" ? prepared.params ?? [] : [];
+        return this.emitSequencedExpr(T_NUMBER, [
+            { value: callback, target: callback.ty, node: callbackNode },
+            ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
+        ], ([fn, ...args]) => {
+            const envType = `${adapter}_env_t`;
+            const env = this.freshTemp("_immediate_env");
+            const pieces = [
+                `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
+                `${env}->fn = ${fn}`,
+            ];
+            args.forEach((arg, i) => pieces.push(`${env}->arg${i} = ${arg}`));
+            pieces.push(`tsc_set_immediate(${adapter}, ${env})`);
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
+    private emitSetTimeoutCall(call: ts.CallExpression): EmitResult {
+        if (call.arguments.length < 1) unsupported(call, "setTimeout expects a callback and optional literal 0 delay");
+        const callbackNode = call.arguments[0]!;
+        const callback = this.emitExpr(callbackNode);
+        if (call.arguments.length >= 2 && !this.isZeroDelayLiteral(call.arguments[1]!)) {
+            unsupported(call.arguments[1]!, "setTimeout in this subset requires an omitted delay or literal 0 delay");
+        }
+        const argNodes = call.arguments.length >= 2
+            ? Array.from(call.arguments.slice(2))
+            : [];
+        const argValues = argNodes.map((arg) => this.emitExpr(arg));
+        const adapter = this.ensureTimeoutAdapter(callbackNode, callback.ty, argValues.map((arg) => arg.ty));
+        const prepared = this.prepareType(callback.ty);
+        const params = prepared.kind === "function" ? prepared.params ?? [] : [];
+        return this.emitSequencedExpr(T_NUMBER, [
+            { value: callback, target: callback.ty, node: callbackNode },
+            ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
+        ], ([fn, ...args]) => {
+            const envType = `${adapter}_env_t`;
+            const env = this.freshTemp("_timeout_env");
+            const pieces = [
+                `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
+                `${env}->fn = ${fn}`,
+            ];
+            args.forEach((arg, i) => pieces.push(`${env}->arg${i} = ${arg}`));
+            pieces.push(`tsc_set_timeout(${adapter}, ${env})`);
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
+    private emitTimersCall(call: ts.CallExpression, name: string): EmitResult {
+        switch (name) {
+            case "setTimeout":
+                return this.emitSetTimeoutCall(call);
+            case "setImmediate":
+                return this.emitSetImmediateCall(call);
+            case "clearTimeout":
+            case "clearInterval":
+                return this.emitClearTimerCall(call, "tsc_clear_timeout");
+            case "clearImmediate":
+                return this.emitClearTimerCall(call, "tsc_clear_immediate");
+        }
+        unsupported(call, `timers.${name}`);
     }
 
     private ensureImmediateAdapter(expr: ts.Expression, type: CType, argTypes: readonly CType[]): string {

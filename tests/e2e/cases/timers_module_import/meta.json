@@ -1,0 +1,3 @@
+{
+  "description": "timers/node:timers imports route to bounded timeout/immediate scheduler helpers"
+}

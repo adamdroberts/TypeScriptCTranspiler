@@ -833,6 +833,36 @@ declare function setImmediate<A, B, C, D, E>(callback: (this: any, arg1: A, arg2
 declare function setImmediate<A, B, C, D, E, F>(callback: (this: any, arg1: A, arg2: B, arg3: C, arg4: D, arg5: E, arg6: F) => void, arg1: A, arg2: B, arg3: C, arg4: D, arg5: E, arg6: F): number;
 declare function setImmediate(callback: (this: any, ...args: any[]) => void, ...args: any[]): number;
 declare function clearImmediate(handle?: number, ...ignored: any[]): void;
+type SetTimeoutFunction = typeof setTimeout;
+type ClearTimeoutFunction = typeof clearTimeout;
+type ClearIntervalFunction = typeof clearInterval;
+type SetImmediateFunction = typeof setImmediate;
+type ClearImmediateFunction = typeof clearImmediate;
+interface TimersModule {
+    setTimeout: SetTimeoutFunction;
+    clearTimeout: ClearTimeoutFunction;
+    clearInterval: ClearIntervalFunction;
+    setImmediate: SetImmediateFunction;
+    clearImmediate: ClearImmediateFunction;
+}
+declare module "timers" {
+    export const setTimeout: SetTimeoutFunction;
+    export const clearTimeout: ClearTimeoutFunction;
+    export const clearInterval: ClearIntervalFunction;
+    export const setImmediate: SetImmediateFunction;
+    export const clearImmediate: ClearImmediateFunction;
+    const defaultTimers: TimersModule;
+    export default defaultTimers;
+}
+declare module "node:timers" {
+    export const setTimeout: SetTimeoutFunction;
+    export const clearTimeout: ClearTimeoutFunction;
+    export const clearInterval: ClearIntervalFunction;
+    export const setImmediate: SetImmediateFunction;
+    export const clearImmediate: ClearImmediateFunction;
+    const defaultTimers: TimersModule;
+    export default defaultTimers;
+}
 declare const NaN: number;
 declare const Infinity: number;
 declare const undefined: undefined;
