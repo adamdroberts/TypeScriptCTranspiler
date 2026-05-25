@@ -1,0 +1,3 @@
+{
+  "description": "default child_process imports route to callback, sync, and spawnSync helpers"
+}

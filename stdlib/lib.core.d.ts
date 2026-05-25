@@ -1703,6 +1703,25 @@ interface ChildProcessExecSyncStringOptions extends ChildProcessExecSyncOptions 
 interface ChildProcessExecSyncBufferOptions extends ChildProcessExecSyncOptions {
     encoding: "buffer";
 }
+interface ChildProcessModule {
+    exec(command: string, callback: ChildProcessExecCallback): void;
+    exec(command: string, options: ChildProcessExecOptions, callback: ChildProcessExecCallback): void;
+    execFile(file: string, callback: ChildProcessExecCallback): void;
+    execFile(file: string, options: ChildProcessExecFileOptions, callback: ChildProcessExecCallback): void;
+    execFile(file: string, args: string[], callback: ChildProcessExecCallback): void;
+    execFile(file: string, args: string[], options: ChildProcessExecFileOptions, callback: ChildProcessExecCallback): void;
+    execSync(command: string, options: ChildProcessExecSyncStringOptions): string;
+    execSync(command: string, options: ChildProcessExecSyncBufferOptions): Buffer;
+    execSync(command: string, options?: ChildProcessExecSyncOptions): Buffer;
+    execFileSync(file: string, options: ChildProcessExecFileSyncStringOptions): string;
+    execFileSync(file: string, options: ChildProcessExecFileSyncBufferOptions): Buffer;
+    execFileSync(file: string, options: ChildProcessExecFileSyncOptions): Buffer;
+    execFileSync(file: string, args: string[], options: ChildProcessExecFileSyncStringOptions): string;
+    execFileSync(file: string, args: string[], options: ChildProcessExecFileSyncBufferOptions): Buffer;
+    execFileSync(file: string, args?: string[], options?: ChildProcessExecFileSyncOptions): Buffer;
+    spawnSync(file: string, options: ChildProcessSpawnSyncUtf8Options): any;
+    spawnSync(file: string, args: string[], options: ChildProcessSpawnSyncUtf8Options): any;
+}
 declare module "child_process" {
     export function exec(command: string, callback: ChildProcessExecCallback): void;
     export function exec(command: string, options: ChildProcessExecOptions, callback: ChildProcessExecCallback): void;
@@ -1721,6 +1740,8 @@ declare module "child_process" {
     export function execFileSync(file: string, args?: string[], options?: ChildProcessExecFileSyncOptions): Buffer;
     export function spawnSync(file: string, options: ChildProcessSpawnSyncUtf8Options): any;
     export function spawnSync(file: string, args: string[], options: ChildProcessSpawnSyncUtf8Options): any;
+    const defaultChildProcess: ChildProcessModule;
+    export default defaultChildProcess;
 }
 declare module "node:child_process" {
     export function exec(command: string, callback: ChildProcessExecCallback): void;
@@ -1740,6 +1761,8 @@ declare module "node:child_process" {
     export function execFileSync(file: string, args?: string[], options?: ChildProcessExecFileSyncOptions): Buffer;
     export function spawnSync(file: string, options: ChildProcessSpawnSyncUtf8Options): any;
     export function spawnSync(file: string, args: string[], options: ChildProcessSpawnSyncUtf8Options): any;
+    const defaultChildProcess: ChildProcessModule;
+    export default defaultChildProcess;
 }
 
 interface URL {

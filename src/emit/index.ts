@@ -17071,7 +17071,8 @@ class Emitter {
     }
 
     private isChildProcessModuleIdentifier(id: ts.Identifier): boolean {
-        return this.isNamespaceImportFrom(id, ["child_process", "node:child_process"]);
+        return this.isNamespaceImportFrom(id, ["child_process", "node:child_process"]) ||
+            this.isDefaultImportFrom(id, ["child_process", "node:child_process"]);
     }
 
     private isProcessModuleIdentifier(id: ts.Identifier): boolean {
