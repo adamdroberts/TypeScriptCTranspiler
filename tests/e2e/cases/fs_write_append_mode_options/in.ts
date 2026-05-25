@@ -6,6 +6,16 @@ const promiseWritePath = "/tmp/tsc2c-fs-write-mode-promise.txt";
 const promiseAppendPath = "/tmp/tsc2c-fs-append-mode-promise.txt";
 const FLUSH_TRUE = true;
 const FLUSH_FALSE = false;
+const WRITE_MODE = 0o640;
+const APPEND_MODE = 0o600;
+const PROMISE_WRITE_MODE = 0o644;
+const PROMISE_APPEND_MODE = 0o620;
+const SYNC_WRITE_OPTIONS = { encoding: "utf8", mode: WRITE_MODE, flush: FLUSH_TRUE } as const;
+const SYNC_APPEND_OPTIONS = { mode: APPEND_MODE, flush: FLUSH_TRUE } as const;
+const SYNC_APPEND_LATER_OPTIONS = { mode: 0o777, flush: FLUSH_FALSE } as const;
+const PROMISE_WRITE_OPTIONS = { mode: PROMISE_WRITE_MODE, flush: FLUSH_TRUE } as const;
+const PROMISE_APPEND_OPTIONS = { encoding: "utf-8", mode: PROMISE_APPEND_MODE, flush: FLUSH_TRUE } as const;
+const PROMISE_APPEND_LATER_OPTIONS = { mode: 0o777, flush: FLUSH_FALSE } as const;
 
 function fileMode(path: string): number {
     return fs.statSync(path).mode & 0o777;
@@ -17,18 +27,18 @@ for (const file of [syncWritePath, syncAppendPath, promiseWritePath, promiseAppe
 
 const oldUmask = process.umask(0);
 try {
-    writeFileSync(syncWritePath, "alpha", { encoding: "utf8", mode: 0o640, flush: FLUSH_TRUE });
+    writeFileSync(syncWritePath, "alpha", SYNC_WRITE_OPTIONS);
     console.log("sync write:", fileMode(syncWritePath), fs.readFileSync(syncWritePath));
 
-    appendFileSync(syncAppendPath, "one", { mode: 0o600, flush: FLUSH_TRUE });
-    appendFileSync(syncAppendPath, "-two", { mode: 0o777, flush: FLUSH_FALSE });
+    appendFileSync(syncAppendPath, "one", SYNC_APPEND_OPTIONS);
+    appendFileSync(syncAppendPath, "-two", SYNC_APPEND_LATER_OPTIONS);
     console.log("sync append:", fileMode(syncAppendPath), fs.readFileSync(syncAppendPath));
 
-    fs.promises.writeFile(promiseWritePath, Buffer.from("promise"), { mode: 0o644, flush: FLUSH_TRUE });
+    fs.promises.writeFile(promiseWritePath, Buffer.from("promise"), PROMISE_WRITE_OPTIONS);
     console.log("promise write:", fileMode(promiseWritePath), fs.readFileSync(promiseWritePath));
 
-    fs.promises.appendFile(promiseAppendPath, "append", { encoding: "utf-8", mode: 0o620, flush: FLUSH_TRUE });
-    fs.promises.appendFile(promiseAppendPath, "-again", { mode: 0o777, flush: FLUSH_FALSE });
+    fs.promises.appendFile(promiseAppendPath, "append", PROMISE_APPEND_OPTIONS);
+    fs.promises.appendFile(promiseAppendPath, "-again", PROMISE_APPEND_LATER_OPTIONS);
     console.log("promise append:", fileMode(promiseAppendPath), fs.readFileSync(promiseAppendPath));
 } finally {
     process.umask(oldUmask);

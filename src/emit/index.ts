@@ -35389,7 +35389,9 @@ class Emitter {
         let encoding: "utf8" | "hex" | "base64" = "utf8";
         let mode: SequencedCallArg = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
         if (!options || this.isUndefinedExpression(options)) return { ...out, encoding, mode };
+        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
         const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" => {
+            node = this.resolveSideEffectFreeEarlierConstExpression(node);
             if (this.isUndefinedExpression(node)) return "utf8";
             const text = this.sideEffectFreeStringLiteralText(node, new Set());
             if (text !== null) {
@@ -35399,6 +35401,7 @@ class Emitter {
             unsupported(node, `${label} only supports UTF-8, hex, or base64 encoding options in this subset`);
         };
         const checkFlag = (node: ts.Expression): void => {
+            node = this.resolveSideEffectFreeEarlierConstExpression(node);
             if (this.isUndefinedExpression(node)) return;
             const supportedFlags = ["w", "wx", "w+", "wx+", "a", "ax", "a+", "ax+", "as", "as+", "r+", "rs+"];
             const text = this.sideEffectFreeStringLiteralText(node, new Set());
@@ -35409,14 +35412,14 @@ class Emitter {
             out.exclusive = text === "wx" || text === "wx+" || text === "ax" || text === "ax+";
             out.update = text === "r+" || text === "rs+";
         };
-        if (this.sideEffectFreeStringLiteralText(options, new Set()) !== null) {
-            encoding = checkEncoding(options);
+        if (this.sideEffectFreeStringLiteralText(resolvedOptions, new Set()) !== null) {
+            encoding = checkEncoding(resolvedOptions);
             return { ...out, encoding, mode };
         }
-        if (!ts.isObjectLiteralExpression(options)) {
+        if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, `${label} options must be a UTF-8/hex/base64 string literal or object literal in this subset`);
         }
-        for (const prop of options.properties) {
+        for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
                 unsupported(prop, `${label} options only support encoding, flag, mode, and flush property assignments`);
             }
@@ -35426,18 +35429,20 @@ class Emitter {
             } else if (key === "flag") {
                 checkFlag(prop.initializer);
             } else if (key === "mode") {
-                if (this.isUndefinedExpression(prop.initializer)) {
+                const modeNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+                if (this.isUndefinedExpression(modeNode)) {
                     mode = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: prop.initializer };
                     continue;
                 }
-                const value = this.emitExpr(prop.initializer);
+                const value = this.emitExpr(modeNode);
                 if (value.ty.kind !== "number") unsupported(prop.initializer, `${label}.mode must be numeric in this subset`);
-                mode = { value, target: T_NUMBER, node: prop.initializer };
+                mode = { value, target: T_NUMBER, node: modeNode };
             } else if (key === "flush") {
-                if (this.isUndefinedExpression(prop.initializer)) {
+                const flushNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+                if (this.isUndefinedExpression(flushNode)) {
                     continue;
                 }
-                if (this.fsBooleanOptionValue(prop.initializer) === null) {
+                if (this.fsBooleanOptionValue(flushNode) === null) {
                     unsupported(prop.initializer, `${label}.flush must be a boolean literal in this subset`);
                 }
             } else {
@@ -35452,7 +35457,9 @@ class Emitter {
         let encoding: "utf8" | "hex" | "base64" = "utf8";
         let mode: SequencedCallArg = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
         if (!options || this.isUndefinedExpression(options)) return { ...out, encoding, mode };
+        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
         const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" => {
+            node = this.resolveSideEffectFreeEarlierConstExpression(node);
             if (this.isUndefinedExpression(node)) return "utf8";
             const text = this.sideEffectFreeStringLiteralText(node, new Set());
             if (text !== null) {
@@ -35462,6 +35469,7 @@ class Emitter {
             unsupported(node, `${label} only supports UTF-8, hex, or base64 encoding options in this subset`);
         };
         const checkFlag = (node: ts.Expression): void => {
+            node = this.resolveSideEffectFreeEarlierConstExpression(node);
             if (this.isUndefinedExpression(node)) return;
             const supportedFlags = ["a", "ax", "a+", "ax+", "as", "as+"];
             const text = this.sideEffectFreeStringLiteralText(node, new Set());
@@ -35470,14 +35478,14 @@ class Emitter {
             }
             out.exclusive = text === "ax" || text === "ax+";
         };
-        if (this.sideEffectFreeStringLiteralText(options, new Set()) !== null) {
-            encoding = checkEncoding(options);
+        if (this.sideEffectFreeStringLiteralText(resolvedOptions, new Set()) !== null) {
+            encoding = checkEncoding(resolvedOptions);
             return { ...out, encoding, mode };
         }
-        if (!ts.isObjectLiteralExpression(options)) {
+        if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, `${label} options must be a UTF-8/hex/base64 string literal or object literal in this subset`);
         }
-        for (const prop of options.properties) {
+        for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
                 unsupported(prop, `${label} options only support encoding, flag, mode, and flush property assignments`);
             }
@@ -35487,18 +35495,20 @@ class Emitter {
             } else if (key === "flag") {
                 checkFlag(prop.initializer);
             } else if (key === "mode") {
-                if (this.isUndefinedExpression(prop.initializer)) {
+                const modeNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+                if (this.isUndefinedExpression(modeNode)) {
                     mode = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: prop.initializer };
                     continue;
                 }
-                const value = this.emitExpr(prop.initializer);
+                const value = this.emitExpr(modeNode);
                 if (value.ty.kind !== "number") unsupported(prop.initializer, `${label}.mode must be numeric in this subset`);
-                mode = { value, target: T_NUMBER, node: prop.initializer };
+                mode = { value, target: T_NUMBER, node: modeNode };
             } else if (key === "flush") {
-                if (this.isUndefinedExpression(prop.initializer)) {
+                const flushNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+                if (this.isUndefinedExpression(flushNode)) {
                     continue;
                 }
-                if (this.fsBooleanOptionValue(prop.initializer) === null) {
+                if (this.fsBooleanOptionValue(flushNode) === null) {
                     unsupported(prop.initializer, `${label}.flush must be a boolean literal in this subset`);
                 }
             } else {
