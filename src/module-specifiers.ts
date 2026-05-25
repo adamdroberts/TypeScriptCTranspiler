@@ -198,14 +198,52 @@ export function requireCallSpecifiers(
     requireAliases: Set<string>,
     moduleAliases: Set<string> = new Set(),
 ): string[] | null {
+    if (!ts.isCallExpression(expr)) return null;
+    const specifierArg = commonJsRequireSpecifierArgument(expr, requireAliases, moduleAliases);
+    if (specifierArg) return staticStringExpressionTexts(specifierArg);
+    return null;
+}
+
+function commonJsRequireSpecifierArgument(
+    expr: ts.CallExpression,
+    requireAliases: Set<string>,
+    moduleAliases: Set<string>,
+): ts.Expression | null {
     if (
-        ts.isCallExpression(expr) &&
         isCommonJsRequireCallee(expr.expression, requireAliases, moduleAliases) &&
         expr.arguments.length === 1
     ) {
-        return staticStringExpressionTexts(expr.arguments[0]!);
+        return expr.arguments[0]!;
+    }
+    const callee = expr.expression;
+    if (
+        ts.isPropertyAccessExpression(callee) &&
+        callee.name.text === "call" &&
+        isCommonJsRequireCallee(callee.expression, requireAliases, moduleAliases) &&
+        expr.arguments.length === 2 &&
+        isCommonJsModuleThisArg(expr.arguments[0]!, moduleAliases)
+    ) {
+        return expr.arguments[1]!;
+    }
+    if (
+        ts.isPropertyAccessExpression(callee) &&
+        callee.name.text === "apply" &&
+        isCommonJsRequireCallee(callee.expression, requireAliases, moduleAliases) &&
+        expr.arguments.length === 2 &&
+        isCommonJsModuleThisArg(expr.arguments[0]!, moduleAliases)
+    ) {
+        const specList = expr.arguments[1]!;
+        if (ts.isArrayLiteralExpression(specList) && specList.elements.length === 1) {
+            return specList.elements[0]!;
+        }
     }
     return null;
+}
+
+function isCommonJsModuleThisArg(expr: ts.Expression, moduleAliases: Set<string>): boolean {
+    let unwrapped: ts.Expression = expr;
+    while (ts.isParenthesizedExpression(unwrapped)) unwrapped = unwrapped.expression;
+    return ts.isIdentifier(unwrapped) && (unwrapped.text === "module" || moduleAliases.has(unwrapped.text));
 }
 
 export function isCommonJsRequireCallee(

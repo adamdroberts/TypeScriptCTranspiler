@@ -16223,28 +16223,56 @@ class Emitter {
     }
 
     private requireCallSpecifier(expr: ts.Expression): string | null {
-        if (
-            ts.isCallExpression(expr) &&
-            this.isCommonJsRequireCallee(expr.expression) &&
-            expr.arguments.length === 1
-        ) {
-            return staticStringExpressionText(expr.arguments[0]!);
-        }
+        if (!ts.isCallExpression(expr)) return null;
+        const specifierArg = this.commonJsRequireSpecifierArgument(expr);
+        if (specifierArg) return staticStringExpressionText(specifierArg);
         return null;
     }
 
     private requireCallSpecifiers(expr: ts.Expression): string[] | null {
-        if (
-            ts.isCallExpression(expr) &&
-            this.isCommonJsRequireCallee(expr.expression) &&
-            expr.arguments.length === 1
-        ) {
-            const staticSpecs = staticStringExpressionTexts(expr.arguments[0]!);
+        if (ts.isCallExpression(expr)) {
+            const specifierArg = this.commonJsRequireSpecifierArgument(expr);
+            if (!specifierArg) return null;
+            const staticSpecs = staticStringExpressionTexts(specifierArg);
             if (staticSpecs.length > 0) return staticSpecs;
             const dynamicRequires = this.options.dynamicRequires ?? emptyDynamicRequireManifest();
             return dynamicRequireManifestHasEntries(dynamicRequires) ? dynamicRequires.specifiers : [];
         }
         return null;
+    }
+
+    private commonJsRequireSpecifierArgument(expr: ts.CallExpression): ts.Expression | null {
+        if (this.isCommonJsRequireCallee(expr.expression) && expr.arguments.length === 1) {
+            return expr.arguments[0]!;
+        }
+        const callee = expr.expression;
+        if (
+            ts.isPropertyAccessExpression(callee) &&
+            callee.name.text === "call" &&
+            this.isCommonJsRequireCallee(callee.expression) &&
+            expr.arguments.length === 2 &&
+            this.isCommonJsModuleThisArg(expr.arguments[0]!)
+        ) {
+            return expr.arguments[1]!;
+        }
+        if (
+            ts.isPropertyAccessExpression(callee) &&
+            callee.name.text === "apply" &&
+            this.isCommonJsRequireCallee(callee.expression) &&
+            expr.arguments.length === 2 &&
+            this.isCommonJsModuleThisArg(expr.arguments[0]!)
+        ) {
+            const specList = expr.arguments[1]!;
+            if (ts.isArrayLiteralExpression(specList) && specList.elements.length === 1) {
+                return specList.elements[0]!;
+            }
+        }
+        return null;
+    }
+
+    private isCommonJsModuleThisArg(expr: ts.Expression): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        return ts.isIdentifier(unwrapped) && this.isCommonJsModuleIdentifier(unwrapped);
     }
 
     private requireDestructureExportName(element: ts.BindingElement): string {
@@ -24784,7 +24812,7 @@ class Emitter {
     }
 
     private emitFiniteCommonJsRequireDispatch(call: ts.CallExpression, specs: string[]): EmitResult {
-        const arg = call.arguments[0]!;
+        const arg = this.commonJsRequireSpecifierArgument(call) ?? call.arguments[0]!;
         const specValue = this.emitExpr(arg);
         const specTmp = this.freshTemp("_reqspec");
         const out = this.freshTemp("_reqout");
@@ -24819,14 +24847,15 @@ class Emitter {
             return this.emitSequencedCall(`${base}_init`, T_VOID, specs, [`(${base}_t*)self`]);
         }
 
-        if (this.isCommonJsRequireCallee(call.expression)) {
+        const commonJsRequireSpecs = this.requireCallSpecifiers(call);
+        if (commonJsRequireSpecs) {
             const spec = this.requireCallSpecifier(call);
             if (!spec) {
-                const specs = this.requireCallSpecifiers(call);
-                if (specs && specs.length > 0 && ts.isExpressionStatement(call.parent)) {
+                const specs = commonJsRequireSpecs;
+                if (specs.length > 0 && ts.isExpressionStatement(call.parent)) {
                     return { c: "(void)0", ty: T_VOID };
                 }
-                if (specs && specs.length > 0) {
+                if (specs.length > 0) {
                     return this.emitFiniteCommonJsRequireDispatch(call, specs);
                 }
                 unsupported(call, "require expects one finite string module specifier when its value is used");
