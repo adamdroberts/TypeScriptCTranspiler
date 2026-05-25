@@ -6,33 +6,33 @@ const file = root + "/sync.txt";
 const copy = root + "/copy.txt";
 const promiseFile = root + "/promise.txt";
 
-fs.rmSync(root, { recursive: true, force: true, maxRetries: undefined, retryDelay: undefined });
-fs.mkdirSync(root, { recursive: undefined, mode: undefined });
+fs.rmSync(root, { recursive: true, force: true, maxRetries: void 0, retryDelay: undefined });
+fs.mkdirSync(root, { recursive: void 0, mode: undefined });
 
-fs.writeFileSync(file, "alpha", { encoding: undefined, flag: undefined, mode: undefined, flush: undefined });
-fs.appendFileSync(file, "-beta", { encoding: undefined, flag: undefined, mode: undefined, flush: undefined });
-console.log("sync read:", readFileSync(file, { encoding: undefined, flag: undefined }));
-console.log("sync stat:", fs.statSync(file, { bigint: undefined, throwIfNoEntry: undefined }).isFile());
+fs.writeFileSync(file, "alpha", { encoding: void 0, flag: undefined, mode: void 0, flush: undefined });
+fs.appendFileSync(file, "-beta", { encoding: undefined, flag: void 0, mode: undefined, flush: void 0 });
+console.log("sync read:", readFileSync(file, { encoding: void 0, flag: undefined }));
+console.log("sync stat:", fs.statSync(file, { bigint: void 0, throwIfNoEntry: undefined }).isFile());
 
 fs.cpSync(file, copy, {
-    recursive: undefined,
+    recursive: void 0,
     force: undefined,
-    errorOnExist: undefined,
+    errorOnExist: void 0,
     dereference: undefined,
-    verbatimSymlinks: undefined,
+    verbatimSymlinks: void 0,
     mode: undefined,
-    preserveTimestamps: undefined,
+    preserveTimestamps: void 0,
 });
-console.log("sync copy:", fs.readFileSync(copy, { encoding: undefined }));
-console.log("sync readdir:", fs.readdirSync(root, { encoding: undefined, recursive: undefined, withFileTypes: undefined }).sort().join("|"));
+console.log("sync copy:", fs.readFileSync(copy, { encoding: void 0 }));
+console.log("sync readdir:", fs.readdirSync(root, { encoding: undefined, recursive: void 0, withFileTypes: undefined }).sort().join("|"));
 
-fs.promises.writeFile(promiseFile, "promise", { encoding: undefined, flag: undefined, mode: undefined, flush: undefined });
-fs.promises.appendFile(promiseFile, "-done", { encoding: undefined, flag: undefined, mode: undefined, flush: undefined });
-fs.promises.readFile(promiseFile, { encoding: undefined, flag: undefined }).then((text: string): void => {
+fs.promises.writeFile(promiseFile, "promise", { encoding: void 0, flag: undefined, mode: void 0, flush: undefined });
+fs.promises.appendFile(promiseFile, "-done", { encoding: undefined, flag: void 0, mode: undefined, flush: void 0 });
+fs.promises.readFile(promiseFile, { encoding: void 0, flag: undefined }).then((text: string): void => {
     console.log("promise read:", text);
 });
-fs.promises.readdir(root, { encoding: undefined, recursive: undefined, withFileTypes: undefined }).then((names: string[]): void => {
+fs.promises.readdir(root, { encoding: undefined, recursive: void 0, withFileTypes: undefined }).then((names: string[]): void => {
     console.log("promise readdir:", names.sort().join("|"));
 });
 
-fs.rmSync(root, { recursive: true, force: true, maxRetries: undefined, retryDelay: undefined });
+fs.rmSync(root, { recursive: true, force: true, maxRetries: void 0, retryDelay: undefined });
