@@ -27090,14 +27090,12 @@ class Emitter {
             let chunk: { value: EmitResult; node: ts.Expression } | null = null;
             let encoding: { value: EmitResult; node: ts.Expression } | null = null;
             let callback: { value: EmitResult; node: ts.Expression } | null = null;
+            let ignoredStart = 1;
             if (call.arguments.length >= 1) {
                 const firstNode = call.arguments[0]!;
                 if (!this.isUndefinedExpression(firstNode)) {
                     const first = this.emitExpr(firstNode);
                     if (first.ty.kind === "function") {
-                        if (call.arguments.length !== 1) {
-                            unsupported(firstNode, `process.${streamName}.end callback form does not accept trailing arguments`);
-                        }
                         callback = { value: first, node: firstNode };
                     } else {
                         if (first.ty.kind !== "string" && first.ty.kind !== "buffer") {
@@ -27107,12 +27105,13 @@ class Emitter {
                     }
                 }
             }
-            if (call.arguments.length >= 2) {
+            if (chunk && call.arguments.length >= 2) {
                 const secondNode = call.arguments[1]!;
+                ignoredStart = 2;
                 if (!this.isUndefinedExpression(secondNode)) {
                     const second = this.emitExpr(secondNode);
                     if (second.ty.kind === "function") {
-                        if (callback || call.arguments.length > 2) {
+                        if (callback) {
                             unsupported(secondNode, `process.${streamName}.end callback must be the final argument`);
                         }
                         callback = { value: second, node: secondNode };
@@ -27121,8 +27120,9 @@ class Emitter {
                     }
                 }
             }
-            if (call.arguments.length >= 3) {
+            if (chunk && call.arguments.length >= 3) {
                 const thirdNode = call.arguments[2]!;
+                ignoredStart = 3;
                 if (!this.isUndefinedExpression(thirdNode)) {
                     const third = this.emitExpr(thirdNode);
                     if (third.ty.kind !== "function") {
@@ -27139,7 +27139,7 @@ class Emitter {
             if (chunk) specs.push({ value: chunk.value, target: chunk.value.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: chunk.node });
             if (encoding) specs.push({ value: encoding.value, target: T_STRING, node: encoding.node });
             if (callback) specs.push({ value: callback.value, target: callback.value.ty, node: callback.node });
-            specs.push(...this.ignoredArgumentSpecs(call.arguments, Math.min(call.arguments.length, 3)));
+            specs.push(...this.ignoredArgumentSpecs(call.arguments, ignoredStart));
             const callbackTy = callback?.value.ty ?? null;
             return this.emitSequencedExpr(T_VOID, specs, (vals) => {
                 const callbackC = callback ? vals[(chunk ? 1 : 0) + (encoding ? 1 : 0)]! : null;
@@ -27164,8 +27164,10 @@ class Emitter {
             }
             let encoding: { value: EmitResult; node: ts.Expression } | null = null;
             let callback: { value: EmitResult; node: ts.Expression } | null = null;
-            if (call.arguments.length === 2) {
+            let ignoredStart = 1;
+            if (call.arguments.length >= 2) {
                 const secondNode = call.arguments[1]!;
+                ignoredStart = 2;
                 if (!this.isUndefinedExpression(secondNode)) {
                     const second = this.emitExpr(secondNode);
                     if (second.ty.kind === "function") {
@@ -27174,12 +27176,10 @@ class Emitter {
                         encoding = { value: second, node: secondNode };
                     }
                 }
-            } else if (call.arguments.length >= 3) {
-                const encodingNode = call.arguments[1]!;
+            }
+            if (!callback && call.arguments.length >= 3 && (encoding || this.isUndefinedExpression(call.arguments[1]!))) {
                 const callbackNode = call.arguments[2]!;
-                if (!this.isUndefinedExpression(encodingNode)) {
-                    encoding = { value: this.emitExpr(encodingNode), node: encodingNode };
-                }
+                ignoredStart = 3;
                 if (!this.isUndefinedExpression(callbackNode)) {
                     callback = { value: this.emitExpr(callbackNode), node: callbackNode };
                 }
@@ -27195,7 +27195,7 @@ class Emitter {
             ];
             if (encoding) specs.push({ value: encoding.value, target: T_STRING, node: encoding.node });
             if (callback) specs.push({ value: callback.value, target: callback.value.ty, node: callback.node });
-            specs.push(...this.ignoredArgumentSpecs(call.arguments, Math.min(call.arguments.length, 3)));
+            specs.push(...this.ignoredArgumentSpecs(call.arguments, ignoredStart));
             return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) => {
                 const chunkC = vals[0]!;
                 const callbackC = callback ? vals[1 + (encoding ? 1 : 0)]! : null;

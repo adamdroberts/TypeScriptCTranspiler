@@ -15,5 +15,6 @@ process.stdout.end("", "utf8", done, mark("g"));
 stdout.end("", "utf8", done, mark("n"));
 processModule.stderr.end("", "utf8", done, mark("m"));
 proc.stderr.end("", "utf8", done, mark("d"));
+stdout.end(done, mark("s"));
 
 console.log("end ignored:", seen, process.stdout.writableEnded, process.stderr.writableFinished);
