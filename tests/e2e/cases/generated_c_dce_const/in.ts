@@ -490,6 +490,8 @@ const unused_promise_resolve_empty_array_some_call = Promise.resolve([].some(() 
 const unused_promise_resolve_object_symbols_every_call = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_every: 1 }).every(() => "dead_promise_resolve_object_symbols_every_callback".length > 0));
 const unused_promise_resolve_object_symbols_find_call = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_find: 1 }).find(() => "dead_promise_resolve_object_symbols_find_callback".length > 0));
 const unused_promise_resolve_object_symbols_find_index_call = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_find_index: 1 }).findIndex(() => "dead_promise_resolve_object_symbols_find_index_callback".length > 0));
+const unused_promise_resolve_empty_array_reduce_call = Promise.resolve([].reduce((acc: string) => acc + "dead_promise_resolve_empty_array_reduce_callback", "dead_promise_resolve_empty_array_reduce_initial"));
+const unused_promise_resolve_object_symbols_reduce_right_call = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_reduce_right: 1 }).reduceRight((acc: string) => acc + "dead_promise_resolve_object_symbols_reduce_right_callback", "dead_promise_resolve_object_symbols_reduce_right_initial"));
 const unused_promise_resolve_object_extensible_call = Promise.resolve(Object.isExtensible({ dead_promise_resolve_object_extensible: 1 }));
 const unused_promise_resolve_object_sealed_call = Promise.resolve(Object.isSealed({ dead_promise_resolve_object_sealed: 1 }));
 const unused_promise_resolve_object_frozen_call = Promise.resolve(Object.isFrozen({ dead_promise_resolve_object_frozen: 1 }));
@@ -3861,6 +3863,7 @@ function usedLocal(value: number): number {
     Array.from(new Set(Object.getOwnPropertySymbols(Object.freeze({ local_dead_array_from_object_symbols_set_empty_for_each: 1 })))).forEach(() => "local_dead_array_from_object_symbols_set_empty_for_each_callback");
     Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_find_last: 1 })).findLast(() => "local_dead_object_symbols_find_last_callback".length > 0);
     Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_find_last_index: 1 })).findLastIndex(() => "local_dead_object_symbols_find_last_index_callback".length > 0);
+    Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_reduce: 1 })).reduce((acc: string) => acc + "local_dead_object_symbols_reduce_callback", "local_dead_object_symbols_reduce_initial");
     Object.getOwnPropertyDescriptor("local_dead_object_primitive_descriptor", "0");
     Object.getOwnPropertyDescriptors("local_dead_object_primitive_descriptors");
     Object.hasOwn("local_dead_object_primitive_has_own", "0");

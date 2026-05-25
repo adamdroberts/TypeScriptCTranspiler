@@ -2615,6 +2615,16 @@ class Emitter {
                     return true;
                 }
                 break;
+            case "reduce":
+            case "reduceRight":
+                if (
+                    this.isSideEffectFreeArrayMethodCall(recv, method, call.arguments, seenConsts) &&
+                    call.arguments.length === 2 &&
+                    this.isSideEffectFreePrimitivePromiseResolveValue(call.arguments[1]!, seenConsts)
+                ) {
+                    return true;
+                }
+                break;
             case "charAt":
             case "charCodeAt":
             case "at":
