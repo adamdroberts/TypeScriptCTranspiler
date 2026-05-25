@@ -1,0 +1,11 @@
+get: 1
+has: true
+delete: true
+define: true 4
+desc: 4
+keys: a,hidden,c
+proto: true proto
+ext: true true false
+apply: applied:x
+construct: y true
+events: get:true|set:true|has:true|delete:true|define:true|getOwnPropertyDescriptor:true|ownKeys:true|getOwnPropertyDescriptor:true|getOwnPropertyDescriptor:true|getOwnPropertyDescriptor:true|setPrototypeOf:true|getPrototypeOf:true|isExtensible:true|preventExtensions:true|apply:true|construct:true
