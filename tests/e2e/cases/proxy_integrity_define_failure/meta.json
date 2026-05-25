@@ -1,0 +1,3 @@
+{
+  "description": "Proxy Object.seal/Object.freeze fail when integrity defineProperty traps return false"
+}
