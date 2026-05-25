@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `fs.accessSync(...)` and immediate `fs.promises.access(...)` now treat earlier static `const` aliases for `undefined` mode values as the default access mode while still evaluating ignored trailing arguments. Tests: `fs_access_ignored_arguments`, `fs_promises_stat_access_ignored_arguments`.
 - Process stdin `read(...)` size and `unpipe(...)` destination defaults now accept earlier static `const` aliases for `undefined` while still evaluating ignored trailing arguments. Tests: `process_stdin_read_null`, `process_stdin_pipe_noop_methods`.
 - `child_process.spawnSync(...)` now treats earlier static `const` aliases for `undefined` whole `stdio` options as default pipe stdio. Test: `child_process_option_property_undefined`.
 - Supported fs option-object properties now accept earlier static `const` aliases for `undefined` and side-effect-free `void` default values across the bounded sync and immediate-promise subsets. Test: `fs_option_property_undefined`.

@@ -34876,8 +34876,9 @@ class Emitter {
                 const specs: SequencedCallArg[] = [
                     this.fsPathSpec(p, args[0]!, "fs.accessSync path"),
                 ];
-                if (args[1] && !this.isUndefinedExpression(args[1])) {
-                    specs.push({ value: this.emitExpr(args[1]), target: T_NUMBER, node: args[1] });
+                const modeArg = args[1] ? this.staticOptionValue(args[1]) : undefined;
+                if (modeArg && !this.isUndefinedExpression(modeArg)) {
+                    specs.push({ value: this.emitExpr(modeArg), target: T_NUMBER, node: args[1] });
                     specs.push(...this.ignoredArgumentSpecs(args, 2));
                     return this.emitSequencedExpr(T_VOID, specs, ([path, mode]) =>
                         `tsc_fs_access_sync_mode(${path!}, ${mode!})`,
@@ -35937,8 +35938,9 @@ class Emitter {
                 const specs: SequencedCallArg[] = [
                     this.fsPathSpec(p, args[0]!, "fs.promises.access path"),
                 ];
-                if (args[1] && !this.isUndefinedExpression(args[1])) {
-                    specs.push({ value: this.emitExpr(args[1]), target: T_NUMBER, node: args[1] });
+                const modeArg = args[1] ? this.staticOptionValue(args[1]) : undefined;
+                if (modeArg && !this.isUndefinedExpression(modeArg)) {
+                    specs.push({ value: this.emitExpr(modeArg), target: T_NUMBER, node: args[1] });
                     specs.push(...this.ignoredArgumentSpecs(args, 2));
                 } else {
                     specs.push(...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1));

@@ -1,2 +1,2 @@
 missing: fs.access: path is not accessible
-events: global-default|global-void-default|named-mode|missing
+events: global-default|global-void-default|global-alias-default|named-mode|missing
