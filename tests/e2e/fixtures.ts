@@ -818,6 +818,10 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'const local = require("./local.js");\nconst countKey = `count`;\nconst descriptors = {\n  default: { value: "define-property-properties-from-entries-default", enumerable: true },\n  label: { get() { return "define-property-properties-from-entries"; }, enumerable: true },\n  [countKey]: { value: local.count, enumerable: true },\n  double: { value: local.double, enumerable: true }\n};\nmodule.exports = Object.defineProperty(Object.defineProperties({}, Object.fromEntries(Object.entries(descriptors))), "bonus", { value: local.bonus, enumerable: true });\n',
         "local.js": 'exports.count = 136;\nexports.bonus = "define-property-properties-from-entries-bonus";\nexports.double = function double(value) { return value * 11; };\n',
     }),
+    "tsc2c-cjs-module-wrapper-define-property-define-properties-from-entries": cjsPackage("tsc2c-cjs-module-wrapper-define-property-define-properties-from-entries", {
+        "index.js": 'const local = require("./local.js");\nconst labelKey = "la" + "bel";\nconst descriptors = {\n  default: { value: "wrapper-define-property-properties-from-entries-default", enumerable: true },\n  [labelKey]: { value: "wrapper-define-property-properties-from-entries", enumerable: true },\n  count: { value: local.count, enumerable: true },\n  double: { value: local.double, enumerable: true }\n};\nmodule.exports = Object.freeze(Object.defineProperty(Object.defineProperties({}, Object.fromEntries(Object.entries(descriptors))), "bonus", { value: local.bonus, enumerable: true }));\n',
+        "local.js": 'exports.count = 137;\nexports.bonus = "wrapper-define-property-properties-from-entries-bonus";\nexports.double = function double(value) { return value * 12; };\n',
+    }),
     "tsc2c-cjs-object-create-default-package": cjsPackage("tsc2c-cjs-object-create-default-package", {
         "index.js": 'module.exports = Object.freeze(Object.create(null, {\n  visible: { value: "descriptor-hidden", enumerable: true },\n  hidden: { value: "not-enumerated", enumerable: false }\n}));\n',
     }),
