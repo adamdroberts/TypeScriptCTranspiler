@@ -1288,6 +1288,8 @@ const unused_object_from_entries_call = Object.fromEntries([["dead_object_from_e
 const unused_object_from_entries_const_call = Object.fromEntries(unused_from_entries_source);
 const unused_object_from_entries_object_entries_call = Object.fromEntries(Object.entries({ dead_object_from_entries_object_entries_key: "dead_object_from_entries_object_entries_value" }));
 const unused_object_from_entries_empty_map_call = Object.fromEntries(new Map<string, string>());
+const unused_group_by_empty_set_source = new Set<number>();
+const unused_group_by_empty_set_copy_source = new Set(unused_group_by_empty_set_source);
 const unused_group_by_empty_map_source = new Map<string, number>();
 const unused_group_by_empty_map_copy_source = new Map(unused_group_by_empty_map_source);
 const unused_object_group_by_empty_call = Object.groupBy([] as number[], (value) => "dead_object_group_by_empty" + value);
@@ -1296,6 +1298,8 @@ const unused_object_group_by_array_from_empty_call = Object.groupBy(Array.from("
 const unused_map_group_by_array_of_empty_call = Map.groupBy(Array.of<number>(), (value) => "dead_map_group_by_array_of_empty" + value);
 const unused_object_group_by_empty_set_call = Object.groupBy(new Set<number>(), (value) => "dead_object_group_by_empty_set" + value);
 const unused_map_group_by_empty_set_call = Map.groupBy(new Set<number>(), (value) => "dead_map_group_by_empty_set" + value);
+const unused_object_group_by_empty_set_const_call = Object.groupBy(unused_group_by_empty_set_source, (value) => "dead_object_group_by_empty_set_const" + value);
+const unused_map_group_by_empty_set_copy_call = Map.groupBy(unused_group_by_empty_set_copy_source, (value) => "dead_map_group_by_empty_set_copy" + value);
 const unused_object_group_by_empty_string_call = Object.groupBy("", (value) => "dead_object_group_by_empty_string" + value);
 const unused_map_group_by_empty_string_call = Map.groupBy("", (value) => "dead_map_group_by_empty_string" + value);
 const unused_object_group_by_empty_map_call = Object.groupBy(new Map<string, number>(), (entry) => "dead_object_group_by_empty_map" + entry[0] + entry[1]);
@@ -2483,6 +2487,8 @@ Object.groupBy(Array.from(""), (value) => "top_level_dead_object_group_by_array_
 Map.groupBy(Array.of<number>(), (value) => "top_level_dead_map_group_by_array_of_empty" + value);
 Object.groupBy(new Set<number>(), (value) => "top_level_dead_object_group_by_empty_set" + value);
 Map.groupBy(new Set<number>(), (value) => "top_level_dead_map_group_by_empty_set" + value);
+Object.groupBy(new Set(unused_group_by_empty_set_source), (value) => "top_level_dead_object_group_by_empty_set_copy" + value);
+Map.groupBy(new Set(unused_group_by_empty_set_source), (value) => "top_level_dead_map_group_by_empty_set_copy" + value);
 Object.groupBy("", (value) => "top_level_dead_object_group_by_empty_string" + value);
 Map.groupBy("", (value) => "top_level_dead_map_group_by_empty_string" + value);
 Object.groupBy(new Map<string, number>(), (entry) => "top_level_dead_object_group_by_empty_map" + entry[0] + entry[1]);
@@ -3697,6 +3703,8 @@ function usedLocal(value: number): number {
     Map.groupBy(Array.of<number>(), (value) => "local_dead_map_group_by_array_of_empty" + value);
     Object.groupBy(new Set<number>(), (value) => "local_dead_object_group_by_empty_set" + value);
     Map.groupBy(new Set<number>(), (value) => "local_dead_map_group_by_empty_set" + value);
+    Object.groupBy(new Set(unused_group_by_empty_set_source), (value) => "local_dead_object_group_by_empty_set_copy" + value);
+    Map.groupBy(new Set(unused_group_by_empty_set_source), (value) => "local_dead_map_group_by_empty_set_copy" + value);
     Object.groupBy("", (value) => "local_dead_object_group_by_empty_string" + value);
     Map.groupBy("", (value) => "local_dead_map_group_by_empty_string" + value);
     Object.groupBy(new Map<string, number>(), (entry) => "local_dead_object_group_by_empty_map" + entry[0] + entry[1]);
