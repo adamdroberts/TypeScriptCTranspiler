@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE coverage now proves unused `Object.groupBy(...)` / `Map.groupBy(...)` pruning over statically empty typed Set sources. Test: `generated_c_dce_const`.
 - `Object.groupBy` and `Map.groupBy` now accept typed `Set<T>` sources as well as typed arrays, preserving Set insertion order through the grouping callback index. Tests: `object_group_by`, `map_group_by`.
 - Generated-C DCE now prunes unused pure `Object.prototype.hasOwnProperty.call(...)`, `propertyIsEnumerable.call(...)`, `isPrototypeOf.call(...)`, and `valueOf.call(...)` forms, including primitive Promise resolutions for boolean call-form results and primitive property/element reads through fresh-object, pure object-builder, or target-returning-wrapper `valueOf.call(...)` receiver results. Test: `generated_c_dce_const`.
 - Basic escape analysis now stack-allocates non-escaping typed object literal and `new Class(...)` locals that flow through `Object.prototype.valueOf.call(...)` when the returned receiver stays within safe same-block uses. Test: `object_literal_stack_alloc_value_of`.

@@ -1288,6 +1288,8 @@ const unused_object_group_by_empty_call = Object.groupBy([] as number[], (value)
 const unused_map_group_by_empty_call = Map.groupBy([] as number[], (value) => "dead_map_group_by_empty" + value);
 const unused_object_group_by_array_from_empty_call = Object.groupBy(Array.from(""), (value) => "dead_object_group_by_array_from_empty" + value);
 const unused_map_group_by_array_of_empty_call = Map.groupBy(Array.of<number>(), (value) => "dead_map_group_by_array_of_empty" + value);
+const unused_object_group_by_empty_set_call = Object.groupBy(new Set<number>(), (value) => "dead_object_group_by_empty_set" + value);
+const unused_map_group_by_empty_set_call = Map.groupBy(new Set<number>(), (value) => "dead_map_group_by_empty_set" + value);
 const unused_collection_object_keys_call = Object.keys(new Map<string, number>());
 const unused_collection_object_has_own_call = Object.hasOwn(new Set<string>(), "dead_collection_has_own");
 const unused_collection_reflect_own_keys_call = Reflect.ownKeys(new WeakRef<object>({ label: "dead_collection_reflect_weak_ref" }));
@@ -2467,6 +2469,8 @@ Object.groupBy([] as number[], (value) => "top_level_dead_object_group_by_empty"
 Map.groupBy([] as number[], (value) => "top_level_dead_map_group_by_empty" + value);
 Object.groupBy(Array.from(""), (value) => "top_level_dead_object_group_by_array_from_empty" + value);
 Map.groupBy(Array.of<number>(), (value) => "top_level_dead_map_group_by_array_of_empty" + value);
+Object.groupBy(new Set<number>(), (value) => "top_level_dead_object_group_by_empty_set" + value);
+Map.groupBy(new Set<number>(), (value) => "top_level_dead_map_group_by_empty_set" + value);
 Object.keys(new WeakMap<object, string>());
 Object.hasOwn(new FinalizationRegistry<string>(() => "top_level_dead_collection_finregistry"), "top_level_dead_collection_has_own");
 Reflect.ownKeys(new WeakRef<object>({ label: "top_level_dead_collection_reflect_weak_ref" }));
@@ -3673,6 +3677,8 @@ function usedLocal(value: number): number {
     Map.groupBy([] as number[], (value) => "local_dead_map_group_by_empty" + value);
     Object.groupBy(Array.from(""), (value) => "local_dead_object_group_by_array_from_empty" + value);
     Map.groupBy(Array.of<number>(), (value) => "local_dead_map_group_by_array_of_empty" + value);
+    Object.groupBy(new Set<number>(), (value) => "local_dead_object_group_by_empty_set" + value);
+    Map.groupBy(new Set<number>(), (value) => "local_dead_map_group_by_empty_set" + value);
     Object.keys(new Set<string>());
     Object.hasOwn(new FinalizationRegistry<string>(() => "local_dead_collection_finregistry"), "local_dead_collection_has_own");
     Reflect.ownKeys(new WeakRef<object>({ label: "local_dead_collection_reflect_weak_ref" }));
