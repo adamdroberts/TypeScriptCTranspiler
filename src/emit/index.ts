@@ -1483,7 +1483,7 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
-            this.isNamespaceImportFrom(recv, ["events", "node:events"]) &&
+            this.isEventsModuleIdentifier(recv) &&
             this.isSideEffectFreeEventsStaticCall(method, call.arguments, seenConsts)
         ) {
             return true;
@@ -1991,7 +1991,7 @@ class Emitter {
                 this.isSideEffectFreePrimitiveCryptoCall(method, call.arguments, seenConsts)
             ) ||
             (
-                this.isNamespaceImportFrom(recv, ["events", "node:events"]) &&
+                this.isEventsModuleIdentifier(recv) &&
                 this.isSideEffectFreePrimitiveEventsStaticCall(method, call.arguments, seenConsts)
             ) ||
             (
@@ -11484,12 +11484,12 @@ class Emitter {
         const recv = expr.expression;
         if (ts.isIdentifier(recv)) {
             return this.isEventEmitterConstructorIdentifier(recv) ||
-                this.isNamespaceImportFrom(recv, ["events", "node:events"]);
+                this.isEventsModuleIdentifier(recv);
         }
         return ts.isPropertyAccessExpression(recv) &&
             recv.name.text === "EventEmitter" &&
             ts.isIdentifier(recv.expression) &&
-            this.isNamespaceImportFrom(recv.expression, ["events", "node:events"]);
+            this.isEventsModuleIdentifier(recv.expression);
     }
 
     private isSideEffectFreeFreshSymbolOperand(
@@ -24155,13 +24155,20 @@ class Emitter {
         const recv = expr.expression;
         return (
             (ts.isIdentifier(recv) && this.isEventEmitterConstructorIdentifier(recv)) ||
-            (ts.isIdentifier(recv) && this.isNamespaceImportFrom(recv, ["events", "node:events"])) ||
+            (ts.isIdentifier(recv) && this.isEventsModuleIdentifier(recv)) ||
             (
                 ts.isPropertyAccessExpression(recv) &&
                 recv.name.text === "EventEmitter" &&
                 ts.isIdentifier(recv.expression) &&
-                this.isNamespaceImportFrom(recv.expression, ["events", "node:events"])
+                this.isEventsModuleIdentifier(recv.expression)
             )
+        );
+    }
+
+    private isEventsModuleIdentifier(expr: ts.Expression): boolean {
+        return ts.isIdentifier(expr) && (
+            this.isNamespaceImportFrom(expr, ["events", "node:events"]) ||
+            this.isDefaultImportFrom(expr, ["events", "node:events"])
         );
     }
 
@@ -26357,7 +26364,7 @@ class Emitter {
             return this.emitFsCall(call, memberName);
         }
 
-        if (ts.isIdentifier(recvExpr) && this.isNamespaceImportFrom(recvExpr, ["events", "node:events"])) {
+        if (ts.isIdentifier(recvExpr) && this.isEventsModuleIdentifier(recvExpr)) {
             if (memberName === "listenerCount" || memberName === "getEventListeners" || memberName === "once" || memberName === "setMaxListeners" || memberName === "getMaxListeners") {
                 return this.emitEventsStaticCall(call, memberName);
             }
@@ -26372,7 +26379,7 @@ class Emitter {
                     ts.isPropertyAccessExpression(recvExpr) &&
                     recvExpr.name.text === "EventEmitter" &&
                     ts.isIdentifier(recvExpr.expression) &&
-                    this.isNamespaceImportFrom(recvExpr.expression, ["events", "node:events"])
+                    this.isEventsModuleIdentifier(recvExpr.expression)
                 )
             )
         ) {
@@ -39664,7 +39671,7 @@ class Emitter {
         if (
             ts.isPropertyAccessExpression(n.expression) &&
             ts.isIdentifier(n.expression.expression) &&
-            this.isNamespaceImportFrom(n.expression.expression, ["events", "node:events"]) &&
+            this.isEventsModuleIdentifier(n.expression.expression) &&
             n.expression.name.text === "EventEmitter"
         ) {
             return this.emitSequencedExpr(
@@ -40280,7 +40287,7 @@ class Emitter {
             }
             if (
                 (this.isEventEmitterConstructorIdentifier(pa.expression) && pa.name.text === "defaultMaxListeners") ||
-                (this.isNamespaceImportFrom(pa.expression, ["events", "node:events"]) && pa.name.text === "defaultMaxListeners")
+                (this.isEventsModuleIdentifier(pa.expression) && pa.name.text === "defaultMaxListeners")
             ) {
                 return { c: "tsc_event_emitter_get_default_max_listeners()", ty: T_NUMBER };
             }
@@ -40350,7 +40357,7 @@ class Emitter {
             pa.name.text === "defaultMaxListeners" &&
             pa.expression.name.text === "EventEmitter" &&
             ts.isIdentifier(pa.expression.expression) &&
-            this.isNamespaceImportFrom(pa.expression.expression, ["events", "node:events"])
+            this.isEventsModuleIdentifier(pa.expression.expression)
         ) {
             return { c: "tsc_event_emitter_get_default_max_listeners()", ty: T_NUMBER };
         }

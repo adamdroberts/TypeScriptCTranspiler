@@ -1,0 +1,3 @@
+{
+  "description": "default events imports expose EventEmitter, module helpers, once, and defaultMaxListeners"
+}

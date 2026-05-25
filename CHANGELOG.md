@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Default imports from `"events"` and `"node:events"` now expose the supported `EventEmitter`, module helper, `once`, and `defaultMaxListeners` subset. Test: `event_emitter_default_import`.
 - Default imports from `"child_process"` and `"node:child_process"` now route to the supported callback, sync, and `spawnSync` subsets. Test: `child_process_default_import`.
 - Default imports from `"fs"` and `"node:fs"` now route to the supported sync fs and immediate `fs.promises` subsets. Test: `fs_default_import`.
 - Default imports from `"dns"` and `"node:dns"` now route to immediate `lookup`, `promises.lookup`, and DNS hint constants. Test: `dns_default_import`.

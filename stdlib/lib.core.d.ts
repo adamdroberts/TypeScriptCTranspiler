@@ -1530,6 +1530,15 @@ declare var EventEmitter: EventEmitterConstructor;
 interface EventEmitterOnceOptions {
     signal?: any;
 }
+interface EventsModule {
+    EventEmitter: EventEmitterConstructor;
+    defaultMaxListeners: number;
+    listenerCount(emitter: EventEmitter, eventName: string, listener?: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): number;
+    getEventListeners(emitter: EventEmitter, eventName: string, ...ignored: any[]): any[];
+    once(emitter: EventEmitter, eventName: string, options?: EventEmitterOnceOptions): Promise<any[]>;
+    setMaxListeners(n: number, emitter: EventEmitter): void;
+    getMaxListeners(emitter: EventEmitter, ...ignored: any[]): number;
+}
 declare module "events" {
     export const EventEmitter: EventEmitterConstructor;
     export let defaultMaxListeners: number;
@@ -1538,6 +1547,8 @@ declare module "events" {
     export function once(emitter: EventEmitter, eventName: string, options?: EventEmitterOnceOptions): Promise<any[]>;
     export function setMaxListeners(n: number, emitter: EventEmitter): void;
     export function getMaxListeners(emitter: EventEmitter, ...ignored: any[]): number;
+    const defaultEvents: EventsModule;
+    export default defaultEvents;
 }
 declare module "node:events" {
     export const EventEmitter: EventEmitterConstructor;
@@ -1547,6 +1558,8 @@ declare module "node:events" {
     export function once(emitter: EventEmitter, eventName: string, options?: EventEmitterOnceOptions): Promise<any[]>;
     export function setMaxListeners(n: number, emitter: EventEmitter): void;
     export function getMaxListeners(emitter: EventEmitter, ...ignored: any[]): number;
+    const defaultEvents: EventsModule;
+    export default defaultEvents;
 }
 
 type DnsLookupCallback = (err: any, address: string, family: number) => void;

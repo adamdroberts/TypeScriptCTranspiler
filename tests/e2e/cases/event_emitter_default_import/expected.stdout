@@ -1,0 +1,6 @@
+default max: 9 9
+count: 1
+static count: 1
+listeners: 1
+emit: true 7
+once: ok:3
