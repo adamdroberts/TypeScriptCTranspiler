@@ -17089,10 +17089,13 @@ class Emitter {
     }
 
     private isProcessEnvObject(expr: ts.Expression): boolean {
+        if (ts.isIdentifier(expr)) {
+            return this.isNamedImportFrom(expr, ["process", "node:process"], "env");
+        }
         return ts.isPropertyAccessExpression(expr) &&
             expr.name.text === "env" &&
             ts.isIdentifier(expr.expression) &&
-            expr.expression.text === "process";
+            this.isProcessModuleIdentifier(expr.expression);
     }
 
     private isFsPromisesReceiver(expr: ts.Expression): boolean {
@@ -40301,13 +40304,8 @@ class Emitter {
                 return { c: `tsc_symbol_async_iterator()`, ty: T_SYMBOL };
             }
         }
-        // process.env.VAR → tsc_process_env_get("VAR")
-        if (
-            ts.isPropertyAccessExpression(pa.expression) &&
-            ts.isIdentifier(pa.expression.expression) &&
-            pa.expression.expression.text === "process" &&
-            pa.expression.name.text === "env"
-        ) {
+        // process.env.VAR and imported env.VAR → tsc_process_env_get("VAR")
+        if (this.isProcessEnvObject(pa.expression)) {
             const varName = pa.name.text;
             return {
                 c: `tsc_process_env_get(tsc_str_from_lit("${escapeCString(varName)}", ${utf8ByteLen(varName)}))`,
