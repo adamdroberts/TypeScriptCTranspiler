@@ -36858,8 +36858,9 @@ class Emitter {
         objExpr: ts.Expression,
         obj: EmitResult,
         keyExpr: ts.Expression,
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
-        return this.emitBufferPropertyKeyCheck(objExpr, obj, keyExpr, false);
+        return this.emitBufferPropertyKeyCheck(objExpr, obj, keyExpr, false, ignored);
     }
 
     private emitBufferPropertyKeyCheck(
@@ -36867,12 +36868,14 @@ class Emitter {
         obj: EmitResult,
         keyExpr: ts.Expression,
         includeLength: boolean,
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer own-key check on non-buffer");
         const key = this.emitExpr(keyExpr);
         return this.emitSequencedExpr(T_BOOLEAN, [
             { value: obj, node: objExpr },
             { value: key, target: T_STRING, node: keyExpr },
+            ...ignored,
         ], ([buffer, keyC]) => {
             const source = this.freshTemp("_boh_src");
             const idx = this.freshTemp("_boh_i");
@@ -38161,13 +38164,15 @@ class Emitter {
             );
         }
         if (name === "hasOwn") {
-            if (args.length !== 2) unsupported(call, "Object.hasOwn expects object and key");
+            if (args.length < 2) unsupported(call, "Object.hasOwn expects object and key");
+            const ignored = this.ignoredArgumentSpecs(args, 2);
             if (nonStringPrimitiveObjectArg) {
                 const obj = this.emitExpr(arg);
                 const key = this.emitExpr(args[1]!);
                 return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: obj, node: arg },
                     { value: key, target: T_STRING, node: args[1]! },
+                    ...ignored,
                 ], ([o, k]) => `({ (void)${o}; (void)${k}; false; })`);
             }
             if (emptyOwnBuiltinObjectArg) {
@@ -38176,35 +38181,39 @@ class Emitter {
                 return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: obj, node: arg },
                     { value: key, target: T_STRING, node: args[1]! },
+                    ...ignored,
                 ], ([o, k]) => `({ (void)${o}; (void)${k}; false; })`);
             }
             if (mapped.kind === "buffer") {
                 const obj = this.emitExpr(arg);
-                return this.emitBufferOwnKeyCheck(arg, obj, args[1]!);
+                return this.emitBufferOwnKeyCheck(arg, obj, args[1]!, ignored);
             }
             if (mapped.kind === "string") {
                 const obj = this.emitExpr(arg);
                 const key = this.emitExpr(args[1]!);
-                return this.emitSequencedCall("tsc_value_has_own_prop", T_BOOLEAN, [
+                return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: obj, target: T_VALUE, node: arg },
                     { value: key, target: T_STRING, node: args[1]! },
-                ]);
+                    ...ignored,
+                ], ([o, k]) => `tsc_value_has_own_prop(${o}, ${k})`);
             }
             if (mapped.kind === "array") {
                 const obj = this.emitExpr(arg);
                 const key = this.emitExpr(args[1]!);
-                return this.emitSequencedCall("tsc_array_has_own_key", T_BOOLEAN, [
-                    { value: obj },
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: obj, target: mapped, node: arg },
                     { value: key, target: T_STRING, node: args[1]! },
-                ]);
+                    ...ignored,
+                ], ([o, k]) => `tsc_array_has_own_key(${o}, ${k})`);
             }
             if (mapped.kind === "function") {
                 const obj = this.emitExpr(arg);
                 const key = this.emitExpr(args[1]!);
-                return this.emitSequencedCall("tsc_value_has_own_prop", T_BOOLEAN, [
+                return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: obj, target: T_VALUE, node: arg },
                     { value: key, target: T_STRING, node: args[1]! },
-                ]);
+                    ...ignored,
+                ], ([o, k]) => `tsc_value_has_own_prop(${o}, ${k})`);
             }
             if (mapped.kind === "class") {
                 const obj = this.emitExpr(arg);
@@ -38214,6 +38223,7 @@ class Emitter {
                     args[1]!,
                     tsType,
                     "Object.hasOwn",
+                    ignored,
                 );
             }
             if (mapped.kind !== "value") unsupported(arg, "Object.hasOwn on non-object");
@@ -38222,6 +38232,7 @@ class Emitter {
             return this.emitSequencedExpr(T_BOOLEAN, [
                 { value: obj, target: T_VALUE, node: arg },
                 { value: key, target: T_STRING, node: args[1]! },
+                ...ignored,
             ], ([o, k]) =>
                 `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.hasOwn target must not be null or undefined")); tsc_value_has_own_prop(${o!}, ${k!}); })`,
             );

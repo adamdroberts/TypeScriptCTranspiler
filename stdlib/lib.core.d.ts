@@ -286,7 +286,7 @@ interface ObjectConstructor {
     getOwnPropertyDescriptors(o: any): any;
     getOwnPropertyNames(o: any, ...ignored: any[]): string[];
     getOwnPropertySymbols(o: any, ...ignored: any[]): symbol[];
-    hasOwn(o: any, p: string): boolean;
+    hasOwn(o: any, p: string, ...ignored: any[]): boolean;
     is(value1: any, value2: any): boolean;
     freeze<T>(o: T): T;
     isFrozen(o: any): boolean;

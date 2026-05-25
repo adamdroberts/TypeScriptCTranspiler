@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Object.hasOwn(...)` now evaluates and ignores trailing arguments across typed object, array, string, and dynamic-object paths. Test: `object_has_own_ignored_arguments`.
 - `Object.getOwnPropertyNames(...)` now evaluates and ignores trailing arguments across typed object, array, string, and dynamic-object paths. Test: `object_get_own_property_names_ignored_arguments`.
 - `Object.getOwnPropertySymbols(...)` now evaluates and ignores trailing arguments while returning an empty symbol array in the current string-key-only object model. Test: `object_get_own_property_symbols`.
 - `Object.groupBy(...)` and `Map.groupBy(...)` now accept boxed dynamic array and string sources, grouping over the same AOT iterable values used by `Array.from(dynamic, ...)`. Tests: `object_group_by_dynamic_source`, `map_group_by_dynamic_source`.
