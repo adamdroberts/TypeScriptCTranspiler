@@ -1122,6 +1122,9 @@ class Emitter {
         ) {
             return true;
         }
+        if (this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts) !== null) {
+            return true;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeLengthOperand(init, seenConsts);
     }
@@ -4488,6 +4491,33 @@ class Emitter {
         if (literalLength !== null) return literalLength;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         if (init) return this.sideEffectFreeFreshOrReturnedArrayLength(init, seenConsts);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression)
+        ) {
+            const method = unwrapped.expression.name.text;
+            const receiverLength = this.sideEffectFreeFreshOrReturnedArrayLength(
+                unwrapped.expression.expression,
+                seenConsts,
+            );
+            if (receiverLength !== null) {
+                const allArgsPure = Array.from(unwrapped.arguments).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+                if (method === "slice" && unwrapped.arguments.length === 0) return receiverLength;
+                if (
+                    (
+                        method === "toReversed" ||
+                        method === "keys" ||
+                        method === "values" ||
+                        method === "entries"
+                    ) &&
+                    allArgsPure
+                ) {
+                    return receiverLength;
+                }
+            }
+        }
         if (
             !ts.isCallExpression(unwrapped) ||
             !ts.isPropertyAccessExpression(unwrapped.expression) ||
