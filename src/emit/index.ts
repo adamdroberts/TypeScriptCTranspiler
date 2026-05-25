@@ -24870,6 +24870,8 @@ class Emitter {
             "geteuid",
             "getegid",
             "getgroups",
+            "cpuUsage",
+            "kill",
             "memoryUsage",
             "resourceUsage",
         ]
@@ -27063,6 +27065,17 @@ class Emitter {
                     this.ignoredArgumentSpecs(call.arguments, 0),
                     () => `tsc_process_getgroups()`,
                 );
+            case "cpuUsage":
+                if (call.arguments.length !== 0) unsupported(call, "process.cpuUsage expects no args in this subset");
+                return { c: `tsc_process_cpu_usage()`, ty: T_VALUE };
+            case "kill": {
+                if (call.arguments.length < 1 || call.arguments.length > 2) unsupported(call, "process.kill expects pid and optional signal");
+                const signal = this.processSignalArgument(call.arguments[1]);
+                return this.emitSequencedCall("tsc_process_kill", T_BOOLEAN, [
+                    { value: this.emitExpr(call.arguments[0]!), target: T_NUMBER, node: call.arguments[0]! },
+                    { value: { c: signal, ty: T_NUMBER } },
+                ]);
+            }
             case "memoryUsage":
                 return this.emitSequencedExpr(
                     T_VALUE,

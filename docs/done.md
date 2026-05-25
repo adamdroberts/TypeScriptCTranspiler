@@ -526,11 +526,11 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `process.getuid(...ignored)`, `process.getgid(...ignored)`, `process.geteuid(...ignored)`, `process.getegid(...ignored)`, and `process.getgroups(...ignored)` expose POSIX process identity values. Named and namespace imports from `"process"` / `"node:process"` route to the same helpers.
 - `process.umask(mask?, ...ignored)` reads or updates the native process file mode creation mask.
 - `process.memoryUsage(...ignored)` returns a Node-shaped dynamic object with numeric `rss`, `heapTotal`, `heapUsed`, `external`, and `arrayBuffers` fields. RSS is populated from `getrusage` where available; heap fields are placeholders until a tracked allocator lands. Named and namespace imports from `"process"` / `"node:process"` route to the same helper.
-- `process.cpuUsage()` returns a Node-shaped dynamic object with numeric `user` and `system` microsecond counters populated from `getrusage`.
+- `process.cpuUsage()` returns a Node-shaped dynamic object with numeric `user` and `system` microsecond counters populated from `getrusage`. Named and namespace imports from `"process"` / `"node:process"` route to the same helper.
 - `process.resourceUsage(...ignored)` returns a Node-shaped dynamic object with numeric `getrusage` counters for CPU time, RSS, page faults, filesystem I/O, IPC, signals, and context switches. Named and namespace imports from `"process"` / `"node:process"` route to the same helper.
-- `process.kill(pid, signal?)` supports a narrow POSIX signal subset: omitted signal / `SIGTERM` / `15`, `SIGKILL` / `9`, and numeric signal `0` existence probes; supported signal values can use earlier static `const` aliases.
+- `process.kill(pid, signal?)` supports a narrow POSIX signal subset: omitted signal / `SIGTERM` / `15`, `SIGKILL` / `9`, and numeric signal `0` existence probes; supported signal values can use earlier static `const` aliases. Named and namespace imports from `"process"` / `"node:process"` route to the same helper.
 - `process.exit(code)` → `tsc_process_exit`
-- Tests: `wordcount`, `stdlib_os`, `process_argv_meta`, `process_chdir`, `process_cpu_usage`, `process_env_mutation`, `process_features`, `process_metadata`, `process_metadata_import`, `process_ppid`, `process_getgroups`, `process_hrtime`, `process_hrtime_bigint`, `process_kill_signal_zero`, `process_memory_usage`, `process_next_tick`, `process_next_tick_args`, `process_usage_import`, `set_immediate`, `timers_clear`, `process_posix_ids`, `process_release`, `process_resource_usage`, `process_stdin_metadata`, `process_stdio_metadata`, `process_stdio_readable_writable`, `process_stdio_write`, `process_stdio_write_buffer`, `process_stdio_write_callback`, `process_title`, `process_umask`, `process_versions`
+- Tests: `wordcount`, `stdlib_os`, `process_argv_meta`, `process_chdir`, `process_control_import`, `process_cpu_usage`, `process_env_mutation`, `process_features`, `process_metadata`, `process_metadata_import`, `process_ppid`, `process_getgroups`, `process_hrtime`, `process_hrtime_bigint`, `process_kill_signal_zero`, `process_memory_usage`, `process_next_tick`, `process_next_tick_args`, `process_usage_import`, `set_immediate`, `timers_clear`, `process_posix_ids`, `process_release`, `process_resource_usage`, `process_stdin_metadata`, `process_stdio_metadata`, `process_stdio_readable_writable`, `process_stdio_write`, `process_stdio_write_buffer`, `process_stdio_write_callback`, `process_title`, `process_umask`, `process_versions`
 
 ### `console`
 - `console.log` / `.error` / `.warn` / `.info` — variadic, auto-stringifies each arg
@@ -1123,6 +1123,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `path_to_namespaced` | path.toNamespacedPath POSIX no-op for global, namespace, named, and posix forms |
 | `process_argv_meta` | process argv0/execPath/execArgv metadata |
 | `process_chdir` | process.chdir updates cwd |
+| `process_control_import` | named and namespace process cpuUsage/kill imports use existing runtime helpers |
 | `process_cpu_usage` | process.cpuUsage numeric user/system fields |
 | `process_env_mutation` | process.env property/element reads, writes, and deletes |
 | `process_features` | process.features bounded boolean metadata object |

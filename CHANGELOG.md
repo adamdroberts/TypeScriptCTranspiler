@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Named and namespace `cpuUsage` / `kill` imports from `"process"` and `"node:process"` now lower to the existing process control/runtime helpers. Test: `process_control_import`.
 - Named and namespace process POSIX/usage imports from `"process"` and `"node:process"` now lower to the existing `getuid` / `getgid` / `geteuid` / `getegid` / `getgroups` / `memoryUsage` / `resourceUsage` runtime helpers. Test: `process_usage_import`.
 - Named and namespace `cwd` / `uptime` imports from `"process"` and `"node:process"` now lower to the existing process metadata runtime helpers. Test: `process_metadata_import`.
 - Named and namespace `nextTick` imports from `"process"` and `"node:process"` now lower to the bounded `process.nextTick` queue. Test: `process_next_tick_import`.
