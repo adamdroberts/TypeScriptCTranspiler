@@ -1819,7 +1819,7 @@ class Emitter {
             (call.arguments.length === 3 || call.arguments.length === 4) &&
             this.isUnshadowedGlobalIdentifier(recv, "Reflect")
         ) {
-            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) &&
+            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) &&
                 this.isSideEffectFreePropertyKeyCoercion(call.arguments[1]!, seenConsts) &&
                 this.isSideEffectFreeTopLevelConstInitializer(call.arguments[2]!, seenConsts) &&
                 (!call.arguments[3] || this.isSideEffectFreeTopLevelConstInitializer(call.arguments[3], seenConsts));
@@ -1830,7 +1830,7 @@ class Emitter {
             call.arguments.length === 2 &&
             this.isUnshadowedGlobalIdentifier(recv, "Reflect")
         ) {
-            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) &&
+            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) &&
                 this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts);
         }
         if (
@@ -1839,7 +1839,7 @@ class Emitter {
             call.arguments.length === 3 &&
             this.isUnshadowedGlobalIdentifier(recv, "Reflect")
         ) {
-            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) &&
+            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) &&
                 this.isSideEffectFreePropertyKeyCoercion(call.arguments[1]!, seenConsts) &&
                 this.isSideEffectFreeDataPropertyDescriptor(call.arguments[2]!, seenConsts);
         }
@@ -1860,7 +1860,7 @@ class Emitter {
             call.arguments.length === 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Reflect")
         ) {
-            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts);
+            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts);
         }
         if (
             ts.isIdentifier(recv) &&
@@ -1868,7 +1868,7 @@ class Emitter {
             call.arguments.length === 2 &&
             this.isUnshadowedGlobalIdentifier(recv, "Reflect")
         ) {
-            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) &&
+            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) &&
                 this.isSideEffectFreeObjectCreatePrototypeOperand(call.arguments[1]!, seenConsts);
         }
         return false;
@@ -10047,6 +10047,25 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         return (ts.isObjectLiteralExpression(unwrapped) || ts.isArrayLiteralExpression(unwrapped)) &&
             this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+    }
+
+    private isSideEffectFreeFreshObjectMutationTarget(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(unwrapped, seenConsts)) {
+            return true;
+        }
+        return ts.isCallExpression(unwrapped) &&
+            (
+                this.isObjectAssignCall(unwrapped) ||
+                this.isObjectFromEntriesCall(unwrapped) ||
+                this.isObjectCreateCall(unwrapped) ||
+                this.isObjectDefinePropertyCall(unwrapped) ||
+                this.isObjectDefinePropertiesCall(unwrapped)
+            ) &&
+            this.isSideEffectFreeStaticCall(unwrapped, seenConsts);
     }
 
     private isSideEffectFreeObjectCreatePrototypeOperand(
