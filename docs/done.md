@@ -17,7 +17,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - Tagged template calls with a `TemplateStringsArray` first parameter and fixed substitution parameters. Test: `tagged_templates`
 - `String.raw` tagged templates preserve raw template segments and stringify substitutions at compile time. Test: `string_raw`
 - Boolean literals `true` / `false`. Test: `json`
-- `null` / `undefined` / `NaN` / `Infinity` globals, with inferred top-level and local nullish variables stored as boxed values so `typeof` and strict equality preserve JavaScript null-vs-undefined identity. Tests: `nullish`, `stdlib_os`, `nullish_variable_storage`
+- `null` / `undefined` / `NaN` / `Infinity` globals, with inferred top-level and local nullish variables stored as boxed values so `typeof` and strict equality preserve JavaScript null-vs-undefined identity, and uninitialized dynamic variables defaulting to JavaScript `undefined` in top-level, local, and captured storage. Tests: `nullish`, `stdlib_os`, `nullish_variable_storage`, `uninitialized_dynamic_variables`
 - Array literals `[1, 2, 3]` with spread `[0, ...a, 6]` → `emitArrayLiteral`. Test: `advanced`
 - Object literals `{ x: 1 }` matched against an interface/class shape → `emitObjectLiteral`. Test: `interfaces`
 - Computed property names in typed object literals when the key resolves to a string/number literal, e.g. `{ [key]: value }`. Test: `computed_props`
@@ -1577,6 +1577,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `typeof_boolean_union` | `typeof` narrowing over `string | number | boolean` dynamic union storage |
 | `typeof_guards` | typeof equality checks over nullable string values |
 | `union_narrowing` | `typeof` narrowing over `string | number` dynamic union storage |
+| `uninitialized_dynamic_variables` | uninitialized dynamic variables default to JavaScript undefined |
 | `void_operator` | `void expr` side-effect preservation and undefined result |
 | `url_base` | URL constructor and URL.canParse support for bounded base URL resolution |
 | `url_can_parse` | URL.canParse support for the bounded absolute URL subset |

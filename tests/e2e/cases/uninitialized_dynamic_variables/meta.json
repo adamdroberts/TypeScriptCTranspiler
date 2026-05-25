@@ -1,0 +1,3 @@
+{
+  "description": "uninitialized dynamic variables default to JavaScript undefined"
+}

@@ -342,6 +342,7 @@ The old smaller-piece queue has been worked down. The bullets below are retained
 - Dynamic unary numeric operators are implemented over `any` values. Test: `dynamic_unary_ops`.
 - Dynamic pre/post update operators are implemented over local `any` variables plus dynamic property and index lvalues. Test: `dynamic_update_ops`.
 - Dynamic `for...of` array-binding rest destructuring is implemented for boxed dynamic arrays. Test: `dynamic_for_of_rest`.
+- Uninitialized dynamic variables default to JavaScript `undefined` for top-level, local, and captured storage. Test: `uninitialized_dynamic_variables`.
 - Inferred top-level and local variables initialized to `null` / `undefined` use boxed value storage instead of invalid C `void` declarations, preserving JavaScript `typeof` and strict nullish equality. Test: `nullish_variable_storage`.
 - The `void` operator is implemented with operand side-effect preservation. Test: `void_operator`.
 - The comma operator is implemented with left-to-right side-effect preservation and right-hand value result. Test: `comma_operator`.

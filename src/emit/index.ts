@@ -15992,6 +15992,8 @@ class Emitter {
                     ? `((int64_t)(${r.c}))`
                     : this.coerce(r, ct, d.initializer);
                 initBuf.line(`${name} = ${coerced};`);
+            } else if (ct.kind === "value") {
+                initBuf.line(`${name} = tsc_value_undefined();`);
             }
         }
     }
@@ -16652,6 +16654,8 @@ class Emitter {
                     ? `((int64_t)(${r.c}))`
                     : this.coerce(r, ct, d.initializer!);
                 init = " = " + coerced;
+            } else if (ct.kind === "value") {
+                init = " = tsc_value_undefined()";
             }
             if (cell) {
                 buf.line(`${ct.c}* ${cell.cellName} = (${ct.c}*)TSC_GC_MALLOC(sizeof(${ct.c}));`);
@@ -18387,6 +18391,8 @@ class Emitter {
             case "void":
             case "never":
                 return "0";
+            case "value":
+                return "tsc_value_undefined()";
             default:
                 if (isPointerKind(type)) return `((${type.c})NULL)`;
                 return `(${type.c}){0}`;
