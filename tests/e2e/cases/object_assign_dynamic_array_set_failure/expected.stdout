@@ -1,0 +1,4 @@
+sealed assign: Object.assign target set failed
+sealed: 2 7|8
+frozen assign: Object.assign target set failed
+frozen: 1|2
