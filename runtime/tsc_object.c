@@ -1149,13 +1149,46 @@ bool tsc_object_prevent_extensions(tsc_object_t* o) {
     return true;
 }
 
+static bool tsc_object_set_proxy_integrity(tsc_object_t* o, bool frozen) {
+    if (!tsc_object_prevent_extensions(o)) return false;
+    tsc_array_t* keys = tsc_object_own_keys_dyn(o);
+    for (size_t i = 0; i < keys->len; i++) {
+        tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
+        bool has_writable = false;
+        if (frozen) {
+            tsc_value_t desc_value = tsc_value_get_own_property_descriptor(tsc_value_object(o), key);
+            if (tsc_value_is_undefined(desc_value)) continue;
+            if (value_is_box(desc_value) && value_tag(desc_value) == TSC_VALUE_TAG_OBJECT) {
+                const tsc_object_t* desc = (const tsc_object_t*)value_ptr(desc_value);
+                has_writable = descriptor_has_prop(desc, "value", 5, NULL) ||
+                    descriptor_has_prop(desc, "writable", 8, NULL);
+            }
+        }
+        if (!tsc_object_define_desc(
+            o,
+            key,
+            tsc_value_undefined(),
+            false,
+            false,
+            has_writable,
+            false,
+            false,
+            false,
+            true
+        )) {
+            return false;
+        }
+    }
+    return true;
+}
+
 
 bool tsc_object_seal(tsc_object_t* o) {
     if (!o) return false;
     if (o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'seal' on a proxy that has been revoked"));
         if (proxy_has_no_integrity_traps(o, true)) return tsc_value_seal(o->proxy_target);
-        if (!tsc_object_prevent_extensions(o)) return false;
+        return tsc_object_set_proxy_integrity(o, false);
     }
     o->extensible = false;
     for (size_t i = 0; i < o->len; i++) {
@@ -1169,6 +1202,7 @@ bool tsc_object_freeze(tsc_object_t* o) {
     if (o && o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'freeze' on a proxy that has been revoked"));
         if (proxy_has_no_integrity_traps(o, true)) return tsc_value_freeze(o->proxy_target);
+        return tsc_object_set_proxy_integrity(o, true);
     }
     if (!tsc_object_seal(o)) return false;
     for (size_t i = 0; i < o->len; i++) {

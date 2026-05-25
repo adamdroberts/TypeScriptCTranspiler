@@ -259,6 +259,7 @@ interface Object {
     valueOf(...ignored: any[]): any;
 }
 type ObjectEntry<T, K = string> = [K, T];
+type Record<K extends string | number | symbol, T> = { [P in K]: T };
 interface ObjectConstructor {
     readonly prototype: Object;
     assign<T, U>(target: T, source: U): T & U;

@@ -412,6 +412,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `Proxy.revocable(...)` revoke functions are idempotent and receiver-independent across direct, `call`, and `apply` invocation forms while preserving revoked-proxy errors after revocation. Test: `proxy_revocable_revoke_function`
 - Ordinary falsy proxy trap results preserve false-returning `Reflect.set`, `Reflect.defineProperty`, `Reflect.deleteProperty`, `Reflect.preventExtensions`, and `Reflect.setPrototypeOf` semantics, while `Object.preventExtensions` and `Object.setPrototypeOf` throw on failed proxy trap results. Test: `proxy_falsy_trap_results`
 - `Object.seal(proxy)` and `Object.freeze(proxy)` fail through catchable errors when a proxy `preventExtensions` trap reports `false`, preserving the Object integrity-operation failure path. Test: `proxy_integrity_falsy_trap_results`
+- `Object.seal(proxy)` and `Object.freeze(proxy)` drive proxy integrity traps through `preventExtensions`, `ownKeys`, `getOwnPropertyDescriptor`, and `defineProperty` so forwarding handlers seal or freeze the underlying target. Test: `proxy_integrity_forward`
 - Proxy `defineProperty` result validation rejects successful trap reports that would replace the getter or setter identity of a non-configurable accessor property. Test: `proxy_define_accessor`
 - Proxy `getOwnPropertyDescriptor` result validation rejects trap results that report a different getter or setter identity for a non-configurable accessor property. Test: `proxy_descriptor_invariants`
 - Proxy `getOwnPropertyDescriptor` result validation rejects trap results that change the `enumerable` flag of a non-configurable target property. Test: `proxy_descriptor_invariants`
@@ -1658,6 +1659,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_prototype_extensibility_invariants` | Proxy get/set prototype and extensibility trap invariant checks |
 | `proxy_falsy_trap_results` | Proxy falsy trap results preserve Reflect false-returning semantics and Object failure paths |
 | `proxy_integrity_falsy_trap_results` | Proxy falsy preventExtensions trap results make Object.seal and Object.freeze fail |
+| `proxy_integrity_forward` | Proxy Object.seal/Object.freeze forward integrity traps to the target |
 | `proxy_construct` | bounded Proxy construct trap dispatch through dynamic Reflect.construct |
 | `proxy_construct_return_objects` | Proxy construct traps accept returned arrays, functions, and ordinary objects while rejecting primitive results |
 | `object_accessor_arrows` | dynamic lifted-arrow accessor descriptors |

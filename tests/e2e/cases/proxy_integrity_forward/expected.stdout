@@ -1,0 +1,5 @@
+seal result: true true false
+seal desc: false true
+freeze result: true true false
+freeze desc: false false
+events: prevent|ownKeys|define:a:false:absent|prevent|ownKeys|desc:a|define:a:false:false
