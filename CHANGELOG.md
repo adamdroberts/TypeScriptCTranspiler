@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `URL.canParse(input, base?, ...ignored)` now evaluates and ignores trailing arguments after the optional base, including explicit `undefined` base defaults. Test: `url_can_parse`.
 - `Function.apply(...)` now evaluates and ignores trailing arguments after the optional argument list on dynamic and statically known function values, and the core shim declares the supported method. Test: `function_call_apply_defaults`.
 - Dynamic string and array `.at()` now treat omitted indexes as zero while preserving ignored trailing argument evaluation. Tests: `dynamic_string_at`, `dynamic_array_at`.
 - Dynamic string helpers now evaluate and ignore trailing arguments for `substring(...)`, `substr(...)`, `localeCompare(...)`, and `toLocaleString(...)`. Test: `dynamic_string_ignored_arguments`.

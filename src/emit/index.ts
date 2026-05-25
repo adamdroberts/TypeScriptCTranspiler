@@ -27298,18 +27298,21 @@ class Emitter {
         }
         if (this.isUrlConstructorExpression(recvExpr)) {
             if (memberName === "canParse") {
-                if (call.arguments.length < 1 || call.arguments.length > 2) unsupported(call, "URL.canParse expects input and optional base");
+                if (call.arguments.length < 1) unsupported(call, "URL.canParse expects input and optional base");
                 const input = this.emitExpr(call.arguments[0]!);
-                if (call.arguments.length === 2) {
-                    const base = this.emitExpr(call.arguments[1]!);
-                    return this.emitSequencedCall("tsc_url_can_parse_base", T_BOOLEAN, [
+                const baseArg = call.arguments[1];
+                if (baseArg && !this.isUndefinedExpression(baseArg)) {
+                    const base = this.emitExpr(baseArg);
+                    return this.emitSequencedExpr(T_BOOLEAN, [
                         { value: input, target: T_STRING, node: call.arguments[0]! },
-                        { value: base, target: T_STRING, node: call.arguments[1]! },
-                    ]);
+                        { value: base, target: T_STRING, node: baseArg },
+                        ...this.ignoredArgumentSpecs(call.arguments, 2),
+                    ], ([inputC, baseC]) => `tsc_url_can_parse_base(${inputC}, ${baseC})`);
                 }
-                return this.emitSequencedCall("tsc_url_can_parse", T_BOOLEAN, [
+                return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: input, target: T_STRING, node: call.arguments[0]! },
-                ]);
+                    ...this.ignoredArgumentSpecs(call.arguments, baseArg ? 2 : 1),
+                ], ([inputC]) => `tsc_url_can_parse(${inputC})`);
             }
             unsupported(call, `URL.${memberName}`);
         }

@@ -1,3 +1,7 @@
 absolute: true true
 unsupported: false false
 construct: true
+ignored: base
+base ignored: true
+ignored: undefined-base
+undefined base: true

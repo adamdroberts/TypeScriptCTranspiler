@@ -2076,7 +2076,7 @@ interface URL {
 }
 interface URLConstructor {
     new (input: string, base?: string, ...ignored: any[]): URL;
-    canParse(input: string, base?: string): boolean;
+    canParse(input: string, base?: string, ...ignored: any[]): boolean;
 }
 declare var URL: URLConstructor;
 type URLPathLike = string | URL;
