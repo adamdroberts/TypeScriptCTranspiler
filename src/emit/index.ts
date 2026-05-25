@@ -9963,6 +9963,13 @@ class Emitter {
                 seenConsts,
             );
         }
+        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(
+            unwrapped,
+            seenConsts,
+        );
+        if (returnedArrayLength !== null) {
+            return index >= 0 && index < returnedArrayLength ? "present" : "absent";
+        }
         if (
             ts.isNewExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
@@ -10112,6 +10119,18 @@ class Emitter {
                 unwrapped,
                 index,
                 seenConsts,
+            );
+        }
+        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(
+            unwrapped,
+            seenConsts,
+        );
+        if (returnedArrayLength !== null) {
+            if (index < 0 || index >= returnedArrayLength) return "absent";
+            return this.sideEffectFreePrimitiveArrayElementOperandResult(
+                unwrapped,
+                index,
+                new Set(seenConsts),
             );
         }
         if (
