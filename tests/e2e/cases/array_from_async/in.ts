@@ -49,3 +49,13 @@ Array.fromAsync([Promise.resolve("ok"), Promise.reject<string>("bad")]).catch((r
 Array.fromAsync([new Promise<number>(() => {})]).then((_values) => {
     console.log("pending should not run");
 });
+
+const dynamicArraySource: any = [9, "ten", true];
+Array.fromAsync(dynamicArraySource).then((values) => {
+    console.log("dynamic array:", values.join("|"));
+});
+
+const dynamicStringSource: any = "xy";
+Array.fromAsync(dynamicStringSource).then((values) => {
+    console.log("dynamic string:", values.join("|"));
+});

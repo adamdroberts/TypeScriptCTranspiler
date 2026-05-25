@@ -7,3 +7,5 @@ thisArg: 21|22
 promise array: 3|4
 promise set: left|right
 promise reject: bad
+dynamic array: 9|ten|true
+dynamic string: x|y

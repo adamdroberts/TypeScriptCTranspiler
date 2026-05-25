@@ -28392,6 +28392,12 @@ class Emitter {
         const sourceElem = source.ty.kind === "array" || source.ty.kind === "set"
             ? source.ty.elem
             : null;
+        if (source.ty.kind === "value") {
+            if (!sameCType(elem, T_VALUE)) unsupported(itemsArg, "Array.fromAsync(dynamic) result must be Promise<any[]>");
+            return this.emitSequencedExpr(promiseType, [{ value: source, target: T_VALUE, node: itemsArg }], ([items]) =>
+                `tsc_promise_resolve_array(tsc_value_iter_values(${items}))`,
+            );
+        }
         if (sourceElem?.kind === "promise") {
             const sourceArray = source.ty.kind === "set"
                 ? { c: `tsc_set_values(${source.c})`, ty: arrayType(sourceElem) }
