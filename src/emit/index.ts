@@ -1787,8 +1787,7 @@ class Emitter {
             }
         }
         if (
-            ts.isIdentifier(recv) &&
-            this.isUnshadowedGlobalIdentifier(recv, "Buffer") &&
+            this.isBufferConstructorExpression(recv) &&
             (
                 this.isSideEffectFreeBufferStaticCall(method, call.arguments, seenConsts) ||
                 this.isSideEffectFreeBufferAllocationCall(method, call.arguments, seenConsts)
@@ -1966,7 +1965,7 @@ class Emitter {
                 )
             ) ||
             (
-                this.isUnshadowedGlobalIdentifier(recv, "Buffer") &&
+                this.isBufferConstructorExpression(recv) &&
                 this.isSideEffectFreeBufferStaticCall(method, call.arguments, seenConsts)
             ) ||
             (
@@ -2328,8 +2327,7 @@ class Emitter {
         if (
             ts.isCallExpression(unwrapped) &&
             ts.isPropertyAccessExpression(unwrapped.expression) &&
-            ts.isIdentifier(unwrapped.expression.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Buffer") &&
+            this.isBufferConstructorExpression(unwrapped.expression.expression) &&
             this.isSideEffectFreeBufferAllocationCall(unwrapped.expression.name.text, unwrapped.arguments, seenConsts)
         ) {
             return true;
@@ -17120,6 +17118,24 @@ class Emitter {
         );
     }
 
+    private isBufferModuleIdentifier(expr: ts.Expression): boolean {
+        return ts.isIdentifier(expr) && (
+            this.isNamespaceImportFrom(expr, ["buffer", "node:buffer"]) ||
+            this.isDefaultImportFrom(expr, ["buffer", "node:buffer"])
+        );
+    }
+
+    private isBufferConstructorExpression(expr: ts.Expression): boolean {
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        if (ts.isIdentifier(unwrapped)) {
+            return this.isUnshadowedGlobalIdentifier(unwrapped, "Buffer") ||
+                this.isNamedImportFrom(unwrapped, ["buffer", "node:buffer"], "Buffer");
+        }
+        return ts.isPropertyAccessExpression(unwrapped) &&
+            unwrapped.name.text === "Buffer" &&
+            this.isBufferModuleIdentifier(unwrapped.expression);
+    }
+
     private isProcessEnvObject(expr: ts.Expression): boolean {
         if (ts.isIdentifier(expr)) {
             return this.isNamedImportFrom(expr, ["process", "node:process"], "env");
@@ -26903,7 +26919,7 @@ class Emitter {
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Reflect") {
             return this.emitReflectCall(call, memberName);
         }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "Buffer") {
+        if (this.isBufferConstructorExpression(recvExpr)) {
             return this.emitBufferStatic(call, memberName);
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Array" && memberName === "of") {

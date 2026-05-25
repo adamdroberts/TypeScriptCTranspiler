@@ -1485,6 +1485,19 @@ interface BufferConstructor {
     compare(a: Buffer, b: Buffer, ...ignored: any[]): number;
 }
 declare var Buffer: BufferConstructor;
+interface BufferModule {
+    Buffer: BufferConstructor;
+}
+declare module "buffer" {
+    export const Buffer: BufferConstructor;
+    const defaultBuffer: BufferModule;
+    export default defaultBuffer;
+}
+declare module "node:buffer" {
+    export const Buffer: BufferConstructor;
+    const defaultBuffer: BufferModule;
+    export default defaultBuffer;
+}
 
 interface Event {
     readonly type: string;

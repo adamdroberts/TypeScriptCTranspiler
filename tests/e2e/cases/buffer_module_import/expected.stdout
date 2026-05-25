@@ -1,0 +1,4 @@
+named: Hi true
+namespace: AAA 3
+default: Hi! 0
+encoding: true false

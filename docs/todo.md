@@ -22,6 +22,7 @@ This is the next item that most directly expands what programs can be written ag
   - Additional typed/dynamic `String.prototype.normalize(form)` coverage routes invalid-form failures through catchable runtime exceptions. Test: `string_normalize_errors`.
   - Additional BigInt constructor/operator/radix coverage routes invalid string/number, zero division/modulo, invalid exponent, and invalid radix failures through catchable runtime exceptions. Test: `bigint_errors`.
   - Additional URL constructor/base-resolution and file-URL path coverage routes invalid absolute URLs, invalid bases, non-file URL paths, and remote-host file URLs through catchable runtime exceptions. Test: `url_errors`.
+  - Named and default imports from `"buffer"` / `"node:buffer"` route to the supported `Buffer` static helper subset. Test: `buffer_module_import`.
   - Named and default imports from `"url"` / `"node:url"` route to the supported `URL` constructor and `URL.canParse(...)` helpers. Test: `url_module_import`.
   - Additional Buffer coverage routes invalid encodings, bad hex/base64 input, invalid sizes/lengths, out-of-range read/write offsets, and invalid swap widths through catchable runtime exceptions. Test: `buffer_errors`.
   - Additional crypto coverage routes unsupported hash algorithms, invalid random byte sizes, and unsupported digest encodings through catchable runtime exceptions. Test: `crypto_errors`.
