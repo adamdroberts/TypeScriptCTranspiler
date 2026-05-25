@@ -1468,6 +1468,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_require_literal_union` | finite string-literal union annotations provide AOT dynamic require alternatives for parameters, top-level variables, and earlier local variables |
 | `dynamic_require_type_alias` | finite string-literal union type aliases provide AOT dynamic require alternatives for parameters and local variables |
 | `dynamic_require_template_literal_type` | finite template-literal string type aliases provide AOT dynamic require alternatives for parameters and local variables |
+| `dynamic_require_template_literal_numeric_type` | numeric and boolean literal placeholders inside finite template-literal string type aliases provide AOT dynamic require alternatives |
 | `dynamic_require_manifest` | explicit dynamic require manifest compiles a non-finite `require(variable)` allow-list into the AOT graph and finite runtime dispatch |
 | `dynamic_require_manifest_package` | dynamic require manifest package specifiers compile installed package sources into the finite AOT dispatch path |
 | `dynamic_require_manifest_native_package` | dynamic require manifest package specifiers still require native-addon manifest allow-listing for native-addon packages |

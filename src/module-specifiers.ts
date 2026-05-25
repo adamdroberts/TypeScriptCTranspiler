@@ -352,7 +352,7 @@ function templateLiteralTypeTexts(
 ): string[] {
     let values = [typeNode.head.text];
     for (const span of typeNode.templateSpans) {
-        const spanValues = stringLiteralUnionTypeTexts(span.type, seenAliases);
+        const spanValues = templateLiteralSpanTypeTexts(span.type, seenAliases);
         if (spanValues.length === 0) return [];
         values = concatStringAlternatives(values, spanValues);
         if (values.length === 0) return [];
@@ -360,6 +360,54 @@ function templateLiteralTypeTexts(
         if (values.length === 0) return [];
     }
     return dedupeStringAlternatives(values);
+}
+
+function templateLiteralSpanTypeTexts(
+    typeNode: ts.TypeNode | undefined,
+    seenAliases: Set<string>,
+): string[] {
+    if (!typeNode) return [];
+    if (ts.isParenthesizedTypeNode(typeNode)) {
+        return templateLiteralSpanTypeTexts(typeNode.type, seenAliases);
+    }
+    if (ts.isTypeReferenceNode(typeNode) && ts.isIdentifier(typeNode.typeName)) {
+        const aliasName = typeNode.typeName.text;
+        if (seenAliases.has(aliasName)) return [];
+        const alias = visibleTypeAliasDeclaration(typeNode.typeName, typeNode);
+        if (!alias) return [];
+        seenAliases.add(aliasName);
+        const values = templateLiteralSpanTypeTexts(alias.type, seenAliases);
+        seenAliases.delete(aliasName);
+        return values;
+    }
+    if (ts.isTemplateLiteralTypeNode(typeNode)) {
+        return templateLiteralTypeTexts(typeNode, seenAliases);
+    }
+    if (ts.isLiteralTypeNode(typeNode)) {
+        const literal = typeNode.literal;
+        if (ts.isStringLiteral(literal) || ts.isNumericLiteral(literal)) return [literal.text];
+        if (literal.kind === ts.SyntaxKind.TrueKeyword) return ["true"];
+        if (literal.kind === ts.SyntaxKind.FalseKeyword) return ["false"];
+        if (ts.isPrefixUnaryExpression(literal) && ts.isNumericLiteral(literal.operand)) {
+            if (literal.operator === ts.SyntaxKind.MinusToken) return [`-${literal.operand.text}`];
+            if (literal.operator === ts.SyntaxKind.PlusToken) return [literal.operand.text];
+        }
+        return [];
+    }
+    if (!ts.isUnionTypeNode(typeNode)) return [];
+    const values: string[] = [];
+    const seen = new Set<string>();
+    for (const part of typeNode.types) {
+        const partValues = templateLiteralSpanTypeTexts(part, seenAliases);
+        if (partValues.length === 0) return [];
+        for (const value of partValues) {
+            if (seen.has(value)) continue;
+            seen.add(value);
+            values.push(value);
+            if (values.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+    }
+    return values;
 }
 
 function concatStringAlternatives(left: string[], right: string[]): string[] {
