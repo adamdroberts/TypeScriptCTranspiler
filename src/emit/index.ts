@@ -4350,6 +4350,48 @@ class Emitter {
         if (
             ts.isCallExpression(unwrapped) &&
             ts.isPropertyAccessExpression(unwrapped.expression) &&
+            unwrapped.expression.name.text === "toSpliced" &&
+            unwrapped.arguments.length >= 1
+        ) {
+            const sourceElements = this.sideEffectFreeSetArraySourceExpressions(
+                unwrapped.expression.expression,
+                seenConsts,
+            );
+            const startValue = this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[0]!, seenConsts);
+            const deleteValue = unwrapped.arguments[1]
+                ? this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[1], seenConsts)
+                : null;
+            const insertedElements = Array.from(unwrapped.arguments).slice(2);
+            if (
+                sourceElements === null ||
+                startValue === null ||
+                !Number.isFinite(startValue) ||
+                !Number.isInteger(startValue) ||
+                (unwrapped.arguments[1] &&
+                    (deleteValue === null ||
+                        !Number.isFinite(deleteValue) ||
+                        !Number.isInteger(deleteValue))) ||
+                !insertedElements.every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                )
+            ) {
+                return null;
+            }
+            const actualStart = startValue < 0
+                ? Math.max(sourceElements.length + startValue, 0)
+                : Math.min(startValue, sourceElements.length);
+            const actualDelete = unwrapped.arguments[1]
+                ? Math.min(Math.max(deleteValue!, 0), sourceElements.length - actualStart)
+                : sourceElements.length - actualStart;
+            return [
+                ...sourceElements.slice(0, actualStart),
+                ...insertedElements,
+                ...sourceElements.slice(actualStart + actualDelete),
+            ];
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
             (
                 unwrapped.expression.name.text === "reverse" ||
                 unwrapped.expression.name.text === "toReversed"
@@ -4720,6 +4762,48 @@ class Emitter {
             const elements = [...sourceElements];
             elements[actualIndex] = unwrapped.arguments[1]!;
             return elements;
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            unwrapped.expression.name.text === "toSpliced" &&
+            unwrapped.arguments.length >= 1
+        ) {
+            const sourceElements = this.sideEffectFreeMapArraySourceExpressions(
+                unwrapped.expression.expression,
+                seenConsts,
+            );
+            const startValue = this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[0]!, seenConsts);
+            const deleteValue = unwrapped.arguments[1]
+                ? this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[1], seenConsts)
+                : null;
+            const insertedElements = Array.from(unwrapped.arguments).slice(2);
+            if (
+                sourceElements === null ||
+                startValue === null ||
+                !Number.isFinite(startValue) ||
+                !Number.isInteger(startValue) ||
+                (unwrapped.arguments[1] &&
+                    (deleteValue === null ||
+                        !Number.isFinite(deleteValue) ||
+                        !Number.isInteger(deleteValue))) ||
+                !insertedElements.every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                )
+            ) {
+                return null;
+            }
+            const actualStart = startValue < 0
+                ? Math.max(sourceElements.length + startValue, 0)
+                : Math.min(startValue, sourceElements.length);
+            const actualDelete = unwrapped.arguments[1]
+                ? Math.min(Math.max(deleteValue!, 0), sourceElements.length - actualStart)
+                : sourceElements.length - actualStart;
+            return [
+                ...sourceElements.slice(0, actualStart),
+                ...insertedElements,
+                ...sourceElements.slice(actualStart + actualDelete),
+            ];
         }
         if (
             ts.isCallExpression(unwrapped) &&
