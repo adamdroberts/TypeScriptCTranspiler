@@ -383,7 +383,7 @@ double tsc_process_uptime(void) {
     return seconds < 0.0 ? 0.0 : seconds;
 }
 
-tsc_value_t tsc_process_memory_usage(void) {
+static double process_memory_usage_rss(void) {
     double rss = 0.0;
     struct rusage usage;
     if (getrusage(RUSAGE_SELF, &usage) == 0) {
@@ -393,6 +393,15 @@ tsc_value_t tsc_process_memory_usage(void) {
         rss = (double)usage.ru_maxrss * 1024.0;
 #endif
     }
+    return rss;
+}
+
+double tsc_process_memory_usage_rss(void) {
+    return process_memory_usage_rss();
+}
+
+tsc_value_t tsc_process_memory_usage(void) {
+    double rss = process_memory_usage_rss();
     tsc_object_t* out = tsc_object_new();
     tsc_object_set(out, tsc_str_from_lit("rss", 3), tsc_value_num(rss));
     tsc_object_set(out, tsc_str_from_lit("heapTotal", 9), tsc_value_num(0.0));

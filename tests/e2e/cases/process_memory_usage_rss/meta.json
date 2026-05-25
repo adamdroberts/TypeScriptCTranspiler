@@ -1,0 +1,3 @@
+{
+  "description": "process.memoryUsage.rss returns RSS across global, named, and namespace references"
+}

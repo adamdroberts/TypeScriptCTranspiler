@@ -17200,6 +17200,16 @@ class Emitter {
             this.isProcessModuleIdentifier(expr.expression);
     }
 
+    private isProcessMemoryUsageReceiver(expr: ts.Expression): boolean {
+        if (ts.isIdentifier(expr)) {
+            return this.isNamedImportFrom(expr, ["process", "node:process"], "memoryUsage");
+        }
+        return ts.isPropertyAccessExpression(expr) &&
+            expr.name.text === "memoryUsage" &&
+            ts.isIdentifier(expr.expression) &&
+            this.isProcessModuleIdentifier(expr.expression);
+    }
+
     private processStdioStreamReceiverName(expr: ts.Expression): "stdin" | "stdout" | "stderr" | null {
         if (ts.isIdentifier(expr)) {
             if (this.isNamedImportFrom(expr, ["process", "node:process"], "stdin")) return "stdin";
@@ -26916,6 +26926,16 @@ class Emitter {
                 T_BIGINT,
                 this.ignoredArgumentSpecs(call.arguments, 0),
                 () => `tsc_process_hrtime_bigint()`,
+            );
+        }
+        if (
+            this.isProcessMemoryUsageReceiver(recvExpr) &&
+            memberName === "rss"
+        ) {
+            return this.emitSequencedExpr(
+                T_NUMBER,
+                this.ignoredArgumentSpecs(call.arguments, 0),
+                () => `tsc_process_memory_usage_rss()`,
             );
         }
         const processStdioNoopEventStreamName = (

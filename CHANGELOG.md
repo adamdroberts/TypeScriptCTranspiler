@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `process.memoryUsage.rss(...ignored)` now returns the RSS counter directly across global, named, and namespace process references while preserving ignored extra-argument evaluation. Test: `process_memory_usage_rss`.
 - `process.cpuUsage(previousValue, ...ignored)` now accepts previous usage objects for elapsed user/system CPU deltas across global, named, and namespace process references while preserving ignored extra-argument evaluation. Test: `process_cpu_usage_previous`.
 - Dynamic `Object.isSealed(...)` / `Object.isFrozen(...)` now report primitive targets as sealed/frozen, and `Object.preventExtensions(...)`, `Object.seal(...)`, and `Object.freeze(...)` return dynamic primitive targets unchanged, including `null` and `undefined`, while preserving dynamic object integrity updates. Test: `object_dynamic_primitive_integrity`.
 - `Object.getPrototypeOf(null | undefined)` now rejects dynamic nullish targets through the catchable runtime exception path. Test: `object_get_prototype_of_nullish`.

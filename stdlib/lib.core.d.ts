@@ -675,6 +675,10 @@ interface ProcessMemoryUsage {
     external: number;
     arrayBuffers: number;
 }
+interface ProcessMemoryUsageFn {
+    (...ignored: any[]): any;
+    rss(...ignored: any[]): number;
+}
 interface ProcessHrtime {
     (time?: number[], ...ignored: any[]): number[];
     bigint(...ignored: any[]): bigint;
@@ -775,7 +779,7 @@ interface Process {
     getegid(...ignored: any[]): number;
     getgroups(...ignored: any[]): number[];
     umask(mask?: number, ...ignored: any[]): number;
-    memoryUsage(...ignored: any[]): any;
+    memoryUsage: ProcessMemoryUsageFn;
     cpuUsage(previousValue?: any, ...ignored: any[]): any;
     resourceUsage(...ignored: any[]): any;
     kill(pid: number, signal?: 0 | 9 | 15 | "SIGTERM" | "SIGKILL"): boolean;
