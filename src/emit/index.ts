@@ -10987,6 +10987,7 @@ class Emitter {
         if (source) {
             const exports = this.commonJsObjectAssignDefinePropertyObjectExports(cur, source);
             if (!exports) return false;
+            if (this.commonJsDescriptorObjectUsesFromEntriesDescriptors(source.arguments[0]!)) return false;
             for (const exported of exports) {
                 if (exported.right) {
                     if (!this.isCommonJsModuleExportsDefaultValue(exported.right)) return false;
@@ -11025,6 +11026,14 @@ class Emitter {
         if (!ts.isCallExpression(cur)) return null;
         const descriptors = this.commonJsObjectAssignDescriptorObjectDescriptors(cur);
         return descriptors ? this.commonJsDefinePropertiesExportDescriptorEntries(descriptors) : null;
+    }
+
+    private commonJsDescriptorObjectUsesFromEntriesDescriptors(source: ts.Expression): boolean {
+        let cur = source;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isCallExpression(cur)) return false;
+        const descriptors = this.commonJsObjectAssignDescriptorObjectDescriptors(cur);
+        return !!descriptors && !!this.commonJsDefinePropertiesFromEntriesCall(descriptors);
     }
 
     private commonJsObjectAssignExportSourceEntries(source: ts.Expression): CommonJsObjectAssignExportEntry[] | null {
@@ -12177,6 +12186,7 @@ class Emitter {
         let cur: ts.Expression = expr;
         while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
         if (!ts.isCallExpression(cur) || !this.isObjectDefinePropertyCall(cur)) return true;
+        if (this.commonJsDescriptorObjectUsesFromEntriesDescriptors(cur.arguments[0]!)) return false;
         const exportInfo = this.commonJsDefinePropertyExportFromKeyAndDescriptor(cur, cur.arguments[1]!, cur.arguments[2]!);
         return !!exportInfo?.right && this.isCommonJsModuleExportsDefaultValue(exportInfo.right);
     }
