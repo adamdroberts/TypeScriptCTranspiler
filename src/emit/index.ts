@@ -36820,9 +36820,9 @@ class Emitter {
         unsupported(call, `Buffer method .${method}`);
     }
 
-    private emitBufferOwnKeys(objExpr: ts.Expression, obj: EmitResult): EmitResult {
+    private emitBufferOwnKeys(objExpr: ts.Expression, obj: EmitResult, ignored: SequencedCallArg[] = []): EmitResult {
         if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer own keys on non-buffer");
-        return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: objExpr }], ([buffer]) => {
+        return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: objExpr }, ...ignored], ([buffer]) => {
             const source = this.freshTemp("_bok_src");
             const out = this.freshTemp("_bok");
             const idx = this.freshTemp("_bok_i");
@@ -37953,32 +37953,34 @@ class Emitter {
             return created;
         }
         if (name === "getOwnPropertyNames") {
-            if (args.length !== 1) unsupported(call, "Object.getOwnPropertyNames expects object");
+            if (args.length < 1) unsupported(call, "Object.getOwnPropertyNames expects object");
+            const ignored = this.ignoredArgumentSpecs(args, 1);
             if (nonStringPrimitiveObjectArg) {
                 const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }], ([o]) =>
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }, ...ignored], ([o]) =>
                     `({ (void)${o}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
                 );
             }
             if (emptyOwnBuiltinObjectArg) {
                 const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }], ([o]) =>
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }, ...ignored], ([o]) =>
                     `({ (void)${o}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
                 );
             }
             if (mapped.kind === "buffer") {
                 const obj = this.emitExpr(arg);
-                return this.emitBufferOwnKeys(arg, obj);
+                return this.emitBufferOwnKeys(arg, obj, ignored);
             }
             if (mapped.kind === "string") {
                 const obj = this.emitExpr(arg);
-                return this.emitSequencedCall("tsc_value_own_keys", arrayType(T_STRING), [
+                return this.emitSequencedExpr(arrayType(T_STRING), [
                     { value: obj, target: T_VALUE, node: arg },
-                ]);
+                    ...ignored,
+                ], ([o]) => `tsc_value_own_keys(${o})`);
             }
             if (mapped.kind === "array") {
                 const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }], ([arr]) => {
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, target: mapped, node: arg }, ...ignored], ([arr]) => {
                     const source = this.freshTemp("_apn_src");
                     const out = this.freshTemp("_apn");
                     const idx = this.freshTemp("_apn_i");
@@ -37989,9 +37991,10 @@ class Emitter {
             }
             if (mapped.kind === "function") {
                 const obj = this.emitExpr(arg);
-                return this.emitSequencedCall("tsc_value_own_keys", arrayType(T_STRING), [
+                return this.emitSequencedExpr(arrayType(T_STRING), [
                     { value: obj, target: T_VALUE, node: arg },
-                ]);
+                    ...ignored,
+                ], ([o]) => `tsc_value_own_keys(${o})`);
             }
             if (mapped.kind === "class") {
                 const obj = this.emitExpr(arg);
@@ -38009,7 +38012,7 @@ class Emitter {
                     pieces.push(`tsc_array_push_raw(${av}, &${kv})`);
                 }
                 pieces.push(av);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }], ([o]) =>
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }, ...ignored], ([o]) =>
                     `({ (void)${o}; ${pieces.join("; ")}; })`,
                 );
             }
@@ -38019,6 +38022,7 @@ class Emitter {
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(arrayType(T_STRING), [
                 { value: obj, target: T_VALUE, node: arg },
+                ...ignored,
             ], ([o]) =>
                 `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyNames target must not be null or undefined")); tsc_value_own_keys(${o!}); })`,
             );

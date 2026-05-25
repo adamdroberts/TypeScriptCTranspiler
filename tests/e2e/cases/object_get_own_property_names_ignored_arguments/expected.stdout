@@ -1,0 +1,5 @@
+typed: x|y
+array: 0|1|length
+string: 0|1|length
+dynamic: alpha|beta
+marks: abcde

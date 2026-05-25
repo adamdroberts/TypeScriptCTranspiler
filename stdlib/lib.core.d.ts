@@ -284,7 +284,7 @@ interface ObjectConstructor {
     getPrototypeOf(o: any): any;
     getOwnPropertyDescriptor(o: any, p: string): any;
     getOwnPropertyDescriptors(o: any): any;
-    getOwnPropertyNames(o: any): string[];
+    getOwnPropertyNames(o: any, ...ignored: any[]): string[];
     getOwnPropertySymbols(o: any, ...ignored: any[]): symbol[];
     hasOwn(o: any, p: string): boolean;
     is(value1: any, value2: any): boolean;

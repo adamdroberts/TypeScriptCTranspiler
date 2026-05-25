@@ -1,0 +1,3 @@
+{
+  "description": "Object.getOwnPropertyNames evaluates and ignores trailing arguments"
+}
