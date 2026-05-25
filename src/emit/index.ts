@@ -4308,6 +4308,23 @@ class Emitter {
             }
             return elements;
         }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            (
+                unwrapped.expression.name.text === "reverse" ||
+                unwrapped.expression.name.text === "toReversed"
+            ) &&
+            Array.from(unwrapped.arguments).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            )
+        ) {
+            const sourceElements = this.sideEffectFreeSetArraySourceExpressions(
+                unwrapped.expression.expression,
+                seenConsts,
+            );
+            return sourceElements ? [...sourceElements].reverse() : null;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeSetArraySourceExpressions(init, seenConsts) : null;
     }
@@ -4611,6 +4628,23 @@ class Emitter {
                 elements.push(...argElements);
             }
             return elements;
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            (
+                unwrapped.expression.name.text === "reverse" ||
+                unwrapped.expression.name.text === "toReversed"
+            ) &&
+            Array.from(unwrapped.arguments).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            )
+        ) {
+            const sourceElements = this.sideEffectFreeMapArraySourceExpressions(
+                unwrapped.expression.expression,
+                seenConsts,
+            );
+            return sourceElements ? [...sourceElements].reverse() : null;
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeMapArraySourceExpressions(init, seenConsts) : null;
