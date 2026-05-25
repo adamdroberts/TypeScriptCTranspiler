@@ -708,8 +708,8 @@ interface ProcessWritableStream {
     removeListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     setDefaultEncoding(encoding: string, ...ignored: any[]): void;
     uncork(...ignored: any[]): void;
-    write(chunk: string | Buffer, callback?: () => void): boolean;
-    write(chunk: string | Buffer, encoding?: string, callback?: () => void): boolean;
+    write(chunk: string | Buffer, callback?: () => void, ...ignored: any[]): boolean;
+    write(chunk: string | Buffer, encoding?: string, callback?: () => void, ...ignored: any[]): boolean;
 }
 interface ProcessReadableStream {
     readonly closed: boolean;

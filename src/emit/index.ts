@@ -27157,7 +27157,7 @@ class Emitter {
             : null;
         if (processWritableStreamName) {
             const streamName = processWritableStreamName;
-            if (call.arguments.length < 1 || call.arguments.length > 3) {
+            if (call.arguments.length < 1) {
                 unsupported(call, `process.${streamName}.write expects a string or Buffer with optional encoding/callback`);
             }
             const chunk = this.emitExpr(call.arguments[0]!);
@@ -27176,7 +27176,7 @@ class Emitter {
                         encoding = { value: second, node: secondNode };
                     }
                 }
-            } else if (call.arguments.length === 3) {
+            } else if (call.arguments.length >= 3) {
                 const encodingNode = call.arguments[1]!;
                 const callbackNode = call.arguments[2]!;
                 if (!this.isUndefinedExpression(encodingNode)) {
@@ -27197,9 +27197,10 @@ class Emitter {
             ];
             if (encoding) specs.push({ value: encoding.value, target: T_STRING, node: encoding.node });
             if (callback) specs.push({ value: callback.value, target: callback.value.ty, node: callback.node });
+            specs.push(...this.ignoredArgumentSpecs(call.arguments, Math.min(call.arguments.length, 3)));
             return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) => {
                 const chunkC = vals[0]!;
-                const callbackC = callback ? vals[vals.length - 1]! : null;
+                const callbackC = callback ? vals[1 + (encoding ? 1 : 0)]! : null;
                 const callbackCall = callbackC
                     ? `${callbackC}->fn(${[`${callbackC}->env`, ...(callback!.value.ty.thisParam ? ["tsc_value_undefined()"] : [])].join(", ")})`
                     : "";
