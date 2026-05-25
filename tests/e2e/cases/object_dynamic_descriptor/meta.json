@@ -1,0 +1,3 @@
+{
+  "description": "Object.defineProperty and Reflect.defineProperty accept runtime data descriptor objects"
+}

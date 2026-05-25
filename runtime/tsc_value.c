@@ -515,6 +515,68 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
     return false;
 }
 
+static bool descriptor_field(tsc_value_t desc, const char* name, size_t len, tsc_value_t* out) {
+    const tsc_str_t* key = tsc_str_from_lit(name, len);
+    if (!tsc_value_has_prop(desc, key)) return false;
+    if (out) *out = tsc_value_get_prop(desc, key);
+    return true;
+}
+
+bool tsc_value_define_property_descriptor(tsc_value_t v, tsc_str_t* key, tsc_value_t desc) {
+    if (!value_is_box(desc) || value_tag(desc) != TSC_VALUE_TAG_OBJECT) {
+        tsc_throw_str(tsc_str_from_cstr("Object.defineProperty descriptor must be an object"));
+    }
+    tsc_value_t value = tsc_value_undefined();
+    tsc_value_t writable_value = tsc_value_undefined();
+    tsc_value_t enumerable_value = tsc_value_undefined();
+    tsc_value_t configurable_value = tsc_value_undefined();
+    tsc_value_t getter_value = tsc_value_undefined();
+    tsc_value_t setter_value = tsc_value_undefined();
+    bool has_value = descriptor_field(desc, "value", 5, &value);
+    bool has_writable = descriptor_field(desc, "writable", 8, &writable_value);
+    bool has_enumerable = descriptor_field(desc, "enumerable", 10, &enumerable_value);
+    bool has_configurable = descriptor_field(desc, "configurable", 12, &configurable_value);
+    bool has_getter = descriptor_field(desc, "get", 3, &getter_value);
+    bool has_setter = descriptor_field(desc, "set", 3, &setter_value);
+    if (has_getter || has_setter) {
+        if (has_value || has_writable) {
+            tsc_throw_str(tsc_str_from_cstr("Object.defineProperty descriptor cannot mix value with get/set"));
+        }
+        if (
+            (has_getter && !tsc_value_is_undefined(getter_value)) ||
+            (has_setter && !tsc_value_is_undefined(setter_value))
+        ) {
+            tsc_throw_str(tsc_str_from_cstr("Object.defineProperty dynamic accessor descriptors are not supported"));
+        }
+        return tsc_value_define_accessor_desc(
+            v,
+            key,
+            NULL,
+            NULL,
+            has_getter,
+            NULL,
+            NULL,
+            has_setter,
+            has_enumerable ? tsc_value_is_truthy(enumerable_value) : false,
+            has_enumerable,
+            has_configurable ? tsc_value_is_truthy(configurable_value) : false,
+            has_configurable
+        );
+    }
+    return tsc_value_define_property_desc(
+        v,
+        key,
+        value,
+        has_value,
+        has_writable ? tsc_value_is_truthy(writable_value) : false,
+        has_writable,
+        has_enumerable ? tsc_value_is_truthy(enumerable_value) : false,
+        has_enumerable,
+        has_configurable ? tsc_value_is_truthy(configurable_value) : false,
+        has_configurable
+    );
+}
+
 bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_getter_t getter, void* getter_env, bool has_getter, tsc_accessor_setter_t setter, void* setter_env, bool has_setter, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_define_accessor((tsc_object_t*)value_ptr(v), key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
@@ -525,6 +587,11 @@ bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_
 bool tsc_reflect_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
     require_reflect_object_target(v, "Reflect.defineProperty target must be an object");
     return tsc_value_define_property_desc(v, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
+}
+
+bool tsc_reflect_define_property_descriptor(tsc_value_t v, tsc_str_t* key, tsc_value_t desc) {
+    require_reflect_object_target(v, "Reflect.defineProperty target must be an object");
+    return tsc_value_define_property_descriptor(v, key, desc);
 }
 
 bool tsc_reflect_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_getter_t getter, void* getter_env, bool has_getter, tsc_accessor_setter_t setter, void* setter_env, bool has_setter, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {

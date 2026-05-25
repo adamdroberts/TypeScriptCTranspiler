@@ -1,0 +1,7 @@
+object define: true 7
+object keys: a
+reflect define: true x
+reflect keys: name
+reflect failed: false
+array define: true first 1
+function define: true Named

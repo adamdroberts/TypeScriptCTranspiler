@@ -38269,13 +38269,29 @@ class Emitter {
             if (args.length !== 3) unsupported(call, "Object.defineProperty expects object, key, descriptor");
             if (mapped.kind === "array") {
                 const obj = this.emitExpr(arg);
-                const desc = this.descriptorData(args[2]!);
-                return this.emitTypedArrayDefineProperty(arg, obj, args[1]!, desc, true);
+                if (ts.isObjectLiteralExpression(args[2]!)) {
+                    const desc = this.descriptorData(args[2]!);
+                    return this.emitTypedArrayDefineProperty(arg, obj, args[1]!, desc, true);
+                }
             }
-            if (mapped.kind !== "value" && mapped.kind !== "function") {
+            if (mapped.kind !== "value" && mapped.kind !== "function" && mapped.kind !== "array") {
                 unsupported(arg, "Object.defineProperty currently supports dynamic objects, arrays, and functions only");
             }
             const key = this.emitExpr(args[1]!);
+            if (!ts.isObjectLiteralExpression(args[2]!)) {
+                const descValue = this.emitExpr(args[2]!);
+                const obj = this.emitExpr(arg);
+                const objectDefineReturnType = (mapped.kind === "function" || mapped.kind === "array") ? mapped : T_VALUE;
+                return this.emitSequencedExpr(
+                    objectDefineReturnType,
+                    [
+                        { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
+                        { value: key, target: T_STRING, node: args[1]! },
+                        { value: descValue, target: T_VALUE, node: args[2]! },
+                    ],
+                    ([o, k, d]) => `({ if (!tsc_value_define_property_descriptor(${dynamicObjectArg(o!)}, ${k}, ${d})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`,
+                );
+            }
             const desc = this.descriptorData(args[2]!);
             const obj = this.emitExpr(arg);
             const objectDefineReturnType = mapped.kind === "function" ? mapped : T_VALUE;
@@ -39592,12 +39608,21 @@ class Emitter {
                 return this.emitReflectConstruct(call);
             case "defineProperty": {
                 if (args.length !== 3) unsupported(call, "Reflect.defineProperty expects target, key, and descriptor");
-                const desc = this.descriptorData(args[2]!);
                 const target = this.emitExpr(args[0]!);
-                if (target.ty.kind === "array") {
+                if (target.ty.kind === "array" && ts.isObjectLiteralExpression(args[2]!)) {
+                    const desc = this.descriptorData(args[2]!);
                     return this.emitTypedArrayDefineProperty(args[0]!, target, args[1]!, desc, false);
                 }
                 const key = this.emitExpr(args[1]!);
+                if (!ts.isObjectLiteralExpression(args[2]!)) {
+                    const descValue = this.emitExpr(args[2]!);
+                    return this.emitSequencedCall("tsc_reflect_define_property_descriptor", T_BOOLEAN, [
+                        { value: target, target: T_VALUE, node: args[0]! },
+                        { value: key, target: T_STRING, node: args[1]! },
+                        { value: descValue, target: T_VALUE, node: args[2]! },
+                    ]);
+                }
+                const desc = this.descriptorData(args[2]!);
                 if (desc.kind === "accessor") {
                     const specs: SequencedCallArg[] = [
                         { value: target, target: T_VALUE, node: args[0]! },
