@@ -1634,7 +1634,7 @@ class Emitter {
             call.arguments.length === 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
         ) {
-            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) ||
+            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) ||
                 this.isSideEffectFreeNonNullishPrimitiveObjectOperand(call.arguments[0]!, seenConsts);
         }
         if (
@@ -1643,7 +1643,7 @@ class Emitter {
             call.arguments.length === 2 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
         ) {
-            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) &&
+            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) &&
                 this.isSideEffectFreeObjectCreatePrototypeOperand(call.arguments[1]!, seenConsts);
         }
         if (
@@ -1662,7 +1662,7 @@ class Emitter {
             this.isUnshadowedGlobalIdentifier(recv, "Object")
         ) {
             const [target, ...sources] = Array.from(call.arguments);
-            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(target!, seenConsts) &&
+            return this.isSideEffectFreeFreshObjectMutationTarget(target!, seenConsts) &&
                 sources.every((source) =>
                     this.isSideEffectFreeObjectAssignSourceOperand(source, seenConsts)
                 );
@@ -1673,7 +1673,7 @@ class Emitter {
             call.arguments.length === 3 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
         ) {
-            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) &&
+            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) &&
                 this.isSideEffectFreePropertyKeyCoercion(call.arguments[1]!, seenConsts) &&
                 this.isSideEffectFreeDataPropertyDescriptor(call.arguments[2]!, seenConsts);
         }
@@ -1683,7 +1683,7 @@ class Emitter {
             call.arguments.length === 2 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
         ) {
-            return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) &&
+            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) &&
                 this.isSideEffectFreeDataPropertyDescriptorMap(call.arguments[1]!, seenConsts);
         }
         if (
