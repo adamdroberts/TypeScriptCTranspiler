@@ -517,6 +517,8 @@ const unused_promise_resolve_object_symbols_flat_map_length = Promise.resolve(Ob
 const unused_promise_resolve_object_symbols_map_element = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_map_element: 1 }).map(() => "dead_promise_resolve_object_symbols_map_element_callback")[0]);
 const unused_promise_resolve_object_symbols_filter_element = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_filter_element: 1 }).filter(() => "dead_promise_resolve_object_symbols_filter_element_callback".length > 0)[0]);
 const unused_promise_resolve_object_symbols_flat_map_element = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_flat_map_element: 1 }).flatMap(() => ["dead_promise_resolve_object_symbols_flat_map_element_callback"])[0]);
+const unused_promise_resolve_object_symbols_slice_from_length = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_slice_from_length: 1 }).slice(1).length);
+const unused_promise_resolve_object_symbols_slice_range_element = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_slice_range_element: 1 }).slice(1, 2)[0]);
 const unused_promise_resolve_object_extensible_call = Promise.resolve(Object.isExtensible({ dead_promise_resolve_object_extensible: 1 }));
 const unused_promise_resolve_object_sealed_call = Promise.resolve(Object.isSealed({ dead_promise_resolve_object_sealed: 1 }));
 const unused_promise_resolve_object_frozen_call = Promise.resolve(Object.isFrozen({ dead_promise_resolve_object_frozen: 1 }));
@@ -3908,6 +3910,8 @@ function usedLocal(value: number): number {
     Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_map_element: 1 })).map(() => "local_dead_object_symbols_map_element_callback")[0];
     Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_filter_element: 1 })).filter(() => "local_dead_object_symbols_filter_element_callback".length > 0)[0];
     Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_flat_map_element: 1 })).flatMap(() => ["local_dead_object_symbols_flat_map_element_callback"])[0];
+    Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_slice_from_length: 1 })).slice(1).length;
+    Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_slice_range_element: 1 })).slice(1, 2)[0];
     Object.getOwnPropertyDescriptor("local_dead_object_primitive_descriptor", "0");
     Object.getOwnPropertyDescriptors("local_dead_object_primitive_descriptors");
     Object.hasOwn("local_dead_object_primitive_has_own", "0");

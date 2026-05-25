@@ -4518,6 +4518,16 @@ class Emitter {
                 }
                 if (receiverLength === 0) {
                     if (
+                        method === "slice" &&
+                        unwrapped.arguments.length >= 1 &&
+                        unwrapped.arguments.length <= 2 &&
+                        Array.from(unwrapped.arguments).every((arg) =>
+                            this.isSideEffectFreePrimitiveNumberCoercion(arg, seenConsts)
+                        )
+                    ) {
+                        return 0;
+                    }
+                    if (
                         (method === "sort" || method === "toSorted") &&
                         unwrapped.arguments.length === 0
                     ) {

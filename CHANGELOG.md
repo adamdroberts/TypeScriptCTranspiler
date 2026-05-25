@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now preserves empty returned-array lengths through numeric-argument `slice(...)` calls, including unused `Promise.resolve(...)` length and absent element reads. Test: `generated_c_dce_const`.
 - Generated-C DCE now derives empty returned-array lengths through pure `map(...)`, `filter(...)`, and `flatMap(...)` calls on statically empty receivers, including unused `Promise.resolve(...)` length and absent element reads. Test: `generated_c_dce_const`.
 - Generated-C DCE now preserves empty returned-array lengths through `reverse()`, argument-free `sort()`, and argument-free `toSorted()` chains, including absent element reads from empty `Object.getOwnPropertySymbols(...)` results. Test: `generated_c_dce_const`.
 - Generated-C DCE now proves primitive and absent element reads from empty returned-array `toSpliced(...)` insertion results, enabling unused `Promise.resolve(...)` and direct expression pruning. Test: `generated_c_dce_const`.
