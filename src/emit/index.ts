@@ -4534,6 +4534,28 @@ class Emitter {
                     }
                 }
                 if (
+                    method === "copyWithin" &&
+                    unwrapped.arguments.length >= 2 &&
+                    unwrapped.arguments.length <= 3 &&
+                    Array.from(unwrapped.arguments).every((arg) =>
+                        this.isSideEffectFreePrimitiveNumberCoercion(arg, seenConsts)
+                    )
+                ) {
+                    return receiverLength;
+                }
+                if (
+                    method === "fill" &&
+                    unwrapped.arguments.length >= 1 &&
+                    unwrapped.arguments.length <= 3 &&
+                    this.isSideEffectFreeTopLevelConstInitializer(unwrapped.arguments[0]!, seenConsts) &&
+                    (!unwrapped.arguments[1] ||
+                        this.isSideEffectFreePrimitiveNumberCoercion(unwrapped.arguments[1], seenConsts)) &&
+                    (!unwrapped.arguments[2] ||
+                        this.isSideEffectFreePrimitiveNumberCoercion(unwrapped.arguments[2], seenConsts))
+                ) {
+                    return receiverLength;
+                }
+                if (
                     method === "flat" &&
                     receiverLength === 0 &&
                     unwrapped.arguments.length <= 1 &&

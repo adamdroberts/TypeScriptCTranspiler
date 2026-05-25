@@ -1123,6 +1123,10 @@ const unused_object_values_pop_call = Object.values({ dead_object_values_pop: "d
 const unused_array_from_set_shift_call = Array.from(new Set(["dead_array_from_set_shift"])).shift();
 const unused_array_fill_call = ["dead_array_fill", "dead_array_fill_tail"].fill("dead_array_fill_value", 0, 1);
 const unused_array_copy_within_call = ["dead_array_copy_within", "dead_array_copy_within_tail"].copyWithin(0, 1);
+const unused_promise_resolve_array_of_fill_length = Promise.resolve(Array.of("dead_promise_resolve_array_of_fill_length", "dead_promise_resolve_array_of_fill_length_tail").fill("dead_promise_resolve_array_of_fill_length_value").length);
+const unused_promise_resolve_array_of_copy_within_length = Promise.resolve(Array.of("dead_promise_resolve_array_of_copy_within_length", "dead_promise_resolve_array_of_copy_within_length_tail").copyWithin(0, 1).length);
+const unused_promise_resolve_array_of_fill_absent_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_fill_absent_element", "dead_promise_resolve_array_of_fill_absent_element_tail").fill("dead_promise_resolve_array_of_fill_absent_element_value")[2]);
+const unused_promise_resolve_array_of_copy_within_absent_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_copy_within_absent_element", "dead_promise_resolve_array_of_copy_within_absent_element_tail").copyWithin(0, 1)[2]);
 const unused_array_push_call = ["dead_array_push"].push("dead_array_push_value");
 const unused_array_unshift_call = ["dead_array_unshift"].unshift("dead_array_unshift_value");
 const unused_object_keys_fill_call = Object.keys({ dead_object_keys_fill: 1 }).fill("dead_object_keys_fill_value");
@@ -3639,6 +3643,10 @@ function usedLocal(value: number): number {
     Array.from(new Set(["local_dead_array_from_set_shift"])).shift();
     ["local_dead_array_fill", "local_dead_array_fill_tail"].fill("local_dead_array_fill_value", 0, 1);
     ["local_dead_array_copy_within", "local_dead_array_copy_within_tail"].copyWithin(0, 1);
+    Array.of("local_dead_array_of_fill_length", "local_dead_array_of_fill_length_tail").fill("local_dead_array_of_fill_length_value").length;
+    Array.of("local_dead_array_of_copy_within_length", "local_dead_array_of_copy_within_length_tail").copyWithin(0, 1).length;
+    Array.of("local_dead_array_of_fill_absent_element", "local_dead_array_of_fill_absent_element_tail").fill("local_dead_array_of_fill_absent_element_value")[2];
+    Array.of("local_dead_array_of_copy_within_absent_element", "local_dead_array_of_copy_within_absent_element_tail").copyWithin(0, 1)[2];
     ["local_dead_array_push"].push("local_dead_array_push_value");
     ["local_dead_array_unshift"].unshift("local_dead_array_unshift_value");
     Object.keys({ local_dead_object_keys_fill: 1 }).fill("local_dead_object_keys_fill_value");
