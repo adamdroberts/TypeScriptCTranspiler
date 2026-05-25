@@ -35125,24 +35125,26 @@ class Emitter {
         if (!options || this.isUndefinedExpression(options)) {
             return { recursive: false, mode: { ...defaultMode, node: options ?? undefined } };
         }
-        if (!ts.isObjectLiteralExpression(options)) {
-            const mode = this.emitExpr(options);
+        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (!ts.isObjectLiteralExpression(resolvedOptions)) {
+            const mode = this.emitExpr(resolvedOptions);
             if (mode.ty.kind !== "number") unsupported(options, `${label} mode must be numeric in this subset`);
-            return { recursive: false, mode: { value: mode, target: T_NUMBER, node: options } };
+            return { recursive: false, mode: { value: mode, target: T_NUMBER, node: resolvedOptions } };
         }
         let recursive = false;
         let modeArg = defaultMode;
-        for (const prop of options.properties) {
+        for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
                 unsupported(prop, `${label} options only support recursive and mode property assignments`);
             }
             const key = this.staticPropertyName(prop.name);
             if (key === "recursive") {
-                if (this.isUndefinedExpression(prop.initializer)) {
+                const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+                if (this.isUndefinedExpression(valueNode)) {
                     recursive = false;
                     continue;
                 }
-                const value = this.fsBooleanOptionValue(prop.initializer);
+                const value = this.fsBooleanOptionValue(valueNode);
                 if (value === null) {
                     unsupported(prop.initializer, `${label}.recursive must be a boolean literal in this subset`);
                 }
@@ -35150,13 +35152,14 @@ class Emitter {
                 continue;
             }
             if (key === "mode") {
-                if (this.isUndefinedExpression(prop.initializer)) {
+                const modeNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+                if (this.isUndefinedExpression(modeNode)) {
                     modeArg = defaultMode;
                     continue;
                 }
-                const mode = this.emitExpr(prop.initializer);
+                const mode = this.emitExpr(modeNode);
                 if (mode.ty.kind !== "number") unsupported(prop.initializer, `${label}.mode must be numeric in this subset`);
-                modeArg = { value: mode, target: T_NUMBER, node: prop.initializer };
+                modeArg = { value: mode, target: T_NUMBER, node: modeNode };
                 continue;
             }
             unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
@@ -35168,31 +35171,34 @@ class Emitter {
         const out = { recursive: false, force: true, errorOnExist: false, dereference: false, verbatimSymlinks: false, preserveTimestamps: false };
         let mode: SequencedCallArg = { value: { c: "0.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
         if (!options || this.isUndefinedExpression(options)) return { ...out, mode };
-        if (!ts.isObjectLiteralExpression(options)) {
+        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, `${label} options must be an object literal in this subset`);
         }
-        for (const prop of options.properties) {
+        for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
                 unsupported(prop, `${label} options only support boolean property assignments plus numeric mode`);
             }
             const key = this.staticPropertyName(prop.name);
             if (key === "mode") {
-                if (this.isUndefinedExpression(prop.initializer)) {
-                    mode = { value: { c: "0.0", ty: T_NUMBER }, target: T_NUMBER, node: prop.initializer };
+                const modeNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+                if (this.isUndefinedExpression(modeNode)) {
+                    mode = { value: { c: "0.0", ty: T_NUMBER }, target: T_NUMBER, node: modeNode };
                     continue;
                 }
-                const value = this.emitExpr(prop.initializer);
+                const value = this.emitExpr(modeNode);
                 if (value.ty.kind !== "number") unsupported(prop.initializer, `${label}.mode must be numeric in this subset`);
-                mode = { value, target: T_NUMBER, node: prop.initializer };
+                mode = { value, target: T_NUMBER, node: modeNode };
                 continue;
             }
             if (key !== "recursive" && key !== "force" && key !== "errorOnExist" && key !== "dereference" && key !== "verbatimSymlinks" && key !== "preserveTimestamps") {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
-            if (this.isUndefinedExpression(prop.initializer)) {
+            const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+            if (this.isUndefinedExpression(valueNode)) {
                 continue;
             }
-            const value = this.fsBooleanOptionValue(prop.initializer);
+            const value = this.fsBooleanOptionValue(valueNode);
             if (value === null) {
                 unsupported(prop.initializer, `${label}.${key} must be a boolean literal in this subset`);
             }
@@ -35215,19 +35221,21 @@ class Emitter {
         const out: Record<string, boolean> = {};
         for (const key of allowed) out[key] = false;
         if (!options || this.isUndefinedExpression(options)) return out;
-        if (!ts.isObjectLiteralExpression(options)) {
+        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, `${label} options must be an object literal in this subset`);
         }
-        for (const prop of options.properties) {
+        for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
                 unsupported(prop, `${label} options only support boolean property assignments${ignoredNumberKeys.length ? " plus numeric retry options" : ""}`);
             }
             const key = this.staticPropertyName(prop.name);
+            const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
             if (key && ignoredNumberKeys.includes(key)) {
-                if (this.isUndefinedExpression(prop.initializer)) {
+                if (this.isUndefinedExpression(valueNode)) {
                     continue;
                 }
-                const value = this.sideEffectFreeNumericLiteralSameValueZeroValue(prop.initializer, new Set());
+                const value = this.sideEffectFreeNumericLiteralSameValueZeroValue(valueNode, new Set());
                 if (value === null || !Number.isFinite(value)) {
                     unsupported(prop.initializer, `${label}.${key} must be a numeric literal in this subset`);
                 }
@@ -35236,11 +35244,11 @@ class Emitter {
             if (!key || !allowed.includes(key)) {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
-            if (this.isUndefinedExpression(prop.initializer)) {
+            if (this.isUndefinedExpression(valueNode)) {
                 out[key] = false;
                 continue;
             }
-            const value = this.fsBooleanOptionValue(prop.initializer);
+            const value = this.fsBooleanOptionValue(valueNode);
             if (value === null) {
                 unsupported(prop.initializer, `${label}.${key} must be a boolean literal in this subset`);
             }
