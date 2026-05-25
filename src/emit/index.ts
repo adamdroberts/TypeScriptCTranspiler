@@ -15565,6 +15565,13 @@ class Emitter {
                     return;
                 }
                 if (
+                    ts.isVariableDeclaration(parent) &&
+                    parent.initializer === n &&
+                    this.nonEscapingObjectAliasUsesAreSafe(parent)
+                ) {
+                    return;
+                }
+                if (
                     ts.isBinaryExpression(parent) &&
                     parent.right === n &&
                     parent.operatorToken.kind === ts.SyntaxKind.InKeyword
@@ -15614,6 +15621,13 @@ class Emitter {
                     return;
                 }
                 if (
+                    ts.isVariableDeclaration(parent) &&
+                    parent.initializer === n &&
+                    this.nonEscapingObjectAliasUsesAreSafe(parent)
+                ) {
+                    return;
+                }
+                if (
                     ts.isBinaryExpression(parent) &&
                     parent.right === n &&
                     parent.operatorToken.kind === ts.SyntaxKind.InKeyword
@@ -15630,6 +15644,45 @@ class Emitter {
         };
         visit(scope);
         return escapes ? null : { cls: mapped.className, init, targetType };
+    }
+
+    private nonEscapingObjectAliasUsesAreSafe(d: ts.VariableDeclaration): boolean {
+        if (!ts.isIdentifier(d.name)) return false;
+        const sym = this.symbolForIdentifier(d.name);
+        if (!sym) return false;
+        const stmt = d.parent.parent;
+        const scope = stmt?.parent;
+        if (!scope || !ts.isBlock(scope)) return false;
+        let safe = true;
+        const visit = (n: ts.Node): void => {
+            if (!safe) return;
+            if (n !== scope && ts.isFunctionLike(n)) return;
+            if (ts.isIdentifier(n) && this.checker.getSymbolAtLocation(n) === sym) {
+                if (n === d.name) return;
+                if (!this.nonEscapingObjectAliasUseIsSafe(n)) {
+                    safe = false;
+                    return;
+                }
+            }
+            ts.forEachChild(n, visit);
+        };
+        visit(scope);
+        return safe;
+    }
+
+    private nonEscapingObjectAliasUseIsSafe(n: ts.Identifier): boolean {
+        const parent = n.parent;
+        if (ts.isPropertyAccessExpression(parent) && parent.expression === n) {
+            return true;
+        }
+        if (
+            ts.isBinaryExpression(parent) &&
+            parent.right === n &&
+            parent.operatorToken.kind === ts.SyntaxKind.InKeyword
+        ) {
+            return true;
+        }
+        return ts.isCallExpression(parent) && this.nonEscapingObjectSafeCallArgument(parent, n);
     }
 
     private nonEscapingObjectSafeCallArgument(call: ts.CallExpression, arg: ts.Expression): boolean {
