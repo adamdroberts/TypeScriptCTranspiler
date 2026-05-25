@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Basic escape analysis now stack-allocates non-escaping typed array literal locals used through ignored receiver-returning in-place methods such as `reverse(...)`, `fill(...)`, and `copyWithin(...)`. Test: `array_literal_stack_alloc_in_place`.
 - Basic escape analysis now stack-allocates non-escaping typed array literal locals used through non-growing mutating methods `pop(...)` and `shift(...)`. Test: `array_literal_stack_alloc_mutation`.
 - Basic escape analysis now stack-allocates non-escaping typed array literal locals used through receiver-safe readonly/copying array methods such as `join(...)`. Test: `array_literal_stack_alloc_method`.
 - Basic escape analysis now stack-allocates non-escaping typed array literal locals that only flow through same-block element reads/writes and readonly `.length` reads. Test: `array_literal_stack_alloc`.

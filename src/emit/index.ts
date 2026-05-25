@@ -15663,10 +15663,17 @@ class Emitter {
                     ts.isPropertyAccessExpression(parent) &&
                     parent.expression === n &&
                     ts.isCallExpression(parent.parent) &&
-                    parent.parent.expression === parent &&
-                    this.nonEscapingArrayReceiverMethod(parent.name.text)
+                    parent.parent.expression === parent
                 ) {
-                    return;
+                    if (this.nonEscapingArrayReceiverMethod(parent.name.text)) {
+                        return;
+                    }
+                    if (
+                        this.nonEscapingArrayIgnoredReceiverMethod(parent.name.text) &&
+                        ts.isExpressionStatement(parent.parent.parent)
+                    ) {
+                        return;
+                    }
                 }
                 escapes = true;
                 return;
@@ -15695,6 +15702,15 @@ class Emitter {
             "toSpliced",
             "toString",
             "with",
+        ].includes(method);
+    }
+
+    private nonEscapingArrayIgnoredReceiverMethod(method: string): boolean {
+        return [
+            "copyWithin",
+            "fill",
+            "reverse",
+            "sort",
         ].includes(method);
     }
 
