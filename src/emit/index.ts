@@ -9005,6 +9005,12 @@ class Emitter {
                 seenConsts,
             );
             if (toSplicedResult !== null) return toSplicedResult;
+            const nonEmptyToSplicedResult = this.sideEffectFreePrimitiveToSplicedElementResult(
+                unwrapped,
+                index,
+                seenConsts,
+            );
+            if (nonEmptyToSplicedResult !== null) return nonEmptyToSplicedResult;
             const sliceResult = this.sideEffectFreePrimitiveSliceElementResult(
                 unwrapped,
                 index,
@@ -9086,6 +9092,75 @@ class Emitter {
         return this.isSideEffectFreePrimitivePromiseResolveValue(inserted, new Set(seenConsts))
             ? "present"
             : "unsafe";
+    }
+
+    private sideEffectFreePrimitiveToSplicedElementResult(
+        call: ts.CallExpression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" | null {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            call.expression.name.text !== "toSpliced" ||
+            call.arguments.length < 1 ||
+            !Array.from(call.arguments).slice(2).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            )
+        ) {
+            return null;
+        }
+        const receiverLength = this.sideEffectFreeFreshOrReturnedArrayLength(
+            call.expression.expression,
+            seenConsts,
+        );
+        if (receiverLength === null) return null;
+        const startValue = this.sideEffectFreePrimitiveNumberValue(call.arguments[0]!, seenConsts);
+        const deleteValue = call.arguments[1]
+            ? this.sideEffectFreePrimitiveNumberValue(call.arguments[1], seenConsts)
+            : null;
+        if (
+            startValue === null ||
+            !Number.isFinite(startValue) ||
+            !Number.isInteger(startValue) ||
+            (
+                call.arguments[1] &&
+                (
+                    deleteValue === null ||
+                    !Number.isFinite(deleteValue) ||
+                    !Number.isInteger(deleteValue)
+                )
+            )
+        ) {
+            return "unsafe";
+        }
+        const actualStart = startValue < 0
+            ? Math.max(receiverLength + startValue, 0)
+            : Math.min(startValue, receiverLength);
+        const actualDelete = call.arguments[1]
+            ? Math.min(Math.max(deleteValue!, 0), receiverLength - actualStart)
+            : receiverLength - actualStart;
+        const insertCount = Math.max(call.arguments.length - 2, 0);
+        const resultLength = receiverLength - actualDelete + insertCount;
+        if (index < 0 || index >= resultLength) return "absent";
+        if (index < actualStart) {
+            return this.sideEffectFreePrimitiveArrayElementOperandResult(
+                call.expression.expression,
+                index,
+                new Set(seenConsts),
+            );
+        }
+        if (index < actualStart + insertCount) {
+            const inserted = call.arguments[index - actualStart + 2];
+            return inserted &&
+                this.isSideEffectFreePrimitivePromiseResolveValue(inserted, new Set(seenConsts))
+                ? "present"
+                : "unsafe";
+        }
+        return this.sideEffectFreePrimitiveArrayElementOperandResult(
+            call.expression.expression,
+            index - insertCount + actualDelete,
+            new Set(seenConsts),
+        );
     }
 
     private sideEffectFreePrimitiveSliceElementResult(
