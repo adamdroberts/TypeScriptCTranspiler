@@ -32,3 +32,20 @@ Array.fromAsync([1, 2], function (this: any, value: number): number {
 }, { offset: 20 }).then((values) => {
     console.log("thisArg:", values.join("|"));
 });
+
+Array.fromAsync([Promise.resolve(3), Promise.resolve(4)]).then((values) => {
+    console.log("promise array:", values.join("|"));
+});
+
+const promiseSet = new Set([Promise.resolve("left"), Promise.resolve("right")]);
+Array.fromAsync(promiseSet).then((values) => {
+    console.log("promise set:", values.join("|"));
+});
+
+Array.fromAsync([Promise.resolve("ok"), Promise.reject<string>("bad")]).catch((reason) => {
+    console.log("promise reject:", reason);
+});
+
+Array.fromAsync([new Promise<number>(() => {})]).then((_values) => {
+    console.log("pending should not run");
+});

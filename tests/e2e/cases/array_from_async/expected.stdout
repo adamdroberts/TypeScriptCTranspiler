@@ -4,3 +4,6 @@ set map: 6|12
 map map: x:7|y:8
 named: 0=5,1=6
 thisArg: 21|22
+promise array: 3|4
+promise set: left|right
+promise reject: bad

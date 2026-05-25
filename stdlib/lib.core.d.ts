@@ -323,7 +323,9 @@ interface ArrayConstructor {
     from<T, U>(set: Set<T>, mapfn: (v: T, k: number) => U, thisArg?: any): U[];
     from<K, T, U>(map: Map<K, T>, mapfn: (v: ObjectEntry<T, K>, k: number) => U, thisArg?: any): U[];
     fromAsync(s: string): Promise<string[]>;
+    fromAsync<T>(arr: Promise<T>[]): Promise<T[]>;
     fromAsync<T>(arr: T[]): Promise<T[]>;
+    fromAsync<T>(set: Set<Promise<T>>): Promise<T[]>;
     fromAsync<T>(set: Set<T>): Promise<T[]>;
     fromAsync<K, T>(map: Map<K, T>): Promise<ObjectEntry<T, K>[]>;
     fromAsync<U>(s: string, mapfn: (v: string, k: number) => U, thisArg?: any): Promise<U[]>;

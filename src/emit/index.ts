@@ -26855,12 +26855,9 @@ class Emitter {
             const a = call.arguments[0];
             if (!a) unsupported(call, "Array.fromAsync needs an argument");
             const mapfn = call.arguments[1];
-            const arrayResult = mapfn
-                ? (() => {
-                    if (call.arguments.length > 3) unsupported(call, "Array.fromAsync(items, mapfn) expects optional thisArg");
-                    return this.emitArrayFromWithMapper(call, a, mapfn, call.arguments[2], promiseType.elem!);
-                })()
-                : this.emitArrayFromWithoutMapper(call, a, promiseType.elem);
+            if (!mapfn) return this.emitArrayFromAsyncWithoutMapper(call, a, promiseType);
+            if (call.arguments.length > 3) unsupported(call, "Array.fromAsync(items, mapfn) expects optional thisArg");
+            const arrayResult = this.emitArrayFromWithMapper(call, a, mapfn, call.arguments[2], promiseType.elem!);
             return { c: `tsc_promise_resolve_array(${arrayResult.c})`, ty: promiseType };
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Map" && memberName === "groupBy") {
@@ -28377,6 +28374,51 @@ class Emitter {
             c: `tsc_array_slice(${r.c}, 0, (double)${r.c}->len)`,
             ty: resultArrayType ?? r.ty,
         };
+    }
+
+    private emitArrayFromAsyncWithoutMapper(
+        call: ts.CallExpression,
+        itemsArg: ts.Expression,
+        promiseType: CType,
+    ): EmitResult {
+        if (promiseType.kind !== "promise" || !promiseType.elem || promiseType.elem.kind !== "array" || !promiseType.elem.elem) {
+            unsupported(call, "Array.fromAsync result must be Promise<T[]>");
+        }
+        const resultArrayType = promiseType.elem;
+        const resultElem = resultArrayType.elem;
+        if (!resultElem) unsupported(call, "Array.fromAsync result must be Promise<T[]>");
+        const elem = this.prepareType(resultElem);
+        const source = this.emitExpr(itemsArg);
+        const sourceElem = source.ty.kind === "array" || source.ty.kind === "set"
+            ? source.ty.elem
+            : null;
+        if (sourceElem?.kind === "promise") {
+            const sourceArray = source.ty.kind === "set"
+                ? { c: `tsc_set_values(${source.c})`, ty: arrayType(sourceElem) }
+                : source;
+            return this.emitSequencedExpr(promiseType, [{ value: sourceArray, node: itemsArg }], ([src]) => {
+                const out = this.freshTemp("_from_async");
+                const result = this.freshTemp("_from_async_result");
+                const pending = this.freshTemp("_from_async_pending");
+                const i = this.freshTemp("_i");
+                const item = this.freshTemp("_from_async_item");
+                const value = this.freshTemp("_from_async_value");
+                const pushed = this.coerce(this.promiseFulfilledValue(elem, item), elem, call);
+                return (
+                    `({ tsc_array_t* const _src = ${src}; ` +
+                    `tsc_array_t* ${out} = tsc_array_new(sizeof(${elem.c}), _src->len); ` +
+                    `tsc_promise_t* ${result} = NULL; bool ${pending} = false; ` +
+                    `for (size_t ${i} = 0; ${i} < _src->len; ${i}++) { ` +
+                    `tsc_promise_t* const ${item} = TSC_ARR(tsc_promise_t*, _src, ${i}); ` +
+                    `if (tsc_promise_is_rejected(${item})) { ${result} = tsc_promise_reject(tsc_promise_reason(${item})); break; } ` +
+                    `if (tsc_promise_is_pending(${item})) { ${pending} = true; continue; } ` +
+                    `${elem.c} ${value} = ${pushed}; tsc_array_push_raw(${out}, &${value}); } ` +
+                    `${result} ? ${result} : (${pending} ? tsc_promise_pending() : tsc_promise_resolve_array(${out})); })`
+                );
+            });
+        }
+        const arrayResult = this.emitArrayFromWithoutMapper(call, itemsArg, resultArrayType);
+        return { c: `tsc_promise_resolve_array(${arrayResult.c})`, ty: promiseType };
     }
 
     private emitMapGroupBy(call: ts.CallExpression): EmitResult {
