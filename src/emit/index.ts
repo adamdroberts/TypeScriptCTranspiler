@@ -27724,6 +27724,44 @@ class Emitter {
             );
         };
         switch (method) {
+            case "call": {
+                const thisArg = args[0] ? this.emitExpr(args[0]) : missing;
+                const specs: SequencedCallArg[] = [
+                    { value: recv, target: T_VALUE, node: call.expression },
+                    { value: thisArg, target: T_VALUE, node: args[0] ?? call.expression },
+                ];
+                for (const arg of args.slice(1)) {
+                    specs.push({ value: this.emitExpr(arg), target: T_VALUE, node: arg });
+                }
+                return this.emitSequencedExpr(T_VALUE, specs, ([fn, thisArgValue, ...values]) => {
+                    const av = this.freshTemp("_dyn_call_args");
+                    const pieces = [`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${values.length || 1})`];
+                    for (const value of values) {
+                        const tmp = this.freshTemp("_dyn_call_arg");
+                        pieces.push(`tsc_value_t ${tmp} = ${value}`);
+                        pieces.push(`tsc_array_push_raw(${av}, &${tmp})`);
+                    }
+                    pieces.push(`tsc_value_apply_function(${fn}, ${thisArgValue}, tsc_value_array(${av}))`);
+                    return `({ ${pieces.join("; ")}; })`;
+                });
+            }
+            case "apply": {
+                if (args.length > 2) unsupported(call, "apply expects thisArg and optional argumentsList");
+                const thisArg = args[0] ? this.emitExpr(args[0]) : missing;
+                const argListNode = args[1];
+                const emptyArgs: EmitResult = {
+                    c: "tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1))",
+                    ty: T_VALUE,
+                };
+                const argList = argListNode && !this.isUndefinedExpression(argListNode) && argListNode.kind !== ts.SyntaxKind.NullKeyword
+                    ? this.emitExpr(argListNode)
+                    : emptyArgs;
+                return this.emitSequencedCall("tsc_value_apply_function", T_VALUE, [
+                    { value: recv, target: T_VALUE, node: call.expression },
+                    { value: thisArg, target: T_VALUE, node: args[0] ?? call.expression },
+                    { value: argList, target: T_VALUE, node: argListNode ?? call.expression },
+                ]);
+            }
             case "charAt":
                 return oneArg("tsc_value_method_char_at", { c: "tsc_value_num(0.0)", ty: T_VALUE });
             case "charCodeAt":

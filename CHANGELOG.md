@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic function values now lower `.call(...)` and `.apply(...)` directly through the boxed function dispatcher, and `Proxy.revocable(...)` has focused coverage for idempotent revoke functions that ignore receiver and extra arguments across direct, `call`, and `apply` invocation forms. Test: `proxy_revocable_revoke_function`.
 - Revoked object `Proxy` values now have focused coverage for `Reflect.*` helper paths including get, set, has, deleteProperty, ownKeys, descriptor, prototype, and extensibility helpers. Test: `proxy_revocable_reflect_ops`.
 - Revoked object `Proxy` values now have focused coverage for object-operation paths including set, has, delete, own-key, descriptor, prototype, extensibility, seal, and freeze helpers. Test: `proxy_revocable_object_ops`.
 - `dns.lookup(...)` and immediate `dns.promises.lookup(...)` now have focused coverage for earlier static `const` aliases on supported `verbatim` / `order` option values. Test: `dns_lookup_hints`.
