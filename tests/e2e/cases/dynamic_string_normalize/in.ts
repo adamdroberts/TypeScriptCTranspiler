@@ -6,6 +6,6 @@ function mark(label: string): string {
   return label;
 }
 
-console.log("default:", decomposed.normalize(undefined, mark("d")) === composed);
+console.log("default:", decomposed.normalize(void 0, mark("d")) === composed);
 console.log("nfd:", composed.normalize("NFD", mark("n")) === decomposed);
 console.log("ignored:", seen);
