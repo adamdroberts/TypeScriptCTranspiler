@@ -237,6 +237,20 @@ function commonJsRequireSpecifierArgument(
             return specList.elements[0]!;
         }
     }
+    if (
+        ts.isPropertyAccessExpression(callee) &&
+        ts.isIdentifier(callee.expression) &&
+        callee.expression.text === "Reflect" &&
+        callee.name.text === "apply" &&
+        expr.arguments.length === 3 &&
+        isCommonJsRequireCallee(expr.arguments[0]!, requireAliases, moduleAliases) &&
+        isCommonJsModuleThisArg(expr.arguments[1]!, moduleAliases)
+    ) {
+        const specList = expr.arguments[2]!;
+        if (ts.isArrayLiteralExpression(specList) && specList.elements.length === 1) {
+            return specList.elements[0]!;
+        }
+    }
     return null;
 }
 

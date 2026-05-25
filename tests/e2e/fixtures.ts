@@ -738,7 +738,7 @@ const packages: Record<string, PackageFixture> = {
         "local.js": 'exports.label = "require-alias-bind";\nexports.count = 77;\n',
     }),
     "tsc2c-cjs-module-require-call-wrapper": cjsPackage("tsc2c-cjs-module-require-call-wrapper", {
-        "index.js": 'const local = module.require.call(module, "./local.js");\nconst { require: req } = module;\nconst applied = req.apply(module, ["./local.js"]);\nexports.default = function greet(name) { return "hello " + name; };\nexports.label = local.label;\nexports.count = applied.count;\nexports.double = function double(value) { return value * 6; };\n',
+        "index.js": 'const local = module.require.call(module, "./local.js");\nconst directApplied = module.require.apply(module, ["./local.js"]);\nconst reflected = Reflect.apply(module.require, module, ["./local.js"]);\nconst { require: req } = module;\nconst applied = req.apply(module, ["./local.js"]);\nexports.default = function greet(name) { return "hello " + name; };\nexports.label = local.label;\nexports.count = applied.count + directApplied.count + reflected.count;\nexports.double = function double(value) { return value * 6; };\n',
         "local.js": 'exports.label = "require-call-wrapper";\nexports.count = 78;\n',
     }),
     "tsc2c-cjs-module-array": cjsPackage("tsc2c-cjs-module-array", {

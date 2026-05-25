@@ -16267,6 +16267,20 @@ class Emitter {
                 return specList.elements[0]!;
             }
         }
+        if (
+            ts.isPropertyAccessExpression(callee) &&
+            ts.isIdentifier(callee.expression) &&
+            callee.expression.text === "Reflect" &&
+            callee.name.text === "apply" &&
+            expr.arguments.length === 3 &&
+            this.isCommonJsRequireCallee(expr.arguments[0]!) &&
+            this.isCommonJsModuleThisArg(expr.arguments[1]!)
+        ) {
+            const specList = expr.arguments[2]!;
+            if (ts.isArrayLiteralExpression(specList) && specList.elements.length === 1) {
+                return specList.elements[0]!;
+            }
+        }
         return null;
     }
 
