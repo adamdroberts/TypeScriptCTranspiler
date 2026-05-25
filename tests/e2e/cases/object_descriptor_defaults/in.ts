@@ -17,8 +17,8 @@ Object.defineProperties(obj, {
         enumerable: true,
     },
     noAccessors: {
-        get: undefined,
-        set: undefined,
+        get: void 0,
+        set: void 0,
         enumerable: true,
         configurable: true,
     },

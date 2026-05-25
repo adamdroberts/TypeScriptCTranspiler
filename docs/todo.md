@@ -75,7 +75,7 @@ This is the next item that most directly expands what programs can be written ag
   - Additional configurable accessor descriptor redefinition coverage is implemented for omitted hook/flag preservation and explicit undefined hook clearing. Test: `object_accessor_preserve`.
   - Additional dynamic `Object.defineProperties` coverage is implemented for static descriptor maps containing data and closure-valued accessor descriptors. Test: `object_define_properties`.
   - Additional dynamic `Object.create(proto, descriptors)` coverage is implemented for static descriptor maps on newly created prototype-linked objects. Test: `object_create_descriptors`.
-  - Additional descriptor-default coverage is implemented for omitted data `value` defaults, explicit undefined accessor hooks, and own undefined `get`/`set` fields for absent accessor hooks. Test: `object_descriptor_defaults`.
+  - Additional descriptor-default coverage is implemented for omitted data `value` defaults, explicit undefined and side-effect-free `void` accessor hooks, and own undefined `get`/`set` fields for absent accessor hooks. Test: `object_descriptor_defaults`.
   - Additional descriptor kind-transition coverage is implemented for configurable data-to-accessor/accessor-to-data redefinitions and non-configurable data-to-accessor rejection. Test: `object_descriptor_kind_transition`.
   - Additional descriptor object-literal coverage is implemented for shorthand fields, shorthand accessor identifiers, and boolean flag expressions. Test: `object_descriptor_shorthand`.
   - Additional data descriptor redefinition coverage is implemented for omitted-field preservation, compatible non-configurable writable updates, and incompatible flag/value changes. Test: `object_descriptor_redefine`.
