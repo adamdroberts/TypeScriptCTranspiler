@@ -17015,7 +17015,9 @@ class Emitter {
     }
 
     private isPathModuleIdentifier(id: ts.Identifier): boolean {
-        return id.text === "path" || this.isNamespaceImportFrom(id, ["path", "node:path"]);
+        return id.text === "path" ||
+            this.isNamespaceImportFrom(id, ["path", "node:path"]) ||
+            this.isDefaultImportFrom(id, ["path", "node:path"]);
     }
 
     private isPathPosixReceiver(expr: ts.Expression): boolean {

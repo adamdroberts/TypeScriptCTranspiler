@@ -448,7 +448,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 ### `path`
 - `path.join(...parts)` → `tsc_path_join`
 - `path.resolve(...parts)` → `tsc_path_resolve` (against `getcwd()`)
-- `path.normalize(path, ...ignored)`, `path.isAbsolute(path, ...ignored)`, `path.relative(from, to, ...ignored)`, `path.toNamespacedPath(path, ...ignored)`, `path.parse(path, ...ignored)`, and `path.format(pathObject, ...ignored)` implement a bounded POSIX subset for segment cleanup, leading-slash absolute detection, relative path construction, POSIX no-op namespacing, and dynamic parsed-path records while evaluating ignored extra arguments after consumed inputs. `path.sep`, `path.delimiter`, `path.posix.*`, and named `posix` imports expose the same POSIX subset. Named and namespace imports from `"path"` / `"node:path"` route to the same supported subset. Tests: `path_normalize`, `path_import`, `path_constants`, `path_relative`, `path_to_namespaced`, `path_parse_format`, `path_posix`
+- `path.normalize(path, ...ignored)`, `path.isAbsolute(path, ...ignored)`, `path.relative(from, to, ...ignored)`, `path.toNamespacedPath(path, ...ignored)`, `path.parse(path, ...ignored)`, and `path.format(pathObject, ...ignored)` implement a bounded POSIX subset for segment cleanup, leading-slash absolute detection, relative path construction, POSIX no-op namespacing, and dynamic parsed-path records while evaluating ignored extra arguments after consumed inputs. `path.sep`, `path.delimiter`, `path.posix.*`, and named `posix` imports expose the same POSIX subset. Default, named, and namespace imports from `"path"` / `"node:path"` route to the same supported subset. Tests: `path_normalize`, `path_import`, `path_default_import`, `path_constants`, `path_relative`, `path_to_namespaced`, `path_parse_format`, `path_posix`
 - `path.basename(path, suffix?, ...ignored)` / `dirname(path, ...ignored)` / `extname(path, ...ignored)`. Test: `path_basename_suffix`
 - Test: `fs_roundtrip`
 
@@ -1116,6 +1116,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `path_constants` | path sep and delimiter constants for global, named import, and namespace import forms |
 | `path_basename_suffix` | path.basename optional suffix for global, namespace, named, and posix forms |
 | `path_import` | path named and namespace imports from node:path/path |
+| `path_default_import` | default path imports route to the supported POSIX path subset |
 | `path_normalize` | bounded POSIX path.normalize segment cleanup and path.isAbsolute checks |
 | `path_parse_format` | bounded POSIX path.parse/path.format dynamic path objects |
 | `path_posix` | path.posix and named posix imports route to the supported POSIX path subset |

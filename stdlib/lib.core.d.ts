@@ -1346,6 +1346,8 @@ declare module "path" {
     export function extname(p: string, ...ignored: any[]): string;
     export function parse(p: string, ...ignored: any[]): any;
     export function format(pathObject: any, ...ignored: any[]): string;
+    const defaultPath: Path;
+    export default defaultPath;
 }
 declare module "node:path" {
     export const sep: string;
@@ -1362,6 +1364,8 @@ declare module "node:path" {
     export function extname(p: string, ...ignored: any[]): string;
     export function parse(p: string, ...ignored: any[]): any;
     export function format(pathObject: any, ...ignored: any[]): string;
+    const defaultPath: Path;
+    export default defaultPath;
 }
 
 type CryptoHashAlgorithm = "sha1" | "sha256" | "sha512";

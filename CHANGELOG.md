@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Default imports from `"path"` and `"node:path"` now route to the supported POSIX path subset, including constants and `posix`. Test: `path_default_import`.
 - Named, namespace, and default `exit` process imports from `"process"` and `"node:process"` now route to the existing process exit helper. Test: `process_exit_import`.
 - Named, namespace, and default `chdir` process imports from `"process"` and `"node:process"` now route to the existing cwd/chdir helpers. Test: `process_chdir_import`.
 - Default imports from `"process"` and `"node:process"` now behave like the global process object for existing metadata, env, and helper calls. Test: `process_default_import`.

@@ -1,0 +1,4 @@
+default join: a/b/../c
+default basename: file
+default constants: / :
+default posix: /a/b /
