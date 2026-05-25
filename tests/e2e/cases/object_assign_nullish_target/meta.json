@@ -1,0 +1,3 @@
+{
+  "description": "Object.assign rejects nullish dynamic targets"
+}

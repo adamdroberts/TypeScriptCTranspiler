@@ -1,0 +1,2 @@
+null: Object.assign target must not be null or undefined
+undefined: Object.assign target must not be null or undefined

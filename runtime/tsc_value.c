@@ -1383,6 +1383,9 @@ static void object_assign_set_or_throw(tsc_value_t target, tsc_object_t* dst, ts
 }
 
 tsc_value_t tsc_value_object_assign(tsc_value_t target, tsc_value_t source) {
+    if (tsc_value_is_nullish(target)) {
+        tsc_throw_str(tsc_str_from_cstr("Object.assign target must not be null or undefined"));
+    }
     if (!value_is_box(target)) return target;
     bool target_is_object = value_tag(target) == TSC_VALUE_TAG_OBJECT;
     bool target_is_array = value_tag(target) == TSC_VALUE_TAG_ARRAY;
