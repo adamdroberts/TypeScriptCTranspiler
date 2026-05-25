@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `crypto.randomUUID(...)` now treats side-effect-free `void` expressions such as `void 0` as default options and `disableEntropyCache` property values. Test: `crypto_random_uuid`.
 - `dns.lookup(...)` and `dns.promises.lookup(...)` option objects now treat side-effect-free `void` expressions such as `void 0` as default values for supported properties. Test: `dns_lookup_option_property_undefined`.
 - Supported `child_process` option objects now treat side-effect-free `void` expressions such as `void 0` as default property values across callback, sync, and `spawnSync` subsets. Test: `child_process_option_property_undefined`.
 - `process.stdout.write(...)` and `process.stderr.write(...)` now treat side-effect-free `void` expressions such as `void 0` as default optional encoding/callback slots. Test: `process_stdio_write_undefined_options`.
