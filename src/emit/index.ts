@@ -17000,6 +17000,7 @@ class Emitter {
             "dns",
             "events",
             "fs",
+            "fs/promises",
             "net",
             "os",
             "path",
@@ -17011,6 +17012,11 @@ class Emitter {
         return id.text === "fs" ||
             this.isNamespaceImportFrom(id, ["fs", "node:fs"]) ||
             this.isDefaultImportFrom(id, ["fs", "node:fs"]);
+    }
+
+    private isFsPromisesModuleIdentifier(id: ts.Identifier): boolean {
+        return this.isNamespaceImportFrom(id, ["fs/promises", "node:fs/promises"]) ||
+            this.isDefaultImportFrom(id, ["fs/promises", "node:fs/promises"]);
     }
 
     private isPathModuleIdentifier(id: ts.Identifier): boolean {
@@ -17161,6 +17167,9 @@ class Emitter {
     }
 
     private isFsPromisesReceiver(expr: ts.Expression): boolean {
+        if (ts.isIdentifier(expr) && this.isFsPromisesModuleIdentifier(expr)) {
+            return true;
+        }
         if (
             ts.isPropertyAccessExpression(expr) &&
             expr.name.text === "promises" &&
@@ -24938,6 +24947,36 @@ class Emitter {
         ].find((exported) => this.isNamedImportFrom(calleeId, ["fs", "node:fs"], exported));
         if (fsNamed) {
             return this.emitFsCall(call, fsNamed);
+        }
+        const fsPromisesNamed = [
+            "readFile",
+            "writeFile",
+            "appendFile",
+            "readdir",
+            "stat",
+            "lstat",
+            "realpath",
+            "readlink",
+            "symlink",
+            "link",
+            "mkdtemp",
+            "truncate",
+            "utimes",
+            "lutimes",
+            "chown",
+            "lchown",
+            "chmod",
+            "access",
+            "mkdir",
+            "unlink",
+            "rm",
+            "rmdir",
+            "cp",
+            "copyFile",
+            "rename",
+        ].find((exported) => this.isNamedImportFrom(calleeId, ["fs/promises", "node:fs/promises"], exported));
+        if (fsPromisesNamed) {
+            return this.emitFsPromisesCall(call, fsPromisesNamed);
         }
         const pathNamed = ["join", "resolve", "normalize", "isAbsolute", "relative", "toNamespacedPath", "basename", "dirname", "extname", "parse", "format"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["path", "node:path"], exported));

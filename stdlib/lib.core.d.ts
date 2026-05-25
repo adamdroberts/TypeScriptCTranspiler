@@ -1383,6 +1383,64 @@ declare module "node:fs" {
     const defaultFs: FS;
     export default defaultFs;
 }
+declare module "fs/promises" {
+    export const readFile: FSPromises["readFile"];
+    export const writeFile: FSPromises["writeFile"];
+    export const appendFile: FSPromises["appendFile"];
+    export const readdir: FSPromises["readdir"];
+    export const stat: FSPromises["stat"];
+    export const lstat: FSPromises["lstat"];
+    export const realpath: FSPromises["realpath"];
+    export const readlink: FSPromises["readlink"];
+    export const symlink: FSPromises["symlink"];
+    export const link: FSPromises["link"];
+    export const mkdtemp: FSPromises["mkdtemp"];
+    export const truncate: FSPromises["truncate"];
+    export const utimes: FSPromises["utimes"];
+    export const lutimes: FSPromises["lutimes"];
+    export const chown: FSPromises["chown"];
+    export const lchown: FSPromises["lchown"];
+    export const chmod: FSPromises["chmod"];
+    export const access: FSPromises["access"];
+    export const mkdir: FSPromises["mkdir"];
+    export const unlink: FSPromises["unlink"];
+    export const rm: FSPromises["rm"];
+    export const rmdir: FSPromises["rmdir"];
+    export const cp: FSPromises["cp"];
+    export const copyFile: FSPromises["copyFile"];
+    export const rename: FSPromises["rename"];
+    const defaultPromises: FSPromises;
+    export default defaultPromises;
+}
+declare module "node:fs/promises" {
+    export const readFile: FSPromises["readFile"];
+    export const writeFile: FSPromises["writeFile"];
+    export const appendFile: FSPromises["appendFile"];
+    export const readdir: FSPromises["readdir"];
+    export const stat: FSPromises["stat"];
+    export const lstat: FSPromises["lstat"];
+    export const realpath: FSPromises["realpath"];
+    export const readlink: FSPromises["readlink"];
+    export const symlink: FSPromises["symlink"];
+    export const link: FSPromises["link"];
+    export const mkdtemp: FSPromises["mkdtemp"];
+    export const truncate: FSPromises["truncate"];
+    export const utimes: FSPromises["utimes"];
+    export const lutimes: FSPromises["lutimes"];
+    export const chown: FSPromises["chown"];
+    export const lchown: FSPromises["lchown"];
+    export const chmod: FSPromises["chmod"];
+    export const access: FSPromises["access"];
+    export const mkdir: FSPromises["mkdir"];
+    export const unlink: FSPromises["unlink"];
+    export const rm: FSPromises["rm"];
+    export const rmdir: FSPromises["rmdir"];
+    export const cp: FSPromises["cp"];
+    export const copyFile: FSPromises["copyFile"];
+    export const rename: FSPromises["rename"];
+    const defaultPromises: FSPromises;
+    export default defaultPromises;
+}
 
 interface Path {
     readonly sep: string;
