@@ -3387,6 +3387,9 @@ class Emitter {
         ) {
             return true;
         }
+        if (this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts) !== null) {
+            return true;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeArrayOperand(init, seenConsts);
     }
@@ -10025,6 +10028,14 @@ class Emitter {
                 seenConsts,
             );
         }
+        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(
+            unwrapped,
+            seenConsts,
+        );
+        if (returnedArrayLength !== null) {
+            if (index < 0 || index >= returnedArrayLength) return "absent";
+            return index === 0 ? "present" : "unsafe";
+        }
         if (
             ts.isNewExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
@@ -10174,6 +10185,20 @@ class Emitter {
                 index,
                 seenConsts,
             );
+        }
+        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(
+            unwrapped,
+            seenConsts,
+        );
+        if (returnedArrayLength !== null) {
+            if (index < 0 || index >= returnedArrayLength) return "absent";
+            return index === 0
+                ? this.sideEffectFreePrimitiveArrayElementOperandResult(
+                    unwrapped,
+                    0,
+                    new Set(seenConsts),
+                )
+                : "unsafe";
         }
         if (
             ts.isNewExpression(unwrapped) &&
