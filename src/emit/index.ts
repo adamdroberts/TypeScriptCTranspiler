@@ -1510,6 +1510,7 @@ class Emitter {
             (
                 method === "all" ||
                 method === "allSettled" ||
+                method === "any" ||
                 method === "race"
             ) &&
             call.arguments.length === 1 &&

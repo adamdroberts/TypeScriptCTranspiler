@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes unused `Promise.any(...)` calls over statically empty returned array sources. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused pure `Promise.reject(...)` calls with absent or side-effect-free primitive rejection reasons. Test: `generated_c_dce_const`.
 - Two-argument dynamic `Reflect.get(target, key)` now uses the same per-site shape-validated property cache path as receiver-aware Reflect reads. Test: `dynamic_runtime_stats`.
 - Generated-C DCE no longer prunes expression-statement `delete` operations on earlier const object/array aliases, preserving later dynamic `in` checks and delete statistics while keeping unused delete-valued const initializers prunable. Tests: `dynamic_runtime_stats`, `generated_c_dce_const`.
