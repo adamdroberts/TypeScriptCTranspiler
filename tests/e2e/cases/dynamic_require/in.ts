@@ -37,6 +37,16 @@ const reflectModuleArgs = [reflectModuleName];
 const reflectModule: any = Reflect.apply(module.require, module, reflectModuleArgs);
 console.log("dynamic require reflect:", reflectModule.name);
 
+const bareApplyModuleName = "./other_bare_apply";
+const bareApplyModuleArgs = [bareApplyModuleName];
+const bareApplyModule: any = require.apply(module, bareApplyModuleArgs);
+console.log("dynamic require bare apply:", bareApplyModule.name);
+
+const bareReflectModuleName = "./other_bare_reflect";
+const bareReflectModuleArgs = [bareReflectModuleName];
+const bareReflectModule: any = Reflect.apply(require, module, bareReflectModuleArgs);
+console.log("dynamic require bare reflect:", bareReflectModule.name);
+
 function loadLocal(): any {
     const localModuleName = "./other_local";
     return require(localModuleName);

@@ -8,4 +8,6 @@ dynamic require named: named-a
 dynamic require call: call-wrapper
 dynamic require apply: apply-a
 dynamic require reflect: reflect-wrapper
+dynamic require bare apply: bare-apply
+dynamic require bare reflect: bare-reflect
 dynamic require local: local
