@@ -213,6 +213,7 @@ export function isCommonJsRequireCallee(
     requireAliases: Set<string>,
     moduleAliases: Set<string> = new Set(),
 ): boolean {
+    if (isCommonJsModuleRequireBindExpression(expr, requireAliases, moduleAliases)) return true;
     return (ts.isIdentifier(expr) && (expr.text === "require" || requireAliases.has(expr.text))) ||
         (
             ts.isPropertyAccessExpression(expr) &&
@@ -220,6 +221,31 @@ export function isCommonJsRequireCallee(
             ts.isIdentifier(expr.expression) &&
             (expr.expression.text === "module" || moduleAliases.has(expr.expression.text))
         );
+}
+
+function isCommonJsModuleRequireBindExpression(
+    expr: ts.Expression,
+    requireAliases: Set<string>,
+    moduleAliases: Set<string>,
+): boolean {
+    let unwrapped: ts.Expression = expr;
+    while (ts.isParenthesizedExpression(unwrapped)) unwrapped = unwrapped.expression;
+    if (!ts.isCallExpression(unwrapped) || unwrapped.arguments.length < 1) return false;
+    const callee = unwrapped.expression;
+    if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "bind") return false;
+    let target: ts.Expression = callee.expression;
+    while (ts.isParenthesizedExpression(target)) target = target.expression;
+    if (
+        !ts.isPropertyAccessExpression(target) ||
+        target.name.text !== "require" ||
+        !ts.isIdentifier(target.expression) ||
+        (target.expression.text !== "module" && !moduleAliases.has(target.expression.text))
+    ) {
+        return false;
+    }
+    let thisArg: ts.Expression = unwrapped.arguments[0]!;
+    while (ts.isParenthesizedExpression(thisArg)) thisArg = thisArg.expression;
+    return ts.isIdentifier(thisArg) && (thisArg.text === "module" || moduleAliases.has(thisArg.text));
 }
 
 function topLevelConstStringDeclaration(id: ts.Identifier): ts.VariableDeclaration | null {

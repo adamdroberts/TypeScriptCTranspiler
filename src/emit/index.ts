@@ -16154,7 +16154,21 @@ class Emitter {
         let init = decl.initializer;
         while (ts.isParenthesizedExpression(init)) init = init.expression;
         return (ts.isIdentifier(init) && init.text === "require") ||
-            (ts.isPropertyAccessExpression(init) && this.isModuleRequireAccess(init));
+            (ts.isPropertyAccessExpression(init) && this.isModuleRequireAccess(init)) ||
+            this.isCommonJsRequireBindExpression(init);
+    }
+
+    private isCommonJsRequireBindExpression(expr: ts.Expression): boolean {
+        let init = expr;
+        while (ts.isParenthesizedExpression(init)) init = init.expression;
+        if (!ts.isCallExpression(init) || init.arguments.length < 1) return false;
+        const callee = init.expression;
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "bind") return false;
+        let target: ts.Expression = callee.expression;
+        while (ts.isParenthesizedExpression(target)) target = target.expression;
+        if (!ts.isPropertyAccessExpression(target) || !this.isModuleRequireAccess(target)) return false;
+        const thisArg = this.unwrapSideEffectFreeStaticExpression(init.arguments[0]!);
+        return ts.isIdentifier(thisArg) && this.isCommonJsModuleIdentifier(thisArg);
     }
 
     private isCommonJsModuleRequireAliasBindingElement(element: ts.BindingElement): boolean {
