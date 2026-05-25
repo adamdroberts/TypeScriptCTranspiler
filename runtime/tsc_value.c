@@ -1360,6 +1360,16 @@ tsc_value_t tsc_value_get_own_property_descriptors(tsc_value_t v) {
     if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) return tsc_value_undefined();
     tsc_object_t* o = (tsc_object_t*)value_ptr(v);
     tsc_object_t* out = tsc_object_new();
+    if (o->is_proxy) {
+        tsc_array_t* keys = tsc_value_own_keys(v);
+        for (size_t i = 0; i < keys->len; i++) {
+            tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
+            tsc_value_t desc = tsc_value_get_own_property_descriptor(v, key);
+            if (tsc_value_is_undefined(desc)) continue;
+            tsc_object_set(out, key, desc);
+        }
+        return tsc_value_object(out);
+    }
     for (size_t i = 0; i < o->len; i++) {
         tsc_value_t desc = value_descriptor_from_prop(&o->props[i]);
         tsc_object_set(out, o->props[i].key, desc);

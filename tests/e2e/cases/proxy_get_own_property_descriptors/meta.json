@@ -1,0 +1,3 @@
+{
+  "description": "Object.getOwnPropertyDescriptors on Proxy uses ownKeys and descriptor traps"
+}

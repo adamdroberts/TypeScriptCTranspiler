@@ -1,0 +1,5 @@
+keys: visible|hidden
+visible: 1 true true true
+hidden: h false false true
+skip: false
+events: ownKeys|desc:visible|desc:hidden|desc:skip

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Object.getOwnPropertyDescriptors(proxy)` now drives proxy `ownKeys` and `getOwnPropertyDescriptor` traps instead of bypassing the proxy target. Test: `proxy_get_own_property_descriptors`.
 - `Object.create(proto, descriptors)` now accepts runtime descriptor maps for newly created dynamic objects. Test: `object_dynamic_create_descriptors`.
 - `Object.defineProperties(...)` now accepts runtime descriptor maps for dynamic objects, including data and accessor descriptor values interpreted at runtime. Test: `object_dynamic_define_properties`.
 - `Object.defineProperty(...)` and `Reflect.defineProperty(...)` now accept runtime accessor descriptor objects with callable `get` / `set` fields, preserving those boxed function identities in descriptor reads. Test: `object_dynamic_accessor_descriptor`.
