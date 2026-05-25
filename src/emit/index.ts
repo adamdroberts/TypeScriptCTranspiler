@@ -40602,24 +40602,25 @@ class Emitter {
     private emitUrlConstructor(n: ts.NewExpression): EmitResult {
         const input = n.arguments?.[0];
         if (!input) unsupported(n, "new URL() expects input");
-        if ((n.arguments?.length ?? 0) > 2) unsupported(n, "new URL() expects input and optional base");
         const r = this.emitExpr(input);
+        const args = n.arguments ?? [];
         const base = n.arguments?.[1];
         if (base) {
             const b = this.emitExpr(base);
-            return this.emitSequencedCall(
-                "tsc_url_new_base",
+            return this.emitSequencedExpr(
                 T_URL,
                 [
                     { value: r, target: T_STRING, node: input },
                     { value: b, target: T_STRING, node: base },
+                    ...this.ignoredArgumentSpecs(args, 2),
                 ],
+                ([inputC, baseC]) => `tsc_url_new_base(${inputC}, ${baseC})`,
             );
         }
-        return this.emitSequencedCall(
-            "tsc_url_new",
+        return this.emitSequencedExpr(
             T_URL,
             [{ value: r, target: T_STRING, node: input }],
+            ([inputC]) => `tsc_url_new(${inputC})`,
         );
     }
 

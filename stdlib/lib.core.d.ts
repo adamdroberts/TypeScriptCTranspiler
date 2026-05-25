@@ -2074,7 +2074,7 @@ interface URL {
     valueOf(...ignored: any[]): URL;
 }
 interface URLConstructor {
-    new (input: string, base?: string): URL;
+    new (input: string, base?: string, ...ignored: any[]): URL;
     canParse(input: string, base?: string): boolean;
 }
 declare var URL: URLConstructor;
