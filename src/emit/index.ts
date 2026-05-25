@@ -2605,6 +2605,16 @@ class Emitter {
                     return true;
                 }
                 break;
+            case "some":
+            case "every":
+            case "find":
+            case "findIndex":
+            case "findLast":
+            case "findLastIndex":
+                if (this.isSideEffectFreeArrayMethodCall(recv, method, call.arguments, seenConsts)) {
+                    return true;
+                }
+                break;
             case "charAt":
             case "charCodeAt":
             case "at":
