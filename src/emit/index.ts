@@ -4505,6 +4505,16 @@ class Emitter {
                     this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
                 );
                 if (method === "slice" && unwrapped.arguments.length === 0) return receiverLength;
+                if (method === "concat" && unwrapped.arguments.length === 0) return receiverLength;
+                if (
+                    method === "flat" &&
+                    receiverLength === 0 &&
+                    unwrapped.arguments.length <= 1 &&
+                    (!unwrapped.arguments[0] ||
+                        this.isSideEffectFreePrimitiveNumberCoercion(unwrapped.arguments[0], seenConsts))
+                ) {
+                    return 0;
+                }
                 if (
                     (
                         method === "toReversed" ||
