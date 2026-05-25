@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE coverage now proves `Object.entries(...)` pruning for `Object.fromEntries(...)` over earlier-const and copy-constructed empty typed Map sources. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats `Object.fromEntries(...)` over earlier-const and copy-constructed empty typed Map sources as an empty object for unused Object key/value enumeration pruning. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now proves unused `Object.fromEntries(...)` pruning through earlier-const and copy-constructed empty typed Map sources. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now proves `Promise.try(...)` pruning for callbacks returning empty Promise combinators fed by earlier-const and copied empty typed array sources. Test: `generated_c_dce_const`.
