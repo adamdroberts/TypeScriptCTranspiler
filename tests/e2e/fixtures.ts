@@ -726,7 +726,7 @@ const packages: Record<string, PackageFixture> = {
         "local.js": 'exports.label = "require-alias";\nexports.count = 64;\n',
     }),
     "tsc2c-cjs-module-require-bind-alias": cjsPackage("tsc2c-cjs-module-require-bind-alias", {
-        "index.js": 'const req = module.require.bind(module);\nconst local = req("./local.js");\nexports.default = function greet(name) { return "hello " + name; };\nexports.label = local.label;\nexports.count = req("./local.js").count;\nexports.double = function double(value) { return value * 3; };\n',
+        "index.js": 'const req = module.require.bind(module);\nconst local = req("./local.js");\nconst inline = module.require.bind(module)("./local.js");\nexports.default = function greet(name) { return "hello " + name; };\nexports.label = local.label;\nexports.count = req("./local.js").count + inline.count;\nexports.double = function double(value) { return value * 3; };\n',
         "local.js": 'exports.label = "require-bind-alias";\nexports.count = 75;\n',
     }),
     "tsc2c-cjs-module-alias-require-bind-alias": cjsPackage("tsc2c-cjs-module-alias-require-bind-alias", {

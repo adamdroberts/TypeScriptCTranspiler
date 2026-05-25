@@ -16121,6 +16121,7 @@ class Emitter {
     }
 
     private isCommonJsRequireCallee(expr: ts.Expression): boolean {
+        if (this.isCommonJsRequireBindExpression(expr)) return true;
         return (ts.isIdentifier(expr) && (expr.text === "require" || this.isCommonJsRequireAliasIdentifier(expr))) ||
             this.isModuleRequireAccess(expr);
     }
