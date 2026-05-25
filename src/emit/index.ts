@@ -15692,6 +15692,12 @@ class Emitter {
                     ) {
                         return;
                     }
+                    if (
+                        this.nonEscapingArrayIgnoredReceiverMethod(parent.name.text) &&
+                        this.nonEscapingArrayResultUseIsSafe(parent.parent)
+                    ) {
+                        return;
+                    }
                 }
                 escapes = true;
                 return;
@@ -15725,6 +15731,50 @@ class Emitter {
 
     private nonEscapingArrayGrowingMethod(method: string): boolean {
         return method === "push" || method === "unshift";
+    }
+
+    private nonEscapingArrayResultUseIsSafe(expr: ts.Expression): boolean {
+        const parent = expr.parent;
+        if (ts.isElementAccessExpression(parent) && parent.expression === expr) {
+            return true;
+        }
+        if (
+            (ts.isForOfStatement(parent) || ts.isForInStatement(parent)) &&
+            parent.expression === expr
+        ) {
+            return true;
+        }
+        if (
+            ts.isPropertyAccessExpression(parent) &&
+            parent.expression === expr &&
+            parent.name.text === "length"
+        ) {
+            return !(
+                ts.isBinaryExpression(parent.parent) &&
+                parent.parent.left === parent &&
+                parent.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
+            );
+        }
+        if (
+            ts.isPropertyAccessExpression(parent) &&
+            parent.expression === expr &&
+            ts.isCallExpression(parent.parent) &&
+            parent.parent.expression === parent
+        ) {
+            if (parent.parent.arguments.some(ts.isSpreadElement)) {
+                return false;
+            }
+            if (this.nonEscapingArrayReceiverMethod(parent.name.text)) {
+                return true;
+            }
+            if (this.nonEscapingArrayIgnoredReceiverMethod(parent.name.text)) {
+                return (
+                    ts.isExpressionStatement(parent.parent.parent) ||
+                    this.nonEscapingArrayResultUseIsSafe(parent.parent)
+                );
+            }
+        }
+        return false;
     }
 
     private nonEscapingArrayIgnoredReceiverMethod(method: string): boolean {

@@ -126,6 +126,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - Non-escaping local typed array literals used through ignored receiver-returning in-place methods such as `reverse(...)`, `fill(...)`, and `copyWithin(...)` are stack-allocated instead of GC-allocated. Test: `array_literal_stack_alloc_in_place`
 - Non-escaping local typed array literals used through same-block, non-loop `push(...)` / `unshift(...)` calls are stack-allocated with finite extra capacity for inserted elements instead of GC-allocated. Test: `array_literal_stack_alloc_growth`
 - Non-escaping local typed array literals used through same-block `for...of` and `for...in` iteration are stack-allocated instead of GC-allocated. Test: `array_literal_stack_alloc_iteration`
+- Non-escaping local typed array literals whose receiver-returning in-place methods are consumed immediately by safe reads or readonly/copying methods are stack-allocated instead of GC-allocated. Test: `array_literal_stack_alloc_chained`
 - Interface nesting — `interface Line { from: Point; to: Point; }`. Test: `interfaces`
 - Shorthand property assignment `{ x, y }`. Test: `interfaces`
 - Computed property assignment with literal or const-literal keys. Test: `computed_props`
@@ -1395,6 +1396,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_literal_stack_alloc_in_place` | non-escaping typed array literal locals use stack storage through ignored in-place methods |
 | `array_literal_stack_alloc_growth` | non-escaping typed array literal locals reserve finite stack capacity for same-block push/unshift |
 | `array_literal_stack_alloc_iteration` | non-escaping typed array literal locals use stack storage through for-of and for-in iteration |
+| `array_literal_stack_alloc_chained` | non-escaping typed array literal locals use stack storage through immediate safe chained in-place results |
 | `object_property_is_enumerable` | dynamic Object.prototype.propertyIsEnumerable over descriptor enumerable flags |
 | `object_prototype_call` | Object.prototype hasOwnProperty/propertyIsEnumerable call-form dispatch |
 | `object_prototype_is_prototype_of_call` | Object.prototype.isPrototypeOf.call prototype-chain dispatch |
