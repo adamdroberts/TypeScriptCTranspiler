@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now unwraps extensible target-returning `Object.setPrototypeOf(...)` and `Object.prototype.valueOf.call(...)` around fresh pure object-builder results when pruning unused pure Object/Reflect mutation helpers. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats direct fresh pure object-builder results, including `Object.fromEntries(...)` over earlier-const and copy-constructed empty typed Map sources, as discardable targets for unused pure `Object.assign(...)`, `Object.defineProperty(...)`, `Object.defineProperties(...)`, `Object.preventExtensions(...)`, `Object.seal(...)`, `Object.freeze(...)`, and `Object.setPrototypeOf(...)` calls. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats direct fresh pure object-builder results, including `Object.fromEntries(...)` over earlier-const and copy-constructed empty typed Map sources, as discardable targets for unused pure `Reflect.set(...)`, `Reflect.deleteProperty(...)`, `Reflect.defineProperty(...)`, `Reflect.preventExtensions(...)`, and `Reflect.setPrototypeOf(...)` calls. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats property reads from `Object.fromEntries(...)` over earlier-const and copy-constructed empty typed Map sources as statically absent, enabling primitive `Promise.resolve(...)` pruning for missing-property reads. Test: `generated_c_dce_const`.

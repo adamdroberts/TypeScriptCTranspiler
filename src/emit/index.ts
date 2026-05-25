@@ -8451,6 +8451,15 @@ class Emitter {
             method === "setPrototypeOf";
     }
 
+    private isObjectSetPrototypeOfCall(expr: ts.Expression): expr is ts.CallExpression {
+        return ts.isCallExpression(expr) &&
+            ts.isPropertyAccessExpression(expr.expression) &&
+            ts.isIdentifier(expr.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(expr.expression.expression, "Object") &&
+            expr.expression.name.text === "setPrototypeOf" &&
+            expr.arguments.length === 2;
+    }
+
     private sideEffectFreeDataDescriptorMapPrimitiveValueResult(
         expr: ts.Expression,
         key: string,
@@ -10057,6 +10066,16 @@ class Emitter {
         if (this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(unwrapped, seenConsts)) {
             return true;
         }
+        const targetOperand = this.sideEffectFreeExtensibleObjectTargetReturningOperand(
+            unwrapped,
+            seenConsts,
+        );
+        if (targetOperand) {
+            return this.isSideEffectFreeFreshObjectMutationTarget(
+                targetOperand,
+                new Set(seenConsts),
+            );
+        }
         return ts.isCallExpression(unwrapped) &&
             (
                 this.isObjectAssignCall(unwrapped) ||
@@ -10066,6 +10085,20 @@ class Emitter {
                 this.isObjectDefinePropertiesCall(unwrapped)
             ) &&
             this.isSideEffectFreeStaticCall(unwrapped, seenConsts);
+    }
+
+    private sideEffectFreeExtensibleObjectTargetReturningOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): ts.Expression | null {
+        if (!ts.isCallExpression(expr)) return null;
+        if (
+            this.isObjectSetPrototypeOfCall(expr) &&
+            this.isSideEffectFreeStaticCall(expr, seenConsts)
+        ) {
+            return expr.arguments[0] ?? null;
+        }
+        return this.sideEffectFreeObjectPrototypeValueOfTargetReturningOperand(expr, seenConsts);
     }
 
     private isSideEffectFreeObjectCreatePrototypeOperand(
