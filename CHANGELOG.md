@@ -5,7 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
-- `Array.fromAsync(...)` now has an immediate-settled subset for typed array, string, typed `Set`, and typed `Map` sources, including synchronous mapper callbacks and native `Promise<T[]>` fulfillment. Test: `array_from_async`.
+- `Array.fromAsync(...)` now has an immediate-settled subset for typed array, string, typed `Set`, and typed `Map` sources, including synchronous mapper callbacks, optional mapper `thisArg` binding, and native `Promise<T[]>` fulfillment. Test: `array_from_async`.
 
 ### Changed
 - Generated-C DCE now preserves side effects from mutating array length proofs when `reverse()` / `sort()` / `fill()` / `copyWithin()` run on earlier const arrays, while still proving lengths for fresh returned receivers. Test: `generated_c_dce_const`.

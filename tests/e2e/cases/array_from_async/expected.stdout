@@ -3,3 +3,4 @@ string map: a0,b1,c2
 set map: 6|12
 map map: x:7|y:8
 named: 0=5,1=6
+thisArg: 21|22

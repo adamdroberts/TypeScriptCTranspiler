@@ -26,3 +26,9 @@ function label(value: number, index: number): string {
 Array.fromAsync([5, 6], label).then((values) => {
     console.log("named:", values.join(","));
 });
+
+Array.fromAsync([1, 2], function (this: any, value: number): number {
+    return value + (this.offset as number);
+}, { offset: 20 }).then((values) => {
+    console.log("thisArg:", values.join("|"));
+});
