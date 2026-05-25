@@ -1141,6 +1141,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `number_to_fixed` | Number.toFixed typed and dynamic fixed-point formatting |
 | `number_to_precision` | Number.toPrecision typed and dynamic significant-digit formatting |
 | `number_format_errors` | Number format validation errors throw catchable runtime exceptions |
+| `default_parameters` | omitted trailing arguments use supported default parameter initializers on functions, constructors, and methods |
 | `default_parameter_function_initializers` | default parameters can initialize omitted function-typed arguments with arrow/function closure values |
 | `function_this_void` | explicit this: void function parameters are compile-time-only |
 | `optional_parameters` | omitted optional pointer and function parameters lower to undefined/null sentinels |
@@ -1212,11 +1213,13 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `process_umask_import` | named and namespace process umask imports use existing runtime helper |
 | `process_usage_import` | named and namespace process POSIX and usage imports use existing runtime helpers |
 | `process_versions` | process.version and process.versions metadata |
+| `promise_any_aggregate` | Promise.any rejects with an AggregateError-shaped object when every input rejects |
 | `promise_callback_adopt` | Promise callbacks and Promise.try adopt returned native Promise records |
 | `promise_callback_throw` | Promise callbacks that throw become rejected Promise records in the immediate subset |
 | `promise_empty_handlers` | Promise.catch and finally omitted or undefined handlers pass settled and pending state through |
 | `promise_executor` | immediate new Promise executor settlement and pending fallback |
 | `promise_finally_adopt` | Promise.finally adopts returned native Promise records in the immediate subset |
+| `promise_pending_combinators` | pending records propagate through immediate Promise combinators without synchronous callback invocation |
 | `queue_microtask` | bounded queueMicrotask callbacks drain after process.nextTick before exit |
 | `scheduler_callback_this` | bounded scheduler callbacks with explicit this parameters receive runtime undefined |
 | `scheduler_many_args` | bounded scheduler callbacks accept more than five typed queued arguments |
@@ -1226,6 +1229,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `timers_module_import` | timers/node:timers imports route to bounded timeout and immediate scheduler helpers |
 | `timers_promises_import` | timers/promises imports expose immediate settled timeout and immediate promises |
 | `timers_promises_scheduler` | timers/promises scheduler.wait and scheduler.yield immediate subset |
+| `promise_race_empty_pending` | empty Promise.race over arrays or Sets returns a pending Promise record |
 | `promise_resolve_adopt` | Promise.resolve adopts existing native Promise records |
 | `promise_settled` | settled Promise.resolve/reject with synchronous then/catch/finally chaining and array/Set combinators |
 | `promise_thenable_assimilation` | immediate dynamic thenable assimilation through Promise.resolve and callbacks |
@@ -1293,7 +1297,10 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generic_class_decorator_replacement` | standard class decorator replacement constructors for erased generic classes |
 | `generic_class_decorator_spread_replacement` | standard class decorator replacement constructors for erased generic spread constructor calls |
 | `generic_classes` | erased generic class fields/methods using dynamic value storage and spread method calls |
+| `generic_callbacks` | generic function references specialize in typed array higher-order callback contexts |
 | `generic_function_values` | generic top-level functions assigned to concrete function-typed values |
+| `generic_functions` | direct generic function calls specialize concrete argument and return types |
+| `generic_methods` | generic instance and static method calls specialize concrete argument and return types |
 | `generated_c_dce` | unreferenced non-exported top-level functions are omitted from generated C |
 | `generated_c_dce_lifted_arrow` | unreferenced non-exported lifted top-level arrow constants are omitted from generated C |
 | `global_number_predicates` | global isNaN/isFinite coercion for typed and dynamic values |
@@ -1543,6 +1550,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `object_from_entries_map` | typed Object.fromEntries over Map<string, V> sources |
 | `object_extensibility` | dynamic Object/Reflect preventExtensions and isExtensible |
 | `object_get_own_property_descriptors` | dynamic Object.getOwnPropertyDescriptors over own data descriptors |
+| `object_get_own_property_symbols` | Object.getOwnPropertySymbols returns an empty symbol array in the string-key-only object model |
 | `object_has_own_property` | dynamic Object.prototype.hasOwnProperty over own vs inherited properties |
 | `object_is` | Object.is SameValue semantics for numbers, strings, and dynamic object identity |
 | `object_is_prototype_of` | dynamic Object.prototype.isPrototypeOf over prototype chains |
@@ -1764,6 +1772,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_object_spread` | dynamic object literal spread over object/string/nullish sources |
 | `dynamic_ops` | dynamic arithmetic, equality, relational, logical, nullish, and compound operators |
 | `dynamic_property_ops` | dynamic `in` and `delete` property operations |
+| `dynamic_runtime_stats` | opt-in dynamic operation, shape-update, and property-cache counters print to stderr |
 | `dynamic_unary_ops` | dynamic unary numeric and bitwise-not operators |
 | `dynamic_update_ops` | dynamic pre/post update operators over local, property, and index lvalues |
 | `dynamic_values` | NaN-boxed `any`/`unknown`, JSON.parse including Unicode escapes, heterogeneous arrays/objects |
