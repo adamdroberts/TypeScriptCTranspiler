@@ -671,6 +671,10 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "define-properties-wrapper-default",\n  label: "define-properties-wrapper-target",\n  count: local.count,\n  double: local.double\n};\nconst descriptors = {\n  bonus: { value: local.bonus, enumerable: true },\n  extra: { get() { return "define-properties-wrapper-extra"; }, enumerable: true }\n};\nmodule.exports = Object.defineProperties(Object.freeze(api), descriptors);\n',
         "local.js": 'exports.count = 101;\nexports.bonus = "define-properties-wrapper-bonus";\nexports.double = function double(value) { return value * 5; };\n',
     }),
+    "tsc2c-cjs-module-define-properties-wrapper-target-from-entries": cjsPackage("tsc2c-cjs-module-define-properties-wrapper-target-from-entries", {
+        "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "define-properties-wrapper-target-from-entries-default",\n  label: "define-properties-wrapper-target-from-entries",\n  count: local.count,\n  double: local.double\n};\nconst bonusKey = `bonus`;\nconst descriptors = {\n  [bonusKey]: { value: local.bonus, enumerable: true },\n  extra: { get() { return "define-properties-wrapper-target-from-entries-extra"; }, enumerable: true }\n};\nconst entries = Object.entries(descriptors);\nmodule.exports = Object.defineProperties(Object.freeze(api), Object.fromEntries(entries));\n',
+        "local.js": 'exports.count = 134;\nexports.bonus = "define-properties-wrapper-target-from-entries-bonus";\nexports.double = function double(value) { return value * 9; };\n',
+    }),
     "tsc2c-cjs-module-define-properties-own-descriptors": cjsPackage("tsc2c-cjs-module-define-properties-own-descriptors", {
         "index.js": 'const api = {\n  default: "module-own-descriptors-default",\n  label: "module-own-descriptors",\n  count: 132,\n  enabled: true\n};\nmodule.exports = Object.defineProperties({}, Object.getOwnPropertyDescriptors(api));\n',
     }),
