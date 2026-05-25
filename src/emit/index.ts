@@ -4506,6 +4506,41 @@ class Emitter {
         ) {
             return this.sideEffectFreeMapArraySourceExpressions(unwrapped.arguments[0]!, seenConsts);
         }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            unwrapped.expression.name.text === "slice" &&
+            unwrapped.arguments.length <= 2
+        ) {
+            const sourceElements = this.sideEffectFreeMapArraySourceExpressions(
+                unwrapped.expression.expression,
+                seenConsts,
+            );
+            if (sourceElements === null) return null;
+            const startValue = unwrapped.arguments[0]
+                ? this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[0], seenConsts)
+                : 0;
+            const endValue = unwrapped.arguments[1]
+                ? this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[1], seenConsts)
+                : sourceElements.length;
+            if (
+                startValue === null ||
+                endValue === null ||
+                !Number.isFinite(startValue) ||
+                !Number.isFinite(endValue) ||
+                !Number.isInteger(startValue) ||
+                !Number.isInteger(endValue)
+            ) {
+                return null;
+            }
+            const actualStart = startValue < 0
+                ? Math.max(sourceElements.length + startValue, 0)
+                : Math.min(startValue, sourceElements.length);
+            const actualEnd = endValue < 0
+                ? Math.max(sourceElements.length + endValue, 0)
+                : Math.min(endValue, sourceElements.length);
+            return sourceElements.slice(actualStart, actualEnd);
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeMapArraySourceExpressions(init, seenConsts) : null;
     }
