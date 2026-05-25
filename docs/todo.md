@@ -306,6 +306,7 @@ This is the next item that most directly expands what programs can be written ag
   - Generated-C DCE propagates statically known Promise state through unused no-op/undefined-handler `.then(...)`, `.catch(...)`, and `.finally(...)` chains. Test: `generated_c_dce_const`.
   - Generated-C DCE preserves settled Promise state through unused `.finally(...)` chains whose reachable callback is side-effect-free and statically fulfilled. Test: `generated_c_dce_const`.
   - Generated-C DCE preserves Promise `.then(...)` pass-through chains when an unreached handler argument expression is still side-effectful. Test: `generated_c_dce_const`.
+  - Generated-C DCE preserves Promise `.then(...)` chains when a reachable-handler branch has a side-effectful opposite handler argument. Test: `generated_c_dce_const`.
   - Generated-C DCE exposes zero-length proofs for mapped `Array.from(empty, mapper[, thisArg])` results, enabling chained unused array-method pruning. Test: `generated_c_dce_const`.
   - Generated-C DCE treats Map/Set constructor sources with exact zero-length proofs as empty for unused `Array.from(..., mapper)` pruning. Test: `generated_c_dce_const`.
   - Generated-C DCE requires ignored extra `Map(...)` / `WeakMap(...)` entry slots to be side-effect-free before pruning static constructor sources. Test: `generated_c_dce_const`.

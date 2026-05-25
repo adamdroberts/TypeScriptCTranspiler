@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now preserves Promise `.then(...)` chains when a reachable-handler branch has a side-effectful opposite handler argument. Test: `generated_c_dce_const`.
 - Generated-C DCE now preserves Promise `.then(...)` pass-through chains when an unreached handler argument expression is still side-effectful. Test: `generated_c_dce_const`.
 - Generated-C DCE now preserves settled Promise state through unused `.finally(...)` chains whose reachable callback is side-effect-free and statically fulfilled. Test: `generated_c_dce_const`.
 - Generated-C DCE now propagates statically known Promise state through unused no-op/undefined-handler `.then(...)`, `.catch(...)`, and `.finally(...)` chains. Test: `generated_c_dce_const`.

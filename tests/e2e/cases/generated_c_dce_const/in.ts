@@ -644,6 +644,18 @@ const kept_promise_then_passthrough_unreached_reject_arg = Promise.resolve("kept
 const kept_promise_then_rejected_passthrough_unreached_fulfill_arg = Promise.reject<string>("kept_promise_then_rejected_passthrough_unreached_fulfill_source")
     .then((Math.random(), (value: string) => "kept_promise_then_rejected_passthrough_unreached_fulfill_handler"))
     .catch((reason) => "kept_promise_then_rejected_passthrough_unreached_fulfill_callback");
+const kept_promise_then_fulfilled_reachable_side_effectful_reject_arg = Promise.resolve("kept_promise_then_fulfilled_reachable_side_effectful_reject_source")
+    .then(
+        (value) => "kept_promise_then_fulfilled_reachable_side_effectful_reject_value",
+        (Math.random(), (reason: any) => "kept_promise_then_fulfilled_reachable_side_effectful_reject_handler"),
+    )
+    .then((value) => "kept_promise_then_fulfilled_reachable_side_effectful_reject_callback");
+const kept_promise_then_rejected_reachable_side_effectful_fulfill_arg = Promise.reject<string>("kept_promise_then_rejected_reachable_side_effectful_fulfill_source")
+    .then(
+        (Math.random(), (value: string) => "kept_promise_then_rejected_reachable_side_effectful_fulfill_handler"),
+        (reason) => "kept_promise_then_rejected_reachable_side_effectful_fulfill_value",
+    )
+    .then((value) => "kept_promise_then_rejected_reachable_side_effectful_fulfill_callback");
 const unused_promise_catch_passthrough_catch_call = Promise.reject<string>("dead_promise_catch_passthrough_source")
     .catch()
     .catch((reason) => "dead_promise_catch_passthrough_callback");

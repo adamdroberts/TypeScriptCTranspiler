@@ -7166,6 +7166,9 @@ class Emitter {
                         : null;
                 }
                 if (recvState === "fulfilled" && unwrapped.arguments[0]) {
+                    if (!this.isSideEffectFreeUnevaluatedPromiseCallback(unwrapped.arguments[1], seenConsts)) {
+                        return null;
+                    }
                     return this.sideEffectFreePromiseHandlerCallbackOperandState(
                         unwrapped.arguments[0],
                         seenConsts,
@@ -7181,6 +7184,9 @@ class Emitter {
                         : null;
                 }
                 if (recvState === "rejected" && unwrapped.arguments[1]) {
+                    if (!this.isSideEffectFreeUnevaluatedPromiseCallback(unwrapped.arguments[0], seenConsts)) {
+                        return null;
+                    }
                     return this.sideEffectFreePromiseHandlerCallbackOperandState(
                         unwrapped.arguments[1],
                         seenConsts,
