@@ -6972,20 +6972,8 @@ class Emitter {
         if (this.sideEffectFreePromiseStaticCombinatorState(unwrapped, seenConsts) === "fulfilled") {
             return true;
         }
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isPropertyAccessExpression(unwrapped.expression) &&
-            ts.isIdentifier(unwrapped.expression.expression) &&
-            unwrapped.expression.name.text === "resolve" &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Promise")
-        ) {
-            return (
-                unwrapped.arguments.length === 0 ||
-                this.isSideEffectFreePrimitivePromiseResolveValue(unwrapped.arguments[0]!, seenConsts)
-            ) &&
-                Array.from(unwrapped.arguments).slice(1).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
+        if (this.sideEffectFreePromiseResolveState(unwrapped, seenConsts) === "fulfilled") {
+            return true;
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeFulfilledPromiseOperand(init, seenConsts);
@@ -7003,6 +6991,9 @@ class Emitter {
             return true;
         }
         if (this.sideEffectFreePromiseStaticCombinatorState(unwrapped, seenConsts) === "rejected") {
+            return true;
+        }
+        if (this.sideEffectFreePromiseResolveState(unwrapped, seenConsts) === "rejected") {
             return true;
         }
         if (
@@ -7034,6 +7025,8 @@ class Emitter {
         if (tryState === "fulfilled" || tryState === "rejected") return true;
         const combinatorState = this.sideEffectFreePromiseStaticCombinatorState(expr, seenConsts);
         if (combinatorState === "fulfilled" || combinatorState === "rejected") return true;
+        const resolveState = this.sideEffectFreePromiseResolveState(expr, seenConsts);
+        if (resolveState === "fulfilled" || resolveState === "rejected") return true;
         return this.isSideEffectFreeFulfilledPromiseOperand(expr, seenConsts) ||
             this.isSideEffectFreeRejectedPromiseOperand(expr, seenConsts);
     }
@@ -7058,6 +7051,65 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreePromiseStaticCombinatorState(init, seenConsts) : null;
+    }
+
+    private sideEffectFreePromiseResolveState(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): "fulfilled" | "rejected" | "pending" | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            unwrapped.expression.name.text === "resolve" &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Promise") &&
+            Array.from(unwrapped.arguments).slice(1).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            )
+        ) {
+            return unwrapped.arguments.length === 0
+                ? "fulfilled"
+                : this.sideEffectFreePromiseResolveArgumentState(unwrapped.arguments[0]!, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreePromiseResolveState(init, seenConsts) : null;
+    }
+
+    private sideEffectFreePromiseResolveArgumentState(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): "fulfilled" | "rejected" | "pending" | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.isSideEffectFreePrimitivePromiseResolveValue(unwrapped, seenConsts)) {
+            return "fulfilled";
+        }
+        const resolveState = this.sideEffectFreePromiseResolveState(unwrapped, seenConsts);
+        if (resolveState) return resolveState;
+        const newState = this.sideEffectFreeNewPromiseState(unwrapped, seenConsts);
+        if (newState) return newState;
+        const tryState = this.sideEffectFreePromiseTryState(unwrapped, seenConsts);
+        if (tryState) return tryState;
+        const combinatorState = this.sideEffectFreePromiseStaticCombinatorState(unwrapped, seenConsts);
+        if (combinatorState) return combinatorState;
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            unwrapped.expression.name.text === "reject" &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Promise") &&
+            (
+                unwrapped.arguments.length === 0 ||
+                this.isSideEffectFreePrimitivePromiseResolveValue(unwrapped.arguments[0]!, seenConsts)
+            ) &&
+            Array.from(unwrapped.arguments).slice(1).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            )
+        ) {
+            return "rejected";
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreePromiseResolveArgumentState(init, seenConsts) : null;
     }
 
     private sideEffectFreePromiseTryState(
@@ -7136,6 +7188,8 @@ class Emitter {
             this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Promise")
         ) {
             const method = unwrapped.expression.name.text;
+            const resolveState = this.sideEffectFreePromiseResolveState(unwrapped, seenConsts);
+            if (resolveState) return resolveState;
             const argsArePure = (
                 unwrapped.arguments.length === 0 ||
                 this.isSideEffectFreePrimitivePromiseResolveValue(unwrapped.arguments[0]!, seenConsts)

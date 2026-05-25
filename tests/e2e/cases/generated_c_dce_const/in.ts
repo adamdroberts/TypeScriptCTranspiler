@@ -577,6 +577,12 @@ const unused_promise_all_empty_finally_call = Promise.all([] as Promise<string>[
     .finally(() => "dead_promise_all_empty_finally_callback");
 const unused_promise_any_empty_finally_call = Promise.any([] as Promise<string>[])
     .finally(() => "dead_promise_any_empty_finally_callback");
+const unused_promise_resolve_adopt_resolve_then_call = Promise.resolve(Promise.resolve("dead_promise_resolve_adopt_resolve_source"))
+    .then(() => "dead_promise_resolve_adopt_resolve_then_callback");
+const unused_promise_resolve_adopt_reject_catch_call = Promise.resolve(Promise.reject("dead_promise_resolve_adopt_reject_source"))
+    .catch(() => "dead_promise_resolve_adopt_reject_catch_callback");
+const unused_promise_resolve_adopt_all_finally_call = Promise.resolve(Promise.all([] as Promise<string>[]))
+    .finally(() => "dead_promise_resolve_adopt_all_finally_callback");
 const unused_new_promise_empty_executor_call = new Promise<string>(() => {
 });
 const unused_new_promise_resolve_call = new Promise<string>((resolve) => resolve("dead_new_promise_resolve"));
@@ -1627,6 +1633,12 @@ Promise.all([] as Promise<string>[])
     .finally(() => "top_level_dead_promise_all_empty_finally_callback");
 Promise.any([] as Promise<string>[])
     .finally(() => "top_level_dead_promise_any_empty_finally_callback");
+Promise.resolve(Promise.resolve("top_level_dead_promise_resolve_adopt_resolve_source"))
+    .then(() => "top_level_dead_promise_resolve_adopt_resolve_then_callback");
+Promise.resolve(Promise.reject("top_level_dead_promise_resolve_adopt_reject_source"))
+    .catch(() => "top_level_dead_promise_resolve_adopt_reject_catch_callback");
+Promise.resolve(Promise.all([] as Promise<string>[]))
+    .finally(() => "top_level_dead_promise_resolve_adopt_all_finally_callback");
 new Promise<string>(() => {
 });
 new Promise<string>((resolve) => resolve("top_level_dead_new_promise_resolve"));
@@ -2654,6 +2666,12 @@ function usedLocal(value: number): number {
         .finally(() => "local_dead_promise_all_empty_finally_callback");
     Promise.any([] as Promise<string>[])
         .finally(() => "local_dead_promise_any_empty_finally_callback");
+    Promise.resolve(Promise.resolve("local_dead_promise_resolve_adopt_resolve_source"))
+        .then(() => "local_dead_promise_resolve_adopt_resolve_then_callback");
+    Promise.resolve(Promise.reject("local_dead_promise_resolve_adopt_reject_source"))
+        .catch(() => "local_dead_promise_resolve_adopt_reject_catch_callback");
+    Promise.resolve(Promise.all([] as Promise<string>[]))
+        .finally(() => "local_dead_promise_resolve_adopt_all_finally_callback");
     new Promise<string>(() => {
     });
     new Promise<string>((resolve) => resolve("local_dead_new_promise_resolve"));
