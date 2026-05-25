@@ -1390,11 +1390,15 @@ declare module "crypto" {
     export function createHash(algorithm: CryptoHashAlgorithm): CryptoHash;
     export function randomBytes(size: number): Buffer;
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
+    const defaultCrypto: Crypto;
+    export default defaultCrypto;
 }
 declare module "node:crypto" {
     export function createHash(algorithm: CryptoHashAlgorithm): CryptoHash;
     export function randomBytes(size: number): Buffer;
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
+    const defaultCrypto: Crypto;
+    export default defaultCrypto;
 }
 
 type BufferEncoding = "utf8" | "utf-8" | "hex" | "base64";

@@ -17061,7 +17061,9 @@ class Emitter {
     }
 
     private isCryptoModuleIdentifier(id: ts.Identifier): boolean {
-        return id.text === "crypto" || this.isNamespaceImportFrom(id, ["crypto", "node:crypto"]);
+        return id.text === "crypto" ||
+            this.isNamespaceImportFrom(id, ["crypto", "node:crypto"]) ||
+            this.isDefaultImportFrom(id, ["crypto", "node:crypto"]);
     }
 
     private isChildProcessModuleIdentifier(id: ts.Identifier): boolean {
