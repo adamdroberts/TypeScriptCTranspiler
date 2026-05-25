@@ -2,3 +2,5 @@ stdin: false false false
 stdout: false false false false 0
 stderr: false false false false 0
 default: false false false
+readable: true true 0
+writable: true 0 false true 0 false

@@ -675,6 +675,7 @@ interface ProcessHrtime {
 interface ProcessWritableStream {
     readonly closed: boolean;
     readonly destroyed: boolean;
+    readonly errored: any;
     readonly fd: number;
     readonly isTTY: boolean;
     readonly readable: boolean;
@@ -682,6 +683,8 @@ interface ProcessWritableStream {
     readonly writableCorked: number;
     readonly writableEnded: boolean;
     readonly writableFinished: boolean;
+    readonly writableLength: number;
+    readonly writableNeedDrain: boolean;
     addListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     cork(...ignored: any[]): void;
     end(callback?: () => void): void;
@@ -700,10 +703,13 @@ interface ProcessWritableStream {
 interface ProcessReadableStream {
     readonly closed: boolean;
     readonly destroyed: boolean;
+    readonly errored: any;
     readonly fd: number;
     readonly isTTY: boolean;
     readonly readable: boolean;
     readonly readableEnded: boolean;
+    readonly readableFlowing: any;
+    readonly readableLength: number;
     addListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;

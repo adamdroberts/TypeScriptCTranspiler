@@ -40826,6 +40826,8 @@ class Emitter {
                 case "closed":
                 case "destroyed":
                     return { c: "false", ty: T_BOOLEAN };
+                case "errored":
+                    return { c: "tsc_value_null()", ty: T_VALUE };
                 case "fd": return { c: `${fd}.0`, ty: T_NUMBER };
                 case "isTTY": return { c: `tsc_process_stdio_is_tty(${fd})`, ty: T_BOOLEAN };
                 case "readable":
@@ -40833,6 +40835,12 @@ class Emitter {
                     return { c: "false", ty: T_BOOLEAN };
                 case "readableEnded":
                     if (stdioStreamName === "stdin") return { c: "false", ty: T_BOOLEAN };
+                    break;
+                case "readableFlowing":
+                    if (stdioStreamName === "stdin") return { c: "tsc_value_null()", ty: T_VALUE };
+                    break;
+                case "readableLength":
+                    if (stdioStreamName === "stdin") return { c: "0.0", ty: T_NUMBER };
                     break;
                 case "writable":
                     if (stdioStreamName !== "stdin") return { c: "true", ty: T_BOOLEAN };
@@ -40842,6 +40850,12 @@ class Emitter {
                     break;
                 case "writableEnded":
                 case "writableFinished":
+                    if (stdioStreamName !== "stdin") return { c: "false", ty: T_BOOLEAN };
+                    break;
+                case "writableLength":
+                    if (stdioStreamName !== "stdin") return { c: "0.0", ty: T_NUMBER };
+                    break;
+                case "writableNeedDrain":
                     if (stdioStreamName !== "stdin") return { c: "false", ty: T_BOOLEAN };
                     break;
             }
