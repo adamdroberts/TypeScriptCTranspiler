@@ -271,7 +271,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 ## 6. Regex (PCRE2-backed)
 
 - `/pattern/flags` literal syntax — parsed at emit time. Test: `regex`
-- `new RegExp(pattern, flags?)` and callable `RegExp(pattern, flags?)` construct the same PCRE2-backed runtime from string patterns and flags. Test: `regexp_constructor`
+- `new RegExp(pattern, flags?, ...ignored)` and callable `RegExp(pattern, flags?, ...ignored)` construct the same PCRE2-backed runtime from string patterns and flags while preserving ignored trailing-argument evaluation. Tests: `regexp_constructor`, `regexp_constructor_ignored_arguments`
 - Flag support: `d`, `g`, `i`, `m`, `s`, `u`, `y` properties (`hasIndices`, global, ignore-case, multiline, dotAll, Unicode, sticky). Tests: `regexp_object_methods`, `regexp_extra_flags`
 - PCRE2 syntax support for lookahead/lookbehind, named capture syntax, and Unicode property escapes. Test: `regex_pcre2`
 - `RegExp.escape(text)` → `tsc_regexp_escape`, returning a literal-pattern string for leading ASCII alphanumerics, regex syntax characters, broader ASCII punctuators, and whitespace/control bytes. Test: `regexp_escape`
@@ -1568,6 +1568,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `regex_captures` | capture groups for non-global `.match()` |
 | `regex_pcre2` | lookahead/lookbehind, named capture syntax, Unicode properties, dotAll |
 | `regexp_constructor` | new RegExp and callable RegExp from string pattern and flags |
+| `regexp_constructor_ignored_arguments` | RegExp constructor and callable form evaluate and ignore trailing arguments |
 | `regexp_escape` | RegExp.escape literal-pattern escaping |
 | `regexp_exec` | RegExp.exec capture-array results |
 | `regexp_extra_flags` | RegExp hasIndices/sticky flag properties |

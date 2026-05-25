@@ -576,8 +576,8 @@ interface RegExp {
     readonly unicode: boolean;
 }
 interface RegExpConstructor {
-    new(pattern: string, flags?: string): RegExp;
-    (pattern: string, flags?: string): RegExp;
+    new(pattern: string, flags?: string, ...ignored: any[]): RegExp;
+    (pattern: string, flags?: string, ...ignored: any[]): RegExp;
     escape(text: string): string;
 }
 declare var RegExp: RegExpConstructor;

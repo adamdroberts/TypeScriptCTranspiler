@@ -40471,7 +40471,7 @@ class Emitter {
 
     private emitRegExpConstructor(call: ts.CallExpression | ts.NewExpression): EmitResult {
         const args = call.arguments ?? [];
-        if (args.length < 1 || args.length > 2) unsupported(call, "RegExp expects pattern and optional flags");
+        if (args.length < 1) unsupported(call, "RegExp expects pattern and optional flags");
         const patternNode = args[0]!;
         const pattern = this.emitExpr(patternNode);
         const specs: SequencedCallArg[] = [
@@ -40481,6 +40481,7 @@ class Emitter {
             const flags = this.emitExpr(args[1]);
             specs.push({ value: flags, target: T_STRING, node: args[1] });
         }
+        specs.push(...this.ignoredArgumentSpecs(args, 2));
         return this.emitSequencedExpr(T_REGEXP, specs, ([patternC, flagsC]) =>
             `tsc_regexp_new(${patternC}, ${flagsC ?? 'tsc_str_from_lit("", 0)'})`,
         );
