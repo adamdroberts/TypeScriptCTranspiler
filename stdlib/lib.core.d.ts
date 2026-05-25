@@ -1533,14 +1533,20 @@ interface BufferConstructor {
 declare var Buffer: BufferConstructor;
 interface BufferModule {
     Buffer: BufferConstructor;
+    atob(value: string, ...ignored: any[]): string;
+    btoa(value: string, ...ignored: any[]): string;
 }
 declare module "buffer" {
     export const Buffer: BufferConstructor;
+    export function atob(value: string, ...ignored: any[]): string;
+    export function btoa(value: string, ...ignored: any[]): string;
     const defaultBuffer: BufferModule;
     export default defaultBuffer;
 }
 declare module "node:buffer" {
     export const Buffer: BufferConstructor;
+    export function atob(value: string, ...ignored: any[]): string;
+    export function btoa(value: string, ...ignored: any[]): string;
     const defaultBuffer: BufferModule;
     export default defaultBuffer;
 }

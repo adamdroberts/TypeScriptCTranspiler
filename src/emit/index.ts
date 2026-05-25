@@ -24846,13 +24846,7 @@ class Emitter {
             return this.emitGlobalNumberPredicate(call, "isFinite");
         }
         if (name === "btoa" || name === "atob") {
-            if (call.arguments.length < 1) unsupported(call, `${name} expects at least 1 arg`);
-            const value = this.emitExpr(call.arguments[0]!);
-            const fn = name === "btoa" ? "tsc_btoa" : "tsc_atob";
-            return this.emitSequencedExpr(T_STRING, [
-                { value, target: T_STRING, node: call.arguments[0]! },
-                ...this.ignoredArgumentSpecs(call.arguments, 1),
-            ], ([input]) => `${fn}(${input!})`);
+            return this.emitBase64Call(call, name);
         }
         if (name === "queueMicrotask") {
             if (call.arguments.length !== 1) unsupported(call, "queueMicrotask expects a callback");
@@ -24883,6 +24877,11 @@ class Emitter {
             .find((exported) => this.isNamedImportFrom(calleeId, ["console", "node:console"], exported));
         if (consoleNamed) {
             return this.emitConsole(call, consoleNamed);
+        }
+        const bufferBase64Named = ["atob", "btoa"]
+            .find((exported) => this.isNamedImportFrom(calleeId, ["buffer", "node:buffer"], exported));
+        if (bufferBase64Named) {
+            return this.emitBase64Call(call, bufferBase64Named);
         }
         const timersNamed = ["setTimeout", "clearTimeout", "clearInterval", "setImmediate", "clearImmediate"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["timers", "node:timers"], exported));
@@ -26389,6 +26388,10 @@ class Emitter {
 
         if (this.isTimersModuleIdentifier(recvExpr)) {
             return this.emitTimersCall(call, memberName);
+        }
+
+        if (this.isBufferModuleIdentifier(recvExpr) && (memberName === "atob" || memberName === "btoa")) {
+            return this.emitBase64Call(call, memberName);
         }
 
         if (
@@ -31351,6 +31354,17 @@ class Emitter {
         return this.emitSequencedExpr(T_VOID, specs, (args) =>
             `${runtime}(${args[0] ?? "0.0"})`,
         );
+    }
+
+    private emitBase64Call(call: ts.CallExpression, name: string): EmitResult {
+        if (name !== "btoa" && name !== "atob") unsupported(call, `${name}`);
+        if (call.arguments.length < 1) unsupported(call, `${name} expects at least 1 arg`);
+        const value = this.emitExpr(call.arguments[0]!);
+        const fn = name === "btoa" ? "tsc_btoa" : "tsc_atob";
+        return this.emitSequencedExpr(T_STRING, [
+            { value, target: T_STRING, node: call.arguments[0]! },
+            ...this.ignoredArgumentSpecs(call.arguments, 1),
+        ], ([input]) => `${fn}(${input!})`);
     }
 
     private emitSetImmediateCall(call: ts.CallExpression): EmitResult {

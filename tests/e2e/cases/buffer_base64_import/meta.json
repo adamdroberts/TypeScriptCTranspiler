@@ -1,0 +1,3 @@
+{
+  "description": "buffer/node:buffer atob and btoa imports route to existing base64 helpers"
+}

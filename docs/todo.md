@@ -25,6 +25,7 @@ This is the next item that most directly expands what programs can be written ag
   - Named and default imports from `"buffer"` / `"node:buffer"` route to the supported `Buffer` static helper subset. Test: `buffer_module_import`.
   - Named and default imports from `"url"` / `"node:url"` route to the supported `URL` constructor and `URL.canParse(...)` helpers. Test: `url_module_import`.
   - Additional Buffer coverage routes invalid encodings, bad hex/base64 input, invalid sizes/lengths, out-of-range read/write offsets, and invalid swap widths through catchable runtime exceptions. Test: `buffer_errors`.
+  - `atob` / `btoa` imports from `"buffer"` / `"node:buffer"` route to the existing base64 helpers across named, namespace, and default import forms. Test: `buffer_base64_import`.
   - Additional crypto coverage routes unsupported hash algorithms, invalid random byte sizes, and unsupported digest encodings through catchable runtime exceptions. Test: `crypto_errors`.
   - Named, namespace, and default imports from `"console"` / `"node:console"` route to the supported variadic console helpers. Test: `console_module_import`.
   - Additional object/iteration coverage routes invalid `Object.create(...)` prototypes and dynamic `for...of` non-iterable values through catchable runtime exceptions. Test: `dynamic_object_iteration_errors`.

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `atob` / `btoa` imports from `"buffer"` and `"node:buffer"` now route to the existing base64 helpers across named, namespace, and default import forms. Test: `buffer_base64_import`.
 - Named, namespace, and default imports from `"console"` and `"node:console"` now route to the supported variadic console helpers. Test: `console_module_import`.
 - Named, namespace, and default imports from `"timers"` and `"node:timers"` now route to the bounded zero-delay `setTimeout` / `clearTimeout` / `clearInterval` and before-exit `setImmediate` / `clearImmediate` scheduler helpers. Test: `timers_module_import`.
 - Named and default imports from `"buffer"` and `"node:buffer"` now route to the supported `Buffer` static helper subset. Test: `buffer_module_import`.
