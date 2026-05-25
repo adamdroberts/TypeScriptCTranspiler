@@ -1,5 +1,6 @@
 const text: any = "abcdef";
 
+console.log("default:", text.at());
 console.log("first:", text.at(0));
 console.log("middle:", text.at(2));
 console.log("last:", text.at(-1));

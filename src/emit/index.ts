@@ -27806,8 +27806,7 @@ class Emitter {
             case "lastIndexOf":
                 return oneRequiredOneOptional("tsc_value_method_last_index_of", { c: "tsc_value_num(INFINITY)", ty: T_VALUE });
             case "at":
-                if (args.length < 1) unsupported(call, "at expects 1 arg");
-                return oneArg("tsc_value_method_at");
+                return oneArg("tsc_value_method_at", { c: "tsc_value_num(0.0)", ty: T_VALUE });
             case "hasOwnProperty":
                 if (args.length < 1) unsupported(call, "hasOwnProperty expects at least 1 arg");
                 return this.emitSequencedExpr(
