@@ -1422,6 +1422,9 @@ class Emitter {
         if (this.isSideEffectFreeEventEmitterStaticMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreePromiseInstanceMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
         if (
             ts.isIdentifier(recv) &&
             this.isCryptoModuleIdentifier(recv) &&
@@ -6905,6 +6908,93 @@ class Emitter {
                 );
         }
         return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+    }
+
+    private isSideEffectFreePromiseInstanceMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (args.length > 1) return false;
+        if (method === "then") {
+            return this.isSideEffectFreeFulfilledPromiseOperand(recv, seenConsts) &&
+                this.isSideEffectFreeOptionalPromiseCallback(args[0], seenConsts);
+        }
+        if (method === "catch") {
+            return this.isSideEffectFreeRejectedPromiseOperand(recv, seenConsts) &&
+                this.isSideEffectFreeOptionalPromiseCallback(args[0], seenConsts);
+        }
+        if (method === "finally") {
+            return this.isSideEffectFreeSettledPromiseOperand(recv, seenConsts) &&
+                this.isSideEffectFreeOptionalPromiseCallback(args[0], seenConsts);
+        }
+        return false;
+    }
+
+    private isSideEffectFreeOptionalPromiseCallback(
+        expr: ts.Expression | undefined,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return !expr ||
+            this.isUndefinedExpression(expr) ||
+            this.isSideEffectFreePromiseTryCallbackOperand(expr, seenConsts);
+    }
+
+    private isSideEffectFreeFulfilledPromiseOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            unwrapped.expression.name.text === "resolve" &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Promise")
+        ) {
+            return (
+                unwrapped.arguments.length === 0 ||
+                this.isSideEffectFreePrimitivePromiseResolveValue(unwrapped.arguments[0]!, seenConsts)
+            ) &&
+                Array.from(unwrapped.arguments).slice(1).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeFulfilledPromiseOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeRejectedPromiseOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            unwrapped.expression.name.text === "reject" &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Promise")
+        ) {
+            return (
+                unwrapped.arguments.length === 0 ||
+                this.isSideEffectFreePrimitivePromiseResolveValue(unwrapped.arguments[0]!, seenConsts)
+            ) &&
+                Array.from(unwrapped.arguments).slice(1).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeRejectedPromiseOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreeSettledPromiseOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return this.isSideEffectFreeFulfilledPromiseOperand(expr, seenConsts) ||
+            this.isSideEffectFreeRejectedPromiseOperand(expr, seenConsts);
     }
 
     private isSideEffectFreePrimitiveTemplateExpression(

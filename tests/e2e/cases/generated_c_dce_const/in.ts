@@ -567,6 +567,14 @@ const unused_new_promise_resolve_call = new Promise<string>((resolve) => resolve
 const unused_new_promise_reject_call = new Promise<string>((resolve, reject) => {
     reject("dead_new_promise_reject");
 });
+const unused_promise_then_call = Promise.resolve("dead_promise_then_source").then(() => "dead_promise_then_callback");
+const unused_promise_catch_call = Promise.reject<string>("dead_promise_catch_source").catch(() => "dead_promise_catch_callback");
+const unused_promise_finally_resolve_call = Promise.resolve("dead_promise_finally_resolve_source").finally(() => {
+    String("dead_promise_finally_resolve_callback");
+});
+const unused_promise_finally_reject_call = Promise.reject<string>("dead_promise_finally_reject_source").finally(() => {
+    String("dead_promise_finally_reject_callback");
+});
 const dead_promise_resolve_object_shorthand = "dead_promise_resolve_object_shorthand";
 const unused_promise_resolve_object_shorthand_call = Promise.resolve({ dead_promise_resolve_object_shorthand }.dead_promise_resolve_object_shorthand);
 const dead_promise_resolve_object_spread_source = { dead_promise_resolve_object_spread: "dead_promise_resolve_object_spread" };
@@ -1577,6 +1585,11 @@ new Promise<string>((resolve) => resolve("top_level_dead_new_promise_resolve"));
 new Promise<string>((resolve, reject) => {
     reject("top_level_dead_new_promise_reject");
 });
+Promise.resolve("top_level_dead_promise_then_source").then(() => "top_level_dead_promise_then_callback");
+Promise.reject<string>("top_level_dead_promise_catch_source").catch(() => "top_level_dead_promise_catch_callback");
+Promise.resolve("top_level_dead_promise_finally_source").finally(() => {
+    String("top_level_dead_promise_finally_callback");
+});
 const top_level_dead_promise_resolve_object_shorthand = "top_level_dead_promise_resolve_object_shorthand";
 Promise.resolve({ top_level_dead_promise_resolve_object_shorthand }.top_level_dead_promise_resolve_object_shorthand);
 const top_level_dead_promise_resolve_object_spread_source = { top_level_dead_promise_resolve_object_spread: "top_level_dead_promise_resolve_object_spread" };
@@ -2566,6 +2579,11 @@ function usedLocal(value: number): number {
     new Promise<string>((resolve) => resolve("local_dead_new_promise_resolve"));
     new Promise<string>((resolve, reject) => {
         reject("local_dead_new_promise_reject");
+    });
+    Promise.resolve("local_dead_promise_then_source").then(() => "local_dead_promise_then_callback");
+    Promise.reject<string>("local_dead_promise_catch_source").catch(() => "local_dead_promise_catch_callback");
+    Promise.resolve("local_dead_promise_finally_source").finally(() => {
+        String("local_dead_promise_finally_callback");
     });
     const local_dead_promise_resolve_object_shorthand = "local_dead_promise_resolve_object_shorthand";
     Promise.resolve({ local_dead_promise_resolve_object_shorthand }.local_dead_promise_resolve_object_shorthand);
