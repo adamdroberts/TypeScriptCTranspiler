@@ -4540,12 +4540,24 @@ class Emitter {
                     }
                     if (
                         method === "toSpliced" &&
+                        unwrapped.arguments.length >= 1 &&
                         unwrapped.arguments.length <= 2 &&
                         Array.from(unwrapped.arguments).every((arg) =>
                             this.isSideEffectFreePrimitiveNumberCoercion(arg, seenConsts)
                         )
                     ) {
                         return 0;
+                    }
+                    if (
+                        method === "toSpliced" &&
+                        unwrapped.arguments.length > 2 &&
+                        this.isSideEffectFreePrimitiveNumberCoercion(unwrapped.arguments[0]!, seenConsts) &&
+                        this.isSideEffectFreePrimitiveNumberCoercion(unwrapped.arguments[1]!, seenConsts) &&
+                        Array.from(unwrapped.arguments).slice(2).every((arg) =>
+                            this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                        )
+                    ) {
+                        return unwrapped.arguments.length - 2;
                     }
                 }
                 if (
