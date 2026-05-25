@@ -3595,8 +3595,9 @@ class Emitter {
                 }
                 const sourceLength = this.sideEffectFreeArrayLiteralLength(args[0]!, seenConsts);
                 if (sourceLength !== null && sourceLength <= 1) return sourceLength;
+                const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(args[0]!, seenConsts);
+                if (returnedArrayLength === 0) return 0;
                 if (globalName === "Set") {
-                    const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(args[0]!, seenConsts);
                     if (returnedArrayLength !== null && returnedArrayLength <= 1) return returnedArrayLength;
                 }
                 return null;
@@ -6828,6 +6829,9 @@ class Emitter {
             this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map") &&
             this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
         ) {
+            return true;
+        }
+        if (this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts) === 0) {
             return true;
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
@@ -10150,6 +10154,14 @@ class Emitter {
                 index,
                 new Set(seenConsts),
             );
+        }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map") &&
+            this.sideEffectFreeNewCollectionLength(unwrapped, "Map", seenConsts) === 0
+        ) {
+            return "absent";
         }
         if (
             ts.isNewExpression(unwrapped) &&
