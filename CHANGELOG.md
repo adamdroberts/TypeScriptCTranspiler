@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now propagates empty Promise combinator state through earlier-const and copy-constructed empty typed Set sources so immediate Promise chains and `Promise.try(...)` callbacks can be pruned. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now proves immediate Promise-chain pruning for empty Promise combinators fed by earlier-const and copied empty typed array sources. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now proves unused `Promise.all(...)`, `Promise.allSettled(...)`, `Promise.any(...)`, and `Promise.race(...)` pruning through earlier-const and copy-constructed empty typed Set sources. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now proves unused `Promise.all(...)`, `Promise.allSettled(...)`, `Promise.any(...)`, and `Promise.race(...)` pruning through earlier-const and copied empty typed array sources. Test: `generated_c_dce_const`.

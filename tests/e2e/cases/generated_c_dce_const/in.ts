@@ -399,6 +399,22 @@ const unused_promise_all_empty_set_copy_call = Promise.all(unused_promise_empty_
 const unused_promise_all_settled_empty_set_copy_call = Promise.allSettled(unused_promise_empty_set_copy_source);
 const unused_promise_any_empty_set_copy_call = Promise.any(unused_promise_empty_set_copy_source);
 const unused_promise_race_empty_set_copy_call = Promise.race(unused_promise_empty_set_copy_source);
+const unused_promise_all_empty_const_set_then_call = Promise.all(unused_promise_empty_set_source)
+    .then((value) => "dead_promise_all_empty_const_set_then_callback");
+const unused_promise_all_settled_empty_const_set_then_call = Promise.allSettled(unused_promise_empty_set_source)
+    .then((value) => "dead_promise_all_settled_empty_const_set_then_callback");
+const unused_promise_any_empty_const_set_catch_call = Promise.any(unused_promise_empty_set_source)
+    .catch((reason) => "dead_promise_any_empty_const_set_catch_callback");
+const unused_promise_race_empty_const_set_finally_call = Promise.race(unused_promise_empty_set_source)
+    .finally(() => "dead_promise_race_empty_const_set_finally_callback");
+const unused_promise_all_empty_set_copy_then_call = Promise.all(unused_promise_empty_set_copy_source)
+    .then((value) => "dead_promise_all_empty_set_copy_then_callback");
+const unused_promise_all_settled_empty_set_copy_then_call = Promise.allSettled(unused_promise_empty_set_copy_source)
+    .then((value) => "dead_promise_all_settled_empty_set_copy_then_callback");
+const unused_promise_any_empty_set_copy_catch_call = Promise.any(unused_promise_empty_set_copy_source)
+    .catch((reason) => "dead_promise_any_empty_set_copy_catch_callback");
+const unused_promise_race_empty_set_copy_finally_call = Promise.race(unused_promise_empty_set_copy_source)
+    .finally(() => "dead_promise_race_empty_set_copy_finally_callback");
 const unused_promise_resolve_bigint_call = Promise.resolve(123456789n);
 const unused_promise_resolve_signed_number_call = Promise.resolve(-123456.5);
 const unused_promise_resolve_nan_call = Promise.resolve(NaN, "dead_promise_resolve_nan_ignored");
@@ -613,6 +629,8 @@ const unused_promise_try_empty_call = Promise.try(() => {
 const unused_promise_try_resolve_call = Promise.try(() => Promise.resolve("dead_promise_try_resolve"));
 const unused_promise_try_reject_call = Promise.try(() => Promise.reject("dead_promise_try_reject"));
 const unused_promise_try_all_empty_call = Promise.try(() => Promise.all([] as Promise<string>[]));
+const unused_promise_try_all_empty_const_set_call = Promise.try(() => Promise.all(unused_promise_empty_set_source));
+const unused_promise_try_race_empty_set_copy_call = Promise.try(() => Promise.race(unused_promise_empty_set_copy_source));
 const unused_promise_try_then_call = Promise.try(() => "dead_promise_try_then_source")
     .then(() => "dead_promise_try_then_callback");
 const unused_promise_try_catch_call = Promise.try(() => Promise.reject("dead_promise_try_catch_source"))

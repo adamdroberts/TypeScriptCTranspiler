@@ -6920,7 +6920,7 @@ class Emitter {
                 ) &&
                 unwrapped.arguments.length === 1
             ) {
-                return this.isSideEffectFreeFreshOrReturnedEmptyArrayOperand(unwrapped.arguments[0]!, seenConsts);
+                return this.isSideEffectFreeEmptyPromiseCombinatorSource(unwrapped.arguments[0]!, seenConsts);
             }
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
@@ -7475,6 +7475,7 @@ class Emitter {
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
     ): Array<"fulfilled" | "rejected" | "pending"> | null {
+        if (this.isSideEffectFreeEmptyPromiseCombinatorSource(expr, seenConsts)) return [];
         const elements = this.sideEffectFreeMapArraySourceExpressions(expr, seenConsts);
         if (elements === null) return null;
         const states: Array<"fulfilled" | "rejected" | "pending"> = [];
