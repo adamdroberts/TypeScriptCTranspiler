@@ -478,7 +478,6 @@ const unused_promise_resolve_finregistry_object_to_string_index_read = Promise.r
     "dead_promise_resolve_finregistry_object_to_string_index_callback";
 }).toString()[0], "dead_promise_resolve_finregistry_object_to_string_index_read_marker"));
 const unused_promise_resolve_object_has_own_call = Promise.resolve(Object.hasOwn({ dead_promise_resolve_object_has_own: 1 }, "dead_promise_resolve_object_has_own"));
-// @ts-ignore: Object.getOwnPropertySymbols is intentionally covered by generated-C DCE under this case's older lib target.
 const unused_promise_resolve_object_symbols_length = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols: 1 }).length);
 const unused_promise_resolve_object_extensible_call = Promise.resolve(Object.isExtensible({ dead_promise_resolve_object_extensible: 1 }));
 const unused_promise_resolve_object_sealed_call = Promise.resolve(Object.isSealed({ dead_promise_resolve_object_sealed: 1 }));
@@ -3842,11 +3841,8 @@ function usedLocal(value: number): number {
     Object.values("local_dead_object_primitive_values");
     Object.entries("local_dead_object_primitive_entries");
     Object.getOwnPropertyNames("local_dead_object_primitive_property_names");
-    // @ts-ignore: Object.getOwnPropertySymbols is intentionally covered by generated-C DCE under this case's older lib target.
     Object.getOwnPropertySymbols({ local_dead_object_symbols: 1 });
-    // @ts-ignore: Object.getOwnPropertySymbols is intentionally covered by generated-C DCE under this case's older lib target.
     Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_freeze: 1 })).length;
-    // @ts-ignore: Object.getOwnPropertySymbols is intentionally covered by generated-C DCE under this case's older lib target.
     Object.getOwnPropertySymbols(Object.assign({}, { local_dead_object_symbols_assign: 1 })).map(() => "local_dead_object_symbols_empty_map_callback");
     Object.getOwnPropertyDescriptor("local_dead_object_primitive_descriptor", "0");
     Object.getOwnPropertyDescriptors("local_dead_object_primitive_descriptors");

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `Object.getOwnPropertySymbols(...)` is now declared in the local stdlib shim so supported user code no longer needs a type-check bypass. Tests: `object_get_own_property_symbols`, `generated_c_dce_const`.
 - `Object.getOwnPropertySymbols(...)` now evaluates/coerces supported typed and dynamic targets and returns an empty `symbol[]` in the current string-key-only object model, with catchable nullish target rejection. Test: `object_get_own_property_symbols`.
 - Generated-C DCE now prunes unused pure `Object.getOwnPropertySymbols(...)` calls, treats `.length` reads on their results as pure, and proves empty callback paths for statically symbol-free operands. Test: `generated_c_dce_const`.
 - CommonJS package metadata now recognizes finite Map-backed `Object.fromEntries(new Map(Object.entries(descriptors)))` descriptor maps for `Object.freeze(Object.defineProperties({}, ...))`, `Object.seal(Object.defineProperties({}, ...))`, `Object.preventExtensions(Object.defineProperties({}, ...))`, and `Object.setPrototypeOf(Object.defineProperties({}, ...), proto)` wrappers. Tests: `node_modules_commonjs_module_exports_wrapper_define_properties_from_entries`, `node_modules_commonjs_module_exports_wrapper_define_properties_from_entries_variants`.
