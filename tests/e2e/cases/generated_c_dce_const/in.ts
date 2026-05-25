@@ -1139,6 +1139,7 @@ const unused_promise_resolve_array_of_concat_absent_element = Promise.resolve(Ar
 const unused_promise_resolve_array_of_concat_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_concat_element").concat(Array.of("dead_promise_resolve_array_of_concat_element_hit", "dead_promise_resolve_array_of_concat_element_tail"))[1]);
 const unused_promise_resolve_array_of_flat_zero_length = Promise.resolve(Array.of("dead_promise_resolve_array_of_flat_zero_length", "dead_promise_resolve_array_of_flat_zero_length_tail").flat(0).length);
 const unused_promise_resolve_array_of_flat_zero_absent_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_flat_zero_absent_element", "dead_promise_resolve_array_of_flat_zero_absent_element_tail").flat(0)[2]);
+const unused_promise_resolve_array_of_flat_zero_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_flat_zero_element", "dead_promise_resolve_array_of_flat_zero_element_hit").flat(0)[1]);
 const unused_promise_resolve_array_of_sort_length = Promise.resolve(Array.of("dead_promise_resolve_array_of_sort_length_b", "dead_promise_resolve_array_of_sort_length_a").sort().length);
 const unused_promise_resolve_array_of_to_sorted_absent_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_to_sorted_absent_element_b", "dead_promise_resolve_array_of_to_sorted_absent_element_a").toSorted()[2]);
 const unused_array_push_call = ["dead_array_push"].push("dead_array_push_value");
@@ -3673,6 +3674,7 @@ function usedLocal(value: number): number {
     Array.of("local_dead_array_of_concat_element").concat(Array.of("local_dead_array_of_concat_element_hit", "local_dead_array_of_concat_element_tail"))[1];
     Array.of("local_dead_array_of_flat_zero_length", "local_dead_array_of_flat_zero_length_tail").flat(0).length;
     Array.of("local_dead_array_of_flat_zero_absent_element", "local_dead_array_of_flat_zero_absent_element_tail").flat(0)[2];
+    Array.of("local_dead_array_of_flat_zero_element", "local_dead_array_of_flat_zero_element_hit").flat(0)[1];
     Array.of("local_dead_array_of_sort_length_b", "local_dead_array_of_sort_length_a").sort().length;
     Array.of("local_dead_array_of_to_sorted_absent_element_b", "local_dead_array_of_to_sorted_absent_element_a").toSorted()[2];
     ["local_dead_array_push"].push("local_dead_array_push_value");

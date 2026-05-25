@@ -9017,6 +9017,12 @@ class Emitter {
                 seenConsts,
             );
             if (concatResult !== null) return concatResult;
+            const flatResult = this.sideEffectFreePrimitiveFlatElementResult(
+                unwrapped,
+                index,
+                seenConsts,
+            );
+            if (flatResult !== null) return flatResult;
         }
         const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts);
         if (returnedArrayLength !== null && (index < 0 || index >= returnedArrayLength)) {
@@ -9156,6 +9162,27 @@ class Emitter {
             offset += argLength;
         }
         return "absent";
+    }
+
+    private sideEffectFreePrimitiveFlatElementResult(
+        call: ts.CallExpression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" | null {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            call.expression.name.text !== "flat" ||
+            call.arguments.length !== 1
+        ) {
+            return null;
+        }
+        const depth = this.sideEffectFreePrimitiveNumberValue(call.arguments[0]!, seenConsts);
+        if (depth !== 0) return "unsafe";
+        return this.sideEffectFreePrimitiveArrayElementOperandResult(
+            call.expression.expression,
+            index,
+            new Set(seenConsts),
+        );
     }
 
     private sideEffectFreePrimitiveStaticArrayElementResult(
