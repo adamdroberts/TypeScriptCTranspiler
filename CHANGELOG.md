@@ -68,6 +68,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `Array.fromAsync(...)` now has an immediate-settled subset for typed array, string, typed `Set`, typed `Map`, and boxed dynamic array/string sources, including explicit `undefined` mapper no-op handling, synchronous or Promise-returning mapper callbacks, optional mapper `thisArg` binding, native `Promise<T[]>` fulfillment, and fulfilled/rejected/pending propagation for array, Set, or mapper-returned native Promise records. Test: `array_from_async`.
 
 ### Changed
+- Generated-C DCE now treats Buffer default encodings supplied through earlier static `const` aliases for `undefined` as pure for unused `Buffer.byteLength(...)`, `Buffer.from(...)`, and fresh-buffer `toString(...)` calls. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats `path.format(...)` static path-object fields with earlier static `const` aliases for `undefined` defaults as pure when the resulting calls are unused. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats `os.userInfo(...)` option objects with earlier static `const` aliases for `undefined` encoding defaults as pure when the resulting calls or field reads are unused. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats supported Event, EventTarget listener, and `events.once(...)` option objects with earlier static `const` aliases for default/boolean option values as pure when the resulting calls are unused. Test: `generated_c_dce_const`.

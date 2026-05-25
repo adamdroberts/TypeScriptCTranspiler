@@ -2276,7 +2276,7 @@ class Emitter {
                     this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
                     (
                         !args[1] ||
-                        this.isUndefinedExpression(args[1]) ||
+                        this.isSideEffectFreeUndefinedValue(args[1], seenConsts) ||
                         this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "utf8" ||
                         this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "utf-8"
                     ) &&
@@ -2302,7 +2302,7 @@ class Emitter {
                     this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
                     (
                         !args[1] ||
-                        this.isUndefinedExpression(args[1]) ||
+                        this.isSideEffectFreeUndefinedValue(args[1], seenConsts) ||
                         this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "utf8" ||
                         this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "utf-8"
                     );
@@ -2354,7 +2354,7 @@ class Emitter {
             case "toString":
                 return (
                     !args[0] ||
-                    this.isUndefinedExpression(args[0]) ||
+                    this.isSideEffectFreeUndefinedValue(args[0], seenConsts) ||
                     this.sideEffectFreeStringLiteralText(args[0], seenConsts) === "utf8" ||
                     this.sideEffectFreeStringLiteralText(args[0], seenConsts) === "utf-8"
                 ) &&
@@ -2422,7 +2422,7 @@ class Emitter {
         expr: ts.Expression | undefined,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
-        if (!expr || this.isUndefinedExpression(expr)) return true;
+        if (!expr || this.isSideEffectFreeUndefinedValue(expr, seenConsts)) return true;
         const encoding = this.sideEffectFreeStringLiteralText(expr, seenConsts);
         return encoding === "hex" || encoding === "base64";
     }
