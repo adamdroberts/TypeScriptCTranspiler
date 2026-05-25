@@ -1154,6 +1154,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_commonjs_object_assign_require_binding_exports` | narrow CommonJS package `Object.assign(exports, declaredObject)` values backed by declared `require("./local.js")` bindings |
 | `node_modules_commonjs_define_properties_exports` | narrow CommonJS package `Object.defineProperties(exports, descriptors)` descriptor-map exports |
 | `node_modules_commonjs_define_properties_identifier_exports` | narrow CommonJS package `Object.defineProperties(exports, declaredDescriptors)` descriptor-map exports |
+| `node_modules_commonjs_define_properties_from_entries_computed` | narrow CommonJS package `Object.defineProperties(exports, Object.fromEntries(...))` static descriptor-map exports |
 | `node_modules_commonjs_define_properties_own_descriptors_exports` | narrow CommonJS package `Object.defineProperties(exports, Object.getOwnPropertyDescriptors(staticObject))` descriptor-preserving exports |
 | `node_modules_commonjs_define_properties_own_descriptors_accessor_exports` | narrow CommonJS package `Object.defineProperties(exports, Object.getOwnPropertyDescriptors(staticObject))` getter and method descriptor-preserving exports |
 | `node_modules_commonjs_define_properties_descriptor_identifier_exports` | narrow CommonJS package `Object.defineProperties(exports, { name: descriptor })` descriptor-variable exports |
