@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Runtime `Object.defineProperty(...)` and `Reflect.defineProperty(...)` data descriptors now have focused coverage for inherited descriptor fields and catchable non-object, mixed data/accessor, and unsupported dynamic accessor descriptor failures. Test: `object_dynamic_descriptor_edges`.
 - `Object.defineProperty(...)` and `Reflect.defineProperty(...)` now accept runtime data descriptor objects for dynamic object/array/function targets, interpreting `value`, `writable`, `enumerable`, and `configurable` fields at runtime. Test: `object_dynamic_descriptor`.
 - Proxy construct traps now have focused coverage for direct `new proxy(...)` and nested trapless proxy forwarding preserving the actual proxy `newTarget` identity. Test: `proxy_construct_new_target_identity`.
 - `Object.isSealed(proxy)` and `Object.isFrozen(proxy)` now have focused coverage for returning `false` when proxy descriptor traps expose configurable or writable properties after extension prevention. Test: `proxy_integrity_state_false`.

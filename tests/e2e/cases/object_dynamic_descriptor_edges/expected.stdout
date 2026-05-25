@@ -1,0 +1,5 @@
+inherited data: true x from-proto-flags
+object bad descriptor: Object.defineProperty descriptor must be an object
+reflect bad descriptor: Object.defineProperty descriptor must be an object
+mixed descriptor: Object.defineProperty descriptor cannot mix value with get/set
+dynamic accessor: Object.defineProperty dynamic accessor descriptors are not supported
