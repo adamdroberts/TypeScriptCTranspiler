@@ -28793,7 +28793,6 @@ class Emitter {
         const cb = call.arguments[0];
         const initArg = call.arguments[1];
         if (!cb) unsupported(call, `dynamic ${method}: missing callback`);
-        if (call.arguments.length > 2) unsupported(call, `dynamic ${method} expects callback and optional initial value`);
         const init = initArg ? this.emitExpr(initArg) : null;
         const av = this.freshTemp("_dynred");
         const iv = this.freshTemp("_i");
@@ -28901,6 +28900,7 @@ class Emitter {
             { value: recv, target: T_VALUE, node: call.expression },
         ];
         if (init && initArg) specs.push({ value: init, target: T_VALUE, node: initArg });
+        specs.push(...this.ignoredArgumentSpecs(call.arguments, initArg ? 2 : 1));
         return this.emitSequencedExpr(T_VALUE, specs, ([value, initial]) => {
             const initC = initial
                 ? `tsc_value_t ${acc} = ${initial}; size_t ${iv}_start = ${av}->len;`
@@ -33279,6 +33279,11 @@ class Emitter {
                 .map((spec) => `(void)(${spec.value.c}); `)
                 .join("")
             : "";
+        const reduceIgnoredSetup = supportsThisArg
+            ? ""
+            : this.ignoredArgumentSpecs(args, args[1] ? 2 : 1)
+                .map((spec) => `(void)(${spec.value.c}); `)
+                .join("");
         const callbackThisArg = thisArgTemp ?? "tsc_value_undefined()";
         const av = this.freshTemp("_a");
         const iv = this.freshTemp("_i");
@@ -33490,8 +33495,6 @@ class Emitter {
                     ty: recv.ty,
                 };
             case "reduce": {
-                if (args.length > 2)
-                    unsupported(call, "reduce expects callback and optional initial value");
                 const hasInit = args.length >= 2;
                 const initR = hasInit ? this.emitExpr(args[1]!) : null;
                 const accType = initR ? initR.ty : et;
@@ -33510,14 +33513,13 @@ class Emitter {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ` +
                         `${initC} ` +
+                        `${reduceIgnoredSetup}` +
                         `for (size_t ${iv} = ${iv}_start; ${iv} < ${av}->len; ${iv}++) ` +
                         `{ ${bindings} ${accName} = ${bodyC.replaceAll("_acc_rd", accName)}; } ${accName}; })`,
                     ty: accType,
                 };
             }
             case "reduceRight": {
-                if (args.length > 2)
-                    unsupported(call, "reduceRight expects callback and optional initial value");
                 const hasInit = args.length >= 2;
                 const initR = hasInit ? this.emitExpr(args[1]!) : null;
                 const accType = initR ? initR.ty : et;
@@ -33534,6 +33536,7 @@ class Emitter {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ` +
                         `${initC} ` +
+                        `${reduceIgnoredSetup}` +
                         `for (size_t ${iv} = ${iv}_start; ${iv}-- > 0;) ` +
                         `{ ${bindings} ${accName} = ${bodyC.replaceAll("_acc_rd", accName)}; } ${accName}; })`,
                     ty: accType,

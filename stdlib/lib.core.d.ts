@@ -201,9 +201,9 @@ interface Array<T> extends Iterable<T> {
     flatMap<U>(cb: (element: T, index: number, array: T[]) => U, thisArg?: any, ...ignored: any[]): U[];
     filter(cb: (element: T, index: number, array: T[]) => boolean, thisArg?: any, ...ignored: any[]): T[];
     reduce(cb: (acc: T, element: T, index: number, array: T[]) => T): T;
-    reduce<U>(cb: (acc: U, element: T, index: number, array: T[]) => U, init: U): U;
+    reduce<U>(cb: (acc: U, element: T, index: number, array: T[]) => U, init: U, ...ignored: any[]): U;
     reduceRight(cb: (acc: T, element: T, index: number, array: T[]) => T): T;
-    reduceRight<U>(cb: (acc: U, element: T, index: number, array: T[]) => U, init: U): U;
+    reduceRight<U>(cb: (acc: U, element: T, index: number, array: T[]) => U, init: U, ...ignored: any[]): U;
     find(cb: (element: T, index: number, array: T[]) => boolean, thisArg?: any, ...ignored: any[]): T | undefined;
     findIndex(cb: (element: T, index: number, array: T[]) => boolean, thisArg?: any, ...ignored: any[]): number;
     findLast(cb: (element: T, index: number, array: T[]) => boolean, thisArg?: any, ...ignored: any[]): T | undefined;
@@ -237,9 +237,9 @@ interface ReadonlyArray<T> extends Iterable<T> {
     map<U>(cb: (element: T, index: number, array: ReadonlyArray<T>) => U, thisArg?: any, ...ignored: any[]): U[];
     filter(cb: (element: T, index: number, array: ReadonlyArray<T>) => boolean, thisArg?: any, ...ignored: any[]): T[];
     reduce(cb: (acc: T, element: T, index: number, array: ReadonlyArray<T>) => T): T;
-    reduce<U>(cb: (acc: U, element: T, index: number, array: ReadonlyArray<T>) => U, init: U): U;
+    reduce<U>(cb: (acc: U, element: T, index: number, array: ReadonlyArray<T>) => U, init: U, ...ignored: any[]): U;
     reduceRight(cb: (acc: T, element: T, index: number, array: ReadonlyArray<T>) => T): T;
-    reduceRight<U>(cb: (acc: U, element: T, index: number, array: ReadonlyArray<T>) => U, init: U): U;
+    reduceRight<U>(cb: (acc: U, element: T, index: number, array: ReadonlyArray<T>) => U, init: U, ...ignored: any[]): U;
     find(cb: (element: T, index: number, array: ReadonlyArray<T>) => boolean, thisArg?: any, ...ignored: any[]): T | undefined;
     findIndex(cb: (element: T, index: number, array: ReadonlyArray<T>) => boolean, thisArg?: any, ...ignored: any[]): number;
     findLast(cb: (element: T, index: number, array: ReadonlyArray<T>) => boolean, thisArg?: any, ...ignored: any[]): T | undefined;
