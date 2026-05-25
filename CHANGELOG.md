@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `fs.stat` / `fs.lstat` sync and immediate-promise forms now accept earlier static `const` aliases for supported `{ bigint: false, throwIfNoEntry }` option objects, not just the boolean property values. Test: `fs_stat_options`.
 - `fs.writeFile` / `fs.appendFile` sync and immediate-promise forms now accept earlier static `const` aliases for supported object `mode` values, alongside existing encoding, flag, and flush aliases. Test: `fs_write_append_mode_options`.
 - `fs.readdir` sync and immediate-promise forms now accept earlier static `const` aliases for supported string/null encodings, object `encoding`, `recursive`, and `withFileTypes` options. Tests: `fs_readdir_buffer_options`, `fs_readdir_null_encoding_options`.
 - `fs.realpath` / `fs.readlink` / `fs.mkdtemp` sync and immediate-promise forms now accept earlier static `const` aliases for supported string/null encodings and object `encoding` options. Tests: `fs_link_path_encoding_options`, `fs_mkdtemp_encoding_options`.

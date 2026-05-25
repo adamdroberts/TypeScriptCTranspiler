@@ -35591,29 +35591,32 @@ class Emitter {
         let throwIfNoEntry = true;
         if (!options) return { throwIfNoEntry };
         if (this.isUndefinedExpression(options)) return { throwIfNoEntry };
-        if (!ts.isObjectLiteralExpression(options)) {
+        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, `${label} options must be an object literal in this subset`);
         }
-        for (const prop of options.properties) {
+        for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
                 unsupported(prop, `${label} options only support bigint and throwIfNoEntry property assignments`);
             }
             const key = this.staticPropertyName(prop.name);
             if (key === "bigint") {
-                if (this.isUndefinedExpression(prop.initializer)) {
+                const bigintNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+                if (this.isUndefinedExpression(bigintNode)) {
                     continue;
                 }
-                const bigint = this.fsBooleanOptionValue(prop.initializer);
+                const bigint = this.fsBooleanOptionValue(bigintNode);
                 if (bigint !== false) {
                     unsupported(prop.initializer, `${label} only supports bigint: false in this subset`);
                 }
                 continue;
             }
             if (key === "throwIfNoEntry") {
-                if (this.isUndefinedExpression(prop.initializer)) {
+                const throwNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+                if (this.isUndefinedExpression(throwNode)) {
                     continue;
                 }
-                const value = this.fsBooleanOptionValue(prop.initializer);
+                const value = this.fsBooleanOptionValue(throwNode);
                 if (value === null) {
                     unsupported(prop.initializer, `${label}.throwIfNoEntry must be a boolean literal in this subset`);
                 }
