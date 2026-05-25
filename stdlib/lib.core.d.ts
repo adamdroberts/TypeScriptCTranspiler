@@ -60,7 +60,13 @@ interface PromiseConstructor {
 }
 declare var Promise: PromiseConstructor;
 
-declare function require(specifier: string): any;
+interface CommonJsRequireFunction {
+    (specifier: string): any;
+    call(thisArg: any, specifier: string): any;
+    apply(thisArg: any, args: [string]): any;
+    bind(thisArg: any): CommonJsRequireFunction;
+}
+declare const require: CommonJsRequireFunction;
 
 declare module "*.node" {
     const addon: any;
@@ -75,7 +81,7 @@ declare const module: {
     id: string;
     path: string;
     loaded: boolean;
-    require(specifier: string): any;
+    require: CommonJsRequireFunction;
 };
 
 interface TemplateStringsArray extends ReadonlyArray<string> {

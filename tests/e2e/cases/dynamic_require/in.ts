@@ -22,6 +22,19 @@ const namedModuleName = chooseNamed ? "./other_named_a" : "./other_named_b";
 const selectedNamed: any = require(namedModuleName);
 console.log("dynamic require named:", selectedNamed.label);
 
+const callModuleName = "./other_call";
+const callModule: any = require.call(module, callModuleName);
+console.log("dynamic require call:", callModule.name);
+
+const chooseApply: boolean = true;
+const applyModuleName = chooseApply ? "./other_apply_a" : "./other_apply_b";
+const applyModule: any = module.require.apply(module, [applyModuleName]);
+console.log("dynamic require apply:", applyModule.name);
+
+const reflectModuleName = "./other_reflect";
+const reflectModule: any = Reflect.apply(module.require, module, [reflectModuleName]);
+console.log("dynamic require reflect:", reflectModule.name);
+
 function loadLocal(): any {
     const localModuleName = "./other_local";
     return require(localModuleName);
