@@ -567,6 +567,16 @@ const unused_promise_try_catch_call = Promise.try(() => Promise.reject("dead_pro
     .catch(() => "dead_promise_try_catch_callback");
 const unused_promise_try_finally_call = Promise.try(() => Promise.resolve("dead_promise_try_finally_source"))
     .finally(() => "dead_promise_try_finally_callback");
+const unused_promise_all_empty_then_call = Promise.all([] as Promise<string>[])
+    .then(() => "dead_promise_all_empty_then_callback");
+const unused_promise_all_settled_empty_then_call = Promise.allSettled([] as Promise<string>[])
+    .then(() => "dead_promise_all_settled_empty_then_callback");
+const unused_promise_any_empty_catch_call = Promise.any([] as Promise<string>[])
+    .catch(() => "dead_promise_any_empty_catch_callback");
+const unused_promise_all_empty_finally_call = Promise.all([] as Promise<string>[])
+    .finally(() => "dead_promise_all_empty_finally_callback");
+const unused_promise_any_empty_finally_call = Promise.any([] as Promise<string>[])
+    .finally(() => "dead_promise_any_empty_finally_callback");
 const unused_new_promise_empty_executor_call = new Promise<string>(() => {
 });
 const unused_new_promise_resolve_call = new Promise<string>((resolve) => resolve("dead_new_promise_resolve"));
@@ -1607,6 +1617,16 @@ Promise.try(() => Promise.reject("top_level_dead_promise_try_catch_source"))
     .catch(() => "top_level_dead_promise_try_catch_callback");
 Promise.try(() => Promise.resolve("top_level_dead_promise_try_finally_source"))
     .finally(() => "top_level_dead_promise_try_finally_callback");
+Promise.all([] as Promise<string>[])
+    .then(() => "top_level_dead_promise_all_empty_then_callback");
+Promise.allSettled([] as Promise<string>[])
+    .then(() => "top_level_dead_promise_all_settled_empty_then_callback");
+Promise.any([] as Promise<string>[])
+    .catch(() => "top_level_dead_promise_any_empty_catch_callback");
+Promise.all([] as Promise<string>[])
+    .finally(() => "top_level_dead_promise_all_empty_finally_callback");
+Promise.any([] as Promise<string>[])
+    .finally(() => "top_level_dead_promise_any_empty_finally_callback");
 new Promise<string>(() => {
 });
 new Promise<string>((resolve) => resolve("top_level_dead_new_promise_resolve"));
@@ -2624,6 +2644,16 @@ function usedLocal(value: number): number {
         .catch(() => "local_dead_promise_try_catch_callback");
     Promise.try(() => Promise.resolve("local_dead_promise_try_finally_source"))
         .finally(() => "local_dead_promise_try_finally_callback");
+    Promise.all([] as Promise<string>[])
+        .then(() => "local_dead_promise_all_empty_then_callback");
+    Promise.allSettled([] as Promise<string>[])
+        .then(() => "local_dead_promise_all_settled_empty_then_callback");
+    Promise.any([] as Promise<string>[])
+        .catch(() => "local_dead_promise_any_empty_catch_callback");
+    Promise.all([] as Promise<string>[])
+        .finally(() => "local_dead_promise_all_empty_finally_callback");
+    Promise.any([] as Promise<string>[])
+        .finally(() => "local_dead_promise_any_empty_finally_callback");
     new Promise<string>(() => {
     });
     new Promise<string>((resolve) => resolve("local_dead_new_promise_resolve"));
