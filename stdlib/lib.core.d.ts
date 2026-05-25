@@ -684,6 +684,9 @@ interface ProcessReadableStream {
     readonly fd: number;
     readonly isTTY: boolean;
     readonly readable: boolean;
+    pause(...ignored: any[]): void;
+    resume(...ignored: any[]): void;
+    setEncoding(encoding: string, ...ignored: any[]): void;
 }
 interface StreamModule {
     isReadable(stream: any, ...ignored: any[]): boolean;

@@ -26807,6 +26807,31 @@ class Emitter {
                 () => `tsc_process_hrtime_bigint()`,
             );
         }
+        const processStdinStreamName = (
+            memberName === "setEncoding" ||
+            memberName === "pause" ||
+            memberName === "resume"
+        )
+            ? this.processStdioStreamReceiverName(recvExpr)
+            : null;
+        if (processStdinStreamName) {
+            if (processStdinStreamName !== "stdin") {
+                unsupported(call, `process.${processStdinStreamName}.${memberName} is not supported in this stdio subset`);
+            }
+            if (memberName === "setEncoding") {
+                if (call.arguments.length < 1) unsupported(call, "process.stdin.setEncoding expects an encoding");
+                const encoding = this.emitExpr(call.arguments[0]!);
+                return this.emitSequencedExpr(T_VOID, [
+                    { value: encoding, target: T_STRING, node: call.arguments[0]! },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ], ([enc]) => `({ (void)${enc}; })`);
+            }
+            return this.emitSequencedExpr(
+                T_VOID,
+                this.ignoredArgumentSpecs(call.arguments, 0),
+                () => "((void)0)",
+            );
+        }
         const processWritableStreamName = memberName === "write"
             ? this.processWritableStreamReceiverName(recvExpr)
             : null;
