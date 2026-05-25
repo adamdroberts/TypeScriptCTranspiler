@@ -130,6 +130,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - Non-escaping local typed array literals used through independent iterator-array helpers `keys(...)`, `values(...)`, and `entries(...)` are stack-allocated instead of GC-allocated. Test: `array_literal_stack_alloc_iterators`
 - Non-escaping local typed array literals used as targets for supported read-only Object/Reflect helper calls and `in` checks are stack-allocated instead of GC-allocated. Test: `array_literal_stack_alloc_object_helpers`
 - Non-escaping local typed array literals passed through read-only `Object.prototype.hasOwnProperty.call(...)`, `isPrototypeOf.call(...)`, `propertyIsEnumerable.call(...)`, `toLocaleString.call(...)`, and `toString.call(...)` inspection forms are stack-allocated instead of GC-allocated. Test: `array_literal_stack_alloc_object_prototype_call`
+- Non-escaping local typed array literals whose receiver-returning in-place method results are captured by same-block aliases remain stack-allocated when those aliases only flow through safe reads and inspections. Test: `array_literal_stack_alloc_alias`
 - Interface nesting — `interface Line { from: Point; to: Point; }`. Test: `interfaces`
 - Shorthand property assignment `{ x, y }`. Test: `interfaces`
 - Computed property assignment with literal or const-literal keys. Test: `computed_props`
@@ -1403,6 +1404,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_literal_stack_alloc_iterators` | non-escaping typed array literal locals use stack storage through keys/values/entries helpers |
 | `array_literal_stack_alloc_object_helpers` | non-escaping typed array literal locals use stack storage through Object/Reflect read helpers |
 | `array_literal_stack_alloc_object_prototype_call` | non-escaping typed array literal locals use stack storage through read-only Object prototype call-form inspections |
+| `array_literal_stack_alloc_alias` | non-escaping typed array literal locals use stack storage through safe same-block aliases of receiver-returning in-place results |
 | `object_property_is_enumerable` | dynamic Object.prototype.propertyIsEnumerable over descriptor enumerable flags |
 | `object_prototype_call` | Object.prototype hasOwnProperty/propertyIsEnumerable call-form dispatch |
 | `object_prototype_is_prototype_of_call` | Object.prototype.isPrototypeOf.call prototype-chain dispatch |

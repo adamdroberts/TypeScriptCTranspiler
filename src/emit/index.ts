@@ -15748,6 +15748,13 @@ class Emitter {
 
     private nonEscapingArrayResultUseIsSafe(expr: ts.Expression): boolean {
         const parent = expr.parent;
+        if (
+            ts.isVariableDeclaration(parent) &&
+            parent.initializer === expr &&
+            this.nonEscapingArrayResultAliasUsesAreSafe(parent)
+        ) {
+            return true;
+        }
         if (ts.isElementAccessExpression(parent) && parent.expression === expr) {
             return true;
         }
@@ -15785,6 +15792,97 @@ class Emitter {
                     ts.isExpressionStatement(parent.parent.parent) ||
                     this.nonEscapingArrayResultUseIsSafe(parent.parent)
                 );
+            }
+        }
+        return false;
+    }
+
+    private nonEscapingArrayResultAliasUsesAreSafe(d: ts.VariableDeclaration): boolean {
+        if (!ts.isIdentifier(d.name)) return false;
+        const sym = this.symbolForIdentifier(d.name);
+        if (!sym) return false;
+        const stmt = d.parent.parent;
+        const scope = stmt?.parent;
+        if (!scope || !ts.isBlock(scope)) return false;
+        let safe = true;
+        const visit = (n: ts.Node): void => {
+            if (!safe) return;
+            if (n !== scope && ts.isFunctionLike(n)) return;
+            if (ts.isIdentifier(n) && this.checker.getSymbolAtLocation(n) === sym) {
+                if (n === d.name) return;
+                if (!this.nonEscapingArrayAliasUseIsSafe(n, scope)) {
+                    safe = false;
+                    return;
+                }
+            }
+            ts.forEachChild(n, visit);
+        };
+        visit(scope);
+        return safe;
+    }
+
+    private nonEscapingArrayAliasUseIsSafe(n: ts.Identifier, scope: ts.Block): boolean {
+        const parent = n.parent;
+        if (ts.isElementAccessExpression(parent) && parent.expression === n) {
+            return true;
+        }
+        if (
+            (ts.isForOfStatement(parent) || ts.isForInStatement(parent)) &&
+            parent.expression === n
+        ) {
+            return true;
+        }
+        if (
+            ts.isBinaryExpression(parent) &&
+            parent.right === n &&
+            parent.operatorToken.kind === ts.SyntaxKind.InKeyword
+        ) {
+            return true;
+        }
+        if (ts.isCallExpression(parent) && this.nonEscapingArraySafeCallArgument(parent, n)) {
+            return true;
+        }
+        if (
+            ts.isPropertyAccessExpression(parent) &&
+            parent.expression === n &&
+            parent.name.text === "length"
+        ) {
+            return !(
+                ts.isBinaryExpression(parent.parent) &&
+                parent.parent.left === parent &&
+                parent.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
+            );
+        }
+        if (
+            ts.isPropertyAccessExpression(parent) &&
+            parent.expression === n &&
+            ts.isCallExpression(parent.parent) &&
+            parent.parent.expression === parent
+        ) {
+            if (parent.parent.arguments.some(ts.isSpreadElement)) {
+                return false;
+            }
+            if (
+                this.nonEscapingArrayGrowingMethod(parent.name.text) &&
+                parent.parent.arguments.length === 0 &&
+                !this.hasLoopAncestorBeforeScope(parent.parent, scope)
+            ) {
+                return true;
+            }
+            if (this.nonEscapingArrayReceiverMethod(parent.name.text)) {
+                return true;
+            }
+            if (
+                this.nonEscapingArrayIgnoredReceiverMethod(parent.name.text) &&
+                ts.isExpressionStatement(parent.parent.parent)
+            ) {
+                return true;
+            }
+            if (
+                this.nonEscapingArrayIgnoredReceiverMethod(parent.name.text) &&
+                this.nonEscapingArrayResultUseIsSafe(parent.parent)
+            ) {
+                return true;
             }
         }
         return false;
