@@ -108,6 +108,7 @@ This is the next item that most directly expands what programs can be written ag
   - Generated-C DCE proves primitive element reads through pure integer-argument `toSpliced(...)` results, enabling unused `Promise.resolve(...)` and direct expression pruning for inserted and retained elements in non-empty fresh arrays. Test: `generated_c_dce_const`.
   - Generated-C DCE proves primitive element reads through in-range pure `with(...)` results, enabling unused `Promise.resolve(...)` and direct expression pruning for replacement and retained elements in fresh arrays. Test: `generated_c_dce_const`.
   - Generated-C DCE proves primitive element reads through pure integer-bound `fill(...)` results, enabling unused `Promise.resolve(...)` and direct expression pruning for replacement and retained elements in fresh arrays. Test: `generated_c_dce_const`.
+  - Generated-C DCE proves primitive element reads through pure integer-bound `copyWithin(...)` results, enabling unused `Promise.resolve(...)` and direct expression pruning for copied and retained elements in fresh arrays. Test: `generated_c_dce_const`.
   - Still missing: hidden classes / shape trees, inline caches and diagnostics, complete built-in object/array prototype behavior, broader prototype method coverage, and remaining descriptor/prototype edge cases.
   - Still blocks: production-quality untyped npm packages, remaining `Proxy` construct/invariant coverage, full `Reflect`, remaining property descriptor edge cases, and high-performance dynamic property access.
 

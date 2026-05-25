@@ -9053,6 +9053,12 @@ class Emitter {
                 seenConsts,
             );
             if (fillResult !== null) return fillResult;
+            const copyWithinResult = this.sideEffectFreePrimitiveCopyWithinElementResult(
+                unwrapped,
+                index,
+                seenConsts,
+            );
+            if (copyWithinResult !== null) return copyWithinResult;
         }
         const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts);
         if (returnedArrayLength !== null && (index < 0 || index >= returnedArrayLength)) {
@@ -9443,6 +9449,63 @@ class Emitter {
         return this.sideEffectFreePrimitiveArrayElementOperandResult(
             call.expression.expression,
             index,
+            new Set(seenConsts),
+        );
+    }
+
+    private sideEffectFreePrimitiveCopyWithinElementResult(
+        call: ts.CallExpression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" | null {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            call.expression.name.text !== "copyWithin" ||
+            call.arguments.length < 2 ||
+            call.arguments.length > 3
+        ) {
+            return null;
+        }
+        const receiverLength = this.sideEffectFreeFreshOrReturnedArrayLength(
+            call.expression.expression,
+            seenConsts,
+        );
+        if (receiverLength === null) return null;
+        if (index < 0 || index >= receiverLength) return "absent";
+        const targetValue = this.sideEffectFreePrimitiveNumberValue(call.arguments[0]!, seenConsts);
+        const startValue = this.sideEffectFreePrimitiveNumberValue(call.arguments[1]!, seenConsts);
+        const endValue = call.arguments[2]
+            ? this.sideEffectFreePrimitiveNumberValue(call.arguments[2], seenConsts)
+            : receiverLength;
+        if (
+            targetValue === null ||
+            startValue === null ||
+            endValue === null ||
+            !Number.isFinite(targetValue) ||
+            !Number.isFinite(startValue) ||
+            !Number.isFinite(endValue) ||
+            !Number.isInteger(targetValue) ||
+            !Number.isInteger(startValue) ||
+            !Number.isInteger(endValue)
+        ) {
+            return "unsafe";
+        }
+        const to = targetValue < 0
+            ? Math.max(receiverLength + targetValue, 0)
+            : Math.min(targetValue, receiverLength);
+        const from = startValue < 0
+            ? Math.max(receiverLength + startValue, 0)
+            : Math.min(startValue, receiverLength);
+        const final = endValue < 0
+            ? Math.max(receiverLength + endValue, 0)
+            : Math.min(endValue, receiverLength);
+        const count = Math.min(final - from, receiverLength - to);
+        const sourceIndex = count > 0 && index >= to && index < to + count
+            ? from + index - to
+            : index;
+        return this.sideEffectFreePrimitiveArrayElementOperandResult(
+            call.expression.expression,
+            sourceIndex,
             new Set(seenConsts),
         );
     }
