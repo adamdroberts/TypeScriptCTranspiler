@@ -26845,35 +26845,23 @@ class Emitter {
                 if (call.arguments.length > 3) unsupported(call, "Array.from(items, mapfn) expects optional thisArg");
                 return this.emitArrayFromWithMapper(call, a, mapfn, call.arguments[2]);
             }
-            const r = this.emitExpr(a);
-            if (r.ty.kind === "value") {
-                const missing: EmitResult = { c: "tsc_value_undefined()", ty: T_VALUE };
-                return this.emitSequencedCall("tsc_value_method_slice", T_VALUE, [
-                    { value: r, target: T_VALUE, node: a },
-                    { value: missing, target: T_VALUE, node: a },
-                    { value: missing, target: T_VALUE, node: a },
-                ]);
+            return this.emitArrayFromWithoutMapper(call, a);
+        }
+        if (ts.isIdentifier(recvExpr) && recvExpr.text === "Array" && memberName === "fromAsync") {
+            const promiseType = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
+            if (promiseType.kind !== "promise" || !promiseType.elem || promiseType.elem.kind !== "array") {
+                unsupported(call, "Array.fromAsync result must be Promise<T[]>");
             }
-            if (r.ty.kind === "string") {
-                return this.emitSequencedCall("tsc_str_chars", arrayType(T_STRING), [
-                    { value: r, target: T_STRING, node: a },
-                ]);
-            }
-            if (r.ty.kind === "set") {
-                const elem = r.ty.elem ?? T_VALUE;
-                return this.emitSequencedCall("tsc_set_values", arrayType(elem), [
-                    { value: r },
-                ]);
-            }
-            if (r.ty.kind === "map") {
-                return this.emitMapEntriesArray(a, r, "Array.from(Map)");
-            }
-            if (r.ty.kind !== "array")
-                unsupported(a, "Array.from on non-array");
-            return {
-                c: `tsc_array_slice(${r.c}, 0, (double)${r.c}->len)`,
-                ty: r.ty,
-            };
+            const a = call.arguments[0];
+            if (!a) unsupported(call, "Array.fromAsync needs an argument");
+            const mapfn = call.arguments[1];
+            const arrayResult = mapfn
+                ? (() => {
+                    if (call.arguments.length > 3) unsupported(call, "Array.fromAsync(items, mapfn) expects optional thisArg");
+                    return this.emitArrayFromWithMapper(call, a, mapfn, call.arguments[2], promiseType.elem!);
+                })()
+                : this.emitArrayFromWithoutMapper(call, a, promiseType.elem);
+            return { c: `tsc_promise_resolve_array(${arrayResult.c})`, ty: promiseType };
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Map" && memberName === "groupBy") {
             return this.emitMapGroupBy(call);
@@ -28162,10 +28150,11 @@ class Emitter {
         itemsArg: ts.Expression,
         mapfnArg: ts.Expression,
         thisArg: ts.Expression | undefined,
+        resultArrayType?: CType,
     ): EmitResult {
-        const callType = this.prepareType(
-            mapTsType(call, this.checker.getTypeAtLocation(call), this.checker),
-        );
+        const callType = resultArrayType
+            ? this.prepareType(resultArrayType)
+            : this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
         if (callType.kind !== "array" || !callType.elem)
             unsupported(call, "Array.from(items, mapfn) result must be an array");
         const u = callType.elem;
@@ -28350,6 +28339,44 @@ class Emitter {
             };
         }
         unsupported(cb, "Array.from callback must be an inline arrow/function expression or function reference");
+    }
+
+    private emitArrayFromWithoutMapper(
+        call: ts.CallExpression,
+        itemsArg: ts.Expression,
+        resultArrayType?: CType,
+    ): EmitResult {
+        const r = this.emitExpr(itemsArg);
+        if (r.ty.kind === "value") {
+            if (resultArrayType) unsupported(itemsArg, "Array.fromAsync currently requires a typed array, Map, Set, or string source");
+            const missing: EmitResult = { c: "tsc_value_undefined()", ty: T_VALUE };
+            return this.emitSequencedCall("tsc_value_method_slice", T_VALUE, [
+                { value: r, target: T_VALUE, node: itemsArg },
+                { value: missing, target: T_VALUE, node: itemsArg },
+                { value: missing, target: T_VALUE, node: itemsArg },
+            ]);
+        }
+        if (r.ty.kind === "string") {
+            return this.emitSequencedCall("tsc_str_chars", resultArrayType ?? arrayType(T_STRING), [
+                { value: r, target: T_STRING, node: itemsArg },
+            ]);
+        }
+        if (r.ty.kind === "set") {
+            const elem = r.ty.elem ?? T_VALUE;
+            return this.emitSequencedCall("tsc_set_values", resultArrayType ?? arrayType(elem), [
+                { value: r },
+            ]);
+        }
+        if (r.ty.kind === "map") {
+            const entries = this.emitMapEntriesArray(itemsArg, r, "Array.from(Map)");
+            return resultArrayType ? { c: entries.c, ty: resultArrayType } : entries;
+        }
+        if (r.ty.kind !== "array")
+            unsupported(itemsArg, "Array.from on non-array");
+        return {
+            c: `tsc_array_slice(${r.c}, 0, (double)${r.c}->len)`,
+            ty: resultArrayType ?? r.ty,
+        };
     }
 
     private emitMapGroupBy(call: ts.CallExpression): EmitResult {
