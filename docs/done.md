@@ -1470,6 +1470,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_require_manifest_package` | dynamic require manifest package specifiers compile installed package sources into the finite AOT dispatch path |
 | `dynamic_require_manifest_native_package` | dynamic require manifest package specifiers still require native-addon manifest allow-listing for native-addon packages |
 | `dynamic_require_manifest_object` | named dynamic require manifest object maps compile the listed specifiers into the same AOT dispatch path |
+| `dynamic_require_manifest_object_package` | named dynamic require manifest object maps can list installed package specifiers |
 | `dynamic_require_static_collections` | top-level and earlier local const string maps/arrays provide finite AOT alternatives for dynamic require element/property access, including numeric literal array indexes |
 | `dynamic_require_static_computed_map` | top-level and earlier local const string maps with computed static keys provide finite AOT alternatives for dynamic require element access |
 | `dynamic_require_unknown` | expected diagnostic for non-finite `require(variable)` |
