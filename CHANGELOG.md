@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `fs.readFileSync` and immediate `fs.promises.readFile` now accept earlier static `const` aliases for supported string/null encodings, object `encoding`, and object `flag` options. Tests: `fs_read_file_buffer_options`, `fs_read_file_null_buffer_options`.
 - CommonJS `module.require.call(module, spec)`, `module.require.apply(module, [spec])`, static require-alias `apply(module, [spec])`, and `Reflect.apply(module.require, module, [spec])` wrappers now preserve static AOT require metadata. Test: `node_modules_commonjs_module_require_call_wrapper`.
 - `timers/promises` immediate helpers now accept explicit undefined, side-effect-free `void`, object-literal options, and earlier static `const` option aliases with undefined `signal` and literal/undefined `ref` values. Tests: `timers_promises_import`, `timers_promises_scheduler`.
 - CommonJS inline `module.require.bind(module)(spec)` calls, `module.require.bind(module)` aliases, module-alias forms such as `mod.require.bind(mod)`, and already-static require alias forms such as `req.bind(module)` now preserve static AOT require metadata for package-local member exports, including function-scoped aliases. Tests: `node_modules_commonjs_module_require_bind_alias`, `node_modules_commonjs_module_alias_require_bind_alias`, `node_modules_commonjs_require_alias_bind_alias`, `node_modules_commonjs_function_scope_require_alias`.

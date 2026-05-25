@@ -12335,6 +12335,15 @@ class Emitter {
         return expr;
     }
 
+    private resolveSideEffectFreeEarlierConstExpression(expr: ts.Expression): ts.Expression {
+        let unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        while (true) {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, new Set());
+            if (!init) return unwrapped;
+            unwrapped = this.unwrapSideEffectFreeStaticExpression(init);
+        }
+    }
+
     private isSideEffectFreeArraySpreadOperand(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -31912,12 +31921,7 @@ class Emitter {
 
     private validateTimersPromisesOptions(options: ts.Expression | undefined, label: string): void {
         if (!options || this.isUndefinedExpression(options)) return;
-        let unwrapped = this.unwrapSideEffectFreeStaticExpression(options);
-        while (true) {
-            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, new Set());
-            if (!init) break;
-            unwrapped = this.unwrapSideEffectFreeStaticExpression(init);
-        }
+        const unwrapped = this.resolveSideEffectFreeEarlierConstExpression(options);
         if (this.isUndefinedExpression(unwrapped)) return;
         if (!ts.isObjectLiteralExpression(unwrapped)) {
             unsupported(options, `${label} options must be undefined or an object literal with undefined signal/ref fields in this immediate subset`);
@@ -35255,7 +35259,9 @@ class Emitter {
 
     private validateFsEncodingOptions(options: ts.Expression | undefined, label: string): "utf8" | "hex" | "base64" | "buffer" {
         if (!options || this.isUndefinedExpression(options)) return "utf8";
+        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
         const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" | "buffer" => {
+            node = this.resolveSideEffectFreeEarlierConstExpression(node);
             if (this.isUndefinedExpression(node)) return "utf8";
             if (node.kind === ts.SyntaxKind.NullKeyword) return "utf8";
             const text = this.sideEffectFreeStringLiteralText(node, new Set());
@@ -35266,17 +35272,17 @@ class Emitter {
             }
             unsupported(node, `${label} only supports UTF-8, hex, base64, buffer, or null encoding options in this subset`);
         };
-        if (this.sideEffectFreeStringLiteralText(options, new Set()) !== null) {
-            return checkEncoding(options);
+        if (this.sideEffectFreeStringLiteralText(resolvedOptions, new Set()) !== null) {
+            return checkEncoding(resolvedOptions);
         }
-        if (options.kind === ts.SyntaxKind.NullKeyword) {
+        if (resolvedOptions.kind === ts.SyntaxKind.NullKeyword) {
             return "utf8";
         }
-        if (!ts.isObjectLiteralExpression(options)) {
+        if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, `${label} options must be a UTF-8/hex/base64/buffer string literal or object literal in this subset`);
         }
         let result: "utf8" | "hex" | "base64" | "buffer" = "utf8";
-        for (const prop of options.properties) {
+        for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
                 unsupported(prop, `${label} options only support encoding property assignments`);
             }
@@ -35303,7 +35309,9 @@ class Emitter {
 
     private validateFsReadFileOptions(options: ts.Expression | undefined, label: string): "utf8" | "hex" | "base64" | "buffer" {
         if (!options || this.isUndefinedExpression(options)) return "utf8";
+        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
         const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" | "buffer" => {
+            node = this.resolveSideEffectFreeEarlierConstExpression(node);
             if (this.isUndefinedExpression(node)) return "utf8";
             const text = this.sideEffectFreeStringLiteralText(node, new Set());
             if (text !== null) {
@@ -35315,23 +35323,24 @@ class Emitter {
             unsupported(node, `${label} only supports UTF-8, hex, base64, buffer, or null encoding options in this subset`);
         };
         const checkFlag = (node: ts.Expression): void => {
+            node = this.resolveSideEffectFreeEarlierConstExpression(node);
             if (this.isUndefinedExpression(node)) return;
             const text = this.sideEffectFreeStringLiteralText(node, new Set());
             if (text === null || !["r", "rs", "r+", "rs+"].includes(text)) {
                 unsupported(node, `${label} only supports literal "r", "rs", "r+", or "rs+" flags in this subset`);
             }
         };
-        if (this.sideEffectFreeStringLiteralText(options, new Set()) !== null) {
-            return checkEncoding(options);
+        if (this.sideEffectFreeStringLiteralText(resolvedOptions, new Set()) !== null) {
+            return checkEncoding(resolvedOptions);
         }
-        if (options.kind === ts.SyntaxKind.NullKeyword) {
+        if (resolvedOptions.kind === ts.SyntaxKind.NullKeyword) {
             return "buffer";
         }
-        if (!ts.isObjectLiteralExpression(options)) {
+        if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, `${label} options must be a UTF-8/hex/base64/buffer string literal, null, or object literal in this subset`);
         }
         let result: "utf8" | "hex" | "base64" | "buffer" = "utf8";
-        for (const prop of options.properties) {
+        for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
                 unsupported(prop, `${label} options only support encoding and flag property assignments`);
             }

@@ -416,7 +416,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 ## 10. Node stdlib (sync subset)
 
 ### `fs`
-- `fs.readFileSync(path[, options], ...ignored)` → `tsc_fs_read_file_sync` / `tsc_fs_read_file_buffer_sync`, treating explicit `undefined` and side-effect-free `void` options as defaults while evaluating ignored extras, returning Buffer for explicit Buffer/null encodings, and returning hex/base64 strings for literal `"hex"` / `"base64"` encodings. Tests: `fs_read_file_ignored_arguments`, `fs_read_file_buffer_options`, `fs_read_file_null_buffer_options`, `fs_read_file_encoded_options`
+- `fs.readFileSync(path[, options], ...ignored)` → `tsc_fs_read_file_sync` / `tsc_fs_read_file_buffer_sync`, treating explicit `undefined` and side-effect-free `void` options as defaults while evaluating ignored extras, returning Buffer for explicit Buffer/null encodings, accepting earlier static `const` aliases for supported encodings/object options, and returning hex/base64 strings for literal `"hex"` / `"base64"` encodings. Tests: `fs_read_file_ignored_arguments`, `fs_read_file_buffer_options`, `fs_read_file_null_buffer_options`, `fs_read_file_encoded_options`
 - `fs.writeFileSync(path, data[, options], ...ignored)` → `tsc_fs_write_file_sync` / `tsc_fs_write_file_buffer_sync_opts_mode`, including explicit `undefined` and side-effect-free `void` default options, ignored-extra evaluation, string/Buffer data, and hex/base64 decoding for string data with literal encodings. Tests: `fs_write_append_ignored_arguments`, `fs_buffer_write_append`, `fs_write_append_encoded_options`
 - `fs.existsSync(path, ...ignored)` → `tsc_fs_exists_sync`
 - `fs.accessSync(path, mode?, ...ignored)` and immediate `fs.promises.access(path, mode?, ...ignored)` → `tsc_fs_access_sync` / `tsc_fs_access_sync_mode`, with POSIX `fs.constants.{F_OK,R_OK,W_OK,X_OK}` support for global, namespace, and named-import forms. Explicit `undefined` and direct side-effect-free `void` mode values such as `void 0` use the default access mode, and extra arguments are evaluated before being ignored. Supported sync fs calls also route from named imports such as `import { accessSync } from "fs"`. Tests: `fs_access_sync`, `fs_access_modes`, `fs_access_ignored_arguments`, `fs_promises_stat_access_ignored_arguments`
@@ -1107,9 +1107,9 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `fs_readdir_buffer_options` | fs readdir explicit Buffer encoding options for sync and immediate promise runtime paths |
 | `fs_readdir_encoded_options` | fs readdir hex/base64 string filename encodings for sync and immediate promise forms |
 | `fs_readdir_null_encoding_options` | fs readdir null encoding options default to string filename results |
-| `fs_read_file_buffer_options` | fs.readFileSync and immediate fs.promises.readFile explicit buffer encoding options return Buffer bytes |
+| `fs_read_file_buffer_options` | fs.readFileSync and immediate fs.promises.readFile explicit buffer encoding options and aliases return Buffer bytes |
 | `fs_read_file_ignored_arguments` | fs.readFileSync and immediate fs.promises.readFile explicit undefined options and ignored extra arguments |
-| `fs_read_file_null_buffer_options` | fs.readFileSync and immediate fs.promises.readFile null encoding options return Buffer bytes |
+| `fs_read_file_null_buffer_options` | fs.readFileSync and immediate fs.promises.readFile null encoding options and aliases return Buffer bytes |
 | `fs_readdir_recursive` | fs readdir recursive string results for sync, named import, and promises |
 | `inheritance` | extends + super() + static members |
 | `instanceof` | class instance ancestry checks |
