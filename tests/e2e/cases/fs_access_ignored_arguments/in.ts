@@ -12,11 +12,12 @@ rmSync(path, { force: true });
 writeFileSync(path, "ok");
 
 fs.accessSync(path, undefined, mark("global-default"));
+fs.accessSync(path, void 0, mark("global-void-default"));
 accessSync(path, fs.constants.F_OK, mark("named-mode"));
 
 let missing = "";
 try {
-    fs.accessSync(path + ".missing", undefined, mark("missing"));
+    fs.accessSync(path + ".missing", void 0, mark("missing"));
 } catch (err: any) {
     missing = err;
 }

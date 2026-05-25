@@ -10,13 +10,14 @@ fs.rmSync(file, { force: true });
 fs.writeFileSync(file, "stats");
 
 fs.promises.access(file, undefined, mark("access-default"));
+fs.promises.access(file, void 0, mark("access-void-default"));
 fs.promises.access(file, fs.constants.F_OK, mark("access-mode"));
 
-fs.promises.stat(file, undefined, mark("stat")).then((value: FSStats): void => {
+fs.promises.stat(file, void 0, mark("stat")).then((value: FSStats): void => {
     console.log("stat:", value.isFile(), value.size);
 });
 
-fs.promises.lstat(file, undefined, mark("lstat")).then((value: FSStats): void => {
+fs.promises.lstat(file, void 0, mark("lstat")).then((value: FSStats): void => {
     console.log("lstat:", value.isFile(), value.size);
 });
 
