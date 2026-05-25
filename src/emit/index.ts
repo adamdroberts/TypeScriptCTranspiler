@@ -24371,28 +24371,32 @@ class Emitter {
         const args = call.arguments;
         switch (name) {
             case "fileURLToPath": {
-                if (args.length !== 1) unsupported(call, "url.fileURLToPath expects one URL or string argument");
+                if (args.length < 1) unsupported(call, "url.fileURLToPath expects one URL or string argument");
                 const argNode = args[0]!;
                 const value = this.emitExpr(argNode);
+                const ignored = this.ignoredArgumentSpecs(args, 1);
                 if (value.ty.kind === "url") {
-                    return this.emitSequencedCall("tsc_url_file_path", T_STRING, [
+                    return this.emitSequencedExpr(T_STRING, [
                         { value, target: T_URL, node: argNode },
-                    ]);
+                        ...ignored,
+                    ], ([urlC]) => `tsc_url_file_path(${urlC})`);
                 }
                 if (value.ty.kind === "string") {
-                    return this.emitSequencedCall("tsc_url_file_url_to_path", T_STRING, [
+                    return this.emitSequencedExpr(T_STRING, [
                         { value, target: T_STRING, node: argNode },
-                    ]);
+                        ...ignored,
+                    ], ([inputC]) => `tsc_url_file_url_to_path(${inputC})`);
                 }
                 unsupported(argNode, "url.fileURLToPath expects a URL object or string in this subset");
             }
             case "pathToFileURL": {
-                if (args.length !== 1) unsupported(call, "url.pathToFileURL expects one string path");
+                if (args.length < 1) unsupported(call, "url.pathToFileURL expects one string path");
                 const argNode = args[0]!;
                 const value = this.emitExpr(argNode);
-                return this.emitSequencedCall("tsc_url_path_to_file_url", T_URL, [
+                return this.emitSequencedExpr(T_URL, [
                     { value, target: T_STRING, node: argNode },
-                ]);
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ], ([pathC]) => `tsc_url_path_to_file_url(${pathC})`);
             }
             default:
                 unsupported(call, `url.${name}`);

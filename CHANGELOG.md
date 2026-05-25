@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `url.fileURLToPath(...)` and `url.pathToFileURL(...)` now evaluate and ignore trailing arguments across named, namespace, and default `"url"` / `"node:url"` imports. Test: `url_file_path_helpers`.
 - EventEmitter instance listener registration and removal methods now evaluate and ignore trailing arguments after the listener parameter. Tests: `event_emitter`, `event_emitter_more`.
 - `EventTarget.addEventListener(...)` and `removeEventListener(...)` now evaluate and ignore trailing arguments after the optional options slot. Test: `event_target`.
 - EventEmitter instance `listenerCount(eventName, listener?, ...ignored)` and `removeAllListeners(eventName?, ...ignored)` now evaluate and ignore trailing arguments, and `listenerCount` treats explicit `undefined` listener filters as omitted. Test: `event_emitter`.

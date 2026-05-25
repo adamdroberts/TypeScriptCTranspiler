@@ -2082,20 +2082,20 @@ declare var URL: URLConstructor;
 type URLPathLike = string | URL;
 interface UrlModule {
     URL: URLConstructor;
-    fileURLToPath(url: URLPathLike): string;
-    pathToFileURL(path: string): URL;
+    fileURLToPath(url: URLPathLike, ...ignored: any[]): string;
+    pathToFileURL(path: string, ...ignored: any[]): URL;
 }
 declare module "url" {
     export const URL: URLConstructor;
-    export function fileURLToPath(url: URLPathLike): string;
-    export function pathToFileURL(path: string): URL;
+    export function fileURLToPath(url: URLPathLike, ...ignored: any[]): string;
+    export function pathToFileURL(path: string, ...ignored: any[]): URL;
     const defaultUrl: UrlModule;
     export default defaultUrl;
 }
 declare module "node:url" {
     export const URL: URLConstructor;
-    export function fileURLToPath(url: URLPathLike): string;
-    export function pathToFileURL(path: string): URL;
+    export function fileURLToPath(url: URLPathLike, ...ignored: any[]): string;
+    export function pathToFileURL(path: string, ...ignored: any[]): URL;
     const defaultUrl: UrlModule;
     export default defaultUrl;
 }

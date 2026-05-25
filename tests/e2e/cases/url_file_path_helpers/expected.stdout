@@ -1,3 +1,4 @@
 paths: /tmp/tsc2c-url path#x?y.txt /tmp/tsc2c-url path#x?y.txt
 direct: file:///tmp/tsc2c-url%20path%23x%3Fy.txt /tmp/tsc2c-url%20path%23x%3Fy.txt
 default: file:///tmp/tsc2c-url-simple.txt /tmp/tsc2c-url-simple.txt
+ignored: abcdef
