@@ -26893,6 +26893,21 @@ class Emitter {
                 () => "((void)0)",
             );
         }
+        const processStdinReadStreamName = memberName === "read"
+            ? this.processStdioStreamReceiverName(recvExpr)
+            : null;
+        if (processStdinReadStreamName) {
+            if (processStdinReadStreamName !== "stdin") {
+                unsupported(call, `process.${processStdinReadStreamName}.read is not supported in this stdio subset`);
+            }
+            const specs: SequencedCallArg[] = [];
+            if (call.arguments.length > 0 && !this.isUndefinedExpression(call.arguments[0]!)) {
+                const size = this.emitExpr(call.arguments[0]!);
+                specs.push({ value: size, target: T_NUMBER, node: call.arguments[0]! });
+            }
+            specs.push(...this.ignoredArgumentSpecs(call.arguments, call.arguments.length > 0 ? 1 : 0));
+            return this.emitSequencedExpr(T_BUFFER, specs, () => "NULL");
+        }
         const processStdinStreamName = (
             memberName === "setEncoding" ||
             memberName === "pause" ||

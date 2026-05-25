@@ -699,6 +699,7 @@ interface ProcessReadableStream {
     once(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     pause(...ignored: any[]): void;
     pipe(destination: ProcessWritableStream, ...ignored: any[]): void;
+    read(size?: number, ...ignored: any[]): Buffer | null;
     removeAllListeners(eventName?: string, ...ignored: any[]): void;
     removeListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     resume(...ignored: any[]): void;
