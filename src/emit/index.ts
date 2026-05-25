@@ -15786,10 +15786,13 @@ class Emitter {
                 }
                 if (
                     ts.isVariableDeclaration(parent) &&
-                    parent.initializer === n &&
-                    this.nonEscapingArrayResultAliasUsesAreSafe(parent)
+                    parent.initializer === n
                 ) {
-                    return;
+                    const aliasCapacity = this.nonEscapingArrayAliasExtraCapacity(parent, scope);
+                    if (aliasCapacity !== null) {
+                        extraCapacity += aliasCapacity;
+                        return;
+                    }
                 }
                 if (
                     (ts.isForOfStatement(parent) || ts.isForInStatement(parent)) &&
@@ -15952,63 +15955,75 @@ class Emitter {
     }
 
     private nonEscapingArrayResultAliasUsesAreSafe(d: ts.VariableDeclaration): boolean {
-        if (!ts.isIdentifier(d.name)) return false;
-        const sym = this.symbolForIdentifier(d.name);
-        if (!sym) return false;
         const stmt = d.parent.parent;
         const scope = stmt?.parent;
-        if (!scope || !ts.isBlock(scope)) return false;
+        return !!scope &&
+            ts.isBlock(scope) &&
+            this.nonEscapingArrayAliasExtraCapacity(d, scope) !== null;
+    }
+
+    private nonEscapingArrayAliasExtraCapacity(d: ts.VariableDeclaration, scope: ts.Block): number | null {
+        if (!ts.isIdentifier(d.name)) return null;
+        const sym = this.symbolForIdentifier(d.name);
+        if (!sym) return null;
         let safe = true;
+        let extraCapacity = 0;
         const visit = (n: ts.Node): void => {
             if (!safe) return;
             if (n !== scope && ts.isFunctionLike(n)) return;
             if (ts.isIdentifier(n) && this.checker.getSymbolAtLocation(n) === sym) {
                 if (n === d.name) return;
-                if (!this.nonEscapingArrayAliasUseIsSafe(n, scope)) {
+                const useCapacity = this.nonEscapingArrayAliasUseExtraCapacity(n, scope);
+                if (useCapacity === null) {
                     safe = false;
                     return;
                 }
+                extraCapacity += useCapacity;
+                return;
             }
             ts.forEachChild(n, visit);
         };
         visit(scope);
-        return safe;
+        return safe ? extraCapacity : null;
     }
 
     private nonEscapingArrayAliasUseIsSafe(n: ts.Identifier, scope: ts.Block): boolean {
+        return this.nonEscapingArrayAliasUseExtraCapacity(n, scope) !== null;
+    }
+
+    private nonEscapingArrayAliasUseExtraCapacity(n: ts.Identifier, scope: ts.Block): number | null {
         const parent = n.parent;
         if (
             ts.isVariableDeclaration(parent) &&
-            parent.initializer === n &&
-            this.nonEscapingArrayResultAliasUsesAreSafe(parent)
+            parent.initializer === n
         ) {
-            return true;
+            return this.nonEscapingArrayAliasExtraCapacity(parent, scope);
         }
         if (ts.isElementAccessExpression(parent) && parent.expression === n) {
-            return true;
+            return 0;
         }
         if (
             (ts.isForOfStatement(parent) || ts.isForInStatement(parent)) &&
             parent.expression === n
         ) {
-            return true;
+            return 0;
         }
         if (
             ts.isBinaryExpression(parent) &&
             parent.right === n &&
             parent.operatorToken.kind === ts.SyntaxKind.InKeyword
         ) {
-            return true;
+            return 0;
         }
         if (ts.isCallExpression(parent) && this.nonEscapingArraySafeCallArgument(parent, n)) {
-            return true;
+            return 0;
         }
         if (
             ts.isCallExpression(parent) &&
             this.nonEscapingArrayObjectPrototypeValueOfCallArgument(parent, n) &&
             this.nonEscapingArrayValueOfResultUseIsSafe(parent)
         ) {
-            return true;
+            return 0;
         }
         if (
             ts.isPropertyAccessExpression(parent) &&
@@ -16019,7 +16034,7 @@ class Emitter {
                 ts.isBinaryExpression(parent.parent) &&
                 parent.parent.left === parent &&
                 parent.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
-            );
+            ) ? 0 : null;
         }
         if (
             ts.isPropertyAccessExpression(parent) &&
@@ -16028,32 +16043,31 @@ class Emitter {
             parent.parent.expression === parent
         ) {
             if (parent.parent.arguments.some(ts.isSpreadElement)) {
-                return false;
+                return null;
             }
-            if (
-                this.nonEscapingArrayGrowingMethod(parent.name.text) &&
-                parent.parent.arguments.length === 0 &&
-                !this.hasLoopAncestorBeforeScope(parent.parent, scope)
-            ) {
-                return true;
+            if (this.nonEscapingArrayGrowingMethod(parent.name.text)) {
+                const repetitions = this.loopRepetitionMultiplierBeforeScope(parent.parent, scope);
+                return repetitions === null
+                    ? null
+                    : parent.parent.arguments.length * repetitions;
             }
             if (this.nonEscapingArrayReceiverMethod(parent.name.text)) {
-                return true;
+                return 0;
             }
             if (
                 this.nonEscapingArrayIgnoredReceiverMethod(parent.name.text) &&
                 ts.isExpressionStatement(parent.parent.parent)
             ) {
-                return true;
+                return 0;
             }
             if (
                 this.nonEscapingArrayIgnoredReceiverMethod(parent.name.text) &&
                 this.nonEscapingArrayResultUseIsSafe(parent.parent)
             ) {
-                return true;
+                return 0;
             }
         }
-        return false;
+        return null;
     }
 
     private nonEscapingArraySafeCallArgument(call: ts.CallExpression, arg: ts.Expression): boolean {

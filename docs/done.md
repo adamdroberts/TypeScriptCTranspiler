@@ -133,7 +133,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - Non-escaping local typed array literals used as targets for supported read-only Object/Reflect helper calls and `in` checks are stack-allocated instead of GC-allocated. Test: `array_literal_stack_alloc_object_helpers`
 - Non-escaping local typed array literals passed through read-only `Object.prototype.hasOwnProperty.call(...)`, `isPrototypeOf.call(...)`, `propertyIsEnumerable.call(...)`, `toLocaleString.call(...)`, and `toString.call(...)` inspection forms are stack-allocated instead of GC-allocated. Test: `array_literal_stack_alloc_object_prototype_call`
 - Non-escaping local typed array literals whose receiver-returning in-place method results are captured by same-block aliases remain stack-allocated when those aliases only flow through safe reads and inspections. Test: `array_literal_stack_alloc_alias`
-- Non-escaping local typed array literals that flow through same-block direct alias chains remain stack-allocated when those aliases only use safe reads, inspections, and non-growing mutations. Test: `array_literal_stack_alloc_alias_direct`
+- Non-escaping local typed array literals that flow through same-block direct alias chains remain stack-allocated when those aliases only use safe reads, inspections, non-growing mutations, and finite `push(...)` / `unshift(...)` growth. Test: `array_literal_stack_alloc_alias_direct`
 - Non-escaping local typed array literals grown by `push(...)` / `unshift(...)` inside simple finite counted `for` loops are stack-allocated with statically reserved capacity. Test: `array_literal_stack_alloc_loop_growth`
 - Non-escaping local typed array literals that flow through `Object.prototype.valueOf.call(...)` remain stack-allocated when the returned receiver is consumed only by read-only safe uses or same-block aliases. Test: `array_literal_stack_alloc_value_of`
 - Interface nesting — `interface Line { from: Point; to: Point; }`. Test: `interfaces`
@@ -1412,7 +1412,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_literal_stack_alloc_object_helpers` | non-escaping typed array literal locals use stack storage through Object/Reflect read helpers |
 | `array_literal_stack_alloc_object_prototype_call` | non-escaping typed array literal locals use stack storage through read-only Object prototype call-form inspections |
 | `array_literal_stack_alloc_alias` | non-escaping typed array literal locals use stack storage through safe same-block aliases of receiver-returning in-place results |
-| `array_literal_stack_alloc_alias_direct` | non-escaping typed array literal locals use stack storage through safe same-block direct alias chains |
+| `array_literal_stack_alloc_alias_direct` | non-escaping typed array literal locals use stack storage through safe same-block direct alias chains with finite growth |
 | `array_literal_stack_alloc_loop_growth` | non-escaping typed array literal locals reserve finite stack capacity for simple counted-loop push/unshift growth |
 | `array_literal_stack_alloc_value_of` | non-escaping typed array literal locals use stack storage through safe `Object.prototype.valueOf.call` receiver returns |
 | `object_property_is_enumerable` | dynamic Object.prototype.propertyIsEnumerable over descriptor enumerable flags |

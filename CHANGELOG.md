@@ -5,7 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
-- Basic escape analysis now stack-allocates non-escaping typed array literal locals that flow through same-block direct alias chains used only for safe reads, inspections, and non-growing mutations. Test: `array_literal_stack_alloc_alias_direct`.
+- Basic escape analysis now stack-allocates non-escaping typed array literal locals that flow through same-block direct alias chains used only for safe reads, inspections, non-growing mutations, and finite `push(...)` / `unshift(...)` growth. Test: `array_literal_stack_alloc_alias_direct`.
 - Basic escape analysis now stack-allocates non-escaping typed object literal and `new Class(...)` locals that flow through same-block alias chains used only for safe property access and read-only inspections. Test: `object_literal_stack_alloc_alias`.
 - Basic escape analysis now stack-allocates non-escaping typed object literal and `new Class(...)` locals used as targets for read-only Object/Reflect/Object-prototype inspection helpers. Test: `object_literal_stack_alloc_helpers`.
 - Basic escape analysis now stack-allocates non-escaping typed array literal locals that flow through `Object.prototype.valueOf.call(...)` when the returned receiver is consumed only by read-only safe uses or aliases. Test: `array_literal_stack_alloc_value_of`.
