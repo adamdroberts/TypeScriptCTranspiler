@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now prunes unused `Object.groupBy(...)` / `Map.groupBy(...)` calls over statically empty string sources. Test: `generated_c_dce_const`.
 - `Object.groupBy` and `Map.groupBy` now accept string sources, grouping code-point strings by callback result through the existing string character materialization path. Tests: `object_group_by`, `map_group_by`.
 - `Promise.any` aggregate rejection and empty `Promise.race` pending behavior are now covered for typed Set sources in the immediate Promise subset. Tests: `promise_any_aggregate`, `promise_race_empty_pending`.
 - Pending Promise records now propagate through immediate `Promise.all`, `Promise.allSettled`, `Promise.race`, and `Promise.any` over typed Set sources without synchronously invoking chained callbacks. Test: `promise_pending_combinators`.
@@ -363,7 +364,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Generated-C DCE now requires ignored extra `Map(...)` / `WeakMap(...)` entry slots to be side-effect-free before pruning static constructor sources. Test: `generated_c_dce_const`.
 - `WeakSet<T>` constructor calls can now initialize from typed `T[]` arrays. Test: `weak_collections`.
 - `WeakMap<K, V>` constructor calls can now initialize from typed `Map<K, V>` sources with matching object-key/value types. Tests: `weak_collections`, `generated_c_dce_const`.
-- Generated-C DCE now recognizes unused pure `Object.groupBy(...)` and `Map.groupBy(...)` calls over statically empty array sources. Test: `generated_c_dce_const`.
+- Generated-C DCE now recognizes unused pure `Object.groupBy(...)` and `Map.groupBy(...)` calls over statically empty array/string sources. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `Array.from(empty, mapper[, thisArg])` calls when the array/string source is statically empty. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure comparator `sort(...)` and `toSorted(...)` calls on fresh array literals with at most one element. Test: `generated_c_dce_const`.
 - Generated-C DCE now recognizes unused pure `flatMap(...)` calls plus `reduce(...)` / `reduceRight(...)` calls with explicit pure initial values on fresh empty array literals. Test: `generated_c_dce_const`.
