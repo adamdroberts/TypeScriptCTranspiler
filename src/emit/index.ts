@@ -4576,6 +4576,24 @@ class Emitter {
                 : Math.min(endValue, sourceElements.length);
             return sourceElements.slice(actualStart, actualEnd);
         }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            unwrapped.expression.name.text === "concat"
+        ) {
+            const sourceElements = this.sideEffectFreeMapArraySourceExpressions(
+                unwrapped.expression.expression,
+                seenConsts,
+            );
+            if (sourceElements === null) return null;
+            const elements = [...sourceElements];
+            for (const arg of unwrapped.arguments) {
+                const argElements = this.sideEffectFreeMapArraySourceExpressions(arg, seenConsts);
+                if (argElements === null) return null;
+                elements.push(...argElements);
+            }
+            return elements;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeMapArraySourceExpressions(init, seenConsts) : null;
     }
