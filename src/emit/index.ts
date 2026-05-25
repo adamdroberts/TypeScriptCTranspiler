@@ -27345,11 +27345,12 @@ class Emitter {
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "RegExp") {
             if (memberName === "escape") {
                 const arg = call.arguments[0];
-                if (!arg || call.arguments.length !== 1) unsupported(call, "RegExp.escape expects one string argument");
+                if (!arg) unsupported(call, "RegExp.escape expects one string argument");
                 const value = this.emitExpr(arg);
-                return this.emitSequencedCall("tsc_regexp_escape", T_STRING, [
+                return this.emitSequencedExpr(T_STRING, [
                     { value, target: T_STRING, node: arg },
-                ]);
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ], ([text]) => `tsc_regexp_escape(${text})`);
             }
             unsupported(call, `RegExp.${memberName}`);
         }

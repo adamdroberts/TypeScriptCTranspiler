@@ -579,7 +579,7 @@ interface RegExp {
 interface RegExpConstructor {
     new(pattern: string, flags?: string, ...ignored: any[]): RegExp;
     (pattern: string, flags?: string, ...ignored: any[]): RegExp;
-    escape(text: string): string;
+    escape(text: string, ...ignored: any[]): string;
 }
 declare var RegExp: RegExpConstructor;
 
