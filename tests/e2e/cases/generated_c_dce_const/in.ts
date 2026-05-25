@@ -629,6 +629,8 @@ const unused_promise_try_empty_call = Promise.try(() => {
 const unused_promise_try_resolve_call = Promise.try(() => Promise.resolve("dead_promise_try_resolve"));
 const unused_promise_try_reject_call = Promise.try(() => Promise.reject("dead_promise_try_reject"));
 const unused_promise_try_all_empty_call = Promise.try(() => Promise.all([] as Promise<string>[]));
+const unused_promise_try_all_empty_const_array_call = Promise.try(() => Promise.all(unused_promise_empty_array_source));
+const unused_promise_try_race_empty_array_copy_call = Promise.try(() => Promise.race(unused_promise_empty_array_copy_source));
 const unused_promise_try_all_empty_const_set_call = Promise.try(() => Promise.all(unused_promise_empty_set_source));
 const unused_promise_try_race_empty_set_copy_call = Promise.try(() => Promise.race(unused_promise_empty_set_copy_source));
 const unused_promise_try_then_call = Promise.try(() => "dead_promise_try_then_source")
