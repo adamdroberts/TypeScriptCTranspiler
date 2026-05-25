@@ -635,6 +635,21 @@ const unused_promise_race_pending_rejected_catch_call = Promise.race([
     Promise.reject<string>("dead_promise_race_pending_rejected_source"),
 ])
     .catch(() => "dead_promise_race_pending_rejected_catch_callback");
+const unused_promise_then_passthrough_then_call = Promise.resolve("dead_promise_then_passthrough_source")
+    .then()
+    .then(() => "dead_promise_then_passthrough_callback");
+const unused_promise_catch_passthrough_catch_call = Promise.reject<string>("dead_promise_catch_passthrough_source")
+    .catch()
+    .catch((reason) => "dead_promise_catch_passthrough_callback");
+const unused_promise_finally_passthrough_then_call = Promise.resolve("dead_promise_finally_passthrough_source")
+    .finally(undefined)
+    .then(() => "dead_promise_finally_passthrough_callback");
+const unused_promise_catch_fulfilled_passthrough_then_call = Promise.resolve("dead_promise_catch_fulfilled_passthrough_source")
+    .catch((reason) => "dead_promise_catch_fulfilled_unreached")
+    .then(() => "dead_promise_catch_fulfilled_passthrough_callback");
+const unused_promise_pending_nested_finally_call = Promise.race([] as Promise<string>[])
+    .then(() => "dead_promise_pending_nested_then_callback")
+    .finally(() => "dead_promise_pending_nested_finally_callback");
 const unused_new_promise_empty_executor_call = new Promise<string>(() => {
 });
 const unused_new_promise_resolve_call = new Promise<string>((resolve) => resolve("dead_new_promise_resolve"));
@@ -1743,6 +1758,21 @@ Promise.race([
     Promise.reject<string>("top_level_dead_promise_race_pending_rejected_source"),
 ])
     .catch(() => "top_level_dead_promise_race_pending_rejected_catch_callback");
+Promise.resolve("top_level_dead_promise_then_passthrough_source")
+    .then()
+    .then(() => "top_level_dead_promise_then_passthrough_callback");
+Promise.reject<string>("top_level_dead_promise_catch_passthrough_source")
+    .catch()
+    .catch((reason) => "top_level_dead_promise_catch_passthrough_callback");
+Promise.resolve("top_level_dead_promise_finally_passthrough_source")
+    .finally(undefined)
+    .then(() => "top_level_dead_promise_finally_passthrough_callback");
+Promise.resolve("top_level_dead_promise_catch_fulfilled_passthrough_source")
+    .catch((reason) => "top_level_dead_promise_catch_fulfilled_unreached")
+    .then(() => "top_level_dead_promise_catch_fulfilled_passthrough_callback");
+Promise.race([] as Promise<string>[])
+    .then(() => "top_level_dead_promise_pending_nested_then_callback")
+    .finally(() => "top_level_dead_promise_pending_nested_finally_callback");
 new Promise<string>(() => {
 });
 new Promise<string>((resolve) => resolve("top_level_dead_new_promise_resolve"));
@@ -2828,6 +2858,21 @@ function usedLocal(value: number): number {
         Promise.reject<string>("local_dead_promise_race_pending_rejected_source"),
     ])
         .catch(() => "local_dead_promise_race_pending_rejected_catch_callback");
+    Promise.resolve("local_dead_promise_then_passthrough_source")
+        .then()
+        .then(() => "local_dead_promise_then_passthrough_callback");
+    Promise.reject<string>("local_dead_promise_catch_passthrough_source")
+        .catch()
+        .catch((reason) => "local_dead_promise_catch_passthrough_callback");
+    Promise.resolve("local_dead_promise_finally_passthrough_source")
+        .finally(undefined)
+        .then(() => "local_dead_promise_finally_passthrough_callback");
+    Promise.resolve("local_dead_promise_catch_fulfilled_passthrough_source")
+        .catch((reason) => "local_dead_promise_catch_fulfilled_unreached")
+        .then(() => "local_dead_promise_catch_fulfilled_passthrough_callback");
+    Promise.race([] as Promise<string>[])
+        .then(() => "local_dead_promise_pending_nested_then_callback")
+        .finally(() => "local_dead_promise_pending_nested_finally_callback");
     new Promise<string>(() => {
     });
     new Promise<string>((resolve) => resolve("local_dead_new_promise_resolve"));

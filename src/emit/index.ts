@@ -6919,12 +6919,12 @@ class Emitter {
         if (method === "then") {
             if (args.length > 2) return false;
             if (this.isSideEffectFreeFulfilledPromiseOperand(recv, seenConsts)) {
-                return this.isSideEffectFreeOptionalPromiseCallback(args[0], seenConsts) &&
+                return this.isSideEffectFreeOptionalPromiseCallback(args[0], seenConsts, 1) &&
                     this.isSideEffectFreeUnevaluatedPromiseCallback(args[1], seenConsts);
             }
             if (this.isSideEffectFreeRejectedPromiseOperand(recv, seenConsts)) {
                 return this.isSideEffectFreeUnevaluatedPromiseCallback(args[0], seenConsts) &&
-                    this.isSideEffectFreeOptionalPromiseCallback(args[1], seenConsts);
+                    this.isSideEffectFreeOptionalPromiseCallback(args[1], seenConsts, 1);
             }
             if (this.isSideEffectFreePendingPromiseOperand(recv, seenConsts)) {
                 return this.isSideEffectFreeUnevaluatedPromiseCallback(args[0], seenConsts) &&
@@ -6938,7 +6938,7 @@ class Emitter {
                 return this.isSideEffectFreeUnevaluatedPromiseCallback(args[0], seenConsts);
             }
             return this.isSideEffectFreeRejectedPromiseOperand(recv, seenConsts) &&
-                this.isSideEffectFreeOptionalPromiseCallback(args[0], seenConsts);
+                this.isSideEffectFreeOptionalPromiseCallback(args[0], seenConsts, 1);
         }
         if (method === "finally") {
             if (this.isSideEffectFreePendingPromiseOperand(recv, seenConsts)) {
@@ -6953,10 +6953,50 @@ class Emitter {
     private isSideEffectFreeOptionalPromiseCallback(
         expr: ts.Expression | undefined,
         seenConsts: Set<ts.Symbol>,
+        maxValueParams = 0,
     ): boolean {
         return !expr ||
             this.isUndefinedExpression(expr) ||
-            this.isSideEffectFreePromiseTryCallbackOperand(expr, seenConsts);
+            this.isSideEffectFreePromiseCallbackOperand(expr, seenConsts, maxValueParams);
+    }
+
+    private isSideEffectFreePromiseCallbackOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+        maxValueParams: number,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrowFunction(unwrapped) || ts.isFunctionExpression(unwrapped)) {
+            return this.isSideEffectFreePromiseCallback(unwrapped, seenConsts, maxValueParams);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreePromiseCallbackOperand(init, seenConsts, maxValueParams);
+    }
+
+    private isSideEffectFreePromiseCallback(
+        fn: ts.ArrowFunction | ts.FunctionExpression,
+        seenConsts: Set<ts.Symbol>,
+        maxValueParams: number,
+    ): boolean {
+        const valueParams = fn.parameters.filter((param) =>
+            !(ts.isIdentifier(param.name) && param.name.text === "this")
+        );
+        if (valueParams.length > maxValueParams || valueParams.some((param) => !ts.isIdentifier(param.name))) {
+            return false;
+        }
+        if (ts.isExpression(fn.body)) {
+            return this.isSideEffectFreePromiseTryReturnValue(fn.body, seenConsts);
+        }
+        const statements = Array.from(fn.body.statements);
+        if (statements.length === 0) return true;
+        if (statements.length !== 1) return false;
+        const stmt = statements[0]!;
+        if (ts.isReturnStatement(stmt)) {
+            return !stmt.expression ||
+                this.isSideEffectFreePromiseTryReturnValue(stmt.expression, seenConsts);
+        }
+        return ts.isExpressionStatement(stmt) &&
+            this.isSideEffectFreeTopLevelConstInitializer(stmt.expression, seenConsts);
     }
 
     private isSideEffectFreeUnevaluatedPromiseCallback(
@@ -6985,6 +7025,9 @@ class Emitter {
         if (this.sideEffectFreePromiseResolveState(unwrapped, seenConsts) === "fulfilled") {
             return true;
         }
+        if (this.sideEffectFreePromiseInstanceChainState(unwrapped, seenConsts) === "fulfilled") {
+            return true;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeFulfilledPromiseOperand(init, seenConsts);
     }
@@ -7004,6 +7047,9 @@ class Emitter {
             return true;
         }
         if (this.sideEffectFreePromiseResolveState(unwrapped, seenConsts) === "rejected") {
+            return true;
+        }
+        if (this.sideEffectFreePromiseInstanceChainState(unwrapped, seenConsts) === "rejected") {
             return true;
         }
         if (
@@ -7042,6 +7088,9 @@ class Emitter {
         if (this.sideEffectFreePromiseResolveState(unwrapped, seenConsts) === "pending") {
             return true;
         }
+        if (this.sideEffectFreePromiseInstanceChainState(unwrapped, seenConsts) === "pending") {
+            return true;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreePendingPromiseOperand(init, seenConsts);
     }
@@ -7058,8 +7107,189 @@ class Emitter {
         if (combinatorState === "fulfilled" || combinatorState === "rejected") return true;
         const resolveState = this.sideEffectFreePromiseResolveState(expr, seenConsts);
         if (resolveState === "fulfilled" || resolveState === "rejected") return true;
+        const instanceState = this.sideEffectFreePromiseInstanceChainState(expr, seenConsts);
+        if (instanceState === "fulfilled" || instanceState === "rejected") return true;
         return this.isSideEffectFreeFulfilledPromiseOperand(expr, seenConsts) ||
             this.isSideEffectFreeRejectedPromiseOperand(expr, seenConsts);
+    }
+
+    private sideEffectFreePromiseKnownState(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): "fulfilled" | "rejected" | "pending" | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        const newState = this.sideEffectFreeNewPromiseState(unwrapped, seenConsts);
+        if (newState) return newState;
+        const tryState = this.sideEffectFreePromiseTryState(unwrapped, seenConsts);
+        if (tryState) return tryState;
+        const combinatorState = this.sideEffectFreePromiseStaticCombinatorState(unwrapped, seenConsts);
+        if (combinatorState) return combinatorState;
+        const resolveState = this.sideEffectFreePromiseResolveState(unwrapped, seenConsts);
+        if (resolveState) return resolveState;
+        const rejectState = this.sideEffectFreePromiseRejectState(unwrapped, seenConsts);
+        if (rejectState) return rejectState;
+        const instanceState = this.sideEffectFreePromiseInstanceChainState(unwrapped, seenConsts);
+        if (instanceState) return instanceState;
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreePromiseKnownState(init, seenConsts) : null;
+    }
+
+    private sideEffectFreePromiseInstanceChainState(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): "fulfilled" | "rejected" | "pending" | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression)
+        ) {
+            const method = unwrapped.expression.name.text;
+            const recvState = this.sideEffectFreePromiseKnownState(
+                unwrapped.expression.expression,
+                new Set(seenConsts),
+            );
+            if (recvState === null) return null;
+            if (method === "then") {
+                if (unwrapped.arguments.length > 2) return null;
+                if (recvState === "pending") {
+                    return this.isSideEffectFreeUnevaluatedPromiseCallback(unwrapped.arguments[0], seenConsts) &&
+                        this.isSideEffectFreeUnevaluatedPromiseCallback(unwrapped.arguments[1], seenConsts)
+                        ? "pending"
+                        : null;
+                }
+                if (
+                    recvState === "fulfilled" &&
+                    this.isUndefinedOrOmittedPromiseHandler(unwrapped.arguments[0])
+                ) {
+                    return "fulfilled";
+                }
+                if (recvState === "fulfilled" && unwrapped.arguments[0]) {
+                    return this.sideEffectFreePromiseHandlerCallbackOperandState(
+                        unwrapped.arguments[0],
+                        seenConsts,
+                        1,
+                    );
+                }
+                if (
+                    recvState === "rejected" &&
+                    this.isUndefinedOrOmittedPromiseHandler(unwrapped.arguments[1])
+                ) {
+                    return "rejected";
+                }
+                if (recvState === "rejected" && unwrapped.arguments[1]) {
+                    return this.sideEffectFreePromiseHandlerCallbackOperandState(
+                        unwrapped.arguments[1],
+                        seenConsts,
+                        1,
+                    );
+                }
+                return null;
+            }
+            if (unwrapped.arguments.length > 1) return null;
+            if (method === "catch") {
+                if (recvState === "pending") {
+                    return this.isSideEffectFreeUnevaluatedPromiseCallback(unwrapped.arguments[0], seenConsts)
+                        ? "pending"
+                        : null;
+                }
+                if (recvState === "fulfilled") {
+                    return this.isSideEffectFreeUnevaluatedPromiseCallback(unwrapped.arguments[0], seenConsts)
+                        ? "fulfilled"
+                        : null;
+                }
+                if (this.isUndefinedOrOmittedPromiseHandler(unwrapped.arguments[0])) {
+                    return "rejected";
+                }
+                return this.sideEffectFreePromiseHandlerCallbackOperandState(
+                    unwrapped.arguments[0]!,
+                    seenConsts,
+                    1,
+                );
+            }
+            if (method === "finally") {
+                if (recvState === "pending") {
+                    return this.isSideEffectFreeUnevaluatedPromiseCallback(unwrapped.arguments[0], seenConsts)
+                        ? "pending"
+                        : null;
+                }
+                return this.isUndefinedOrOmittedPromiseHandler(unwrapped.arguments[0])
+                    ? recvState
+                    : null;
+            }
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreePromiseInstanceChainState(init, seenConsts) : null;
+    }
+
+    private isUndefinedOrOmittedPromiseHandler(expr: ts.Expression | undefined): boolean {
+        return !expr || this.isUndefinedExpression(expr);
+    }
+
+    private sideEffectFreePromiseRejectState(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): "rejected" | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            unwrapped.expression.name.text === "reject" &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Promise") &&
+            (
+                unwrapped.arguments.length === 0 ||
+                this.isSideEffectFreePrimitivePromiseResolveValue(unwrapped.arguments[0]!, seenConsts)
+            ) &&
+            Array.from(unwrapped.arguments).slice(1).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            )
+        ) {
+            return "rejected";
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreePromiseRejectState(init, seenConsts) : null;
+    }
+
+    private sideEffectFreePromiseHandlerCallbackOperandState(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+        maxValueParams: number,
+    ): "fulfilled" | "rejected" | "pending" | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrowFunction(unwrapped) || ts.isFunctionExpression(unwrapped)) {
+            return this.sideEffectFreePromiseHandlerCallbackState(unwrapped, seenConsts, maxValueParams);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreePromiseHandlerCallbackOperandState(init, seenConsts, maxValueParams) : null;
+    }
+
+    private sideEffectFreePromiseHandlerCallbackState(
+        fn: ts.ArrowFunction | ts.FunctionExpression,
+        seenConsts: Set<ts.Symbol>,
+        maxValueParams: number,
+    ): "fulfilled" | "rejected" | "pending" | null {
+        const valueParams = fn.parameters.filter((param) =>
+            !(ts.isIdentifier(param.name) && param.name.text === "this")
+        );
+        if (valueParams.length > maxValueParams || valueParams.some((param) => !ts.isIdentifier(param.name))) {
+            return null;
+        }
+        if (ts.isExpression(fn.body)) {
+            return this.sideEffectFreePromiseTryReturnValueState(fn.body, seenConsts);
+        }
+        const statements = Array.from(fn.body.statements);
+        if (statements.length === 0) return "fulfilled";
+        if (statements.length !== 1) return null;
+        const stmt = statements[0]!;
+        if (ts.isReturnStatement(stmt)) {
+            return stmt.expression
+                ? this.sideEffectFreePromiseTryReturnValueState(stmt.expression, seenConsts)
+                : "fulfilled";
+        }
+        return ts.isExpressionStatement(stmt) &&
+            this.isSideEffectFreeTopLevelConstInitializer(stmt.expression, seenConsts)
+            ? "fulfilled"
+            : null;
     }
 
     private sideEffectFreePromiseStaticCombinatorState(
