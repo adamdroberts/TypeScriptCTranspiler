@@ -1072,6 +1072,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `error_cause` | Error-family and AggregateError literal cause options exposed through .cause |
 | `error_instances` | Error object subset with name/message/stringification/valueOf, ignored extra args, and throw stringification |
 | `error_more_constructors` | ReferenceError, EvalError, and URIError constructors share Error object behavior |
+| `encode_uri` | URI encode/decode helpers route valid ASCII inputs through the supported string runtime |
 | `event_emitter` | synchronous EventEmitter listener registration, emit, once, removal, and listener counts |
 | `event_emitter_default_max_listeners` | EventEmitter.defaultMaxListeners and events.defaultMaxListeners configure default max listeners |
 | `event_emitter_default_import` | default events imports expose EventEmitter, module helpers, once, and defaultMaxListeners |
@@ -1110,6 +1111,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `fs_readdir_encoded_options` | fs readdir hex/base64 string filename encodings for sync and immediate promise forms |
 | `fs_readdir_null_encoding_options` | fs readdir null encoding options default to string filename results |
 | `fs_read_file_buffer_options` | fs.readFileSync and immediate fs.promises.readFile explicit buffer encoding options and aliases return Buffer bytes |
+| `fs_read_file_encoded_options` | fs.readFileSync and immediate fs.promises.readFile hex/base64 string encodings for sync and promise forms |
 | `fs_read_file_ignored_arguments` | fs.readFileSync and immediate fs.promises.readFile explicit undefined options and ignored extra arguments |
 | `fs_read_file_null_buffer_options` | fs.readFileSync and immediate fs.promises.readFile null encoding options and aliases return Buffer bytes |
 | `fs_readdir_recursive` | fs readdir recursive string results for sync, named import, and promises |
@@ -1249,6 +1251,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `fs_file_flag_options` | fs readFile and appendFile literal flag options for sync, named import, and promises |
 | `fs_read_file_plus_flags` | fs readFile literal `"r+"` and `"rs+"` flag options for sync, named import, and promises |
 | `fs_write_append_mode_options` | fs writeFile/appendFile numeric mode and const flush options for sync, named import, and promises |
+| `fs_write_append_encoded_options` | fs writeFile/appendFile hex/base64 string encodings for sync and immediate promise forms |
 | `fs_write_append_ignored_arguments` | fs writeFile/appendFile sync and promise explicit undefined options and ignored extra arguments |
 | `fs_mutation_ignored_arguments` | fs mutation sync and promise calls evaluate ignored extra arguments after consumed options |
 | `fs_promises_stat_access_ignored_arguments` | fs.promises stat/lstat/access explicit undefined options and ignored extra arguments |
@@ -1267,6 +1270,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `fs_promises_rejections` | sync filesystem throws inside immediate fs.promises wrappers become rejected Promise records |
 | `fs_realpath` | fs.realpathSync and immediate-settled fs.promises realpath |
 | `fs_readlink` | fs.readlinkSync and immediate-settled fs.promises readlink |
+| `fs_exists_ignored_arguments` | fs.existsSync evaluates ignored trailing arguments before returning path existence |
+| `fs_path_result_encoded_options` | fs realpath/readlink/mkdtemp hex/base64 string result encodings for sync and immediate promise forms |
 | `fs_recursive_options` | fs mkdir recursive plus rm/rmdir recursive, force, retry, and const boolean option-object shapes |
 | `fs_readdir_ignored_arguments` | fs.readdirSync and immediate fs.promises.readdir explicit undefined options and ignored extra arguments |
 | `fs_roundtrip` | fs.readFileSync + writeFileSync + path helpers |
@@ -1830,6 +1835,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `union_narrowing` | `typeof` narrowing over `string | number` dynamic union storage |
 | `uninitialized_dynamic_variables` | uninitialized dynamic variables default to JavaScript undefined |
 | `void_operator` | `void expr` side-effect preservation and undefined result |
+| `static_void_analysis` | side-effect-free void expressions participate in static undefined/nullish/falsy analysis |
 | `url_base` | URL constructor and URL.canParse support for bounded base URL resolution |
 | `url_can_parse` | URL.canParse support for the bounded absolute URL subset |
 | `url_file_path_helpers` | node:url fileURLToPath and pathToFileURL helpers |
@@ -1838,6 +1844,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `url_object_methods` | URL toString/toJSON/toLocaleString/valueOf |
 | `url_parse` | URL parsing fields |
 | `weak_collections` | typed WeakMap/WeakSet with object keys |
+| `weak_map_primitive_map_source_reject` | WeakMap constructor preserves primitive-key rejection for non-object typed Map sources |
+| `weak_set_primitive_set_source_reject` | WeakSet constructor preserves primitive-value rejection for non-object typed Set sources |
 | `weak_ref` | typed WeakRef construction and deref |
 | `finalization_registry` | FinalizationRegistry register/unregister with optional unregister tokens |
 | `set_composition` | ES2025 Set union/intersection/difference/symmetricDifference and subset/superset/disjoint predicates |
