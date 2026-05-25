@@ -11818,7 +11818,11 @@ class Emitter {
                     return;
                 }
                 while (ts.isParenthesizedExpression(descriptors)) descriptors = descriptors.expression;
-                if (ts.isIdentifier(descriptors) && descriptors.text === sourceName) {
+                const fromEntriesSource = this.commonJsDefinePropertiesFromEntriesCall(descriptors);
+                const usesSource = fromEntriesSource
+                    ? this.commonJsObjectFromEntriesSourceUsesIdentifier(fromEntriesSource.arguments[0]!, sourceName)
+                    : ts.isIdentifier(descriptors) && descriptors.text === sourceName;
+                if (usesSource) {
                     if (this.commonJsObjectAssignExportContextCallForSourceNode(node)) {
                         found = node;
                         return;
