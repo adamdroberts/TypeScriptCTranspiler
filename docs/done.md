@@ -280,6 +280,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `re.exec(s, ...ignored)` → `tsc_regexp_exec`, returning the full match plus captures or `null` after evaluating ignored extra arguments. Tests: `regexp_exec`, `regexp_object_methods`
 - `re.test(s, ...ignored)` → `tsc_regexp_test`, with ignored extra arguments evaluated before being discarded. Test: `regexp_object_methods`
 - `re.source`, `re.flags`, `re.global`, `re.hasIndices`, `re.ignoreCase`, `re.multiline`, `re.dotAll`, `re.sticky`, `re.unicode`, `re.toString(...ignored)`, `re.toLocaleString(...ignored)`, and `re.valueOf(...ignored)`. Tests: `regexp_object_methods`, `regexp_extra_flags`
+- RegExp instances expose non-enumerable own `lastIndex` metadata through `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, `Object.prototype.*.call(...)`, `Reflect.ownKeys`, and `Reflect.getOwnPropertyDescriptor`, while `Object.keys` / `values` / `entries` stay empty. Test: `regexp_own_properties`
 - String-side methods with regex argument: `.replace`, `.replaceAll`, `.match`, `.search`, `.split`
 - Capture groups on non-global `.match()` results. Test: `regex_captures`
 - `.matchAll(regex)` full-match and capture arrays. Test: `string_match_all`
@@ -1581,6 +1582,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `regexp_exec` | RegExp.exec capture-array results |
 | `regexp_extra_flags` | RegExp hasIndices/sticky flag properties |
 | `regexp_object_methods` | RegExp source/flags/flag booleans and toString/toLocaleString/valueOf |
+| `regexp_own_properties` | RegExp lastIndex own-property Object and Reflect helper behavior |
 | `release_build` | `--release` size-optimized linking still produces a runnable binary |
 | `rest_spread` | rest parameters plus spread arguments into rest and fixed-arity function/method calls |
 | `nullish` | `??` + `?.` + null returns from functions |

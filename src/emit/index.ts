@@ -25373,6 +25373,16 @@ class Emitter {
         if (mapped.kind === "buffer") {
             return this.emitBufferOwnKeyCheck(targetNode, target, keyNode);
         }
+        if (mapped.kind === "regexp") {
+            const key = this.emitExpr(keyNode);
+            return this.emitSequencedExpr(T_BOOLEAN, [
+                { value: target, node: targetNode },
+                { value: key, target: T_STRING, node: keyNode },
+                ...ignored,
+            ], ([value, keyC]) => method === "hasOwnProperty"
+                ? `({ (void)${value}; tsc_str_eq(${keyC}, tsc_str_from_lit("lastIndex", 9)); })`
+                : `({ (void)${value}; (void)${keyC}; false; })`);
+        }
         if (mapped.kind === "value" || mapped.kind === "string") {
             const key = this.emitExpr(keyNode);
             const fn = method === "hasOwnProperty"
@@ -29003,6 +29013,22 @@ class Emitter {
                     [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
                     ([regexp]) => regexp,
                 );
+            case "hasOwnProperty":
+            case "propertyIsEnumerable": {
+                if (args.length < 1) unsupported(call, `RegExp.${method} expects at least 1 arg`);
+                const key = this.emitExpr(args[0]!);
+                return this.emitSequencedExpr(
+                    T_BOOLEAN,
+                    [
+                        { value: recv },
+                        { value: key, target: T_STRING, node: args[0]! },
+                        ...this.ignoredArgumentSpecs(args, 1),
+                    ],
+                    ([regexp, prop]) => method === "hasOwnProperty"
+                        ? `({ (void)${regexp}; tsc_str_eq(${prop}, tsc_str_from_lit("lastIndex", 9)); })`
+                        : `({ (void)${regexp}; (void)${prop}; false; })`,
+                );
+            }
         }
         unsupported(call, `RegExp method .${method}`);
     }
@@ -37867,6 +37893,9 @@ class Emitter {
             mapped.kind === "eventtarget" ||
             mapped.kind === "date" ||
             mapped.kind === "url";
+        const emptyEnumerableBuiltinObjectArg =
+            emptyOwnBuiltinObjectArg ||
+            mapped.kind === "regexp";
         const dynamicObjectArg = (value: string): string => {
             if (mapped.kind === "array") return `tsc_value_array(${value})`;
             if (mapped.kind === "function") return this.coerce({ c: value, ty: mapped }, T_VALUE, arg);
@@ -37922,7 +37951,7 @@ class Emitter {
                     `({ (void)${v}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
                 );
             }
-            if (emptyOwnBuiltinObjectArg) {
+            if (emptyEnumerableBuiltinObjectArg) {
                 const value = this.emitExpr(arg);
                 return this.emitSequencedExpr(arrayType(T_STRING), [{ value, node: arg }, ...ignored], ([v]) =>
                     `({ (void)${v}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
@@ -37997,7 +38026,7 @@ class Emitter {
                     `({ (void)${v}; tsc_array_new(sizeof(${elem.c}), 1); })`,
                 );
             }
-            if (emptyOwnBuiltinObjectArg) {
+            if (emptyEnumerableBuiltinObjectArg) {
                 const value = this.emitExpr(arg);
                 return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, node: arg }, ...ignored], ([v]) =>
                     `({ (void)${v}; tsc_array_new(sizeof(tsc_value_t), 1); })`,
@@ -38067,7 +38096,7 @@ class Emitter {
                     `({ (void)${v}; tsc_array_new(sizeof(${elem.c}), 1); })`,
                 );
             }
-            if (emptyOwnBuiltinObjectArg) {
+            if (emptyEnumerableBuiltinObjectArg) {
                 const value = this.emitExpr(arg);
                 return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, node: arg }, ...ignored], ([v]) =>
                     `({ (void)${v}; tsc_array_new(sizeof(tsc_value_t), 1); })`,
@@ -38178,6 +38207,10 @@ class Emitter {
                     `({ (void)${o}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
                 );
             }
+            if (mapped.kind === "regexp") {
+                const obj = this.emitExpr(arg);
+                return this.emitRegExpOwnPropertyNames(arg, obj, ignored);
+            }
             if (mapped.kind === "buffer") {
                 const obj = this.emitExpr(arg);
                 return this.emitBufferOwnKeys(arg, obj, ignored);
@@ -38274,6 +38307,10 @@ class Emitter {
                     ...ignored,
                 ], ([o, k]) => `({ (void)${o}; (void)${k}; tsc_value_undefined(); })`);
             }
+            if (mapped.kind === "regexp") {
+                const obj = this.emitExpr(arg);
+                return this.emitRegExpGetOwnPropertyDescriptor(arg, obj, args[1]!, ignored);
+            }
             if (mapped.kind === "buffer") {
                 const obj = this.emitExpr(arg);
                 return this.emitBufferGetOwnPropertyDescriptor(arg, obj, args[1]!, ignored);
@@ -38334,6 +38371,10 @@ class Emitter {
                 return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: arg }, ...ignored], ([o]) =>
                     `({ (void)${o}; tsc_value_object(tsc_object_new()); })`,
                 );
+            }
+            if (mapped.kind === "regexp") {
+                const obj = this.emitExpr(arg);
+                return this.emitRegExpGetOwnPropertyDescriptors(arg, obj, ignored);
             }
             if (mapped.kind === "buffer") {
                 const obj = this.emitExpr(arg);
@@ -38409,6 +38450,15 @@ class Emitter {
                     { value: key, target: T_STRING, node: args[1]! },
                     ...ignored,
                 ], ([o, k]) => `({ (void)${o}; (void)${k}; false; })`);
+            }
+            if (mapped.kind === "regexp") {
+                const obj = this.emitExpr(arg);
+                const key = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: obj, node: arg },
+                    { value: key, target: T_STRING, node: args[1]! },
+                    ...ignored,
+                ], ([o, k]) => `({ (void)${o}; tsc_str_eq(${k}, tsc_str_from_lit("lastIndex", 9)); })`);
             }
             if (mapped.kind === "buffer") {
                 const obj = this.emitExpr(arg);
@@ -39144,6 +39194,48 @@ class Emitter {
             `tsc_object_set(${desc}, tsc_str_from_lit("enumerable", 10), tsc_value_bool(${enumerable})); ` +
             `tsc_object_set(${desc}, tsc_str_from_lit("configurable", 12), tsc_value_bool(${configurable}))`
         );
+    }
+
+    private emitRegExpOwnPropertyNames(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: objExpr }, ...ignored], ([regexp]) => {
+            const out = this.freshTemp("_re_keys");
+            const key = this.freshTemp("_re_key");
+            return `({ (void)${regexp}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), 1); tsc_str_t* ${key} = tsc_str_from_lit("lastIndex", 9); tsc_array_push_raw(${out}, &${key}); ${out}; })`;
+        });
+    }
+
+    private emitRegExpGetOwnPropertyDescriptor(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const key = this.emitExpr(keyExpr);
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+            ...ignored,
+        ], ([regexp, keyC]) => {
+            const out = this.freshTemp("_re_desc_out");
+            const desc = this.freshTemp("_re_desc");
+            return `({ (void)${regexp}; tsc_value_t ${out} = tsc_value_undefined(); if (tsc_str_eq(${keyC}, tsc_str_from_lit("lastIndex", 9))) { ${this.typedArrayDescriptorInit(desc, "tsc_value_num(0.0)", "true", "false", "false")}; ${out} = tsc_value_object(${desc}); } ${out}; })`;
+        });
+    }
+
+    private emitRegExpGetOwnPropertyDescriptors(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }, ...ignored], ([regexp]) => {
+            const out = this.freshTemp("_re_descs");
+            const desc = this.freshTemp("_re_desc");
+            return `({ (void)${regexp}; tsc_object_t* ${out} = tsc_object_new(); { ${this.typedArrayDescriptorInit(desc, "tsc_value_num(0.0)", "true", "false", "false")}; tsc_object_set(${out}, tsc_str_from_lit("lastIndex", 9), tsc_value_object(${desc})); } tsc_value_object(${out}); })`;
+        });
     }
 
     private emitTypedArrayGetOwnPropertyDescriptor(
@@ -40120,6 +40212,9 @@ class Emitter {
                 if (mapped.kind === "buffer") {
                     return this.emitBufferGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
                 }
+                if (mapped.kind === "regexp") {
+                    return this.emitRegExpGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
+                }
                 if (mapped.kind === "array") {
                     return this.emitTypedArrayGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
                 }
@@ -40213,6 +40308,10 @@ class Emitter {
                 if (mapped.kind === "buffer") {
                     const target = this.emitExpr(args[0]!);
                     return this.emitBufferOwnKeys(args[0]!, target, ignored);
+                }
+                if (mapped.kind === "regexp") {
+                    const target = this.emitExpr(args[0]!);
+                    return this.emitRegExpOwnPropertyNames(args[0]!, target, ignored);
                 }
                 if (mapped.kind === "class") {
                     const target = this.emitExpr(args[0]!);

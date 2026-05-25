@@ -1,0 +1,8 @@
+enum: 0 0 0
+names: lastIndex lastIndex
+desc: 0 true false false undefined
+descs: lastIndex 0 true false false 0
+own: true false true false
+call: true false
+tag: [object RegExp]
+trace: kvenrdmDRhHpicqt
