@@ -1,0 +1,7 @@
+alias a init
+alias b init
+alias local a init
+alias local b init
+alias first: alias-b
+alias second: alias-a
+alias local: alias-local-b

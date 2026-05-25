@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Finite dynamic `require(...)` proofs now resolve variables and parameters annotated with string-literal union type aliases. Test: `dynamic_require_type_alias`.
 - Dynamic require manifest object maps are covered for installed package specifiers. Test: `dynamic_require_manifest_object_package`.
 - Dynamic require manifest package specifiers now have focused coverage proving native-addon packages still require the native-addon manifest gate. Test: `dynamic_require_manifest_native_package`.
 - Dynamic require manifest allow-lists are covered for installed package specifiers as well as relative specifiers. Test: `dynamic_require_manifest_package`.

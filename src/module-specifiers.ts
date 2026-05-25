@@ -307,10 +307,23 @@ function earlierVariableStringLiteralUnionTexts(id: ts.Identifier): string[] {
     return [];
 }
 
-function stringLiteralUnionTypeTexts(typeNode: ts.TypeNode | undefined): string[] {
+function stringLiteralUnionTypeTexts(
+    typeNode: ts.TypeNode | undefined,
+    seenAliases = new Set<string>(),
+): string[] {
     if (!typeNode) return [];
     if (ts.isParenthesizedTypeNode(typeNode)) {
-        return stringLiteralUnionTypeTexts(typeNode.type);
+        return stringLiteralUnionTypeTexts(typeNode.type, seenAliases);
+    }
+    if (ts.isTypeReferenceNode(typeNode) && ts.isIdentifier(typeNode.typeName)) {
+        const aliasName = typeNode.typeName.text;
+        if (seenAliases.has(aliasName)) return [];
+        const alias = visibleTypeAliasDeclaration(typeNode.typeName, typeNode);
+        if (!alias) return [];
+        seenAliases.add(aliasName);
+        const values = stringLiteralUnionTypeTexts(alias.type, seenAliases);
+        seenAliases.delete(aliasName);
+        return values;
     }
     if (ts.isLiteralTypeNode(typeNode) && ts.isStringLiteral(typeNode.literal)) {
         return [typeNode.literal.text];
@@ -319,7 +332,7 @@ function stringLiteralUnionTypeTexts(typeNode: ts.TypeNode | undefined): string[
     const values: string[] = [];
     const seen = new Set<string>();
     for (const part of typeNode.types) {
-        const partValues = stringLiteralUnionTypeTexts(part);
+        const partValues = stringLiteralUnionTypeTexts(part, seenAliases);
         if (partValues.length === 0) return [];
         for (const value of partValues) {
             if (seen.has(value)) continue;
@@ -328,6 +341,21 @@ function stringLiteralUnionTypeTexts(typeNode: ts.TypeNode | undefined): string[
         }
     }
     return values;
+}
+
+function visibleTypeAliasDeclaration(id: ts.Identifier, context: ts.Node): ts.TypeAliasDeclaration | null {
+    let cur: ts.Node | undefined = context;
+    while (cur) {
+        if (ts.isBlock(cur) || ts.isSourceFile(cur) || ts.isModuleBlock(cur)) {
+            for (const stmt of cur.statements) {
+                if (ts.isTypeAliasDeclaration(stmt) && stmt.name.text === id.text) {
+                    return stmt;
+                }
+            }
+        }
+        cur = cur.parent;
+    }
+    return null;
 }
 
 function staticPropertyName(name: ts.PropertyName): string | null {

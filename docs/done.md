@@ -1466,6 +1466,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_require` | finite const string `require(name)` resolved as an AOT module edge, including earlier local const aliases, static concatenation, template expressions, side-effect-only conditionals, value-returning `module.exports` dispatch, and named-export object materialization |
 | `dynamic_require_commonjs_shapes` | dynamic require dispatch materializes object-literal CommonJS exports that spread package-local require results |
 | `dynamic_require_literal_union` | finite string-literal union annotations provide AOT dynamic require alternatives for parameters, top-level variables, and earlier local variables |
+| `dynamic_require_type_alias` | finite string-literal union type aliases provide AOT dynamic require alternatives for parameters and local variables |
 | `dynamic_require_manifest` | explicit dynamic require manifest compiles a non-finite `require(variable)` allow-list into the AOT graph and finite runtime dispatch |
 | `dynamic_require_manifest_package` | dynamic require manifest package specifiers compile installed package sources into the finite AOT dispatch path |
 | `dynamic_require_manifest_native_package` | dynamic require manifest package specifiers still require native-addon manifest allow-listing for native-addon packages |
