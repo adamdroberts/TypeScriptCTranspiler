@@ -120,6 +120,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - `interface` declarations → C struct types (no runtime overhead); `extends` emits inherited fields in base-first order for field access and typed Object/Reflect field-list helpers. Tests: `interfaces`, `interface_inheritance`
 - Object literals typed against an interface/class → allocated + field-assigned. Test: `interfaces`
 - Non-escaping local typed object literals that only flow through same-block property reads/writes are stack-allocated instead of GC-allocated. Test: `object_literal_stack_alloc`
+- Non-escaping local typed array literals that only flow through same-block element reads/writes and readonly `.length` reads are stack-allocated instead of GC-allocated. Test: `array_literal_stack_alloc`
 - Interface nesting — `interface Line { from: Point; to: Point; }`. Test: `interfaces`
 - Shorthand property assignment `{ x, y }`. Test: `interfaces`
 - Computed property assignment with literal or const-literal keys. Test: `computed_props`
@@ -1383,6 +1384,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `object_is` | Object.is SameValue semantics for numbers, strings, and dynamic object identity |
 | `object_is_prototype_of` | dynamic Object.prototype.isPrototypeOf over prototype chains |
 | `object_literal_stack_alloc` | non-escaping typed object literal locals use stack storage |
+| `array_literal_stack_alloc` | non-escaping typed array literal locals use stack storage |
 | `object_property_is_enumerable` | dynamic Object.prototype.propertyIsEnumerable over descriptor enumerable flags |
 | `object_prototype_call` | Object.prototype hasOwnProperty/propertyIsEnumerable call-form dispatch |
 | `object_prototype_is_prototype_of_call` | Object.prototype.isPrototypeOf.call prototype-chain dispatch |

@@ -15612,6 +15612,59 @@ class Emitter {
         return escapes ? null : { cls: mapped.className, init, targetType };
     }
 
+    private nonEscapingLocalArrayLiteral(
+        d: ts.VariableDeclaration,
+    ): { init: ts.ArrayLiteralExpression; ty: CType } | null {
+        if (!ts.isIdentifier(d.name) || !d.initializer || !ts.isArrayLiteralExpression(d.initializer)) {
+            return null;
+        }
+        const init = d.initializer;
+        if (this.isUntypedJsArrayLiteral(init)) return null;
+        if (init.elements.some((element) => ts.isSpreadElement(element) || element.kind === ts.SyntaxKind.OmittedExpression)) {
+            return null;
+        }
+        const targetType = d.type
+            ? this.checker.getTypeAtLocation(d)
+            : this.checker.getContextualType(init) ?? this.checker.getTypeAtLocation(init);
+        const mapped = mapTsType(init, targetType, this.checker);
+        if (mapped.kind !== "array" || !mapped.elem) return null;
+        const sym = this.symbolForIdentifier(d.name);
+        if (!sym) return null;
+        const stmt = d.parent.parent;
+        const scope = stmt?.parent;
+        if (!scope || !ts.isBlock(scope)) return null;
+
+        let escapes = false;
+        const visit = (n: ts.Node): void => {
+            if (escapes) return;
+            if (n !== scope && ts.isFunctionLike(n)) return;
+            if (ts.isIdentifier(n) && this.checker.getSymbolAtLocation(n) === sym) {
+                if (n === d.name) return;
+                const parent = n.parent;
+                if (ts.isElementAccessExpression(parent) && parent.expression === n) {
+                    return;
+                }
+                if (
+                    ts.isPropertyAccessExpression(parent) &&
+                    parent.expression === n &&
+                    parent.name.text === "length" &&
+                    !(
+                        ts.isBinaryExpression(parent.parent) &&
+                        parent.parent.left === parent &&
+                        parent.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
+                    )
+                ) {
+                    return;
+                }
+                escapes = true;
+                return;
+            }
+            ts.forEachChild(n, visit);
+        };
+        visit(scope);
+        return escapes ? null : { init, ty: mapped };
+    }
+
     private emitClassBodies(cd: ts.ClassDeclaration): void {
         if (!cd.name) return;
         const name = cd.name.text;
@@ -17793,6 +17846,36 @@ class Emitter {
                     }
                 }
                 buf.line(`${stackObject.cls}_t*${qual} ${name} = &${storage};`);
+                continue;
+            }
+            const stackArray = this.nonEscapingLocalArrayLiteral(d);
+            if (stackArray) {
+                const elemType = stackArray.ty.elem!;
+                const storage = this.freshTemp(`_${name}_stack`);
+                const data = this.freshTemp(`_${name}_stack_data`);
+                const cap = Math.max(1, stackArray.init.elements.length);
+                const qual = isConst ? " const" : "";
+                buf.line(`${elemType.c} ${data}[${cap}];`);
+                buf.line(`tsc_array_t ${storage} = {0};`);
+                buf.line(`${storage}.len = 0;`);
+                buf.line(`${storage}.cap = ${cap};`);
+                buf.line(`${storage}.es = sizeof(${elemType.c});`);
+                buf.line(`${storage}.extensible = true;`);
+                buf.line(`${storage}.sealed = false;`);
+                buf.line(`${storage}.frozen = false;`);
+                buf.line(`${storage}.prototype = tsc_value_undefined();`);
+                buf.line(`${storage}.iter_pos = 0;`);
+                buf.line(`${storage}.iter_has_return = false;`);
+                buf.line(`${storage}.iter_return_consumed = false;`);
+                buf.line(`${storage}.iter_return = tsc_value_undefined();`);
+                buf.line(`${storage}.data = ${data};`);
+                for (const element of stackArray.init.elements) {
+                    const r = this.emitExpr(element as ts.Expression);
+                    const tv = this.freshTemp("_el");
+                    buf.line(`${elemType.c} ${tv} = ${this.coerce(r, elemType, element as ts.Expression)};`);
+                    buf.line(`TSC_ARR(${elemType.c}, &${storage}, ${storage}.len) = ${tv}; ${storage}.len++;`);
+                }
+                buf.line(`tsc_array_t*${qual} ${name} = &${storage};`);
                 continue;
             }
             const stackNew = this.nonEscapingLocalNewClass(d);
