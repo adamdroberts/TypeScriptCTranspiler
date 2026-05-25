@@ -26965,9 +26965,10 @@ class Emitter {
                 );
             }
             if (call.arguments.length > 0) {
-                if (!this.isUndefinedExpression(call.arguments[0]!)) {
+                const destinationArg = this.resolveSideEffectFreeEarlierConstExpression(call.arguments[0]!);
+                if (!this.isUndefinedExpression(destinationArg)) {
                     const destination = this.processWritableStreamReceiverName(
-                        this.unwrapSideEffectFreeStaticExpression(call.arguments[0]!),
+                        this.unwrapSideEffectFreeStaticExpression(destinationArg),
                     );
                     if (!destination) unsupported(call.arguments[0]!, "process.stdin.unpipe currently supports process stdout/stderr destinations");
                 }
@@ -26986,9 +26987,12 @@ class Emitter {
                 unsupported(call, `process.${processStdinReadStreamName}.read is not supported in this stdio subset`);
             }
             const specs: SequencedCallArg[] = [];
-            if (call.arguments.length > 0 && !this.isUndefinedExpression(call.arguments[0]!)) {
-                const size = this.emitExpr(call.arguments[0]!);
-                specs.push({ value: size, target: T_NUMBER, node: call.arguments[0]! });
+            if (call.arguments.length > 0) {
+                const sizeArg = this.resolveSideEffectFreeEarlierConstExpression(call.arguments[0]!);
+                if (!this.isUndefinedExpression(sizeArg)) {
+                    const size = this.emitExpr(sizeArg);
+                    specs.push({ value: size, target: T_NUMBER, node: call.arguments[0]! });
+                }
             }
             specs.push(...this.ignoredArgumentSpecs(call.arguments, call.arguments.length > 0 ? 1 : 0));
             return this.emitSequencedExpr(T_BUFFER, specs, () => "NULL");

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Process stdin `read(...)` size and `unpipe(...)` destination defaults now accept earlier static `const` aliases for `undefined` while still evaluating ignored trailing arguments. Tests: `process_stdin_read_null`, `process_stdin_pipe_noop_methods`.
 - `child_process.spawnSync(...)` now treats earlier static `const` aliases for `undefined` whole `stdio` options as default pipe stdio. Test: `child_process_option_property_undefined`.
 - Supported fs option-object properties now accept earlier static `const` aliases for `undefined` and side-effect-free `void` default values across the bounded sync and immediate-promise subsets. Test: `fs_option_property_undefined`.
 - Bounded zero-delay timer helpers now accept earlier static `const` aliases for supported `undefined` delay values alongside zero and negative-zero delay aliases. Tests: `set_timeout_zero`, `timers_promises_import`, `timers_promises_scheduler`.
