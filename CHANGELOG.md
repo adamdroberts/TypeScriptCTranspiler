@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `timers/promises` immediate helpers now accept explicit undefined, side-effect-free `void`, and object-literal options with undefined `signal` and literal/undefined `ref` values. Tests: `timers_promises_import`, `timers_promises_scheduler`.
 - CommonJS `module.require.bind(module)` aliases, module-alias forms such as `mod.require.bind(mod)`, and already-static require alias forms such as `req.bind(module)` now preserve static AOT require metadata for package-local member exports, including function-scoped aliases. Tests: `node_modules_commonjs_module_require_bind_alias`, `node_modules_commonjs_module_alias_require_bind_alias`, `node_modules_commonjs_require_alias_bind_alias`, `node_modules_commonjs_function_scope_require_alias`.
 - Process stdio streams now expose inert state and queue flags such as `destroyed`, `closed`, `errored`, `readableEnded`, `readableFlowing`, `readableLength`, `writableEnded`, `writableFinished`, `writableCorked`, `writableLength`, and `writableNeedDrain` in the bounded stdio subset. Test: `process_stdio_state_flags`.
 - `process.stdout.end(...)` and `process.stderr.end(...)` now accept optional string/Buffer chunks and optional callbacks in the bounded stdio stream subset. Test: `process_stdio_end`.

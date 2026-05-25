@@ -31821,9 +31821,7 @@ class Emitter {
                     unsupported(delay, "timers/promises.setTimeout in this subset requires an omitted delay or literal 0 delay");
                 }
                 const options = call.arguments[2];
-                if (options && !this.isUndefinedExpression(options)) {
-                    unsupported(options, "timers/promises.setTimeout options are not supported in this immediate subset");
-                }
+                this.validateTimersPromisesOptions(options, "timers/promises.setTimeout");
                 const valueNode = call.arguments[1];
                 if (!valueNode) return { c: "tsc_promise_resolve(tsc_value_undefined())", ty: mapped };
                 const value = this.emitExpr(valueNode);
@@ -31834,9 +31832,7 @@ class Emitter {
             case "setImmediate": {
                 if (call.arguments.length > 2) unsupported(call, "timers/promises.setImmediate expects optional value and optional options");
                 const options = call.arguments[1];
-                if (options && !this.isUndefinedExpression(options)) {
-                    unsupported(options, "timers/promises.setImmediate options are not supported in this immediate subset");
-                }
+                this.validateTimersPromisesOptions(options, "timers/promises.setImmediate");
                 const valueNode = call.arguments[0];
                 if (!valueNode) return { c: "tsc_promise_resolve(tsc_value_undefined())", ty: mapped };
                 const value = this.emitExpr(valueNode);
@@ -31859,9 +31855,7 @@ class Emitter {
                     unsupported(delay, "timers/promises.scheduler.wait in this subset requires an omitted delay or literal 0 delay");
                 }
                 const options = call.arguments[1];
-                if (options && !this.isUndefinedExpression(options)) {
-                    unsupported(options, "timers/promises.scheduler.wait options are not supported in this immediate subset");
-                }
+                this.validateTimersPromisesOptions(options, "timers/promises.scheduler.wait");
                 return { c: "tsc_promise_resolve(tsc_value_undefined())", ty: mapped };
             }
             case "yield": {
@@ -31870,6 +31864,27 @@ class Emitter {
             }
         }
         unsupported(call, `timers/promises.scheduler.${name}`);
+    }
+
+    private validateTimersPromisesOptions(options: ts.Expression | undefined, label: string): void {
+        if (!options || this.isUndefinedExpression(options)) return;
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(options);
+        if (this.isUndefinedExpression(unwrapped)) return;
+        if (!ts.isObjectLiteralExpression(unwrapped)) {
+            unsupported(options, `${label} options must be undefined or an object literal with undefined signal/ref fields in this immediate subset`);
+        }
+        for (const prop of unwrapped.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, `${label} options only support property assignments`);
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (key !== "signal" && key !== "ref") {
+                unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+            }
+            if (this.isUndefinedExpression(prop.initializer)) continue;
+            if (key === "ref" && this.sideEffectFreeBooleanLiteralValue(prop.initializer, new Set()) !== null) continue;
+            unsupported(prop.initializer, `${label}.${key} must be undefined${key === "ref" ? " or a boolean literal" : ""} in this immediate subset`);
+        }
     }
 
     private ensureImmediateAdapter(expr: ts.Expression, type: CType, argTypes: readonly CType[]): string {

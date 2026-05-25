@@ -910,12 +910,16 @@ interface TimersModule {
     clearImmediate: ClearImmediateFunction;
 }
 interface TimersPromisesModule {
-    setTimeout<T = void>(delay?: number, value?: T, options?: undefined): Promise<T>;
-    setImmediate<T = void>(value?: T, options?: undefined): Promise<T>;
+    setTimeout<T = void>(delay?: number, value?: T, options?: TimersPromisesOptions): Promise<T>;
+    setImmediate<T = void>(value?: T, options?: TimersPromisesOptions): Promise<T>;
     scheduler: TimersPromisesScheduler;
 }
+interface TimersPromisesOptions {
+    ref?: boolean | undefined;
+    signal?: undefined;
+}
 interface TimersPromisesScheduler {
-    wait(delay?: number, options?: undefined): Promise<void>;
+    wait(delay?: number, options?: TimersPromisesOptions): Promise<void>;
     yield(): Promise<void>;
 }
 declare module "timers" {
@@ -937,15 +941,15 @@ declare module "node:timers" {
     export default defaultTimers;
 }
 declare module "timers/promises" {
-    export function setTimeout<T = void>(delay?: number, value?: T, options?: undefined): Promise<T>;
-    export function setImmediate<T = void>(value?: T, options?: undefined): Promise<T>;
+    export function setTimeout<T = void>(delay?: number, value?: T, options?: TimersPromisesOptions): Promise<T>;
+    export function setImmediate<T = void>(value?: T, options?: TimersPromisesOptions): Promise<T>;
     export const scheduler: TimersPromisesScheduler;
     const defaultTimersPromises: TimersPromisesModule;
     export default defaultTimersPromises;
 }
 declare module "node:timers/promises" {
-    export function setTimeout<T = void>(delay?: number, value?: T, options?: undefined): Promise<T>;
-    export function setImmediate<T = void>(value?: T, options?: undefined): Promise<T>;
+    export function setTimeout<T = void>(delay?: number, value?: T, options?: TimersPromisesOptions): Promise<T>;
+    export function setImmediate<T = void>(value?: T, options?: TimersPromisesOptions): Promise<T>;
     export const scheduler: TimersPromisesScheduler;
     const defaultTimersPromises: TimersPromisesModule;
     export default defaultTimersPromises;
