@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now treats fresh arrays returned by pure Object/Reflect enumeration helpers as discardable targets for unused pure Object/Reflect mutation helpers. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats direct fresh `Array.of(...)` and one-argument `Array.from(...)` results as discardable targets for unused pure Object/Reflect mutation helpers. Test: `generated_c_dce_const`.
 - Generated-C DCE now unwraps extensible target-returning `Object.setPrototypeOf(...)` and `Object.prototype.valueOf.call(...)` around fresh pure object-builder results when pruning unused pure Object/Reflect mutation helpers. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats direct fresh pure object-builder results, including `Object.fromEntries(...)` over earlier-const and copy-constructed empty typed Map sources, as discardable targets for unused pure `Object.assign(...)`, `Object.defineProperty(...)`, `Object.defineProperties(...)`, `Object.preventExtensions(...)`, `Object.seal(...)`, `Object.freeze(...)`, and `Object.setPrototypeOf(...)` calls. Test: `generated_c_dce_const`.
