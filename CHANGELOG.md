@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- CommonJS package metadata now recognizes `Object.defineProperties(module.exports, Object.fromEntries(Object.entries(...)))` descriptor maps when the descriptor object has statically computable keys. Test: `node_modules_commonjs_define_properties_from_entries_object_entries`.
 - CommonJS package metadata now recognizes `Object.defineProperties(exports, Object.fromEntries(...))` descriptor maps when the entry keys are statically computable. Test: `node_modules_commonjs_define_properties_from_entries_computed`.
 - `crypto.randomUUID(...)` now treats side-effect-free `void` expressions such as `void 0` as default options and `disableEntropyCache` property values. Test: `crypto_random_uuid`.
 - `dns.lookup(...)` and `dns.promises.lookup(...)` option objects now treat side-effect-free `void` expressions such as `void 0` as default values for supported properties. Test: `dns_lookup_option_property_undefined`.

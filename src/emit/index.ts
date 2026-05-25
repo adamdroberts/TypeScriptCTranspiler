@@ -11889,7 +11889,7 @@ class Emitter {
         if (!this.isJavaScriptSourceFile(decl.getSourceFile())) return false;
         if (!ts.isIdentifier(decl.name)) return false;
         const init = decl.initializer;
-        if (!init || !ts.isObjectLiteralExpression(init)) return false;
+        if (!init || !this.isCommonJsDefinePropertiesExportSourceInitializer(init)) return false;
         for (const stmt of decl.getSourceFile().statements) {
             const call = this.commonJsDefinePropertiesCallInStatement(stmt);
             if (call && this.commonJsDefinePropertiesExportCallUsesSourceIdentifier(call, decl.name.text)) {
@@ -11913,6 +11913,14 @@ class Emitter {
             }
         }
         return false;
+    }
+
+    private isCommonJsDefinePropertiesExportSourceInitializer(init: ts.Expression): boolean {
+        let cur = init;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isObjectLiteralExpression(cur)) return true;
+        if (ts.isArrayLiteralExpression(cur) && this.isUntypedJsArrayLiteral(cur)) return true;
+        return ts.isCallExpression(cur) && this.objectStaticCallName(cur) === "entries";
     }
 
     private isCommonJsDefinePropertiesExportDescriptorDeclaration(decl: ts.VariableDeclaration): boolean {
