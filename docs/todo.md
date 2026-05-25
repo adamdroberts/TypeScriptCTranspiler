@@ -88,6 +88,7 @@ This is the next item that most directly expands what programs can be written ag
   - Additional `Reflect.apply` coverage is implemented for binding `thisArg` into function values that declare `this: any`. Test: `reflect_apply`.
   - `Object.getOwnPropertySymbols(...)` is declared in the local stdlib shim, evaluates/coerces supported typed and dynamic targets, and returns an empty `symbol[]` in the current string-key-only object model, with catchable nullish target rejection. Tests: `object_get_own_property_symbols`, `generated_c_dce_const`.
   - Generated-C DCE preserves empty returned-array lengths through `reverse()`, argument-free `sort()`, and argument-free `toSorted()` chains, including absent element reads from empty `Object.getOwnPropertySymbols(...)` results. Test: `generated_c_dce_const`.
+  - Generated-C DCE derives empty returned-array lengths through pure `map(...)`, `filter(...)`, and `flatMap(...)` calls on statically empty receivers, including unused `Promise.resolve(...)` length and absent element reads. Test: `generated_c_dce_const`.
   - Still missing: hidden classes / shape trees, inline caches and diagnostics, complete built-in object/array prototype behavior, broader prototype method coverage, and remaining descriptor/prototype edge cases.
   - Still blocks: production-quality untyped npm packages, remaining `Proxy` construct/invariant coverage, full `Reflect`, remaining property descriptor edge cases, and high-performance dynamic property access.
 

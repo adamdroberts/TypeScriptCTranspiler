@@ -4524,6 +4524,14 @@ class Emitter {
                         return 0;
                     }
                     if (
+                        (method === "map" || method === "filter" || method === "flatMap") &&
+                        unwrapped.arguments.length >= 1 &&
+                        unwrapped.arguments.length <= 2 &&
+                        allArgsPure
+                    ) {
+                        return 0;
+                    }
+                    if (
                         method === "copyWithin" &&
                         unwrapped.arguments.length >= 2 &&
                         unwrapped.arguments.length <= 3 &&
