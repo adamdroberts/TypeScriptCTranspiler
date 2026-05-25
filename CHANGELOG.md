@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- CommonJS package metadata now recognizes `module.exports = Object.defineProperty(Object.create(proto, Object.fromEntries(...)), key, descriptor)` with finite target descriptor maps. Test: `node_modules_commonjs_module_exports_define_property_create_from_entries`.
 - CommonJS package metadata now recognizes `module.exports = Object.defineProperties(Object.freeze(api), Object.fromEntries(...))` with finite descriptor maps and static wrapped target objects. Test: `node_modules_commonjs_module_exports_define_properties_wrapper_target_from_entries`.
 - CommonJS package metadata now recognizes `module.exports = Object.defineProperties(api, Object.fromEntries(...))` with finite descriptor maps and static target objects. Test: `node_modules_commonjs_module_exports_define_properties_target_from_entries`.
 - CommonJS package metadata now recognizes `module.exports = Object.defineProperties(Object.create(proto), Object.fromEntries(...))` descriptor maps with finite static entries. Test: `node_modules_commonjs_module_exports_define_properties_create_from_entries`.

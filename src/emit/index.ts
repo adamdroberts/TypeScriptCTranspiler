@@ -11741,11 +11741,15 @@ class Emitter {
         call: ts.CallExpression,
         entry: ts.Node,
     ): CommonJsDefinePropertiesExport | null {
+        const moduleDefinePropertyCall = this.commonJsModuleExportsDefinePropertyCallForTargetNode(call);
         const exports =
             this.commonJsDefinePropertiesExportCall(call) ??
             this.commonJsModuleExportsDefinePropertiesValueExportCall(call) ??
             this.commonJsModuleExportsObjectCreateValueExportCall(call) ??
-            this.commonJsModuleExportsObjectWrapperDescriptorValueExportCall(call);
+            this.commonJsModuleExportsObjectWrapperDescriptorValueExportCall(call) ??
+            (moduleDefinePropertyCall
+                ? this.commonJsModuleExportsDefinePropertyValueExportCallEntries(moduleDefinePropertyCall)
+                : null);
         return exports?.find((candidate) => candidate.entry === entry) ?? null;
     }
 
@@ -11768,6 +11772,16 @@ class Emitter {
                 if (found) return found;
                 const objectWrapperDescriptorExports = this.commonJsModuleExportsObjectWrapperDescriptorValueExportCall(call);
                 found = objectWrapperDescriptorExports?.find((candidate) => candidate.entry === entry || candidate.name === entryName) ?? null;
+                if (found) return found;
+            }
+            const moduleDefinePropertyCall = call
+                ? this.commonJsModuleExportsDefinePropertyCallForTargetNode(call)
+                : null;
+            if (moduleDefinePropertyCall) {
+                const moduleDefinePropertyExports =
+                    this.commonJsModuleExportsDefinePropertyValueExportCallEntries(moduleDefinePropertyCall);
+                const found = moduleDefinePropertyExports
+                    ?.find((candidate) => candidate.entry === entry || candidate.name === entryName) ?? null;
                 if (found) return found;
             }
             if (
@@ -11823,7 +11837,10 @@ class Emitter {
                     ? this.commonJsObjectFromEntriesSourceUsesIdentifier(fromEntriesSource.arguments[0]!, sourceName)
                     : ts.isIdentifier(descriptors) && descriptors.text === sourceName;
                 if (usesSource) {
-                    if (this.commonJsObjectAssignExportContextCallForSourceNode(node)) {
+                    if (
+                        this.commonJsObjectAssignExportContextCallForSourceNode(node) ||
+                        this.commonJsModuleExportsDefinePropertyCallForTargetNode(node)
+                    ) {
                         found = node;
                         return;
                     }
@@ -11865,6 +11882,20 @@ class Emitter {
             }
         }
         return ts.isCallExpression(parent) && this.isCommonJsObjectAssignExportContextCall(parent)
+            ? parent
+            : null;
+    }
+
+    private commonJsModuleExportsDefinePropertyCallForTargetNode(node: ts.Node): ts.CallExpression | null {
+        let source: ts.Node = node;
+        let parent: ts.Node = source.parent;
+        while (ts.isParenthesizedExpression(parent)) {
+            source = parent;
+            parent = parent.parent;
+        }
+        return ts.isCallExpression(parent) &&
+            this.isCommonJsModuleExportsDefinePropertyValueCall(parent) &&
+            parent.arguments[0] === source
             ? parent
             : null;
     }
