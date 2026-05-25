@@ -1,4 +1,5 @@
 sync: sync
+ignored: ab
 tick: sync,tick
 micro1: sync,tick,micro1
 micro2: sync,tick,micro1,micro2

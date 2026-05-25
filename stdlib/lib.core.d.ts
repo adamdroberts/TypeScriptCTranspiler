@@ -891,7 +891,7 @@ declare function isNaN(value: any, ...ignored: any[]): boolean;
 declare function isFinite(value: any, ...ignored: any[]): boolean;
 declare function btoa(value: string, ...ignored: any[]): string;
 declare function atob(value: string, ...ignored: any[]): string;
-declare function queueMicrotask(callback: (this: any) => void): void;
+declare function queueMicrotask(callback: (this: any) => void, ...ignored: any[]): void;
 declare function setTimeout(callback: (this: any) => void, delay?: number): number;
 declare function setTimeout<A>(callback: (this: any, arg: A) => void, delay: number, arg: A): number;
 declare function setTimeout<A, B>(callback: (this: any, arg1: A, arg2: B) => void, delay: number, arg1: A, arg2: B): number;

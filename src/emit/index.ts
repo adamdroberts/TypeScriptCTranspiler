@@ -25028,12 +25028,13 @@ class Emitter {
             return this.emitBase64Call(call, name);
         }
         if (name === "queueMicrotask") {
-            if (call.arguments.length !== 1) unsupported(call, "queueMicrotask expects a callback");
+            if (call.arguments.length < 1) unsupported(call, "queueMicrotask expects a callback");
             const callbackNode = call.arguments[0]!;
             const callback = this.emitExpr(callbackNode);
             const adapter = this.ensureMicrotaskAdapter(callbackNode, callback.ty);
             return this.emitSequencedExpr(T_VOID, [
                 { value: callback, target: callback.ty, node: callbackNode },
+                ...this.ignoredArgumentSpecs(call.arguments, 1),
             ], ([fn]) => {
                 const envType = `${adapter}_env_t`;
                 const env = this.freshTemp("_microtask_env");
