@@ -28162,52 +28162,60 @@ class Emitter {
             }
             case "replace":
             case "replaceAll": {
-                if (args.length !== 2) unsupported(call, `${method} expects 2 args`);
+                if (args.length < 2) unsupported(call, `${method} expects at least 2 args`);
                 const search = this.emitExpr(args[0]!);
                 const replacement = this.emitExpr(args[1]!);
+                const ignored = this.ignoredArgumentSpecs(args, 2);
                 if (search.ty.kind === "regexp") {
                     return this.emitSequencedExpr(T_VALUE, [
                         { value: recv, target: T_VALUE, node: call.expression },
                         { value: search },
                         { value: replacement, target: T_STRING, node: args[1]! },
+                        ...ignored,
                     ], ([s, re, repl]) => `tsc_value_string(tsc_str_replace_regex(tsc_value_as_string(${s}), ${re}, ${repl}))`);
                 }
                 const fn = method === "replace" ? "tsc_value_method_replace" : "tsc_value_method_replace_all";
-                return this.emitSequencedCall(fn, T_VALUE, [
+                return this.emitSequencedExpr(T_VALUE, [
                     { value: recv, target: T_VALUE, node: call.expression },
                     { value: search, target: T_VALUE, node: args[0]! },
                     { value: replacement, target: T_VALUE, node: args[1]! },
-                ]);
+                    ...ignored,
+                ], ([target, pattern, repl]) => `${fn}(${target}, ${pattern}, ${repl})`);
             }
             case "split":
-                if (args.length < 1 || args.length > 2) unsupported(call, "split expects 1-2 args");
+                if (args.length < 1) unsupported(call, "split expects at least 1 arg");
                 const sep = this.emitExpr(args[0]!);
                 const limit = args[1] ? this.emitExpr(args[1]) : missing;
+                const splitIgnored = this.ignoredArgumentSpecs(args, 2);
                 if (sep.ty.kind === "regexp") {
-                    return this.emitSequencedCall("tsc_value_method_split_regex", T_VALUE, [
+                    return this.emitSequencedExpr(T_VALUE, [
                         { value: recv, target: T_VALUE, node: call.expression },
                         { value: sep },
                         { value: limit, target: T_VALUE, node: args[1] ?? call.expression },
-                    ]);
+                        ...splitIgnored,
+                    ], ([target, pattern, max]) => `tsc_value_method_split_regex(${target}, ${pattern}, ${max})`);
                 }
-                return this.emitSequencedCall("tsc_value_method_split", T_VALUE, [
+                return this.emitSequencedExpr(T_VALUE, [
                     { value: recv, target: T_VALUE, node: call.expression },
                     { value: sep, target: T_VALUE, node: args[0]! },
                     { value: limit, target: T_VALUE, node: args[1] ?? call.expression },
-                ]);
+                    ...splitIgnored,
+                ], ([target, pattern, max]) => `tsc_value_method_split(${target}, ${pattern}, ${max})`);
             case "match": {
-                if (args.length !== 1) unsupported(call, "match expects 1 arg");
+                if (args.length < 1) unsupported(call, "match expects at least 1 arg");
                 const re = this.emitExpr(args[0]!);
+                const ignored = this.ignoredArgumentSpecs(args, 1);
                 if (re.ty.kind === "regexp") {
-                    return this.emitSequencedCall("tsc_value_method_match_regex", T_VALUE, [
+                    return this.emitSequencedExpr(T_VALUE, [
                         { value: recv, target: T_VALUE, node: call.expression },
                         { value: re },
-                    ]);
+                        ...ignored,
+                    ], ([target, pattern]) => `tsc_value_method_match_regex(${target}, ${pattern})`);
                 }
                 if (re.ty.kind !== "string" && re.ty.kind !== "value") {
                     unsupported(args[0]!, "match requires a RegExp or string pattern");
                 }
-                return this.emitSequencedCall("tsc_value_method_match_regex", T_VALUE, [
+                return this.emitSequencedExpr(T_VALUE, [
                     { value: recv, target: T_VALUE, node: call.expression },
                     {
                         value: {
@@ -28215,21 +28223,24 @@ class Emitter {
                             ty: T_REGEXP,
                         },
                     },
-                ]);
+                    ...ignored,
+                ], ([target, pattern]) => `tsc_value_method_match_regex(${target}, ${pattern})`);
             }
             case "matchAll": {
-                if (args.length !== 1) unsupported(call, "matchAll expects 1 arg");
+                if (args.length < 1) unsupported(call, "matchAll expects at least 1 arg");
                 const re = this.emitExpr(args[0]!);
+                const ignored = this.ignoredArgumentSpecs(args, 1);
                 if (re.ty.kind === "regexp") {
-                    return this.emitSequencedCall("tsc_value_method_match_all_regex", T_VALUE, [
+                    return this.emitSequencedExpr(T_VALUE, [
                         { value: recv, target: T_VALUE, node: call.expression },
                         { value: re },
-                    ]);
+                        ...ignored,
+                    ], ([target, pattern]) => `tsc_value_method_match_all_regex(${target}, ${pattern})`);
                 }
                 if (re.ty.kind !== "string" && re.ty.kind !== "value") {
                     unsupported(args[0]!, "matchAll requires a RegExp or string pattern");
                 }
-                return this.emitSequencedCall("tsc_value_method_match_all_regex", T_VALUE, [
+                return this.emitSequencedExpr(T_VALUE, [
                     { value: recv, target: T_VALUE, node: call.expression },
                     {
                         value: {
@@ -28237,15 +28248,18 @@ class Emitter {
                             ty: T_REGEXP,
                         },
                     },
-                ]);
+                    ...ignored,
+                ], ([target, pattern]) => `tsc_value_method_match_all_regex(${target}, ${pattern})`);
             }
             case "search": {
-                if (args.length !== 1) unsupported(call, "search expects 1 arg");
+                if (args.length < 1) unsupported(call, "search expects at least 1 arg");
                 const re = this.emitExpr(args[0]!);
+                const ignored = this.ignoredArgumentSpecs(args, 1);
                 if (re.ty.kind === "regexp") {
                     return this.emitSequencedExpr(T_VALUE, [
                         { value: recv, target: T_VALUE, node: call.expression },
                         { value: re },
+                        ...ignored,
                     ], ([s, r]) => `tsc_value_num(tsc_str_search_regex(tsc_value_as_string(${s}), ${r}))`);
                 }
                 if (re.ty.kind !== "string" && re.ty.kind !== "value") {
@@ -28259,6 +28273,7 @@ class Emitter {
                             ty: T_REGEXP,
                         },
                     },
+                    ...ignored,
                 ], ([s, r]) => `tsc_value_num(tsc_str_search_regex(tsc_value_as_string(${s}), ${r}))`);
             }
             case "startsWith":

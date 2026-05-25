@@ -1908,6 +1908,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `string_normalize` | ICU-backed Unicode normalization forms |
 | `string_object_enumeration` | typed string Object/Reflect enumeration and descriptors |
 | `string_object_methods` | String toString/toLocaleString/valueOf identity methods |
+| `string_regex_ignored_arguments` | String match/matchAll/search/replace/split evaluate and ignore trailing arguments across typed and dynamic paths |
 | `string_replace_regex_groups` | String.replace RegExp replacement-token expansion |
 | `string_replace_string_tokens` | String.replace/replaceAll string replacement-token expansion |
 | `string_search_regex` | String.search over a typed RegExp |
