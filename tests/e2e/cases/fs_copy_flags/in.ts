@@ -27,6 +27,10 @@ fs.writeFileSync(dest, "alias-existing");
 fs.copyFileSync(src, dest, DEFAULT_COPY_FLAGS);
 console.log("sync default alias:", fs.readFileSync(dest));
 
+fs.writeFileSync(dest, "void-default");
+fs.copyFileSync(src, dest, void 0);
+console.log("sync void default:", fs.readFileSync(dest));
+
 try {
     fs.copyFileSync(src, dest, EXCLUSIVE_COPY_FLAGS);
     console.log("sync excl alias: copied");
@@ -37,6 +41,10 @@ try {
 fs.writeFileSync(dest, "promise-default");
 fs.promises.copyFile(src, dest, DEFAULT_COPY_FLAGS);
 console.log("promise default alias:", fs.readFileSync(dest));
+
+fs.writeFileSync(dest, "promise-void");
+fs.promises.copyFile(src, dest, void 0);
+console.log("promise void default:", fs.readFileSync(dest));
 
 fs.promises.copyFile(src, dest, EXCLUSIVE_COPY_FLAGS).catch((reason: string): any => {
     console.log("promise excl:", reason);

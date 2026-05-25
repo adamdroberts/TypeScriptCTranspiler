@@ -34539,7 +34539,9 @@ class Emitter {
     }
 
     private isUndefinedExpression(expr: ts.Expression): boolean {
-        return ts.isIdentifier(expr) && expr.text === "undefined";
+        if (ts.isIdentifier(expr) && expr.text === "undefined") return true;
+        return ts.isVoidExpression(expr) &&
+            this.isSideEffectFreeTopLevelConstInitializer(expr.expression);
     }
 
     private emitObjectDefineProperties(

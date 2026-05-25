@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Static optional-default checks now treat side-effect-free `void` expressions such as `void 0` as `undefined`, including `fs.copyFileSync(...)` and immediate `fs.promises.copyFile(...)` copy flags. Test: `fs_copy_flags`.
 - `fs.copyFileSync(...)` and immediate `fs.promises.copyFile(...)` now treat earlier static `const` aliases for `undefined` flags as default copy mode while preserving static numeric flag aliases. Test: `fs_copy_flags`.
 - Uninitialized dynamic variables now default to JavaScript `undefined` for top-level, local, and captured storage instead of zero-valued `tsc_value_t`. Test: `uninitialized_dynamic_variables`.
 - Inferred top-level and local variables initialized to `null` / `undefined` now use boxed value storage instead of invalid C `void` declarations, preserving `typeof` and strict nullish equality. Test: `nullish_variable_storage`.
