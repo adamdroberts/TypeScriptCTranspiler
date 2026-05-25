@@ -1198,6 +1198,8 @@ const unused_object_prototype_value_of_property_read = (Object.prototype.valueOf
 const unused_object_prototype_value_of_element_read = (Object.prototype.valueOf.call(["dead_object_prototype_value_of_element_read"]) as string[])[0];
 const unused_object_prototype_value_of_freeze_property_read = (Object.prototype.valueOf.call(Object.freeze({ dead_object_prototype_value_of_freeze_property_read: 1 })) as { dead_object_prototype_value_of_freeze_property_read: number }).dead_object_prototype_value_of_freeze_property_read;
 const unused_object_prototype_value_of_seal_element_read = (Object.prototype.valueOf.call(Object.seal(["dead_object_prototype_value_of_seal_element_read"])) as string[])[0];
+const unused_object_prototype_value_of_define_property_read = (Object.prototype.valueOf.call(Object.defineProperty({}, "dead_object_prototype_value_of_define_property_read", { value: 1 })) as { dead_object_prototype_value_of_define_property_read: number }).dead_object_prototype_value_of_define_property_read;
+const unused_object_prototype_value_of_from_entries_read = (Object.prototype.valueOf.call(Object.fromEntries([["dead_object_prototype_value_of_from_entries_read", 1]])) as { dead_object_prototype_value_of_from_entries_read: number }).dead_object_prototype_value_of_from_entries_read;
 const unused_promise_resolve_object_prototype_has_own_call = Promise.resolve(Object.prototype.hasOwnProperty.call({ dead_promise_resolve_object_prototype_has_own: 1 }, "dead_promise_resolve_object_prototype_has_own"));
 const unused_promise_resolve_object_prototype_property_is_enumerable_call = Promise.resolve(Object.prototype.propertyIsEnumerable.call({ dead_promise_resolve_object_prototype_property_is_enumerable: 1 }, "dead_promise_resolve_object_prototype_property_is_enumerable"));
 const unused_promise_resolve_object_prototype_is_prototype_of_call = Promise.resolve(Object.prototype.isPrototypeOf.call({ dead_promise_resolve_object_prototype_is_prototype_of: 1 }, {}));
@@ -1205,6 +1207,8 @@ const unused_promise_resolve_object_prototype_value_of_property_read = Promise.r
 const unused_promise_resolve_object_prototype_value_of_element_read = Promise.resolve((Object.prototype.valueOf.call(["dead_promise_resolve_object_prototype_value_of_element_read"]) as string[])[0]);
 const unused_promise_resolve_object_prototype_value_of_freeze_property_read = Promise.resolve((Object.prototype.valueOf.call(Object.freeze({ dead_promise_resolve_object_prototype_value_of_freeze_property_read: 1 })) as { dead_promise_resolve_object_prototype_value_of_freeze_property_read: number }).dead_promise_resolve_object_prototype_value_of_freeze_property_read);
 const unused_promise_resolve_object_prototype_value_of_seal_element_read = Promise.resolve((Object.prototype.valueOf.call(Object.seal(["dead_promise_resolve_object_prototype_value_of_seal_element_read"])) as string[])[0]);
+const unused_promise_resolve_object_prototype_value_of_define_property_read = Promise.resolve((Object.prototype.valueOf.call(Object.defineProperty({}, "dead_promise_resolve_object_prototype_value_of_define_property_read", { value: 1 })) as { dead_promise_resolve_object_prototype_value_of_define_property_read: number }).dead_promise_resolve_object_prototype_value_of_define_property_read);
+const unused_promise_resolve_object_prototype_value_of_from_entries_read = Promise.resolve((Object.prototype.valueOf.call(Object.fromEntries([["dead_promise_resolve_object_prototype_value_of_from_entries_read", 1]])) as { dead_promise_resolve_object_prototype_value_of_from_entries_read: number }).dead_promise_resolve_object_prototype_value_of_from_entries_read);
 const unused_object_is = Object.is("dead", unused_label);
 const unused_math_abs_call = Math.abs(-1);
 const unused_math_max_call = Math.max(1, 2, 3);
@@ -2378,6 +2382,8 @@ Object.prototype.valueOf.call({ top_level_dead_object_prototype_value_of: 1 });
 (Object.prototype.valueOf.call(["top_level_dead_object_prototype_value_of_element_read"]) as string[])[0];
 (Object.prototype.valueOf.call(Object.freeze({ top_level_dead_object_prototype_value_of_freeze_property_read: 1 })) as { top_level_dead_object_prototype_value_of_freeze_property_read: number }).top_level_dead_object_prototype_value_of_freeze_property_read;
 (Object.prototype.valueOf.call(Object.seal(["top_level_dead_object_prototype_value_of_seal_element_read"])) as string[])[0];
+(Object.prototype.valueOf.call(Object.defineProperty({}, "top_level_dead_object_prototype_value_of_define_property_read", { value: 1 })) as { top_level_dead_object_prototype_value_of_define_property_read: number }).top_level_dead_object_prototype_value_of_define_property_read;
+(Object.prototype.valueOf.call(Object.fromEntries([["top_level_dead_object_prototype_value_of_from_entries_read", 1]])) as { top_level_dead_object_prototype_value_of_from_entries_read: number }).top_level_dead_object_prototype_value_of_from_entries_read;
 Promise.resolve(Object.prototype.hasOwnProperty.call({ top_level_dead_promise_resolve_object_prototype_has_own: 1 }, "top_level_dead_promise_resolve_object_prototype_has_own"));
 Promise.resolve(Object.prototype.propertyIsEnumerable.call({ top_level_dead_promise_resolve_object_prototype_property_is_enumerable: 1 }, "top_level_dead_promise_resolve_object_prototype_property_is_enumerable"));
 Promise.resolve(Object.prototype.isPrototypeOf.call({ top_level_dead_promise_resolve_object_prototype_is_prototype_of: 1 }, {}));
@@ -2385,6 +2391,8 @@ Promise.resolve((Object.prototype.valueOf.call({ top_level_dead_promise_resolve_
 Promise.resolve((Object.prototype.valueOf.call(["top_level_dead_promise_resolve_object_prototype_value_of_element_read"]) as string[])[0]);
 Promise.resolve((Object.prototype.valueOf.call(Object.freeze({ top_level_dead_promise_resolve_object_prototype_value_of_freeze_property_read: 1 })) as { top_level_dead_promise_resolve_object_prototype_value_of_freeze_property_read: number }).top_level_dead_promise_resolve_object_prototype_value_of_freeze_property_read);
 Promise.resolve((Object.prototype.valueOf.call(Object.seal(["top_level_dead_promise_resolve_object_prototype_value_of_seal_element_read"])) as string[])[0]);
+Promise.resolve((Object.prototype.valueOf.call(Object.defineProperty({}, "top_level_dead_promise_resolve_object_prototype_value_of_define_property_read", { value: 1 })) as { top_level_dead_promise_resolve_object_prototype_value_of_define_property_read: number }).top_level_dead_promise_resolve_object_prototype_value_of_define_property_read);
+Promise.resolve((Object.prototype.valueOf.call(Object.fromEntries([["top_level_dead_promise_resolve_object_prototype_value_of_from_entries_read", 1]])) as { top_level_dead_promise_resolve_object_prototype_value_of_from_entries_read: number }).top_level_dead_promise_resolve_object_prototype_value_of_from_entries_read);
 Object.is("top_level_dead_object_is", "dead");
 Math.max("top_level_dead_math_call".length, 1);
 String.fromCharCode("top_level_dead_from_char_code".length);
@@ -3574,6 +3582,8 @@ function usedLocal(value: number): number {
     (Object.prototype.valueOf.call(["local_dead_object_prototype_value_of_element_read"]) as string[])[0];
     (Object.prototype.valueOf.call(Object.freeze({ local_dead_object_prototype_value_of_freeze_property_read: 1 })) as { local_dead_object_prototype_value_of_freeze_property_read: number }).local_dead_object_prototype_value_of_freeze_property_read;
     (Object.prototype.valueOf.call(Object.seal(["local_dead_object_prototype_value_of_seal_element_read"])) as string[])[0];
+    (Object.prototype.valueOf.call(Object.defineProperty({}, "local_dead_object_prototype_value_of_define_property_read", { value: 1 })) as { local_dead_object_prototype_value_of_define_property_read: number }).local_dead_object_prototype_value_of_define_property_read;
+    (Object.prototype.valueOf.call(Object.fromEntries([["local_dead_object_prototype_value_of_from_entries_read", 1]])) as { local_dead_object_prototype_value_of_from_entries_read: number }).local_dead_object_prototype_value_of_from_entries_read;
     Promise.resolve(Object.prototype.hasOwnProperty.call({ local_dead_promise_resolve_object_prototype_has_own: 1 }, "local_dead_promise_resolve_object_prototype_has_own"));
     Promise.resolve(Object.prototype.propertyIsEnumerable.call({ local_dead_promise_resolve_object_prototype_property_is_enumerable: 1 }, "local_dead_promise_resolve_object_prototype_property_is_enumerable"));
     Promise.resolve(Object.prototype.isPrototypeOf.call({ local_dead_promise_resolve_object_prototype_is_prototype_of: 1 }, {}));
@@ -3581,6 +3591,8 @@ function usedLocal(value: number): number {
     Promise.resolve((Object.prototype.valueOf.call(["local_dead_promise_resolve_object_prototype_value_of_element_read"]) as string[])[0]);
     Promise.resolve((Object.prototype.valueOf.call(Object.freeze({ local_dead_promise_resolve_object_prototype_value_of_freeze_property_read: 1 })) as { local_dead_promise_resolve_object_prototype_value_of_freeze_property_read: number }).local_dead_promise_resolve_object_prototype_value_of_freeze_property_read);
     Promise.resolve((Object.prototype.valueOf.call(Object.seal(["local_dead_promise_resolve_object_prototype_value_of_seal_element_read"])) as string[])[0]);
+    Promise.resolve((Object.prototype.valueOf.call(Object.defineProperty({}, "local_dead_promise_resolve_object_prototype_value_of_define_property_read", { value: 1 })) as { local_dead_promise_resolve_object_prototype_value_of_define_property_read: number }).local_dead_promise_resolve_object_prototype_value_of_define_property_read);
+    Promise.resolve((Object.prototype.valueOf.call(Object.fromEntries([["local_dead_promise_resolve_object_prototype_value_of_from_entries_read", 1]])) as { local_dead_promise_resolve_object_prototype_value_of_from_entries_read: number }).local_dead_promise_resolve_object_prototype_value_of_from_entries_read);
     Object.is("local_dead_object_is", "dead");
     Math.min("local_dead_math_call".length, 1);
     String.fromCharCode("local_dead_from_char_code".length);

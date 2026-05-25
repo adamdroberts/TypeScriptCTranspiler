@@ -5,7 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
-- Generated-C DCE now prunes unused pure `Object.prototype.hasOwnProperty.call(...)`, `propertyIsEnumerable.call(...)`, `isPrototypeOf.call(...)`, and `valueOf.call(...)` forms, including primitive Promise resolutions for boolean call-form results and primitive property/element reads through fresh-object or target-returning-wrapper `valueOf.call(...)` receiver results. Test: `generated_c_dce_const`.
+- Generated-C DCE now prunes unused pure `Object.prototype.hasOwnProperty.call(...)`, `propertyIsEnumerable.call(...)`, `isPrototypeOf.call(...)`, and `valueOf.call(...)` forms, including primitive Promise resolutions for boolean call-form results and primitive property/element reads through fresh-object, pure object-builder, or target-returning-wrapper `valueOf.call(...)` receiver results. Test: `generated_c_dce_const`.
 - Basic escape analysis now stack-allocates non-escaping typed object literal and `new Class(...)` locals that flow through `Object.prototype.valueOf.call(...)` when the returned receiver stays within safe same-block uses. Test: `object_literal_stack_alloc_value_of`.
 - Basic escape analysis now stack-allocates non-escaping typed array literal locals that flow through same-block direct alias chains used only for safe reads, inspections, non-growing mutations, and finite `push(...)` / `unshift(...)` growth. Test: `array_literal_stack_alloc_alias_direct`.
 - Basic escape analysis now stack-allocates non-escaping typed object literal and `new Class(...)` locals that flow through same-block alias chains used only for safe property access and read-only inspections. Test: `object_literal_stack_alloc_alias`.

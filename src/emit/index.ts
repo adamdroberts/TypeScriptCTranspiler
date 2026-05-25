@@ -1299,16 +1299,36 @@ class Emitter {
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
+        return this.isSideEffectFreeObjectIdentityOperand(expr, seenConsts);
+    }
+
+    private isSideEffectFreeObjectIdentityOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (ts.isObjectLiteralExpression(unwrapped) || ts.isArrayLiteralExpression(unwrapped)) {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
         }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            (
+                this.isObjectAssignCall(unwrapped) ||
+                this.isObjectFromEntriesCall(unwrapped) ||
+                this.isObjectCreateCall(unwrapped) ||
+                this.isObjectDefinePropertyCall(unwrapped) ||
+                this.isObjectDefinePropertiesCall(unwrapped)
+            ) &&
+            this.isSideEffectFreeStaticCall(unwrapped, seenConsts)
+        ) {
+            return true;
+        }
         const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
         if (targetOperand) {
-            return this.isSideEffectFreeObjectReadOperand(targetOperand, new Set(seenConsts));
+            return this.isSideEffectFreeObjectIdentityOperand(targetOperand, new Set(seenConsts));
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreeObjectReadOperand(init, seenConsts);
+        return !!init && this.isSideEffectFreeObjectIdentityOperand(init, seenConsts);
     }
 
     private isSideEffectFreeInRightOperand(
