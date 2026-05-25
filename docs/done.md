@@ -410,6 +410,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Revoked object `Proxy` values throw through object-operation paths including set, has, delete, own-key, descriptor, prototype, extensibility, seal, and freeze helpers. Test: `proxy_revocable_object_ops`
 - Revoked object `Proxy` values throw through `Reflect.*` helper paths including get, set, has, deleteProperty, ownKeys, descriptor, prototype, and extensibility helpers. Test: `proxy_revocable_reflect_ops`
 - `Proxy.revocable(...)` revoke functions are idempotent and receiver-independent across direct, `call`, and `apply` invocation forms while preserving revoked-proxy errors after revocation. Test: `proxy_revocable_revoke_function`
+- Ordinary falsy proxy trap results preserve false-returning `Reflect.set`, `Reflect.defineProperty`, `Reflect.deleteProperty`, `Reflect.preventExtensions`, and `Reflect.setPrototypeOf` semantics, while `Object.preventExtensions` and `Object.setPrototypeOf` throw on failed proxy trap results. Test: `proxy_falsy_trap_results`
 - Proxy `defineProperty` result validation rejects successful trap reports that would replace the getter or setter identity of a non-configurable accessor property. Test: `proxy_define_accessor`
 - Proxy `getOwnPropertyDescriptor` result validation rejects trap results that report a different getter or setter identity for a non-configurable accessor property. Test: `proxy_descriptor_invariants`
 - Proxy `getOwnPropertyDescriptor` result validation rejects trap results that change the `enumerable` flag of a non-configurable target property. Test: `proxy_descriptor_invariants`
@@ -1654,6 +1655,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_get_set_define_invariants` | Proxy get/set/defineProperty non-configurable and non-extensible target invariant checks |
 | `proxy_has_delete_invariants` | Proxy has/deleteProperty non-configurable and non-extensible target invariant checks |
 | `proxy_prototype_extensibility_invariants` | Proxy get/set prototype and extensibility trap invariant checks |
+| `proxy_falsy_trap_results` | Proxy falsy trap results preserve Reflect false-returning semantics and Object failure paths |
 | `proxy_construct` | bounded Proxy construct trap dispatch through dynamic Reflect.construct |
 | `proxy_construct_return_objects` | Proxy construct traps accept returned arrays, functions, and ordinary objects while rejecting primitive results |
 | `object_accessor_arrows` | dynamic lifted-arrow accessor descriptors |

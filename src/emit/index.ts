@@ -38223,7 +38223,7 @@ class Emitter {
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(mapped, [
                 { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
-            ], ([o]) => `({ tsc_value_prevent_extensions(${dynamicObjectArg(o!)}); ${o}; })`);
+            ], ([o]) => `({ if (!tsc_value_prevent_extensions(${dynamicObjectArg(o!)})) tsc_throw_str(tsc_str_from_cstr("Object.preventExtensions failed")); ${o}; })`);
         }
         if (name === "seal") {
             if (args.length !== 1) unsupported(call, "Object.seal expects object");

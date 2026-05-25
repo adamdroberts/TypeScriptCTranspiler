@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Proxy traps that report ordinary falsy results now have focused coverage for `Reflect.set`, `Reflect.defineProperty`, `Reflect.deleteProperty`, `Reflect.preventExtensions`, and `Reflect.setPrototypeOf` returning `false`, while `Object.preventExtensions` and `Object.setPrototypeOf` throw on failed proxy trap results. Test: `proxy_falsy_trap_results`.
 - Dynamic function values now lower `.call(...)` and `.apply(...)` directly through the boxed function dispatcher, including omitted, `undefined`, and `null` `.apply(...)` argument lists; `Proxy.revocable(...)` has focused coverage for idempotent revoke functions that ignore receiver and extra arguments across direct, `call`, and `apply` invocation forms. Tests: `function_call_apply_defaults`, `proxy_revocable_revoke_function`.
 - Revoked object `Proxy` values now have focused coverage for `Reflect.*` helper paths including get, set, has, deleteProperty, ownKeys, descriptor, prototype, and extensibility helpers. Test: `proxy_revocable_reflect_ops`.
 - Revoked object `Proxy` values now have focused coverage for object-operation paths including set, has, delete, own-key, descriptor, prototype, extensibility, seal, and freeze helpers. Test: `proxy_revocable_object_ops`.

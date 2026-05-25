@@ -1,0 +1,3 @@
+{
+  "description": "Proxy falsy trap results preserve Reflect false returns and Object failure paths"
+}
