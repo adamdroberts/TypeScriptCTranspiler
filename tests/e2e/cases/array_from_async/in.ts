@@ -72,8 +72,24 @@ Array.fromAsync(new Set([3, 4]), (value) => Promise.resolve(value + 1)).then((va
     console.log("async mapper set:", values.join("|"));
 });
 
+Array.fromAsync(sourceMap, (entry) => Promise.resolve(entry[0] + "=" + entry[1])).then((values) => {
+    console.log("async mapper map:", values.join("|"));
+});
+
+Array.fromAsync(dynamicArraySource, (value: any) => Promise.resolve("dyn:" + value)).then((values) => {
+    console.log("async mapper dynamic:", values.join("|"));
+});
+
 Array.fromAsync([1, 2], (value) => value === 2 ? Promise.reject<number>("mapper bad") : Promise.resolve(value)).catch((reason) => {
     console.log("async mapper reject:", reason);
+});
+
+function throwingMapper(_value: number): Promise<number> {
+    throw "mapper throw";
+}
+
+Array.fromAsync([1], throwingMapper).catch((reason) => {
+    console.log("async mapper throw:", reason);
 });
 
 Array.fromAsync([1], (_value) => new Promise<number>(() => {})).then((_values) => {

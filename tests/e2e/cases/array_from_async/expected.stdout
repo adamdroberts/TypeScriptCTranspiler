@@ -12,4 +12,7 @@ dynamic string: x|y
 async mapper array: 10|20
 async mapper string: p:0|q:1
 async mapper set: 4|5
+async mapper map: x=7|y=8
+async mapper dynamic: dyn:9|dyn:ten|dyn:true
 async mapper reject: mapper bad
+async mapper throw: mapper throw
