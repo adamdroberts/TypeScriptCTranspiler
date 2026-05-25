@@ -13,10 +13,10 @@ fs.mkdirSync(root, { recursive: true });
 fs.writeFileSync(path.join(root, "b.txt"), "b");
 fs.writeFileSync(path.join(root, "a.txt"), "a");
 
-const names = fs.readdirSync(root, undefined, mark("global")).sort();
+const names = fs.readdirSync(root, void 0, mark("global")).sort();
 const buffers = readdirSync(root, "buffer", mark("named")).map((entry: Buffer): string => entry.toString()).sort();
 
-fs.promises.readdir(root, undefined, mark("promise")).then((promiseNames: string[]): void => {
+fs.promises.readdir(root, void 0, mark("promise")).then((promiseNames: string[]): void => {
     console.log("promise:", promiseNames.sort().join("|"));
 });
 

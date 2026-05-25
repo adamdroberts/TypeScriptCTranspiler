@@ -10,10 +10,10 @@ function mark(label: string): string {
 
 fs.writeFileSync(file, "read file ignored\n");
 
-const text = fs.readFileSync(file, undefined, mark("global")).trim();
+const text = fs.readFileSync(file, void 0, mark("global")).trim();
 const buffer = readFileSync(file, { encoding: "buffer" }, mark("named"));
 
-fs.promises.readFile(file, undefined, mark("promise")).then((value: string): void => {
+fs.promises.readFile(file, void 0, mark("promise")).then((value: string): void => {
     console.log("promise:", value.trim());
 });
 
