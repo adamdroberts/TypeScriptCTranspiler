@@ -40,6 +40,6 @@ console.log("get-only:", Reflect.defineProperty(obj, "x", { get: readTwo }), obj
 Reflect.set(obj, "x", 4);
 console.log("setter preserved:", stored);
 
-console.log("clear-get:", Reflect.defineProperty(obj, "x", { get: undefined }), String(obj.x));
+console.log("clear-get:", Reflect.defineProperty(obj, "x", { get: void 0 }), String(obj.x));
 Reflect.set(obj, "x", 5);
 console.log("setter after clear:", stored);
