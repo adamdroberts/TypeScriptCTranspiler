@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Default imports from `"process"` and `"node:process"` now behave like the global process object for existing metadata, env, and helper calls. Test: `process_default_import`.
 - Named and namespace `env` imports from `"process"` and `"node:process"` now route environment reads, writes, and deletes through the existing `process.env` helpers. Test: `process_env_import`.
 - Named and namespace read-only process metadata imports from `"process"` and `"node:process"` now expose the existing `argv` / `argv0` / `execArgv` / `execPath` / `title` / `version` / `versions` / `release` / `features` / `platform` / `arch` / `pid` / `ppid` helpers. Test: `process_metadata_value_import`.
 - Named and namespace process stdio imports from `"process"` and `"node:process"` now expose existing `fd` / `isTTY` / `readable` / `writable` metadata. Test: `process_stdio_metadata_import`.

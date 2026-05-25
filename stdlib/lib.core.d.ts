@@ -744,6 +744,8 @@ declare module "process" {
     export const uptime: Process["uptime"];
     export const version: Process["version"];
     export const versions: Process["versions"];
+    const defaultProcess: Process;
+    export default defaultProcess;
 }
 declare module "node:process" {
     export const arch: Process["arch"];
@@ -777,6 +779,8 @@ declare module "node:process" {
     export const uptime: Process["uptime"];
     export const version: Process["version"];
     export const versions: Process["versions"];
+    const defaultProcess: Process;
+    export default defaultProcess;
 }
 
 declare function parseInt(value: any, radix?: number, ...ignored: any[]): number;

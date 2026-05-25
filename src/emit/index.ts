@@ -16874,6 +16874,17 @@ class Emitter {
         return null;
     }
 
+    private isDefaultImportFrom(id: ts.Identifier, moduleNames: readonly string[]): boolean {
+        const sym = this.checker.getSymbolAtLocation(id);
+        for (const decl of sym?.declarations ?? []) {
+            if (!ts.isImportClause(decl) || decl.name?.text !== id.text) continue;
+            const importDecl = decl.parent;
+            const spec = importDecl.moduleSpecifier;
+            if (ts.isStringLiteral(spec) && moduleNames.includes(spec.text)) return true;
+        }
+        return false;
+    }
+
     private isNamespaceImportFrom(id: ts.Identifier, moduleNames: readonly string[]): boolean {
         const sym = this.checker.getSymbolAtLocation(id);
         for (const decl of sym?.declarations ?? []) {
@@ -17052,7 +17063,9 @@ class Emitter {
     }
 
     private isProcessModuleIdentifier(id: ts.Identifier): boolean {
-        return id.text === "process" || this.isNamespaceImportFrom(id, ["process", "node:process"]);
+        return id.text === "process" ||
+            this.isNamespaceImportFrom(id, ["process", "node:process"]) ||
+            this.isDefaultImportFrom(id, ["process", "node:process"]);
     }
 
     private isProcessHrtimeReceiver(expr: ts.Expression): boolean {
@@ -26669,7 +26682,7 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recvExpr) &&
-            (recvExpr.text === "process" || this.isNamespaceImportFrom(recvExpr, ["process", "node:process"]))
+            this.isProcessModuleIdentifier(recvExpr)
         ) {
             switch (memberName) {
                 case "nextTick":
