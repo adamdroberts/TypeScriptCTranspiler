@@ -7534,6 +7534,8 @@ class Emitter {
             const combinatorState = this.sideEffectFreePromiseStaticCombinatorState(unwrapped, seenConsts);
             if (combinatorState) return combinatorState;
         }
+        const instanceState = this.sideEffectFreePromiseInstanceChainState(unwrapped, seenConsts);
+        if (instanceState) return instanceState;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreePromiseTryReturnValueState(init, seenConsts) : null;
     }

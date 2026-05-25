@@ -567,6 +567,18 @@ const unused_promise_try_catch_call = Promise.try(() => Promise.reject("dead_pro
     .catch(() => "dead_promise_try_catch_callback");
 const unused_promise_try_finally_call = Promise.try(() => Promise.resolve("dead_promise_try_finally_source"))
     .finally(() => "dead_promise_try_finally_callback");
+const unused_promise_try_then_passthrough_call = Promise.try(() =>
+    Promise.resolve("dead_promise_try_then_passthrough_source").then(),
+)
+    .then((value) => "dead_promise_try_then_passthrough_callback");
+const unused_promise_try_catch_passthrough_call = Promise.try(() =>
+    Promise.reject<string>("dead_promise_try_catch_passthrough_source").catch(),
+)
+    .catch((reason) => "dead_promise_try_catch_passthrough_callback");
+const unused_promise_try_pending_instance_then_call = Promise.try(() =>
+    Promise.race([] as Promise<string>[]).then((value) => "dead_promise_try_pending_instance_then_unreached"),
+)
+    .finally(() => "dead_promise_try_pending_instance_then_finally_callback");
 const unused_promise_all_empty_then_call = Promise.all([] as Promise<string>[])
     .then(() => "dead_promise_all_empty_then_callback");
 const unused_promise_all_settled_empty_then_call = Promise.allSettled([] as Promise<string>[])
@@ -1728,6 +1740,18 @@ Promise.try(() => Promise.reject("top_level_dead_promise_try_catch_source"))
     .catch(() => "top_level_dead_promise_try_catch_callback");
 Promise.try(() => Promise.resolve("top_level_dead_promise_try_finally_source"))
     .finally(() => "top_level_dead_promise_try_finally_callback");
+Promise.try(() =>
+    Promise.resolve("top_level_dead_promise_try_then_passthrough_source").then(),
+)
+    .then((value) => "top_level_dead_promise_try_then_passthrough_callback");
+Promise.try(() =>
+    Promise.reject<string>("top_level_dead_promise_try_catch_passthrough_source").catch(),
+)
+    .catch((reason) => "top_level_dead_promise_try_catch_passthrough_callback");
+Promise.try(() =>
+    Promise.race([] as Promise<string>[]).then((value) => "top_level_dead_promise_try_pending_then_unreached"),
+)
+    .finally(() => "top_level_dead_promise_try_pending_then_finally_callback");
 Promise.all([] as Promise<string>[])
     .then(() => "top_level_dead_promise_all_empty_then_callback");
 Promise.allSettled([] as Promise<string>[])
@@ -2848,6 +2872,18 @@ function usedLocal(value: number): number {
         .catch(() => "local_dead_promise_try_catch_callback");
     Promise.try(() => Promise.resolve("local_dead_promise_try_finally_source"))
         .finally(() => "local_dead_promise_try_finally_callback");
+    Promise.try(() =>
+        Promise.resolve("local_dead_promise_try_then_passthrough_source").then(),
+    )
+        .then((value) => "local_dead_promise_try_then_passthrough_callback");
+    Promise.try(() =>
+        Promise.reject<string>("local_dead_promise_try_catch_passthrough_source").catch(),
+    )
+        .catch((reason) => "local_dead_promise_try_catch_passthrough_callback");
+    Promise.try(() =>
+        Promise.race([] as Promise<string>[]).then((value) => "local_dead_promise_try_pending_then_unreached"),
+    )
+        .finally(() => "local_dead_promise_try_pending_then_finally_callback");
     Promise.all([] as Promise<string>[])
         .then(() => "local_dead_promise_all_empty_then_callback");
     Promise.allSettled([] as Promise<string>[])
