@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE coverage now proves primitive `Promise.resolve(...)` pruning for Object/Reflect predicates over `Object.fromEntries(...)` fed by earlier-const and copy-constructed empty typed Map sources. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now proves Object/Reflect predicate and descriptor pruning for `Object.fromEntries(...)` over earlier-const and copy-constructed empty typed Map sources. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now proves Object/Reflect own-key pruning for `Object.fromEntries(...)` over earlier-const and copy-constructed empty typed Map sources. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now proves `Object.entries(...)` pruning for `Object.fromEntries(...)` over earlier-const and copy-constructed empty typed Map sources. Test: `generated_c_dce_const`.
