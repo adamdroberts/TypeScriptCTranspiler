@@ -17003,6 +17003,7 @@ class Emitter {
             "net",
             "os",
             "path",
+            "process",
         ].includes(bare);
     }
 
@@ -26623,7 +26624,10 @@ class Emitter {
                 return `({ bool _ok = ${fn}(${chunkC}); ${callbackCall}; _ok; })`;
             });
         }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "process") {
+        if (
+            ts.isIdentifier(recvExpr) &&
+            (recvExpr.text === "process" || this.isNamespaceImportFrom(recvExpr, ["process", "node:process"]))
+        ) {
             switch (memberName) {
                 case "nextTick":
                     return this.emitProcessNextTickCall(call);
