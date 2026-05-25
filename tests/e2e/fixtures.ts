@@ -480,6 +480,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-exports-static-metadata": cjsPackage("tsc2c-cjs-module-exports-static-metadata", {
         "index.js": 'module.exports.__esModule = true;\nconst defaultDescriptor = { value: function greet(name) { return "hello " + name; }, enumerable: true };\nconst descriptors = {\n  label: { value: "module-static-metadata", enumerable: true }\n};\nconst api = { count: 51 };\nObject.defineProperty(module.exports, "default", defaultDescriptor);\nObject.defineProperties(module.exports, descriptors);\nObject.assign(module.exports, api);\n',
     }),
+    "tsc2c-cjs-module-exports-define-properties-from-entries": cjsPackage("tsc2c-cjs-module-exports-define-properties-from-entries", {
+        "index.js": 'const defaultKey = "def" + "ault";\nconst labelKey = `label`;\nconst descriptors = {\n  [defaultKey]: { value: function greet(name) { return "whole-from-entries " + name; }, enumerable: true },\n  [labelKey]: { value: "module-define-properties-from-entries", enumerable: true },\n  count: { value: 93, enumerable: true },\n  double: { value: function double(value) { return value * 5; }, enumerable: true }\n};\nmodule.exports = Object.defineProperties({}, Object.fromEntries(Object.entries(descriptors)));\n',
+    }),
     "tsc2c-cjs-define-property-exports": cjsPackage("tsc2c-cjs-define-property-exports", {
         "index.js": 'Object.defineProperty(exports, "label", { value: "defined", enumerable: true });\nObject.defineProperty(exports, "count", { value: 42, enumerable: true });\nObject.defineProperty(exports, "double", { value: function double(value) { return value * 2; }, enumerable: true });\n',
     }),
