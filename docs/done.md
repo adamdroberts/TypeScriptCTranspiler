@@ -382,7 +382,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `Object.fromEntries(dynamicEntries)` builds a dynamic object from dynamic `[key, value]` arrays and uses string conversion for keys. Test: `dynamic_object_from_entries`
 - `Object.is(a, b)` uses SameValue semantics over boxed dynamic values, including `NaN`, signed zero, strings, and object identity. Test: `object_is`
 - ES2024 static `Object.groupBy(items: T[] | Set<T> | Map<MK, MV> | string, keyFn: (item, index) => string): unknown` groups a typed array, typed Set, typed Map entry source, or string source into a null-prototype dynamic object whose string keys map to dynamic arrays of boxed items. Set and Map sources preserve insertion order and string sources use code-point order for callback index assignment; Map entries are boxed as dynamic `[key, value]` arrays. The callback may be an inline arrow/function expression with an expression body or single-return block body, or a function reference; callbacks that declare `this: any` receive the JavaScript default `undefined` receiver. Elements must be types boxable into `tsc_value_t` (number, boolean, string, array, entry, value). Tests: `object_group_by`, `group_by_this_param`
-- `Object.assign(dynamicTarget, ...dynamicSources)` copies enumerable dynamic object data properties, and `Object.getOwnPropertyNames(dynamic)` / `Object.hasOwn(dynamic, key)` use the dynamic object property table. Test: `object_static_methods`
+- `Object.assign(dynamicTarget, ...dynamicSources)` copies enumerable dynamic object data properties, and `Object.getOwnPropertyNames(dynamic)` / `Object.hasOwn(dynamic, key)` use the dynamic object property table. Dynamic nullish targets reject through the catchable runtime exception path for own-property helper calls while non-nullish primitive targets preserve ES-compatible empty/false results. Tests: `object_static_methods`, `object_nullish_own_helpers`
 - `dynamicObj.hasOwnProperty(key)` checks the dynamic object's own property table without walking prototypes. Test: `object_has_own_property`
 - `dynamicObj.isPrototypeOf(value)` checks whether the dynamic receiver appears in another dynamic object's prototype chain. Test: `object_is_prototype_of`
 - `dynamicObj.propertyIsEnumerable(key)` checks that a dynamic property is both own and enumerable, returning false for hidden, inherited, or missing keys. Test: `object_property_is_enumerable`
@@ -1582,6 +1582,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `object_is` | Object.is SameValue semantics for numbers, strings, and dynamic object identity |
 | `object_is_prototype_of` | dynamic Object.prototype.isPrototypeOf over prototype chains |
 | `object_nullish_enumeration` | Object.keys/values/entries reject nullish dynamic targets |
+| `object_nullish_own_helpers` | Object own-property helpers reject nullish dynamic targets |
 | `object_literal_stack_alloc` | non-escaping typed object literal locals use stack storage |
 | `object_literal_stack_alloc_helpers` | non-escaping typed object literal and class locals use stack storage through read-only Object/Reflect/Object-prototype helpers |
 | `object_literal_stack_alloc_alias` | non-escaping typed object literal and class locals use stack storage through safe same-block alias chains |

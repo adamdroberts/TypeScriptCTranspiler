@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Object.getOwnPropertyNames(...)`, `Object.getOwnPropertyDescriptor(s)(...)`, and `Object.hasOwn(...)` now reject dynamic `null` / `undefined` targets while preserving non-nullish primitive compatibility. Test: `object_nullish_own_helpers`.
 - `Object.keys(...)`, `Object.values(...)`, and `Object.entries(...)` now reject dynamic `null` / `undefined` targets while preserving empty results for non-nullish primitive targets. Test: `object_nullish_enumeration`.
 - `Object.assign(null | undefined, source)` now throws through the catchable runtime exception path for dynamic nullish targets. Test: `object_assign_nullish_target`.
 - `Object.assign(dynamicArrayTarget, source)` now has focused coverage for catchable target set failures on frozen targets or sealed/non-extensible growth. Test: `object_assign_dynamic_array_set_failure`.

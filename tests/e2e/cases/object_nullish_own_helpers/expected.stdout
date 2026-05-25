@@ -1,0 +1,5 @@
+names null: Object.getOwnPropertyNames target must not be null or undefined
+desc undefined: Object.getOwnPropertyDescriptor target must not be null or undefined
+descs null: Object.getOwnPropertyDescriptors target must not be null or undefined
+has undefined: Object.hasOwn target must not be null or undefined
+number: 0 undefined false

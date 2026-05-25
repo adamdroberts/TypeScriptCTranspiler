@@ -37986,9 +37986,11 @@ class Emitter {
                 unsupported(arg, "Object.getOwnPropertyNames currently supports dynamic objects only");
             }
             const obj = this.emitExpr(arg);
-            return this.emitSequencedCall("tsc_value_own_keys", arrayType(T_STRING), [
+            return this.emitSequencedExpr(arrayType(T_STRING), [
                 { value: obj, target: T_VALUE, node: arg },
-            ]);
+            ], ([o]) =>
+                `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyNames target must not be null or undefined")); tsc_value_own_keys(${o!}); })`,
+            );
         }
         if (name === "getOwnPropertySymbols") {
             if (args.length !== 1) unsupported(call, "Object.getOwnPropertySymbols expects object");
@@ -38054,10 +38056,12 @@ class Emitter {
             }
             const obj = this.emitExpr(arg);
             const key = this.emitExpr(args[1]!);
-            return this.emitSequencedCall("tsc_value_get_own_property_descriptor", T_VALUE, [
+            return this.emitSequencedExpr(T_VALUE, [
                 { value: obj, target: T_VALUE, node: arg },
                 { value: key, target: T_STRING, node: args[1]! },
-            ]);
+            ], ([o, k]) =>
+                `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyDescriptor target must not be null or undefined")); tsc_value_get_own_property_descriptor(${o!}, ${k!}); })`,
+            );
         }
         if (name === "getOwnPropertyDescriptors") {
             if (args.length !== 1) unsupported(call, "Object.getOwnPropertyDescriptors expects object");
@@ -38101,9 +38105,11 @@ class Emitter {
                 unsupported(arg, "Object.getOwnPropertyDescriptors currently supports dynamic objects only");
             }
             const obj = this.emitExpr(arg);
-            return this.emitSequencedCall("tsc_value_get_own_property_descriptors", T_VALUE, [
+            return this.emitSequencedExpr(T_VALUE, [
                 { value: obj, target: T_VALUE, node: arg },
-            ]);
+            ], ([o]) =>
+                `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyDescriptors target must not be null or undefined")); tsc_value_get_own_property_descriptors(${o!}); })`,
+            );
         }
         if (name === "getPrototypeOf") {
             if (args.length !== 1) unsupported(call, "Object.getPrototypeOf expects object");
@@ -38174,10 +38180,12 @@ class Emitter {
             if (mapped.kind !== "value") unsupported(arg, "Object.hasOwn on non-object");
             const obj = this.emitExpr(arg);
             const key = this.emitExpr(args[1]!);
-            return this.emitSequencedCall("tsc_value_has_own_prop", T_BOOLEAN, [
+            return this.emitSequencedExpr(T_BOOLEAN, [
                 { value: obj, target: T_VALUE, node: arg },
                 { value: key, target: T_STRING, node: args[1]! },
-            ]);
+            ], ([o, k]) =>
+                `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.hasOwn target must not be null or undefined")); tsc_value_has_own_prop(${o!}, ${k!}); })`,
+            );
         }
         if (name === "isExtensible") {
             if (args.length !== 1) unsupported(call, "Object.isExtensible expects object");
