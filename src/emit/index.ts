@@ -26968,6 +26968,75 @@ class Emitter {
                 () => "((void)0)",
             );
         }
+        const processWritableEndStreamName = memberName === "end"
+            ? this.processWritableStreamReceiverName(recvExpr)
+            : null;
+        if (processWritableEndStreamName) {
+            const streamName = processWritableEndStreamName;
+            if (call.arguments.length > 3) {
+                unsupported(call, `process.${streamName}.end expects an optional string or Buffer chunk, encoding, and callback`);
+            }
+            let chunk: { value: EmitResult; node: ts.Expression } | null = null;
+            let encoding: { value: EmitResult; node: ts.Expression } | null = null;
+            let callback: { value: EmitResult; node: ts.Expression } | null = null;
+            if (call.arguments.length >= 1) {
+                const firstNode = call.arguments[0]!;
+                if (!this.isUndefinedExpression(firstNode)) {
+                    const first = this.emitExpr(firstNode);
+                    if (first.ty.kind === "function") {
+                        if (call.arguments.length !== 1) {
+                            unsupported(firstNode, `process.${streamName}.end callback form does not accept trailing arguments`);
+                        }
+                        callback = { value: first, node: firstNode };
+                    } else {
+                        if (first.ty.kind !== "string" && first.ty.kind !== "buffer") {
+                            unsupported(firstNode, `process.${streamName}.end chunk must be a string or Buffer`);
+                        }
+                        chunk = { value: first, node: firstNode };
+                    }
+                }
+            }
+            if (call.arguments.length >= 2) {
+                const secondNode = call.arguments[1]!;
+                if (!this.isUndefinedExpression(secondNode)) {
+                    const second = this.emitExpr(secondNode);
+                    if (second.ty.kind === "function") {
+                        if (callback || call.arguments.length > 2) {
+                            unsupported(secondNode, `process.${streamName}.end callback must be the final argument`);
+                        }
+                        callback = { value: second, node: secondNode };
+                    } else {
+                        encoding = { value: second, node: secondNode };
+                    }
+                }
+            }
+            if (call.arguments.length === 3) {
+                const thirdNode = call.arguments[2]!;
+                if (!this.isUndefinedExpression(thirdNode)) {
+                    const third = this.emitExpr(thirdNode);
+                    if (third.ty.kind !== "function") {
+                        unsupported(thirdNode, `process.${streamName}.end callback must be a function`);
+                    }
+                    callback = { value: third, node: thirdNode };
+                }
+            }
+            const fn = streamName === "stdout"
+                ? (chunk?.value.ty.kind === "buffer" ? "tsc_process_stdout_write_buffer" : "tsc_process_stdout_write")
+                : (chunk?.value.ty.kind === "buffer" ? "tsc_process_stderr_write_buffer" : "tsc_process_stderr_write");
+            const specs: SequencedCallArg[] = [];
+            if (chunk) specs.push({ value: chunk.value, target: chunk.value.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: chunk.node });
+            if (encoding) specs.push({ value: encoding.value, target: T_STRING, node: encoding.node });
+            if (callback) specs.push({ value: callback.value, target: callback.value.ty, node: callback.node });
+            const callbackTy = callback?.value.ty ?? null;
+            return this.emitSequencedExpr(T_VOID, specs, (vals) => {
+                const callbackC = callback ? vals[vals.length - 1]! : null;
+                const writeCall = chunk ? `${fn}(${vals[0]!});` : "";
+                const callbackCall = callbackC
+                    ? `${callbackC}->fn(${[`${callbackC}->env`, ...(callbackTy?.thisParam ? ["tsc_value_undefined()"] : [])].join(", ")});`
+                    : "";
+                return `({ ${writeCall} ${callbackCall} })`;
+            });
+        }
         const processWritableStreamName = memberName === "write"
             ? this.processWritableStreamReceiverName(recvExpr)
             : null;
