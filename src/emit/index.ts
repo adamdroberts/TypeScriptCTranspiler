@@ -8719,6 +8719,14 @@ class Emitter {
                 seenConsts,
             );
         }
+        if (ts.isCallExpression(unwrapped)) {
+            const result = this.sideEffectFreePrimitiveStaticArrayElementResult(
+                unwrapped,
+                index,
+                seenConsts,
+            );
+            if (result !== null) return result;
+        }
         if (ts.isObjectLiteralExpression(unwrapped)) {
             return this.sideEffectFreePrimitiveObjectValuesLiteralElementResult(
                 unwrapped,
@@ -8781,6 +8789,14 @@ class Emitter {
             return tupleIndex === 0
                 ? this.sideEffectFreePrimitiveArrayEntryKeyElementResult(unwrapped, entryIndex, seenConsts)
                 : this.sideEffectFreePrimitiveArrayLiteralElementResult(unwrapped, entryIndex, seenConsts);
+        }
+        if (ts.isCallExpression(unwrapped)) {
+            const result = this.sideEffectFreePrimitiveStaticArrayElementResult(
+                unwrapped,
+                entryIndex,
+                seenConsts,
+            );
+            if (result !== null) return result;
         }
         if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
             return entryIndex < Array.from(unwrapped.text).length ? "present" : "absent";

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now reuses fresh array-builder element proofs for primitive `Promise.resolve(...)` inputs from `Object.values(Array.of/from(...))[i]` and `Object.entries(Array.of/from(...))[i][1]`. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats direct fresh array-builder results as safe Object/Reflect enumeration operands with exact length proofs, enabling `Object.keys(...)`, `Object.values(...)`, `Object.entries(...)`, and `Reflect.ownKeys(...)` pruning over `Array.from(...)` / `Array.of(...)` targets. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats boolean-returning `Reflect.set(...)`, `Reflect.deleteProperty(...)`, `Reflect.defineProperty(...)`, `Reflect.preventExtensions(...)`, and `Reflect.setPrototypeOf(...)` calls over discardable fresh targets as primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats fresh arrays returned by pure Object/Reflect enumeration helpers as discardable targets for unused pure Object/Reflect mutation helpers. Test: `generated_c_dce_const`.
