@@ -4401,6 +4401,8 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         const literalLength = this.sideEffectFreeArrayLiteralLength(unwrapped, seenConsts);
         if (literalLength !== null) return literalLength;
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        if (init) return this.sideEffectFreeFreshOrReturnedArrayLength(init, seenConsts);
         if (
             !ts.isCallExpression(unwrapped) ||
             !ts.isPropertyAccessExpression(unwrapped.expression) ||
