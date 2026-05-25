@@ -37862,6 +37862,7 @@ class Emitter {
             mapped.kind === "weakset" ||
             mapped.kind === "weakref" ||
             mapped.kind === "finregistry" ||
+            mapped.kind === "promise" ||
             mapped.kind === "date" ||
             mapped.kind === "url";
         const dynamicObjectArg = (value: string): string => {
@@ -40101,6 +40102,7 @@ class Emitter {
                     mapped.kind === "weakset" ||
                     mapped.kind === "weakref" ||
                     mapped.kind === "finregistry" ||
+                    mapped.kind === "promise" ||
                     mapped.kind === "date" ||
                     mapped.kind === "url"
                 ) {
@@ -40193,6 +40195,7 @@ class Emitter {
                     mapped.kind === "weakset" ||
                     mapped.kind === "weakref" ||
                     mapped.kind === "finregistry" ||
+                    mapped.kind === "promise" ||
                     mapped.kind === "date" ||
                     mapped.kind === "url"
                 ) {

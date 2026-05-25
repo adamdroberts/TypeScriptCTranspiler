@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Promise instances now expose empty own-property results through `Object.keys`, `Object.values`, `Object.entries`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, `Reflect.ownKeys`, and `Reflect.getOwnPropertyDescriptor`, while preserving receiver/key/trailing-argument evaluation. Test: `promise_object_methods`.
 - Date instances now expose empty own-property results through `Object.keys`, `Object.values`, `Object.entries`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, `Reflect.ownKeys`, and `Reflect.getOwnPropertyDescriptor`, while preserving receiver/key/trailing-argument evaluation. Test: `date_object_methods`.
 - `os.userInfo(options?, ...ignored)` now evaluates and ignores trailing arguments after the supported options slot. Test: `os_user_info`.
 - `queueMicrotask(callback, ...ignored)` now evaluates and ignores trailing arguments before scheduling the bounded microtask callback. Test: `queue_microtask`.
