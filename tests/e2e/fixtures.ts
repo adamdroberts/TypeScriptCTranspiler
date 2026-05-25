@@ -884,11 +884,20 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-object-wrapper-seal-create-descriptors-named": cjsPackage("tsc2c-cjs-object-wrapper-seal-create-descriptors-named", {
         "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "sealed " + name; }, enumerable: true },\n  label: { value: "seal-create-descriptors", enumerable: true },\n  count: { value: 104, enumerable: true }\n};\nmodule.exports = Object.seal(Object.create({ inherited: true }, descriptors));\n',
     }),
+    "tsc2c-cjs-object-wrapper-seal-create-from-entries": cjsPackage("tsc2c-cjs-object-wrapper-seal-create-from-entries", {
+        "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "sealed-create-from-entries " + name; }, enumerable: true },\n  label: { value: "seal-create-from-entries", enumerable: true },\n  count: { value: 125, enumerable: true }\n};\nmodule.exports = Object.seal(Object.create({ inherited: true }, Object.fromEntries(Object.entries(descriptors))));\n',
+    }),
     "tsc2c-cjs-object-wrapper-prevent-create-descriptors-named": cjsPackage("tsc2c-cjs-object-wrapper-prevent-create-descriptors-named", {
         "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "prevented " + name; }, enumerable: true },\n  label: { value: "prevent-create-descriptors", enumerable: true },\n  count: { value: 105, enumerable: true }\n};\nmodule.exports = Object.preventExtensions(Object.create({ inherited: true }, descriptors));\n',
     }),
+    "tsc2c-cjs-object-wrapper-prevent-create-from-entries": cjsPackage("tsc2c-cjs-object-wrapper-prevent-create-from-entries", {
+        "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "prevented-create-from-entries " + name; }, enumerable: true },\n  label: { value: "prevent-create-from-entries", enumerable: true },\n  count: { value: 126, enumerable: true }\n};\nconst entries = Object.entries(descriptors);\nmodule.exports = Object.preventExtensions(Object.create({ inherited: true }, Object.fromEntries(entries)));\n',
+    }),
     "tsc2c-cjs-object-wrapper-set-prototype-create-descriptors-named": cjsPackage("tsc2c-cjs-object-wrapper-set-prototype-create-descriptors-named", {
         "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "reproto " + name; }, enumerable: true },\n  label: { value: "set-prototype-create-descriptors", enumerable: true },\n  count: { value: 106, enumerable: true }\n};\nmodule.exports = Object.setPrototypeOf(Object.create(null, descriptors), { inherited: true });\n',
+    }),
+    "tsc2c-cjs-object-wrapper-set-prototype-create-from-entries": cjsPackage("tsc2c-cjs-object-wrapper-set-prototype-create-from-entries", {
+        "index.js": 'const labelKey = "la" + "bel";\nconst descriptors = {\n  default: { value: function greet(name) { return "reproto-create-from-entries " + name; }, enumerable: true },\n  [labelKey]: { value: "set-prototype-create-from-entries", enumerable: true },\n  count: { value: 127, enumerable: true }\n};\nmodule.exports = Object.setPrototypeOf(Object.create(null, Object.fromEntries(Object.entries(descriptors))), { inherited: true });\n',
     }),
     "tsc2c-cjs-object-set-prototype-named": cjsPackage("tsc2c-cjs-object-set-prototype-named", {
         "index.js": 'module.exports = Object.setPrototypeOf({\n  default: function greet(name) { return "hello " + name; },\n  label: "set-prototype-named",\n  count: 74,\n  double(value) { return value * 2; }\n}, { inherited: "base" });\n',

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- CommonJS package metadata now preserves finite `Object.fromEntries(...)` descriptor maps through `Object.seal`, `Object.preventExtensions`, and `Object.setPrototypeOf` wrappers around `Object.create(...)`. Test: `node_modules_commonjs_module_exports_object_wrapper_create_from_entries_variants`.
 - CommonJS package metadata now preserves finite `Object.fromEntries(...)` descriptor maps through `Object.freeze(Object.create(...))` whole-value wrappers. Test: `node_modules_commonjs_module_exports_object_wrapper_create_from_entries`.
 - CommonJS package metadata now recognizes `module.exports = Object.create(proto, Object.fromEntries(...))` descriptor maps with finite static entries. Test: `node_modules_commonjs_module_exports_object_create_from_entries`.
 - CommonJS package metadata now preserves finite `Object.fromEntries(...)` descriptor maps through `Object.seal`, `Object.preventExtensions`, and `Object.setPrototypeOf` wrappers around `Object.defineProperties(...)`. Test: `node_modules_commonjs_module_exports_wrapper_define_properties_from_entries_variants`.
