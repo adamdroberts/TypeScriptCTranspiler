@@ -4311,6 +4311,19 @@ class Emitter {
         if (
             ts.isCallExpression(unwrapped) &&
             ts.isPropertyAccessExpression(unwrapped.expression) &&
+            unwrapped.expression.name.text === "flat" &&
+            unwrapped.arguments.length === 1
+        ) {
+            const depth = this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[0]!, seenConsts);
+            if (depth !== 0) return null;
+            return this.sideEffectFreeSetArraySourceExpressions(
+                unwrapped.expression.expression,
+                seenConsts,
+            );
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
             (
                 unwrapped.expression.name.text === "reverse" ||
                 unwrapped.expression.name.text === "toReversed"
@@ -4642,6 +4655,19 @@ class Emitter {
                 elements.push(...argElements);
             }
             return elements;
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            unwrapped.expression.name.text === "flat" &&
+            unwrapped.arguments.length === 1
+        ) {
+            const depth = this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[0]!, seenConsts);
+            if (depth !== 0) return null;
+            return this.sideEffectFreeMapArraySourceExpressions(
+                unwrapped.expression.expression,
+                seenConsts,
+            );
         }
         if (
             ts.isCallExpression(unwrapped) &&
