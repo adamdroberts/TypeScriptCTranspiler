@@ -3,3 +3,8 @@ errors: 2 first|second
 recovered: fallback
 empty rejected: AggregateError 0
 empty recovered: empty
+set rejected: AggregateError All promises were rejected
+set errors: 2 set-first|set-second
+set recovered: set fallback
+empty set rejected: AggregateError 0
+empty set recovered: empty set
