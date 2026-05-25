@@ -188,7 +188,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - `Array.of(...items)` — typed array construction, including `Array.of<any>(...)` followed by dynamic array coercion. Tests: `array_of`, `dynamic_array_of`
 
 ### `Map<K, V>`
-- `new Map<K, V>()`, `new Map(Object.entries(obj))`, typed `ObjectEntry<V, K>[]` sources including non-string keys, and `new Map(existingMap)` for typed Map sources — `tsc_map_new(sizeof(K), sizeof(V), keyKind, initialCap)`. Tests: `map_set_constructors`, `map_constructor_from_map`, `map_object_entry_constructors`
+- `new Map<K, V>()`, `new Map(Object.entries(obj), ...ignored)`, typed `ObjectEntry<V, K>[]` sources including non-string keys, and `new Map(existingMap, ...ignored)` for typed Map sources — `tsc_map_new(sizeof(K), sizeof(V), keyKind, initialCap)`, with supported source constructor extras evaluated and ignored. Tests: `map_set_constructors`, `map_constructor_from_map`, `map_object_entry_constructors`, `collection_constructor_ignored_arguments`
 - `.set(k, v)`, `.get(k)`, `.has(k)`, `.delete(k)`, `.clear()`; numeric keys use SameValueZero semantics so `NaN` matches `NaN` and `-0` matches `0`. Tests: `map_set`, `map_set_same_value_zero`
 - `.keys(...ignored)`, `.values(...ignored)` — returns typed array; `.entries(...ignored)` returns a typed `ObjectEntry<V, K>[]`. Ignored extra arguments are evaluated before being discarded. Tests: `map_entries`, `map_object_entry_constructors`
 - `.forEach((value, key, map) => expr, thisArg?)` — inline expression-body or single-return block-body callbacks and named callback references over insertion order; optional `thisArg` values are evaluated once and bound for callbacks that declare `this: any`. Tests: `map_set_for_each`, `map_set_for_each_refs`, `map_set_for_each_this_arg`
@@ -199,15 +199,15 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - ES2024 static `Map.groupBy(...)` groups typed array, typed Set, typed Map entry, string, boxed dynamic array, or boxed dynamic string sources by the callback's return value, returning typed `Map<K, T[]>` groups or `Map<K, ObjectEntry<MV, MK>[]>` for Map sources. Set and Map sources preserve insertion order and string/dynamic-string sources use code-point order for callback index assignment. The callback may be an inline arrow/function expression with an expression body or single-return block body, or a function reference (including generic functions); callbacks that declare `this: any` receive the JavaScript default `undefined` receiver. Tests: `map_group_by`, `map_group_by_dynamic_source`, `group_by_this_param`
 
 ### `Set<T>`
-- `new Set<T>()`, `new Set(valuesArray)`, and `new Set(existingSet)` — `tsc_set_new(sizeof(T), keyKind, initialCap)` plus per-value insertion. Tests: `map_set_constructors`, `set_constructor_from_set`
+- `new Set<T>()`, `new Set(valuesArray, ...ignored)`, and `new Set(existingSet, ...ignored)` — `tsc_set_new(sizeof(T), keyKind, initialCap)` plus per-value insertion, with supported source constructor extras evaluated and ignored. Tests: `map_set_constructors`, `set_constructor_from_set`, `collection_constructor_ignored_arguments`
 - `.add(v)`, `.has(v)`, `.delete(v)`, `.clear()`, `.keys(...ignored)`, `.values(...ignored)`, `.forEach((value, value2, set) => expr, thisArg?)`, `.size`; numeric values use SameValueZero semantics, ignored key/value iterator arguments are evaluated before being discarded, and `forEach` accepts inline expression-body or single-return block-body callbacks and named callback references. Optional `thisArg` values are evaluated once and bound for callbacks that declare `this: any`. Tests: `map_set`, `map_set_same_value_zero`, `set_keys`, `map_set_for_each`, `map_set_for_each_refs`, `map_set_for_each_this_arg`
 - Direct `for...of` over values. Test: `map_set_for_of`
 - `.toString(...ignored)`, `.toLocaleString(...ignored)`, and `.valueOf(...ignored)`. Test: `collection_object_methods`
 - ES2025 set composition: `.union(other)`, `.intersection(other)`, `.difference(other)`, `.symmetricDifference(other)`, `.isSubsetOf(other)`, `.isSupersetOf(other)`, `.isDisjointFrom(other)`. The argument must be a `Set<T>` of the same element type; runtime helpers `tsc_set_union`/`tsc_set_intersection`/`tsc_set_difference`/`tsc_set_symmetric_difference`/`tsc_set_is_subset_of`/`tsc_set_is_superset_of`/`tsc_set_is_disjoint_from` honor SameValueZero element matching and insertion order. Test: `set_composition`
 
 ### `WeakMap<K, V>` / `WeakSet<T>`
-- Typed object-key `WeakMap` supports `.set(k, v)`, `.get(k)`, `.has(k)`, `.delete(k)`, and construction from typed `Map<K, V>` or `ObjectEntry<V, K>[]` sources with matching object-key/value types. Tests: `weak_collections`, `map_object_entry_constructors`
-- Typed object-key `WeakSet` supports `.add(v)`, `.has(v)`, `.delete(v)`, and construction from typed `T[]` arrays or matching `Set<T>` sources. Test: `weak_collections`
+- Typed object-key `WeakMap` supports `.set(k, v)`, `.get(k)`, `.has(k)`, `.delete(k)`, and construction from typed `Map<K, V>` or `ObjectEntry<V, K>[]` sources with matching object-key/value types, with supported source constructor extras evaluated and ignored. Tests: `weak_collections`, `map_object_entry_constructors`, `collection_constructor_ignored_arguments`
+- Typed object-key `WeakSet` supports `.add(v)`, `.has(v)`, `.delete(v)`, and construction from typed `T[]` arrays or matching `Set<T>` sources, with supported source constructor extras evaluated and ignored. Tests: `weak_collections`, `collection_constructor_ignored_arguments`
 - `.toString(...ignored)`, `.toLocaleString(...ignored)`, and `.valueOf(...ignored)` on both weak collections. Test: `collection_object_methods`
 - Runtime storage reuses pointer-key map/set tables; there is no iteration API exposed.
 
@@ -1004,6 +1004,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `class_modifiers` | abstract/access/readonly modifiers accepted as TS-only |
 | `class_static_blocks` | class static initialization blocks execute in member order with static fields |
 | `closure_optional_parameters` | first-class closures accept omitted optional pointer and function parameters |
+| `collection_constructor_ignored_arguments` | Map, Set, WeakMap, and WeakSet constructors evaluate and ignore trailing arguments |
 | `collection_object_methods` | Map/Set/WeakMap/WeakSet/WeakRef toString/toLocaleString/valueOf |
 | `comma_operator` | comma operator side effects and right-hand value |
 | `console_module_import` | console/node:console imports route to supported console helpers |

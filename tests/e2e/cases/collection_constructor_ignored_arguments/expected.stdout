@@ -1,0 +1,5 @@
+map: 2 1 2
+set: 2 true 1|2
+weak map: admin reader
+weak set: true true
+marks: abcdefgh

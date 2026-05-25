@@ -40668,9 +40668,9 @@ class Emitter {
             const k = mapped.key!;
             const v = mapped.elem!;
             const args = n.arguments ?? [];
-            if (args.length > 1) unsupported(n, "new Map() expects 0 or 1 arguments");
-            if (args.length === 1) {
+            if (args.length >= 1) {
                 const entries = this.emitExpr(args[0]!);
+                const ignored = this.ignoredArgumentSpecs(args, 1);
                 if (entries.ty.kind === "map") {
                     if (
                         !entries.ty.key ||
@@ -40680,7 +40680,7 @@ class Emitter {
                     ) {
                         unsupported(args[0]!, "new Map(existingMap) key/value types must match the target Map");
                     }
-                    return this.emitSequencedExpr(mapped, [{ value: entries }], ([source]) => {
+                    return this.emitSequencedExpr(mapped, [{ value: entries, node: args[0]! }, ...ignored], ([source]) => {
                         const map = this.freshTemp("_map_copy");
                         const idx = this.freshTemp("_i");
                         const keyPtr = this.freshTemp("_key");
@@ -40707,7 +40707,7 @@ class Emitter {
                 if (!sameCType(entryValueType, v)) {
                     unsupported(args[0]!, `new Map(entries) value type ${entryValueType.c} does not match map value type ${v.c}`);
                 }
-                return this.emitSequencedExpr(mapped, [{ value: entries }], ([source]) => {
+                return this.emitSequencedExpr(mapped, [{ value: entries, node: args[0]! }, ...ignored], ([source]) => {
                     const map = this.freshTemp("_map_init");
                     const idx = this.freshTemp("_i");
                     const entry = this.freshTemp("_entry");
@@ -40735,9 +40735,9 @@ class Emitter {
                 unsupported(n, "new Set() requires <T> type parameter");
             const e = mapped.elem!;
             const args = n.arguments ?? [];
-            if (args.length > 1) unsupported(n, "new Set() expects 0 or 1 arguments");
-            if (args.length === 1) {
+            if (args.length >= 1) {
                 const values = this.emitExpr(args[0]!);
+                const ignored = this.ignoredArgumentSpecs(args, 1);
                 if (
                     (values.ty.kind !== "array" && values.ty.kind !== "set") ||
                     !values.ty.elem ||
@@ -40745,7 +40745,7 @@ class Emitter {
                 ) {
                     unsupported(args[0]!, "new Set(values) expects an array or Set whose element type matches the set");
                 }
-                return this.emitSequencedExpr(mapped, [{ value: values }], ([source]) => {
+                return this.emitSequencedExpr(mapped, [{ value: values, node: args[0]! }, ...ignored], ([source]) => {
                     const set = this.freshTemp("_set_init");
                     const src = this.freshTemp("_set_src");
                     const idx = this.freshTemp("_i");
@@ -40771,12 +40771,12 @@ class Emitter {
             if (mapped.kind !== "weakmap")
                 unsupported(n, "new WeakMap() requires <K, V> type parameters");
             const args = n.arguments ?? [];
-            if (args.length > 1) unsupported(n, "new WeakMap() expects 0 or 1 arguments");
             const k = mapped.key!;
             const v = mapped.elem!;
             requireWeakObjectKey(n, k, "WeakMap");
-            if (args.length === 1) {
+            if (args.length >= 1) {
                 const entries = this.emitExpr(args[0]!);
+                const ignored = this.ignoredArgumentSpecs(args, 1);
                 if (entries.ty.kind === "map") {
                     if (
                         !entries.ty.key ||
@@ -40786,7 +40786,7 @@ class Emitter {
                     ) {
                         unsupported(args[0]!, "new WeakMap(entries) expects entries whose key/value types match the WeakMap");
                     }
-                    return this.emitSequencedExpr(mapped, [{ value: entries }], ([source]) => {
+                    return this.emitSequencedExpr(mapped, [{ value: entries, node: args[0]! }, ...ignored], ([source]) => {
                         const map = this.freshTemp("_weak_map_init");
                         const idx = this.freshTemp("_i");
                         const keyPtr = this.freshTemp("_key");
@@ -40813,7 +40813,7 @@ class Emitter {
                 if (!sameCType(entryValueType, v)) {
                     unsupported(args[0]!, `new WeakMap(entries) value type ${entryValueType.c} does not match WeakMap value type ${v.c}`);
                 }
-                return this.emitSequencedExpr(mapped, [{ value: entries }], ([source]) => {
+                return this.emitSequencedExpr(mapped, [{ value: entries, node: args[0]! }, ...ignored], ([source]) => {
                     const map = this.freshTemp("_weak_map_init");
                     const idx = this.freshTemp("_i");
                     const entry = this.freshTemp("_entry");
@@ -40840,11 +40840,11 @@ class Emitter {
             if (mapped.kind !== "weakset")
                 unsupported(n, "new WeakSet() requires <T> type parameter");
             const args = n.arguments ?? [];
-            if (args.length > 1) unsupported(n, "new WeakSet() expects 0 or 1 arguments");
             const e = mapped.elem!;
             requireWeakObjectKey(n, e, "WeakSet");
-            if (args.length === 1) {
+            if (args.length >= 1) {
                 const values = this.emitExpr(args[0]!);
+                const ignored = this.ignoredArgumentSpecs(args, 1);
                 if (
                     (values.ty.kind !== "array" && values.ty.kind !== "set") ||
                     !values.ty.elem ||
@@ -40852,7 +40852,7 @@ class Emitter {
                 ) {
                     unsupported(args[0]!, "new WeakSet(values) expects an array or Set whose element type matches the WeakSet");
                 }
-                return this.emitSequencedExpr(mapped, [{ value: values }], ([source]) => {
+                return this.emitSequencedExpr(mapped, [{ value: values, node: args[0]! }, ...ignored], ([source]) => {
                     const set = this.freshTemp("_weak_set_init");
                     const src = this.freshTemp("_weak_set_src");
                     const idx = this.freshTemp("_i");

@@ -380,8 +380,8 @@ interface Map<K, V> extends Iterable<[K, V]> {
     [Symbol.iterator](): IterableIterator<[K, V]>;
 }
 interface MapConstructor {
-    new <K, V>(entries: ObjectEntry<V, K>[]): Map<K, V>;
-    new <K, V>(entries: Map<K, V>): Map<K, V>;
+    new <K, V>(entries: ObjectEntry<V, K>[], ...ignored: any[]): Map<K, V>;
+    new <K, V>(entries: Map<K, V>, ...ignored: any[]): Map<K, V>;
     new <K, V>(): Map<K, V>;
     groupBy<T, K>(items: T[], callbackfn: (value: T, index: number) => K): Map<K, T[]>;
     groupBy<T, K>(items: Set<T>, callbackfn: (value: T, index: number) => K): Map<K, T[]>;
@@ -413,8 +413,8 @@ interface Set<T> extends Iterable<T> {
     [Symbol.iterator](): IterableIterator<T>;
 }
 interface SetConstructor {
-    new <T>(values: T[]): Set<T>;
-    new <T>(values: Set<T>): Set<T>;
+    new <T>(values: T[], ...ignored: any[]): Set<T>;
+    new <T>(values: Set<T>, ...ignored: any[]): Set<T>;
     new <T>(): Set<T>;
 }
 declare var Set: SetConstructor;
@@ -429,8 +429,8 @@ interface WeakMap<K extends object, V> {
     valueOf(...ignored: any[]): WeakMap<K, V>;
 }
 interface WeakMapConstructor {
-    new <K extends object, V>(entries: ObjectEntry<V, K>[]): WeakMap<K, V>;
-    new <K extends object, V>(entries: Map<K, V>): WeakMap<K, V>;
+    new <K extends object, V>(entries: ObjectEntry<V, K>[], ...ignored: any[]): WeakMap<K, V>;
+    new <K extends object, V>(entries: Map<K, V>, ...ignored: any[]): WeakMap<K, V>;
     new <K extends object, V>(): WeakMap<K, V>;
 }
 declare var WeakMap: WeakMapConstructor;
@@ -444,8 +444,8 @@ interface WeakSet<T extends object> {
     valueOf(...ignored: any[]): WeakSet<T>;
 }
 interface WeakSetConstructor {
-    new <T extends object>(values: T[]): WeakSet<T>;
-    new <T extends object>(values: Set<T>): WeakSet<T>;
+    new <T extends object>(values: T[], ...ignored: any[]): WeakSet<T>;
+    new <T extends object>(values: Set<T>, ...ignored: any[]): WeakSet<T>;
     new <T extends object>(): WeakSet<T>;
 }
 declare var WeakSet: WeakSetConstructor;
