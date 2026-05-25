@@ -1136,6 +1136,7 @@ const unused_promise_resolve_array_of_slice_absent_element = Promise.resolve(Arr
 const unused_promise_resolve_array_of_slice_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_slice_element", "dead_promise_resolve_array_of_slice_element_hit", "dead_promise_resolve_array_of_slice_element_tail").slice(1, 3)[0]);
 const unused_promise_resolve_array_of_concat_length = Promise.resolve(Array.of("dead_promise_resolve_array_of_concat_length").concat(Array.of("dead_promise_resolve_array_of_concat_length_arg", "dead_promise_resolve_array_of_concat_length_arg_tail")).length);
 const unused_promise_resolve_array_of_concat_absent_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_concat_absent_element").concat(Array.of("dead_promise_resolve_array_of_concat_absent_element_arg", "dead_promise_resolve_array_of_concat_absent_element_arg_tail"))[3]);
+const unused_promise_resolve_array_of_concat_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_concat_element").concat(Array.of("dead_promise_resolve_array_of_concat_element_hit", "dead_promise_resolve_array_of_concat_element_tail"))[1]);
 const unused_promise_resolve_array_of_flat_zero_length = Promise.resolve(Array.of("dead_promise_resolve_array_of_flat_zero_length", "dead_promise_resolve_array_of_flat_zero_length_tail").flat(0).length);
 const unused_promise_resolve_array_of_flat_zero_absent_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_flat_zero_absent_element", "dead_promise_resolve_array_of_flat_zero_absent_element_tail").flat(0)[2]);
 const unused_promise_resolve_array_of_sort_length = Promise.resolve(Array.of("dead_promise_resolve_array_of_sort_length_b", "dead_promise_resolve_array_of_sort_length_a").sort().length);
@@ -3669,6 +3670,7 @@ function usedLocal(value: number): number {
     Array.of("local_dead_array_of_slice_element", "local_dead_array_of_slice_element_hit", "local_dead_array_of_slice_element_tail").slice(1, 3)[0];
     Array.of("local_dead_array_of_concat_length").concat(Array.of("local_dead_array_of_concat_length_arg", "local_dead_array_of_concat_length_arg_tail")).length;
     Array.of("local_dead_array_of_concat_absent_element").concat(Array.of("local_dead_array_of_concat_absent_element_arg", "local_dead_array_of_concat_absent_element_arg_tail"))[3];
+    Array.of("local_dead_array_of_concat_element").concat(Array.of("local_dead_array_of_concat_element_hit", "local_dead_array_of_concat_element_tail"))[1];
     Array.of("local_dead_array_of_flat_zero_length", "local_dead_array_of_flat_zero_length_tail").flat(0).length;
     Array.of("local_dead_array_of_flat_zero_absent_element", "local_dead_array_of_flat_zero_absent_element_tail").flat(0)[2];
     Array.of("local_dead_array_of_sort_length_b", "local_dead_array_of_sort_length_a").sort().length;

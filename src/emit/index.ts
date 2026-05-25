@@ -9011,6 +9011,12 @@ class Emitter {
                 seenConsts,
             );
             if (sliceResult !== null) return sliceResult;
+            const concatResult = this.sideEffectFreePrimitiveConcatElementResult(
+                unwrapped,
+                index,
+                seenConsts,
+            );
+            if (concatResult !== null) return concatResult;
         }
         const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts);
         if (returnedArrayLength !== null && (index < 0 || index >= returnedArrayLength)) {
@@ -9110,6 +9116,46 @@ class Emitter {
             actualStart + index,
             new Set(seenConsts),
         );
+    }
+
+    private sideEffectFreePrimitiveConcatElementResult(
+        call: ts.CallExpression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" | null {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            call.expression.name.text !== "concat"
+        ) {
+            return null;
+        }
+        const receiverLength = this.sideEffectFreeFreshOrReturnedArrayLength(
+            call.expression.expression,
+            seenConsts,
+        );
+        if (receiverLength === null) return null;
+        if (index < 0) return "absent";
+        if (index < receiverLength) {
+            return this.sideEffectFreePrimitiveArrayElementOperandResult(
+                call.expression.expression,
+                index,
+                new Set(seenConsts),
+            );
+        }
+        let offset = receiverLength;
+        for (const arg of call.arguments) {
+            const argLength = this.sideEffectFreeFreshOrReturnedArrayLength(arg, seenConsts);
+            if (argLength === null) return "unsafe";
+            if (index < offset + argLength) {
+                return this.sideEffectFreePrimitiveArrayElementOperandResult(
+                    arg,
+                    index - offset,
+                    new Set(seenConsts),
+                );
+            }
+            offset += argLength;
+        }
+        return "absent";
     }
 
     private sideEffectFreePrimitiveStaticArrayElementResult(
