@@ -4576,6 +4576,16 @@ class Emitter {
                         return receiverLength;
                     }
                 }
+                if (
+                    (method === "sort" || method === "toSorted") &&
+                    unwrapped.arguments.length === 0 &&
+                    this.isSideEffectFreeFreshOrReturnedStringArrayOperand(
+                        unwrapped.expression.expression,
+                        seenConsts,
+                    )
+                ) {
+                    return receiverLength;
+                }
                 if (method === "reverse" && allArgsPure) return receiverLength;
                 if (method === "with" && unwrapped.arguments.length === 2) {
                     const index = this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[0]!, seenConsts);

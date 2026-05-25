@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now preserves exact returned-array lengths through no-argument string-array `sort()` and `toSorted()` calls, enabling unused `Promise.resolve(...)` length and absent element reads to prune for non-empty fresh arrays. Test: `generated_c_dce_const`.
 - Generated-C DCE now preserves exact returned-array lengths through pure zero-depth `flat(...)` calls, enabling unused `Promise.resolve(...)` length and absent element reads to prune for non-empty fresh arrays. Test: `generated_c_dce_const`.
 - Generated-C DCE now derives exact returned-array lengths through pure array-result `concat(...)` calls, enabling unused `Promise.resolve(...)` length and absent element reads to prune for non-empty fresh arrays. Test: `generated_c_dce_const`.
 - Generated-C DCE now derives exact returned-array lengths through pure integer-argument `slice(...)` calls, enabling unused `Promise.resolve(...)` length and absent element reads to prune for non-empty fresh arrays. Test: `generated_c_dce_const`.

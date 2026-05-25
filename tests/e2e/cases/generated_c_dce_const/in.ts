@@ -1137,6 +1137,8 @@ const unused_promise_resolve_array_of_concat_length = Promise.resolve(Array.of("
 const unused_promise_resolve_array_of_concat_absent_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_concat_absent_element").concat(Array.of("dead_promise_resolve_array_of_concat_absent_element_arg", "dead_promise_resolve_array_of_concat_absent_element_arg_tail"))[3]);
 const unused_promise_resolve_array_of_flat_zero_length = Promise.resolve(Array.of("dead_promise_resolve_array_of_flat_zero_length", "dead_promise_resolve_array_of_flat_zero_length_tail").flat(0).length);
 const unused_promise_resolve_array_of_flat_zero_absent_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_flat_zero_absent_element", "dead_promise_resolve_array_of_flat_zero_absent_element_tail").flat(0)[2]);
+const unused_promise_resolve_array_of_sort_length = Promise.resolve(Array.of("dead_promise_resolve_array_of_sort_length_b", "dead_promise_resolve_array_of_sort_length_a").sort().length);
+const unused_promise_resolve_array_of_to_sorted_absent_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_to_sorted_absent_element_b", "dead_promise_resolve_array_of_to_sorted_absent_element_a").toSorted()[2]);
 const unused_array_push_call = ["dead_array_push"].push("dead_array_push_value");
 const unused_array_unshift_call = ["dead_array_unshift"].unshift("dead_array_unshift_value");
 const unused_object_keys_fill_call = Object.keys({ dead_object_keys_fill: 1 }).fill("dead_object_keys_fill_value");
@@ -3667,6 +3669,8 @@ function usedLocal(value: number): number {
     Array.of("local_dead_array_of_concat_absent_element").concat(Array.of("local_dead_array_of_concat_absent_element_arg", "local_dead_array_of_concat_absent_element_arg_tail"))[3];
     Array.of("local_dead_array_of_flat_zero_length", "local_dead_array_of_flat_zero_length_tail").flat(0).length;
     Array.of("local_dead_array_of_flat_zero_absent_element", "local_dead_array_of_flat_zero_absent_element_tail").flat(0)[2];
+    Array.of("local_dead_array_of_sort_length_b", "local_dead_array_of_sort_length_a").sort().length;
+    Array.of("local_dead_array_of_to_sorted_absent_element_b", "local_dead_array_of_to_sorted_absent_element_a").toSorted()[2];
     ["local_dead_array_push"].push("local_dead_array_push_value");
     ["local_dead_array_unshift"].unshift("local_dead_array_unshift_value");
     Object.keys({ local_dead_object_keys_fill: 1 }).fill("local_dead_object_keys_fill_value");
