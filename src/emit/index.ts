@@ -17140,6 +17140,13 @@ class Emitter {
         );
     }
 
+    private isTimersPromisesModuleIdentifier(expr: ts.Expression): boolean {
+        return ts.isIdentifier(expr) && (
+            this.isNamespaceImportFrom(expr, ["timers/promises", "node:timers/promises"]) ||
+            this.isDefaultImportFrom(expr, ["timers/promises", "node:timers/promises"])
+        );
+    }
+
     private isConsoleModuleIdentifier(expr: ts.Expression): boolean {
         return ts.isIdentifier(expr) && (
             this.isNamespaceImportFrom(expr, ["console", "node:console"]) ||
@@ -24879,6 +24886,11 @@ class Emitter {
                 return `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->fn = ${fn}; tsc_queue_microtask(${adapter}, ${env}); })`;
             });
         }
+        const timersPromisesNamed = ["setTimeout", "setImmediate"]
+            .find((exported) => this.isNamedImportFrom(calleeId, ["timers/promises", "node:timers/promises"], exported));
+        if (timersPromisesNamed) {
+            return this.emitTimersPromisesCall(call, timersPromisesNamed);
+        }
         if (name === "setImmediate") {
             return this.emitSetImmediateCall(call);
         }
@@ -26439,6 +26451,10 @@ class Emitter {
 
         if (this.isTimersModuleIdentifier(recvExpr)) {
             return this.emitTimersCall(call, memberName);
+        }
+
+        if (this.isTimersPromisesModuleIdentifier(recvExpr)) {
+            return this.emitTimersPromisesCall(call, memberName);
         }
 
         if (this.isBufferModuleIdentifier(recvExpr) && (memberName === "atob" || memberName === "btoa")) {
@@ -31486,6 +31502,44 @@ class Emitter {
                 return this.emitClearTimerCall(call, "tsc_clear_immediate");
         }
         unsupported(call, `timers.${name}`);
+    }
+
+    private emitTimersPromisesCall(call: ts.CallExpression, name: string): EmitResult {
+        const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
+        if (mapped.kind !== "promise") unsupported(call, `timers/promises.${name} result must be Promise<T>`);
+        switch (name) {
+            case "setTimeout": {
+                if (call.arguments.length > 3) unsupported(call, "timers/promises.setTimeout expects delay, optional value, and optional options");
+                const delay = call.arguments[0];
+                if (delay && !this.isZeroDelayLiteral(delay)) {
+                    unsupported(delay, "timers/promises.setTimeout in this subset requires an omitted delay or literal 0 delay");
+                }
+                const options = call.arguments[2];
+                if (options && !this.isUndefinedExpression(options)) {
+                    unsupported(options, "timers/promises.setTimeout options are not supported in this immediate subset");
+                }
+                const valueNode = call.arguments[1];
+                if (!valueNode) return { c: "tsc_promise_resolve(tsc_value_undefined())", ty: mapped };
+                const value = this.emitExpr(valueNode);
+                return this.emitSequencedExpr(mapped, [
+                    { value, node: valueNode },
+                ], ([resolved]) => this.promiseResolveResult({ c: resolved!, ty: value.ty }, valueNode));
+            }
+            case "setImmediate": {
+                if (call.arguments.length > 2) unsupported(call, "timers/promises.setImmediate expects optional value and optional options");
+                const options = call.arguments[1];
+                if (options && !this.isUndefinedExpression(options)) {
+                    unsupported(options, "timers/promises.setImmediate options are not supported in this immediate subset");
+                }
+                const valueNode = call.arguments[0];
+                if (!valueNode) return { c: "tsc_promise_resolve(tsc_value_undefined())", ty: mapped };
+                const value = this.emitExpr(valueNode);
+                return this.emitSequencedExpr(mapped, [
+                    { value, node: valueNode },
+                ], ([resolved]) => this.promiseResolveResult({ c: resolved!, ty: value.ty }, valueNode));
+            }
+        }
+        unsupported(call, `timers/promises.${name}`);
     }
 
     private ensureImmediateAdapter(expr: ts.Expression, type: CType, argTypes: readonly CType[]): string {

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `"timers/promises"` and `"node:timers/promises"` imports now expose an immediate-settled subset for omitted/zero-delay `setTimeout(...)` and `setImmediate(...)` across named, namespace, and default import forms. Test: `timers_promises_import`.
 - Direct `"dns/promises"` and `"node:dns/promises"` imports now route to the existing immediate `dns.promises.lookup` subset across named, namespace, and default import forms. Test: `dns_promises_subpath_import`.
 - Direct `"fs/promises"` and `"node:fs/promises"` imports now route the immediate `fs.promises` subset across named, namespace, and default import forms. Test: `fs_promises_subpath_import`.
 - `atob` / `btoa` imports from `"buffer"` and `"node:buffer"` now route to the existing base64 helpers across named, namespace, and default import forms. Test: `buffer_base64_import`.

@@ -861,6 +861,10 @@ interface TimersModule {
     setImmediate: SetImmediateFunction;
     clearImmediate: ClearImmediateFunction;
 }
+interface TimersPromisesModule {
+    setTimeout<T = void>(delay?: number, value?: T, options?: undefined): Promise<T>;
+    setImmediate<T = void>(value?: T, options?: undefined): Promise<T>;
+}
 declare module "timers" {
     export const setTimeout: SetTimeoutFunction;
     export const clearTimeout: ClearTimeoutFunction;
@@ -878,6 +882,18 @@ declare module "node:timers" {
     export const clearImmediate: ClearImmediateFunction;
     const defaultTimers: TimersModule;
     export default defaultTimers;
+}
+declare module "timers/promises" {
+    export function setTimeout<T = void>(delay?: number, value?: T, options?: undefined): Promise<T>;
+    export function setImmediate<T = void>(value?: T, options?: undefined): Promise<T>;
+    const defaultTimersPromises: TimersPromisesModule;
+    export default defaultTimersPromises;
+}
+declare module "node:timers/promises" {
+    export function setTimeout<T = void>(delay?: number, value?: T, options?: undefined): Promise<T>;
+    export function setImmediate<T = void>(value?: T, options?: undefined): Promise<T>;
+    const defaultTimersPromises: TimersPromisesModule;
+    export default defaultTimersPromises;
 }
 declare const NaN: number;
 declare const Infinity: number;
