@@ -27452,6 +27452,13 @@ class Emitter {
             return this.emitArrayMethod(call, recv, memberName);
         if (recv.ty.kind === "value")
             return this.emitDynamicMethod(call, recv, memberName);
+        if (recv.ty.kind === "function" && (memberName === "call" || memberName === "apply")) {
+            return this.emitDynamicMethod(
+                call,
+                { c: this.coerce(recv, T_VALUE, recvExpr), ty: T_VALUE },
+                memberName,
+            );
+        }
         if (recv.ty.kind === "number")
             return this.emitNumberMethod(call, recv, memberName);
         if (recv.ty.kind === "boolean")
@@ -27777,7 +27784,6 @@ class Emitter {
                 });
             }
             case "apply": {
-                if (args.length > 2) unsupported(call, "apply expects thisArg and optional argumentsList");
                 const thisArg = args[0] ? this.emitExpr(args[0]) : missing;
                 const argListNode = args[1];
                 const emptyArgs: EmitResult = {
@@ -27787,11 +27793,17 @@ class Emitter {
                 const argList = argListNode && !this.isUndefinedExpression(argListNode) && argListNode.kind !== ts.SyntaxKind.NullKeyword
                     ? this.emitExpr(argListNode)
                     : emptyArgs;
-                return this.emitSequencedCall("tsc_value_apply_function", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: thisArg, target: T_VALUE, node: args[0] ?? call.expression },
-                    { value: argList, target: T_VALUE, node: argListNode ?? call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: thisArg, target: T_VALUE, node: args[0] ?? call.expression },
+                        { value: argList, target: T_VALUE, node: argListNode ?? call.expression },
+                        ...this.ignoredArgumentSpecs(args, 2),
+                    ],
+                    ([fn, thisArgValue, argListValue]) =>
+                        `tsc_value_apply_function(${fn}, ${thisArgValue}, ${argListValue})`,
+                );
             }
             case "charAt":
                 return oneArg("tsc_value_method_char_at", { c: "tsc_value_num(0.0)", ty: T_VALUE });

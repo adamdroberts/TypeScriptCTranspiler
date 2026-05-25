@@ -512,6 +512,7 @@ declare var FinalizationRegistry: FinalizationRegistryConstructor;
 interface Function {
     (...args: any[]): any;
     call(thisArg: any, ...args: any[]): any;
+    apply(thisArg: any, args?: any[] | ArrayLike<any> | null, ...ignored: any[]): any;
 }
 interface FunctionConstructor {
     new (...args: string[]): Function;

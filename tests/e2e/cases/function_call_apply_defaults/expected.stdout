@@ -1,5 +1,9 @@
 call args: call:x:y
 apply args: apply:x:y
+ignored: apply-extra
+apply extra: extra:x:y
+ignored: typed-extra
+typed apply extra: typed:a:b
 apply omitted: omitted:undefined:undefined
 apply undefined: undefined:undefined:undefined
 apply null: null:undefined:undefined
