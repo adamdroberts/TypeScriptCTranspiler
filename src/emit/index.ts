@@ -37907,6 +37907,16 @@ class Emitter {
                 { value: proto, target: T_VALUE, node: arg },
             ]);
             if (args.length === 2) {
+                if (!ts.isObjectLiteralExpression(args[1]!)) {
+                    const descriptors = this.emitExpr(args[1]!);
+                    return this.emitSequencedExpr(T_VALUE, [
+                        { value: proto, target: T_VALUE, node: arg },
+                        { value: descriptors, target: T_VALUE, node: args[1]! },
+                    ], ([p, d]) => {
+                        const out = this.freshTemp("_create_obj");
+                        return `({ tsc_value_t ${out} = tsc_value_object_create(${p}); if (!tsc_value_define_properties_descriptor_map(${out}, ${d})) tsc_throw_str(tsc_str_from_cstr("Object.create defineProperties failed")); ${out}; })`;
+                    });
+                }
                 return this.emitObjectDefineProperties(arg, created, args[1]!);
             }
             return created;

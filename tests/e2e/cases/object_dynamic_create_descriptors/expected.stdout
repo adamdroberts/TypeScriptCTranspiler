@@ -1,0 +1,10 @@
+proto: true base
+keys: own|secret
+values: value|base:2
+has: true false
+quiet: false hidden
+secret: base:7 base:base:7
+identity: true true
+json: {"own":"value","secret":"base:base:7"}
+own map: own undefined
+bad map: Object.defineProperties descriptor map must be an object
