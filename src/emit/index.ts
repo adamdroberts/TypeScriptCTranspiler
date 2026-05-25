@@ -2618,6 +2618,15 @@ class Emitter {
                     return true;
                 }
                 break;
+            case "pop":
+            case "shift":
+                if (
+                    this.isSideEffectFreeArrayMethodCall(recv, method, call.arguments, seenConsts) &&
+                    this.sideEffectFreeFreshOrReturnedArrayLength(recv, seenConsts) === 0
+                ) {
+                    return true;
+                }
+                break;
             case "reduce":
             case "reduceRight":
                 if (
