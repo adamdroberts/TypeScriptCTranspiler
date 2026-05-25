@@ -9041,6 +9041,12 @@ class Emitter {
                 seenConsts,
             );
             if (reversedResult !== null) return reversedResult;
+            const withResult = this.sideEffectFreePrimitiveWithElementResult(
+                unwrapped,
+                index,
+                seenConsts,
+            );
+            if (withResult !== null) return withResult;
         }
         const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts);
         if (returnedArrayLength !== null && (index < 0 || index >= returnedArrayLength)) {
@@ -9327,6 +9333,53 @@ class Emitter {
         return this.sideEffectFreePrimitiveArrayElementOperandResult(
             call.expression.expression,
             length - 1 - index,
+            new Set(seenConsts),
+        );
+    }
+
+    private sideEffectFreePrimitiveWithElementResult(
+        call: ts.CallExpression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" | null {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            call.expression.name.text !== "with" ||
+            call.arguments.length !== 2
+        ) {
+            return null;
+        }
+        const receiverLength = this.sideEffectFreeFreshOrReturnedArrayLength(
+            call.expression.expression,
+            seenConsts,
+        );
+        if (receiverLength === null) return null;
+        if (index < 0 || index >= receiverLength) return "absent";
+        const replacementIndex = this.sideEffectFreePrimitiveNumberValue(call.arguments[0]!, seenConsts);
+        if (
+            replacementIndex === null ||
+            !Number.isInteger(replacementIndex) ||
+            !this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts)
+        ) {
+            return "unsafe";
+        }
+        const actualReplacementIndex = replacementIndex < 0
+            ? receiverLength + replacementIndex
+            : replacementIndex;
+        if (actualReplacementIndex < 0 || actualReplacementIndex >= receiverLength) {
+            return "unsafe";
+        }
+        if (index === actualReplacementIndex) {
+            return this.isSideEffectFreePrimitivePromiseResolveValue(
+                call.arguments[1]!,
+                new Set(seenConsts),
+            )
+                ? "present"
+                : "unsafe";
+        }
+        return this.sideEffectFreePrimitiveArrayElementOperandResult(
+            call.expression.expression,
+            index,
             new Set(seenConsts),
         );
     }
