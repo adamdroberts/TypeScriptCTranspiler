@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE coverage now proves unused `Promise.all(...)`, `Promise.allSettled(...)`, `Promise.any(...)`, and `Promise.race(...)` pruning through earlier-const and copy-constructed empty typed Set sources. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now proves unused `Promise.all(...)`, `Promise.allSettled(...)`, `Promise.any(...)`, and `Promise.race(...)` pruning through earlier-const and copied empty typed array sources. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now proves `Array.from(empty, mapper)` pruning through earlier-const and copy-constructed empty typed Set and Map sources. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now proves `Array.from(empty, mapper)` pruning through earlier-const and copied empty typed array sources. Test: `generated_c_dce_const`.
