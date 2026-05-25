@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import ts from "typescript";
 
-const COMMONJS_CONDITIONS = new Set(["node-addons", "require", "node", "default"]);
+const COMMONJS_CONDITIONS = new Set(["node-addons", "node", "require", "module-sync", "default"]);
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
 
 export function resolveCommonJsRequireModuleName(

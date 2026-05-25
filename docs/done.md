@@ -1298,9 +1298,11 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_package_conditional_exports` | TypeScript package source imports through package exports/imports condition maps selecting import branches |
 | `node_modules_package_import_node_addons_conditions` | TypeScript package source imports through package exports/imports node-addons condition maps before node/import/default fallbacks |
 | `node_modules_package_import_node_conditions` | TypeScript package source imports through package exports/imports node condition maps with array fallback and wildcard targets |
+| `node_modules_package_import_module_sync_conditions` | TypeScript package source imports through package exports/imports module-sync condition maps before import/default fallbacks |
 | `node_modules_package_dual_cjs_esm_resolution` | package source AOT graph keeps import and CommonJS require condition branches distinct for the same specifier |
 | `node_modules_package_require_conditions` | CommonJS require package edges through package exports/imports condition maps selecting require branches |
 | `node_modules_package_require_node_addons_conditions` | CommonJS require package edges through package exports/imports condition maps selecting node-addons branches |
+| `node_modules_package_require_module_sync_conditions` | CommonJS require package edges through package exports/imports condition maps selecting module-sync branches |
 | `node_modules_package_require_pattern_conditions` | CommonJS require package edges through wildcard package exports/imports condition maps |
 | `node_modules_package_require_array_conditions` | CommonJS require package edges through package exports/imports condition arrays with fallback targets |
 | `node_modules_package_imports` | TypeScript package source imports through package imports |

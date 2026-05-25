@@ -220,6 +220,43 @@ const packages: Record<string, PackageFixture> = {
             "src/flavor-default.ts": 'export const flavor = "wrong-flavor-default";\n',
         },
     },
+    "tsc2c-import-module-sync-conditions-package": {
+        packageJson: {
+            name: "tsc2c-import-module-sync-conditions-package",
+            version: "1.0.0",
+            type: "module",
+            exports: {
+                ".": {
+                    "module-sync": "./src/sync-entry.ts",
+                    import: "./src/import-entry.ts",
+                    default: "./src/default-entry.ts",
+                },
+                "./tool": {
+                    "module-sync": "./src/tool-sync.ts",
+                    import: "./src/tool-import.ts",
+                    default: "./src/tool-default.ts",
+                },
+            },
+            imports: {
+                "#flavor": {
+                    "module-sync": "./src/flavor-sync.ts",
+                    import: "./src/flavor-import.ts",
+                    default: "./src/flavor-default.ts",
+                },
+            },
+        },
+        files: {
+            "src/sync-entry.ts": 'import { flavor } from "#flavor";\nexport const label = "sync:" + flavor;\nexport function pick(value: number): string {\n    return "sync-entry:" + value;\n}\n',
+            "src/import-entry.ts": 'export const label = "wrong-import-entry";\nexport function pick(value: number): string {\n    return "wrong-import:" + value;\n}\n',
+            "src/default-entry.ts": 'export const label = "wrong-default-entry";\nexport function pick(value: number): string {\n    return "wrong-default:" + value;\n}\n',
+            "src/tool-sync.ts": 'export const tool = "sync-tool";\nexport function scale(value: number): number {\n    return value * 11;\n}\n',
+            "src/tool-import.ts": 'export const tool = "wrong-tool-import";\nexport function scale(value: number): number {\n    return value * 88;\n}\n',
+            "src/tool-default.ts": 'export const tool = "wrong-tool-default";\nexport function scale(value: number): number {\n    return value * 99;\n}\n',
+            "src/flavor-sync.ts": 'export const flavor = "imports-module-sync";\n',
+            "src/flavor-import.ts": 'export const flavor = "wrong-flavor-import";\n',
+            "src/flavor-default.ts": 'export const flavor = "wrong-flavor-default";\n',
+        },
+    },
     "tsc2c-require-conditions-package": {
         packageJson: {
             name: "tsc2c-require-conditions-package",
@@ -255,6 +292,43 @@ const packages: Record<string, PackageFixture> = {
             "src/flavor-import.ts": 'export const label = "wrong-flavor-import";\n',
             "src/flavor-default.ts": 'export const label = "wrong-flavor-default";\n',
             "src/flavor-require.cjs": 'exports.label = "require-imports";\n',
+        },
+    },
+    "tsc2c-require-module-sync-conditions-package": {
+        packageJson: {
+            name: "tsc2c-require-module-sync-conditions-package",
+            version: "1.0.0",
+            type: "module",
+            exports: {
+                ".": {
+                    "module-sync": "./src/sync-entry.cjs",
+                    require: "./src/require-entry.cjs",
+                    default: "./src/default-entry.ts",
+                },
+                "./tool": {
+                    "module-sync": "./src/tool-sync.cjs",
+                    require: "./src/tool-require.cjs",
+                    default: "./src/tool-default.ts",
+                },
+            },
+            imports: {
+                "#flavor": {
+                    "module-sync": "./src/flavor-sync.cjs",
+                    require: "./src/flavor-require.cjs",
+                    default: "./src/flavor-default.ts",
+                },
+            },
+        },
+        files: {
+            "src/default-entry.ts": 'export const label = "wrong-default-entry";\nexport function pick(value: number): string {\n    return "wrong-default:" + value;\n}\n',
+            "src/require-entry.cjs": 'exports.label = "wrong-require-entry";\nexports.pick = function pick(value) { return "wrong-require:" + value; };\n',
+            "src/sync-entry.cjs": 'const flavor = require("#flavor");\nexports.label = "sync:" + flavor.label;\nexports.pick = function pick(value) { return "sync-entry:" + value; };\n',
+            "src/tool-default.ts": 'export const tool = "wrong-tool-default";\nexport function scale(value: number): number {\n    return value * 100;\n}\n',
+            "src/tool-require.cjs": 'exports.tool = "wrong-tool-require";\nexports.scale = function scale(value) { return value * 99; };\n',
+            "src/tool-sync.cjs": 'exports.tool = "sync-tool";\nexports.scale = function scale(value) { return value * 12; };\n',
+            "src/flavor-default.ts": 'export const label = "wrong-flavor-default";\n',
+            "src/flavor-require.cjs": 'exports.label = "wrong-flavor-require";\n',
+            "src/flavor-sync.cjs": 'exports.label = "imports-module-sync";\n',
         },
     },
     "tsc2c-require-node-addons-conditions-package": {

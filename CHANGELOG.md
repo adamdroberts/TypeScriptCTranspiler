@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Package `exports` / package-private `imports` condition resolution now recognizes Node's `module-sync` branch for both ESM import graph edges and CommonJS `require(...)` AOT graph edges. Tests: `node_modules_package_import_module_sync_conditions`, `node_modules_package_require_module_sync_conditions`.
 - Primitive-only CommonJS `Object.defineProperty(Object.create(proto, Object.fromEntries(...)), key, descriptor)` targets now also stay metadata-only through `Object.seal`, `Object.preventExtensions`, and `Object.setPrototypeOf` wrappers. Test: `node_modules_commonjs_module_exports_wrapper_define_property_create_from_entries_primitives_variants`.
 - Primitive-only CommonJS `Object.defineProperty(Object.create(proto, Object.fromEntries(...)), key, descriptor)` targets, including `Object.freeze(...)` wrappers, now stay on the AOT metadata path instead of trying to emit the unsupported descriptor-map whole value. Tests: `node_modules_commonjs_module_exports_define_property_create_from_entries_primitives`, `node_modules_commonjs_module_exports_wrapper_define_property_create_from_entries_primitives`.
 - Primitive-only CommonJS `Object.defineProperty(Object.defineProperties({}, Object.fromEntries(...)), key, descriptor)` targets now stay on the AOT metadata path instead of trying to emit the unsupported descriptor-map whole value. Test: `node_modules_commonjs_module_exports_define_property_define_properties_from_entries_primitives`.
