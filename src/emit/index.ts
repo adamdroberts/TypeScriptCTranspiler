@@ -17113,6 +17113,13 @@ class Emitter {
         return stream === "stdout" || stream === "stderr" ? stream : null;
     }
 
+    private isStreamModuleIdentifier(expr: ts.Expression): boolean {
+        return ts.isIdentifier(expr) && (
+            this.isNamespaceImportFrom(expr, ["stream", "node:stream"]) ||
+            this.isDefaultImportFrom(expr, ["stream", "node:stream"])
+        );
+    }
+
     private isProcessEnvObject(expr: ts.Expression): boolean {
         if (ts.isIdentifier(expr)) {
             return this.isNamedImportFrom(expr, ["process", "node:process"], "env");
@@ -24898,6 +24905,12 @@ class Emitter {
         ) {
             return this.emitEventsStaticCall(call, name);
         }
+        if (
+            this.isNamedImportFrom(calleeId, ["stream", "node:stream"], "isReadable") ||
+            this.isNamedImportFrom(calleeId, ["stream", "node:stream"], "isWritable")
+        ) {
+            return this.emitStreamCall(call, name);
+        }
         const cryptoNamed = ["createHash", "randomBytes", "randomUUID"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["crypto", "node:crypto"], exported));
         if (cryptoNamed) {
@@ -26379,6 +26392,13 @@ class Emitter {
 
         if (ts.isIdentifier(recvExpr) && this.isFsModuleIdentifier(recvExpr)) {
             return this.emitFsCall(call, memberName);
+        }
+
+        if (this.isStreamModuleIdentifier(recvExpr)) {
+            if (memberName === "isReadable" || memberName === "isWritable") {
+                return this.emitStreamCall(call, memberName);
+            }
+            unsupported(call, `stream.${memberName}`);
         }
 
         if (ts.isIdentifier(recvExpr) && this.isEventsModuleIdentifier(recvExpr)) {
@@ -30250,6 +30270,28 @@ class Emitter {
             }
         }
         unsupported(call, `events.${method}`);
+    }
+
+    private emitStreamCall(call: ts.CallExpression, method: string): EmitResult {
+        if (method !== "isReadable" && method !== "isWritable") {
+            unsupported(call, `stream.${method}`);
+        }
+        const args = call.arguments;
+        if (args.length < 1) unsupported(call, `stream.${method} expects a stream`);
+        const streamName = this.processStdioStreamReceiverName(
+            this.unwrapSideEffectFreeStaticExpression(args[0]!),
+        );
+        if (!streamName) {
+            unsupported(args[0]!, `stream.${method} currently supports process stdio streams`);
+        }
+        const result = method === "isReadable"
+            ? streamName === "stdin"
+            : streamName !== "stdin";
+        return this.emitSequencedExpr(
+            T_BOOLEAN,
+            this.ignoredArgumentSpecs(args, 1),
+            () => result ? "true" : "false",
+        );
     }
 
     private eventEmitterOnceOptions(options: ts.Expression | undefined, label: string): void {

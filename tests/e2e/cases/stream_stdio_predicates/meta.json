@@ -1,0 +1,3 @@
+{
+  "description": "stream/node:stream isReadable and isWritable classify process stdio streams"
+}

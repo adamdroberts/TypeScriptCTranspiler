@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `stream.isReadable(...)` / `stream.isWritable(...)` from `"stream"` and `"node:stream"` now classify the bounded process stdio stream subset across named, namespace, and default imports. Test: `stream_stdio_predicates`.
 - Named and default imports from `"url"` and `"node:url"` now route to the supported `URL` constructor and `URL.canParse(...)` helpers. Test: `url_module_import`.
 - Default imports from `"events"` and `"node:events"` now expose the supported `EventEmitter`, module helper, `once`, and `defaultMaxListeners` subset. Test: `event_emitter_default_import`.
 - Default imports from `"child_process"` and `"node:child_process"` now route to the supported callback, sync, and `spawnSync` subsets. Test: `child_process_default_import`.

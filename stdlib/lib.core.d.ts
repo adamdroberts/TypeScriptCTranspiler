@@ -669,6 +669,10 @@ interface ProcessReadableStream {
     readonly isTTY: boolean;
     readonly readable: boolean;
 }
+interface StreamModule {
+    isReadable(stream: any, ...ignored: any[]): boolean;
+    isWritable(stream: any, ...ignored: any[]): boolean;
+}
 interface Process {
     readonly platform: string;
     readonly arch: string;
@@ -712,6 +716,18 @@ interface Process {
     kill(pid: number, signal?: 0 | 9 | 15 | "SIGTERM" | "SIGKILL"): boolean;
 }
 declare const process: Process;
+declare module "stream" {
+    export function isReadable(stream: any, ...ignored: any[]): boolean;
+    export function isWritable(stream: any, ...ignored: any[]): boolean;
+    const defaultStream: StreamModule;
+    export default defaultStream;
+}
+declare module "node:stream" {
+    export function isReadable(stream: any, ...ignored: any[]): boolean;
+    export function isWritable(stream: any, ...ignored: any[]): boolean;
+    const defaultStream: StreamModule;
+    export default defaultStream;
+}
 declare module "process" {
     export const arch: Process["arch"];
     export const argv: Process["argv"];
