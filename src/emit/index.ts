@@ -24929,7 +24929,9 @@ class Emitter {
         }
         if (
             this.isNamedImportFrom(calleeId, ["stream", "node:stream"], "isReadable") ||
-            this.isNamedImportFrom(calleeId, ["stream", "node:stream"], "isWritable")
+            this.isNamedImportFrom(calleeId, ["stream", "node:stream"], "isWritable") ||
+            this.isNamedImportFrom(calleeId, ["stream", "node:stream"], "isErrored") ||
+            this.isNamedImportFrom(calleeId, ["stream", "node:stream"], "isDestroyed")
         ) {
             return this.emitStreamCall(call, name);
         }
@@ -26469,7 +26471,12 @@ class Emitter {
         }
 
         if (this.isStreamModuleIdentifier(recvExpr)) {
-            if (memberName === "isReadable" || memberName === "isWritable") {
+            if (
+                memberName === "isReadable" ||
+                memberName === "isWritable" ||
+                memberName === "isErrored" ||
+                memberName === "isDestroyed"
+            ) {
                 return this.emitStreamCall(call, memberName);
             }
             unsupported(call, `stream.${memberName}`);
@@ -30349,7 +30356,12 @@ class Emitter {
     }
 
     private emitStreamCall(call: ts.CallExpression, method: string): EmitResult {
-        if (method !== "isReadable" && method !== "isWritable") {
+        if (
+            method !== "isReadable" &&
+            method !== "isWritable" &&
+            method !== "isErrored" &&
+            method !== "isDestroyed"
+        ) {
             unsupported(call, `stream.${method}`);
         }
         const args = call.arguments;
@@ -30362,7 +30374,9 @@ class Emitter {
         }
         const result = method === "isReadable"
             ? streamName === "stdin"
-            : streamName !== "stdin";
+            : method === "isWritable"
+                ? streamName !== "stdin"
+                : false;
         return this.emitSequencedExpr(
             T_BOOLEAN,
             this.ignoredArgumentSpecs(args, 1),

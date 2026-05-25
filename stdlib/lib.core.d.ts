@@ -688,6 +688,8 @@ interface ProcessReadableStream {
 interface StreamModule {
     isReadable(stream: any, ...ignored: any[]): boolean;
     isWritable(stream: any, ...ignored: any[]): boolean;
+    isErrored(stream: any, ...ignored: any[]): boolean;
+    isDestroyed(stream: any, ...ignored: any[]): boolean;
 }
 interface Process {
     readonly platform: string;
@@ -735,12 +737,16 @@ declare const process: Process;
 declare module "stream" {
     export function isReadable(stream: any, ...ignored: any[]): boolean;
     export function isWritable(stream: any, ...ignored: any[]): boolean;
+    export function isErrored(stream: any, ...ignored: any[]): boolean;
+    export function isDestroyed(stream: any, ...ignored: any[]): boolean;
     const defaultStream: StreamModule;
     export default defaultStream;
 }
 declare module "node:stream" {
     export function isReadable(stream: any, ...ignored: any[]): boolean;
     export function isWritable(stream: any, ...ignored: any[]): boolean;
+    export function isErrored(stream: any, ...ignored: any[]): boolean;
+    export function isDestroyed(stream: any, ...ignored: any[]): boolean;
     const defaultStream: StreamModule;
     export default defaultStream;
 }
