@@ -28543,13 +28543,15 @@ class Emitter {
     ): EmitResult {
         const cb = call.arguments[0];
         if (!cb) unsupported(call, `${method}: missing callback`);
-        if (call.arguments.length > 2) unsupported(call, `${method} expects callback and optional thisArg`);
         const thisArg = call.arguments[1];
         const thisArgValue = thisArg ? this.emitExpr(thisArg) : null;
         const thisArgTemp = thisArgValue ? this.freshTemp("_this_arg") : null;
         const thisArgSetup = thisArgValue
             ? `tsc_value_t ${thisArgTemp} = ${this.coerce(thisArgValue, T_VALUE, thisArg)}; `
             : "";
+        const ignoredSetup = this.ignoredArgumentSpecs(call.arguments, thisArg ? 2 : 1)
+            .map((spec) => `(void)(${spec.value.c}); `)
+            .join("");
         const callbackThisArg = thisArgTemp ?? "tsc_value_undefined()";
         const av = this.freshTemp("_dynhof");
         const iv = this.freshTemp("_i");
@@ -28666,6 +28668,7 @@ class Emitter {
             ], ([value]) =>
                 `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); ` +
                 `${thisArgSetup}` +
+                `${ignoredSetup}` +
                 `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                 `{ ${bindings.join("; ")}; (void)(${body.c}); } (void)0; })`,
             );
@@ -28678,6 +28681,7 @@ class Emitter {
             ], ([value]) =>
                 `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); ` +
                 `${thisArgSetup}` +
+                `${ignoredSetup}` +
                 `tsc_array_t* ${dst} = tsc_array_new(sizeof(tsc_value_t), ${av}->len ? ${av}->len : 1); ` +
                 `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                 `{ ${bindings.join("; ")}; tsc_value_t ${out} = ${mapped}; tsc_array_push_raw(${dst}, &${out}); } ` +
@@ -28692,6 +28696,7 @@ class Emitter {
             ], ([value]) =>
                 `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); ` +
                 `${thisArgSetup}` +
+                `${ignoredSetup}` +
                 `tsc_array_t* ${dst} = tsc_array_new(sizeof(tsc_value_t), ${av}->len ? ${av}->len : 1); ` +
                 `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                 `{ ${bindings.join("; ")}; tsc_value_t ${out} = ${mapped}; tsc_value_array_push_flat(${dst}, ${out}); } ` +
@@ -28706,6 +28711,7 @@ class Emitter {
             ], ([value]) =>
                 `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); bool ${result} = false; ` +
                 `${thisArgSetup}` +
+                `${ignoredSetup}` +
                 `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                 `{ ${bindings.join("; ")}; if (${cond}) { ${result} = true; break; } } ${result}; })`,
             );
@@ -28717,6 +28723,7 @@ class Emitter {
             ], ([value]) =>
                 `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); bool ${result} = true; ` +
                 `${thisArgSetup}` +
+                `${ignoredSetup}` +
                 `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                 `{ ${bindings.join("; ")}; if (!(${cond})) { ${result} = false; break; } } ${result}; })`,
             );
@@ -28728,6 +28735,7 @@ class Emitter {
             ], ([value]) =>
                 `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); tsc_value_t ${result} = tsc_value_undefined(); ` +
                 `${thisArgSetup}` +
+                `${ignoredSetup}` +
                 `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                 `{ ${bindings.join("; ")}; if (${cond}) { ${result} = ${elem}; break; } } ${result}; })`,
             );
@@ -28739,6 +28747,7 @@ class Emitter {
             ], ([value]) =>
                 `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); double ${result} = -1.0; ` +
                 `${thisArgSetup}` +
+                `${ignoredSetup}` +
                 `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                 `{ ${bindings.join("; ")}; if (${cond}) { ${result} = (double)${iv}; break; } } ${result}; })`,
             );
@@ -28750,6 +28759,7 @@ class Emitter {
             ], ([value]) =>
                 `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); tsc_value_t ${result} = tsc_value_undefined(); ` +
                 `${thisArgSetup}` +
+                `${ignoredSetup}` +
                 `for (size_t ${iv} = ${av}->len; ${iv}-- > 0;) ` +
                 `{ ${bindings.join("; ")}; if (${cond}) { ${result} = ${elem}; break; } } ${result}; })`,
             );
@@ -28761,6 +28771,7 @@ class Emitter {
             ], ([value]) =>
                 `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); double ${result} = -1.0; ` +
                 `${thisArgSetup}` +
+                `${ignoredSetup}` +
                 `for (size_t ${iv} = ${av}->len; ${iv}-- > 0;) ` +
                 `{ ${bindings.join("; ")}; if (${cond}) { ${result} = (double)${iv}; break; } } ${result}; })`,
             );
@@ -28770,6 +28781,7 @@ class Emitter {
         ], ([value]) =>
             `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); ` +
             `${thisArgSetup}` +
+            `${ignoredSetup}` +
             `tsc_array_t* ${dst} = tsc_array_new(sizeof(tsc_value_t), ${av}->len ? ${av}->len : 1); ` +
             `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
             `{ ${bindings.join("; ")}; if (${cond}) tsc_array_push_raw(${dst}, &${elem}); } ` +
@@ -33256,14 +33268,16 @@ class Emitter {
         const cb = args[0];
         if (!cb) unsupported(call, `${method}: missing callback`);
         const supportsThisArg = method !== "reduce" && method !== "reduceRight";
-        if (supportsThisArg && args.length > 2) {
-            unsupported(call, `${method} expects callback and optional thisArg`);
-        }
         const thisArg = supportsThisArg ? args[1] : undefined;
         const thisArgValue = thisArg ? this.emitExpr(thisArg) : null;
         const thisArgTemp = thisArgValue ? this.freshTemp("_this_arg") : null;
         const thisArgSetup = thisArgValue
             ? `tsc_value_t ${thisArgTemp} = ${this.coerce(thisArgValue, T_VALUE, thisArg!)}; `
+            : "";
+        const ignoredSetup = supportsThisArg
+            ? this.ignoredArgumentSpecs(args, thisArg ? 2 : 1)
+                .map((spec) => `(void)(${spec.value.c}); `)
+                .join("")
             : "";
         const callbackThisArg = thisArgTemp ?? "tsc_value_undefined()";
         const av = this.freshTemp("_a");
@@ -33419,6 +33433,7 @@ class Emitter {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ` +
                         `${thisArgSetup}` +
+                        `${ignoredSetup}` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                         `{ ${bindings} (void)(${bodyC}); } (void)0; })`,
                     ty: T_VOID,
@@ -33428,6 +33443,7 @@ class Emitter {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ` +
                         `${thisArgSetup}` +
+                        `${ignoredSetup}` +
                         `tsc_array_t* _dst = tsc_array_new(sizeof(${bodyType.c}), ${av}->len); ` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                         `{ ${bindings} ${bodyType.c} _r = ${bodyC}; ` +
@@ -33441,6 +33457,7 @@ class Emitter {
                         c:
                             `({ tsc_array_t* const ${av} = ${recv.c}; ` +
                             `${thisArgSetup}` +
+                            `${ignoredSetup}` +
                             `tsc_array_t* _dst = tsc_array_new(sizeof(${inner.c}), ${av}->len); ` +
                             `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                             `{ ${bindings} ${inner.c} _r = ${bodyC}; ` +
@@ -33452,6 +33469,7 @@ class Emitter {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ` +
                         `${thisArgSetup}` +
+                        `${ignoredSetup}` +
                         `tsc_array_t* _dst = tsc_array_new(sizeof(${inner.c}), ${av}->len); ` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                         `{ ${bindings} tsc_array_t* _r = ${bodyC}; ` +
@@ -33464,6 +33482,7 @@ class Emitter {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ` +
                         `${thisArgSetup}` +
+                        `${ignoredSetup}` +
                         `tsc_array_t* _dst = tsc_array_new(sizeof(${et.c}), ${av}->len); ` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                         `{ ${et.c} _el = TSC_ARR(${et.c}, ${av}, ${iv}); ${bindings} ` +
@@ -33533,6 +33552,7 @@ class Emitter {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ${resultType.c} _r = ${missing}; bool _f = false; ` +
                         `${thisArgSetup}` +
+                        `${ignoredSetup}` +
                         (forward
                             ? `for (size_t ${iv} = 0; ${iv} < ${av}->len && !_f; ${iv}++) `
                             : `for (size_t ${iv} = ${av}->len; ${iv}-- > 0 && !_f;) `) +
@@ -33545,6 +33565,7 @@ class Emitter {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; double _r = -1.0; ` +
                         `${thisArgSetup}` +
+                        `${ignoredSetup}` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                         `{ ${bindings} if (${bodyC}) { _r = (double)${iv}; break; } } _r; })`,
                     ty: T_NUMBER,
@@ -33554,6 +33575,7 @@ class Emitter {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; double _r = -1.0; ` +
                         `${thisArgSetup}` +
+                        `${ignoredSetup}` +
                         `for (size_t ${iv} = ${av}->len; ${iv}-- > 0;) ` +
                         `{ ${bindings} if (${bodyC}) { _r = (double)${iv}; break; } } _r; })`,
                     ty: T_NUMBER,
@@ -33563,6 +33585,7 @@ class Emitter {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; bool _r = false; ` +
                         `${thisArgSetup}` +
+                        `${ignoredSetup}` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len && !_r; ${iv}++) ` +
                         `{ ${bindings} if (${bodyC}) _r = true; } _r; })`,
                     ty: T_BOOLEAN,
@@ -33572,6 +33595,7 @@ class Emitter {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; bool _r = true; ` +
                         `${thisArgSetup}` +
+                        `${ignoredSetup}` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len && _r; ${iv}++) ` +
                         `{ ${bindings} if (!(${bodyC})) _r = false; } _r; })`,
                     ty: T_BOOLEAN,

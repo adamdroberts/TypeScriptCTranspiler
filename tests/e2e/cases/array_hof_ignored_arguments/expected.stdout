@@ -1,0 +1,33 @@
+typed-foreach-this:1
+typed-foreach-extra:2
+typed forEach:6
+typed-map-this:3
+typed-map-extra:4
+typed map:2,4,6
+typed-filter-this:5
+typed-filter-extra:6
+typed filter:2,3
+typed-some-this:7
+typed-some-extra:8
+typed some:true
+typed-find-this:9
+typed-find-extra:10
+typed find:2
+readonly-map-this:11
+readonly-map-extra:12
+readonly map:2,3,4
+dynamic-foreach-this:13
+dynamic-foreach-extra:14
+dynamic forEach:6
+dynamic-map-this:15
+dynamic-map-extra:16
+dynamic map:2,4,6
+dynamic-filter-this:17
+dynamic-filter-extra:18
+dynamic filter:2,3
+dynamic-some-this:19
+dynamic-some-extra:20
+dynamic some:true
+dynamic-find-this:21
+dynamic-find-extra:22
+dynamic find:2

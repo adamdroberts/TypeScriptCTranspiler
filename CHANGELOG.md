@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Typed and dynamic non-reduce array higher-order methods now evaluate and ignore trailing arguments after the optional `thisArg`. Test: `array_hof_ignored_arguments`.
 - Typed and dynamic array `.sort(...)` and `.toSorted(...)` now evaluate and ignore trailing arguments after omitted, explicit `undefined`, or real comparator inputs. Test: `array_sort_ignored_arguments`.
 - Typed and dynamic array `.fill(...)`, `.copyWithin(...)`, and `.with(...)` now evaluate and ignore trailing arguments after their JavaScript-consumed inputs. Test: `array_mutator_ignored_arguments`.
 - Typed and dynamic array read/search helpers including `.indexOf(...)`, `.lastIndexOf(...)`, `.includes(...)`, `.at(...)`, `.slice(...)`, `.join(...)`, and `.flat(...)` now evaluate and ignore trailing arguments after their JavaScript-consumed inputs. Test: `array_read_ignored_arguments`.
