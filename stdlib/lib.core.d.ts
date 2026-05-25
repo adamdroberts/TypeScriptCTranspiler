@@ -279,8 +279,8 @@ interface ObjectConstructor {
     fromEntries<T>(entries: ObjectEntry<any>[]): T;
     fromEntries<T>(entries: Map<string, any>): T;
     create(o: any, properties?: any): any;
-    defineProperty<T>(o: T, p: string, attributes: any): T;
-    defineProperties<T>(o: T, properties: any): T;
+    defineProperty<T>(o: T, p: string, attributes: any, ...ignored: any[]): T;
+    defineProperties<T>(o: T, properties: any, ...ignored: any[]): T;
     getPrototypeOf(o: any, ...ignored: any[]): any;
     getOwnPropertyDescriptor(o: any, p: string, ...ignored: any[]): any;
     getOwnPropertyDescriptors(o: any, ...ignored: any[]): any;

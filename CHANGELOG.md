@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Object.defineProperty(...)` and `Object.defineProperties(...)` now evaluate and ignore trailing arguments across dynamic object, array, and function paths. Test: `object_define_property_ignored_arguments`.
 - `Object.getPrototypeOf(...)`, Object integrity predicates/mutators, and `Object.setPrototypeOf(...)` now evaluate and ignore trailing arguments across supported dynamic object, array, function, and primitive paths. Test: `object_prototype_integrity_ignored_arguments`.
 - `Object.getOwnPropertyDescriptor(...)` and `Object.getOwnPropertyDescriptors(...)` now evaluate and ignore trailing arguments across typed object, array, string, primitive, and dynamic-object paths. Test: `object_get_own_property_descriptors_ignored_arguments`.
 - `Object.hasOwn(...)` now evaluates and ignores trailing arguments across typed object, array, string, and dynamic-object paths. Test: `object_has_own_ignored_arguments`.

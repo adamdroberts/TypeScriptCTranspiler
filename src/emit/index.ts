@@ -38369,12 +38369,16 @@ class Emitter {
             ], ([o]) => `({ if (!tsc_value_freeze(${dynamicObjectArg(o!)})) tsc_throw_str(tsc_str_from_cstr("Object.freeze failed")); ${o}; })`);
         }
         if (name === "defineProperty") {
-            if (args.length !== 3) unsupported(call, "Object.defineProperty expects object, key, descriptor");
+            if (args.length < 3) unsupported(call, "Object.defineProperty expects object, key, descriptor");
+            const ignored = this.ignoredArgumentSpecs(args, 3);
             if (mapped.kind === "array") {
                 const obj = this.emitExpr(arg);
                 if (ts.isObjectLiteralExpression(args[2]!)) {
                     const desc = this.descriptorData(args[2]!);
-                    return this.emitTypedArrayDefineProperty(arg, obj, args[1]!, desc, true);
+                    const arrayObj = obj.ty.kind === "array"
+                        ? obj
+                        : { c: this.coerce(obj, mapped, arg), ty: mapped };
+                    return this.emitTypedArrayDefineProperty(arg, arrayObj, args[1]!, desc, true, ignored);
                 }
             }
             if (mapped.kind !== "value" && mapped.kind !== "function" && mapped.kind !== "array") {
@@ -38391,6 +38395,7 @@ class Emitter {
                         { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
                         { value: key, target: T_STRING, node: args[1]! },
                         { value: descValue, target: T_VALUE, node: args[2]! },
+                        ...ignored,
                     ],
                     ([o, k, d]) => `({ if (!tsc_value_define_property_descriptor(${dynamicObjectArg(o!)}, ${k}, ${d})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`,
                 );
@@ -38411,6 +38416,7 @@ class Emitter {
                 if (desc.setter?.env) {
                     specs.push({ value: desc.setter.env, node: desc.setter.node, pass: (tmp) => `(void*)${tmp}` });
                 }
+                specs.push(...ignored);
                 return this.emitSequencedExpr(
                     T_VALUE,
                     specs,
@@ -38432,15 +38438,20 @@ class Emitter {
                     { value: obj, node: arg },
                     { value: key, target: T_STRING, node: args[1]! },
                     { value, target: T_VALUE, node: desc.value ?? args[2]! },
+                    ...ignored,
                 ],
                 ([o, k, v]) => `({ tsc_value_define_property_desc(${dynamicObjectArg(o!)}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable}); ${o}; })`,
             );
         }
         if (name === "defineProperties") {
-            if (args.length !== 2) unsupported(call, "Object.defineProperties expects object and descriptor map");
+            if (args.length < 2) unsupported(call, "Object.defineProperties expects object and descriptor map");
+            const ignored = this.ignoredArgumentSpecs(args, 2);
             if (mapped.kind === "array") {
                 const obj = this.emitExpr(arg);
-                return this.emitTypedArrayDefineProperties(arg, obj, args[1]!);
+                const arrayObj = obj.ty.kind === "array"
+                    ? obj
+                    : { c: this.coerce(obj, mapped, arg), ty: mapped };
+                return this.emitTypedArrayDefineProperties(arg, arrayObj, args[1]!, ignored);
             }
             if (mapped.kind !== "value") {
                 unsupported(arg, "Object.defineProperties currently supports dynamic objects and arrays only");
@@ -38451,9 +38462,10 @@ class Emitter {
                 return this.emitSequencedExpr(T_VALUE, [
                     { value: obj, target: T_VALUE, node: arg },
                     { value: descriptors, target: T_VALUE, node: args[1]! },
+                    ...ignored,
                 ], ([o, d]) => `({ if (!tsc_value_define_properties_descriptor_map(${o}, ${d})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperties failed")); ${o}; })`);
             }
-            return this.emitObjectDefineProperties(arg, obj, args[1]!);
+            return this.emitObjectDefineProperties(arg, obj, args[1]!, ignored);
         }
         if (name === "groupBy") {
             return this.emitObjectGroupBy(call);
@@ -39002,6 +39014,7 @@ class Emitter {
         keyExpr: ts.Expression,
         desc: DescriptorData,
         returnObject: boolean,
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         if (obj.ty.kind !== "array") unsupported(objExpr, "typed array defineProperty on non-array");
         if (desc.kind === "accessor") {
@@ -39015,6 +39028,7 @@ class Emitter {
         ];
         const value = desc.value ? this.emitExpr(desc.value) : null;
         if (value) specs.push({ value, node: desc.value! });
+        specs.push(...ignored);
         return this.emitSequencedExpr(returnObject ? obj.ty : T_BOOLEAN, specs, (vals) => {
             const arrC = vals[0]!;
             const keyC = vals[1]!;
@@ -39118,6 +39132,7 @@ class Emitter {
         objExpr: ts.Expression,
         obj: EmitResult,
         descriptorsExpr: ts.Expression,
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         if (obj.ty.kind !== "array") unsupported(objExpr, "typed array defineProperties on non-array");
         if (!ts.isObjectLiteralExpression(descriptorsExpr)) {
@@ -39157,6 +39172,7 @@ class Emitter {
             }
             entries.push(entry);
         }
+        specs.push(...ignored);
         return this.emitSequencedExpr(obj.ty, specs, (vals) => {
             const arrC = vals[0]!;
             const pieces: string[] = [];
@@ -40122,6 +40138,7 @@ class Emitter {
         objExpr: ts.Expression,
         obj: EmitResult,
         descriptorsExpr: ts.Expression,
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         if (!ts.isObjectLiteralExpression(descriptorsExpr)) {
             unsupported(descriptorsExpr, "Object.defineProperties descriptor map must be an object literal");
@@ -40166,6 +40183,7 @@ class Emitter {
             }
             entries.push(entry);
         }
+        specs.push(...ignored);
         return this.emitSequencedExpr(T_VALUE, specs, (vals) => {
             const o = vals[0]!;
             const pieces: string[] = [];

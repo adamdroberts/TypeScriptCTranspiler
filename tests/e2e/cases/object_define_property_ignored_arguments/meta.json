@@ -1,0 +1,3 @@
+{
+  "description": "Object.defineProperty and Object.defineProperties evaluate and ignore trailing arguments"
+}

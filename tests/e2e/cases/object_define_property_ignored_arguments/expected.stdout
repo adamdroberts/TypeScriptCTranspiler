@@ -1,0 +1,7 @@
+define: true 1
+properties var: true 2
+properties literal: true 3
+array define: true 8
+function define: true sample
+keys: a|b|c 0|1 
+marks: abcdef
