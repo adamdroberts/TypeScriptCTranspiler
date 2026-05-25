@@ -15785,6 +15785,13 @@ class Emitter {
                     return;
                 }
                 if (
+                    ts.isVariableDeclaration(parent) &&
+                    parent.initializer === n &&
+                    this.nonEscapingArrayResultAliasUsesAreSafe(parent)
+                ) {
+                    return;
+                }
+                if (
                     (ts.isForOfStatement(parent) || ts.isForInStatement(parent)) &&
                     parent.expression === n
                 ) {
@@ -15970,6 +15977,13 @@ class Emitter {
 
     private nonEscapingArrayAliasUseIsSafe(n: ts.Identifier, scope: ts.Block): boolean {
         const parent = n.parent;
+        if (
+            ts.isVariableDeclaration(parent) &&
+            parent.initializer === n &&
+            this.nonEscapingArrayResultAliasUsesAreSafe(parent)
+        ) {
+            return true;
+        }
         if (ts.isElementAccessExpression(parent) && parent.expression === n) {
             return true;
         }
