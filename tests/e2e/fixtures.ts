@@ -777,6 +777,10 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'const local = require("./local.js");\nconst descriptors = {\n  default: { value: "assign-define-property-properties-default", enumerable: true },\n  label: { get() { return "assign-define-property-properties-target"; }, enumerable: true },\n  count: { value: local.count, enumerable: true }\n};\nmodule.exports = Object.assign(\n  Object.defineProperty(Object.defineProperties({}, descriptors), "bonus", { value: local.bonus, enumerable: true }),\n  { extra: true }\n);\n',
         "local.js": 'exports.count = 82;\nexports.bonus = "assign-define-property-properties-bonus";\n',
     }),
+    "tsc2c-cjs-module-object-assign-define-property-define-properties-from-entries-target-named": cjsPackage("tsc2c-cjs-module-object-assign-define-property-define-properties-from-entries-target-named", {
+        "index.js": 'const local = require("./local.js");\nconst countKey = `count`;\nconst descriptors = {\n  default: { value: "assign-define-property-properties-from-entries-default", enumerable: true },\n  label: { get() { return "assign-define-property-properties-from-entries-target"; }, enumerable: true },\n  [countKey]: { value: local.count, enumerable: true }\n};\nconst entries = Object.entries(descriptors);\nmodule.exports = Object.assign(\n  Object.defineProperty(Object.defineProperties({}, Object.fromEntries(entries)), "bonus", { value: local.bonus, enumerable: true }),\n  { extra: true }\n);\n',
+        "local.js": 'exports.count = 130;\nexports.bonus = "assign-define-property-properties-from-entries-bonus";\n',
+    }),
     "tsc2c-cjs-module-define-property-default": cjsPackage("tsc2c-cjs-module-define-property-default", {
         "index.js": 'const defaultDescriptor = { value: function greet(name) { return "hello " + name; }, enumerable: true };\nmodule.exports = Object.defineProperty({}, "default", defaultDescriptor);\n',
     }),
