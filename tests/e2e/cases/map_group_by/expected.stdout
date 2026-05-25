@@ -11,3 +11,7 @@ k=1: 1,3,5,7,9
 halves: 2
 first-half: ada,alan,grace
 second-half: linus,rms,abby
+set buckets: 3
+set early: 2,3
+set even: 4,6
+set odd: 5,7

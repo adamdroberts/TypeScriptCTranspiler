@@ -74,3 +74,13 @@ const halves = Map.groupBy(people, classify);
 console.log("halves:", halves.size);
 printPersonGroup(halves, "first-half");
 printPersonGroup(halves, "second-half");
+
+const setNums = new Set([2, 3, 4, 5, 6, 7]);
+const setBuckets = Map.groupBy(setNums, (n, index) => index < 2 ? "early" : (n % 2 === 0 ? "even" : "odd"));
+console.log("set buckets:", setBuckets.size);
+const earlySet = setBuckets.get("early");
+const evenSet = setBuckets.get("even");
+const oddSet = setBuckets.get("odd");
+console.log("set early:", earlySet === undefined ? "(none)" : joinNumbers(earlySet));
+console.log("set even:", evenSet === undefined ? "(none)" : joinNumbers(evenSet));
+console.log("set odd:", oddSet === undefined ? "(none)" : joinNumbers(oddSet));

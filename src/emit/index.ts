@@ -26385,8 +26385,12 @@ class Emitter {
         const t = groupArrayTy.elem!;
 
         const items = this.emitExpr(itemsArg);
-        if (items.ty.kind !== "array" || !sameCType(items.ty.elem!, t))
-            unsupported(itemsArg, "Map.groupBy items must match the result element type T[]");
+        if (
+            (items.ty.kind !== "array" && items.ty.kind !== "set") ||
+            !sameCType(items.ty.elem!, t)
+        ) {
+            unsupported(itemsArg, "Map.groupBy items must be an array or Set matching the result element type T[]");
+        }
 
         return this.emitSequencedExpr(callType, [{ value: items }], ([itemsExpr]) => {
             const src = this.freshTemp("_gb_src");
@@ -26395,6 +26399,9 @@ class Emitter {
             const item = this.freshTemp("_gb_item");
             const key = this.freshTemp("_gb_key");
             const group = this.freshTemp("_gb_group");
+            const sourceArray = items.ty.kind === "set"
+                ? `tsc_set_values(${itemsExpr})`
+                : itemsExpr;
             const itemExpr = `TSC_ARR(${t.c}, ${src}, ${iv})`;
 
             const cb = keyArg;
@@ -26479,7 +26486,7 @@ class Emitter {
             }
             const keyCExpr = this.coerce(keyBody, k, cb);
             return (
-                `({ tsc_array_t* const ${src} = ${itemsExpr}; ` +
+                `({ tsc_array_t* const ${src} = ${sourceArray}; ` +
                 `tsc_map_t* const ${map} = tsc_map_new(sizeof(${k.c}), sizeof(tsc_array_t*), ${keyKindOf(k)}, 0); ` +
                 `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
                 `${t.c} ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
@@ -35440,8 +35447,8 @@ class Emitter {
         const itemsArg = call.arguments[0]!;
         const keyArg = call.arguments[1]!;
         const items = this.emitExpr(itemsArg);
-        if (items.ty.kind !== "array")
-            unsupported(itemsArg, "Object.groupBy expects an array");
+        if (items.ty.kind !== "array" && items.ty.kind !== "set")
+            unsupported(itemsArg, "Object.groupBy expects an array or Set");
         const t = items.ty.elem!;
 
         return this.emitSequencedExpr(T_VALUE, [{ value: items }], ([itemsExpr]) => {
@@ -35453,6 +35460,9 @@ class Emitter {
             const existing = this.freshTemp("_ogb_existing");
             const group = this.freshTemp("_ogb_group");
             const boxed = this.freshTemp("_ogb_box");
+            const sourceArray = items.ty.kind === "set"
+                ? `tsc_set_values(${itemsExpr})`
+                : itemsExpr;
             const itemExpr = `TSC_ARR(${t.c}, ${src}, ${iv})`;
 
             const cb = keyArg;
@@ -35539,7 +35549,7 @@ class Emitter {
             // Box the item into tsc_value_t. Restrict to types boxable through coerce(.., T_VALUE).
             const boxedItemExpr = this.coerce({ c: item, ty: t }, T_VALUE, itemsArg);
             return (
-                `({ tsc_array_t* const ${src} = ${itemsExpr}; ` +
+                `({ tsc_array_t* const ${src} = ${sourceArray}; ` +
                 `tsc_value_t ${out} = tsc_value_object_create(tsc_value_null()); ` +
                 `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
                 `${t.c} ${item} = ${itemExpr}; ${bindings.join(" ")} ` +

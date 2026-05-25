@@ -21,3 +21,11 @@ const arr = [10, 20, 30, 40, 50];
 const halves = Object.groupBy(arr, classify) as any;
 console.log("first:", JSON.stringify(halves.first));
 console.log("last:", JSON.stringify(halves.last));
+
+const wordSet = new Set(["ape", "ant", "bear", "bat", "cat"]);
+const setGroups = Object.groupBy(wordSet, (word, index) => {
+    return index < 3 ? "early" : word.charAt(0);
+}) as any;
+console.log("set early:", JSON.stringify(setGroups.early));
+console.log("set b:", JSON.stringify(setGroups.b));
+console.log("set c:", JSON.stringify(setGroups.c));
