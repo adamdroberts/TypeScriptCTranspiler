@@ -556,6 +556,7 @@ bool tsc_value_freeze(tsc_value_t v);
 bool tsc_value_is_sealed(tsc_value_t v);
 bool tsc_value_is_frozen(tsc_value_t v);
 tsc_array_t* tsc_value_own_keys(tsc_value_t v);
+tsc_array_t* tsc_value_get_own_property_symbols(tsc_value_t v);
 tsc_value_t tsc_value_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key);
 tsc_array_t* tsc_reflect_own_keys(tsc_value_t v);
 tsc_value_t tsc_reflect_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key);

@@ -1171,6 +1171,13 @@ tsc_array_t* tsc_value_own_keys(tsc_value_t v) {
     return tsc_array_new(sizeof(tsc_str_t*), 1);
 }
 
+tsc_array_t* tsc_value_get_own_property_symbols(tsc_value_t v) {
+    if (tsc_value_is_nullish(v)) {
+        tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertySymbols target must not be null or undefined"));
+    }
+    return tsc_array_new(sizeof(tsc_symbol_t*), 1);
+}
+
 tsc_array_t* tsc_reflect_own_keys(tsc_value_t v) {
     require_reflect_object_target(v, "Reflect.ownKeys target must be an object");
     return tsc_value_own_keys(v);
