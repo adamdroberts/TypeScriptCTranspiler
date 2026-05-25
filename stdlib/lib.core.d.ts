@@ -478,8 +478,8 @@ interface ProxyHandler<T extends object> {
 }
 
 declare class Proxy<T extends object> {
-    constructor(target: T, handler: ProxyHandler<T>);
-    static revocable<T extends object>(target: T, handler: ProxyHandler<T>): any;
+    constructor(target: T, handler: ProxyHandler<T>, ...ignored: any[]);
+    static revocable<T extends object>(target: T, handler: ProxyHandler<T>, ...ignored: any[]): any;
 }
 
 declare namespace Reflect {

@@ -24922,13 +24922,14 @@ class Emitter {
             call.expression.expression.text === "Proxy" &&
             call.expression.name.text === "revocable"
         ) {
-            if (call.arguments.length !== 2) unsupported(call, "Proxy.revocable expects target and handler");
+            if (call.arguments.length < 2) unsupported(call, "Proxy.revocable expects target and handler");
             const target = this.emitExpr(call.arguments[0]!);
             const handler = this.emitExpr(call.arguments[1]!);
-            return this.emitSequencedCall("tsc_proxy_revocable", T_VALUE, [
+            return this.emitSequencedExpr(T_VALUE, [
                 { value: target, target: T_VALUE, node: call.arguments[0]! },
                 { value: handler, target: T_VALUE, node: call.arguments[1]! },
-            ]);
+                ...this.ignoredArgumentSpecs(call.arguments, 2),
+            ], ([t, h]) => `tsc_proxy_revocable(${t}, ${h})`);
         }
 
         const objectPrototypeCall = this.emitObjectPrototypeCall(call);
@@ -27366,13 +27367,14 @@ class Emitter {
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Proxy") {
             if (memberName !== "revocable") unsupported(call, `Proxy.${memberName}`);
-            if (call.arguments.length !== 2) unsupported(call, "Proxy.revocable expects target and handler");
+            if (call.arguments.length < 2) unsupported(call, "Proxy.revocable expects target and handler");
             const target = this.emitExpr(call.arguments[0]!);
             const handler = this.emitExpr(call.arguments[1]!);
-            return this.emitSequencedCall("tsc_proxy_revocable", T_VALUE, [
+            return this.emitSequencedExpr(T_VALUE, [
                 { value: target, target: T_VALUE, node: call.arguments[0]! },
                 { value: handler, target: T_VALUE, node: call.arguments[1]! },
-            ]);
+                ...this.ignoredArgumentSpecs(call.arguments, 2),
+            ], ([t, h]) => `tsc_proxy_revocable(${t}, ${h})`);
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Reflect") {
             return this.emitReflectCall(call, memberName);
@@ -40646,13 +40648,14 @@ class Emitter {
         }
         if (ctorExpr.text === "Proxy") {
             const args = n.arguments ?? [];
-            if (args.length !== 2) unsupported(n, "new Proxy expects target and handler");
+            if (args.length < 2) unsupported(n, "new Proxy expects target and handler");
             const target = this.emitExpr(args[0]!);
             const handler = this.emitExpr(args[1]!);
-            return this.emitSequencedCall("tsc_proxy_new", T_VALUE, [
+            return this.emitSequencedExpr(T_VALUE, [
                 { value: target, target: T_VALUE, node: args[0]! },
                 { value: handler, target: T_VALUE, node: args[1]! },
-            ]);
+                ...this.ignoredArgumentSpecs(args, 2),
+            ], ([t, h]) => `tsc_proxy_new(${t}, ${h})`);
         }
         const targetClassDecl = this.classDeclForConstructorIdentifier(ctorExpr);
         const cls = targetClassDecl?.name?.text ?? this.identifierName(ctorExpr);
