@@ -6926,14 +6926,24 @@ class Emitter {
                 return this.isSideEffectFreeUnevaluatedPromiseCallback(args[0], seenConsts) &&
                     this.isSideEffectFreeOptionalPromiseCallback(args[1], seenConsts);
             }
+            if (this.isSideEffectFreePendingPromiseOperand(recv, seenConsts)) {
+                return this.isSideEffectFreeUnevaluatedPromiseCallback(args[0], seenConsts) &&
+                    this.isSideEffectFreeUnevaluatedPromiseCallback(args[1], seenConsts);
+            }
             return false;
         }
         if (args.length > 1) return false;
         if (method === "catch") {
+            if (this.isSideEffectFreePendingPromiseOperand(recv, seenConsts)) {
+                return this.isSideEffectFreeUnevaluatedPromiseCallback(args[0], seenConsts);
+            }
             return this.isSideEffectFreeRejectedPromiseOperand(recv, seenConsts) &&
                 this.isSideEffectFreeOptionalPromiseCallback(args[0], seenConsts);
         }
         if (method === "finally") {
+            if (this.isSideEffectFreePendingPromiseOperand(recv, seenConsts)) {
+                return this.isSideEffectFreeUnevaluatedPromiseCallback(args[0], seenConsts);
+            }
             return this.isSideEffectFreeSettledPromiseOperand(recv, seenConsts) &&
                 this.isSideEffectFreeOptionalPromiseCallback(args[0], seenConsts);
         }
@@ -7013,6 +7023,27 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeRejectedPromiseOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreePendingPromiseOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.sideEffectFreeNewPromiseState(unwrapped, seenConsts) === "pending") {
+            return true;
+        }
+        if (this.sideEffectFreePromiseTryState(unwrapped, seenConsts) === "pending") {
+            return true;
+        }
+        if (this.sideEffectFreePromiseStaticCombinatorState(unwrapped, seenConsts) === "pending") {
+            return true;
+        }
+        if (this.sideEffectFreePromiseResolveState(unwrapped, seenConsts) === "pending") {
+            return true;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreePendingPromiseOperand(init, seenConsts);
     }
 
     private isSideEffectFreeSettledPromiseOperand(
