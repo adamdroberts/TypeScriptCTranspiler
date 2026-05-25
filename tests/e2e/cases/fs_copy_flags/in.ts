@@ -2,6 +2,8 @@ import { constants } from "fs";
 
 const src = "/tmp/tsc2c-fs-copy-flags-src.txt";
 const dest = "/tmp/tsc2c-fs-copy-flags-dest.txt";
+const DEFAULT_COPY_FLAGS = undefined;
+const EXCLUSIVE_COPY_FLAGS = constants.COPYFILE_EXCL;
 
 for (const file of [src, dest]) {
     if (fs.existsSync(file)) fs.rmSync(file);
@@ -21,7 +23,22 @@ console.log("after excl:", fs.readFileSync(dest));
 fs.copyFileSync(src, dest, constants.COPYFILE_FICLONE);
 console.log("after overwrite:", fs.readFileSync(dest));
 
-fs.promises.copyFile(src, dest, constants.COPYFILE_EXCL).catch((reason: string): any => {
+fs.writeFileSync(dest, "alias-existing");
+fs.copyFileSync(src, dest, DEFAULT_COPY_FLAGS);
+console.log("sync default alias:", fs.readFileSync(dest));
+
+try {
+    fs.copyFileSync(src, dest, EXCLUSIVE_COPY_FLAGS);
+    console.log("sync excl alias: copied");
+} catch (err: any) {
+    console.log("sync excl alias:", err);
+}
+
+fs.writeFileSync(dest, "promise-default");
+fs.promises.copyFile(src, dest, DEFAULT_COPY_FLAGS);
+console.log("promise default alias:", fs.readFileSync(dest));
+
+fs.promises.copyFile(src, dest, EXCLUSIVE_COPY_FLAGS).catch((reason: string): any => {
     console.log("promise excl:", reason);
 });
 

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `fs.copyFileSync(...)` and immediate `fs.promises.copyFile(...)` now treat earlier static `const` aliases for `undefined` flags as default copy mode while preserving static numeric flag aliases. Test: `fs_copy_flags`.
 - Uninitialized dynamic variables now default to JavaScript `undefined` for top-level, local, and captured storage instead of zero-valued `tsc_value_t`. Test: `uninitialized_dynamic_variables`.
 - Inferred top-level and local variables initialized to `null` / `undefined` now use boxed value storage instead of invalid C `void` declarations, preserving `typeof` and strict nullish equality. Test: `nullish_variable_storage`.
 - CommonJS package sources now treat read-only `module` metadata destructuring such as `const { filename, path, loaded, paths, parent, children } = module` as static wrapper metadata. Test: `node_modules_commonjs_module_metadata_destructure`.

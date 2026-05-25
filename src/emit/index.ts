@@ -26278,9 +26278,9 @@ class Emitter {
         if (!prop || this.isUndefinedExpression(prop.initializer)) {
             return { pipeStdin: "true", ignoreStdin: "false", captureStdout: "true", captureStderr: "true", inheritStdout: "false", inheritStderr: "false" };
         }
-        const value = this.childProcessStaticOptionValue(prop.initializer);
+        const value = this.staticOptionValue(prop.initializer);
         const mode = (expr: ts.Expression, fd: 0 | 1 | 2): { pipe: string; ignore: string; capture: string; inherit: string } => {
-            expr = this.childProcessStaticOptionValue(expr);
+            expr = this.staticOptionValue(expr);
             if (
                 expr.kind === ts.SyntaxKind.NullKeyword ||
                 expr.kind === ts.SyntaxKind.UndefinedKeyword ||
@@ -26336,7 +26336,7 @@ class Emitter {
         unsupported(value, "child_process.spawnSync stdio must be a literal string or tuple in this subset");
     }
 
-    private childProcessStaticOptionValue(expr: ts.Expression): ts.Expression {
+    private staticOptionValue(expr: ts.Expression): ts.Expression {
         return this.unwrapSideEffectFreeStaticExpression(
             this.sideEffectFreeEarlierConstInitializer(expr, new Set()) ?? expr,
         );
@@ -29808,8 +29808,9 @@ class Emitter {
                     this.fsPathSpec(b, args[1]!, `fs.${name} destination`),
                 ];
                 if (isCopy) {
+                    const flagsArg = args[2] ? this.staticOptionValue(args[2]) : undefined;
                     specs.push({
-                        value: args[2] && !this.isUndefinedExpression(args[2]) ? this.emitExpr(args[2]) : { c: "0.0", ty: T_NUMBER },
+                        value: flagsArg && !this.isUndefinedExpression(flagsArg) ? this.emitExpr(args[2]!) : { c: "0.0", ty: T_NUMBER },
                         target: T_NUMBER,
                         node: args[2] ?? call,
                     });
@@ -30677,8 +30678,9 @@ class Emitter {
                     this.fsPathSpec(b, args[1]!, `fs.promises.${name} destination`),
                 ];
                 if (isCopy) {
+                    const flagsArg = args[2] ? this.staticOptionValue(args[2]) : undefined;
                     specs.push({
-                        value: args[2] && !this.isUndefinedExpression(args[2]) ? this.emitExpr(args[2]) : { c: "0.0", ty: T_NUMBER },
+                        value: flagsArg && !this.isUndefinedExpression(flagsArg) ? this.emitExpr(args[2]!) : { c: "0.0", ty: T_NUMBER },
                         target: T_NUMBER,
                         node: args[2] ?? call,
                     });
