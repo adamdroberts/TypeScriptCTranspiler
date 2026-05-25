@@ -37862,6 +37862,7 @@ class Emitter {
             mapped.kind === "weakset" ||
             mapped.kind === "weakref" ||
             mapped.kind === "finregistry" ||
+            mapped.kind === "date" ||
             mapped.kind === "url";
         const dynamicObjectArg = (value: string): string => {
             if (mapped.kind === "array") return `tsc_value_array(${value})`;
@@ -40100,6 +40101,7 @@ class Emitter {
                     mapped.kind === "weakset" ||
                     mapped.kind === "weakref" ||
                     mapped.kind === "finregistry" ||
+                    mapped.kind === "date" ||
                     mapped.kind === "url"
                 ) {
                     const key = this.emitExpr(args[1]!);
@@ -40191,6 +40193,7 @@ class Emitter {
                     mapped.kind === "weakset" ||
                     mapped.kind === "weakref" ||
                     mapped.kind === "finregistry" ||
+                    mapped.kind === "date" ||
                     mapped.kind === "url"
                 ) {
                     const target = this.emitExpr(args[0]!);
