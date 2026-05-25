@@ -21,6 +21,15 @@ function joinNumbers(group: number[]): string {
     return parts;
 }
 
+function joinStrings(group: string[]): string {
+    let parts = "";
+    for (let i = 0; i < group.length; i++) {
+        if (i > 0) parts = parts + ",";
+        parts = parts + group[i]!;
+    }
+    return parts;
+}
+
 function printPersonGroup(map: Map<string, Person[]>, key: string): void {
     const group = map.get(key);
     if (group === undefined) {
@@ -84,3 +93,12 @@ const oddSet = setBuckets.get("odd");
 console.log("set early:", earlySet === undefined ? "(none)" : joinNumbers(earlySet));
 console.log("set even:", evenSet === undefined ? "(none)" : joinNumbers(evenSet));
 console.log("set odd:", oddSet === undefined ? "(none)" : joinNumbers(oddSet));
+
+const charBuckets = Map.groupBy("abacad", (ch, index) => index < 2 ? "front" : ch);
+console.log("string buckets:", charBuckets.size);
+const frontChars = charBuckets.get("front");
+const aChars = charBuckets.get("a");
+const dChars = charBuckets.get("d");
+console.log("string front:", frontChars === undefined ? "(none)" : joinStrings(frontChars));
+console.log("string a:", aChars === undefined ? "(none)" : joinStrings(aChars));
+console.log("string d:", dChars === undefined ? "(none)" : joinStrings(dChars));

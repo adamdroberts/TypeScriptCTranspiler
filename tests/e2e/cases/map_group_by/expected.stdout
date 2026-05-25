@@ -15,3 +15,7 @@ set buckets: 3
 set early: 2,3
 set even: 4,6
 set odd: 5,7
+string buckets: 4
+string front: a,b
+string a: a,a
+string d: d

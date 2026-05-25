@@ -29,3 +29,10 @@ const setGroups = Object.groupBy(wordSet, (word, index) => {
 console.log("set early:", JSON.stringify(setGroups.early));
 console.log("set b:", JSON.stringify(setGroups.b));
 console.log("set c:", JSON.stringify(setGroups.c));
+
+const charGroups = Object.groupBy("abacad", (ch, index) => {
+    return index < 3 ? "front" : ch;
+}) as any;
+console.log("string front:", JSON.stringify(charGroups.front));
+console.log("string a:", JSON.stringify(charGroups.a));
+console.log("string d:", JSON.stringify(charGroups.d));

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `Object.groupBy` and `Map.groupBy` now accept string sources, grouping code-point strings by callback result through the existing string character materialization path. Tests: `object_group_by`, `map_group_by`.
 - `Promise.any` aggregate rejection and empty `Promise.race` pending behavior are now covered for typed Set sources in the immediate Promise subset. Tests: `promise_any_aggregate`, `promise_race_empty_pending`.
 - Pending Promise records now propagate through immediate `Promise.all`, `Promise.allSettled`, `Promise.race`, and `Promise.any` over typed Set sources without synchronously invoking chained callbacks. Test: `promise_pending_combinators`.
 - Generated-C DCE now prunes unused `Promise.all(...)`, `Promise.allSettled(...)`, `Promise.any(...)`, and `Promise.race(...)` calls over statically empty typed Set sources. Test: `generated_c_dce_const`.

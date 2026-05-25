@@ -26396,11 +26396,11 @@ class Emitter {
         const t = groupArrayTy.elem!;
 
         const items = this.emitExpr(itemsArg);
-        if (
-            (items.ty.kind !== "array" && items.ty.kind !== "set") ||
-            !sameCType(items.ty.elem!, t)
-        ) {
-            unsupported(itemsArg, "Map.groupBy items must be an array or Set matching the result element type T[]");
+        const validItems =
+            ((items.ty.kind === "array" || items.ty.kind === "set") && sameCType(items.ty.elem!, t)) ||
+            (items.ty.kind === "string" && sameCType(t, T_STRING));
+        if (!validItems) {
+            unsupported(itemsArg, "Map.groupBy items must be an array, Set, or string matching the result element type T[]");
         }
 
         return this.emitSequencedExpr(callType, [{ value: items }], ([itemsExpr]) => {
@@ -26412,7 +26412,9 @@ class Emitter {
             const group = this.freshTemp("_gb_group");
             const sourceArray = items.ty.kind === "set"
                 ? `tsc_set_values(${itemsExpr})`
-                : itemsExpr;
+                : items.ty.kind === "string"
+                    ? `tsc_str_chars(${itemsExpr})`
+                    : itemsExpr;
             const itemExpr = `TSC_ARR(${t.c}, ${src}, ${iv})`;
 
             const cb = keyArg;
@@ -35468,9 +35470,9 @@ class Emitter {
         const itemsArg = call.arguments[0]!;
         const keyArg = call.arguments[1]!;
         const items = this.emitExpr(itemsArg);
-        if (items.ty.kind !== "array" && items.ty.kind !== "set")
-            unsupported(itemsArg, "Object.groupBy expects an array or Set");
-        const t = items.ty.elem!;
+        if (items.ty.kind !== "array" && items.ty.kind !== "set" && items.ty.kind !== "string")
+            unsupported(itemsArg, "Object.groupBy expects an array, Set, or string");
+        const t = items.ty.kind === "string" ? T_STRING : items.ty.elem!;
 
         return this.emitSequencedExpr(T_VALUE, [{ value: items }], ([itemsExpr]) => {
             const src = this.freshTemp("_ogb_src");
@@ -35483,7 +35485,9 @@ class Emitter {
             const boxed = this.freshTemp("_ogb_box");
             const sourceArray = items.ty.kind === "set"
                 ? `tsc_set_values(${itemsExpr})`
-                : itemsExpr;
+                : items.ty.kind === "string"
+                    ? `tsc_str_chars(${itemsExpr})`
+                    : itemsExpr;
             const itemExpr = `TSC_ARR(${t.c}, ${src}, ${iv})`;
 
             const cb = keyArg;
