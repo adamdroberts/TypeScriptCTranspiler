@@ -495,6 +495,8 @@ const unused_promise_resolve_object_symbols_reduce_right_call = Promise.resolve(
 const unused_promise_resolve_object_symbols_slice_length = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_slice_length: 1 }).slice().length);
 const unused_promise_resolve_object_symbols_to_reversed_length = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_to_reversed_length: 1 }).toReversed().length);
 const unused_promise_resolve_object_symbols_keys_length = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_keys_length: 1 }).keys().length);
+const unused_promise_resolve_object_symbols_slice_element = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_slice_element: 1 }).slice()[0]);
+const unused_promise_resolve_object_symbols_keys_element = Promise.resolve(Object.getOwnPropertySymbols({ dead_promise_resolve_object_symbols_keys_element: 1 }).keys()[0]);
 const unused_promise_resolve_object_extensible_call = Promise.resolve(Object.isExtensible({ dead_promise_resolve_object_extensible: 1 }));
 const unused_promise_resolve_object_sealed_call = Promise.resolve(Object.isSealed({ dead_promise_resolve_object_sealed: 1 }));
 const unused_promise_resolve_object_frozen_call = Promise.resolve(Object.isFrozen({ dead_promise_resolve_object_frozen: 1 }));
@@ -3869,6 +3871,7 @@ function usedLocal(value: number): number {
     Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_reduce: 1 })).reduce((acc: string) => acc + "local_dead_object_symbols_reduce_callback", "local_dead_object_symbols_reduce_initial");
     Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_values_length: 1 })).values("local_dead_object_symbols_values_ignored").length;
     Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_entries_length: 1 })).entries("local_dead_object_symbols_entries_ignored").length;
+    Object.getOwnPropertySymbols(Object.freeze({ local_dead_object_symbols_to_reversed_element: 1 })).toReversed()[0];
     Object.getOwnPropertyDescriptor("local_dead_object_primitive_descriptor", "0");
     Object.getOwnPropertyDescriptors("local_dead_object_primitive_descriptors");
     Object.hasOwn("local_dead_object_primitive_has_own", "0");

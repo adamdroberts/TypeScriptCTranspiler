@@ -8775,6 +8775,10 @@ class Emitter {
             );
             if (result !== null) return result;
         }
+        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts);
+        if (returnedArrayLength !== null && (index < 0 || index >= returnedArrayLength)) {
+            return "absent";
+        }
         const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
         if (targetOperand) {
             return this.sideEffectFreePrimitiveArrayElementOperandResult(

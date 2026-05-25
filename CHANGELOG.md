@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now treats out-of-range element reads from exact-length returned-array chains as absent, enabling empty `Object.getOwnPropertySymbols(...).slice()[0]`-style reads to prune. Test: `generated_c_dce_const`.
 - Generated-C DCE now preserves exact returned-array lengths through pure `.slice()`, `.toReversed(...)`, `.keys(...)`, `.values(...)`, and `.entries(...)` chains, enabling empty `Object.getOwnPropertySymbols(...)` length reads to prune. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats `reduce(...)` / `reduceRight(...)` on statically empty arrays with primitive initial values as pure `Promise.resolve(...)` inputs because the callback cannot run. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats primitive/undefined empty-array HOF results such as `some(...)`, `every(...)`, `find(...)`, and `findIndex(...)` as pure `Promise.resolve(...)` inputs when callback execution is statically impossible. Test: `generated_c_dce_const`.
