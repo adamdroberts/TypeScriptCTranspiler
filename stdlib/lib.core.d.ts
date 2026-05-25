@@ -673,10 +673,15 @@ interface ProcessHrtime {
     bigint(...ignored: any[]): bigint;
 }
 interface ProcessWritableStream {
+    readonly closed: boolean;
+    readonly destroyed: boolean;
     readonly fd: number;
     readonly isTTY: boolean;
     readonly readable: boolean;
     readonly writable: boolean;
+    readonly writableCorked: number;
+    readonly writableEnded: boolean;
+    readonly writableFinished: boolean;
     addListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     cork(...ignored: any[]): void;
     end(callback?: () => void): void;
@@ -693,9 +698,12 @@ interface ProcessWritableStream {
     write(chunk: string | Buffer, encoding?: string, callback?: () => void): boolean;
 }
 interface ProcessReadableStream {
+    readonly closed: boolean;
+    readonly destroyed: boolean;
     readonly fd: number;
     readonly isTTY: boolean;
     readonly readable: boolean;
+    readonly readableEnded: boolean;
     addListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;

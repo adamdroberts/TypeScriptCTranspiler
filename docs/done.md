@@ -524,6 +524,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `process.env["VAR"]` — same as above via element access
 - `process.env.VAR = value`, `process.env["VAR"] = value`, and `delete process.env[...]` mutate the local process environment through `setenv` / `unsetenv`. Named and namespace `env` imports from `"process"` / `"node:process"` route reads, writes, and deletes through the same helpers.
 - `process.stdin.fd` exposes `0`, `process.stdin.isTTY` uses `isatty(0)`, and `process.stdin.readable` returns `true` in the bounded stdio subset. Named and namespace `stdin` imports from `"process"` / `"node:process"` expose the same metadata. Tests: `process_stdin_metadata`, `process_stdio_readable_writable`, `process_stdio_metadata_import`
+- Process stdio streams expose inert state flags for the bounded subset: `destroyed` / `closed` are `false`, `stdin.readableEnded` is `false`, and `stdout` / `stderr` expose `writableEnded` / `writableFinished` as `false` plus `writableCorked` as `0`. Test: `process_stdio_state_flags`
 - `process.stdin.setEncoding(...)`, `process.stdin.resume(...)`, and `process.stdin.pause(...)` are accepted as no-op compatibility methods in the bounded stdio subset while evaluating consumed and ignored arguments. Named, namespace, and default process imports route to the same helpers. Test: `process_stdin_noop_methods`
 - `process.stdin.pipe(process.stdout|process.stderr, ...ignored)` and `process.stdin.unpipe(process.stdout|process.stderr?, ...ignored)` are accepted as no-op compatibility methods in the bounded stdio subset while evaluating ignored trailing arguments. Named, namespace, and default process imports route to the same helpers. Test: `process_stdin_pipe_noop_methods`
 - `process.stdin.read(size?, ...ignored)` returns `null` in the bounded no-input stdio subset while evaluating optional size and ignored arguments. Named, namespace, and default process imports route to the same helper. Test: `process_stdin_read_null`
@@ -1194,6 +1195,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `process_stdio_metadata_import` | named and namespace process stdio imports expose existing fd/isTTY/readable/writable metadata |
 | `process_stdio_readable_writable` | process stdio readable and writable stream flags |
 | `process_stdio_end` | process stdout/stderr end compatibility method |
+| `process_stdio_state_flags` | process stdio destroyed/closed/readable-ended/writable-ended state flags |
 | `process_stdio_write` | process.stdout.write and process.stderr.write string subset, including optional encoding/callback forms |
 | `process_stdio_write_buffer` | process.stdout.write and process.stderr.write Buffer subset, including optional encoding/callback forms |
 | `process_stdio_write_callback` | process stdout/stderr write optional encoding and callback subset |

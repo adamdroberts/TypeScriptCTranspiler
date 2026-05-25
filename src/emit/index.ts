@@ -40805,13 +40805,26 @@ class Emitter {
                     ? "1"
                     : "2";
             switch (pa.name.text) {
+                case "closed":
+                case "destroyed":
+                    return { c: "false", ty: T_BOOLEAN };
                 case "fd": return { c: `${fd}.0`, ty: T_NUMBER };
                 case "isTTY": return { c: `tsc_process_stdio_is_tty(${fd})`, ty: T_BOOLEAN };
                 case "readable":
                     if (stdioStreamName === "stdin") return { c: "true", ty: T_BOOLEAN };
                     return { c: "false", ty: T_BOOLEAN };
+                case "readableEnded":
+                    if (stdioStreamName === "stdin") return { c: "false", ty: T_BOOLEAN };
+                    break;
                 case "writable":
                     if (stdioStreamName !== "stdin") return { c: "true", ty: T_BOOLEAN };
+                    break;
+                case "writableCorked":
+                    if (stdioStreamName !== "stdin") return { c: "0.0", ty: T_NUMBER };
+                    break;
+                case "writableEnded":
+                case "writableFinished":
+                    if (stdioStreamName !== "stdin") return { c: "false", ty: T_BOOLEAN };
                     break;
             }
         }
