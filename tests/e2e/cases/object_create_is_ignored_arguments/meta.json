@@ -1,0 +1,3 @@
+{
+  "description": "Object.create and Object.is evaluate and ignore trailing arguments"
+}

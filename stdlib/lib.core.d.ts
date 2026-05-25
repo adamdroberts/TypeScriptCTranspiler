@@ -278,7 +278,7 @@ interface ObjectConstructor {
     entries(o: unknown): ObjectEntry<any>[];
     fromEntries<T>(entries: ObjectEntry<any>[]): T;
     fromEntries<T>(entries: Map<string, any>): T;
-    create(o: any, properties?: any): any;
+    create(o: any, properties?: any, ...ignored: any[]): any;
     defineProperty<T>(o: T, p: string, attributes: any, ...ignored: any[]): T;
     defineProperties<T>(o: T, properties: any, ...ignored: any[]): T;
     getPrototypeOf(o: any, ...ignored: any[]): any;
@@ -287,7 +287,7 @@ interface ObjectConstructor {
     getOwnPropertyNames(o: any, ...ignored: any[]): string[];
     getOwnPropertySymbols(o: any, ...ignored: any[]): symbol[];
     hasOwn(o: any, p: string, ...ignored: any[]): boolean;
-    is(value1: any, value2: any): boolean;
+    is(value1: any, value2: any, ...ignored: any[]): boolean;
     freeze<T>(o: T, ...ignored: any[]): T;
     isFrozen(o: any, ...ignored: any[]): boolean;
     isExtensible(o: any, ...ignored: any[]): boolean;
