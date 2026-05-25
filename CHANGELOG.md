@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Finite dynamic `require(...)` proofs now resolve bigint, null, and undefined literal placeholders inside finite template-literal string type aliases. Test: `dynamic_require_template_literal_primitive_type`.
 - Finite dynamic `require(...)` proofs now resolve numeric and boolean literal placeholders inside finite template-literal string type aliases. Test: `dynamic_require_template_literal_numeric_type`.
 - Finite dynamic `require(...)` proofs now resolve variables and parameters annotated with finite template-literal string type aliases. Test: `dynamic_require_template_literal_type`.
 - Finite dynamic `require(...)` proofs now resolve variables and parameters annotated with string-literal union type aliases. Test: `dynamic_require_type_alias`.

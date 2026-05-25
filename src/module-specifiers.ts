@@ -383,9 +383,13 @@ function templateLiteralSpanTypeTexts(
     if (ts.isTemplateLiteralTypeNode(typeNode)) {
         return templateLiteralTypeTexts(typeNode, seenAliases);
     }
+    if (typeNode.kind === ts.SyntaxKind.NullKeyword) return ["null"];
+    if (typeNode.kind === ts.SyntaxKind.UndefinedKeyword) return ["undefined"];
     if (ts.isLiteralTypeNode(typeNode)) {
         const literal = typeNode.literal;
         if (ts.isStringLiteral(literal) || ts.isNumericLiteral(literal)) return [literal.text];
+        if (ts.isBigIntLiteral(literal)) return [literal.text.replace(/n$/i, "")];
+        if (literal.kind === ts.SyntaxKind.NullKeyword) return ["null"];
         if (literal.kind === ts.SyntaxKind.TrueKeyword) return ["true"];
         if (literal.kind === ts.SyntaxKind.FalseKeyword) return ["false"];
         if (ts.isPrefixUnaryExpression(literal) && ts.isNumericLiteral(literal.operand)) {
