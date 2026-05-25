@@ -1,5 +1,7 @@
 import { exec, execFile, execFileSync, execSync, spawnSync } from "child_process";
 
+const defaultStdio = undefined;
+
 const syncOut = execSync("printf sync", {
     cwd: void 0,
     input: undefined,
@@ -38,7 +40,7 @@ const spawned: any = spawnSync("/bin/printf", ["spawn"], {
     input: undefined,
     env: undefined,
     shell: undefined,
-    stdio: void 0,
+    stdio: defaultStdio,
     argv0: undefined,
     detached: undefined,
     windowsHide: undefined,

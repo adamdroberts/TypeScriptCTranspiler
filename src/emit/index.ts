@@ -31420,10 +31420,10 @@ class Emitter {
         const prop = options.properties.find((entry): entry is ts.PropertyAssignment =>
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === "stdio",
         );
-        if (!prop || this.isUndefinedExpression(prop.initializer)) {
+        const value = prop ? this.staticOptionValue(prop.initializer) : undefined;
+        if (!value || this.isUndefinedExpression(value)) {
             return { pipeStdin: "true", ignoreStdin: "false", captureStdout: "true", captureStderr: "true", inheritStdout: "false", inheritStderr: "false" };
         }
-        const value = this.staticOptionValue(prop.initializer);
         const mode = (expr: ts.Expression, fd: 0 | 1 | 2): { pipe: string; ignore: string; capture: string; inherit: string } => {
             expr = this.staticOptionValue(expr);
             if (
