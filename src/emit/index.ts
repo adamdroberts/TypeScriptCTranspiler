@@ -1520,6 +1520,14 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            method === "try" &&
+            call.arguments.length === 1 &&
+            this.isUnshadowedGlobalIdentifier(recv, "Promise")
+        ) {
+            return this.isSideEffectFreePromiseTryCallbackOperand(call.arguments[0]!, seenConsts);
+        }
+        if (
+            ts.isIdentifier(recv) &&
             method === "canParse" &&
             call.arguments.length >= 1 &&
             call.arguments.length <= 2 &&
@@ -6731,6 +6739,44 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreePrimitivePromiseResolveValue(init, seenConsts);
+    }
+
+    private isSideEffectFreePromiseTryCallbackOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isArrowFunction(unwrapped) || ts.isFunctionExpression(unwrapped)) {
+            return this.isSideEffectFreePromiseTryCallback(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreePromiseTryCallbackOperand(init, seenConsts);
+    }
+
+    private isSideEffectFreePromiseTryCallback(
+        fn: ts.ArrowFunction | ts.FunctionExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (
+            fn.parameters.some((param) =>
+                !ts.isIdentifier(param.name) || param.name.text !== "this"
+            )
+        ) {
+            return false;
+        }
+        if (ts.isExpression(fn.body)) {
+            return this.isSideEffectFreePrimitivePromiseResolveValue(fn.body, seenConsts);
+        }
+        const statements = Array.from(fn.body.statements);
+        if (statements.length === 0) return true;
+        if (statements.length !== 1) return false;
+        const stmt = statements[0]!;
+        if (ts.isReturnStatement(stmt)) {
+            return !stmt.expression ||
+                this.isSideEffectFreePrimitivePromiseResolveValue(stmt.expression, seenConsts);
+        }
+        return ts.isExpressionStatement(stmt) &&
+            this.isSideEffectFreeTopLevelConstInitializer(stmt.expression, seenConsts);
     }
 
     private isSideEffectFreePrimitiveTemplateExpression(

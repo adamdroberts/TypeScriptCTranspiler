@@ -552,6 +552,12 @@ const unused_promise_resolve_bitwise_not_call = Promise.resolve(~"dead_promise_r
 const unused_promise_reject_literal_call = Promise.reject("dead_promise_reject_literal");
 const unused_promise_reject_string_call = Promise.reject(String("dead_promise_reject_string"));
 const unused_promise_reject_void_call = Promise.reject(void String("dead_promise_reject_void"));
+const unused_promise_try_literal_call = Promise.try(() => "dead_promise_try_literal");
+const unused_promise_try_function_call = Promise.try(function () {
+    return String("dead_promise_try_function");
+});
+const unused_promise_try_empty_call = Promise.try(() => {
+});
 const dead_promise_resolve_object_shorthand = "dead_promise_resolve_object_shorthand";
 const unused_promise_resolve_object_shorthand_call = Promise.resolve({ dead_promise_resolve_object_shorthand }.dead_promise_resolve_object_shorthand);
 const dead_promise_resolve_object_spread_source = { dead_promise_resolve_object_spread: "dead_promise_resolve_object_spread" };
@@ -1547,6 +1553,12 @@ Promise.resolve(void String("top_level_dead_promise_resolve_void"));
 Promise.resolve(typeof String("top_level_dead_promise_resolve_typeof"));
 Promise.resolve(!"top_level_dead_promise_resolve_prefix_bang".length);
 Promise.resolve(~"top_level_dead_promise_resolve_prefix_tilde".length);
+Promise.try(() => "top_level_dead_promise_try_literal");
+Promise.try(function () {
+    return String("top_level_dead_promise_try_function");
+});
+Promise.try(() => {
+});
 const top_level_dead_promise_resolve_object_shorthand = "top_level_dead_promise_resolve_object_shorthand";
 Promise.resolve({ top_level_dead_promise_resolve_object_shorthand }.top_level_dead_promise_resolve_object_shorthand);
 const top_level_dead_promise_resolve_object_spread_source = { top_level_dead_promise_resolve_object_spread: "top_level_dead_promise_resolve_object_spread" };
@@ -2522,6 +2534,12 @@ function usedLocal(value: number): number {
     Promise.resolve(typeof String("local_dead_promise_resolve_typeof"));
     Promise.resolve(!"local_dead_promise_resolve_prefix_bang".length);
     Promise.resolve(~"local_dead_promise_resolve_prefix_tilde".length);
+    Promise.try(() => "local_dead_promise_try_literal");
+    Promise.try(function () {
+        return String("local_dead_promise_try_function");
+    });
+    Promise.try(() => {
+    });
     const local_dead_promise_resolve_object_shorthand = "local_dead_promise_resolve_object_shorthand";
     Promise.resolve({ local_dead_promise_resolve_object_shorthand }.local_dead_promise_resolve_object_shorthand);
     const local_dead_promise_resolve_object_spread_source = { local_dead_promise_resolve_object_spread: "local_dead_promise_resolve_object_spread" };
