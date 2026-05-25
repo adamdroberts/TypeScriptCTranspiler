@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE now treats stringification helpers on statically empty returned arrays as pure, including `Object.getOwnPropertySymbols(...).join(...)`, `.toString()`, and `.toLocaleString(...)`. Test: `generated_c_dce_const`.
 - Generated-C DCE now carries exact empty/singleton returned-array lengths into `Set` constructor length proofs, enabling empty `Object.getOwnPropertySymbols(...)` Set sources to prune unused callbacks. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats element reads from statically empty `Object.getOwnPropertySymbols(...)` results as absent, enabling unused `Promise.resolve(...)` and direct expression pruning. Test: `generated_c_dce_const`.
 - `Object.getOwnPropertySymbols(...)` is now declared in the local stdlib shim so supported user code no longer needs a type-check bypass. Tests: `object_get_own_property_symbols`, `generated_c_dce_const`.

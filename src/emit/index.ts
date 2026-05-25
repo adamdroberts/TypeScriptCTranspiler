@@ -2944,7 +2944,10 @@ class Emitter {
                 return searchArgs();
             case "join":
                 return args.length <= 1 &&
-                    this.isSideEffectFreeStringArrayOperand(recv, seenConsts) &&
+                    (
+                        this.isSideEffectFreeStringArrayOperand(recv, seenConsts) ||
+                        this.isSideEffectFreeFreshOrReturnedEmptyArrayOperand(recv, seenConsts)
+                    ) &&
                     (!args[0] || this.isSideEffectFreeStringCoercion(args[0], seenConsts));
             case "concat":
                 return allArgsPure();
@@ -2983,7 +2986,10 @@ class Emitter {
                 return allArgsPure();
             case "toLocaleString":
             case "toString":
-                return this.isSideEffectFreeStringArrayOperand(recv, seenConsts) &&
+                return (
+                    this.isSideEffectFreeStringArrayOperand(recv, seenConsts) ||
+                    this.isSideEffectFreeFreshOrReturnedEmptyArrayOperand(recv, seenConsts)
+                ) &&
                     allArgsPure();
             case "pop":
             case "shift":
