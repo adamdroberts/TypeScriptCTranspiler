@@ -15652,6 +15652,16 @@ class Emitter {
                     return;
                 }
                 if (
+                    ts.isBinaryExpression(parent) &&
+                    parent.right === n &&
+                    parent.operatorToken.kind === ts.SyntaxKind.InKeyword
+                ) {
+                    return;
+                }
+                if (ts.isCallExpression(parent) && this.nonEscapingArraySafeCallArgument(parent, n)) {
+                    return;
+                }
+                if (
                     ts.isPropertyAccessExpression(parent) &&
                     parent.expression === n &&
                     parent.name.text === "length"
@@ -15776,6 +15786,44 @@ class Emitter {
                     this.nonEscapingArrayResultUseIsSafe(parent.parent)
                 );
             }
+        }
+        return false;
+    }
+
+    private nonEscapingArraySafeCallArgument(call: ts.CallExpression, arg: ts.Expression): boolean {
+        if (call.arguments[0] !== arg) return false;
+        const callee = call.expression;
+        if (!ts.isPropertyAccessExpression(callee) || !ts.isIdentifier(callee.expression)) {
+            return false;
+        }
+        const receiver = callee.expression.text;
+        const method = callee.name.text;
+        if (receiver === "Object") {
+            return [
+                "entries",
+                "getOwnPropertyDescriptor",
+                "getOwnPropertyDescriptors",
+                "getOwnPropertyNames",
+                "hasOwn",
+                "isExtensible",
+                "isFrozen",
+                "isSealed",
+                "keys",
+                "values",
+            ].includes(method);
+        }
+        if (receiver === "Reflect") {
+            return [
+                "get",
+                "getOwnPropertyDescriptor",
+                "getPrototypeOf",
+                "has",
+                "isExtensible",
+                "ownKeys",
+            ].includes(method);
+        }
+        if (receiver === "Array") {
+            return method === "isArray";
         }
         return false;
     }

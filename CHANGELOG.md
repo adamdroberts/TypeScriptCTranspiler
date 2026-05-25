@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Basic escape analysis now stack-allocates non-escaping typed array literal locals used as targets for supported read-only Object/Reflect helper calls and `in` checks. Test: `array_literal_stack_alloc_object_helpers`.
 - Basic escape analysis now stack-allocates non-escaping typed array literal locals used through independent iterator-array helpers `keys(...)`, `values(...)`, and `entries(...)`. Test: `array_literal_stack_alloc_iterators`.
 - Basic escape analysis now stack-allocates non-escaping typed array literal locals when receiver-returning in-place methods are consumed immediately by safe reads or readonly/copying methods. Test: `array_literal_stack_alloc_chained`.
 - Basic escape analysis now stack-allocates non-escaping typed array literal locals used through same-block `for...of` and `for...in` iteration. Test: `array_literal_stack_alloc_iteration`.
