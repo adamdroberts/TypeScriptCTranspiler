@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `stream.isDisturbed(...)` from `"stream"` and `"node:stream"` now classifies the bounded process stdio stream subset across named, namespace, and default imports. Test: `stream_stdio_disturbed_predicate`.
 - `stream.isErrored(...)` / `stream.isDestroyed(...)` from `"stream"` and `"node:stream"` now classify the bounded process stdio stream subset across named, namespace, and default imports. Test: `stream_stdio_state_predicates`.
 - `"timers/promises"` and `"node:timers/promises"` imports now expose an immediate-settled subset for omitted/zero-delay `setTimeout(...)` and `setImmediate(...)` across named, namespace, and default import forms. Test: `timers_promises_import`.
 - Direct `"dns/promises"` and `"node:dns/promises"` imports now route to the existing immediate `dns.promises.lookup` subset across named, namespace, and default import forms. Test: `dns_promises_subpath_import`.

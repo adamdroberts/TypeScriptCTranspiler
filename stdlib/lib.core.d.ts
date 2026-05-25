@@ -690,6 +690,7 @@ interface StreamModule {
     isWritable(stream: any, ...ignored: any[]): boolean;
     isErrored(stream: any, ...ignored: any[]): boolean;
     isDestroyed(stream: any, ...ignored: any[]): boolean;
+    isDisturbed(stream: any, ...ignored: any[]): boolean;
 }
 interface Process {
     readonly platform: string;
@@ -739,6 +740,7 @@ declare module "stream" {
     export function isWritable(stream: any, ...ignored: any[]): boolean;
     export function isErrored(stream: any, ...ignored: any[]): boolean;
     export function isDestroyed(stream: any, ...ignored: any[]): boolean;
+    export function isDisturbed(stream: any, ...ignored: any[]): boolean;
     const defaultStream: StreamModule;
     export default defaultStream;
 }
@@ -747,6 +749,7 @@ declare module "node:stream" {
     export function isWritable(stream: any, ...ignored: any[]): boolean;
     export function isErrored(stream: any, ...ignored: any[]): boolean;
     export function isDestroyed(stream: any, ...ignored: any[]): boolean;
+    export function isDisturbed(stream: any, ...ignored: any[]): boolean;
     const defaultStream: StreamModule;
     export default defaultStream;
 }

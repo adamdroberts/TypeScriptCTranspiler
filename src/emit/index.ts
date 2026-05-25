@@ -24931,7 +24931,8 @@ class Emitter {
             this.isNamedImportFrom(calleeId, ["stream", "node:stream"], "isReadable") ||
             this.isNamedImportFrom(calleeId, ["stream", "node:stream"], "isWritable") ||
             this.isNamedImportFrom(calleeId, ["stream", "node:stream"], "isErrored") ||
-            this.isNamedImportFrom(calleeId, ["stream", "node:stream"], "isDestroyed")
+            this.isNamedImportFrom(calleeId, ["stream", "node:stream"], "isDestroyed") ||
+            this.isNamedImportFrom(calleeId, ["stream", "node:stream"], "isDisturbed")
         ) {
             return this.emitStreamCall(call, name);
         }
@@ -26475,7 +26476,8 @@ class Emitter {
                 memberName === "isReadable" ||
                 memberName === "isWritable" ||
                 memberName === "isErrored" ||
-                memberName === "isDestroyed"
+                memberName === "isDestroyed" ||
+                memberName === "isDisturbed"
             ) {
                 return this.emitStreamCall(call, memberName);
             }
@@ -30360,7 +30362,8 @@ class Emitter {
             method !== "isReadable" &&
             method !== "isWritable" &&
             method !== "isErrored" &&
-            method !== "isDestroyed"
+            method !== "isDestroyed" &&
+            method !== "isDisturbed"
         ) {
             unsupported(call, `stream.${method}`);
         }
