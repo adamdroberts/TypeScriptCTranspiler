@@ -1,0 +1,14 @@
+typed keys: x|y
+typed values: 1|2
+typed entry: y 2
+array keys: 0|1
+array values: 10|20
+array entry: 1 20
+string keys: 0|1
+string values: h|i
+string entry: 1 i
+primitive: 0 0 0
+dynamic keys: alpha|beta
+dynamic values: A|B
+dynamic entry: beta B
+marks: abcdefghijklmno

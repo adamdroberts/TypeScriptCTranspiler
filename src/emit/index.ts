@@ -36831,9 +36831,9 @@ class Emitter {
         });
     }
 
-    private emitBufferObjectValues(objExpr: ts.Expression, obj: EmitResult): EmitResult {
+    private emitBufferObjectValues(objExpr: ts.Expression, obj: EmitResult, ignored: SequencedCallArg[] = []): EmitResult {
         if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer Object.values on non-buffer");
-        return this.emitSequencedExpr(arrayType(T_NUMBER), [{ value: obj, node: objExpr }], ([buffer]) => {
+        return this.emitSequencedExpr(arrayType(T_NUMBER), [{ value: obj, node: objExpr }, ...ignored], ([buffer]) => {
             const source = this.freshTemp("_bov_src");
             const out = this.freshTemp("_bov");
             const idx = this.freshTemp("_bov_i");
@@ -36842,10 +36842,10 @@ class Emitter {
         });
     }
 
-    private emitBufferObjectEntries(objExpr: ts.Expression, obj: EmitResult): EmitResult {
+    private emitBufferObjectEntries(objExpr: ts.Expression, obj: EmitResult, ignored: SequencedCallArg[] = []): EmitResult {
         if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer Object.entries on non-buffer");
         const elemType = entryType(T_NUMBER);
-        return this.emitSequencedExpr(arrayType(elemType), [{ value: obj, node: objExpr }], ([buffer]) => {
+        return this.emitSequencedExpr(arrayType(elemType), [{ value: obj, node: objExpr }, ...ignored], ([buffer]) => {
             const source = this.freshTemp("_boe_src");
             const out = this.freshTemp("_boe");
             const idx = this.freshTemp("_boe_i");
@@ -37537,6 +37537,7 @@ class Emitter {
         arg: ts.Expression,
         mapped: CType,
         tsType: ts.Type,
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         if (mapped.kind !== "class")
             unsupported(arg, "Object.entries on non-object (Phase 3)");
@@ -37551,7 +37552,6 @@ class Emitter {
         );
         const elemType = entryType(valueType);
         const pieces: string[] = [
-            `${mapped.c} ${obj} = ${argR.c}`,
             `tsc_array_t* ${arr} = tsc_array_new(sizeof(${elemType.c}), ${props.length || 1})`,
         ];
         for (const p of props) {
@@ -37573,7 +37573,9 @@ class Emitter {
             pieces.push(`tsc_array_push_raw(${arr}, &${entry})`);
         }
         pieces.push(arr);
-        return { c: `({ ${pieces.join("; ")}; })`, ty: arrayType(elemType) };
+        return this.emitSequencedExpr(arrayType(elemType), [{ value: argR, node: arg }, ...ignored], ([objC]) =>
+            `({ ${mapped.c} ${obj} = ${objC}; ${pieces.join("; ")}; })`,
+        );
     }
 
     private emitObjectFromEntries(
@@ -37712,48 +37714,50 @@ class Emitter {
             ], ([l, r]) => `tsc_value_object_is(${l}, ${r})`);
         }
         if (name === "keys") {
+            const ignored = this.ignoredArgumentSpecs(args, 1);
             if (mapped.kind === "value") {
                 const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value }], ([v]) =>
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value }, ...ignored], ([v]) =>
                     `({ if (tsc_value_is_nullish(${v!})) tsc_throw_str(tsc_str_from_cstr("Object.keys target must not be null or undefined")); tsc_value_object_keys(${v!}); })`,
                 );
             }
             if (nonStringPrimitiveObjectArg) {
                 const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value, node: arg }], ([v]) =>
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value, node: arg }, ...ignored], ([v]) =>
                     `({ (void)${v}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
                 );
             }
             if (emptyOwnBuiltinObjectArg) {
                 const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value, node: arg }], ([v]) =>
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value, node: arg }, ...ignored], ([v]) =>
                     `({ (void)${v}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
                 );
             }
             if (mapped.kind === "function") {
                 const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value, node: arg }], ([v]) =>
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value, node: arg }, ...ignored], ([v]) =>
                     `({ (void)${v}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
                 );
             }
             if (mapped.kind === "buffer") {
                 const value = this.emitExpr(arg);
-                return this.emitBufferOwnKeys(arg, value);
+                return this.emitBufferOwnKeys(arg, value, ignored);
             }
             if (mapped.kind === "string") {
                 const value = this.emitExpr(arg);
-                return this.emitSequencedCall("tsc_value_object_keys", arrayType(T_STRING), [
+                return this.emitSequencedExpr(arrayType(T_STRING), [
                     { value, target: T_VALUE, node: arg },
-                ]);
+                    ...ignored,
+                ], ([v]) => `tsc_value_object_keys(${v})`);
             }
             if (mapped.kind === "array") {
                 const value = this.emitExpr(arg);
                 if (value.ty.kind === "value") {
-                    return this.emitSequencedExpr(arrayType(T_STRING), [{ value, target: T_VALUE, node: arg }], ([v]) =>
+                    return this.emitSequencedExpr(arrayType(T_STRING), [{ value, target: T_VALUE, node: arg }, ...ignored], ([v]) =>
                         `({ if (tsc_value_is_nullish(${v})) tsc_throw_str(tsc_str_from_cstr("Object.keys target must not be null or undefined")); tsc_value_object_keys(${v}); })`,
                     );
                 }
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value }], ([arr]) => {
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value, target: mapped, node: arg }, ...ignored], ([arr]) => {
                     const source = this.freshTemp("_oak_src");
                     const out = this.freshTemp("_oak");
                     const idx = this.freshTemp("_oak_i");
@@ -37778,14 +37782,15 @@ class Emitter {
                 pieces.push(`tsc_array_push_raw(${av}, &${kv})`);
             }
             pieces.push(av);
-            return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }], ([o]) =>
+            return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }, ...ignored], ([o]) =>
                 `({ (void)${o}; ${pieces.join("; ")}; })`,
             );
         }
         if (name === "values") {
+            const ignored = this.ignoredArgumentSpecs(args, 1);
             if (mapped.kind === "value") {
                 const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value }], ([v]) =>
+                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value }, ...ignored], ([v]) =>
                     `({ if (tsc_value_is_nullish(${v!})) tsc_throw_str(tsc_str_from_cstr("Object.values target must not be null or undefined")); tsc_value_object_values(${v!}); })`,
                 );
             }
@@ -37793,29 +37798,29 @@ class Emitter {
                 const value = this.emitExpr(arg);
                 const resultType = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
                 const elem = resultType.kind === "array" ? resultType.elem ?? T_VALUE : T_VALUE;
-                return this.emitSequencedExpr(arrayType(elem), [{ value, node: arg }], ([v]) =>
+                return this.emitSequencedExpr(arrayType(elem), [{ value, node: arg }, ...ignored], ([v]) =>
                     `({ (void)${v}; tsc_array_new(sizeof(${elem.c}), 1); })`,
                 );
             }
             if (emptyOwnBuiltinObjectArg) {
                 const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, node: arg }], ([v]) =>
+                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, node: arg }, ...ignored], ([v]) =>
                     `({ (void)${v}; tsc_array_new(sizeof(tsc_value_t), 1); })`,
                 );
             }
             if (mapped.kind === "function") {
                 const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, node: arg }], ([v]) =>
+                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, node: arg }, ...ignored], ([v]) =>
                     `({ (void)${v}; tsc_array_new(sizeof(tsc_value_t), 1); })`,
                 );
             }
             if (mapped.kind === "buffer") {
                 const value = this.emitExpr(arg);
-                return this.emitBufferObjectValues(arg, value);
+                return this.emitBufferObjectValues(arg, value, ignored);
             }
             if (mapped.kind === "string") {
                 const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value }], ([str]) => {
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value, node: arg }, ...ignored], ([str]) => {
                     const source = this.freshTemp("_osv_src");
                     const out = this.freshTemp("_osv");
                     const idx = this.freshTemp("_osv_i");
@@ -37825,7 +37830,7 @@ class Emitter {
             }
             if (mapped.kind === "array") {
                 const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(mapped.elem ?? T_VALUE), [{ value }], ([arr]) =>
+                return this.emitSequencedExpr(arrayType(mapped.elem ?? T_VALUE), [{ value, target: mapped, node: arg }, ...ignored], ([arr]) =>
                     `tsc_array_slice(${arr}, 0.0, (double)${arr}->len)`,
                 );
             }
@@ -37842,7 +37847,6 @@ class Emitter {
             );
             const av = this.freshTemp("_ov2");
             const pieces: string[] = [
-                `${mapped.c} ${ov} = ${argR.c}`,
                 `tsc_array_t* ${av} = tsc_array_new(sizeof(${commonType.c}), ${props.length || 1})`,
             ];
             for (const p of props) {
@@ -37854,40 +37858,40 @@ class Emitter {
                 pieces.push(`tsc_array_push_raw(${av}, &${vv})`);
             }
             pieces.push(av);
-            return {
-                c: `({ ${pieces.join("; ")}; })`,
-                ty: arrayType(commonType),
-            };
+            return this.emitSequencedExpr(arrayType(commonType), [{ value: argR, node: arg }, ...ignored], ([objC]) =>
+                `({ ${mapped.c} ${ov} = ${objC}; ${pieces.join("; ")}; })`,
+            );
         }
         if (name === "entries") {
+            const ignored = this.ignoredArgumentSpecs(args, 1);
             if (nonStringPrimitiveObjectArg) {
                 const value = this.emitExpr(arg);
                 const resultType = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
                 const elem = resultType.kind === "array" ? resultType.elem ?? T_VALUE : T_VALUE;
-                return this.emitSequencedExpr(arrayType(elem), [{ value, node: arg }], ([v]) =>
+                return this.emitSequencedExpr(arrayType(elem), [{ value, node: arg }, ...ignored], ([v]) =>
                     `({ (void)${v}; tsc_array_new(sizeof(${elem.c}), 1); })`,
                 );
             }
             if (emptyOwnBuiltinObjectArg) {
                 const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, node: arg }], ([v]) =>
+                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, node: arg }, ...ignored], ([v]) =>
                     `({ (void)${v}; tsc_array_new(sizeof(tsc_value_t), 1); })`,
                 );
             }
             if (mapped.kind === "function") {
                 const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, node: arg }], ([v]) =>
+                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, node: arg }, ...ignored], ([v]) =>
                     `({ (void)${v}; tsc_array_new(sizeof(tsc_value_t), 1); })`,
                 );
             }
             if (mapped.kind === "buffer") {
                 const value = this.emitExpr(arg);
-                return this.emitBufferObjectEntries(arg, value);
+                return this.emitBufferObjectEntries(arg, value, ignored);
             }
             if (mapped.kind === "string") {
                 const value = this.emitExpr(arg);
                 const elemType = entryType(T_STRING);
-                return this.emitSequencedExpr(arrayType(elemType), [{ value }], ([str]) => {
+                return this.emitSequencedExpr(arrayType(elemType), [{ value, node: arg }, ...ignored], ([str]) => {
                     const source = this.freshTemp("_ose_src");
                     const out = this.freshTemp("_ose");
                     const idx = this.freshTemp("_ose_i");
@@ -37899,7 +37903,7 @@ class Emitter {
                 const value = this.emitExpr(arg);
                 const valueType = mapped.elem ?? T_VALUE;
                 const elemType = entryType(valueType);
-                return this.emitSequencedExpr(arrayType(elemType), [{ value }], ([arr]) => {
+                return this.emitSequencedExpr(arrayType(elemType), [{ value, target: mapped, node: arg }, ...ignored], ([arr]) => {
                     const source = this.freshTemp("_oae_src");
                     const out = this.freshTemp("_oae");
                     const idx = this.freshTemp("_oae_i");
@@ -37915,11 +37919,11 @@ class Emitter {
             );
             if (value.ty.kind === "value" || declaredDynamic) {
                 const dynamicValue: EmitResult = declaredDynamic ? { c: value.c, ty: T_VALUE } : value;
-                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value: dynamicValue }], ([v]) =>
+                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value: dynamicValue }, ...ignored], ([v]) =>
                     `({ if (tsc_value_is_nullish(${v!})) tsc_throw_str(tsc_str_from_cstr("Object.entries target must not be null or undefined")); tsc_value_object_entries(${v!}); })`,
                 );
             }
-            return this.emitObjectEntries(call, arg, mapped, tsType);
+            return this.emitObjectEntries(call, arg, mapped, tsType, ignored);
         }
         if (name === "fromEntries") {
             const entries = this.emitExpr(arg);
