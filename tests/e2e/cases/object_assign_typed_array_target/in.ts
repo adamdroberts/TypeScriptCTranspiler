@@ -39,12 +39,20 @@ const primitiveSources = [1, 2];
 Object.assign(primitiveSources, primitiveSource(), false, 10n, Symbol("p"));
 console.log("primitive sources:", primitiveCalls, primitiveSources.length, primitiveSources.join("|"));
 
+function report(label: string, fn: () => any): void {
+    try {
+        console.log(label + ":", fn());
+    } catch (e: any) {
+        console.log(label + ":", e);
+    }
+}
+
 const sealed = [5, 6];
 Object.seal(sealed);
-Object.assign(sealed, [7, 8, 9]);
+report("sealed assign", (): any => Object.assign(sealed, [7, 8, 9]) === sealed);
 console.log("sealed:", sealed.length, sealed.join("|"));
 
 const frozen = [1, 2];
 Object.freeze(frozen);
-Object.assign(frozen, [3, 4]);
+report("frozen assign", (): any => Object.assign(frozen, [3, 4]) === frozen);
 console.log("frozen:", frozen.join("|"));

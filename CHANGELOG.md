@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Object.assign(typedArrayTarget, source)` now throws through the catchable runtime exception path when typed-array target writes fail on frozen targets or sealed/non-extensible growth. Test: `object_assign_typed_array_target`.
 - `Object.assign(dynamicTarget, source)` now has focused coverage for catchable target set failures on non-writable properties and non-extensible targets. Test: `object_assign_set_failure`.
 - `Object.assign(proxyTarget, source)` now throws through the catchable runtime exception path when target property setting fails, including proxy `set` traps that return `false`. Test: `proxy_object_assign_set_failure`.
 - `Object.assign(target, proxySource)` now enumerates object Proxy sources through `ownKeys` and `getOwnPropertyDescriptor`, reads copied values through `get`, and preserves target proxy `set` dispatch. Test: `proxy_object_assign_source`.

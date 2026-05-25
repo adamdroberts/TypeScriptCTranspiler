@@ -38490,6 +38490,7 @@ class Emitter {
         }
         return this.emitSequencedExpr(target.ty, specs, (vals) => {
             const targetC = vals[0]!;
+            const assignFailure = `tsc_throw_str(tsc_str_from_cstr("Object.assign target set failed"))`;
             const pieces: string[] = [];
             for (const source of sources) {
                 const sourceC = vals[source.pos]!;
@@ -38503,15 +38504,14 @@ class Emitter {
                     };
                     const coerced = this.coerce(current, elem, source.node);
                     pieces.push(
-                        `if (!${targetC}->frozen) { ` +
-                            `for (size_t ${idx} = 0; ${idx} < ${sourceC}->len; ${idx}++) { ` +
-                                `${elem.c} ${elemTmp} = ${coerced}; ` +
-                                `if (${idx} < ${targetC}->len) { ` +
-                                    `TSC_ARR(${elem.c}, ${targetC}, ${idx}) = ${elemTmp}; ` +
-                                `} else if (${targetC}->extensible && !${targetC}->sealed && ${idx} == ${targetC}->len) { ` +
-                                    `tsc_array_push_raw(${targetC}, &${elemTmp}); ` +
-                                `} ` +
-                            `} ` +
+                        `for (size_t ${idx} = 0; ${idx} < ${sourceC}->len; ${idx}++) { ` +
+                            `${elem.c} ${elemTmp} = ${coerced}; ` +
+                            `if (${targetC}->frozen) { ${assignFailure}; ` +
+                            `} else if (${idx} < ${targetC}->len) { ` +
+                                `TSC_ARR(${elem.c}, ${targetC}, ${idx}) = ${elemTmp}; ` +
+                            `} else if (${targetC}->extensible && !${targetC}->sealed && ${idx} == ${targetC}->len) { ` +
+                                `tsc_array_push_raw(${targetC}, &${elemTmp}); ` +
+                            `} else { ${assignFailure}; } ` +
                         `}`,
                     );
                     continue;
@@ -38527,26 +38527,24 @@ class Emitter {
                     };
                     const coerced = this.coerce(raw, elem, source.node);
                     pieces.push(
-                        `if (!${targetC}->frozen) { ` +
-                            `tsc_array_t* ${keys} = tsc_value_object_keys(${sourceC}); ` +
-                            `for (size_t ${idx} = 0; ${idx} < ${keys}->len; ${idx}++) { ` +
-                                `tsc_str_t* ${key} = TSC_ARR(tsc_str_t*, ${keys}, ${idx}); ` +
-                                `bool _ta_assign_done = false; ` +
-                                `for (size_t ${targetIdx} = 0; ${targetIdx} < ${targetC}->len; ${targetIdx}++) { ` +
-                                    `tsc_str_t* _ta_assign_idx_key = tsc_str_from_int((int64_t)${targetIdx}); ` +
-                                    `if (tsc_str_eq(${key}, _ta_assign_idx_key)) { ` +
-                                        `${elem.c} ${elemTmp} = ${coerced}; ` +
-                                        `TSC_ARR(${elem.c}, ${targetC}, ${targetIdx}) = ${elemTmp}; ` +
-                                        `_ta_assign_done = true; ` +
-                                        `break; ` +
-                                    `} ` +
+                        `tsc_array_t* ${keys} = tsc_value_object_keys(${sourceC}); ` +
+                        `for (size_t ${idx} = 0; ${idx} < ${keys}->len; ${idx}++) { ` +
+                            `tsc_str_t* ${key} = TSC_ARR(tsc_str_t*, ${keys}, ${idx}); ` +
+                            `bool _ta_assign_done = false; ` +
+                            `for (size_t ${targetIdx} = 0; ${targetIdx} < ${targetC}->len; ${targetIdx}++) { ` +
+                                `tsc_str_t* _ta_assign_idx_key = tsc_str_from_int((int64_t)${targetIdx}); ` +
+                                `if (tsc_str_eq(${key}, _ta_assign_idx_key)) { ` +
+                                    `${elem.c} ${elemTmp} = ${coerced}; ` +
+                                    `if (${targetC}->frozen) { ${assignFailure}; } else { TSC_ARR(${elem.c}, ${targetC}, ${targetIdx}) = ${elemTmp}; } ` +
+                                    `_ta_assign_done = true; ` +
+                                    `break; ` +
                                 `} ` +
-                                `if (!_ta_assign_done && ${targetC}->extensible && !${targetC}->sealed) { ` +
-                                    `tsc_str_t* ${nextKey} = tsc_str_from_int((int64_t)${targetC}->len); ` +
-                                    `if (tsc_str_eq(${key}, ${nextKey})) { ` +
-                                        `${elem.c} ${elemTmp} = ${coerced}; ` +
-                                        `tsc_array_push_raw(${targetC}, &${elemTmp}); ` +
-                                    `} ` +
+                            `} ` +
+                            `if (!_ta_assign_done) { ` +
+                                `tsc_str_t* ${nextKey} = tsc_str_from_int((int64_t)${targetC}->len); ` +
+                                `if (tsc_str_eq(${key}, ${nextKey})) { ` +
+                                    `${elem.c} ${elemTmp} = ${coerced}; ` +
+                                    `if (${targetC}->frozen || !${targetC}->extensible || ${targetC}->sealed) { ${assignFailure}; } else { tsc_array_push_raw(${targetC}, &${elemTmp}); } ` +
                                 `} ` +
                             `} ` +
                         `}`,
@@ -38574,16 +38572,19 @@ class Emitter {
                         const coerced = this.coerce(raw, elem, source.node);
                         assignments.push(
                             `{ ${elem.c} ${elemTmp} = ${coerced}; ` +
-                                `if (${numericKey} < ${targetC}->len) { ` +
+                                `if (${targetC}->frozen && ${numericKey} <= ${targetC}->len) { ${assignFailure}; ` +
+                                `} else if (${numericKey} < ${targetC}->len) { ` +
                                     `TSC_ARR(${elem.c}, ${targetC}, ${numericKey}) = ${elemTmp}; ` +
                                 `} else if (${targetC}->extensible && !${targetC}->sealed && ${numericKey} == ${targetC}->len) { ` +
                                     `tsc_array_push_raw(${targetC}, &${elemTmp}); ` +
+                                `} else if (${numericKey} == ${targetC}->len) { ` +
+                                    `${assignFailure}; ` +
                                 `} ` +
                             `}`,
                         );
                     }
                     if (assignments.length) {
-                        pieces.push(`if (!${targetC}->frozen) { ${assignments.join(" ")} }`);
+                        pieces.push(assignments.join(" "));
                     } else {
                         pieces.push(`(void)${sourceC}`);
                     }
@@ -38604,15 +38605,14 @@ class Emitter {
                 };
                 const coerced = this.coerce(current, elem, source.node);
                 pieces.push(
-                    `if (!${targetC}->frozen) { ` +
-                        `for (size_t ${idx} = 0; ${idx} < ${sourceC}->len; ${idx}++) { ` +
-                            `${elem.c} ${elemTmp} = ${coerced}; ` +
-                            `if (${idx} < ${targetC}->len) { ` +
-                                `TSC_ARR(${elem.c}, ${targetC}, ${idx}) = ${elemTmp}; ` +
-                            `} else if (${targetC}->extensible && !${targetC}->sealed && ${idx} == ${targetC}->len) { ` +
-                                `tsc_array_push_raw(${targetC}, &${elemTmp}); ` +
-                            `} ` +
-                        `} ` +
+                    `for (size_t ${idx} = 0; ${idx} < ${sourceC}->len; ${idx}++) { ` +
+                        `${elem.c} ${elemTmp} = ${coerced}; ` +
+                        `if (${targetC}->frozen) { ${assignFailure}; ` +
+                        `} else if (${idx} < ${targetC}->len) { ` +
+                            `TSC_ARR(${elem.c}, ${targetC}, ${idx}) = ${elemTmp}; ` +
+                        `} else if (${targetC}->extensible && !${targetC}->sealed && ${idx} == ${targetC}->len) { ` +
+                            `tsc_array_push_raw(${targetC}, &${elemTmp}); ` +
+                        `} else { ${assignFailure}; } ` +
                     `}`,
                 );
             }
