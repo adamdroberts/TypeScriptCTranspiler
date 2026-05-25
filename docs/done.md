@@ -83,7 +83,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - Top-level generic function references are specialized in typed array callback contexts such as `map(identity)`, `flatMap(wrap)`, `filter`, `reduce`, `forEach`, `find`/`some`/`every`, and `sort` comparators. Test: `generic_callbacks`
 - Top-level generic function references are specialized when assigned to concrete function-typed values, using generated adapter closures. Test: `generic_function_values`
 - `Reflect.apply(fn, thisArg, args)` works for statically known function values with array-literal, array-literal-spread, typed-array, and dynamic-array argument lists; function values that declare `this: any` receive the supplied `thisArg`. Test: `reflect_apply`
-- Dynamic function values support `.call(...)` and `.apply(...)` lowering through the boxed function dispatcher for generic function identities and callable proxies. Test: `proxy_revocable_revoke_function`
+- Dynamic function values support `.call(...)` and `.apply(...)` lowering through the boxed function dispatcher for generic function identities and callable proxies, including omitted, `undefined`, and `null` `.apply(...)` argument lists. Tests: `function_call_apply_defaults`, `proxy_revocable_revoke_function`
 - Generic classes are supported with erased `tsc_value_t` type-parameter storage and typed coercion at construction, method, and accessor property boundaries, including fixed-arity spread calls through erased generic class methods and standard class decorator replacement constructors for direct, spread, and static `Reflect.construct` constructor calls. Tests: `generic_classes`, `generic_class_accessors`, `generic_class_decorator_replacement`, `generic_class_decorator_spread_replacement`, `generic_class_decorator_reflect_construct`
 - Generic instance and static class methods are monomorphized per concrete call signature, including inherited generic method calls with base self-casts, literal/const-literal computed method names, and fixed-arity spread argument lists. Test: `generic_methods`
 - Left-to-right argument evaluation for function, method, constructor, console, math, path, fs write, regex, and supported string calls with side effects. Test: `call_arg_order`
@@ -1294,6 +1294,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `fs_mkdir_mode_options` | fs.mkdirSync and immediate-settled fs.promises.mkdir numeric mode and const recursive options |
 | `function_closures` | returned closures with function-scope captures and mutable captured state |
 | `function_integrity` | stable boxed direct function identity, own length/name metadata, typed function Object/Reflect helpers, function seal/freeze state, trapless function Proxy integrity forwarding, and function-target Proxy metadata/ownKeys invariant coverage |
+| `function_call_apply_defaults` | dynamic function call/apply thisArg forwarding and omitted/nullish apply argument lists |
 | `function_prototypes` | boxed function Object/Reflect prototype and extensibility state |
 | `function_value_spread` | spread calls through first-class function values |
 | `generator_functions` | synchronous function* materialized Iterator/IterableIterator lowering with yield, bounded yield*, next, return, and throw |

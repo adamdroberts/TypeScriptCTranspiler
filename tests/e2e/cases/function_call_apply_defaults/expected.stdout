@@ -1,0 +1,5 @@
+call args: call:x:y
+apply args: apply:x:y
+apply omitted: omitted:undefined:undefined
+apply undefined: undefined:undefined:undefined
+apply null: null:undefined:undefined

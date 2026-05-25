@@ -133,6 +133,7 @@ This is the next item that most directly expands what programs can be written ag
   - Generated-C DCE proves primitive element reads through pure integer-bound `copyWithin(...)` results, enabling unused `Promise.resolve(...)` and direct expression pruning for copied and retained elements in fresh arrays. Test: `generated_c_dce_const`.
   - Generated-C DCE proves primitive element reads through pure `keys()` and `values()` array results, enabling unused `Promise.resolve(...)` and direct expression pruning for in-range fresh arrays. Test: `generated_c_dce_const`.
   - Generated-C DCE proves primitive tuple reads through pure array `entries()` results, enabling unused `Promise.resolve(...)` and direct expression pruning for in-range fresh arrays. Test: `generated_c_dce_const`.
+  - Dynamic function values now support direct `.call(...)` / `.apply(...)` lowering through the boxed function dispatcher, including omitted, `undefined`, and `null` `.apply(...)` argument lists. Tests: `function_call_apply_defaults`, `proxy_revocable_revoke_function`.
   - Still missing: hidden classes / shape trees, inline caches and diagnostics, complete built-in object/array prototype behavior, broader prototype method coverage, and remaining descriptor/prototype edge cases.
   - Still blocks: production-quality untyped npm packages, remaining `Proxy` construct/invariant coverage, full `Reflect`, remaining property descriptor edge cases, and high-performance dynamic property access.
 
