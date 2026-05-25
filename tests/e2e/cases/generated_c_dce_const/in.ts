@@ -1133,6 +1133,7 @@ const unused_promise_resolve_array_of_to_spliced_length = Promise.resolve(Array.
 const unused_promise_resolve_array_of_to_spliced_absent_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_to_spliced_absent_element", "dead_promise_resolve_array_of_to_spliced_absent_element_tail").toSpliced(1, 1, "dead_promise_resolve_array_of_to_spliced_absent_element_insert")[2]);
 const unused_promise_resolve_array_of_slice_length = Promise.resolve(Array.of("dead_promise_resolve_array_of_slice_length", "dead_promise_resolve_array_of_slice_length_tail", "dead_promise_resolve_array_of_slice_length_extra").slice(1, 2).length);
 const unused_promise_resolve_array_of_slice_absent_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_slice_absent_element", "dead_promise_resolve_array_of_slice_absent_element_tail", "dead_promise_resolve_array_of_slice_absent_element_extra").slice(-2, -1)[1]);
+const unused_promise_resolve_array_of_slice_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_slice_element", "dead_promise_resolve_array_of_slice_element_hit", "dead_promise_resolve_array_of_slice_element_tail").slice(1, 3)[0]);
 const unused_promise_resolve_array_of_concat_length = Promise.resolve(Array.of("dead_promise_resolve_array_of_concat_length").concat(Array.of("dead_promise_resolve_array_of_concat_length_arg", "dead_promise_resolve_array_of_concat_length_arg_tail")).length);
 const unused_promise_resolve_array_of_concat_absent_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_concat_absent_element").concat(Array.of("dead_promise_resolve_array_of_concat_absent_element_arg", "dead_promise_resolve_array_of_concat_absent_element_arg_tail"))[3]);
 const unused_promise_resolve_array_of_flat_zero_length = Promise.resolve(Array.of("dead_promise_resolve_array_of_flat_zero_length", "dead_promise_resolve_array_of_flat_zero_length_tail").flat(0).length);
@@ -3665,6 +3666,7 @@ function usedLocal(value: number): number {
     Array.of("local_dead_array_of_to_spliced_absent_element", "local_dead_array_of_to_spliced_absent_element_tail").toSpliced(1, 1, "local_dead_array_of_to_spliced_absent_element_insert")[2];
     Array.of("local_dead_array_of_slice_length", "local_dead_array_of_slice_length_tail", "local_dead_array_of_slice_length_extra").slice(1, 2).length;
     Array.of("local_dead_array_of_slice_absent_element", "local_dead_array_of_slice_absent_element_tail", "local_dead_array_of_slice_absent_element_extra").slice(-2, -1)[1];
+    Array.of("local_dead_array_of_slice_element", "local_dead_array_of_slice_element_hit", "local_dead_array_of_slice_element_tail").slice(1, 3)[0];
     Array.of("local_dead_array_of_concat_length").concat(Array.of("local_dead_array_of_concat_length_arg", "local_dead_array_of_concat_length_arg_tail")).length;
     Array.of("local_dead_array_of_concat_absent_element").concat(Array.of("local_dead_array_of_concat_absent_element_arg", "local_dead_array_of_concat_absent_element_arg_tail"))[3];
     Array.of("local_dead_array_of_flat_zero_length", "local_dead_array_of_flat_zero_length_tail").flat(0).length;

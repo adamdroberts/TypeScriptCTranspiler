@@ -9005,6 +9005,12 @@ class Emitter {
                 seenConsts,
             );
             if (toSplicedResult !== null) return toSplicedResult;
+            const sliceResult = this.sideEffectFreePrimitiveSliceElementResult(
+                unwrapped,
+                index,
+                seenConsts,
+            );
+            if (sliceResult !== null) return sliceResult;
         }
         const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped, seenConsts);
         if (returnedArrayLength !== null && (index < 0 || index >= returnedArrayLength)) {
@@ -9056,6 +9062,54 @@ class Emitter {
         return this.isSideEffectFreePrimitivePromiseResolveValue(inserted, new Set(seenConsts))
             ? "present"
             : "unsafe";
+    }
+
+    private sideEffectFreePrimitiveSliceElementResult(
+        call: ts.CallExpression,
+        index: number,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" | null {
+        if (
+            !ts.isPropertyAccessExpression(call.expression) ||
+            call.expression.name.text !== "slice" ||
+            call.arguments.length > 2
+        ) {
+            return null;
+        }
+        const receiverLength = this.sideEffectFreeFreshOrReturnedArrayLength(
+            call.expression.expression,
+            seenConsts,
+        );
+        if (receiverLength === null) return null;
+        const startValue = call.arguments[0]
+            ? this.sideEffectFreePrimitiveNumberValue(call.arguments[0], seenConsts)
+            : 0;
+        const endValue = call.arguments[1]
+            ? this.sideEffectFreePrimitiveNumberValue(call.arguments[1], seenConsts)
+            : receiverLength;
+        if (
+            startValue === null ||
+            endValue === null ||
+            !Number.isFinite(startValue) ||
+            !Number.isFinite(endValue) ||
+            !Number.isInteger(startValue) ||
+            !Number.isInteger(endValue)
+        ) {
+            return "unsafe";
+        }
+        const actualStart = startValue < 0
+            ? Math.max(receiverLength + startValue, 0)
+            : Math.min(startValue, receiverLength);
+        const actualEnd = endValue < 0
+            ? Math.max(receiverLength + endValue, 0)
+            : Math.min(endValue, receiverLength);
+        const sliceLength = Math.max(actualEnd - actualStart, 0);
+        if (index < 0 || index >= sliceLength) return "absent";
+        return this.sideEffectFreePrimitiveArrayElementOperandResult(
+            call.expression.expression,
+            actualStart + index,
+            new Set(seenConsts),
+        );
     }
 
     private sideEffectFreePrimitiveStaticArrayElementResult(
