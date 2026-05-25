@@ -26,6 +26,7 @@ This is the next item that most directly expands what programs can be written ag
   - Named and default imports from `"url"` / `"node:url"` route to the supported `URL` constructor and `URL.canParse(...)` helpers. Test: `url_module_import`.
   - Additional Buffer coverage routes invalid encodings, bad hex/base64 input, invalid sizes/lengths, out-of-range read/write offsets, and invalid swap widths through catchable runtime exceptions. Test: `buffer_errors`.
   - Additional crypto coverage routes unsupported hash algorithms, invalid random byte sizes, and unsupported digest encodings through catchable runtime exceptions. Test: `crypto_errors`.
+  - Named, namespace, and default imports from `"console"` / `"node:console"` route to the supported variadic console helpers. Test: `console_module_import`.
   - Additional object/iteration coverage routes invalid `Object.create(...)` prototypes and dynamic `for...of` non-iterable values through catchable runtime exceptions. Test: `dynamic_object_iteration_errors`.
   - Additional child-process coverage routes `execSync(...)` / `execFileSync(...)` command failure, timeout, and maxBuffer overflow through catchable runtime exceptions. Test: `child_process_sync_errors`.
   - Additional typed array descriptor and own-key coverage is implemented for `Object.getOwnPropertyDescriptor(array, key)`, `Object.getOwnPropertyDescriptors(array)`, `Reflect.getOwnPropertyDescriptor(array, key)`, and the `in` operator. Tests: `array_property_descriptors`, `array_own_properties`.

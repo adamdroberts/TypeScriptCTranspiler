@@ -641,6 +641,22 @@ interface Console {
     info(...data: unknown[]): void;
 }
 declare const console: Console;
+declare module "console" {
+    export const log: Console["log"];
+    export const error: Console["error"];
+    export const warn: Console["warn"];
+    export const info: Console["info"];
+    const defaultConsole: Console;
+    export default defaultConsole;
+}
+declare module "node:console" {
+    export const log: Console["log"];
+    export const error: Console["error"];
+    export const warn: Console["warn"];
+    export const info: Console["info"];
+    const defaultConsole: Console;
+    export default defaultConsole;
+}
 
 interface ProcessEnv {
     [key: string]: string | undefined;

@@ -540,6 +540,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 
 ### `console`
 - `console.log` / `.error` / `.warn` / `.info` — variadic, auto-stringifies each arg
+- Named, namespace, and default imports from `"console"` / `"node:console"` route to the supported variadic console helpers. Test: `console_module_import`
 - First-argument formatting for `%s`, `%d`, `%i`, `%f`, `%o`, `%O`, `%c`, and `%%`. Test: `console_format`
 - Runtime: `tsc_console_log_n`, `tsc_console_error_n`
 
@@ -968,6 +969,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `closure_optional_parameters` | first-class closures accept omitted optional pointer and function parameters |
 | `collection_object_methods` | Map/Set/WeakMap/WeakSet/WeakRef toString/toLocaleString/valueOf |
 | `comma_operator` | comma operator side effects and right-hand value |
+| `console_module_import` | console/node:console imports route to supported console helpers |
 | `child_process_exec_callbacks` | child_process exec/execFile immediate UTF-8 callback subset |
 | `child_process_exec_callbacks_cwd` | child_process exec/execFile immediate callback cwd option |
 | `child_process_exec_callback_error` | child_process.exec callback child setup error |

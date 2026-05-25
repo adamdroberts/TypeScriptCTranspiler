@@ -17125,6 +17125,13 @@ class Emitter {
         );
     }
 
+    private isConsoleModuleIdentifier(expr: ts.Expression): boolean {
+        return ts.isIdentifier(expr) && (
+            this.isNamespaceImportFrom(expr, ["console", "node:console"]) ||
+            this.isDefaultImportFrom(expr, ["console", "node:console"])
+        );
+    }
+
     private isBufferModuleIdentifier(expr: ts.Expression): boolean {
         return ts.isIdentifier(expr) && (
             this.isNamespaceImportFrom(expr, ["buffer", "node:buffer"]) ||
@@ -24872,6 +24879,11 @@ class Emitter {
         if (name === "clearTimeout" || name === "clearInterval") {
             return this.emitClearTimerCall(call, "tsc_clear_timeout");
         }
+        const consoleNamed = ["log", "error", "warn", "info"]
+            .find((exported) => this.isNamedImportFrom(calleeId, ["console", "node:console"], exported));
+        if (consoleNamed) {
+            return this.emitConsole(call, consoleNamed);
+        }
         const timersNamed = ["setTimeout", "clearTimeout", "clearInterval", "setImmediate", "clearImmediate"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["timers", "node:timers"], exported));
         if (timersNamed) {
@@ -26379,6 +26391,13 @@ class Emitter {
             return this.emitTimersCall(call, memberName);
         }
 
+        if (
+            this.isConsoleModuleIdentifier(recvExpr) &&
+            (memberName === "log" || memberName === "error" || memberName === "warn" || memberName === "info")
+        ) {
+            return this.emitConsole(call, memberName);
+        }
+
         if (this.isStreamModuleIdentifier(recvExpr)) {
             if (memberName === "isReadable" || memberName === "isWritable") {
                 return this.emitStreamCall(call, memberName);
@@ -26619,8 +26638,10 @@ class Emitter {
         }
 
         if (
-            ts.isIdentifier(recvExpr) &&
-            recvExpr.text === "console" &&
+            (
+                ts.isIdentifier(recvExpr) &&
+                recvExpr.text === "console"
+            ) &&
             (memberName === "log" ||
                 memberName === "error" ||
                 memberName === "warn" ||
