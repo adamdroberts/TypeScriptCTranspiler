@@ -7091,19 +7091,26 @@ class Emitter {
                     if (method === "race") return "pending";
                     return "fulfilled";
                 }
-                if (states.some((state) => state === "pending")) return "pending";
                 if (method === "all") {
                     return states.some((state) => state === "rejected")
                         ? "rejected"
+                        : states.some((state) => state === "pending")
+                            ? "pending"
+                            : "fulfilled";
+                }
+                if (method === "allSettled") {
+                    return states.some((state) => state === "pending")
+                        ? "pending"
                         : "fulfilled";
                 }
-                if (method === "allSettled") return "fulfilled";
                 if (method === "any") {
                     return states.some((state) => state === "fulfilled")
                         ? "fulfilled"
-                        : "rejected";
+                        : states.some((state) => state === "pending")
+                            ? "pending"
+                            : "rejected";
                 }
-                return states[0]!;
+                return states.find((state) => state !== "pending") ?? "pending";
             }
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);

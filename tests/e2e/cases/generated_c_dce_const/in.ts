@@ -615,6 +615,26 @@ const unused_new_promise_empty_then_call = new Promise<string>(() => {
 const unused_new_promise_empty_finally_call = new Promise<string>(() => {
 })
     .finally(() => "dead_new_promise_empty_finally_callback");
+const unused_promise_all_pending_rejected_catch_call = Promise.all([
+    Promise.race([] as Promise<string>[]),
+    Promise.reject<string>("dead_promise_all_pending_rejected_source"),
+])
+    .catch(() => "dead_promise_all_pending_rejected_catch_callback");
+const unused_promise_any_pending_fulfilled_then_call = Promise.any([
+    Promise.race([] as Promise<string>[]),
+    Promise.resolve("dead_promise_any_pending_fulfilled_source"),
+])
+    .then(() => "dead_promise_any_pending_fulfilled_then_callback");
+const unused_promise_race_pending_fulfilled_then_call = Promise.race([
+    Promise.race([] as Promise<string>[]),
+    Promise.resolve("dead_promise_race_pending_fulfilled_source"),
+])
+    .then(() => "dead_promise_race_pending_fulfilled_then_callback");
+const unused_promise_race_pending_rejected_catch_call = Promise.race([
+    Promise.race([] as Promise<string>[]),
+    Promise.reject<string>("dead_promise_race_pending_rejected_source"),
+])
+    .catch(() => "dead_promise_race_pending_rejected_catch_callback");
 const unused_new_promise_empty_executor_call = new Promise<string>(() => {
 });
 const unused_new_promise_resolve_call = new Promise<string>((resolve) => resolve("dead_new_promise_resolve"));
@@ -1703,6 +1723,26 @@ new Promise<string>(() => {
 new Promise<string>(() => {
 })
     .finally(() => "top_level_dead_new_promise_empty_finally_callback");
+Promise.all([
+    Promise.race([] as Promise<string>[]),
+    Promise.reject<string>("top_level_dead_promise_all_pending_rejected_source"),
+])
+    .catch(() => "top_level_dead_promise_all_pending_rejected_catch_callback");
+Promise.any([
+    Promise.race([] as Promise<string>[]),
+    Promise.resolve("top_level_dead_promise_any_pending_fulfilled_source"),
+])
+    .then(() => "top_level_dead_promise_any_pending_fulfilled_then_callback");
+Promise.race([
+    Promise.race([] as Promise<string>[]),
+    Promise.resolve("top_level_dead_promise_race_pending_fulfilled_source"),
+])
+    .then(() => "top_level_dead_promise_race_pending_fulfilled_then_callback");
+Promise.race([
+    Promise.race([] as Promise<string>[]),
+    Promise.reject<string>("top_level_dead_promise_race_pending_rejected_source"),
+])
+    .catch(() => "top_level_dead_promise_race_pending_rejected_catch_callback");
 new Promise<string>(() => {
 });
 new Promise<string>((resolve) => resolve("top_level_dead_new_promise_resolve"));
@@ -2768,6 +2808,26 @@ function usedLocal(value: number): number {
     new Promise<string>(() => {
     })
         .finally(() => "local_dead_new_promise_empty_finally_callback");
+    Promise.all([
+        Promise.race([] as Promise<string>[]),
+        Promise.reject<string>("local_dead_promise_all_pending_rejected_source"),
+    ])
+        .catch(() => "local_dead_promise_all_pending_rejected_catch_callback");
+    Promise.any([
+        Promise.race([] as Promise<string>[]),
+        Promise.resolve("local_dead_promise_any_pending_fulfilled_source"),
+    ])
+        .then(() => "local_dead_promise_any_pending_fulfilled_then_callback");
+    Promise.race([
+        Promise.race([] as Promise<string>[]),
+        Promise.resolve("local_dead_promise_race_pending_fulfilled_source"),
+    ])
+        .then(() => "local_dead_promise_race_pending_fulfilled_then_callback");
+    Promise.race([
+        Promise.race([] as Promise<string>[]),
+        Promise.reject<string>("local_dead_promise_race_pending_rejected_source"),
+    ])
+        .catch(() => "local_dead_promise_race_pending_rejected_catch_callback");
     new Promise<string>(() => {
     });
     new Promise<string>((resolve) => resolve("local_dead_new_promise_resolve"));
