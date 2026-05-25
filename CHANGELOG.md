@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE coverage now proves `Object.groupBy(...)` / `Map.groupBy(...)` pruning through earlier-const empty string sources. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now proves `Object.groupBy(...)` / `Map.groupBy(...)` pruning through earlier-const and copy-constructed empty typed Set sources. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now proves `Object.groupBy(...)` / `Map.groupBy(...)` pruning through earlier-const and copy-constructed empty typed Map sources. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused `Object.groupBy(...)` / `Map.groupBy(...)` calls over statically empty typed Map sources. Test: `generated_c_dce_const`.
