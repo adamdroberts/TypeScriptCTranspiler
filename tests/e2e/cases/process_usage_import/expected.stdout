@@ -1,0 +1,5 @@
+named ids: true true
+namespace ids: true true true
+memory: number true number
+resource: number true number
+ignored: mr

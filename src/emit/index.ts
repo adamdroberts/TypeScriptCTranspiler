@@ -24862,7 +24862,17 @@ class Emitter {
         if (this.isNamedImportFrom(calleeId, ["process", "node:process"], "nextTick")) {
             return this.emitProcessNextTickCall(call);
         }
-        const processNamed = ["cwd", "uptime"]
+        const processNamed = [
+            "cwd",
+            "uptime",
+            "getuid",
+            "getgid",
+            "geteuid",
+            "getegid",
+            "getgroups",
+            "memoryUsage",
+            "resourceUsage",
+        ]
             .find((exported) => this.isNamedImportFrom(calleeId, ["process", "node:process"], exported));
         if (processNamed) {
             return this.emitProcessModuleCall(call, processNamed);
@@ -27022,6 +27032,48 @@ class Emitter {
                     T_NUMBER,
                     this.ignoredArgumentSpecs(call.arguments, 0),
                     () => `tsc_process_uptime()`,
+                );
+            case "getuid":
+                return this.emitSequencedExpr(
+                    T_NUMBER,
+                    this.ignoredArgumentSpecs(call.arguments, 0),
+                    () => `tsc_process_getuid()`,
+                );
+            case "getgid":
+                return this.emitSequencedExpr(
+                    T_NUMBER,
+                    this.ignoredArgumentSpecs(call.arguments, 0),
+                    () => `tsc_process_getgid()`,
+                );
+            case "geteuid":
+                return this.emitSequencedExpr(
+                    T_NUMBER,
+                    this.ignoredArgumentSpecs(call.arguments, 0),
+                    () => `tsc_process_geteuid()`,
+                );
+            case "getegid":
+                return this.emitSequencedExpr(
+                    T_NUMBER,
+                    this.ignoredArgumentSpecs(call.arguments, 0),
+                    () => `tsc_process_getegid()`,
+                );
+            case "getgroups":
+                return this.emitSequencedExpr(
+                    arrayType(T_NUMBER),
+                    this.ignoredArgumentSpecs(call.arguments, 0),
+                    () => `tsc_process_getgroups()`,
+                );
+            case "memoryUsage":
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    this.ignoredArgumentSpecs(call.arguments, 0),
+                    () => `tsc_process_memory_usage()`,
+                );
+            case "resourceUsage":
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    this.ignoredArgumentSpecs(call.arguments, 0),
+                    () => `tsc_process_resource_usage()`,
                 );
         }
         unsupported(call, `process.${name}`);

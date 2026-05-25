@@ -713,12 +713,26 @@ interface Process {
 declare const process: Process;
 declare module "process" {
     export const cwd: Process["cwd"];
+    export const getegid: Process["getegid"];
+    export const geteuid: Process["geteuid"];
+    export const getgid: Process["getgid"];
+    export const getgroups: Process["getgroups"];
+    export const getuid: Process["getuid"];
+    export const memoryUsage: Process["memoryUsage"];
     export const nextTick: Process["nextTick"];
+    export const resourceUsage: Process["resourceUsage"];
     export const uptime: Process["uptime"];
 }
 declare module "node:process" {
     export const cwd: Process["cwd"];
+    export const getegid: Process["getegid"];
+    export const geteuid: Process["geteuid"];
+    export const getgid: Process["getgid"];
+    export const getgroups: Process["getgroups"];
+    export const getuid: Process["getuid"];
+    export const memoryUsage: Process["memoryUsage"];
     export const nextTick: Process["nextTick"];
+    export const resourceUsage: Process["resourceUsage"];
     export const uptime: Process["uptime"];
 }
 
