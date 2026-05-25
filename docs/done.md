@@ -161,22 +161,22 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - `.toReversed(...ignored)` — copy via `tsc_array_to_reversed`; original array remains unchanged and ignored extra arguments are evaluated. Test: `array_to_reversed`
 - `.fill(value, start?, end?)` — in-place via `tsc_array_fill`. Test: `array_fill`
 - `.copyWithin(target, start, end?)` — in-place via `tsc_array_copy_within`. Test: `array_copy_within`
-- `.at(index)` — positive and negative index lookup. Test: `array_at`
+- `.at(index, ...ignored)` — positive and negative index lookup after evaluating ignored extra arguments. Tests: `array_at`, `array_read_ignored_arguments`
 - `.with(index, value)` — copy via `tsc_array_with`; original array remains unchanged, negative indices count from the end, and out-of-range failures are catchable. Tests: `array_with`, `array_with_errors`
 - `.toSpliced(start?, deleteCount?, ...items)` — copy via `tsc_array_to_spliced`; original array remains unchanged. Test: `array_to_spliced`
-- `.slice(start?, end?)` — `tsc_array_slice`
+- `.slice(start?, end?, ...ignored)` — `tsc_array_slice` after evaluating ignored extra arguments. Test: `array_read_ignored_arguments`
 - `.concat(...items)` — copy plus `tsc_array_append`/`tsc_array_push_raw`; accepts array arguments, single element arguments, and spread elements inside array-literal arguments. Test: `array_concat_values`
-- `.join(sep?)` — with type-driven element stringification
+- `.join(sep?, ...ignored)` — with type-driven element stringification after evaluating ignored extra arguments. Test: `array_read_ignored_arguments`
 - `.toString(...ignored)` / `.toLocaleString(...ignored)` — typed arrays reuse comma-join stringification after evaluating ignored extra arguments. Test: `array_to_string`
 - `.valueOf(...ignored)` — returns the typed array receiver unchanged after evaluating ignored extra arguments. Test: `array_value_of`
 - `.keys(...ignored)` / `.values(...ignored)` / `.entries(...ignored)` — returns a number-index array, a shallow value copy, or `[string, value]` entry arrays after evaluating ignored extra arguments. Tests: `array_keys_values`, `array_entries`
 - `.hasOwnProperty(key)` / `.propertyIsEnumerable(key)` plus `Object.hasOwn(array, key)`, `Reflect.has(array, key)`, and the `in` operator check typed array indexes and the non-enumerable `length` own property. Test: `array_own_properties`
 - `Object.getOwnPropertyDescriptor(array, key)`, `Object.getOwnPropertyDescriptors(array)`, and `Reflect.getOwnPropertyDescriptor(array, key)` return typed array index and `length` data descriptors. Test: `array_property_descriptors`
 - `Array.from(string)` — returns an array of one-code-point strings via `tsc_str_chars`. Test: `array_from_string`
-- `.indexOf(x, fromIndex?)`, `.lastIndexOf(x, fromIndex?)`, `.includes(x, fromIndex?)` — with proper per-element-type equality, SameValueZero `includes(NaN)` behavior, and JS-style from-index clamping. Tests: `array_last_index_of`, `array_search_from_index`, `array_includes_same_value_zero`
+- `.indexOf(x, fromIndex?, ...ignored)`, `.lastIndexOf(x, fromIndex?, ...ignored)`, `.includes(x, fromIndex?, ...ignored)` — with proper per-element-type equality, SameValueZero `includes(NaN)` behavior, JS-style from-index clamping, and ignored extra-argument evaluation. Tests: `array_last_index_of`, `array_search_from_index`, `array_includes_same_value_zero`, `array_read_ignored_arguments`
 - `.sort()` / `.toSorted()` — JS-style default string-conversion sort; `toSorted` returns a sorted copy. Tests: `array_sort_default`, `array_to_sorted`
 - `.sort((a, b) => cmp)` / `.toSorted((a, b) => cmp)` — inline insertion sort; accepts inline expression-body and single-return block-body callbacks, named function references, and first-class closure comparator values. Tests: `wordcount`, `array_to_sorted`
-- `.flat(depth)` for compile-time numeric depths and `.flatMap(cb)` for array-returning or scalar callbacks. Test: `array_flat`
+- `.flat(depth?, ...ignored)` for compile-time numeric depths after evaluating ignored extra arguments and `.flatMap(cb)` for array-returning or scalar callbacks. Tests: `array_flat`, `array_read_ignored_arguments`
 - `.forEach(cb)` / `.map(cb)` / `.filter(cb)` / `.reduce(cb[, init])` / `.reduceRight(cb[, init])`; callbacks receive the standard receiver array argument and inline callbacks may use expression bodies or single-return block bodies. Tests: `array_hof`, `array_reduce_no_initial`, `array_reduce_right`
 - `.find(cb)` / `.findIndex(cb)` / `.findLast(cb)` / `.findLastIndex(cb)` / `.some(cb)` / `.every(cb)`; callbacks receive the standard receiver array argument and inline callbacks may use expression bodies or single-return block bodies. `find` / `findLast` return `undefined` when no element matches for element types that can flow through `tsc_value_t`, including inferred numeric/boolean nullish locals assigned from the result. Tests: `array_hof`, `array_find_last`
 - Typed array higher-order methods accept optional `thisArg` values, evaluate them once, and bind them for direct and inline callbacks that declare `this: any`. Test: `array_hof_this_arg`
@@ -1781,6 +1781,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_index_assignment` | dynamic array index writes and compound index writes |
 | `dynamic_last_index_of` | dynamic string and array lastIndexOf |
 | `array_at` | Array.at positive and negative index lookup |
+| `array_read_ignored_arguments` | Array read/search helpers evaluate ignored trailing arguments |
 | `array_find_last` | Array.findLast and Array.findLastIndex reverse callback scan |
 | `array_includes_same_value_zero` | typed and dynamic Array.includes SameValueZero behavior |
 | `array_reduce_right` | Array.reduceRight reverse accumulation with explicit initial value |

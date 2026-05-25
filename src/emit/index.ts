@@ -27806,7 +27806,7 @@ class Emitter {
             case "lastIndexOf":
                 return oneRequiredOneOptional("tsc_value_method_last_index_of", { c: "tsc_value_num(INFINITY)", ty: T_VALUE });
             case "at":
-                if (args.length !== 1) unsupported(call, "at expects 1 arg");
+                if (args.length < 1) unsupported(call, "at expects 1 arg");
                 return oneArg("tsc_value_method_at");
             case "hasOwnProperty":
                 if (args.length < 1) unsupported(call, "hasOwnProperty expects at least 1 arg");
@@ -27911,12 +27911,16 @@ class Emitter {
                 });
             }
             case "flat": {
-                if (args.length > 1) unsupported(call, "flat expects 0 or 1 arg");
                 const depth = args[0] ? this.emitExpr(args[0]) : missing;
-                return this.emitSequencedCall("tsc_value_method_flat", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: depth, target: T_VALUE, node: args[0] ?? call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: depth, target: T_VALUE, node: args[0] ?? call.expression },
+                        ...this.ignoredArgumentSpecs(args, 1),
+                    ],
+                    ([target, depthArg]) => `tsc_value_method_flat(${target}, ${depthArg})`,
+                );
             }
             case "fill": {
                 if (args.length < 1 || args.length > 3) unsupported(call, "fill expects 1-3 args");
@@ -28059,14 +28063,18 @@ class Emitter {
                     ([target]) => `tsc_value_method_to_reversed(${target})`,
                 );
             case "slice": {
-                if (args.length > 2) unsupported(call, "slice expects 0-2 args");
                 const start = args[0] ? this.emitExpr(args[0]) : missing;
                 const end = args[1] ? this.emitExpr(args[1]) : missing;
-                return this.emitSequencedCall("tsc_value_method_slice", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: start, target: T_VALUE, node: args[0] ?? call.expression },
-                    { value: end, target: T_VALUE, node: args[1] ?? call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: start, target: T_VALUE, node: args[0] ?? call.expression },
+                        { value: end, target: T_VALUE, node: args[1] ?? call.expression },
+                        ...this.ignoredArgumentSpecs(args, 2),
+                    ],
+                    ([target, startArg, endArg]) => `tsc_value_method_slice(${target}, ${startArg}, ${endArg})`,
+                );
             }
             case "keys":
                 return this.emitSequencedExpr(
@@ -32616,12 +32624,6 @@ class Emitter {
                 `{ if (${iv} > 0) _r = tsc_str_concat(_r, _s); _r = tsc_str_concat(_r, ${stringify(`TSC_ARR(${et.c}, ${av}, ${iv})`)}); } _r; })`
             );
         };
-        const emitJoinString = (sep: string): EmitResult => {
-            return {
-                c: emitJoinStringExpr(recv.c, sep),
-                ty: T_STRING,
-            };
-        };
         const emitForwardStartDecls = (len: string, from: string, out: string): string =>
             `size_t ${out} = 0; ` +
             `if (isnan(${from}) || ${from} == -INFINITY) ${out} = 0; ` +
@@ -32730,7 +32732,7 @@ class Emitter {
             case "length":
                 return { c: `tsc_array_length(${recv.c})`, ty: T_NUMBER };
             case "indexOf": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "indexOf expects 1 or 2 args");
+                if (args.length < 1) unsupported(call, "indexOf expects at least 1 arg");
                 const needle = this.emitExpr(args[0]!);
                 const coerced = this.coerce(needle, et, args[0]!);
                 const fromIndex = args[1] ? this.emitExpr(args[1]) : { c: "0.0", ty: T_NUMBER };
@@ -32739,6 +32741,7 @@ class Emitter {
                     { value: recv },
                     { value: { c: coerced, ty: et }, target: et, node: args[0]! },
                     { value: fromIndex, target: T_NUMBER, node: args[1] ?? call.expression },
+                    ...this.ignoredArgumentSpecs(args, 2),
                 ], ([arr, target, from]) => {
                     const av = this.freshTemp("_arr");
                     const iv = this.freshTemp("_i");
@@ -32757,7 +32760,7 @@ class Emitter {
                 });
             }
             case "lastIndexOf": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "lastIndexOf expects 1 or 2 args");
+                if (args.length < 1) unsupported(call, "lastIndexOf expects at least 1 arg");
                 const needle = this.emitExpr(args[0]!);
                 const coerced = this.coerce(needle, et, args[0]!);
                 const fromIndex = args[1] ? this.emitExpr(args[1]) : { c: "INFINITY", ty: T_NUMBER };
@@ -32766,6 +32769,7 @@ class Emitter {
                     { value: recv },
                     { value: { c: coerced, ty: et }, target: et, node: args[0]! },
                     { value: fromIndex, target: T_NUMBER, node: args[1] ?? call.expression },
+                    ...this.ignoredArgumentSpecs(args, 2),
                 ], ([arr, target, from]) => {
                     const av = this.freshTemp("_arr");
                     const iv = this.freshTemp("_i");
@@ -32785,7 +32789,7 @@ class Emitter {
                 });
             }
             case "includes": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "includes expects 1 or 2 args");
+                if (args.length < 1) unsupported(call, "includes expects at least 1 arg");
                 const needle = this.emitExpr(args[0]!);
                 const coerced = this.coerce(needle, et, args[0]!);
                 const fromIndex = args[1] ? this.emitExpr(args[1]) : { c: "0.0", ty: T_NUMBER };
@@ -32794,6 +32798,7 @@ class Emitter {
                     { value: recv },
                     { value: { c: coerced, ty: et }, target: et, node: args[0]! },
                     { value: fromIndex, target: T_NUMBER, node: args[1] ?? call.expression },
+                    ...this.ignoredArgumentSpecs(args, 2),
                 ], ([arr, target, from]) => {
                     const av = this.freshTemp("_arr");
                     const iv = this.freshTemp("_i");
@@ -32814,12 +32819,13 @@ class Emitter {
                 });
             }
             case "at": {
-                if (args.length !== 1) unsupported(call, "at expects 1 arg");
+                if (args.length < 1) unsupported(call, "at expects at least 1 arg");
                 const index = this.emitExpr(args[0]!);
                 requireNumber(args[0]!, index.ty);
                 return this.emitSequencedExpr(et, [
                     { value: recv },
                     { value: index, target: T_NUMBER, node: args[0]! },
+                    ...this.ignoredArgumentSpecs(args, 1),
                 ], ([arr, idx]) => {
                     const av = this.freshTemp("_arr");
                     const nv = this.freshTemp("_at");
@@ -32854,6 +32860,7 @@ class Emitter {
                     requireNumber(args[1], end.ty);
                     specs.push({ value: end, target: T_NUMBER, node: args[1] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(recv.ty, specs, (vals) => {
                     const arr = vals[0]!;
                     const start = vals[1] ?? "0";
@@ -32883,9 +32890,17 @@ class Emitter {
             }
             case "join": {
                 const sep = args[0]
-                    ? this.coerceToString(this.emitExpr(args[0]), args[0])
-                    : `tsc_str_from_lit(",", 1)`;
-                return emitJoinString(sep);
+                    ? this.emitExpr(args[0])
+                    : { c: `tsc_str_from_lit(",", 1)`, ty: T_STRING };
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [
+                        { value: recv },
+                        { value: sep, target: T_STRING, node: args[0] ?? call.expression },
+                        ...this.ignoredArgumentSpecs(args, 1),
+                    ],
+                    ([arr, sepArg]) => emitJoinStringExpr(arr!, sepArg!),
+                );
             }
             case "keys": {
                 const av = this.freshTemp("_arr");
@@ -33127,27 +33142,41 @@ class Emitter {
     }
 
     private emitArrayFlat(call: ts.CallExpression, recv: EmitResult): EmitResult {
-        if (call.arguments.length > 1) unsupported(call, "flat expects 0 or 1 arg");
         const depth = call.arguments[0] ? this.constantFlatDepth(call.arguments[0]!) : 1;
-        let currentC = depth === 0
-            ? `tsc_array_slice(${recv.c}, 0, (double)${recv.c}->len)`
-            : recv.c;
-        let currentTy = recv.ty;
-        if (depth === 0) return { c: currentC, ty: currentTy };
-
-        for (let i = 0; i < depth; i++) {
-            const elem = currentTy.elem!;
-            if (elem.kind !== "array") {
-                if (i === 0) {
-                    currentC = `tsc_array_slice(${currentC}, 0, (double)${currentC}->len)`;
-                }
-                break;
+        let resultTy = recv.ty;
+        if (depth > 0) {
+            for (let i = 0; i < depth; i++) {
+                const elem = resultTy.elem!;
+                if (elem.kind !== "array") break;
+                resultTy = arrayType(elem.elem!);
             }
-            const inner = elem.elem!;
-            currentC = `tsc_array_flat_once(${currentC}, sizeof(${inner.c}))`;
-            currentTy = arrayType(inner);
         }
-        return { c: currentC, ty: currentTy };
+        const resultFor = (arr: string): string => {
+            let currentTy = recv.ty;
+            let currentC = depth === 0
+                ? `tsc_array_slice(${arr}, 0, (double)${arr}->len)`
+                : arr;
+            if (depth === 0) return currentC;
+
+            for (let i = 0; i < depth; i++) {
+                const elem = currentTy.elem!;
+                if (elem.kind !== "array") {
+                    if (i === 0) {
+                        currentC = `tsc_array_slice(${currentC}, 0, (double)${currentC}->len)`;
+                    }
+                    break;
+                }
+                const inner = elem.elem!;
+                currentC = `tsc_array_flat_once(${currentC}, sizeof(${inner.c}))`;
+                currentTy = arrayType(inner);
+            }
+            return currentC;
+        };
+        return this.emitSequencedExpr(
+            resultTy,
+            [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 1)],
+            ([arr]) => resultFor(arr!),
+        );
     }
 
     private constantFlatDepth(expr: ts.Expression): number {

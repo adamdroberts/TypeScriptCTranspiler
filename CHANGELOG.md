@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Typed and dynamic array read/search helpers including `.indexOf(...)`, `.lastIndexOf(...)`, `.includes(...)`, `.at(...)`, `.slice(...)`, `.join(...)`, and `.flat(...)` now evaluate and ignore trailing arguments after their JavaScript-consumed inputs. Test: `array_read_ignored_arguments`.
 - `Promise.all(...)`, `Promise.allSettled(...)`, `Promise.race(...)`, `Promise.any(...)`, `Promise.try(...)`, and synchronous `.then(...)` / `.catch(...)` / `.finally(...)` now evaluate and ignore trailing arguments. Test: `promise_ignored_arguments`.
 - `Reflect.apply(...)`, dynamic `Reflect.construct(...)`, and supported Object/Reflect property, prototype, and extensibility helpers now evaluate and ignore trailing arguments across dynamic, typed-array, typed-object, and Buffer-backed paths. Test: `reflect_ignored_arguments`.
 - `new URL(input, base?, ...ignored)` now evaluates and ignores trailing constructor arguments after the optional base. Test: `url_constructor_ignored_arguments`.

@@ -171,10 +171,10 @@ interface Array<T> extends Iterable<T> {
     pop(...ignored: any[]): T | undefined;
     shift(...ignored: any[]): T | undefined;
     unshift(...items: T[]): number;
-    indexOf(searchElement: T, fromIndex?: number): number;
-    lastIndexOf(searchElement: T, fromIndex?: number): number;
-    includes(searchElement: T, fromIndex?: number): boolean;
-    at(index: number): T | undefined;
+    indexOf(searchElement: T, fromIndex?: number, ...ignored: any[]): number;
+    lastIndexOf(searchElement: T, fromIndex?: number, ...ignored: any[]): number;
+    includes(searchElement: T, fromIndex?: number, ...ignored: any[]): boolean;
+    at(index: number, ...ignored: any[]): T | undefined;
     reverse(...ignored: any[]): T[];
     toReversed(...ignored: any[]): T[];
     sort(cmp?: (a: T, b: T) => number): T[];
@@ -183,12 +183,12 @@ interface Array<T> extends Iterable<T> {
     toSpliced(start?: number, deleteCount?: number, ...items: T[]): T[];
     fill(value: T, start?: number, end?: number): T[];
     copyWithin(target: number, start: number, end?: number): T[];
-    flat(depth: 0): T[];
-    flat<U>(this: U[][], depth?: 1): U[];
-    flat<U>(this: U[][][], depth: 2): U[];
-    slice(start?: number, end?: number): T[];
+    flat(depth: 0, ...ignored: any[]): T[];
+    flat<U>(this: U[][], depth?: 1, ...ignored: any[]): U[];
+    flat<U>(this: U[][][], depth: 2, ...ignored: any[]): U[];
+    slice(start?: number, end?: number, ...ignored: any[]): T[];
     concat(...items: (T | T[])[]): T[];
-    join(sep?: string): string;
+    join(sep?: string, ...ignored: any[]): string;
     keys(...ignored: any[]): number[];
     values(...ignored: any[]): T[];
     entries(...ignored: any[]): [string, T][];
@@ -216,17 +216,17 @@ interface Array<T> extends Iterable<T> {
 
 interface ReadonlyArray<T> extends Iterable<T> {
     readonly length: number;
-    indexOf(searchElement: T, fromIndex?: number): number;
-    lastIndexOf(searchElement: T, fromIndex?: number): number;
-    includes(searchElement: T, fromIndex?: number): boolean;
-    at(index: number): T | undefined;
+    indexOf(searchElement: T, fromIndex?: number, ...ignored: any[]): number;
+    lastIndexOf(searchElement: T, fromIndex?: number, ...ignored: any[]): number;
+    includes(searchElement: T, fromIndex?: number, ...ignored: any[]): boolean;
+    at(index: number, ...ignored: any[]): T | undefined;
     toReversed(...ignored: any[]): T[];
     toSorted(cmp?: (a: T, b: T) => number): T[];
     with(index: number, value: T): T[];
     toSpliced(start?: number, deleteCount?: number, ...items: T[]): T[];
-    slice(start?: number, end?: number): T[];
+    slice(start?: number, end?: number, ...ignored: any[]): T[];
     concat(...items: (T | T[])[]): T[];
-    join(sep?: string): string;
+    join(sep?: string, ...ignored: any[]): string;
     keys(...ignored: any[]): number[];
     values(...ignored: any[]): T[];
     entries(...ignored: any[]): [string, T][];
