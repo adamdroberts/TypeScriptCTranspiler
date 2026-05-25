@@ -698,10 +698,12 @@ interface ProcessReadableStream {
     on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     once(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     pause(...ignored: any[]): void;
+    pipe(destination: ProcessWritableStream, ...ignored: any[]): void;
     removeAllListeners(eventName?: string, ...ignored: any[]): void;
     removeListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     resume(...ignored: any[]): void;
     setEncoding(encoding: string, ...ignored: any[]): void;
+    unpipe(destination?: ProcessWritableStream, ...ignored: any[]): void;
 }
 interface StreamModule {
     isReadable(stream: any, ...ignored: any[]): boolean;

@@ -26857,6 +26857,42 @@ class Emitter {
                 () => "((void)0)",
             );
         }
+        const processStdinPipeStreamName = (
+            memberName === "pipe" ||
+            memberName === "unpipe"
+        )
+            ? this.processStdioStreamReceiverName(recvExpr)
+            : null;
+        if (processStdinPipeStreamName) {
+            if (processStdinPipeStreamName !== "stdin") {
+                unsupported(call, `process.${processStdinPipeStreamName}.${memberName} is not supported in this stdio subset`);
+            }
+            if (memberName === "pipe") {
+                if (call.arguments.length < 1) unsupported(call, "process.stdin.pipe expects a destination stream");
+                const destination = this.processWritableStreamReceiverName(
+                    this.unwrapSideEffectFreeStaticExpression(call.arguments[0]!),
+                );
+                if (!destination) unsupported(call.arguments[0]!, "process.stdin.pipe currently supports process stdout/stderr destinations");
+                return this.emitSequencedExpr(
+                    T_VOID,
+                    this.ignoredArgumentSpecs(call.arguments, 1),
+                    () => "((void)0)",
+                );
+            }
+            if (call.arguments.length > 0) {
+                if (!this.isUndefinedExpression(call.arguments[0]!)) {
+                    const destination = this.processWritableStreamReceiverName(
+                        this.unwrapSideEffectFreeStaticExpression(call.arguments[0]!),
+                    );
+                    if (!destination) unsupported(call.arguments[0]!, "process.stdin.unpipe currently supports process stdout/stderr destinations");
+                }
+            }
+            return this.emitSequencedExpr(
+                T_VOID,
+                this.ignoredArgumentSpecs(call.arguments, call.arguments.length > 0 ? 1 : 0),
+                () => "((void)0)",
+            );
+        }
         const processStdinStreamName = (
             memberName === "setEncoding" ||
             memberName === "pause" ||

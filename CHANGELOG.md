@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `process.stdin.pipe(...)` and `process.stdin.unpipe(...)` now act as no-op compatibility methods for process stdout/stderr destinations while evaluating ignored arguments. Test: `process_stdin_pipe_noop_methods`.
 - Process stdio streams now accept no-op `on(...)`, `once(...)`, `addListener(...)`, `off(...)`, `removeListener(...)`, and `removeAllListeners(...)` compatibility methods while evaluating supplied arguments. Test: `process_stdio_event_noop_methods`.
 - `fs.constants` now exposes common POSIX open flags `O_RDONLY`, `O_WRONLY`, `O_RDWR`, `O_CREAT`, `O_EXCL`, `O_TRUNC`, `O_APPEND`, `O_DIRECTORY`, and `O_NOFOLLOW` across default, namespace, and named constants imports. Test: `fs_open_flag_constants`.
 - `process.stdout` / `process.stderr` now accept no-op `setDefaultEncoding(...)`, `cork(...)`, and `uncork(...)` compatibility methods across global, named, namespace, and default process references. Test: `process_stdout_noop_methods`.
