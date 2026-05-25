@@ -30602,7 +30602,7 @@ class Emitter {
             case "prependListener":
             case "once":
             case "prependOnceListener": {
-                if (args.length !== 2) unsupported(call, `EventEmitter.${method} expects eventName and listener`);
+                if (args.length < 2) unsupported(call, `EventEmitter.${method} expects eventName and listener`);
                 const eventName = this.emitExpr(args[0]!);
                 const listener = this.emitEventListenerExpression(args[1]!);
                 const adapter = this.ensureEventListenerAdapter(args[1]!, listener.ty);
@@ -30610,13 +30610,14 @@ class Emitter {
                     { value: recv },
                     { value: eventName, target: T_STRING, node: args[0]! },
                     { value: listener, target: listener.ty, node: args[1]! },
+                    ...this.ignoredArgumentSpecs(args, 2),
                 ], ([ee, event, fn]) =>
                     `({ tsc_event_emitter_on(${ee}, ${event}, ${adapter}, (void*)${fn}, ${this.eventListenerIdentity(args[1]!, fn)}, ${method === "once" || method === "prependOnceListener" ? "true" : "false"}, ${method === "prependListener" || method === "prependOnceListener" ? "true" : "false"}); ${ee}; })`,
                 );
             }
             case "off":
             case "removeListener": {
-                if (args.length !== 2) unsupported(call, `EventEmitter.${method} expects eventName and listener`);
+                if (args.length < 2) unsupported(call, `EventEmitter.${method} expects eventName and listener`);
                 const eventName = this.emitExpr(args[0]!);
                 const listener = this.emitEventListenerExpression(args[1]!);
                 const adapter = this.ensureEventListenerAdapter(args[1]!, listener.ty);
@@ -30624,6 +30625,7 @@ class Emitter {
                     { value: recv },
                     { value: eventName, target: T_STRING, node: args[0]! },
                     { value: listener, target: listener.ty, node: args[1]! },
+                    ...this.ignoredArgumentSpecs(args, 2),
                 ], ([ee, event, fn]) =>
                     `({ tsc_event_emitter_off(${ee}, ${event}, ${adapter}, ${this.eventListenerIdentity(args[1]!, fn)}); ${ee}; })`,
                 );

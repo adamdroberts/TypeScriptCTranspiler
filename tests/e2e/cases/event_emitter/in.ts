@@ -26,7 +26,7 @@ console.log("count before:", emitter.listenerCount("data", undefined, mark("c"))
 console.log("emit1:", emitter.emit("data", "alpha", 1));
 console.log("count after once:", emitter.listenerCount("data"));
 
-emitter.off("data", listener);
+emitter.off("data", listener, mark("f"));
 console.log("count after off:", emitter.listenerCount("data"));
 console.log("emit2:", emitter.emit("data", "beta", 2));
 

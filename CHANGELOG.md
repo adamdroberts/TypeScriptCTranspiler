@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- EventEmitter instance listener registration and removal methods now evaluate and ignore trailing arguments after the listener parameter. Tests: `event_emitter`, `event_emitter_more`.
 - `EventTarget.addEventListener(...)` and `removeEventListener(...)` now evaluate and ignore trailing arguments after the optional options slot. Test: `event_target`.
 - EventEmitter instance `listenerCount(eventName, listener?, ...ignored)` and `removeAllListeners(eventName?, ...ignored)` now evaluate and ignore trailing arguments, and `listenerCount` treats explicit `undefined` listener filters as omitted. Test: `event_emitter`.
 - `FinalizationRegistry.register(...)` now treats an explicit `undefined` unregister token as omitted while still evaluating ignored trailing arguments. Test: `finalization_registry`.

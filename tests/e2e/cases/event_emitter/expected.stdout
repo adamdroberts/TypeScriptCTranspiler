@@ -6,4 +6,4 @@ emit2: true
 count after remove: 0
 emit3: false
 seen: named:alpha:1|closure:alpha:1|once:alpha:1|named:beta:2
-ignored: cr
+ignored: cfr

@@ -1776,13 +1776,13 @@ interface AddEventListenerOptions extends EventListenerOptions {
 }
 
 interface EventEmitter {
-    on(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void): this;
-    addListener(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void): this;
-    prependListener(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void): this;
-    once(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void): this;
-    prependOnceListener(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void): this;
-    off(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void): this;
-    removeListener(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void): this;
+    on(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): this;
+    addListener(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): this;
+    prependListener(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): this;
+    once(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): this;
+    prependOnceListener(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): this;
+    off(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): this;
+    removeListener(eventName: string, listener: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): this;
     removeAllListeners(eventName?: string, ...ignored: any[]): this;
     emit(eventName: string, ...args: any[]): boolean;
     listenerCount(eventName: string, listener?: (this: EventEmitter, ...args: any[]) => void, ...ignored: any[]): number;

@@ -10,16 +10,16 @@ function mark(label: string): string {
 
 emitter.on("data", (label: string): void => {
     seen.push("on:" + label);
-});
+}, mark("o"));
 emitter.prependListener("data", (label: string): void => {
     seen.push("pre:" + label);
-});
+}, mark("p"));
 emitter.prependOnceListener("data", (label: string): void => {
     seen.push("once:" + label);
-});
+}, mark("q"));
 emitter.on("other", (): void => {
     seen.push("other");
-});
+}, mark("x"));
 
 console.log("names:", emitter.eventNames().join("|"));
 console.log("names ignored:", emitter.eventNames(mark("e")).join("|"), ignoredSeen);

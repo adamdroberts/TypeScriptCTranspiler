@@ -1,5 +1,5 @@
 names: data|other
-names ignored: data|other e
+names ignored: data|other opqxe
 static count: 3
 emit1: true
 after once: 2
