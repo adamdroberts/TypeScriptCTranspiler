@@ -17,7 +17,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - Tagged template calls with a `TemplateStringsArray` first parameter and fixed substitution parameters. Test: `tagged_templates`
 - `String.raw` tagged templates preserve raw template segments and stringify substitutions at compile time. Test: `string_raw`
 - Boolean literals `true` / `false`. Test: `json`
-- `null` / `undefined` / `NaN` / `Infinity` globals. Test: `nullish`, `stdlib_os`
+- `null` / `undefined` / `NaN` / `Infinity` globals, with inferred top-level and local nullish variables stored as boxed values so `typeof` and strict equality preserve JavaScript null-vs-undefined identity. Tests: `nullish`, `stdlib_os`, `nullish_variable_storage`
 - Array literals `[1, 2, 3]` with spread `[0, ...a, 6]` → `emitArrayLiteral`. Test: `advanced`
 - Object literals `{ x: 1 }` matched against an interface/class shape → `emitObjectLiteral`. Test: `interfaces`
 - Computed property names in typed object literals when the key resolves to a string/number literal, e.g. `{ [key]: value }`. Test: `computed_props`
@@ -1317,6 +1317,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `release_build` | `--release` size-optimized linking still produces a runnable binary |
 | `rest_spread` | rest parameters plus spread arguments into rest and fixed-arity function/method calls |
 | `nullish` | `??` + `?.` + null returns from functions |
+| `nullish_variable_storage` | inferred top-level and local nullish variables use boxed value storage |
 | `advanced` | spread + Object.keys + Array.from + padStart + replace |
 | `object_array_enumeration` | Object keys/values/entries/property names over typed arrays |
 | `object_assign_array_target` | Object.assign into dynamic array targets |

@@ -13825,6 +13825,9 @@ class Emitter {
                     this.checker,
                 ),
             );
+            if (ts.isVariableDeclaration(decl)) {
+                return this.variableStorageType(base);
+            }
             // Int-shape specialization: the C-level storage of this symbol
             // is int64_t, not double. Surface that to the assignment / read
             // sites so they don't insert spurious cvtsi2sd casts.
@@ -13835,6 +13838,11 @@ class Emitter {
         } catch {
             return null;
         }
+    }
+
+    private variableStorageType(base: CType): CType {
+        if (base.kind === "void") return T_VALUE;
+        return base;
     }
 
     private expressionDeclaredOrCurrentType(expr: ts.Expression): ts.Type {
@@ -15960,7 +15968,7 @@ class Emitter {
                     ts.isArrayLiteralExpression(d.initializer) &&
                     this.isUntypedJsArrayLiteral(d.initializer)
                 ? T_VALUE
-                : this.prepareType(mapType(d, this.checker));
+                : this.variableStorageType(this.prepareType(mapType(d, this.checker)));
 
             // If this number is provably integer-shape, store as int64_t.
             // C's implicit conversion handles boundaries (calls, etc.).
@@ -16622,13 +16630,13 @@ class Emitter {
                 if (this.decoratedClassConstructorAliasTarget(d)) {
                     ct = T_VALUE;
                 } else if (d.type) {
-                    ct = this.prepareType(mapType(d, this.checker));
+                    ct = this.variableStorageType(this.prepareType(mapType(d, this.checker)));
                 } else {
                     const inferred = this.prepareType(mapType(d, this.checker));
-                    ct = inferred.kind === "value" ? inferred : r.ty;
+                    ct = this.variableStorageType(inferred.kind === "value" ? inferred : r.ty);
                 }
             } else {
-                ct = this.prepareType(mapType(d, this.checker));
+                ct = this.variableStorageType(this.prepareType(mapType(d, this.checker)));
             }
             // Int-shape specialization: when the symbol is provably integer
             // and would otherwise be `double`, store as `int64_t`. Closures
@@ -18250,6 +18258,9 @@ class Emitter {
             }
             const ty = this.prepareType(mapType(expr, this.checker));
             const declaredTy = this.identifierDeclaredType(expr);
+            if (declaredTy?.kind === "value" && ty.kind === "void") {
+                return { c: this.identifierRead(expr), ty: T_VALUE };
+            }
             if (declaredTy?.kind === "value" && ty.kind !== "value") {
                 return {
                     c: this.unboxDynamicValue(this.identifierRead(expr), ty),

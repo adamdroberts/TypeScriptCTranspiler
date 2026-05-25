@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Inferred top-level and local variables initialized to `null` / `undefined` now use boxed value storage instead of invalid C `void` declarations, preserving `typeof` and strict nullish equality. Test: `nullish_variable_storage`.
 - CommonJS package sources now treat read-only `module` metadata destructuring such as `const { filename, path, loaded, paths, parent, children } = module` as static wrapper metadata. Test: `node_modules_commonjs_module_metadata_destructure`.
 - CommonJS package sources now treat `const { require: req, exports: out } = module` destructuring as static wrapper aliases for AOT require edges and export mutations. Test: `node_modules_commonjs_module_destructure_wrapper`.
 - CommonJS package sources now treat function-scoped `const mod = module` aliases as static wrapper aliases for scoped `mod.require(...)`, `const req = mod.require`, and read-only module metadata. Test: `node_modules_commonjs_function_scope_module_alias`.
