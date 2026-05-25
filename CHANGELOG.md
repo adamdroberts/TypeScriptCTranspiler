@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Generated-C DCE coverage now proves `Promise.any(...)` / `Promise.race(...)` element-state pruning through side-effect-free Promise instance-chain elements. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now proves `Promise.all(...)` element-state pruning through side-effect-free Promise instance-chain elements. Test: `generated_c_dce_const`.
 - Generated-C DCE now propagates `new Promise(...)` executor state through side-effect-free resolved/rejected Promise instance-chain arguments. Test: `generated_c_dce_const`.
 - Generated-C DCE now propagates `Promise.try(...)` callback return state through side-effect-free Promise instance chains before pruning deeper unused chains. Test: `generated_c_dce_const`.

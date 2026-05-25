@@ -656,6 +656,20 @@ const unused_promise_all_pending_then_element_call = Promise.all([
     Promise.race([] as Promise<string>[]).then((value) => "dead_promise_all_pending_then_element_unreached"),
 ])
     .finally(() => "dead_promise_all_pending_then_element_finally_callback");
+const unused_promise_any_then_passthrough_element_call = Promise.any([
+    Promise.reject<string>("dead_promise_any_then_passthrough_rejected_element").then(undefined),
+    Promise.resolve("dead_promise_any_then_passthrough_fulfilled_element").then(),
+])
+    .then((value) => "dead_promise_any_then_passthrough_element_callback");
+const unused_promise_any_pending_then_element_call = Promise.any([
+    Promise.race([] as Promise<string>[]).then((value) => "dead_promise_any_pending_then_element_unreached"),
+    Promise.reject<string>("dead_promise_any_pending_then_rejected_element").then(undefined),
+])
+    .finally(() => "dead_promise_any_pending_then_element_finally_callback");
+const unused_promise_race_then_passthrough_element_call = Promise.race([
+    Promise.resolve("dead_promise_race_then_passthrough_element_source").then(),
+])
+    .then((value) => "dead_promise_race_then_passthrough_element_callback");
 const unused_promise_any_pending_fulfilled_then_call = Promise.any([
     Promise.race([] as Promise<string>[]),
     Promise.resolve("dead_promise_any_pending_fulfilled_source"),
@@ -1854,6 +1868,20 @@ Promise.all([
 ])
     .finally(() => "top_level_dead_promise_all_pending_then_element_finally_callback");
 Promise.any([
+    Promise.reject<string>("top_level_dead_promise_any_then_passthrough_rejected_element").then(undefined),
+    Promise.resolve("top_level_dead_promise_any_then_passthrough_fulfilled_element").then(),
+])
+    .then((value) => "top_level_dead_promise_any_then_passthrough_element_callback");
+Promise.any([
+    Promise.race([] as Promise<string>[]).then((value) => "top_level_dead_promise_any_pending_then_element_unreached"),
+    Promise.reject<string>("top_level_dead_promise_any_pending_then_rejected_element").then(undefined),
+])
+    .finally(() => "top_level_dead_promise_any_pending_then_element_finally_callback");
+Promise.race([
+    Promise.resolve("top_level_dead_promise_race_then_passthrough_element_source").then(),
+])
+    .then((value) => "top_level_dead_promise_race_then_passthrough_element_callback");
+Promise.any([
     Promise.race([] as Promise<string>[]),
     Promise.resolve("top_level_dead_promise_any_pending_fulfilled_source"),
 ])
@@ -3009,6 +3037,20 @@ function usedLocal(value: number): number {
         Promise.race([] as Promise<string>[]).then((value) => "local_dead_promise_all_pending_then_element_unreached"),
     ])
         .finally(() => "local_dead_promise_all_pending_then_element_finally_callback");
+    Promise.any([
+        Promise.reject<string>("local_dead_promise_any_then_passthrough_rejected_element").then(undefined),
+        Promise.resolve("local_dead_promise_any_then_passthrough_fulfilled_element").then(),
+    ])
+        .then((value) => "local_dead_promise_any_then_passthrough_element_callback");
+    Promise.any([
+        Promise.race([] as Promise<string>[]).then((value) => "local_dead_promise_any_pending_then_element_unreached"),
+        Promise.reject<string>("local_dead_promise_any_pending_then_rejected_element").then(undefined),
+    ])
+        .finally(() => "local_dead_promise_any_pending_then_element_finally_callback");
+    Promise.race([
+        Promise.resolve("local_dead_promise_race_then_passthrough_element_source").then(),
+    ])
+        .then((value) => "local_dead_promise_race_then_passthrough_element_callback");
     Promise.any([
         Promise.race([] as Promise<string>[]),
         Promise.resolve("local_dead_promise_any_pending_fulfilled_source"),
