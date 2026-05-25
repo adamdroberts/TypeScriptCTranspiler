@@ -15793,7 +15793,13 @@ class Emitter {
     private nonEscapingArraySafeCallArgument(call: ts.CallExpression, arg: ts.Expression): boolean {
         if (call.arguments[0] !== arg) return false;
         const callee = call.expression;
-        if (!ts.isPropertyAccessExpression(callee) || !ts.isIdentifier(callee.expression)) {
+        if (!ts.isPropertyAccessExpression(callee)) {
+            return false;
+        }
+        if (this.nonEscapingArrayObjectPrototypeCallArgument(callee)) {
+            return true;
+        }
+        if (!ts.isIdentifier(callee.expression)) {
             return false;
         }
         const receiver = callee.expression.text;
@@ -15826,6 +15832,29 @@ class Emitter {
             return method === "isArray";
         }
         return false;
+    }
+
+    private nonEscapingArrayObjectPrototypeCallArgument(callee: ts.PropertyAccessExpression): boolean {
+        if (callee.name.text !== "call" || !ts.isPropertyAccessExpression(callee.expression)) {
+            return false;
+        }
+        const methodAccess = callee.expression;
+        const prototypeAccess = methodAccess.expression;
+        if (
+            !ts.isPropertyAccessExpression(prototypeAccess) ||
+            prototypeAccess.name.text !== "prototype" ||
+            !ts.isIdentifier(prototypeAccess.expression) ||
+            prototypeAccess.expression.text !== "Object"
+        ) {
+            return false;
+        }
+        return [
+            "hasOwnProperty",
+            "isPrototypeOf",
+            "propertyIsEnumerable",
+            "toLocaleString",
+            "toString",
+        ].includes(methodAccess.name.text);
     }
 
     private nonEscapingArrayIgnoredReceiverMethod(method: string): boolean {
