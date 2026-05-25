@@ -27923,25 +27923,37 @@ class Emitter {
                 );
             }
             case "fill": {
-                if (args.length < 1 || args.length > 3) unsupported(call, "fill expects 1-3 args");
+                if (args.length < 1) unsupported(call, "fill expects at least 1 arg");
                 const start = args[1] ? this.emitExpr(args[1]) : missing;
                 const end = args[2] ? this.emitExpr(args[2]) : missing;
-                return this.emitSequencedCall("tsc_value_method_fill", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
-                    { value: start, target: T_VALUE, node: args[1] ?? call.expression },
-                    { value: end, target: T_VALUE, node: args[2] ?? call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
+                        { value: start, target: T_VALUE, node: args[1] ?? call.expression },
+                        { value: end, target: T_VALUE, node: args[2] ?? call.expression },
+                        ...this.ignoredArgumentSpecs(args, 3),
+                    ],
+                    ([target, value, startArg, endArg]) =>
+                        `tsc_value_method_fill(${target}, ${value}, ${startArg}, ${endArg})`,
+                );
             }
             case "copyWithin": {
-                if (args.length < 2 || args.length > 3) unsupported(call, "copyWithin expects 2-3 args");
+                if (args.length < 2) unsupported(call, "copyWithin expects at least 2 args");
                 const end = args[2] ? this.emitExpr(args[2]) : missing;
-                return this.emitSequencedCall("tsc_value_method_copy_within", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
-                    { value: this.emitExpr(args[1]!), target: T_VALUE, node: args[1]! },
-                    { value: end, target: T_VALUE, node: args[2] ?? call.expression },
-                ]);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
+                        { value: this.emitExpr(args[1]!), target: T_VALUE, node: args[1]! },
+                        { value: end, target: T_VALUE, node: args[2] ?? call.expression },
+                        ...this.ignoredArgumentSpecs(args, 3),
+                    ],
+                    ([target, targetIndex, start, endArg]) =>
+                        `tsc_value_method_copy_within(${target}, ${targetIndex}, ${start}, ${endArg})`,
+                );
             }
             case "splice": {
                 if (args.length === 0) {
@@ -27989,12 +28001,17 @@ class Emitter {
                     { value: recv, target: T_VALUE, node: call.expression },
                 ]);
             case "with": {
-                if (args.length !== 2) unsupported(call, "with expects 2 args");
-                return this.emitSequencedCall("tsc_value_method_with", T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
-                    { value: this.emitExpr(args[1]!), target: T_VALUE, node: args[1]! },
-                ]);
+                if (args.length < 2) unsupported(call, "with expects at least 2 args");
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
+                        { value: this.emitExpr(args[1]!), target: T_VALUE, node: args[1]! },
+                        ...this.ignoredArgumentSpecs(args, 2),
+                    ],
+                    ([target, index, value]) => `tsc_value_method_with(${target}, ${index}, ${value})`,
+                );
             }
             case "toSpliced": {
                 const zero: EmitResult = { c: "tsc_value_num(0.0)", ty: T_VALUE };
@@ -33029,7 +33046,7 @@ class Emitter {
                 return this.emitArraySort(call, copy);
             }
             case "with": {
-                if (args.length !== 2) unsupported(call, "with expects 2 args");
+                if (args.length < 2) unsupported(call, "with expects at least 2 args");
                 const index = this.emitExpr(args[0]!);
                 const value = this.emitExpr(args[1]!);
                 requireNumber(args[0]!, index.ty);
@@ -33037,6 +33054,7 @@ class Emitter {
                     { value: recv },
                     { value: index, target: T_NUMBER, node: args[0]! },
                     { value, target: et, node: args[1]! },
+                    ...this.ignoredArgumentSpecs(args, 2),
                 ], (vals) => `tsc_array_with(${vals[0]}, ${vals[1]}, &(${et.c}){${vals[2]}})`);
             }
             case "toSpliced": {
@@ -33066,7 +33084,7 @@ class Emitter {
                 });
             }
             case "fill": {
-                if (args.length < 1 || args.length > 3) unsupported(call, "fill expects 1-3 args");
+                if (args.length < 1) unsupported(call, "fill expects at least 1 arg");
                 const value = this.emitExpr(args[0]!);
                 const specs: SequencedCallArg[] = [
                     { value: recv },
@@ -33082,6 +33100,7 @@ class Emitter {
                     requireNumber(args[2], end.ty);
                     specs.push({ value: end, target: T_NUMBER, node: args[2] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 3));
                 return this.emitSequencedExpr(recv.ty, specs, (vals) => {
                     const arr = vals[0]!;
                     const start = vals[2] ?? "0.0";
@@ -33090,7 +33109,7 @@ class Emitter {
                 });
             }
             case "copyWithin": {
-                if (args.length < 2 || args.length > 3) unsupported(call, "copyWithin expects 2-3 args");
+                if (args.length < 2) unsupported(call, "copyWithin expects at least 2 args");
                 const target = this.emitExpr(args[0]!);
                 const startExpr = this.emitExpr(args[1]!);
                 requireNumber(args[0]!, target.ty);
@@ -33105,6 +33124,7 @@ class Emitter {
                     requireNumber(args[2], end.ty);
                     specs.push({ value: end, target: T_NUMBER, node: args[2] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 3));
                 return this.emitSequencedExpr(recv.ty, specs, (vals) => {
                     const arr = vals[0]!;
                     const end = vals[3] ?? `(double)${arr}->len`;

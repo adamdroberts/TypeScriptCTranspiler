@@ -159,10 +159,10 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - `.shift(...ignored)` / `.unshift(...)` — `tsc_array_shift_raw`, `tsc_array_unshift_raw`; ignored `shift` arguments are evaluated before being discarded. Test: `arrays`
 - `.reverse(...ignored)` — in-place via `tsc_array_reverse` after evaluating ignored extra arguments. Test: `arrays`
 - `.toReversed(...ignored)` — copy via `tsc_array_to_reversed`; original array remains unchanged and ignored extra arguments are evaluated. Test: `array_to_reversed`
-- `.fill(value, start?, end?)` — in-place via `tsc_array_fill`. Test: `array_fill`
-- `.copyWithin(target, start, end?)` — in-place via `tsc_array_copy_within`. Test: `array_copy_within`
+- `.fill(value, start?, end?, ...ignored)` — in-place via `tsc_array_fill` after evaluating ignored extra arguments. Tests: `array_fill`, `array_mutator_ignored_arguments`
+- `.copyWithin(target, start, end?, ...ignored)` — in-place via `tsc_array_copy_within` after evaluating ignored extra arguments. Tests: `array_copy_within`, `array_mutator_ignored_arguments`
 - `.at(index, ...ignored)` — positive and negative index lookup after evaluating ignored extra arguments. Tests: `array_at`, `array_read_ignored_arguments`
-- `.with(index, value)` — copy via `tsc_array_with`; original array remains unchanged, negative indices count from the end, and out-of-range failures are catchable. Tests: `array_with`, `array_with_errors`
+- `.with(index, value, ...ignored)` — copy via `tsc_array_with` after evaluating ignored extra arguments; original array remains unchanged, negative indices count from the end, and out-of-range failures are catchable. Tests: `array_with`, `array_with_errors`, `array_mutator_ignored_arguments`
 - `.toSpliced(start?, deleteCount?, ...items)` — copy via `tsc_array_to_spliced`; original array remains unchanged. Test: `array_to_spliced`
 - `.slice(start?, end?, ...ignored)` — `tsc_array_slice` after evaluating ignored extra arguments. Test: `array_read_ignored_arguments`
 - `.concat(...items)` — copy plus `tsc_array_append`/`tsc_array_push_raw`; accepts array arguments, single element arguments, and spread elements inside array-literal arguments. Test: `array_concat_values`
@@ -1781,6 +1781,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_index_assignment` | dynamic array index writes and compound index writes |
 | `dynamic_last_index_of` | dynamic string and array lastIndexOf |
 | `array_at` | Array.at positive and negative index lookup |
+| `array_mutator_ignored_arguments` | Array fill/copyWithin/with helpers evaluate ignored trailing arguments |
 | `array_read_ignored_arguments` | Array read/search helpers evaluate ignored trailing arguments |
 | `array_find_last` | Array.findLast and Array.findLastIndex reverse callback scan |
 | `array_includes_same_value_zero` | typed and dynamic Array.includes SameValueZero behavior |
