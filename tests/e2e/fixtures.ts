@@ -667,6 +667,10 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'const local = require("./local.js");\nconst descriptors = {\n  default: { value: function greet(name) { return "defined " + name; }, enumerable: true },\n  label: { get() { return "wrapper-define-properties"; }, enumerable: true },\n  count: { value: local.count, enumerable: true },\n  double: { value: local.double, enumerable: true },\n  extra: { value: true, enumerable: true }\n};\nmodule.exports = Object.freeze(Object.defineProperties({}, descriptors));\n',
         "local.js": 'exports.count = 103;\nexports.double = function double(value) { return value * 7; };\n',
     }),
+    "tsc2c-cjs-object-wrapper-define-properties-from-entries": cjsPackage("tsc2c-cjs-object-wrapper-define-properties-from-entries", {
+        "index.js": 'const local = require("./local.js");\nconst defaultKey = "def" + "ault";\nconst descriptors = {\n  [defaultKey]: { value: function greet(name) { return "wrapped-from-entries " + name; }, enumerable: true },\n  label: { value: "wrapper-define-properties-from-entries", enumerable: true },\n  count: { value: local.count, enumerable: true },\n  double: { value: local.double, enumerable: true },\n  extra: { value: true, enumerable: true }\n};\nconst entries = Object.entries(descriptors);\nmodule.exports = Object.freeze(Object.defineProperties({}, Object.fromEntries(entries)));\n',
+        "local.js": 'exports.count = 104;\nexports.double = function double(value) { return value * 9; };\n',
+    }),
     "tsc2c-cjs-object-wrapper-seal-define-properties-named": cjsPackage("tsc2c-cjs-object-wrapper-seal-define-properties-named", {
         "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "sealed-defined " + name; }, enumerable: true },\n  label: { value: "seal-define-properties", enumerable: true },\n  count: { value: 107, enumerable: true }\n};\nmodule.exports = Object.seal(Object.defineProperties({}, descriptors));\n',
     }),

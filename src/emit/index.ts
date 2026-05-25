@@ -10935,6 +10935,10 @@ class Emitter {
         let descriptors = this.commonJsObjectAssignDescriptorObjectDescriptors(source);
         if (!descriptors) return false;
         while (ts.isParenthesizedExpression(descriptors)) descriptors = descriptors.expression;
+        const fromEntriesSource = this.commonJsDefinePropertiesFromEntriesCall(descriptors);
+        if (fromEntriesSource) {
+            return this.commonJsObjectFromEntriesSourceUsesIdentifier(fromEntriesSource.arguments[0]!, sourceName);
+        }
         return ts.isIdentifier(descriptors) && descriptors.text === sourceName;
     }
 
@@ -11680,7 +11684,15 @@ class Emitter {
         if (!decl || !ts.isVariableDeclaration(decl) || !ts.isIdentifier(decl.name)) return null;
         for (const stmt of entry.getSourceFile().statements) {
             const call = this.commonJsDefinePropertiesCallInStatement(stmt);
-            if (!call || !this.commonJsDefinePropertiesExportCallUsesSourceIdentifier(call, decl.name.text)) continue;
+            if (
+                !call ||
+                (
+                    !this.commonJsDefinePropertiesExportCallUsesSourceIdentifier(call, decl.name.text) &&
+                    !this.commonJsModuleExportsObjectWrapperDescriptorValueExportCallUsesSourceIdentifier(call, decl.name.text)
+                )
+            ) {
+                continue;
+            }
             const found = this.commonJsDefinePropertiesExportEntryFromContextCall(call, entry);
             if (found) return found;
         }
@@ -11709,7 +11721,15 @@ class Emitter {
         if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
             for (const stmt of entry.getSourceFile().statements) {
                 const call = this.commonJsDefinePropertiesCallInStatement(stmt);
-                if (!call || !this.commonJsDefinePropertiesExportCallUsesSourceIdentifier(call, parent.name.text)) continue;
+                if (
+                    !call ||
+                    (
+                        !this.commonJsDefinePropertiesExportCallUsesSourceIdentifier(call, parent.name.text) &&
+                        !this.commonJsModuleExportsObjectWrapperDescriptorValueExportCallUsesSourceIdentifier(call, parent.name.text)
+                    )
+                ) {
+                    continue;
+                }
                 const found = this.commonJsDefinePropertiesExportEntryFromContextCall(call, entry);
                 if (found) return found;
             }
