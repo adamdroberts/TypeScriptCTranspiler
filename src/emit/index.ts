@@ -26283,8 +26283,7 @@ class Emitter {
             expr = this.staticOptionValue(expr);
             if (
                 expr.kind === ts.SyntaxKind.NullKeyword ||
-                expr.kind === ts.SyntaxKind.UndefinedKeyword ||
-                (ts.isIdentifier(expr) && expr.text === "undefined")
+                this.isUndefinedExpression(expr)
             ) {
                 return { pipe: "true", ignore: "false", capture: "true", inherit: "false" };
             }
@@ -26297,7 +26296,7 @@ class Emitter {
             }
             const text = this.sideEffectFreeStringLiteralText(expr, new Set());
             if (text === null) {
-                unsupported(expr, "child_process.spawnSync stdio entries must be literal \"pipe\", \"ignore\", \"inherit\", matching fd number, null, or undefined");
+                unsupported(expr, "child_process.spawnSync stdio entries must be literal \"pipe\", \"ignore\", \"inherit\", matching fd number, null, undefined, or side-effect-free void");
             }
             if (text === "pipe") return { pipe: "true", ignore: "false", capture: "true", inherit: "false" };
             if (text === "ignore") return { pipe: "false", ignore: "true", capture: "false", inherit: "false" };

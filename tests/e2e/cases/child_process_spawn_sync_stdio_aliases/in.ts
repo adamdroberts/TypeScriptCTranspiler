@@ -2,7 +2,7 @@ import { spawnSync } from "child_process";
 
 const UTF8 = "utf8";
 const PIPE = "pipe";
-const DEFAULT_STDIN: any = undefined;
+const DEFAULT_STDIN: any = void 0;
 const DEFAULT_STDOUT: any = null;
 const STDIO_DEFAULTS: any = [DEFAULT_STDIN, DEFAULT_STDOUT, PIPE];
 
