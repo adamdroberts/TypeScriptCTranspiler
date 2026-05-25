@@ -877,6 +877,10 @@ const packages: Record<string, PackageFixture> = {
         "local.js": 'exports.count = 102;\nexports.double = function double(value) { return value * 6; };\n',
         "index.js": 'const local = require("./local.js");\nconst base = { inherited: "wrapper-create-base" };\nconst descriptors = {\n  default: { value: function greet(name) { return "wrapped " + name; }, enumerable: true },\n  label: { value: "wrapper-create-named", enumerable: true },\n  count: { value: local.count, enumerable: true },\n  double: { get() { return local.double; }, enumerable: true },\n  extra: { value: true, enumerable: true }\n};\nmodule.exports = Object.freeze(Object.create(base, descriptors));\n',
     }),
+    "tsc2c-cjs-object-wrapper-create-from-entries": cjsPackage("tsc2c-cjs-object-wrapper-create-from-entries", {
+        "local.js": 'exports.count = 124;\nexports.double = function double(value) { return value * 17; };\n',
+        "index.js": 'const local = require("./local.js");\nconst base = { inherited: "wrapper-create-from-entries-base" };\nconst defaultKey = "def" + "ault";\nconst descriptors = {\n  [defaultKey]: { value: function greet(name) { return "wrapped-create-from-entries " + name; }, enumerable: true },\n  label: { value: "wrapper-create-from-entries", enumerable: true },\n  count: { value: local.count, enumerable: true },\n  double: { get() { return local.double; }, enumerable: true },\n  extra: { value: true, enumerable: true }\n};\nconst entries = Object.entries(descriptors);\nmodule.exports = Object.freeze(Object.create(base, Object.fromEntries(entries)));\n',
+    }),
     "tsc2c-cjs-object-wrapper-seal-create-descriptors-named": cjsPackage("tsc2c-cjs-object-wrapper-seal-create-descriptors-named", {
         "index.js": 'const descriptors = {\n  default: { value: function greet(name) { return "sealed " + name; }, enumerable: true },\n  label: { value: "seal-create-descriptors", enumerable: true },\n  count: { value: 104, enumerable: true }\n};\nmodule.exports = Object.seal(Object.create({ inherited: true }, descriptors));\n',
     }),
