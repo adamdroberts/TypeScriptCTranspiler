@@ -4558,6 +4558,18 @@ class Emitter {
                     }
                 }
                 if (method === "concat" && unwrapped.arguments.length === 0) return receiverLength;
+                if (method === "concat" && unwrapped.arguments.length > 0) {
+                    let concatLength = receiverLength;
+                    for (const arg of unwrapped.arguments) {
+                        const argLength = this.sideEffectFreeFreshOrReturnedArrayLength(arg, seenConsts);
+                        if (argLength === null) {
+                            concatLength = -1;
+                            break;
+                        }
+                        concatLength += argLength;
+                    }
+                    if (concatLength >= 0) return concatLength;
+                }
                 if (method === "reverse" && allArgsPure) return receiverLength;
                 if (method === "with" && unwrapped.arguments.length === 2) {
                     const index = this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[0]!, seenConsts);

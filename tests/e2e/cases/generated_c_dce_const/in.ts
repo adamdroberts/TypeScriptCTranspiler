@@ -1133,6 +1133,8 @@ const unused_promise_resolve_array_of_to_spliced_length = Promise.resolve(Array.
 const unused_promise_resolve_array_of_to_spliced_absent_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_to_spliced_absent_element", "dead_promise_resolve_array_of_to_spliced_absent_element_tail").toSpliced(1, 1, "dead_promise_resolve_array_of_to_spliced_absent_element_insert")[2]);
 const unused_promise_resolve_array_of_slice_length = Promise.resolve(Array.of("dead_promise_resolve_array_of_slice_length", "dead_promise_resolve_array_of_slice_length_tail", "dead_promise_resolve_array_of_slice_length_extra").slice(1, 2).length);
 const unused_promise_resolve_array_of_slice_absent_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_slice_absent_element", "dead_promise_resolve_array_of_slice_absent_element_tail", "dead_promise_resolve_array_of_slice_absent_element_extra").slice(-2, -1)[1]);
+const unused_promise_resolve_array_of_concat_length = Promise.resolve(Array.of("dead_promise_resolve_array_of_concat_length").concat(Array.of("dead_promise_resolve_array_of_concat_length_arg", "dead_promise_resolve_array_of_concat_length_arg_tail")).length);
+const unused_promise_resolve_array_of_concat_absent_element = Promise.resolve(Array.of("dead_promise_resolve_array_of_concat_absent_element").concat(Array.of("dead_promise_resolve_array_of_concat_absent_element_arg", "dead_promise_resolve_array_of_concat_absent_element_arg_tail"))[3]);
 const unused_array_push_call = ["dead_array_push"].push("dead_array_push_value");
 const unused_array_unshift_call = ["dead_array_unshift"].unshift("dead_array_unshift_value");
 const unused_object_keys_fill_call = Object.keys({ dead_object_keys_fill: 1 }).fill("dead_object_keys_fill_value");
@@ -3659,6 +3661,8 @@ function usedLocal(value: number): number {
     Array.of("local_dead_array_of_to_spliced_absent_element", "local_dead_array_of_to_spliced_absent_element_tail").toSpliced(1, 1, "local_dead_array_of_to_spliced_absent_element_insert")[2];
     Array.of("local_dead_array_of_slice_length", "local_dead_array_of_slice_length_tail", "local_dead_array_of_slice_length_extra").slice(1, 2).length;
     Array.of("local_dead_array_of_slice_absent_element", "local_dead_array_of_slice_absent_element_tail", "local_dead_array_of_slice_absent_element_extra").slice(-2, -1)[1];
+    Array.of("local_dead_array_of_concat_length").concat(Array.of("local_dead_array_of_concat_length_arg", "local_dead_array_of_concat_length_arg_tail")).length;
+    Array.of("local_dead_array_of_concat_absent_element").concat(Array.of("local_dead_array_of_concat_absent_element_arg", "local_dead_array_of_concat_absent_element_arg_tail"))[3];
     ["local_dead_array_push"].push("local_dead_array_push_value");
     ["local_dead_array_unshift"].unshift("local_dead_array_unshift_value");
     Object.keys({ local_dead_object_keys_fill: 1 }).fill("local_dead_object_keys_fill_value");
