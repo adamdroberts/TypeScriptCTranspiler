@@ -37,10 +37,10 @@ interface Generator<T = unknown, TReturn = any, TNext = unknown> extends Iterato
 }
 
 interface Promise<T> {
-    then<TResult = T>(onfulfilled?: (value: T) => TResult | Promise<TResult>): Promise<TResult>;
-    then<TResult = T, TRejectResult = never>(onfulfilled: ((value: T) => TResult | Promise<TResult>) | undefined, onrejected: (reason: any) => TRejectResult | Promise<TRejectResult>): Promise<TResult | TRejectResult>;
-    catch<TResult = never>(onrejected?: ((reason: any) => TResult | Promise<TResult>) | undefined): Promise<T | TResult>;
-    finally(onfinally?: (() => void) | undefined): Promise<T>;
+    then<TResult = T, TRejectResult = never>(onfulfilled: ((value: T) => TResult | Promise<TResult>) | undefined, onrejected: (reason: any) => TRejectResult | Promise<TRejectResult>, ...ignored: any[]): Promise<TResult | TRejectResult>;
+    then<TResult = T>(onfulfilled?: (value: T) => TResult | Promise<TResult>, ...ignored: any[]): Promise<TResult>;
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | Promise<TResult>) | undefined, ...ignored: any[]): Promise<T | TResult>;
+    finally(onfinally?: (() => void) | undefined, ...ignored: any[]): Promise<T>;
 }
 interface PromiseConstructor {
     new<T>(executor: (resolve: (value: T) => void, reject: (reason: any) => void) => void, ...ignored: any[]): Promise<T>;
@@ -48,15 +48,15 @@ interface PromiseConstructor {
     resolve<T>(value: T, ...ignored: any[]): Promise<T>;
     resolve(): Promise<void>;
     reject<T = never>(reason?: any, ...ignored: any[]): Promise<T>;
-    all<T>(values: Promise<T>[]): Promise<T[]>;
-    all<T>(values: Set<Promise<T>>): Promise<T[]>;
-    allSettled<T>(values: Promise<T>[]): Promise<any[]>;
-    allSettled<T>(values: Set<Promise<T>>): Promise<any[]>;
-    race<T>(values: Promise<T>[]): Promise<T>;
-    race<T>(values: Set<Promise<T>>): Promise<T>;
-    any<T>(values: Promise<T>[]): Promise<T>;
-    any<T>(values: Set<Promise<T>>): Promise<T>;
-    try<T>(callback: () => T | Promise<T>): Promise<T>;
+    all<T>(values: Promise<T>[], ...ignored: any[]): Promise<T[]>;
+    all<T>(values: Set<Promise<T>>, ...ignored: any[]): Promise<T[]>;
+    allSettled<T>(values: Promise<T>[], ...ignored: any[]): Promise<any[]>;
+    allSettled<T>(values: Set<Promise<T>>, ...ignored: any[]): Promise<any[]>;
+    race<T>(values: Promise<T>[], ...ignored: any[]): Promise<T>;
+    race<T>(values: Set<Promise<T>>, ...ignored: any[]): Promise<T>;
+    any<T>(values: Promise<T>[], ...ignored: any[]): Promise<T>;
+    any<T>(values: Set<Promise<T>>, ...ignored: any[]): Promise<T>;
+    try<T>(callback: () => T | Promise<T>, ...ignored: any[]): Promise<T>;
 }
 declare var Promise: PromiseConstructor;
 

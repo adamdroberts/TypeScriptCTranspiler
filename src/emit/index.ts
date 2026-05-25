@@ -30084,14 +30084,17 @@ class Emitter {
                 );
             }
             case "all": {
-                if (call.arguments.length !== 1) unsupported(call, "Promise.all expects 1 arg");
+                if (call.arguments.length < 1) unsupported(call, "Promise.all expects 1 arg");
                 const source = this.emitPromiseArrayArg(call, "Promise.all");
                 const resultArray = mapped.elem;
                 if (!resultArray || resultArray.kind !== "array" || !resultArray.elem) {
                     unsupported(call, "Promise.all result must be Promise<T[]>");
                 }
                 const elem = this.prepareType(resultArray.elem);
-                return this.emitSequencedExpr(mapped, [{ value: source, node: call.arguments[0]! }], ([src]) => {
+                return this.emitSequencedExpr(mapped, [
+                    { value: source, node: call.arguments[0]! },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ], ([src]) => {
                     const out = this.freshTemp("_promise_all");
                     const result = this.freshTemp("_promise_result");
                     const pending = this.freshTemp("_promise_pending");
@@ -30113,9 +30116,12 @@ class Emitter {
                 });
             }
             case "race": {
-                if (call.arguments.length !== 1) unsupported(call, "Promise.race expects 1 arg");
+                if (call.arguments.length < 1) unsupported(call, "Promise.race expects 1 arg");
                 const source = this.emitPromiseArrayArg(call, "Promise.race");
-                return this.emitSequencedExpr(mapped, [{ value: source, node: call.arguments[0]! }], ([src]) => {
+                return this.emitSequencedExpr(mapped, [
+                    { value: source, node: call.arguments[0]! },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ], ([src]) => {
                     const result = this.freshTemp("_promise_result");
                     const i = this.freshTemp("_i");
                     const item = this.freshTemp("_promise_item");
@@ -30131,9 +30137,12 @@ class Emitter {
                 });
             }
             case "any": {
-                if (call.arguments.length !== 1) unsupported(call, "Promise.any expects 1 arg");
+                if (call.arguments.length < 1) unsupported(call, "Promise.any expects 1 arg");
                 const source = this.emitPromiseArrayArg(call, "Promise.any");
-                return this.emitSequencedExpr(mapped, [{ value: source, node: call.arguments[0]! }], ([src]) => {
+                return this.emitSequencedExpr(mapped, [
+                    { value: source, node: call.arguments[0]! },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ], ([src]) => {
                     const result = this.freshTemp("_promise_result");
                     const errors = this.freshTemp("_promise_errors");
                     const pending = this.freshTemp("_promise_pending");
@@ -30161,13 +30170,16 @@ class Emitter {
                 });
             }
             case "allSettled": {
-                if (call.arguments.length !== 1) unsupported(call, "Promise.allSettled expects 1 arg");
+                if (call.arguments.length < 1) unsupported(call, "Promise.allSettled expects 1 arg");
                 const source = this.emitPromiseArrayArg(call, "Promise.allSettled");
                 const resultArray = mapped.elem;
                 if (!resultArray || resultArray.kind !== "array") {
                     unsupported(call, "Promise.allSettled result must be Promise<any[]>");
                 }
-                return this.emitSequencedExpr(mapped, [{ value: source, node: call.arguments[0]! }], ([src]) => {
+                return this.emitSequencedExpr(mapped, [
+                    { value: source, node: call.arguments[0]! },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ], ([src]) => {
                     const out = this.freshTemp("_promise_settled");
                     const i = this.freshTemp("_i");
                     const item = this.freshTemp("_promise_item");
@@ -30194,12 +30206,13 @@ class Emitter {
                 });
             }
             case "try": {
-                if (call.arguments.length !== 1) unsupported(call, "Promise.try expects 1 callback");
+                if (call.arguments.length < 1) unsupported(call, "Promise.try expects 1 callback");
                 const callbackNode = call.arguments[0]!;
                 const callback = this.emitExpr(callbackNode);
                 this.validatePromiseCallback(callbackNode, callback, 0, "Promise.try callback");
                 return this.emitSequencedExpr(mapped, [
                     { value: callback, target: callback.ty, node: callbackNode },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
                 ], ([fn]) => this.promiseCallbackResolve(call, callback.ty, fn, { c: "tsc_value_undefined()", ty: T_VALUE }, callbackNode));
             }
         }
@@ -30299,7 +30312,6 @@ class Emitter {
         switch (method) {
             case "then": {
                 const args = call.arguments;
-                if (args.length > 2) unsupported(call, "Promise.then expects at most 2 args");
                 const hasFulfilledHandler = !!args[0] && !this.isPromiseEmptyHandlerExpression(args[0]);
                 const fulfilled = hasFulfilledHandler ? this.emitExpr(args[0]!) : null;
                 if (fulfilled) {
@@ -30310,11 +30322,12 @@ class Emitter {
                 ];
                 if (fulfilled) specs.push({ value: fulfilled, target: fulfilled.ty, node: args[0]! });
                 let rejected: EmitResult | null = null;
-                if (args[1]) {
+                if (args[1] && !this.isPromiseEmptyHandlerExpression(args[1])) {
                     rejected = this.emitExpr(args[1]);
                     this.validatePromiseCallback(args[1], rejected, 1, "Promise.then onrejected");
                     specs.push({ value: rejected, target: rejected.ty, node: args[1] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, args[1] ? 2 : args[0] ? 1 : 0));
                 return this.emitSequencedExpr(mapped, specs, (vals) => {
                     const promise = vals[0]!;
                     const onFulfilled = fulfilled ? vals[1]! : null;
@@ -30329,7 +30342,6 @@ class Emitter {
                 });
             }
             case "catch": {
-                if (call.arguments.length > 1) unsupported(call, "Promise.catch expects at most 1 arg");
                 const handler = call.arguments[0];
                 const hasRejectedHandler = !!handler && !this.isPromiseEmptyHandlerExpression(handler);
                 const rejected = hasRejectedHandler ? this.emitExpr(handler!) : null;
@@ -30338,6 +30350,7 @@ class Emitter {
                 }
                 const specs: SequencedCallArg[] = [{ value: recv }];
                 if (rejected) specs.push({ value: rejected, target: rejected.ty, node: handler! });
+                specs.push(...this.ignoredArgumentSpecs(call.arguments, handler ? 1 : 0));
                 return this.emitSequencedExpr(mapped, specs, (vals) => {
                     const promise = vals[0]!;
                     const onRejected = rejected ? vals[1]! : null;
@@ -30348,7 +30361,6 @@ class Emitter {
                 });
             }
             case "finally": {
-                if (call.arguments.length > 1) unsupported(call, "Promise.finally expects at most 1 arg");
                 const handler = call.arguments[0];
                 const hasFinallyHandler = !!handler && !this.isPromiseEmptyHandlerExpression(handler);
                 const cb = hasFinallyHandler ? this.emitExpr(handler!) : null;
@@ -30357,6 +30369,7 @@ class Emitter {
                 }
                 const specs: SequencedCallArg[] = [{ value: recv }];
                 if (cb) specs.push({ value: cb, target: cb.ty, node: handler! });
+                specs.push(...this.ignoredArgumentSpecs(call.arguments, handler ? 1 : 0));
                 return this.emitSequencedExpr(mapped, specs, (vals) => {
                     const promise = vals[0]!;
                     const fn = cb ? vals[1]! : null;

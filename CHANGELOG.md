@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Promise.all(...)`, `Promise.allSettled(...)`, `Promise.race(...)`, `Promise.any(...)`, `Promise.try(...)`, and synchronous `.then(...)` / `.catch(...)` / `.finally(...)` now evaluate and ignore trailing arguments. Test: `promise_ignored_arguments`.
 - `Reflect.apply(...)`, dynamic `Reflect.construct(...)`, and supported Object/Reflect property, prototype, and extensibility helpers now evaluate and ignore trailing arguments across dynamic, typed-array, typed-object, and Buffer-backed paths. Test: `reflect_ignored_arguments`.
 - `new URL(input, base?, ...ignored)` now evaluates and ignores trailing constructor arguments after the optional base. Test: `url_constructor_ignored_arguments`.
 - `new Event(type, options?, ...ignored)` now evaluates and ignores trailing constructor arguments after the supported options slot. Test: `event_constructor_ignored_arguments`.
