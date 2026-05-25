@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- CommonJS package sources now support static default/named export metadata from `module.exports = Object.fromEntries(new Map(entries))` when the Map source is finite and statically keyed. Test: `node_modules_commonjs_module_exports_object_from_entries_map_named`.
 - Generated-C DCE now reuses exact Map/Set constructor lengths as array-builder element-existence proofs for primitive entry-key reads over `Array.from(...)` results. Test: `generated_c_dce_const`.
 - Generated-C DCE now carries fresh Set-backed array-builder element-existence proofs into primitive `Promise.resolve(...)` inputs from `Object.entries(Array.from(new Set(...)))[i][0]`. Test: `generated_c_dce_const`.
 - Generated-C DCE now proves primitive `Promise.resolve(...)` inputs from `Object.entries(freshArray)[i][0]` when fresh array elements are side-effect-free objects rather than primitive values. Test: `generated_c_dce_const`.

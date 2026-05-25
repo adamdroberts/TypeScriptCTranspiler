@@ -11898,6 +11898,28 @@ class Emitter {
         }
         const objectEntries = this.commonJsObjectFromEntriesExportObjectEntries(cur);
         if (objectEntries) return objectEntries;
+        if (
+            ts.isNewExpression(cur) &&
+            ts.isIdentifier(cur.expression) &&
+            this.isUnshadowedGlobalIdentifier(cur.expression, "Map")
+        ) {
+            const args = Array.from(cur.arguments ?? []);
+            if (args.length === 0) return [];
+            if (args.length !== 1) return null;
+            const objectEntryExports = this.commonJsObjectFromEntriesExportObjectEntries(args[0]!);
+            if (objectEntryExports) return objectEntryExports;
+            const sourceEntries = this.sideEffectFreeMapArraySourceExpressions(args[0]!, new Set());
+            if (sourceEntries === null) return null;
+            const entries: ts.ArrayLiteralExpression[] = [];
+            for (const element of sourceEntries) {
+                const entry = this.sideEffectFreeMapEntryArrayLiteral(element, new Set());
+                if (!entry) {
+                    unsupported(element, "CommonJS Object.fromEntries(new Map(...)) exports require static [key, value] entry arrays");
+                }
+                entries.push(entry);
+            }
+            return entries;
+        }
         if (!ts.isArrayLiteralExpression(cur)) return null;
         const entries: ts.ArrayLiteralExpression[] = [];
         for (const element of cur.elements) {
@@ -11916,6 +11938,13 @@ class Emitter {
         const initializer = decl.initializer;
         if (ts.isArrayLiteralExpression(initializer) && this.isUntypedJsArrayLiteral(initializer)) return initializer;
         if (ts.isCallExpression(initializer) && this.objectStaticCallName(initializer) === "entries") return initializer;
+        if (
+            ts.isNewExpression(initializer) &&
+            ts.isIdentifier(initializer.expression) &&
+            this.isUnshadowedGlobalIdentifier(initializer.expression, "Map")
+        ) {
+            return initializer;
+        }
         return null;
     }
 
@@ -12119,9 +12148,20 @@ class Emitter {
         if (!ts.isCallExpression(cur) || !this.isCommonJsModuleExportsObjectFromEntriesValueCall(cur)) return true;
         let source = cur.arguments[0]!;
         while (ts.isParenthesizedExpression(source)) source = source.expression;
-        if (!ts.isIdentifier(source)) return true;
-        const initializer = this.commonJsObjectFromEntriesSourceIdentifierInitializer(source);
-        return !initializer || !ts.isCallExpression(initializer) || this.objectStaticCallName(initializer) !== "entries";
+        let resolvedSource = source;
+        if (ts.isIdentifier(source)) {
+            const initializer = this.commonJsObjectFromEntriesSourceIdentifierInitializer(source);
+            if (!initializer) return true;
+            resolvedSource = initializer;
+            while (ts.isParenthesizedExpression(resolvedSource)) resolvedSource = resolvedSource.expression;
+        }
+        if (ts.isCallExpression(resolvedSource) && this.objectStaticCallName(resolvedSource) === "entries") return false;
+        return !(
+            ts.isNewExpression(resolvedSource) &&
+            ts.isIdentifier(resolvedSource.expression) &&
+            this.isUnshadowedGlobalIdentifier(resolvedSource.expression, "Map") &&
+            this.commonJsObjectFromEntriesExportEntries(resolvedSource)
+        );
     }
 
     private commonJsModuleExportsObjectWrapperFromEntriesValueExports(

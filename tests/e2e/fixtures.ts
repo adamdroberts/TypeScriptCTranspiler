@@ -1011,6 +1011,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-object-from-entries-identifier-named-package": cjsPackage("tsc2c-cjs-object-from-entries-identifier-named-package", {
         "index.js": 'const entries = [\n  ["default", "from-entries-identifier-default"],\n  ["label", "from-entries-identifier-named"],\n  ["count", 92],\n  ["enabled", true]\n];\nmodule.exports = Object.fromEntries(entries);\n',
     }),
+    "tsc2c-cjs-object-from-entries-map-named-package": cjsPackage("tsc2c-cjs-object-from-entries-map-named-package", {
+        "index.js": 'const api = {\n  default: "from-entries-map-default",\n  label: "from-entries-map-named",\n  count: 96,\n  enabled: true\n};\nmodule.exports = Object.fromEntries(new Map(Object.entries(api)));\n',
+    }),
     "tsc2c-cjs-object-from-entries-require-values-package": cjsPackage("tsc2c-cjs-object-from-entries-require-values-package", {
         "index.js": 'const local = require("./local.js");\nconst defaultValue = require("./default.js");\nmodule.exports = Object.fromEntries([\n  ["default", defaultValue],\n  ["label", local.label],\n  ["count", local.count],\n  ["enabled", true]\n]);\n',
         "default.js": 'module.exports = "from-entries-require-default";\n',
