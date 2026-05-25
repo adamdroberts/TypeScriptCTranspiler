@@ -520,7 +520,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `process.chdir(directory)` → `tsc_process_chdir`
 - `process.platform`, `process.arch`, `process.pid`, `process.ppid`, `process.version`, `process.versions`, `process.release`, `process.features`, and `process.uptime(...ignored)` expose synchronous process metadata, with ignored extra-argument evaluation where Node ignores extras.
 - `process.hrtime([previous], ...ignored)` returns a monotonic `[seconds, nanoseconds]` pair, with previous-mark diff support, and `process.hrtime.bigint(...ignored)` returns a monotonic nanosecond BigInt timestamp.
-- `process.nextTick(callback, ...args)` supports a bounded callback queue with typed callback arguments and no fixed arity cap, drained after module initialization and before process exit. Callback functions with explicit `this: any` parameters receive runtime `undefined`.
+- `process.nextTick(callback, ...args)` plus named `nextTick` imports from `"process"` / `"node:process"` support a bounded callback queue with typed callback arguments and no fixed arity cap, drained after module initialization and before process exit. Callback functions with explicit `this: any` parameters receive runtime `undefined`.
 - `setTimeout(callback, 0, ...args)` plus explicit `undefined` / `void 0` / `-0` delay forms support a bounded zero-delay callback queue with typed callback arguments and no fixed arity cap, drained after `process.nextTick` and `queueMicrotask` callbacks before `setImmediate` and process exit; zero / negative-zero delay values may use earlier static `const` aliases. It returns a numeric handle accepted by `clearTimeout(handle)` or `clearInterval(handle)` before the drain; omitted or undefined-valued clear handles are no-op clears that still evaluate ignored arguments. Callback functions with explicit `this: any` parameters receive runtime `undefined`.
 - `setImmediate(callback, ...args)` supports a bounded callback queue with typed callback arguments and no fixed arity cap, drained after `process.nextTick`, `queueMicrotask`, and zero-delay `setTimeout` callbacks before process exit. It returns a numeric handle accepted by `clearImmediate(handle)` before the drain; omitted or undefined-valued clear handles are no-op clears that still evaluate ignored arguments. Callback functions with explicit `this: any` parameters receive runtime `undefined`.
 - `process.getuid(...ignored)`, `process.getgid(...ignored)`, `process.geteuid(...ignored)`, `process.getegid(...ignored)`, and `process.getgroups(...ignored)` expose POSIX process identity values.
@@ -1134,6 +1134,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `process_metadata` | process.platform/arch/pid/uptime metadata |
 | `process_next_tick` | bounded zero-argument process.nextTick queue drained before exit |
 | `process_next_tick_args` | bounded process.nextTick callback arguments are queued and delivered in order |
+| `process_next_tick_import` | named process nextTick imports use the bounded nextTick queue |
 | `process_ppid` | process.ppid parent process metadata |
 | `process_posix_ids` | process POSIX uid/gid/euid/egid helpers |
 | `process_release` | process.release Node-shaped metadata object |

@@ -1,0 +1,3 @@
+{
+  "description": "named process nextTick imports use the bounded nextTick queue"
+}

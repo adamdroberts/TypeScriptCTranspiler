@@ -24854,6 +24854,9 @@ class Emitter {
         if (this.isNamedImportFrom(calleeId, ["dns", "node:dns"], "lookup")) {
             return this.emitDnsCall(call, "lookup");
         }
+        if (this.isNamedImportFrom(calleeId, ["process", "node:process"], "nextTick")) {
+            return this.emitProcessNextTickCall(call);
+        }
         const netNamed = ["isIP", "isIPv4", "isIPv6"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["net", "node:net"], exported));
         if (netNamed) {
@@ -26622,30 +26625,8 @@ class Emitter {
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "process") {
             switch (memberName) {
-                case "nextTick": {
-                    if (call.arguments.length < 1) unsupported(call, "process.nextTick expects a callback");
-                    const callbackNode = call.arguments[0]!;
-                    const callback = this.emitExpr(callbackNode);
-                    const argNodes = Array.from(call.arguments.slice(1));
-                    const argValues = argNodes.map((arg) => this.emitExpr(arg));
-                    const adapter = this.ensureNextTickAdapter(callbackNode, callback.ty, argValues.map((arg) => arg.ty));
-                    const prepared = this.prepareType(callback.ty);
-                    const params = prepared.kind === "function" ? prepared.params ?? [] : [];
-                    return this.emitSequencedExpr(T_VOID, [
-                        { value: callback, target: callback.ty, node: callbackNode },
-                        ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
-                    ], ([fn, ...args]) => {
-                        const envType = `${adapter}_env_t`;
-                        const env = this.freshTemp("_next_tick_env");
-                        const pieces = [
-                            `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
-                            `${env}->fn = ${fn}`,
-                        ];
-                        args.forEach((arg, i) => pieces.push(`${env}->arg${i} = ${arg}`));
-                        pieces.push(`tsc_process_next_tick(${adapter}, ${env})`);
-                        return `({ ${pieces.join("; ")}; })`;
-                    });
-                }
+                case "nextTick":
+                    return this.emitProcessNextTickCall(call);
                 case "getuid":
                     return this.emitSequencedExpr(
                         T_NUMBER,
@@ -26996,6 +26977,31 @@ class Emitter {
                 );
         }
         unsupported(call, `Object.prototype.${method}`);
+    }
+
+    private emitProcessNextTickCall(call: ts.CallExpression): EmitResult {
+        if (call.arguments.length < 1) unsupported(call, "process.nextTick expects a callback");
+        const callbackNode = call.arguments[0]!;
+        const callback = this.emitExpr(callbackNode);
+        const argNodes = Array.from(call.arguments.slice(1));
+        const argValues = argNodes.map((arg) => this.emitExpr(arg));
+        const adapter = this.ensureNextTickAdapter(callbackNode, callback.ty, argValues.map((arg) => arg.ty));
+        const prepared = this.prepareType(callback.ty);
+        const params = prepared.kind === "function" ? prepared.params ?? [] : [];
+        return this.emitSequencedExpr(T_VOID, [
+            { value: callback, target: callback.ty, node: callbackNode },
+            ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
+        ], ([fn, ...args]) => {
+            const envType = `${adapter}_env_t`;
+            const env = this.freshTemp("_next_tick_env");
+            const pieces = [
+                `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
+                `${env}->fn = ${fn}`,
+            ];
+            args.forEach((arg, i) => pieces.push(`${env}->arg${i} = ${arg}`));
+            pieces.push(`tsc_process_next_tick(${adapter}, ${env})`);
+            return `({ ${pieces.join("; ")}; })`;
+        });
     }
 
     private emitDynamicMethod(

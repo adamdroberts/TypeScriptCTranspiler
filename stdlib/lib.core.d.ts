@@ -711,6 +711,12 @@ interface Process {
     kill(pid: number, signal?: 0 | 9 | 15 | "SIGTERM" | "SIGKILL"): boolean;
 }
 declare const process: Process;
+declare module "process" {
+    export const nextTick: Process["nextTick"];
+}
+declare module "node:process" {
+    export const nextTick: Process["nextTick"];
+}
 
 declare function parseInt(value: any, radix?: number, ...ignored: any[]): number;
 declare function parseFloat(value: any, ...ignored: any[]): number;
