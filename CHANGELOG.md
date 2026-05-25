@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Expanded `process_stdin_noop_methods` coverage for consumed `setEncoding(...)` arguments, ignored trailing arguments, and global/named/default process stdin no-op paths.
 - Direct typed-array `.hasOwnProperty(...)` and `.propertyIsEnumerable(...)` calls now evaluate and ignore trailing arguments, matching the dynamic-array and Object helper paths. Test: `array_object_method_ignored_arguments`.
 - Typed and dynamic `Array.prototype.reduce(...)` and `reduceRight(...)` now evaluate and ignore trailing arguments after an explicit initial value. Test: `array_reduce_ignored_arguments`.
 - Typed and dynamic non-reduce array higher-order methods now evaluate and ignore trailing arguments after the optional `thisArg`. Test: `array_hof_ignored_arguments`.
