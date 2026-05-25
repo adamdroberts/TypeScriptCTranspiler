@@ -1936,6 +1936,11 @@ class Emitter {
                 this.isUnshadowedGlobalIdentifier(recv, "Reflect") &&
                 (
                     method === "has" ||
+                    method === "set" ||
+                    method === "deleteProperty" ||
+                    method === "defineProperty" ||
+                    method === "preventExtensions" ||
+                    method === "setPrototypeOf" ||
                     method === "isExtensible"
                 )
             ) ||
