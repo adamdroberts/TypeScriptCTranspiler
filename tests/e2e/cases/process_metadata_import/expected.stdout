@@ -1,0 +1,5 @@
+named cwd: true
+named uptime: true
+namespace cwd: true
+namespace uptime: true
+ignored: true true cu

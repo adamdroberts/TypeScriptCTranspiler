@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Named and namespace `cwd` / `uptime` imports from `"process"` and `"node:process"` now lower to the existing process metadata runtime helpers. Test: `process_metadata_import`.
 - Named and namespace `nextTick` imports from `"process"` and `"node:process"` now lower to the bounded `process.nextTick` queue. Test: `process_next_tick_import`.
 - `Array.from(items, undefined[, thisArg])` now takes the no-mapper path while preserving optional `thisArg` argument evaluation. Test: `array_from_mapper`.
 - `Array.fromAsync(...)` now has an immediate-settled subset for typed array, string, typed `Set`, typed `Map`, and boxed dynamic array/string sources, including explicit `undefined` mapper no-op handling, synchronous or Promise-returning mapper callbacks, optional mapper `thisArg` binding, native `Promise<T[]>` fulfillment, and fulfilled/rejected/pending propagation for array, Set, or mapper-returned native Promise records. Test: `array_from_async`.

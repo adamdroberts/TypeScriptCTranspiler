@@ -712,10 +712,14 @@ interface Process {
 }
 declare const process: Process;
 declare module "process" {
+    export const cwd: Process["cwd"];
     export const nextTick: Process["nextTick"];
+    export const uptime: Process["uptime"];
 }
 declare module "node:process" {
+    export const cwd: Process["cwd"];
     export const nextTick: Process["nextTick"];
+    export const uptime: Process["uptime"];
 }
 
 declare function parseInt(value: any, radix?: number, ...ignored: any[]): number;

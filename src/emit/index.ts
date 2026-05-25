@@ -17059,6 +17059,10 @@ class Emitter {
         return this.isNamespaceImportFrom(id, ["child_process", "node:child_process"]);
     }
 
+    private isProcessModuleIdentifier(id: ts.Identifier): boolean {
+        return id.text === "process" || this.isNamespaceImportFrom(id, ["process", "node:process"]);
+    }
+
     private isProcessEnvObject(expr: ts.Expression): boolean {
         return ts.isPropertyAccessExpression(expr) &&
             expr.name.text === "env" &&
@@ -24858,6 +24862,11 @@ class Emitter {
         if (this.isNamedImportFrom(calleeId, ["process", "node:process"], "nextTick")) {
             return this.emitProcessNextTickCall(call);
         }
+        const processNamed = ["cwd", "uptime"]
+            .find((exported) => this.isNamedImportFrom(calleeId, ["process", "node:process"], exported));
+        if (processNamed) {
+            return this.emitProcessModuleCall(call, processNamed);
+        }
         const netNamed = ["isIP", "isIPv4", "isIPv6"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["net", "node:net"], exported));
         if (netNamed) {
@@ -26524,14 +26533,10 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recvExpr) &&
-            recvExpr.text === "process" &&
+            this.isProcessModuleIdentifier(recvExpr) &&
             memberName === "cwd"
         ) {
-            return this.emitSequencedExpr(
-                T_STRING,
-                this.ignoredArgumentSpecs(call.arguments, 0),
-                () => `tsc_process_cwd()`,
-            );
+            return this.emitProcessModuleCall(call, "cwd");
         }
         if (
             ts.isIdentifier(recvExpr) &&
@@ -26546,14 +26551,10 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recvExpr) &&
-            recvExpr.text === "process" &&
+            this.isProcessModuleIdentifier(recvExpr) &&
             memberName === "uptime"
         ) {
-            return this.emitSequencedExpr(
-                T_NUMBER,
-                this.ignoredArgumentSpecs(call.arguments, 0),
-                () => `tsc_process_uptime()`,
-            );
+            return this.emitProcessModuleCall(call, "uptime");
         }
         if (
             ts.isPropertyAccessExpression(recvExpr) &&
@@ -27006,6 +27007,24 @@ class Emitter {
             pieces.push(`tsc_process_next_tick(${adapter}, ${env})`);
             return `({ ${pieces.join("; ")}; })`;
         });
+    }
+
+    private emitProcessModuleCall(call: ts.CallExpression, name: string): EmitResult {
+        switch (name) {
+            case "cwd":
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    this.ignoredArgumentSpecs(call.arguments, 0),
+                    () => `tsc_process_cwd()`,
+                );
+            case "uptime":
+                return this.emitSequencedExpr(
+                    T_NUMBER,
+                    this.ignoredArgumentSpecs(call.arguments, 0),
+                    () => `tsc_process_uptime()`,
+                );
+        }
+        unsupported(call, `process.${name}`);
     }
 
     private emitDynamicMethod(
