@@ -1467,6 +1467,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_require_commonjs_shapes` | dynamic require dispatch materializes object-literal CommonJS exports that spread package-local require results |
 | `dynamic_require_literal_union` | finite string-literal union annotations provide AOT dynamic require alternatives for parameters, top-level variables, and earlier local variables |
 | `dynamic_require_manifest` | explicit dynamic require manifest compiles a non-finite `require(variable)` allow-list into the AOT graph and finite runtime dispatch |
+| `dynamic_require_manifest_package` | dynamic require manifest package specifiers compile installed package sources into the finite AOT dispatch path |
 | `dynamic_require_manifest_object` | named dynamic require manifest object maps compile the listed specifiers into the same AOT dispatch path |
 | `dynamic_require_static_collections` | top-level and earlier local const string maps/arrays provide finite AOT alternatives for dynamic require element/property access, including numeric literal array indexes |
 | `dynamic_require_static_computed_map` | top-level and earlier local const string maps with computed static keys provide finite AOT alternatives for dynamic require element access |

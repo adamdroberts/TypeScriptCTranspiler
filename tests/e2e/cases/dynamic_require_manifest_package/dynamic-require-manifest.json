@@ -1,0 +1,3 @@
+{
+  "requires": ["tsc2c-cjs-named-package"]
+}

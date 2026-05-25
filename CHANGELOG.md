@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Dynamic require manifest allow-lists are covered for installed package specifiers as well as relative specifiers. Test: `dynamic_require_manifest_package`.
 - ESM package-private `imports` resolution is now covered for external package targets and wildcard subpaths in the AOT import graph. Test: `node_modules_package_import_external_imports`.
 - Manifest-backed package-private imports that target external native-addon packages are covered on the embedded Node bridge path. Test: `native_addon_manifest_external_imports`.
 - Native-addon closure diagnostics now reject package-private imports that target external native-addon packages unless the native-addon manifest allow-lists the import. Test: `native_addon_package_external_imports`.
