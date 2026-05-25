@@ -15662,6 +15662,13 @@ class Emitter {
                     return;
                 }
                 if (
+                    ts.isCallExpression(parent) &&
+                    this.nonEscapingArrayObjectPrototypeValueOfCallArgument(parent, n) &&
+                    this.nonEscapingArrayValueOfResultUseIsSafe(parent)
+                ) {
+                    return;
+                }
+                if (
                     ts.isPropertyAccessExpression(parent) &&
                     parent.expression === n &&
                     parent.name.text === "length"
@@ -15844,6 +15851,13 @@ class Emitter {
             return true;
         }
         if (
+            ts.isCallExpression(parent) &&
+            this.nonEscapingArrayObjectPrototypeValueOfCallArgument(parent, n) &&
+            this.nonEscapingArrayValueOfResultUseIsSafe(parent)
+        ) {
+            return true;
+        }
+        if (
             ts.isPropertyAccessExpression(parent) &&
             parent.expression === n &&
             parent.name.text === "length"
@@ -15931,6 +15945,167 @@ class Emitter {
             return method === "isArray";
         }
         return false;
+    }
+
+    private nonEscapingArrayValueOfResultUseIsSafe(expr: ts.Expression): boolean {
+        const parent = expr.parent;
+        if (
+            ts.isVariableDeclaration(parent) &&
+            parent.initializer === expr &&
+            this.nonEscapingArrayValueOfAliasUsesAreSafe(parent)
+        ) {
+            return true;
+        }
+        if (ts.isElementAccessExpression(parent) && parent.expression === expr) {
+            return true;
+        }
+        if (
+            (ts.isForOfStatement(parent) || ts.isForInStatement(parent)) &&
+            parent.expression === expr
+        ) {
+            return true;
+        }
+        if (
+            ts.isPropertyAccessExpression(parent) &&
+            parent.expression === expr &&
+            parent.name.text === "length"
+        ) {
+            return !(
+                ts.isBinaryExpression(parent.parent) &&
+                parent.parent.left === parent &&
+                parent.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
+            );
+        }
+        if (
+            ts.isPropertyAccessExpression(parent) &&
+            parent.expression === expr &&
+            ts.isCallExpression(parent.parent) &&
+            parent.parent.expression === parent
+        ) {
+            return (
+                !parent.parent.arguments.some(ts.isSpreadElement) &&
+                this.nonEscapingArrayReadOnlyReceiverMethod(parent.name.text)
+            );
+        }
+        return false;
+    }
+
+    private nonEscapingArrayValueOfAliasUsesAreSafe(d: ts.VariableDeclaration): boolean {
+        if (!ts.isIdentifier(d.name)) return false;
+        const sym = this.symbolForIdentifier(d.name);
+        if (!sym) return false;
+        const stmt = d.parent.parent;
+        const scope = stmt?.parent;
+        if (!scope || !ts.isBlock(scope)) return false;
+        let safe = true;
+        const visit = (n: ts.Node): void => {
+            if (!safe) return;
+            if (n !== scope && ts.isFunctionLike(n)) return;
+            if (ts.isIdentifier(n) && this.checker.getSymbolAtLocation(n) === sym) {
+                if (n === d.name) return;
+                if (!this.nonEscapingArrayValueOfAliasUseIsSafe(n)) {
+                    safe = false;
+                    return;
+                }
+            }
+            ts.forEachChild(n, visit);
+        };
+        visit(scope);
+        return safe;
+    }
+
+    private nonEscapingArrayValueOfAliasUseIsSafe(n: ts.Identifier): boolean {
+        const parent = n.parent;
+        if (ts.isElementAccessExpression(parent) && parent.expression === n) {
+            return true;
+        }
+        if (
+            (ts.isForOfStatement(parent) || ts.isForInStatement(parent)) &&
+            parent.expression === n
+        ) {
+            return true;
+        }
+        if (
+            ts.isBinaryExpression(parent) &&
+            parent.right === n &&
+            parent.operatorToken.kind === ts.SyntaxKind.InKeyword
+        ) {
+            return true;
+        }
+        if (ts.isCallExpression(parent) && this.nonEscapingArraySafeCallArgument(parent, n)) {
+            return true;
+        }
+        if (
+            ts.isCallExpression(parent) &&
+            this.nonEscapingArrayObjectPrototypeValueOfCallArgument(parent, n) &&
+            this.nonEscapingArrayValueOfResultUseIsSafe(parent)
+        ) {
+            return true;
+        }
+        if (
+            ts.isPropertyAccessExpression(parent) &&
+            parent.expression === n &&
+            parent.name.text === "length"
+        ) {
+            return !(
+                ts.isBinaryExpression(parent.parent) &&
+                parent.parent.left === parent &&
+                parent.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
+            );
+        }
+        if (
+            ts.isPropertyAccessExpression(parent) &&
+            parent.expression === n &&
+            ts.isCallExpression(parent.parent) &&
+            parent.parent.expression === parent
+        ) {
+            return (
+                !parent.parent.arguments.some(ts.isSpreadElement) &&
+                this.nonEscapingArrayReadOnlyReceiverMethod(parent.name.text)
+            );
+        }
+        return false;
+    }
+
+    private nonEscapingArrayReadOnlyReceiverMethod(method: string): boolean {
+        return [
+            "at",
+            "concat",
+            "flat",
+            "includes",
+            "indexOf",
+            "keys",
+            "join",
+            "lastIndexOf",
+            "slice",
+            "entries",
+            "toLocaleString",
+            "toReversed",
+            "toSorted",
+            "toSpliced",
+            "toString",
+            "values",
+            "with",
+        ].includes(method);
+    }
+
+    private nonEscapingArrayObjectPrototypeValueOfCallArgument(call: ts.CallExpression, arg: ts.Expression): boolean {
+        if (call.arguments[0] !== arg) return false;
+        const callee = call.expression;
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "call") {
+            return false;
+        }
+        const methodAccess = callee.expression;
+        if (!ts.isPropertyAccessExpression(methodAccess) || methodAccess.name.text !== "valueOf") {
+            return false;
+        }
+        const prototypeAccess = methodAccess.expression;
+        return (
+            ts.isPropertyAccessExpression(prototypeAccess) &&
+            prototypeAccess.name.text === "prototype" &&
+            ts.isIdentifier(prototypeAccess.expression) &&
+            prototypeAccess.expression.text === "Object"
+        );
     }
 
     private nonEscapingArrayObjectPrototypeCallArgument(callee: ts.PropertyAccessExpression): boolean {
