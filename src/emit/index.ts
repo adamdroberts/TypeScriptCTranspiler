@@ -31911,7 +31911,12 @@ class Emitter {
 
     private validateTimersPromisesOptions(options: ts.Expression | undefined, label: string): void {
         if (!options || this.isUndefinedExpression(options)) return;
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(options);
+        let unwrapped = this.unwrapSideEffectFreeStaticExpression(options);
+        while (true) {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, new Set());
+            if (!init) break;
+            unwrapped = this.unwrapSideEffectFreeStaticExpression(init);
+        }
         if (this.isUndefinedExpression(unwrapped)) return;
         if (!ts.isObjectLiteralExpression(unwrapped)) {
             unsupported(options, `${label} options must be undefined or an object literal with undefined signal/ref fields in this immediate subset`);

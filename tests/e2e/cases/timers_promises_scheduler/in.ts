@@ -6,7 +6,10 @@ let defaultYield = "pending";
 let namespaceWait = "pending";
 let optionWait = "pending";
 
-scheduler.wait(0, { signal: undefined, ref: false }).then((_value: any): void => {
+const schedulerOptions = { signal: undefined, ref: false };
+const schedulerVoidOptions = { ref: undefined, signal: void 0 };
+
+scheduler.wait(0, schedulerOptions).then((_value: any): void => {
     namedWait = "settled";
 });
 
@@ -18,7 +21,7 @@ timersPromisesNs.scheduler.wait(undefined).then((_value: any): void => {
     namespaceWait = "settled";
 });
 
-timersPromises.scheduler.wait(void 0, { ref: undefined, signal: void 0 }).then((_value: any): void => {
+timersPromises.scheduler.wait(void 0, schedulerVoidOptions).then((_value: any): void => {
     optionWait = "settled";
 });
 

@@ -9,15 +9,20 @@ let defaultImmediate = "";
 let optionDelay = "";
 let optionImmediate = "";
 
-delay(0, "named delay", { signal: undefined, ref: false }).then((value: string): void => {
+const delayOptions = { signal: undefined, ref: false };
+const immediateOptions = { ref: true, signal: undefined };
+const noOptions = undefined;
+const voidOptions = { ref: undefined, signal: void 0 };
+
+delay(0, "named delay", delayOptions).then((value: string): void => {
     namedDelay = value;
 });
 
-setImmediate("named immediate", { ref: true, signal: undefined }).then((value: string): void => {
+setImmediate("named immediate", immediateOptions).then((value: string): void => {
     namedImmediate = value;
 });
 
-nodeTimersPromises.setTimeout(undefined, "namespace delay").then((value: string): void => {
+nodeTimersPromises.setTimeout(undefined, "namespace delay", noOptions).then((value: string): void => {
     namespaceDelay = value;
 });
 
@@ -25,7 +30,7 @@ timersPromises.setImmediate("default immediate").then((value: string): void => {
     defaultImmediate = value;
 });
 
-nodeTimersPromises.setTimeout(void 0, "option delay", { ref: undefined, signal: void 0 }).then((value: string): void => {
+nodeTimersPromises.setTimeout(void 0, "option delay", voidOptions).then((value: string): void => {
     optionDelay = value;
 });
 
