@@ -35564,11 +35564,12 @@ class Emitter {
                 continue;
             }
             if (key === "withFileTypes") {
-                if (this.isUndefinedExpression(prop.initializer)) {
+                const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+                if (this.isUndefinedExpression(valueNode)) {
                     withFileTypes = false;
                     continue;
                 }
-                const value = this.fsBooleanOptionValue(prop.initializer);
+                const value = this.fsBooleanOptionValue(valueNode);
                 if (value === null) {
                     unsupported(prop.initializer, `${label}.withFileTypes must be a boolean literal in this subset`);
                 }
@@ -35576,11 +35577,12 @@ class Emitter {
                 continue;
             }
             if (key === "recursive") {
-                if (this.isUndefinedExpression(prop.initializer)) {
+                const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+                if (this.isUndefinedExpression(valueNode)) {
                     recursive = false;
                     continue;
                 }
-                const value = this.fsBooleanOptionValue(prop.initializer);
+                const value = this.fsBooleanOptionValue(valueNode);
                 if (value === null) {
                     unsupported(prop.initializer, `${label}.recursive must be a boolean literal in this subset`);
                 }
