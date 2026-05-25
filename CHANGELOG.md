@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `os.userInfo(options?, ...ignored)` now evaluates and ignores trailing arguments after the supported options slot. Test: `os_user_info`.
 - `queueMicrotask(callback, ...ignored)` now evaluates and ignores trailing arguments before scheduling the bounded microtask callback. Test: `queue_microtask`.
 - `events.once(emitter, eventName, options?, ...ignored)` now evaluates and ignores trailing arguments after the optional options slot. Test: `event_emitter_once_options`.
 - `EventTarget.dispatchEvent(event, ...ignored)` now evaluates and ignores trailing arguments before synchronous listener dispatch. Test: `event_target`.

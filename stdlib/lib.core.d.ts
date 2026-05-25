@@ -1044,7 +1044,7 @@ interface OS {
     freemem(...ignored: any[]): number;
     uptime(...ignored: any[]): number;
     loadavg(...ignored: any[]): number[];
-    userInfo(options?: OSUserInfoOptions): any;
+    userInfo(options?: OSUserInfoOptions, ...ignored: any[]): any;
 }
 interface OSUserInfoOptions {
     encoding?: FSEncoding;
@@ -1069,7 +1069,7 @@ declare module "os" {
     export function freemem(...ignored: any[]): number;
     export function uptime(...ignored: any[]): number;
     export function loadavg(...ignored: any[]): number[];
-    export function userInfo(options?: OSUserInfoOptions): any;
+    export function userInfo(options?: OSUserInfoOptions, ...ignored: any[]): any;
     const defaultOs: OS;
     export default defaultOs;
 }
@@ -1092,7 +1092,7 @@ declare module "node:os" {
     export function freemem(...ignored: any[]): number;
     export function uptime(...ignored: any[]): number;
     export function loadavg(...ignored: any[]): number[];
-    export function userInfo(options?: OSUserInfoOptions): any;
+    export function userInfo(options?: OSUserInfoOptions, ...ignored: any[]): any;
     const defaultOs: OS;
     export default defaultOs;
 }

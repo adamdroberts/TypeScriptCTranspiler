@@ -37486,9 +37486,12 @@ class Emitter {
             case "uptime": return ret(T_NUMBER, `tsc_os_uptime()`);
             case "loadavg": return ret(arrayType(T_NUMBER), `tsc_os_loadavg()`);
             case "userInfo":
-                if (call.arguments.length > 1) unsupported(call, "os.userInfo expects at most one options argument");
                 this.validateOsUserInfoOptions(call.arguments[0]);
-                return { c: `tsc_os_user_info()`, ty: T_VALUE };
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    this.ignoredArgumentSpecs(call.arguments, call.arguments[0] ? 1 : 0),
+                    () => `tsc_os_user_info()`,
+                );
             case "cpus": {
                 // Minimal: return an array-of-empty-objects of length cpu_count.
                 // Most user code just wants os.cpus().length, so this is fine.
