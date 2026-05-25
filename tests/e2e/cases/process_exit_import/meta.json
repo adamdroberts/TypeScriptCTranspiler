@@ -1,0 +1,3 @@
+{
+  "description": "named, namespace, and default process exit imports route to the existing exit helper"
+}

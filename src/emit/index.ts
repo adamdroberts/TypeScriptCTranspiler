@@ -24911,6 +24911,7 @@ class Emitter {
         const processNamed = [
             "chdir",
             "cwd",
+            "exit",
             "uptime",
             "getuid",
             "getgid",
@@ -26587,7 +26588,7 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recvExpr) &&
-            recvExpr.text === "process" &&
+            this.isProcessModuleIdentifier(recvExpr) &&
             memberName === "exit"
         ) {
             return this.emitProcessExit(call);
@@ -27067,6 +27068,8 @@ class Emitter {
                     { value: directory, target: T_STRING, node: call.arguments[0]! },
                 ]);
             }
+            case "exit":
+                return this.emitProcessExit(call);
             case "uptime":
                 return this.emitSequencedExpr(
                     T_NUMBER,

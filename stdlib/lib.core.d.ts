@@ -722,6 +722,7 @@ declare module "process" {
     export const env: Process["env"];
     export const execArgv: Process["execArgv"];
     export const execPath: Process["execPath"];
+    export const exit: Process["exit"];
     export const features: Process["features"];
     export const getegid: Process["getegid"];
     export const geteuid: Process["geteuid"];
@@ -758,6 +759,7 @@ declare module "node:process" {
     export const env: Process["env"];
     export const execArgv: Process["execArgv"];
     export const execPath: Process["execPath"];
+    export const exit: Process["exit"];
     export const features: Process["features"];
     export const getegid: Process["getegid"];
     export const geteuid: Process["geteuid"];
