@@ -15683,14 +15683,15 @@ class Emitter {
                     parent.parent.expression === parent
                 ) {
                     if (this.nonEscapingArrayGrowingMethod(parent.name.text)) {
+                        const repetitions = this.loopRepetitionMultiplierBeforeScope(parent.parent, scope);
                         if (
                             parent.parent.arguments.some(ts.isSpreadElement) ||
-                            this.hasLoopAncestorBeforeScope(parent.parent, scope)
+                            repetitions === null
                         ) {
                             escapes = true;
                             return;
                         }
-                        extraCapacity += parent.parent.arguments.length;
+                        extraCapacity += parent.parent.arguments.length * repetitions;
                         return;
                     }
                     if (this.nonEscapingArrayReceiverMethod(parent.name.text)) {
@@ -15977,6 +15978,131 @@ class Emitter {
             }
         }
         return false;
+    }
+
+    private loopRepetitionMultiplierBeforeScope(node: ts.Node, scope: ts.Node): number | null {
+        let repetitions = 1;
+        for (let cur = node.parent; cur && cur !== scope; cur = cur.parent) {
+            if (ts.isForStatement(cur)) {
+                const count = this.staticForLoopIterationCount(cur);
+                if (count === null) return null;
+                repetitions *= count;
+                continue;
+            }
+            if (
+                ts.isDoStatement(cur) ||
+                ts.isWhileStatement(cur) ||
+                ts.isForInStatement(cur) ||
+                ts.isForOfStatement(cur)
+            ) {
+                return null;
+            }
+        }
+        return repetitions;
+    }
+
+    private staticForLoopIterationCount(stmt: ts.ForStatement): number | null {
+        if (!stmt.initializer || !ts.isVariableDeclarationList(stmt.initializer)) return null;
+        const declarations = Array.from(stmt.initializer.declarations);
+        if (declarations.length !== 1) return null;
+        const declaration = declarations[0]!;
+        if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return null;
+        const sym = this.symbolForIdentifier(declaration.name);
+        if (!sym) return null;
+        const start = this.staticSafeIntegerLiteralValue(declaration.initializer);
+        if (start === null) return null;
+        const condition = stmt.condition ? this.staticForLoopCondition(declaration.name, sym, stmt.condition) : null;
+        if (!condition) return null;
+        if (!stmt.incrementor || !this.staticForLoopUnitIncrement(stmt.incrementor, sym)) return null;
+        if (this.forLoopBodyMutatesSymbol(stmt.statement, sym)) return null;
+        const { inclusive, limit } = condition;
+        if (limit < start) return 0;
+        const count = inclusive ? limit - start + 1 : limit - start;
+        return count >= 0 && Number.isSafeInteger(count) ? count : null;
+    }
+
+    private staticForLoopCondition(
+        name: ts.Identifier,
+        sym: ts.Symbol,
+        expr: ts.Expression,
+    ): { limit: number; inclusive: boolean } | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (!ts.isBinaryExpression(unwrapped)) return null;
+        const op = unwrapped.operatorToken.kind;
+        const leftIsIndex = ts.isIdentifier(unwrapped.left) && this.checker.getSymbolAtLocation(unwrapped.left) === sym;
+        const rightIsIndex = ts.isIdentifier(unwrapped.right) && this.checker.getSymbolAtLocation(unwrapped.right) === sym;
+        if (leftIsIndex) {
+            const limit = this.staticSafeIntegerLiteralValue(unwrapped.right);
+            if (limit === null) return null;
+            if (op === ts.SyntaxKind.LessThanToken) return { limit, inclusive: false };
+            if (op === ts.SyntaxKind.LessThanEqualsToken) return { limit, inclusive: true };
+            return null;
+        }
+        if (rightIsIndex) {
+            const limit = this.staticSafeIntegerLiteralValue(unwrapped.left);
+            if (limit === null) return null;
+            if (op === ts.SyntaxKind.GreaterThanToken) return { limit, inclusive: false };
+            if (op === ts.SyntaxKind.GreaterThanEqualsToken) return { limit, inclusive: true };
+        }
+        void name;
+        return null;
+    }
+
+    private staticForLoopUnitIncrement(expr: ts.Expression, sym: ts.Symbol): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            (ts.isPostfixUnaryExpression(unwrapped) || ts.isPrefixUnaryExpression(unwrapped)) &&
+            unwrapped.operator === ts.SyntaxKind.PlusPlusToken &&
+            ts.isIdentifier(unwrapped.operand)
+        ) {
+            return this.checker.getSymbolAtLocation(unwrapped.operand) === sym;
+        }
+        if (
+            ts.isBinaryExpression(unwrapped) &&
+            unwrapped.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken &&
+            ts.isIdentifier(unwrapped.left) &&
+            this.checker.getSymbolAtLocation(unwrapped.left) === sym
+        ) {
+            return this.staticSafeIntegerLiteralValue(unwrapped.right) === 1;
+        }
+        return false;
+    }
+
+    private forLoopBodyMutatesSymbol(body: ts.Statement, sym: ts.Symbol): boolean {
+        let mutates = false;
+        const visit = (n: ts.Node): void => {
+            if (mutates) return;
+            if (n !== body && ts.isFunctionLike(n)) return;
+            if (
+                (ts.isPostfixUnaryExpression(n) || ts.isPrefixUnaryExpression(n)) &&
+                ts.isIdentifier(n.operand) &&
+                this.checker.getSymbolAtLocation(n.operand) === sym
+            ) {
+                mutates = true;
+                return;
+            }
+            if (
+                ts.isBinaryExpression(n) &&
+                this.isAssignmentOperatorKind(n.operatorToken.kind) &&
+                ts.isIdentifier(n.left) &&
+                this.checker.getSymbolAtLocation(n.left) === sym
+            ) {
+                mutates = true;
+                return;
+            }
+            ts.forEachChild(n, visit);
+        };
+        visit(body);
+        return mutates;
+    }
+
+    private isAssignmentOperatorKind(kind: ts.SyntaxKind): boolean {
+        return kind >= ts.SyntaxKind.FirstAssignment && kind <= ts.SyntaxKind.LastAssignment;
+    }
+
+    private staticSafeIntegerLiteralValue(expr: ts.Expression): number | null {
+        const value = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr, new Set());
+        return value !== null && Number.isSafeInteger(value) ? value : null;
     }
 
     private emitClassBodies(cd: ts.ClassDeclaration): void {
