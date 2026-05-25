@@ -309,6 +309,8 @@ bool tsc_url_can_parse_base(const tsc_str_t* input, const tsc_str_t* base);
 tsc_url_t* tsc_url_new(const tsc_str_t* input);
 tsc_url_t* tsc_url_new_base(const tsc_str_t* input, const tsc_str_t* base);
 tsc_str_t* tsc_url_file_path(const tsc_url_t* url);
+tsc_str_t* tsc_url_file_url_to_path(const tsc_str_t* input);
+tsc_url_t* tsc_url_path_to_file_url(const tsc_str_t* path);
 
 /* ------------- Date ------------- */
 typedef struct tsc_date {

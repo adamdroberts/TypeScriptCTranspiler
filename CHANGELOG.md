@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `fileURLToPath(...)` and `pathToFileURL(...)` imports from `"url"` and `"node:url"` now route through the bounded POSIX file URL/path conversion subset across named, namespace, and default import forms. Test: `url_file_path_helpers`.
 - `stream.isDisturbed(...)` from `"stream"` and `"node:stream"` now classifies the bounded process stdio stream subset across named, namespace, and default imports. Test: `stream_stdio_disturbed_predicate`.
 - `stream.isErrored(...)` / `stream.isDestroyed(...)` from `"stream"` and `"node:stream"` now classify the bounded process stdio stream subset across named, namespace, and default imports. Test: `stream_stdio_state_predicates`.
 - `"timers/promises"` and `"node:timers/promises"` imports now expose an immediate-settled subset for omitted/zero-delay `setTimeout(...)` and `setImmediate(...)` across named, namespace, and default import forms. Test: `timers_promises_import`.

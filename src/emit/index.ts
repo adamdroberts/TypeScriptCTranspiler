@@ -24251,6 +24251,38 @@ class Emitter {
             this.isUrlModuleIdentifier(unwrapped.expression);
     }
 
+    private emitUrlModuleCall(call: ts.CallExpression, name: string): EmitResult {
+        const args = call.arguments;
+        switch (name) {
+            case "fileURLToPath": {
+                if (args.length !== 1) unsupported(call, "url.fileURLToPath expects one URL or string argument");
+                const argNode = args[0]!;
+                const value = this.emitExpr(argNode);
+                if (value.ty.kind === "url") {
+                    return this.emitSequencedCall("tsc_url_file_path", T_STRING, [
+                        { value, target: T_URL, node: argNode },
+                    ]);
+                }
+                if (value.ty.kind === "string") {
+                    return this.emitSequencedCall("tsc_url_file_url_to_path", T_STRING, [
+                        { value, target: T_STRING, node: argNode },
+                    ]);
+                }
+                unsupported(argNode, "url.fileURLToPath expects a URL object or string in this subset");
+            }
+            case "pathToFileURL": {
+                if (args.length !== 1) unsupported(call, "url.pathToFileURL expects one string path");
+                const argNode = args[0]!;
+                const value = this.emitExpr(argNode);
+                return this.emitSequencedCall("tsc_url_path_to_file_url", T_URL, [
+                    { value, target: T_STRING, node: argNode },
+                ]);
+            }
+            default:
+                unsupported(call, `url.${name}`);
+        }
+    }
+
     private isEventEmitterConstructorIdentifier(id: ts.Identifier): boolean {
         return (
             id.text === "EventEmitter" &&
@@ -25051,6 +25083,11 @@ class Emitter {
             .find((exported) => this.isNamedImportFrom(calleeId, ["os", "node:os"], exported));
         if (osNamed) {
             return this.emitOsCall(call, osNamed);
+        }
+        const urlNamed = ["fileURLToPath", "pathToFileURL"]
+            .find((exported) => this.isNamedImportFrom(calleeId, ["url", "node:url"], exported));
+        if (urlNamed) {
+            return this.emitUrlModuleCall(call, urlNamed);
         }
 
         if (!this.isDirectCallableIdentifier(call.expression)) {
@@ -26532,6 +26569,10 @@ class Emitter {
 
         if (ts.isIdentifier(recvExpr) && this.isOsModuleIdentifier(recvExpr)) {
             return this.emitOsCall(call, memberName);
+        }
+
+        if (ts.isIdentifier(recvExpr) && this.isUrlModuleIdentifier(recvExpr)) {
+            return this.emitUrlModuleCall(call, memberName);
         }
 
         if (ts.isIdentifier(recvExpr) && this.isCryptoModuleIdentifier(recvExpr)) {

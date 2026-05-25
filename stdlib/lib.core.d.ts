@@ -1972,16 +1972,23 @@ interface URLConstructor {
     canParse(input: string, base?: string): boolean;
 }
 declare var URL: URLConstructor;
+type URLPathLike = string | URL;
 interface UrlModule {
     URL: URLConstructor;
+    fileURLToPath(url: URLPathLike): string;
+    pathToFileURL(path: string): URL;
 }
 declare module "url" {
     export const URL: URLConstructor;
+    export function fileURLToPath(url: URLPathLike): string;
+    export function pathToFileURL(path: string): URL;
     const defaultUrl: UrlModule;
     export default defaultUrl;
 }
 declare module "node:url" {
     export const URL: URLConstructor;
+    export function fileURLToPath(url: URLPathLike): string;
+    export function pathToFileURL(path: string): URL;
     const defaultUrl: UrlModule;
     export default defaultUrl;
 }

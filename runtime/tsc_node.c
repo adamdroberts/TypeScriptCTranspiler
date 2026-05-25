@@ -820,6 +820,67 @@ bool tsc_url_can_parse_base(const tsc_str_t* input, const tsc_str_t* base) {
     return resolved && tsc_url_can_parse(resolved);
 }
 
+int url_hex_value(char ch) {
+    if (ch >= '0' && ch <= '9') return ch - '0';
+    if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+    if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
+    return -1;
+}
+
+tsc_str_t* url_percent_decode_path(const tsc_str_t* path) {
+    size_t out_len = 0;
+    for (size_t i = 0; i < path->len; i++) {
+        if (path->data[i] == '%') {
+            if (i + 2 >= path->len || url_hex_value(path->data[i + 1]) < 0 || url_hex_value(path->data[i + 2]) < 0) {
+                tsc_throw_str(tsc_str_from_cstr("URL: invalid percent escape in file URL path"));
+            }
+            i += 2;
+        }
+        out_len++;
+    }
+    tsc_str_t* out = str_alloc(out_len);
+    char* dst = (char*)out->data;
+    size_t pos = 0;
+    for (size_t i = 0; i < path->len; i++) {
+        if (path->data[i] == '%') {
+            int hi = url_hex_value(path->data[i + 1]);
+            int lo = url_hex_value(path->data[i + 2]);
+            dst[pos++] = (char)((hi << 4) | lo);
+            i += 2;
+        } else {
+            dst[pos++] = path->data[i];
+        }
+    }
+    return out;
+}
+
+bool url_path_encode_byte(unsigned char ch) {
+    return ch <= 0x20 || ch >= 0x7f || ch == '%' || ch == '#' || ch == '?';
+}
+
+tsc_str_t* url_percent_encode_path(const tsc_str_t* path) {
+    static const char hex[] = "0123456789ABCDEF";
+    size_t out_len = 0;
+    for (size_t i = 0; i < path->len; i++) {
+        unsigned char ch = (unsigned char)path->data[i];
+        out_len += url_path_encode_byte(ch) ? 3 : 1;
+    }
+    tsc_str_t* out = str_alloc(out_len);
+    char* dst = (char*)out->data;
+    size_t pos = 0;
+    for (size_t i = 0; i < path->len; i++) {
+        unsigned char ch = (unsigned char)path->data[i];
+        if (url_path_encode_byte(ch)) {
+            dst[pos++] = '%';
+            dst[pos++] = hex[ch >> 4];
+            dst[pos++] = hex[ch & 15];
+        } else {
+            dst[pos++] = (char)ch;
+        }
+    }
+    return out;
+}
+
 tsc_url_t* tsc_url_new(const tsc_str_t* input) {
     const char* d = input->data;
     size_t n = input->len;
@@ -887,7 +948,21 @@ tsc_str_t* tsc_url_file_path(const tsc_url_t* url) {
     if (url->host->len != 0 && !tsc_str_eq(url->host, tsc_str_from_lit("localhost", 9))) {
         tsc_throw_str(tsc_str_from_cstr("URL: filesystem file: URLs must not have a remote host"));
     }
-    return url->pathname;
+    return url_percent_decode_path(url->pathname);
+}
+
+tsc_str_t* tsc_url_file_url_to_path(const tsc_str_t* input) {
+    return tsc_url_file_path(tsc_url_new(input));
+}
+
+tsc_url_t* tsc_url_path_to_file_url(const tsc_str_t* path) {
+    tsc_str_t* absolute = tsc_path_is_absolute(path) ? (tsc_str_t*)path : tsc_path_resolve(1, path);
+    absolute = tsc_path_normalize(absolute);
+    if (!tsc_path_is_absolute(absolute)) {
+        absolute = tsc_str_concat(tsc_str_from_lit("/", 1), absolute);
+    }
+    tsc_str_t* encoded = url_percent_encode_path(absolute);
+    return tsc_url_new(tsc_str_concat(tsc_str_from_lit("file://", 7), encoded));
 }
 
 int tsc_dns_lookup_ai_flags(double hints) {
