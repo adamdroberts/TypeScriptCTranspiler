@@ -17022,8 +17022,8 @@ class Emitter {
 
     private isPathModuleIdentifier(id: ts.Identifier): boolean {
         return id.text === "path" ||
-            this.isNamespaceImportFrom(id, ["path", "node:path"]) ||
-            this.isDefaultImportFrom(id, ["path", "node:path"]);
+            this.isNamespaceImportFrom(id, ["path", "node:path", "path/posix", "node:path/posix"]) ||
+            this.isDefaultImportFrom(id, ["path", "node:path", "path/posix", "node:path/posix"]);
     }
 
     private isPathPosixReceiver(expr: ts.Expression): boolean {
@@ -25035,7 +25035,7 @@ class Emitter {
             return this.emitFsPromisesCall(call, fsPromisesNamed);
         }
         const pathNamed = ["join", "resolve", "normalize", "isAbsolute", "relative", "toNamespacedPath", "basename", "dirname", "extname", "parse", "format"]
-            .find((exported) => this.isNamedImportFrom(calleeId, ["path", "node:path"], exported));
+            .find((exported) => this.isNamedImportFrom(calleeId, ["path", "node:path", "path/posix", "node:path/posix"], exported));
         if (pathNamed) {
             return this.emitPathCall(call, pathNamed);
         }

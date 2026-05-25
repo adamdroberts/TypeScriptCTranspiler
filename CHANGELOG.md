@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Direct `"path/posix"` and `"node:path/posix"` imports now route to the supported POSIX path subset across named, namespace, and default import forms. Test: `path_posix_subpath_import`.
 - `process.stdin.setEncoding(...)`, `process.stdin.resume(...)`, and `process.stdin.pause(...)` now act as no-op compatibility methods in the bounded process stdio subset across global, named, namespace, and default process references. Test: `process_stdin_noop_methods`.
 - `fileURLToPath(...)` and `pathToFileURL(...)` imports from `"url"` and `"node:url"` now route through the bounded POSIX file URL/path conversion subset across named, namespace, and default import forms. Test: `url_file_path_helpers`.
 - `stream.isDisturbed(...)` from `"stream"` and `"node:stream"` now classifies the bounded process stdio stream subset across named, namespace, and default imports. Test: `stream_stdio_disturbed_predicate`.

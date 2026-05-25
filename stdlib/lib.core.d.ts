@@ -1523,6 +1523,40 @@ declare module "node:path" {
     const defaultPath: Path;
     export default defaultPath;
 }
+declare module "path/posix" {
+    export const sep: string;
+    export const delimiter: string;
+    export function join(...parts: string[]): string;
+    export function resolve(...parts: string[]): string;
+    export function normalize(p: string, ...ignored: any[]): string;
+    export function isAbsolute(p: string, ...ignored: any[]): boolean;
+    export function relative(from: string, to: string, ...ignored: any[]): string;
+    export function toNamespacedPath(p: string, ...ignored: any[]): string;
+    export function basename(p: string, suffix?: string, ...ignored: any[]): string;
+    export function dirname(p: string, ...ignored: any[]): string;
+    export function extname(p: string, ...ignored: any[]): string;
+    export function parse(p: string, ...ignored: any[]): any;
+    export function format(pathObject: any, ...ignored: any[]): string;
+    const defaultPath: Path;
+    export default defaultPath;
+}
+declare module "node:path/posix" {
+    export const sep: string;
+    export const delimiter: string;
+    export function join(...parts: string[]): string;
+    export function resolve(...parts: string[]): string;
+    export function normalize(p: string, ...ignored: any[]): string;
+    export function isAbsolute(p: string, ...ignored: any[]): boolean;
+    export function relative(from: string, to: string, ...ignored: any[]): string;
+    export function toNamespacedPath(p: string, ...ignored: any[]): string;
+    export function basename(p: string, suffix?: string, ...ignored: any[]): string;
+    export function dirname(p: string, ...ignored: any[]): string;
+    export function extname(p: string, ...ignored: any[]): string;
+    export function parse(p: string, ...ignored: any[]): any;
+    export function format(pathObject: any, ...ignored: any[]): string;
+    const defaultPath: Path;
+    export default defaultPath;
+}
 
 type CryptoHashAlgorithm = "sha1" | "sha256" | "sha512";
 interface CryptoRandomUUIDOptions {

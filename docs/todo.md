@@ -24,6 +24,7 @@ This is the next item that most directly expands what programs can be written ag
   - Additional URL constructor/base-resolution and file-URL path coverage routes invalid absolute URLs, invalid bases, non-file URL paths, and remote-host file URLs through catchable runtime exceptions. Test: `url_errors`.
   - Named and default imports from `"buffer"` / `"node:buffer"` route to the supported `Buffer` static helper subset. Test: `buffer_module_import`.
   - Named and default imports from `"url"` / `"node:url"` route to the supported `URL` constructor, `URL.canParse(...)`, `fileURLToPath(...)`, and `pathToFileURL(...)` helpers. Tests: `url_module_import`, `url_file_path_helpers`.
+  - Direct named, namespace, and default imports from `"path/posix"` / `"node:path/posix"` route to the supported POSIX path subset. Test: `path_posix_subpath_import`.
   - Additional Buffer coverage routes invalid encodings, bad hex/base64 input, invalid sizes/lengths, out-of-range read/write offsets, and invalid swap widths through catchable runtime exceptions. Test: `buffer_errors`.
   - `atob` / `btoa` imports from `"buffer"` / `"node:buffer"` route to the existing base64 helpers across named, namespace, and default import forms. Test: `buffer_base64_import`.
   - Additional crypto coverage routes unsupported hash algorithms, invalid random byte sizes, and unsupported digest encodings through catchable runtime exceptions. Test: `crypto_errors`.

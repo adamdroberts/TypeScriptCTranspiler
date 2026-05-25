@@ -1,0 +1,3 @@
+default: /tmp/a/../b /
+named: file b/c
+namespace: /tmp/a .txt :
