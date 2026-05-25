@@ -1,0 +1,6 @@
+typed: 3 true x|label
+array: 20 2 0|1|length
+string: i 2 0|1|length
+primitive: undefined 0
+dynamic: 11 alpha
+marks: abcdefghijk

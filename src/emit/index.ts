@@ -36926,12 +36926,14 @@ class Emitter {
         objExpr: ts.Expression,
         obj: EmitResult,
         keyExpr: ts.Expression,
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer descriptor on non-buffer");
         const key = this.emitExpr(keyExpr);
         return this.emitSequencedExpr(T_VALUE, [
             { value: obj, node: objExpr },
             { value: key, target: T_STRING, node: keyExpr },
+            ...ignored,
         ], ([buffer, keyC]) => {
             const source = this.freshTemp("_bdesc_src");
             const out = this.freshTemp("_bdesc_out");
@@ -36958,9 +36960,10 @@ class Emitter {
     private emitBufferGetOwnPropertyDescriptors(
         objExpr: ts.Expression,
         obj: EmitResult,
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer descriptors on non-buffer");
-        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }], ([buffer]) => {
+        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }, ...ignored], ([buffer]) => {
             const source = this.freshTemp("_bdescs_src");
             const out = this.freshTemp("_bdescs");
             const idx = this.freshTemp("_bdescs_i");
@@ -38046,13 +38049,15 @@ class Emitter {
             );
         }
         if (name === "getOwnPropertyDescriptor") {
-            if (args.length !== 2) unsupported(call, "Object.getOwnPropertyDescriptor expects object and key");
+            if (args.length < 2) unsupported(call, "Object.getOwnPropertyDescriptor expects object and key");
+            const ignored = this.ignoredArgumentSpecs(args, 2);
             if (nonStringPrimitiveObjectArg) {
                 const obj = this.emitExpr(arg);
                 const key = this.emitExpr(args[1]!);
                 return this.emitSequencedExpr(T_VALUE, [
                     { value: obj, node: arg },
                     { value: key, target: T_STRING, node: args[1]! },
+                    ...ignored,
                 ], ([o, k]) => `({ (void)${o}; (void)${k}; tsc_value_undefined(); })`);
             }
             if (emptyOwnBuiltinObjectArg) {
@@ -38061,35 +38066,41 @@ class Emitter {
                 return this.emitSequencedExpr(T_VALUE, [
                     { value: obj, node: arg },
                     { value: key, target: T_STRING, node: args[1]! },
+                    ...ignored,
                 ], ([o, k]) => `({ (void)${o}; (void)${k}; tsc_value_undefined(); })`);
             }
             if (mapped.kind === "buffer") {
                 const obj = this.emitExpr(arg);
-                return this.emitBufferGetOwnPropertyDescriptor(arg, obj, args[1]!);
+                return this.emitBufferGetOwnPropertyDescriptor(arg, obj, args[1]!, ignored);
             }
             if (mapped.kind === "string") {
                 const obj = this.emitExpr(arg);
                 const key = this.emitExpr(args[1]!);
-                return this.emitSequencedCall("tsc_value_get_own_property_descriptor", T_VALUE, [
+                return this.emitSequencedExpr(T_VALUE, [
                     { value: obj, target: T_VALUE, node: arg },
                     { value: key, target: T_STRING, node: args[1]! },
-                ]);
+                    ...ignored,
+                ], ([o, k]) => `tsc_value_get_own_property_descriptor(${o}, ${k})`);
             }
             if (mapped.kind === "array") {
                 const obj = this.emitExpr(arg);
-                return this.emitTypedArrayGetOwnPropertyDescriptor(arg, obj, args[1]!);
+                const arrayObj = obj.ty.kind === "array"
+                    ? obj
+                    : { c: this.coerce(obj, mapped, arg), ty: mapped };
+                return this.emitTypedArrayGetOwnPropertyDescriptor(arg, arrayObj, args[1]!, ignored);
             }
             if (mapped.kind === "function") {
                 const obj = this.emitExpr(arg);
                 const key = this.emitExpr(args[1]!);
-                return this.emitSequencedCall("tsc_value_get_own_property_descriptor", T_VALUE, [
+                return this.emitSequencedExpr(T_VALUE, [
                     { value: obj, target: T_VALUE, node: arg },
                     { value: key, target: T_STRING, node: args[1]! },
-                ]);
+                    ...ignored,
+                ], ([o, k]) => `tsc_value_get_own_property_descriptor(${o}, ${k})`);
             }
             if (mapped.kind === "class") {
                 const obj = this.emitExpr(arg);
-                return this.emitTypedGetOwnPropertyDescriptor(arg, obj, args[1]!, tsType);
+                return this.emitTypedGetOwnPropertyDescriptor(arg, obj, args[1]!, tsType, ignored);
             }
             if (mapped.kind !== "value") {
                 unsupported(arg, "Object.getOwnPropertyDescriptor currently supports dynamic objects only");
@@ -38099,47 +38110,54 @@ class Emitter {
             return this.emitSequencedExpr(T_VALUE, [
                 { value: obj, target: T_VALUE, node: arg },
                 { value: key, target: T_STRING, node: args[1]! },
+                ...ignored,
             ], ([o, k]) =>
                 `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyDescriptor target must not be null or undefined")); tsc_value_get_own_property_descriptor(${o!}, ${k!}); })`,
             );
         }
         if (name === "getOwnPropertyDescriptors") {
-            if (args.length !== 1) unsupported(call, "Object.getOwnPropertyDescriptors expects object");
+            if (args.length < 1) unsupported(call, "Object.getOwnPropertyDescriptors expects object");
+            const ignored = this.ignoredArgumentSpecs(args, 1);
             if (nonStringPrimitiveObjectArg) {
                 const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: arg }], ([o]) =>
+                return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: arg }, ...ignored], ([o]) =>
                     `({ (void)${o}; tsc_value_object(tsc_object_new()); })`,
                 );
             }
             if (emptyOwnBuiltinObjectArg) {
                 const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: arg }], ([o]) =>
+                return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: arg }, ...ignored], ([o]) =>
                     `({ (void)${o}; tsc_value_object(tsc_object_new()); })`,
                 );
             }
             if (mapped.kind === "buffer") {
                 const obj = this.emitExpr(arg);
-                return this.emitBufferGetOwnPropertyDescriptors(arg, obj);
+                return this.emitBufferGetOwnPropertyDescriptors(arg, obj, ignored);
             }
             if (mapped.kind === "string") {
                 const obj = this.emitExpr(arg);
-                return this.emitSequencedCall("tsc_value_get_own_property_descriptors", T_VALUE, [
+                return this.emitSequencedExpr(T_VALUE, [
                     { value: obj, target: T_VALUE, node: arg },
-                ]);
+                    ...ignored,
+                ], ([o]) => `tsc_value_get_own_property_descriptors(${o})`);
             }
             if (mapped.kind === "array") {
                 const obj = this.emitExpr(arg);
-                return this.emitTypedArrayGetOwnPropertyDescriptors(arg, obj);
+                const arrayObj = obj.ty.kind === "array"
+                    ? obj
+                    : { c: this.coerce(obj, mapped, arg), ty: mapped };
+                return this.emitTypedArrayGetOwnPropertyDescriptors(arg, arrayObj, ignored);
             }
             if (mapped.kind === "function") {
                 const obj = this.emitExpr(arg);
-                return this.emitSequencedCall("tsc_value_get_own_property_descriptors", T_VALUE, [
+                return this.emitSequencedExpr(T_VALUE, [
                     { value: obj, target: T_VALUE, node: arg },
-                ]);
+                    ...ignored,
+                ], ([o]) => `tsc_value_get_own_property_descriptors(${o})`);
             }
             if (mapped.kind === "class") {
                 const obj = this.emitExpr(arg);
-                return this.emitTypedGetOwnPropertyDescriptors(arg, obj, tsType);
+                return this.emitTypedGetOwnPropertyDescriptors(arg, obj, tsType, ignored);
             }
             if (mapped.kind !== "value") {
                 unsupported(arg, "Object.getOwnPropertyDescriptors currently supports dynamic objects only");
@@ -38147,6 +38165,7 @@ class Emitter {
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(T_VALUE, [
                 { value: obj, target: T_VALUE, node: arg },
+                ...ignored,
             ], ([o]) =>
                 `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyDescriptors target must not be null or undefined")); tsc_value_get_own_property_descriptors(${o!}); })`,
             );
@@ -38896,6 +38915,7 @@ class Emitter {
         objExpr: ts.Expression,
         obj: EmitResult,
         keyExpr: ts.Expression,
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         if (obj.ty.kind !== "array") unsupported(objExpr, "typed array descriptor on non-array");
         const elem = obj.ty.elem ?? T_VALUE;
@@ -38903,6 +38923,7 @@ class Emitter {
         return this.emitSequencedExpr(T_VALUE, [
             { value: obj, node: objExpr },
             { value: key, target: T_STRING, node: keyExpr },
+            ...ignored,
         ], ([arrC, keyC]) => {
             const out = this.freshTemp("_adesc");
             const idx = this.freshTemp("_adesc_i");
@@ -38933,10 +38954,11 @@ class Emitter {
     private emitTypedArrayGetOwnPropertyDescriptors(
         objExpr: ts.Expression,
         obj: EmitResult,
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         if (obj.ty.kind !== "array") unsupported(objExpr, "typed array descriptors on non-array");
         const elem = obj.ty.elem ?? T_VALUE;
-        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }], ([arrC]) => {
+        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }, ...ignored], ([arrC]) => {
             const out = this.freshTemp("_adescs");
             const idx = this.freshTemp("_adescs_i");
             const elemDesc = this.freshTemp("_adescs_elem");
@@ -39264,10 +39286,11 @@ class Emitter {
         objExpr: ts.Expression,
         obj: EmitResult,
         tsType: ts.Type,
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         if (obj.ty.kind !== "class") unsupported(objExpr, "typed property descriptors on non-object");
         const props = this.typedObjectPropertyNames(tsType, obj.ty);
-        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }], ([objC]) => {
+        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }, ...ignored], ([objC]) => {
             const out = this.freshTemp("_tdescs");
             const pieces: string[] = [`tsc_object_t* ${out} = tsc_object_new()`];
             for (const name of props) {
@@ -39299,6 +39322,7 @@ class Emitter {
         obj: EmitResult,
         keyExpr: ts.Expression,
         tsType: ts.Type,
+        ignored: SequencedCallArg[] = [],
     ): EmitResult {
         if (obj.ty.kind !== "class") unsupported(objExpr, "typed property descriptor on non-object");
         const key = this.emitExpr(keyExpr);
@@ -39306,6 +39330,7 @@ class Emitter {
         return this.emitSequencedExpr(T_VALUE, [
             { value: obj, node: objExpr },
             { value: key, target: T_STRING, node: keyExpr },
+            ...ignored,
         ], ([objC, keyC]) => {
             const out = this.freshTemp("_tdesc");
             const checks: string[] = [`tsc_value_t ${out} = tsc_value_undefined()`];

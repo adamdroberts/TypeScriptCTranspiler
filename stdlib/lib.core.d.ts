@@ -282,8 +282,8 @@ interface ObjectConstructor {
     defineProperty<T>(o: T, p: string, attributes: any): T;
     defineProperties<T>(o: T, properties: any): T;
     getPrototypeOf(o: any): any;
-    getOwnPropertyDescriptor(o: any, p: string): any;
-    getOwnPropertyDescriptors(o: any): any;
+    getOwnPropertyDescriptor(o: any, p: string, ...ignored: any[]): any;
+    getOwnPropertyDescriptors(o: any, ...ignored: any[]): any;
     getOwnPropertyNames(o: any, ...ignored: any[]): string[];
     getOwnPropertySymbols(o: any, ...ignored: any[]): symbol[];
     hasOwn(o: any, p: string, ...ignored: any[]): boolean;
