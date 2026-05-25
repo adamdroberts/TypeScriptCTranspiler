@@ -1,0 +1,5 @@
+{
+  "addons": {
+    "#native": "../../../../node_modules/native-pkg/build/Release/native.node"
+  }
+}

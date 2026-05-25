@@ -1,0 +1,3 @@
+{
+  "description": "manifest-backed package-private imports targeting external native-addon packages lower through the embedded Node bridge"
+}

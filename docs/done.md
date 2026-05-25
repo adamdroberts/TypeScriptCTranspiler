@@ -1135,6 +1135,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `native_addon` | expected diagnostic for literal native addon imports |
 | `native_addon_manifest_import` | manifest-listed direct `.node` import emits the embedded Node native-addon bridge |
 | `native_addon_manifest_require` | compile-time native-addon manifest lowers an allow-listed require to the embedded Node bridge |
+| `native_addon_manifest_external_imports` | manifest-backed package-private import to an external native-addon package emits the embedded Node bridge |
 | `native_addon_package` | expected diagnostic for imported packages containing native addon binaries |
 | `native_addon_package_imports` | expected diagnostic for package imports resolving to native addon binaries |
 | `native_addon_package_external_imports` | expected diagnostic for package-private imports targeting external native-addon packages |

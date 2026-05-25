@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Manifest-backed package-private imports that target external native-addon packages are covered on the embedded Node bridge path. Test: `native_addon_manifest_external_imports`.
 - Native-addon closure diagnostics now reject package-private imports that target external native-addon packages unless the native-addon manifest allow-lists the import. Test: `native_addon_package_external_imports`.
 - CommonJS package-private `imports` resolution now accepts external package targets and wildcard subpaths, compiling the resolved external package into the AOT require graph. Test: `node_modules_package_require_external_imports`.
 - Package `exports` / package-private `imports` condition resolution now recognizes Node's `module-sync` branch for both ESM import graph edges and CommonJS `require(...)` AOT graph edges. Tests: `node_modules_package_import_module_sync_conditions`, `node_modules_package_require_module_sync_conditions`.
