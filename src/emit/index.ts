@@ -5089,6 +5089,9 @@ class Emitter {
             ts.isCallExpression(unwrapped) &&
             ts.isPropertyAccessExpression(unwrapped.expression)
         ) {
+            if (this.isMutatingArraySourceTransformOnNonFreshReceiver(unwrapped, seenConsts)) {
+                return null;
+            }
             const method = unwrapped.expression.name.text;
             const receiverLength = this.sideEffectFreeFreshOrReturnedArrayLength(
                 unwrapped.expression.expression,

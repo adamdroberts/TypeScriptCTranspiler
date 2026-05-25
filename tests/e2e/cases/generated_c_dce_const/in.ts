@@ -4416,6 +4416,18 @@ function observedMutatingCollectionSources(): string {
     return setSource[0] + " " + mapSource[0]![0];
 }
 
+function observedMutatingLengthProofs(): string {
+    const reverseSource = ["kept_reverse_length_head", "kept_reverse_length_tail"];
+    Promise.resolve(reverseSource.reverse().length);
+    const sortSource = ["kept_sort_length_tail", "kept_sort_length_head"];
+    Promise.resolve(sortSource.sort().length);
+    const fillSource = ["kept_fill_length_head", "kept_fill_length_tail"];
+    Promise.resolve(fillSource.fill("kept_fill_length_mid", 0, 1).length);
+    const copySource = ["kept_copy_length_head", "kept_copy_length_tail"];
+    Promise.resolve(copySource.copyWithin(0, 1).length);
+    return reverseSource[0] + " " + sortSource[0] + " " + fillSource[0] + " " + copySource[0];
+}
+
 console.log(
     usedLocal(used_count),
     constantBranch(used_count),
@@ -4434,5 +4446,6 @@ console.log(
     forExit(),
     doExit(false),
     observedMutatingCollectionSources(),
+    observedMutatingLengthProofs(),
     DceNamespace.kept,
 );
