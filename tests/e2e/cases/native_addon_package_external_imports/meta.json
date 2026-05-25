@@ -1,0 +1,3 @@
+{
+  "description": "package-private imports targeting external native-addon packages still require a manifest allow-list"
+}

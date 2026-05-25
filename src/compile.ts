@@ -425,7 +425,12 @@ function nativeAddonPackageImportMessage(
     const packageRoot = findNearestPackageRoot(path.dirname(containingFile));
     if (!packageRoot) return null;
     const importsTarget = packageImportTarget(packageRoot, spec);
-    if (!containsNativeAddonReference(importsTarget)) return null;
+    if (
+        !containsNativeAddonReference(importsTarget) &&
+        !containsNativeAddonPackageReference(importsTarget, packageRoot)
+    ) {
+        return null;
+    }
     return `native C++ addon package import '${spec}' resolves to a .node binary and requires --native-addon-manifest allow-list entry`;
 }
 
@@ -523,6 +528,25 @@ function containsNativeAddonReference(value: unknown): boolean {
     if (Array.isArray(value)) return value.some(containsNativeAddonReference);
     if (value && typeof value === "object") {
         return Object.values(value).some(containsNativeAddonReference);
+    }
+    return false;
+}
+
+function containsNativeAddonPackageReference(value: unknown, packageRoot: string): boolean {
+    if (typeof value === "string") {
+        if (value.startsWith(".") || value.startsWith("/") || value.startsWith("#") || value.startsWith("node:")) {
+            return false;
+        }
+        const packageName = packageNameFromSpecifier(value);
+        if (!packageName) return false;
+        const targetRoot = findNodeModulePackage(packageName, path.dirname(packageRoot));
+        return targetRoot ? packageContainsNativeAddon(targetRoot) : false;
+    }
+    if (Array.isArray(value)) {
+        return value.some((entry) => containsNativeAddonPackageReference(entry, packageRoot));
+    }
+    if (value && typeof value === "object") {
+        return Object.values(value).some((entry) => containsNativeAddonPackageReference(entry, packageRoot));
     }
     return false;
 }

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- Native-addon closure diagnostics now reject package-private imports that target external native-addon packages unless the native-addon manifest allow-lists the import. Test: `native_addon_package_external_imports`.
 - CommonJS package-private `imports` resolution now accepts external package targets and wildcard subpaths, compiling the resolved external package into the AOT require graph. Test: `node_modules_package_require_external_imports`.
 - Package `exports` / package-private `imports` condition resolution now recognizes Node's `module-sync` branch for both ESM import graph edges and CommonJS `require(...)` AOT graph edges. Tests: `node_modules_package_import_module_sync_conditions`, `node_modules_package_require_module_sync_conditions`.
 - Primitive-only CommonJS `Object.defineProperty(Object.create(proto, Object.fromEntries(...)), key, descriptor)` targets now also stay metadata-only through `Object.seal`, `Object.preventExtensions`, and `Object.setPrototypeOf` wrappers. Test: `node_modules_commonjs_module_exports_wrapper_define_property_create_from_entries_primitives_variants`.
