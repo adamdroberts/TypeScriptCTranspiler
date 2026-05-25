@@ -3,21 +3,25 @@ import { ADDRCONFIG as DNS_ADDRCONFIG, ALL, V4MAPPED as DNS_V4MAPPED, lookup, pr
 
 const CALLBACK_HINTS = DNS_V4MAPPED;
 const PROMISE_HINTS = nodeDns.V4MAPPED | dns.ALL;
+const CALLBACK_OPTIONS = { family: 6, hints: DNS_V4MAPPED } as const;
+const PROMISE_OPTIONS = { family: 6, hints: nodeDns.V4MAPPED | dns.ALL } as const;
+const CALLBACK_CONST_OPTIONS = { family: 6, hints: CALLBACK_HINTS } as const;
+const PROMISE_CONST_OPTIONS = { family: 6, hints: PROMISE_HINTS } as const;
 
 console.log("constants:", dns.ADDRCONFIG, nodeDns.V4MAPPED, DNS_ADDRCONFIG, ALL);
 
-lookup("127.0.0.1", { family: 6, hints: DNS_V4MAPPED }, (err: any, address: string, family: number): void => {
+lookup("127.0.0.1", CALLBACK_OPTIONS, (err: any, address: string, family: number): void => {
     console.log("callback hints:", err === null, address.indexOf("127.0.0.1") >= 0, family);
 });
 
-promises.lookup("127.0.0.1", { family: 6, hints: nodeDns.V4MAPPED | dns.ALL }).then((result: any): void => {
+promises.lookup("127.0.0.1", PROMISE_OPTIONS).then((result: any): void => {
     console.log("promise hints:", result.address.indexOf("127.0.0.1") >= 0, result.family);
 });
 
-lookup("127.0.0.1", { family: 6, hints: CALLBACK_HINTS }, (err: any, address: string, family: number): void => {
+lookup("127.0.0.1", CALLBACK_CONST_OPTIONS, (err: any, address: string, family: number): void => {
     console.log("callback const hints:", err === null, address.indexOf("127.0.0.1") >= 0, family);
 });
 
-promises.lookup("127.0.0.1", { family: 6, hints: PROMISE_HINTS }).then((result: any): void => {
+promises.lookup("127.0.0.1", PROMISE_CONST_OPTIONS).then((result: any): void => {
     console.log("promise const hints:", result.address.indexOf("127.0.0.1") >= 0, result.family);
 });

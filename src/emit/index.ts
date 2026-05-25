@@ -30874,15 +30874,8 @@ class Emitter {
     private dnsLookupOptions(options: ts.Expression | undefined): { family: number; all: boolean; hints: number } {
         const out = { family: 0, all: false, hints: 0 };
         if (!options || this.isUndefinedExpression(options)) return out;
-        while (
-            ts.isParenthesizedExpression(options) ||
-            ts.isAsExpression(options) ||
-            ts.isTypeAssertionExpression(options) ||
-            ts.isNonNullExpression(options) ||
-            ts.isSatisfiesExpression(options)
-        ) {
-            options = options.expression;
-        }
+        options = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedExpression(options)) return out;
         const numericFamily = this.dnsLookupNumberValue(options);
         if (numericFamily !== null) {
             out.family = numericFamily;
@@ -30902,11 +30895,12 @@ class Emitter {
             if (key !== "family" && key !== "all" && key !== "verbatim" && key !== "order" && key !== "hints") {
                 unsupported(prop.name, `dns.lookup unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
-            if (this.isUndefinedExpression(prop.initializer)) {
+            const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+            if (this.isUndefinedExpression(valueNode)) {
                 continue;
             }
             if (key === "family") {
-                const family = this.dnsLookupNumberValue(prop.initializer);
+                const family = this.dnsLookupNumberValue(valueNode);
                 if (family === null) {
                     unsupported(prop.initializer, "dns.lookup family must be numeric literal 0, 4, or 6 in this subset");
                 }
@@ -30915,18 +30909,18 @@ class Emitter {
                     unsupported(prop.initializer, "dns.lookup family must be 0, 4, or 6 in this subset");
                 }
             } else if (key === "all") {
-                const all = this.dnsLookupBooleanValue(prop.initializer);
+                const all = this.dnsLookupBooleanValue(valueNode);
                 if (all === null) {
                     unsupported(prop.initializer, "dns.lookup all must be a boolean literal in this subset");
                 }
                 out.all = all;
             } else if (key === "verbatim") {
-                const verbatim = this.dnsLookupBooleanValue(prop.initializer);
+                const verbatim = this.dnsLookupBooleanValue(valueNode);
                 if (verbatim === null) {
                     unsupported(prop.initializer, "dns.lookup verbatim must be a boolean literal in this subset");
                 }
             } else if (key === "order") {
-                const order = this.dnsLookupStringValue(prop.initializer);
+                const order = this.dnsLookupStringValue(valueNode);
                 if (order === null) {
                     unsupported(prop.initializer, "dns.lookup order must be a string literal in this subset");
                 }
@@ -30934,7 +30928,7 @@ class Emitter {
                     unsupported(prop.initializer, "dns.lookup order must be verbatim, ipv4first, or ipv6first");
                 }
             } else if (key === "hints") {
-                out.hints = this.dnsLookupHintValue(prop.initializer);
+                out.hints = this.dnsLookupHintValue(valueNode);
             }
         }
         return out;
