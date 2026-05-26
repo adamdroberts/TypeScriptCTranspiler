@@ -443,6 +443,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Callable proxy-valued object traps receive the handler object as their `this` binding when dispatched through the underlying callable proxy. Test: `proxy_callable_trap_this_binding`
 - Nullish Proxy object traps are treated as absent and forward object, descriptor, own-key, prototype, and extensibility operations to the target. Test: `proxy_nullish_traps_forward`
 - Proxy handler accessor trap properties are read with the handler object as receiver before dispatching the returned trap function. Test: `proxy_trap_accessor_lookup`
+- Proxy handler accessor trap values are validated after lookup, with non-callable values rejected and nullish results treated as absent traps that forward to the target. Test: `proxy_trap_accessor_validation`
 - Revoked object `Proxy` values throw through object-operation paths including set, has, delete, own-key, descriptor, prototype, extensibility, seal, and freeze helpers. Test: `proxy_revocable_object_ops`
 - Revoked object `Proxy` values throw through `Reflect.*` helper paths including get, set, has, deleteProperty, ownKeys, descriptor, prototype, and extensibility helpers. Test: `proxy_revocable_reflect_ops`
 - `Proxy.revocable(...)` revoke functions are idempotent and receiver-independent across direct, `call`, and `apply` invocation forms while preserving revoked-proxy errors after revocation. Test: `proxy_revocable_revoke_function`
@@ -1751,6 +1752,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_inherited_traps` | Proxy object, apply, and construct traps may be inherited from the handler prototype |
 | `proxy_inherited_meta_traps` | Proxy descriptor, key, delete, prototype, and extensibility traps may be inherited from the handler prototype |
 | `proxy_trap_accessor_lookup` | Proxy handler accessor trap properties are read with handler receiver before dispatch |
+| `proxy_trap_accessor_validation` | Proxy handler accessor trap values validate after lookup and nullish results forward |
 | `proxy_apply_forward` | trapless callable Proxy values forward dynamic Reflect.apply, direct calls, and method calls to function targets |
 | `proxy_array_mutation_forward` | trapless array Proxy dynamic writes, Reflect.set, descriptor definitions, length updates, and deletes forward to the array target |
 | `proxy_array_extensibility_forward` | trapless array Proxy extensibility checks and preventExtensions forward to the array target |
