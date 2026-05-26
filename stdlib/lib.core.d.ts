@@ -749,6 +749,10 @@ interface StreamModule {
     isDestroyed(stream: any, ...ignored: any[]): boolean | null;
     isDisturbed(stream: any, ...ignored: any[]): boolean;
 }
+type POSIXSignalName = "SIGHUP" | "SIGINT" | "SIGQUIT" | "SIGILL" | "SIGTRAP" | "SIGABRT" | "SIGBUS" | "SIGFPE" | "SIGKILL" | "SIGUSR1" | "SIGSEGV" | "SIGUSR2" | "SIGPIPE" | "SIGALRM" | "SIGTERM";
+type POSIXSignalNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
+type ProcessSignal = 0 | POSIXSignalName | POSIXSignalNumber;
+type ChildProcessKillSignal = POSIXSignalName | POSIXSignalNumber;
 interface Process {
     readonly platform: string;
     readonly arch: string;
@@ -789,7 +793,7 @@ interface Process {
     memoryUsage: ProcessMemoryUsageFn;
     cpuUsage(previousValue?: any, ...ignored: any[]): any;
     resourceUsage(...ignored: any[]): any;
-    kill(pid: number, signal?: 0 | 9 | 15 | "SIGTERM" | "SIGKILL", ...ignored: any[]): boolean;
+    kill(pid: number, signal?: ProcessSignal, ...ignored: any[]): boolean;
 }
 declare const process: Process;
 declare module "stream" {
@@ -1929,7 +1933,7 @@ interface ChildProcessExecOptions {
     gid?: number;
     maxBuffer?: number;
     timeout?: number;
-    killSignal?: "SIGTERM" | "SIGKILL" | 9 | 15;
+    killSignal?: ChildProcessKillSignal;
 }
 interface ChildProcessExecFileOptions {
     cwd?: string;
@@ -1943,7 +1947,7 @@ interface ChildProcessExecFileOptions {
     gid?: number;
     maxBuffer?: number;
     timeout?: number;
-    killSignal?: "SIGTERM" | "SIGKILL" | 9 | 15;
+    killSignal?: ChildProcessKillSignal;
 }
 interface ChildProcessSpawnSyncUtf8Options {
     encoding: "utf8" | "utf-8";
@@ -1960,7 +1964,7 @@ interface ChildProcessSpawnSyncUtf8Options {
     gid?: number;
     maxBuffer?: number;
     timeout?: number;
-    killSignal?: "SIGTERM" | "SIGKILL" | 9 | 15;
+    killSignal?: ChildProcessKillSignal;
 }
 interface ChildProcessExecFileSyncOptions {
     cwd?: string;
@@ -1975,7 +1979,7 @@ interface ChildProcessExecFileSyncOptions {
     gid?: number;
     maxBuffer?: number;
     timeout?: number;
-    killSignal?: "SIGTERM" | "SIGKILL" | 9 | 15;
+    killSignal?: ChildProcessKillSignal;
 }
 interface ChildProcessExecFileSyncStringOptions extends ChildProcessExecFileSyncOptions {
     encoding: "utf8" | "utf-8";
@@ -1994,7 +1998,7 @@ interface ChildProcessExecSyncOptions {
     gid?: number;
     maxBuffer?: number;
     timeout?: number;
-    killSignal?: "SIGTERM" | "SIGKILL" | 9 | 15;
+    killSignal?: ChildProcessKillSignal;
 }
 interface ChildProcessExecSyncStringOptions extends ChildProcessExecSyncOptions {
     encoding: "utf8" | "utf-8";

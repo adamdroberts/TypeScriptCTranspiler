@@ -32229,37 +32229,50 @@ class Emitter {
         const numericSignal = this.sideEffectFreeNumericLiteralSameValueZeroValue(valueNode, new Set());
         if (numericSignal !== null) {
             const signal = numericSignal;
-            if (signal === 9 || signal === 15) return `${signal}.0`;
-            unsupported(prop.initializer, "child_process killSignal only supports SIGTERM, SIGKILL, 9, and 15");
+            if (Number.isInteger(signal) && signal >= 1 && signal <= 15) return `${signal}.0`;
+            unsupported(prop.initializer, "child_process killSignal only supports runtime-backed POSIX signals 1 through 15");
         }
         const signalText = this.sideEffectFreeStringLiteralText(valueNode, new Set());
         if (signalText === null) {
             unsupported(prop.initializer, "child_process killSignal must be a literal signal string or numeric signal in this subset");
         }
-        switch (signalText) {
-            case "SIGTERM": return "15.0";
-            case "SIGKILL": return "9.0";
-            default:
-                unsupported(prop.initializer, "child_process killSignal only supports SIGTERM, SIGKILL, 9, and 15");
-        }
+        return this.posixSignalLiteral(signalText, prop.initializer, "child_process killSignal");
     }
 
     private processSignalArgument(signal: ts.Expression | undefined): string {
         if (!signal || this.isUndefinedExpression(signal)) return "15.0";
         const numeric = this.sideEffectFreeNumericLiteralSameValueZeroValue(signal, new Set());
         if (numeric !== null) {
-            if (numeric === 0 || numeric === 9 || numeric === 15) return `${numeric}.0`;
-            unsupported(signal, "process.kill only supports signals 0, SIGTERM, SIGKILL, 9, and 15");
+            if (Number.isInteger(numeric) && numeric >= 0 && numeric <= 15) return `${numeric}.0`;
+            unsupported(signal, "process.kill only supports signal 0 and runtime-backed POSIX signals 1 through 15");
         }
         const text = this.sideEffectFreeStringLiteralText(signal, new Set());
         if (text === null) {
             unsupported(signal, "process.kill signal must be a literal signal string or numeric signal in this subset");
         }
-        switch (text) {
-            case "SIGTERM": return "15.0";
-            case "SIGKILL": return "9.0";
+        return this.posixSignalLiteral(text, signal, "process.kill signal");
+    }
+
+    private posixSignalLiteral(signalText: string, node: ts.Node, label: string): string {
+        switch (signalText) {
+            case "SIGHUP":
+            case "SIGINT":
+            case "SIGQUIT":
+            case "SIGILL":
+            case "SIGTRAP":
+            case "SIGABRT":
+            case "SIGBUS":
+            case "SIGFPE":
+            case "SIGKILL":
+            case "SIGUSR1":
+            case "SIGSEGV":
+            case "SIGUSR2":
+            case "SIGPIPE":
+            case "SIGALRM":
+            case "SIGTERM":
+                return `tsc_posix_signal_number(tsc_str_from_lit("${signalText}", ${signalText.length}))`;
             default:
-                unsupported(signal, "process.kill only supports SIGTERM and SIGKILL string signals in this subset");
+                unsupported(node, `${label} only supports runtime-backed POSIX signal strings`);
         }
     }
 

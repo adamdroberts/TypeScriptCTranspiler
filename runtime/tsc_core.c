@@ -498,6 +498,56 @@ bool tsc_process_kill(double pid_value, double signal_value) {
     return true;
 }
 
+int tsc_posix_signal_number(const tsc_str_t* signal) {
+#ifdef SIGHUP
+    if (tsc_str_eq(signal, tsc_str_from_lit("SIGHUP", 6))) return SIGHUP;
+#endif
+#ifdef SIGINT
+    if (tsc_str_eq(signal, tsc_str_from_lit("SIGINT", 6))) return SIGINT;
+#endif
+#ifdef SIGQUIT
+    if (tsc_str_eq(signal, tsc_str_from_lit("SIGQUIT", 7))) return SIGQUIT;
+#endif
+#ifdef SIGILL
+    if (tsc_str_eq(signal, tsc_str_from_lit("SIGILL", 6))) return SIGILL;
+#endif
+#ifdef SIGTRAP
+    if (tsc_str_eq(signal, tsc_str_from_lit("SIGTRAP", 7))) return SIGTRAP;
+#endif
+#ifdef SIGABRT
+    if (tsc_str_eq(signal, tsc_str_from_lit("SIGABRT", 7))) return SIGABRT;
+#endif
+#ifdef SIGBUS
+    if (tsc_str_eq(signal, tsc_str_from_lit("SIGBUS", 6))) return SIGBUS;
+#endif
+#ifdef SIGFPE
+    if (tsc_str_eq(signal, tsc_str_from_lit("SIGFPE", 6))) return SIGFPE;
+#endif
+#ifdef SIGKILL
+    if (tsc_str_eq(signal, tsc_str_from_lit("SIGKILL", 7))) return SIGKILL;
+#endif
+#ifdef SIGUSR1
+    if (tsc_str_eq(signal, tsc_str_from_lit("SIGUSR1", 7))) return SIGUSR1;
+#endif
+#ifdef SIGSEGV
+    if (tsc_str_eq(signal, tsc_str_from_lit("SIGSEGV", 7))) return SIGSEGV;
+#endif
+#ifdef SIGUSR2
+    if (tsc_str_eq(signal, tsc_str_from_lit("SIGUSR2", 7))) return SIGUSR2;
+#endif
+#ifdef SIGPIPE
+    if (tsc_str_eq(signal, tsc_str_from_lit("SIGPIPE", 7))) return SIGPIPE;
+#endif
+#ifdef SIGALRM
+    if (tsc_str_eq(signal, tsc_str_from_lit("SIGALRM", 7))) return SIGALRM;
+#endif
+#ifdef SIGTERM
+    if (tsc_str_eq(signal, tsc_str_from_lit("SIGTERM", 7))) return SIGTERM;
+#endif
+    tsc_throw_str(tsc_str_from_cstr("unsupported POSIX signal"));
+    return SIGTERM;
+}
+
 tsc_array_t* tsc_process_hrtime(tsc_array_t* previous) {
     struct timespec now;
     if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {

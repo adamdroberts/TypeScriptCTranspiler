@@ -1,2 +1,2 @@
-spawn: ETIMEDOUT SIGKILL
+spawn: ETIMEDOUT SIGINT
 callback: ETIMEDOUT 0 0
