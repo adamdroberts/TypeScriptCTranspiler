@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `child_process.execSync(...)`, `execFileSync(...)`, and `spawnSync(...)` now evaluate and ignore trailing arguments after their supported sync operand slots. Test: `child_process_sync_ignored_arguments`.
 - `Array.isArray(value, ...ignored)` now evaluates and ignores trailing arguments on typed, non-array, and dynamic-value paths. Test: `array_is_array_ignored_arguments`.
 - ES2025 Set composition and predicate methods now evaluate and ignore trailing arguments after the required `Set<T>` operand. Test: `set_composition_ignored_arguments`.
 - Supported crypto hash and random-byte helpers now evaluate and ignore trailing arguments for `createHash(...)`, `randomBytes(...)`, `Hash.update(...)`, and `Hash.digest(...)`. Test: `crypto_ignored_arguments`.
