@@ -1,5 +1,11 @@
 const badTarget: any = 1;
 const validTarget: any = { value: 1 };
+let trace = "";
+
+function proto(label: string, value: any): any {
+    trace += label;
+    return value;
+}
 
 try {
     console.log("get proto target:", Reflect.getPrototypeOf(badTarget));
@@ -8,13 +14,13 @@ try {
 }
 
 try {
-    console.log("set proto target:", Reflect.setPrototypeOf(badTarget, null));
+    console.log("set proto target:", Reflect.setPrototypeOf(badTarget, proto("t", null)));
 } catch (e: any) {
     console.log("set proto target:", e);
 }
 
 try {
-    console.log("set proto value:", Reflect.setPrototypeOf(validTarget, 1 as any));
+    console.log("set proto value:", Reflect.setPrototypeOf(validTarget, proto("p", 1)));
 } catch (e: any) {
     console.log("set proto value:", e);
 }
@@ -30,6 +36,7 @@ try {
 } catch (e: any) {
     console.log("prevent target:", e);
 }
+console.log("trace:", trace);
 
 console.log("valid before:", Reflect.isExtensible(validTarget));
 console.log("valid prevent:", Reflect.preventExtensions(validTarget));
