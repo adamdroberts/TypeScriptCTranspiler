@@ -35561,13 +35561,14 @@ class Emitter {
 
     private emitSymbolConstructor(call: ts.CallExpression): EmitResult {
         const specs: SequencedCallArg[] = [];
-        if (call.arguments[0]) {
+        const hasDescription = !!call.arguments[0] && !this.isUndefinedExpression(call.arguments[0]);
+        if (hasDescription) {
             const desc = this.emitExpr(call.arguments[0]);
             specs.push({ value: desc, target: T_STRING, node: call.arguments[0] });
         }
         specs.push(...this.ignoredArgumentSpecs(call.arguments, 1));
         return this.emitSequencedExpr(T_SYMBOL, specs, (vals) =>
-            `tsc_symbol_new(${vals[0] ?? "NULL"})`,
+            `tsc_symbol_new(${hasDescription ? vals[0]! : "NULL"})`,
         );
     }
 

@@ -23,6 +23,7 @@ console.log("iterator:", iter === Symbol.iterator, iter.description);
 console.log("async:", asyncIter === Symbol.asyncIterator, asyncIter.description);
 
 const ignoredDesc = Symbol(mark("d"), mark("x"));
+const undefinedDesc = Symbol(undefined, mark("u"));
 const ignoredGlobal = Symbol.for(mark("f"), mark("g"));
-console.log("ignored desc:", ignoredDesc.description, Symbol.keyFor(ignoredGlobal, mark("k")));
+console.log("ignored desc:", ignoredDesc.description, undefinedDesc.description === undefined, Symbol.keyFor(ignoredGlobal, mark("k")));
 console.log("ignored methods:", ignoredDesc.toString(mark("t")), ignoredDesc.toLocaleString(mark("l")), ignoredDesc.valueOf(mark("v")) === ignoredDesc, seen);
