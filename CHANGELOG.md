@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Runtime `Object.defineProperties(...)` descriptor maps now validate every descriptor before applying any property definitions, preventing partial target mutation when a later descriptor is invalid. Test: `object_define_properties_atomic_descriptors`.
 - Pure JavaScript package subclass instances erased to `any` now have focused coverage for inherited AOT field accessors and method wrappers. Test: `node_modules_js_class_dynamic_inherited`.
 - Pure JavaScript package class instances erased to `any` now keep AOT-generated field accessors readable and writable through dynamic property dispatch. Test: `node_modules_js_class_dynamic_fields`.
 - Pure JavaScript package class instances erased to `any` now keep AOT-generated instance method wrappers callable through dynamic method dispatch. Test: `node_modules_js_class_dynamic_method`.
