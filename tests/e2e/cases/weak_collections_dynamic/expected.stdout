@@ -1,0 +1,13 @@
+empty map: undefined false
+seeded map: admin true undefined false false
+delete object: true false
+set primitive: WeakMap key must be an object
+bad map source: WeakMap constructor source is not iterable
+bad map entry: WeakMap constructor entry must be an array pair
+bad map key: WeakMap key must be an object
+empty set: false false
+seeded set: true true false false
+delete value: true false
+add primitive: WeakSet value must be an object
+bad set source: collection constructor source is not iterable
+bad set value: WeakSet value must be an object

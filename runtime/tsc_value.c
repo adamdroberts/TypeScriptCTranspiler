@@ -1662,6 +1662,62 @@ tsc_map_t* tsc_value_map_constructor_entries(tsc_value_t entries) {
     return out;
 }
 
+bool tsc_value_is_weak_key(tsc_value_t v) {
+    if (!value_is_box(v)) return false;
+    switch (value_tag(v)) {
+        case TSC_VALUE_TAG_FUNCTION:
+        case TSC_VALUE_TAG_ARRAY:
+        case TSC_VALUE_TAG_OBJECT:
+            return true;
+        default:
+            return false;
+    }
+}
+
+tsc_map_t* tsc_value_weak_map_constructor_entries(tsc_value_t entries) {
+    if (tsc_value_is_nullish(entries)) {
+        return tsc_map_new(sizeof(tsc_value_t), sizeof(tsc_value_t), TSC_KEY_VALUE, 0);
+    }
+    if (!value_is_box(entries) || value_tag(entries) != TSC_VALUE_TAG_ARRAY) {
+        tsc_throw_str(tsc_str_from_cstr("WeakMap constructor source is not iterable"));
+    }
+    tsc_array_t* outer = value_array_values((const tsc_array_t*)value_ptr(entries));
+    tsc_map_t* out = tsc_map_new(sizeof(tsc_value_t), sizeof(tsc_value_t), TSC_KEY_VALUE, outer->len);
+    for (size_t i = 0; i < outer->len; i++) {
+        tsc_value_t pair_value = TSC_ARR(tsc_value_t, outer, i);
+        if (!value_is_box(pair_value) || value_tag(pair_value) != TSC_VALUE_TAG_ARRAY) {
+            tsc_throw_str(tsc_str_from_cstr("WeakMap constructor entry must be an array pair"));
+        }
+        tsc_array_t* pair = (tsc_array_t*)value_ptr(pair_value);
+        if (pair->len < 2) {
+            tsc_throw_str(tsc_str_from_cstr("WeakMap constructor entry must be an array pair"));
+        }
+        tsc_value_t key = TSC_ARR(tsc_value_t, pair, 0);
+        if (!tsc_value_is_weak_key(key)) {
+            tsc_throw_str(tsc_str_from_cstr("WeakMap key must be an object"));
+        }
+        tsc_value_t value = TSC_ARR(tsc_value_t, pair, 1);
+        tsc_map_set_raw(out, &key, &value);
+    }
+    return out;
+}
+
+tsc_set_t* tsc_value_weak_set_constructor_values(tsc_value_t values) {
+    if (tsc_value_is_nullish(values)) {
+        return tsc_set_new(sizeof(tsc_value_t), TSC_KEY_VALUE, 0);
+    }
+    tsc_array_t* src = tsc_value_collection_constructor_values(values);
+    tsc_set_t* out = tsc_set_new(sizeof(tsc_value_t), TSC_KEY_VALUE, src->len);
+    for (size_t i = 0; i < src->len; i++) {
+        tsc_value_t value = TSC_ARR(tsc_value_t, src, i);
+        if (!tsc_value_is_weak_key(value)) {
+            tsc_throw_str(tsc_str_from_cstr("WeakSet value must be an object"));
+        }
+        tsc_set_add_raw(out, &value);
+    }
+    return out;
+}
+
 tsc_array_t* tsc_value_object_keys(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_keys_dyn((tsc_object_t*)value_ptr(v));

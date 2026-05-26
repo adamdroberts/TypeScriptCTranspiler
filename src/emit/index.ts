@@ -30140,6 +30140,64 @@ class Emitter {
         recv: EmitResult,
         method: string,
     ): EmitResult {
+        const k = recv.ty.key!;
+        const v = recv.ty.elem!;
+        const args = call.arguments;
+        if (k.kind === "value" && v.kind === "value") {
+            const mt = this.freshTemp("_weak_map");
+            switch (method) {
+                case "set": {
+                    const key = this.emitExpr(args[0]!);
+                    const value = this.emitExpr(args[1]!);
+                    const kc = this.coerce(key, T_VALUE, args[0]!);
+                    const vc = this.coerce(value, T_VALUE, args[1]!);
+                    const kt = this.freshTemp("_wk");
+                    const vt = this.freshTemp("_wv");
+                    return {
+                        c:
+                            `({ tsc_map_t* const ${mt} = ${recv.c}; tsc_value_t ${kt} = ${kc}; ` +
+                            `if (!tsc_value_is_weak_key(${kt})) tsc_throw_str(tsc_str_from_cstr("WeakMap key must be an object")); ` +
+                            `tsc_value_t ${vt} = ${vc}; tsc_map_set_raw(${mt}, &${kt}, &${vt}); ${mt}; })`,
+                        ty: recv.ty,
+                    };
+                }
+                case "get": {
+                    const key = this.emitExpr(args[0]!);
+                    const kc = this.coerce(key, T_VALUE, args[0]!);
+                    const kt = this.freshTemp("_wk");
+                    const vt = this.freshTemp("_wv");
+                    return {
+                        c:
+                            `({ tsc_map_t* const ${mt} = ${recv.c}; tsc_value_t ${kt} = ${kc}; ` +
+                            `tsc_value_t ${vt} = tsc_value_undefined(); ` +
+                            `if (tsc_value_is_weak_key(${kt})) tsc_map_get_raw(${mt}, &${kt}, &${vt}); ${vt}; })`,
+                        ty: v,
+                    };
+                }
+                case "has": {
+                    const key = this.emitExpr(args[0]!);
+                    const kc = this.coerce(key, T_VALUE, args[0]!);
+                    const kt = this.freshTemp("_wk");
+                    return {
+                        c:
+                            `({ tsc_map_t* const ${mt} = ${recv.c}; tsc_value_t ${kt} = ${kc}; ` +
+                            `tsc_value_is_weak_key(${kt}) && tsc_map_has_raw(${mt}, &${kt}); })`,
+                        ty: T_BOOLEAN,
+                    };
+                }
+                case "delete": {
+                    const key = this.emitExpr(args[0]!);
+                    const kc = this.coerce(key, T_VALUE, args[0]!);
+                    const kt = this.freshTemp("_wk");
+                    return {
+                        c:
+                            `({ tsc_map_t* const ${mt} = ${recv.c}; tsc_value_t ${kt} = ${kc}; ` +
+                            `tsc_value_is_weak_key(${kt}) && tsc_map_delete_raw(${mt}, &${kt}); })`,
+                        ty: T_BOOLEAN,
+                    };
+                }
+            }
+        }
         switch (method) {
             case "set":
             case "get":
@@ -30161,6 +30219,47 @@ class Emitter {
         recv: EmitResult,
         method: string,
     ): EmitResult {
+        const e = recv.ty.elem!;
+        const args = call.arguments;
+        if (e.kind === "value") {
+            const st = this.freshTemp("_weak_set");
+            switch (method) {
+                case "add": {
+                    const value = this.emitExpr(args[0]!);
+                    const vc = this.coerce(value, T_VALUE, args[0]!);
+                    const vt = this.freshTemp("_wv");
+                    return {
+                        c:
+                            `({ tsc_set_t* const ${st} = ${recv.c}; tsc_value_t ${vt} = ${vc}; ` +
+                            `if (!tsc_value_is_weak_key(${vt})) tsc_throw_str(tsc_str_from_cstr("WeakSet value must be an object")); ` +
+                            `tsc_set_add_raw(${st}, &${vt}); ${st}; })`,
+                        ty: recv.ty,
+                    };
+                }
+                case "has": {
+                    const value = this.emitExpr(args[0]!);
+                    const vc = this.coerce(value, T_VALUE, args[0]!);
+                    const vt = this.freshTemp("_wv");
+                    return {
+                        c:
+                            `({ tsc_set_t* const ${st} = ${recv.c}; tsc_value_t ${vt} = ${vc}; ` +
+                            `tsc_value_is_weak_key(${vt}) && tsc_set_has_raw(${st}, &${vt}); })`,
+                        ty: T_BOOLEAN,
+                    };
+                }
+                case "delete": {
+                    const value = this.emitExpr(args[0]!);
+                    const vc = this.coerce(value, T_VALUE, args[0]!);
+                    const vt = this.freshTemp("_wv");
+                    return {
+                        c:
+                            `({ tsc_set_t* const ${st} = ${recv.c}; tsc_value_t ${vt} = ${vc}; ` +
+                            `tsc_value_is_weak_key(${vt}) && tsc_set_delete_raw(${st}, &${vt}); })`,
+                        ty: T_BOOLEAN,
+                    };
+                }
+            }
+        }
         switch (method) {
             case "add":
             case "has":
@@ -42141,10 +42240,16 @@ class Emitter {
             const args = n.arguments ?? [];
             const k = mapped.key!;
             const v = mapped.elem!;
-            requireWeakObjectKey(n, k, "WeakMap");
+            if (k.kind !== "value") requireWeakObjectKey(n, k, "WeakMap");
             if (args.length >= 1) {
                 const entries = this.emitExpr(args[0]!);
                 const ignored = this.ignoredArgumentSpecs(args, 1);
+                if (entries.ty.kind === "value" && k.kind === "value" && v.kind === "value") {
+                    return this.emitSequencedExpr(mapped, [
+                        { value: entries, target: T_VALUE, node: args[0]! },
+                        ...ignored,
+                    ], ([source]) => `tsc_value_weak_map_constructor_entries(${source})`);
+                }
                 if (entries.ty.kind === "map") {
                     if (
                         !entries.ty.key ||
@@ -42209,10 +42314,16 @@ class Emitter {
                 unsupported(n, "new WeakSet() requires <T> type parameter");
             const args = n.arguments ?? [];
             const e = mapped.elem!;
-            requireWeakObjectKey(n, e, "WeakSet");
+            if (e.kind !== "value") requireWeakObjectKey(n, e, "WeakSet");
             if (args.length >= 1) {
                 const values = this.emitExpr(args[0]!);
                 const ignored = this.ignoredArgumentSpecs(args, 1);
+                if (values.ty.kind === "value" && e.kind === "value") {
+                    return this.emitSequencedExpr(mapped, [
+                        { value: values, target: T_VALUE, node: args[0]! },
+                        ...ignored,
+                    ], ([source]) => `tsc_value_weak_set_constructor_values(${source})`);
+                }
                 if (
                     (values.ty.kind !== "array" && values.ty.kind !== "set") ||
                     !values.ty.elem ||
