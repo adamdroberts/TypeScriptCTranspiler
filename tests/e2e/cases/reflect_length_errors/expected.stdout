@@ -6,4 +6,4 @@ construct dynamic: Reflect.construct argumentsList length mismatch
 construct spread: Reflect.construct argumentsList length mismatch
 direct spread: spread call argument length mismatch
 function spread: function value argument length mismatch
-valid: 5 undefined
+valid: 5 9
