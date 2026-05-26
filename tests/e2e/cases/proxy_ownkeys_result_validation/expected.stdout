@@ -1,2 +1,3 @@
 reflect: Proxy ownKeys trap must return an array
 object: Proxy ownKeys trap must return an array
+events: ignored:r|trap:1|ignored:o|trap:1
