@@ -4,3 +4,4 @@ delete fixed: Proxy deleteProperty trap cannot report deletion of non-configurab
 delete closed: Proxy deleteProperty trap cannot report deletion of key on non-extensible target
 loose has: false
 loose delete: true 5
+events: has:fixed|has:open|delete:fixed|delete:open|has:open|delete:open

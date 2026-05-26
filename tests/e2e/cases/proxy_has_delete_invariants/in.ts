@@ -1,8 +1,12 @@
+const events: string[] = [];
+
 function falseHas(target: any, prop: any): boolean {
+    events.push("has:" + String(prop));
     return false;
 }
 
 function trueDelete(target: any, prop: any): boolean {
+    events.push("delete:" + String(prop));
     return true;
 }
 
@@ -59,3 +63,4 @@ const looseProxy: any = new Proxy(looseTarget, {
 });
 console.log("loose has:", "open" in looseProxy);
 console.log("loose delete:", delete looseProxy.open, looseTarget.open);
+console.log("events:", events.join("|"));
