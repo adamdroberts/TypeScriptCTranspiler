@@ -25257,6 +25257,10 @@ class Emitter {
             method !== "hasOwnProperty" &&
             method !== "isPrototypeOf" &&
             method !== "propertyIsEnumerable" &&
+            method !== "__defineGetter__" &&
+            method !== "__defineSetter__" &&
+            method !== "__lookupGetter__" &&
+            method !== "__lookupSetter__" &&
             method !== "toLocaleString" &&
             method !== "toString" &&
             method !== "valueOf"
@@ -25269,6 +25273,51 @@ class Emitter {
             prototypeAccess.expression.text !== "Object"
         ) {
             return null;
+        }
+        if (method === "__defineGetter__" || method === "__defineSetter__") {
+            if (call.arguments.length < 3) {
+                unsupported(call, `Object.prototype.${method}.call expects target, key, and accessor`);
+            }
+            const targetNode = call.arguments[0]!;
+            const keyNode = call.arguments[1]!;
+            const accessorNode = call.arguments[2]!;
+            const target = this.emitExpr(targetNode);
+            const key = this.emitExpr(keyNode);
+            const accessor = this.emitExpr(accessorNode);
+            const fn = method === "__defineGetter__"
+                ? "tsc_value_object_define_getter"
+                : "tsc_value_object_define_setter";
+            return this.emitSequencedExpr(
+                T_VOID,
+                [
+                    { value: target, target: T_VALUE, node: targetNode },
+                    { value: key, target: T_STRING, node: keyNode },
+                    { value: accessor, target: T_VALUE, node: accessorNode },
+                    ...this.ignoredArgumentSpecs(call.arguments, 3),
+                ],
+                ([t, k, a]) => `({ if (!${fn}(${t}, ${k}, ${a})) tsc_throw_str(tsc_str_from_cstr("Object.prototype.${method}.call failed")); })`,
+            );
+        }
+        if (method === "__lookupGetter__" || method === "__lookupSetter__") {
+            if (call.arguments.length < 2) {
+                unsupported(call, `Object.prototype.${method}.call expects target and key`);
+            }
+            const targetNode = call.arguments[0]!;
+            const keyNode = call.arguments[1]!;
+            const target = this.emitExpr(targetNode);
+            const key = this.emitExpr(keyNode);
+            const fn = method === "__lookupGetter__"
+                ? "tsc_value_object_lookup_getter"
+                : "tsc_value_object_lookup_setter";
+            return this.emitSequencedExpr(
+                T_VALUE,
+                [
+                    { value: target, target: T_VALUE, node: targetNode },
+                    { value: key, target: T_STRING, node: keyNode },
+                    ...this.ignoredArgumentSpecs(call.arguments, 2),
+                ],
+                ([t, k]) => `${fn}(${t}, ${k})`,
+            );
         }
         const isTargetOnlyCall = method === "toString" || method === "toLocaleString" || method === "valueOf";
         const minArgs = isTargetOnlyCall ? 1 : 2;

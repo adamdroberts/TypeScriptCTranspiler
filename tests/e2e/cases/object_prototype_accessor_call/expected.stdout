@@ -1,0 +1,5 @@
+define: gs
+read: 5 gsG
+write: 12 gsGS
+lookup: true true gsGSlL
+data: undefined undefined 99
