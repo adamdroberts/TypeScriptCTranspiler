@@ -5681,6 +5681,21 @@ class Emitter {
                     ? (includeNonEnumerable ? 1 : 0)
                     : null;
             }
+            const errorFamilyBuiltins = new Set([
+                "Error",
+                "TypeError",
+                "RangeError",
+                "SyntaxError",
+                "ReferenceError",
+                "EvalError",
+                "URIError",
+                "AggregateError",
+            ]);
+            if (errorFamilyBuiltins.has(name)) {
+                return this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+                    ? (includeNonEnumerable ? 4 : 0)
+                    : null;
+            }
             const emptyOwnKeyBuiltins = new Set([
                 "Map",
                 "Set",
