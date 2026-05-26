@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE now carries exact descriptor-map key length proofs for `Object.getOwnPropertyDescriptors(...)` over side-effect-free sources with known own-property names. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats stringification of pure fresh RegExp `lastIndex` descriptor values as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats descriptor-result property reads over pure fresh RegExp `lastIndex` own data properties as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats string methods on pure fresh Error-family `name`/`message` descriptor values as side-effect-free. Test: `generated_c_dce_const`.

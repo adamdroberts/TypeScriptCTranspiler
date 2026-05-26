@@ -5789,6 +5789,19 @@ class Emitter {
             const entries = this.sideEffectFreeObjectAssignOwnDataEntries(unwrapped, new Set(seenConsts));
             return entries === null ? null : entries.length;
         }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Object") &&
+            unwrapped.expression.name.text === "getOwnPropertyDescriptors" &&
+            unwrapped.arguments.length === 1
+        ) {
+            return this.sideEffectFreeObjectGetOwnPropertyNamesLength(
+                unwrapped.arguments[0]!,
+                new Set(seenConsts),
+            );
+        }
         const descriptorKeys = this.sideEffectFreeDescriptorBuiltObjectOwnStringKeys(
             unwrapped,
             seenConsts,

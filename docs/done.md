@@ -672,6 +672,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - CommonJS package sources treat `const { require: req, exports: out } = module` destructuring as static wrapper aliases for AOT require edges and export mutations. Test: `node_modules_commonjs_module_destructure_wrapper`
 - CommonJS package sources treat function-scoped `const mod = module` aliases as static wrapper aliases for scoped `mod.require(...)`, `const req = mod.require`, and read-only module metadata. Test: `node_modules_commonjs_function_scope_module_alias`
 - CommonJS package sources treat top-level `const mod = module` aliases as static wrapper aliases for `mod.require(...)`, `const req = mod.require`, `mod.exports.*`, and module metadata reads such as `mod.filename`, `mod.path`, `mod.loaded`, and `mod.paths`. Test: `node_modules_commonjs_module_alias_wrapper`
+- Generated-C DCE carries exact descriptor-map key length proofs for `Object.getOwnPropertyDescriptors(...)` over side-effect-free sources with known own-property names. Test: `generated_c_dce_const`
 - Generated-C DCE treats stringification of pure fresh RegExp `lastIndex` descriptor values as side-effect-free. Test: `generated_c_dce_const`
 - Generated-C DCE treats descriptor-result property reads over pure fresh RegExp `lastIndex` own data properties as side-effect-free. Test: `generated_c_dce_const`
 - Generated-C DCE treats string methods on pure fresh Error-family `name`/`message` descriptor values as side-effect-free. Test: `generated_c_dce_const`

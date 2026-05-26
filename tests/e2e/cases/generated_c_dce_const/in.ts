@@ -1422,6 +1422,9 @@ const unused_regexp_descriptor_value_read = Object.getOwnPropertyDescriptor(/dea
 const unused_regexp_descriptors_value_read = Object.getOwnPropertyDescriptors(new RegExp("dead_regexp_descriptors_value_read", "g")).lastIndex.value;
 const unused_regexp_descriptor_value_to_string_call = Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_value_to_string_call/g, "lastIndex")!.value.toString().length;
 const unused_regexp_descriptors_value_to_string_call = Object.getOwnPropertyDescriptors(new RegExp("dead_regexp_descriptors_value_to_string_call", "g")).lastIndex.value.toLocaleString().length;
+const unused_error_descriptors_keys_with_call = Object.keys(Object.getOwnPropertyDescriptors(new Error("dead_error_descriptors_keys_with"))).with(3, "dead_error_descriptors_keys_with_replacement");
+const unused_regexp_descriptors_values_with_call = Object.values(Object.getOwnPropertyDescriptors(/dead_regexp_descriptors_values_with/g)).with(0, { value: 1 });
+const unused_date_descriptors_own_keys_empty_map_call = Reflect.ownKeys(Object.getOwnPropertyDescriptors(new Date("2020-01-13T14:15:16Z"))).map(() => "dead_date_descriptors_own_keys_empty_map");
 const unused_object_property_names_spread_with_call = Object.getOwnPropertyNames({ ...{ dead_object_property_names_spread_with: 1 }, dead_object_property_names_spread_with_tail: 2 }).with(1, "dead_object_property_names_spread_with_replacement");
 const unused_object_property_names_assign_with_call = Object.getOwnPropertyNames(Object.assign({} as { dead_object_property_names_assign_with: number; dead_object_property_names_assign_tail: number }, { dead_object_property_names_assign_with: 1 }, { dead_object_property_names_assign_tail: 2 })).with(1, "dead_object_property_names_assign_replacement");
 const unused_object_property_names_define_property_with_call = Object.getOwnPropertyNames(Object.defineProperty({} as { dead_object_property_names_define_property_with: number }, "dead_object_property_names_define_property_with", { value: 1 })).with(0, "dead_object_property_names_define_property_replacement");
@@ -2792,6 +2795,9 @@ Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_value_read/g, 
 Object.getOwnPropertyDescriptors(new RegExp("top_level_dead_regexp_descriptors_value_read", "g")).lastIndex.value;
 Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_value_to_string_call/g, "lastIndex")!.value.toString().length;
 Object.getOwnPropertyDescriptors(new RegExp("top_level_dead_regexp_descriptors_value_to_string_call", "g")).lastIndex.value.toLocaleString().length;
+Object.keys(Object.getOwnPropertyDescriptors(new Error("top_level_dead_error_descriptors_keys_with"))).with(3, "top_level_dead_error_descriptors_keys_with_replacement");
+Object.values(Object.getOwnPropertyDescriptors(/top_level_dead_regexp_descriptors_values_with/g)).with(0, { value: 1 });
+Reflect.ownKeys(Object.getOwnPropertyDescriptors(new Date("2020-01-14T15:16:17Z"))).map(() => "top_level_dead_date_descriptors_own_keys_empty_map");
 Object.getOwnPropertyNames(Object.assign({} as { top_level_dead_object_property_names_assign_with: number; top_level_dead_object_property_names_assign_tail: number }, { top_level_dead_object_property_names_assign_with: 1 }, { top_level_dead_object_property_names_assign_tail: 2 })).with(1, "top_level_dead_object_property_names_assign_replacement");
 Object.getOwnPropertyNames(Object.defineProperty({} as { top_level_dead_object_property_names_define_property_with: number }, "top_level_dead_object_property_names_define_property_with", { value: 1 })).with(0, "top_level_dead_object_property_names_define_property_replacement");
 Object.getOwnPropertyNames(Object.seal({ top_level_dead_object_property_names_seal_with: 1, top_level_dead_object_property_names_seal_tail: 2 })).with(1, "top_level_dead_object_property_names_seal_replacement");
@@ -4205,6 +4211,9 @@ function usedLocal(value: number): number {
     Object.getOwnPropertyDescriptors(new RegExp("local_dead_regexp_descriptors_value_read", "g")).lastIndex.value;
     Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_value_to_string_call/g, "lastIndex")!.value.toString().length;
     Object.getOwnPropertyDescriptors(new RegExp("local_dead_regexp_descriptors_value_to_string_call", "g")).lastIndex.value.toLocaleString().length;
+    Object.keys(Object.getOwnPropertyDescriptors(new Error("local_dead_error_descriptors_keys_with"))).with(3, "local_dead_error_descriptors_keys_with_replacement");
+    Object.values(Object.getOwnPropertyDescriptors(/local_dead_regexp_descriptors_values_with/g)).with(0, { value: 1 });
+    Reflect.ownKeys(Object.getOwnPropertyDescriptors(new Date("2020-01-15T16:17:18Z"))).map(() => "local_dead_date_descriptors_own_keys_empty_map");
     ["local_dead_array_to_string", "local_dead_array_to_string_tail"].toString();
     ["local_dead_array_to_locale_string", "local_dead_array_to_locale_string_tail"].toLocaleString();
     ["local_dead_array_join_length_read"].join("/").length;
