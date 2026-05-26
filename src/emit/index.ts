@@ -25943,6 +25943,9 @@ class Emitter {
     }
 
     private emitTernary(expr: ts.ConditionalExpression): EmitResult {
+        const staticCondition = this.staticBooleanValue(expr.condition);
+        if (staticCondition === true) return this.emitExpr(expr.whenTrue);
+        if (staticCondition === false) return this.emitExpr(expr.whenFalse);
         const cond = this.emitBoolExpr(expr.condition);
         const whenT = this.emitExpr(expr.whenTrue);
         const whenF = this.emitExpr(expr.whenFalse);

@@ -4873,6 +4873,13 @@ function literalTruthiness(): number {
     }
 }
 
+function absentDescriptorTernary(): string {
+    // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+    return Object.getOwnPropertyDescriptor(new Error("local_dead_absent_descriptor_ternary_condition"), "missing", "local_dead_absent_descriptor_ternary_ignored")
+        ? "local_dead_absent_descriptor_ternary_true"
+        : "kept_absent_descriptor_ternary";
+}
+
 function staticSwitchDce(): number {
     const local_static_switch_key: "a" | "b" = top_level_static_false ? "a" : "b";
     switch (local_static_switch_key) {
@@ -5028,6 +5035,7 @@ console.log(
     branchInnerExit(true),
     elseIfStatic(used_count),
     literalTruthiness(),
+    absentDescriptorTernary(),
     staticSwitchDce(),
     branchExit(true),
     nestedBlockExit(),

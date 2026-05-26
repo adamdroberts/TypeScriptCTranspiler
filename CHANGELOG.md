@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE now emits only the selected branch for used ternary expressions whose condition is statically known and side-effect-free, including absent descriptor conditions. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats statically absent Object/Reflect `getOwnPropertyDescriptor(...)` results as falsy/nullish for dead branch pruning when ignored trailing arguments are pure. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats statically absent Object/Reflect `getOwnPropertyDescriptor(...)` results as `undefined` for no-op Promise `then`/`catch`/`finally` handlers when ignored trailing arguments are pure. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused `Promise.resolve(...)` and `Promise.reject(...)` calls over Object/Reflect `getOwnPropertyDescriptor(...)` results when the descriptor result is statically known to be absent and ignored trailing arguments are pure. Test: `generated_c_dce_const`.
