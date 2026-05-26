@@ -4,7 +4,8 @@ entries: 14 size 4
 names: 14 dev|ino|size|mode|nlink|uid|gid|rdev|blksize|blocks|atimeMs|mtimeMs|ctimeMs|birthtimeMs 14 dev|ino|size|mode|nlink|uid|gid|rdev|blksize|blocks|atimeMs|mtimeMs|ctimeMs|birthtimeMs
 desc: 4 true true true undefined
 descs: 14 4 4
+reflect: 4 undefined true false
 own: true false true true
 call: true true
 tag: [object Stats] [object Stats]
-trace: kvenrdmDRhHpicqt
+trace: kvenrdmDRgxsShHpicqt

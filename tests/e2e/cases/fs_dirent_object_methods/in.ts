@@ -17,12 +17,15 @@ const desc: any = Object.getOwnPropertyDescriptor(entry, "name", mark("d"));
 const missing: any = Object.getOwnPropertyDescriptor(entry, "missing", mark("m"));
 const descs: any = Object.getOwnPropertyDescriptors(entry, mark("D"));
 const reflectDesc: any = Reflect.getOwnPropertyDescriptor(entry, "name", mark("R"));
+const reflectName: any = Reflect.get(entry, "name", {}, mark("g"));
+const reflectMissing: any = Reflect.get(entry, "missing", mark("x"));
 
 console.log("enum:", Object.keys(entry, mark("k")).join("|"), Object.values(entry, mark("v")).join("|"));
 console.log("entries:", entries.length, entries[0][0], entries[0][1]);
 console.log("names:", Object.getOwnPropertyNames(entry, mark("n")).join("|"), Reflect.ownKeys(entry, mark("r")).join("|"));
 console.log("desc:", desc.value, desc.writable, desc.enumerable, desc.configurable, String(missing));
 console.log("descs:", Object.keys(descs).join("|"), descs.name.value, reflectDesc.value);
+console.log("reflect:", reflectName, String(reflectMissing), Reflect.has(entry, "name", mark("s")), Reflect.has(entry, "missing", mark("S")));
 console.log("own:", Object.hasOwn(entry, "name", mark("h")), Object.hasOwn(entry, "missing", mark("H")), entry.hasOwnProperty("name", mark("p")), entry.propertyIsEnumerable("name", mark("i")));
 console.log("call:", Object.prototype.hasOwnProperty.call(entry, "name", mark("c")), Object.prototype.propertyIsEnumerable.call(entry, "name", mark("q")));
 console.log("tag:", Object.prototype.toString.call(entry, mark("t")), entry.toString());

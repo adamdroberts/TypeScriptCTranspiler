@@ -3,7 +3,8 @@ entries: 1 name file.txt
 names: name name
 desc: file.txt true true true undefined
 descs: name file.txt file.txt
+reflect: file.txt undefined true false
 own: true false true true
 call: true true
 tag: [object Dirent] [object Dirent]
-trace: edmDRkvnrhHpicqt
+trace: edmDRgxkvnrsShHpicqt

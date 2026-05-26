@@ -39655,6 +39655,37 @@ class Emitter {
         });
     }
 
+    private emitFsStatsReflectGet(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        receiver?: { value: EmitResult; node: ts.Expression },
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const key = this.emitExpr(keyExpr);
+        const fields = this.fsStatsOwnFields();
+        const specs: SequencedCallArg[] = [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+        ];
+        if (receiver) specs.push({ value: receiver.value, target: T_VALUE, node: receiver.node });
+        specs.push(...ignored);
+        return this.emitSequencedExpr(T_VALUE, specs, ([stats, keyC, receiverC]) => {
+            const out = this.freshTemp("_stats_get");
+            const checks: string[] = [
+                receiver ? `(void)${receiverC}` : "",
+                `tsc_value_t ${out} = tsc_value_undefined()`,
+            ].filter(Boolean);
+            for (const field of fields) {
+                checks.push(
+                    `if (tsc_str_eq(${keyC}, tsc_str_from_lit("${field.name}", ${field.name.length}))) ${out} = tsc_value_num(${field.value(stats!)})`,
+                );
+            }
+            checks.push(out);
+            return `({ ${checks.join("; ")}; })`;
+        });
+    }
+
     private emitFsDirentOwnPropertyNames(
         objExpr: ts.Expression,
         obj: EmitResult,
@@ -39734,6 +39765,26 @@ class Emitter {
             { value: key, target: T_STRING, node: keyExpr },
             ...ignored,
         ], ([dirent, keyC]) => `({ (void)${dirent}; tsc_str_eq(${keyC}, tsc_str_from_lit("name", 4)); })`);
+    }
+
+    private emitFsDirentReflectGet(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        receiver?: { value: EmitResult; node: ts.Expression },
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const key = this.emitExpr(keyExpr);
+        const specs: SequencedCallArg[] = [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+        ];
+        if (receiver) specs.push({ value: receiver.value, target: T_VALUE, node: receiver.node });
+        specs.push(...ignored);
+        return this.emitSequencedExpr(T_VALUE, specs, ([dirent, keyC, receiverC]) => {
+            const ignoredReceiver = receiver ? `(void)${receiverC}; ` : "";
+            return `({ ${ignoredReceiver}tsc_str_eq(${keyC}, tsc_str_from_lit("name", 4)) ? tsc_value_string(tsc_fs_dirent_name(${dirent})) : tsc_value_undefined(); })`;
+        });
     }
 
     private emitTypedArrayGetOwnPropertyDescriptor(
@@ -40655,6 +40706,12 @@ class Emitter {
                 if (mapped.kind === "error") {
                     return this.emitErrorReflectGet(args[0]!, target, args[1]!, receiver, ignored);
                 }
+                if (mapped.kind === "fsstats") {
+                    return this.emitFsStatsReflectGet(args[0]!, target, args[1]!, receiver, ignored);
+                }
+                if (mapped.kind === "fsdirent") {
+                    return this.emitFsDirentReflectGet(args[0]!, target, args[1]!, receiver, ignored);
+                }
                 if (mapped.kind === "class") {
                     return this.emitTypedReflectGet(args[0]!, target, args[1]!, targetType, receiver, ignored);
                 }
@@ -40768,6 +40825,12 @@ class Emitter {
                 }
                 if (mapped.kind === "error") {
                     return this.emitErrorPropertyKeyCheck(args[0]!, target, args[1]!, ignored);
+                }
+                if (mapped.kind === "fsstats") {
+                    return this.emitFsStatsOwnKeyCheck(args[0]!, target, args[1]!, ignored);
+                }
+                if (mapped.kind === "fsdirent") {
+                    return this.emitFsDirentOwnKeyCheck(args[0]!, target, args[1]!, ignored);
                 }
                 if (mapped.kind === "class") {
                     return this.emitTypedObjectHasOwn(
