@@ -16376,6 +16376,25 @@ class Emitter {
         return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
     }
 
+    private emitDynamicRequireRestObject(source: EmitResult, excluded: Set<string>, node: ts.Node): EmitResult {
+        const sourceTmp = this.freshTemp("_reqrest_src");
+        const obj = this.freshTemp("_reqrest");
+        const keys = this.freshTemp("_reqrest_keys");
+        const idx = this.freshTemp("_reqrest_i");
+        const key = this.freshTemp("_reqrest_key");
+        const skip = [...excluded].map((name) =>
+            `tsc_str_eq(${key}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))`,
+        ).join(" || ");
+        const pieces = [
+            `tsc_value_t ${sourceTmp} = ${this.coerce(source, T_VALUE, node)}`,
+            `tsc_object_t* ${obj} = tsc_object_new()`,
+            `tsc_array_t* ${keys} = tsc_value_object_keys(${sourceTmp})`,
+            `for (size_t ${idx} = 0; ${idx} < ${keys}->len; ${idx}++) { tsc_str_t* ${key} = TSC_ARR(tsc_str_t*, ${keys}, ${idx}); ${skip ? `if (${skip}) continue; ` : ""}tsc_object_set(${obj}, ${key}, tsc_value_get_prop(${sourceTmp}, ${key})); }`,
+            `tsc_value_object(${obj})`,
+        ];
+        return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
+    }
+
     private emitTopLevelRequireDestructuring(
         initBuf: CBuf,
         d: ts.VariableDeclaration,
@@ -16386,9 +16405,17 @@ class Emitter {
         }
         const nativeAddon = this.emitNativeAddonValue(spec, d.getSourceFile().fileName);
         if (nativeAddon) {
+            const excluded = this.requireDestructureExcludedExportNames(d.name);
             for (const element of d.name.elements) {
-                if (element.dotDotDotToken) {
-                    unsupported(element, "native addon require destructuring does not support rest bindings");
+                const rest = this.requireDestructureRestIdentifier(element);
+                if (rest) {
+                    const localName = this.declaredName(rest);
+                    const value = this.emitDynamicRequireRestObject(nativeAddon, excluded, element);
+                    this.globalDecls.line(`static tsc_value_t ${localName};`);
+                    initBuf.line(`${localName} = ${value.c};`);
+                    const sym = this.symbolForIdentifier(rest);
+                    if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
+                    continue;
                 }
                 const exportName = this.requireDestructureExportName(element);
                 if (!ts.isIdentifier(element.name)) {
@@ -16501,6 +16528,10 @@ class Emitter {
         }
         const spec = this.requireCallSpecifier(varDecl.initializer);
         if (!spec) return null;
+        if (this.nativeAddonPathForSpecifier(spec, varDecl.getSourceFile().fileName)) {
+            if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
+            return T_VALUE;
+        }
         const info = this.resolvedModuleInfoForSpecifier(spec, varDecl.getSourceFile().fileName, "require");
         if (!info) {
             unsupported(varDecl.initializer, `unresolved require("${spec}")`);
@@ -21418,6 +21449,46 @@ class Emitter {
     ): void {
         if (!ts.isObjectBindingPattern(d.name)) {
             unsupported(d.name, "require destructuring requires an object binding pattern");
+        }
+        const nativeAddon = this.emitNativeAddonValue(spec, d.getSourceFile().fileName);
+        if (nativeAddon) {
+            const excluded = this.requireDestructureExcludedExportNames(d.name);
+            for (const element of d.name.elements) {
+                const rest = this.requireDestructureRestIdentifier(element);
+                if (rest) {
+                    const value = this.emitDynamicRequireRestObject(nativeAddon, excluded, element);
+                    const localName = mangleIdent(rest.text);
+                    const sym = this.symbolForIdentifier(rest);
+                    if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
+                    const cell = this.currentFunctionCellForSymbol(sym);
+                    if (cell) {
+                        buf.line(`tsc_value_t* ${cell.cellName} = (tsc_value_t*)TSC_GC_MALLOC(sizeof(tsc_value_t));`);
+                        buf.line(`*${cell.cellName} = ${value.c};`);
+                        continue;
+                    }
+                    const qual = isConst ? " const" : "";
+                    buf.line(`tsc_value_t${qual} ${localName} = ${value.c};`);
+                    continue;
+                }
+                const exportName = this.requireDestructureExportName(element);
+                if (!ts.isIdentifier(element.name)) {
+                    unsupported(element.name, "require destructuring requires identifier bindings");
+                }
+                const localName = mangleIdent(element.name.text);
+                const key = `tsc_str_from_lit("${escapeCString(exportName)}", ${utf8ByteLen(exportName)})`;
+                const value = { c: `tsc_value_get_prop(${nativeAddon.c}, ${key})`, ty: T_VALUE };
+                const sym = this.symbolForIdentifier(element.name);
+                if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
+                const cell = this.currentFunctionCellForSymbol(sym);
+                if (cell) {
+                    buf.line(`tsc_value_t* ${cell.cellName} = (tsc_value_t*)TSC_GC_MALLOC(sizeof(tsc_value_t));`);
+                    buf.line(`*${cell.cellName} = ${value.c};`);
+                    continue;
+                }
+                const qual = isConst ? " const" : "";
+                buf.line(`tsc_value_t${qual} ${localName} = ${value.c};`);
+            }
+            return;
         }
         const info = this.resolvedModuleInfoForSpecifier(spec, d.getSourceFile().fileName, "require");
         if (!info) {
