@@ -3,5 +3,6 @@ typed high: Number.toString: radix must be 2..36
 typed magnitude: Number.toString: magnitude too large for radix conversion
 dynamic low: Number.toString: radix must be 2..36
 dynamic high: Number.toString: radix must be 2..36
+dynamic null: Number.toString: radix must be 2..36
 dynamic magnitude: Number.toString: magnitude too large for radix conversion
 valid: ff 11111111

@@ -17,7 +17,7 @@ function typedMagnitude(): string {
 const dynamicNumber: any = 255;
 const hugeDynamic: any = 1e300;
 
-function dynamicRadix(radix: number): string {
+function dynamicRadix(radix: any): string {
     try {
         return dynamicNumber.toString(radix);
     } catch (err) {
@@ -38,5 +38,6 @@ console.log("typed high:", typedRadix(37));
 console.log("typed magnitude:", typedMagnitude());
 console.log("dynamic low:", dynamicRadix(1));
 console.log("dynamic high:", dynamicRadix(37));
+console.log("dynamic null:", dynamicRadix(null));
 console.log("dynamic magnitude:", dynamicMagnitude());
 console.log("valid:", typedRadix(16), dynamicRadix(2));

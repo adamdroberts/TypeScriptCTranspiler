@@ -21,5 +21,6 @@ function dynamicNormalize(form: any): string {
 
 console.log("typed invalid:", typedNormalize(invalid));
 console.log("dynamic invalid:", dynamicNormalize(invalid));
+console.log("dynamic null:", dynamicNormalize(null));
 console.log("typed valid:", typedNormalize("NFC") === composed);
 console.log("dynamic valid:", dynamicNormalize("NFC") === composed);

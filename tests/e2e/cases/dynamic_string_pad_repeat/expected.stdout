@@ -1,3 +1,4 @@
 repeat: gogogo 0
 pad: ...go go111   go
-ignored: rzseu
+pad null: nullgo gonull
+ignored: rzseunm

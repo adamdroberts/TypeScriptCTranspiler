@@ -2202,7 +2202,7 @@ void value_flat_push(tsc_array_t* out, tsc_value_t value, int depth) {
 
 tsc_value_t tsc_value_method_flat(tsc_value_t recv, tsc_value_t depth) {
     if (!value_is_box(recv) || value_tag(recv) != TSC_VALUE_TAG_ARRAY) return tsc_value_undefined();
-    double depth_num = tsc_value_is_nullish(depth) ? 1.0 : tsc_value_as_num(depth);
+    double depth_num = tsc_value_is_undefined(depth) ? 1.0 : tsc_value_as_num(depth);
     int depth_i = isnan(depth_num) || depth_num < 0 ? 0 : (int)depth_num;
     tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
     tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), a->len ? a->len : 1);
@@ -2481,7 +2481,7 @@ tsc_value_t tsc_value_method_ends_with(tsc_value_t recv, tsc_value_t needle, tsc
 
 tsc_str_t* tsc_value_method_to_string(tsc_value_t recv, tsc_value_t radix) {
     if (!value_is_box(recv)) {
-        if (tsc_value_is_nullish(radix)) return tsc_str_from_num(value_as_num(recv));
+        if (tsc_value_is_undefined(radix)) return tsc_str_from_num(value_as_num(recv));
         return tsc_str_from_num_radix(value_as_num(recv), tsc_value_as_num(radix));
     }
     return tsc_value_to_string(recv);
@@ -2523,7 +2523,7 @@ tsc_value_t tsc_value_method_to_upper(tsc_value_t recv) {
 
 tsc_value_t tsc_value_method_normalize(tsc_value_t recv, tsc_value_t form) {
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        tsc_str_t* f = tsc_value_is_nullish(form) ? tsc_str_from_lit("NFC", 3) : tsc_value_to_string(form);
+        tsc_str_t* f = tsc_value_is_undefined(form) ? tsc_str_from_lit("NFC", 3) : tsc_value_to_string(form);
         return tsc_value_string(tsc_str_normalize((const tsc_str_t*)value_ptr(recv), f));
     }
     return tsc_value_undefined();
@@ -2559,7 +2559,7 @@ tsc_value_t tsc_value_method_repeat(tsc_value_t recv, tsc_value_t count) {
 
 tsc_value_t tsc_value_method_pad_start(tsc_value_t recv, tsc_value_t target, tsc_value_t pad) {
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        tsc_str_t* fill = tsc_value_is_nullish(pad) ? tsc_str_from_lit(" ", 1) : tsc_value_to_string(pad);
+        tsc_str_t* fill = tsc_value_is_undefined(pad) ? tsc_str_from_lit(" ", 1) : tsc_value_to_string(pad);
         return tsc_value_string(tsc_str_pad_start((const tsc_str_t*)value_ptr(recv), tsc_value_as_num(target), fill));
     }
     return tsc_value_undefined();
@@ -2567,7 +2567,7 @@ tsc_value_t tsc_value_method_pad_start(tsc_value_t recv, tsc_value_t target, tsc
 
 tsc_value_t tsc_value_method_pad_end(tsc_value_t recv, tsc_value_t target, tsc_value_t pad) {
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        tsc_str_t* fill = tsc_value_is_nullish(pad) ? tsc_str_from_lit(" ", 1) : tsc_value_to_string(pad);
+        tsc_str_t* fill = tsc_value_is_undefined(pad) ? tsc_str_from_lit(" ", 1) : tsc_value_to_string(pad);
         return tsc_value_string(tsc_str_pad_end((const tsc_str_t*)value_ptr(recv), tsc_value_as_num(target), fill));
     }
     return tsc_value_undefined();
