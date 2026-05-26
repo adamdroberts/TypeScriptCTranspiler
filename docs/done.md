@@ -304,6 +304,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Pure JavaScript package default-exported function declarations import through `allowJs`. Test: `node_modules_js_default_function`
 - Pure JavaScript package default anonymous function exports import through `allowJs`. Test: `node_modules_js_default_anonymous_function`
 - Pure JavaScript package default arrow-function exports import through `allowJs`. Test: `node_modules_js_default_arrow`
+- Pure JavaScript package named arrow-function exports import through `allowJs`. Test: `node_modules_js_named_arrow`
 - CommonJS `require(...)` package edges resolve package `exports` and package-private `imports` condition maps through `node-addons`, `require`, `node`, and `default` branches in package order while building the AOT module graph, including array fallback targets, wildcard target substitution, and package-internal `#...` requires from the selected CommonJS source. Tests: `node_modules_package_require_conditions`, `node_modules_package_require_node_addons_conditions`, `node_modules_package_require_pattern_conditions`, `node_modules_package_require_array_conditions`
 - Function-scoped static literal CommonJS `require(...)` bindings and local `require`/`module.require` aliases are included in the module graph and lower eagerly for namespace member calls, destructured member calls, bound default-function calls, and direct default-function calls, including destructuring defaults for absent static exports and rest bindings over remaining known named exports. Tests: `node_modules_commonjs_function_scope_require`, `node_modules_commonjs_function_scope_require_alias`
 - Top-level and function-scoped CommonJS inline `module.require.bind(module)(spec)` calls, `module.require.bind(module)` aliases, module-alias forms such as `mod.require.bind(mod)`, and already-static require alias forms such as `req.bind(module)` are treated as static AOT require aliases for package-local member export metadata and runtime dispatch. Tests: `node_modules_commonjs_module_require_bind_alias`, `node_modules_commonjs_module_alias_require_bind_alias`, `node_modules_commonjs_require_alias_bind_alias`, `node_modules_commonjs_function_scope_require_alias`
@@ -1562,6 +1563,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_js_default_function` | pure-JS package default function imports through allowJs |
 | `node_modules_js_default_anonymous_function` | pure-JS package default anonymous function imports through allowJs |
 | `node_modules_js_default_arrow` | pure-JS package default arrow-function imports through allowJs |
+| `node_modules_js_named_arrow` | pure-JS package named arrow-function imports through allowJs |
 | `node_modules_js_package_relative_import` | pure-JS package entry importing a package-local JS module |
 | `node_modules_js_package_re_exports` | pure-JS package re-export barrel with named, default-alias, and export-star bindings |
 | `node_modules_package_exports` | TypeScript package source imports through package exports |

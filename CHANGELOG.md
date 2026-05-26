@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Pure JavaScript packages loaded through `allowJs` now have focused coverage for named arrow-function exports. Test: `node_modules_js_named_arrow`.
 - Pure JavaScript packages loaded through `allowJs` now have focused coverage for default arrow-function exports. Test: `node_modules_js_default_arrow`.
 - Pure JavaScript packages loaded through `allowJs` now have focused coverage for default anonymous function exports. Test: `node_modules_js_default_anonymous_function`.
 - Pure JavaScript packages loaded through `allowJs` now have focused coverage for default-exported function declarations. Test: `node_modules_js_default_function`.
