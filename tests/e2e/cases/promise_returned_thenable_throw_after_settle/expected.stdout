@@ -1,0 +1,3 @@
+callback resolve kept: callback kept
+try reject kept: try kept reason
+events: callback resolve then throw|try reject then throw
