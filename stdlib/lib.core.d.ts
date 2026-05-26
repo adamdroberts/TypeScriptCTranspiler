@@ -1304,7 +1304,8 @@ interface FSReaddirBufferOptions {
     recursive?: boolean;
     withFileTypes?: false;
 }
-interface FSReaddirDirentOptions extends FSEncodingOptions {
+interface FSReaddirDirentOptions {
+    encoding?: FSReaddirStringEncoding;
     recursive?: boolean;
     withFileTypes: true;
 }

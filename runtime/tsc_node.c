@@ -2737,6 +2737,16 @@ tsc_array_t* tsc_fs_readdir_dirents_sync(const tsc_str_t* path) {
     return a;
 }
 
+tsc_array_t* tsc_fs_dirents_encode_names(tsc_array_t* entries, const tsc_str_t* encoding) {
+    if (!entries || !encoding) return entries;
+    for (size_t i = 0; i < entries->len; i++) {
+        tsc_fs_dirent_t* ent = TSC_ARR(tsc_fs_dirent_t*, entries, i);
+        if (!ent || !ent->name) continue;
+        ent->name = tsc_buffer_to_string(tsc_buffer_from_str(ent->name, NULL), encoding);
+    }
+    return entries;
+}
+
 /* ---------------- path ---------------- */
 
 tsc_str_t* path_join_impl(size_t n, va_list ap, bool resolve) {

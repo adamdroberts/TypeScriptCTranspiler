@@ -35856,7 +35856,10 @@ class Emitter {
                     return this.emitSequencedExpr(arrayType(T_FS_DIRENT), [
                         this.fsPathSpec(p, args[0]!, "fs.readdirSync path"),
                         ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
-                    ], ([path]) => `${options.recursive ? "tsc_fs_readdir_recursive_dirents_sync" : "tsc_fs_readdir_dirents_sync"}(${path!})`);
+                    ], ([path]) => {
+                        const value = `${options.recursive ? "tsc_fs_readdir_recursive_dirents_sync" : "tsc_fs_readdir_dirents_sync"}(${path!})`;
+                        return this.emitFsDirentArrayEncodingResult(value, options.encoding);
+                    });
                 }
                 if (options.encoding === "buffer") {
                     return this.emitSequencedExpr(arrayType(T_BUFFER), [
@@ -36294,6 +36297,12 @@ class Emitter {
         return `({ tsc_array_t* const _src = ${value}; tsc_array_t* _out = tsc_array_new(sizeof(tsc_str_t*), _src->len ? _src->len : 1); for (size_t _i = 0; _i < _src->len; _i++) { tsc_str_t* _name = TSC_ARR(tsc_str_t*, _src, _i); tsc_str_t* _encoded = tsc_buffer_to_string(tsc_buffer_from_str(_name, NULL), tsc_str_from_lit("${encoding}", ${encoding.length})); tsc_array_push_raw(_out, &_encoded); } _out; })`;
     }
 
+    private emitFsDirentArrayEncodingResult(value: string, encoding: "utf8" | "hex" | "base64" | "buffer"): string {
+        if (encoding === "utf8") return value;
+        if (encoding === "buffer") throw new Error("internal buffer dirent encoding should be rejected before emission");
+        return `tsc_fs_dirents_encode_names(${value}, tsc_str_from_lit("${encoding}", ${encoding.length}))`;
+    }
+
     private validateFsReadFileOptions(options: ts.Expression | undefined, label: string): "utf8" | "hex" | "base64" | "buffer" {
         if (!options || this.isUndefinedExpression(options)) return "utf8";
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
@@ -36572,7 +36581,7 @@ class Emitter {
             }
             unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
         }
-        if (withFileTypes && encoding !== "utf8") unsupported(options, `${label} does not support combining withFileTypes and non-UTF-8 encoding yet`);
+        if (withFileTypes && encoding === "buffer") unsupported(options, `${label} does not support combining withFileTypes and buffer encoding yet`);
         return { withFileTypes, recursive, encoding };
     }
 
@@ -36720,9 +36729,11 @@ class Emitter {
                             : options.recursive
                                 ? "tsc_fs_readdir_recursive_sync"
                                 : "tsc_fs_readdir_sync";
-                    const value = options.encoding === "hex" || options.encoding === "base64"
-                        ? this.emitFsStringArrayEncodingResult(`${fn}(${path!})`, options.encoding)
-                        : `${fn}(${path!})`;
+                    const value = options.withFileTypes
+                        ? this.emitFsDirentArrayEncodingResult(`${fn}(${path!})`, options.encoding)
+                        : options.encoding === "hex" || options.encoding === "base64"
+                            ? this.emitFsStringArrayEncodingResult(`${fn}(${path!})`, options.encoding)
+                            : `${fn}(${path!})`;
                     if (mapped.elem?.kind === "array") {
                         return settle(`tsc_promise_resolve_array(${value})`);
                     }
