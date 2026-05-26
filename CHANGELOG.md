@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic thenable assimilation now preserves the first settlement when the `then` method throws after calling `resolve(...)` or `reject(...)`. Test: `promise_thenable_throw_after_settle`.
 - `Promise.resolve(...)` now has focused coverage for dynamic thenable `resolve` / `reject` callbacks invoked through `call(...)` and `apply(...)`. Test: `promise_thenable_resolver_call_apply`.
 - `Promise.try(...)` now has focused coverage that returned dynamic thenables are invoked with the thenable object as `this`, including getter-returned methods. Test: `promise_try_thenable_this_binding`.
 - `Promise.resolve(...)` now has focused coverage that dynamic thenable methods are invoked with the thenable object as `this`, including getter-returned methods. Test: `promise_thenable_this_binding`.
