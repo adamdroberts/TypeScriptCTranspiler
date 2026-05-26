@@ -32137,7 +32137,7 @@ class Emitter {
             });
         }
         if (method === "execSync") {
-            if (call.arguments.length < 1 || call.arguments.length > 2) {
+            if (call.arguments.length < 1) {
                 unsupported(call, "child_process.execSync expects command and optional options");
             }
             const command = this.emitExpr(call.arguments[0]!);
@@ -32171,19 +32171,21 @@ class Emitter {
                     ? { value: options.timeout, target: T_NUMBER, node: options.timeout.node }
                     : { value: { c: "-1.0", ty: T_NUMBER } },
                 { value: { c: options.killSignal, ty: T_NUMBER } },
+                ...this.ignoredArgumentSpecs(call.arguments, 2),
             ], ([commandC, cwdC, inputC, envC, shellC, uidC, gidC, maxBufferC, timeoutC, killSignalC]) => {
                 const callC = `tsc_child_process_exec_sync(${commandC}, ${cwdC}, ${inputC}, ${envC}, ${shellC}, ${uidC}, ${gidC}, ${maxBufferC}, ${timeoutC}, (int)${killSignalC})`;
                 return encoding ? `tsc_buffer_to_string(${callC}, tsc_str_from_lit("utf8", 4))` : callC;
             });
         }
         if (method === "execFileSync") {
-            if (call.arguments.length < 1 || call.arguments.length > 3) {
+            if (call.arguments.length < 1) {
                 unsupported(call, "child_process.execFileSync expects file, optional args, and optional { cwd }");
             }
             const file = this.emitExpr(call.arguments[0]!);
-            const optionsAsSecondArg = call.arguments.length === 2 && this.isStaticObjectLiteralExpression(call.arguments[1]!);
+            const optionsAsSecondArg = this.isStaticObjectLiteralExpression(call.arguments[1]);
             const argsNode = optionsAsSecondArg ? undefined : call.arguments[1];
             const optionsNode = optionsAsSecondArg ? call.arguments[1] : call.arguments[2];
+            const consumedArgCount = optionsAsSecondArg ? 2 : optionsNode ? 3 : argsNode ? 2 : 1;
             const fileOptions = this.childProcessFileOptions(optionsNode);
             const encoding = this.childProcessEncodingOption(optionsNode, "execFileSync");
             if (!argsNode) {
@@ -32218,6 +32220,7 @@ class Emitter {
                         ? { value: fileOptions.timeout, target: T_NUMBER, node: fileOptions.timeout.node }
                         : { value: { c: "-1.0", ty: T_NUMBER } },
                     { value: { c: fileOptions.killSignal, ty: T_NUMBER } },
+                    ...this.ignoredArgumentSpecs(call.arguments, consumedArgCount),
                 ], ([fileC, argsC, cwdC, inputC, envC, shellC, argv0C, uidC, gidC, maxBufferC, timeoutC, killSignalC]) => {
                     const callC = `tsc_child_process_exec_file_sync(${fileC}, ${argsC}, ${cwdC}, ${inputC}, ${envC}, ${shellC}, ${argv0C}, ${uidC}, ${gidC}, ${maxBufferC}, ${timeoutC}, (int)${killSignalC})`;
                     return encoding ? `tsc_buffer_to_string(${callC}, tsc_str_from_lit("utf8", 4))` : callC;
@@ -32258,23 +32261,25 @@ class Emitter {
                     ? { value: fileOptions.timeout, target: T_NUMBER, node: fileOptions.timeout.node }
                     : { value: { c: "-1.0", ty: T_NUMBER } },
                 { value: { c: fileOptions.killSignal, ty: T_NUMBER } },
+                ...this.ignoredArgumentSpecs(call.arguments, consumedArgCount),
             ], ([fileC, argsC, cwdC, inputC, envC, shellC, argv0C, uidC, gidC, maxBufferC, timeoutC, killSignalC]) => {
                 const callC = `tsc_child_process_exec_file_sync(${fileC}, ${argsC}, ${cwdC}, ${inputC}, ${envC}, ${shellC}, ${argv0C}, ${uidC}, ${gidC}, ${maxBufferC}, ${timeoutC}, (int)${killSignalC})`;
                 return encoding ? `tsc_buffer_to_string(${callC}, tsc_str_from_lit("utf8", 4))` : callC;
             });
         }
         if (method === "spawnSync") {
-            if (call.arguments.length < 2 || call.arguments.length > 3) {
+            if (call.arguments.length < 2) {
                 unsupported(call, "child_process.spawnSync expects file, optional args, and { encoding: \"utf8\" }");
             }
             const file = this.emitExpr(call.arguments[0]!);
-            const optionsAsSecondArg = call.arguments.length === 2 && this.isStaticObjectLiteralExpression(call.arguments[1]!);
+            const optionsAsSecondArg = this.isStaticObjectLiteralExpression(call.arguments[1]);
             const argsNode = optionsAsSecondArg ? undefined : call.arguments[1]!;
             const args = argsNode ? this.emitExpr(argsNode) : { c: "NULL", ty: arrayType(T_STRING) };
             if (argsNode && (args.ty.kind !== "array" || args.ty.elem?.kind !== "string")) {
                 unsupported(argsNode, "child_process.spawnSync args must be string[]");
             }
             const optionsNode = optionsAsSecondArg ? call.arguments[1]! : call.arguments[2]!;
+            const consumedArgCount = optionsAsSecondArg ? 2 : 3;
             const options = this.resolveSideEffectFreeEarlierConstExpression(optionsNode);
             if (!ts.isObjectLiteralExpression(options)) {
                 unsupported(optionsNode, "child_process.spawnSync options must be an object literal");
@@ -32303,7 +32308,7 @@ class Emitter {
             const killSignal = this.childProcessKillSignalOption(options);
             const stdio = this.childProcessSpawnSyncStdioOption(options);
             const detached = this.childProcessBooleanOption(options, "detached");
-            return this.emitSequencedCall("tsc_child_process_spawn_sync", T_VALUE, [
+            return this.emitSequencedExpr(T_VALUE, [
                 { value: file, target: T_STRING, node: call.arguments[0]! },
                 { value: args, target: arrayType(T_STRING), node: argsNode },
                 cwd
@@ -32341,7 +32346,10 @@ class Emitter {
                     ? { value: timeout, target: T_NUMBER, node: timeout.node }
                     : { value: { c: "-1.0", ty: T_NUMBER } },
                 { value: { c: killSignal, ty: T_NUMBER } },
-            ]);
+                ...this.ignoredArgumentSpecs(call.arguments, consumedArgCount),
+            ], ([fileC, argsC, cwdC, inputC, envC, shellC, argv0C, pipeStdinC, ignoreStdinC, captureStdoutC, captureStderrC, inheritStdoutC, inheritStderrC, detachedC, uidC, gidC, maxBufferC, timeoutC, killSignalC]) =>
+                `tsc_child_process_spawn_sync(${fileC}, ${argsC}, ${cwdC}, ${inputC}, ${envC}, ${shellC}, ${argv0C}, ${pipeStdinC}, ${ignoreStdinC}, ${captureStdoutC}, ${captureStderrC}, ${inheritStdoutC}, ${inheritStderrC}, ${detachedC}, ${uidC}, ${gidC}, ${maxBufferC}, ${timeoutC}, (int)${killSignalC})`,
+            );
         }
         unsupported(call, `child_process.${method}`);
     }
