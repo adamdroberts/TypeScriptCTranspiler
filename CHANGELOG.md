@@ -47,7 +47,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `Promise.resolve(...)` now has focused coverage for inherited dynamic `then` methods and inherited dynamic `then` getters. Test: `promise_thenable_inherited_then`.
 - `Promise.try(...)` now has focused coverage for returned dynamic thenables whose `then` getter throws or returns a non-callable value. Test: `promise_try_thenable_getter_edges`.
 - Promise.resolve and immediate Promise callback return handling now have focused coverage for dynamic thenables whose `then` getter throws or returns a non-callable value. Test: `promise_thenable_getter_edges`.
-- Legacy Object prototype accessor helpers now no-op after callable validation for object-coercible primitive receivers instead of reporting a failed dynamic define. Test: `object_prototype_accessor_primitives`.
+- Legacy Object prototype accessor helpers now no-op after getter/setter callable validation for object-coercible primitive receivers instead of reporting a failed dynamic define. Test: `object_prototype_accessor_primitives`.
 - Runtime `Object.defineProperties(...)` descriptor maps now validate every descriptor before applying any property definitions, preventing partial target mutation when a later descriptor is invalid. Test: `object_define_properties_atomic_descriptors`.
 - Pure JavaScript package subclass instances erased to `any` now have focused coverage for inherited AOT field accessors and method wrappers. Test: `node_modules_js_class_dynamic_inherited`.
 - Pure JavaScript package class instances erased to `any` now keep AOT-generated field accessors readable and writable through dynamic property dispatch. Test: `node_modules_js_class_dynamic_fields`.

@@ -418,7 +418,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Legacy Object prototype accessor helpers `__defineGetter__`, `__defineSetter__`, `__lookupGetter__`, and `__lookupSetter__` work on dynamic objects, preserve ignored trailing-argument evaluation, use enumerable/configurable accessor descriptors, preserve getter/setter descriptor identities, and lookup accessors through prototypes while stopping at own data descriptors. Test: `object_prototype_accessors`
 - `Object.prototype.__defineGetter__.call(...)`, `__defineSetter__.call(...)`, `__lookupGetter__.call(...)`, and `__lookupSetter__.call(...)` dispatch over dynamic targets with the same descriptor, lookup, identity, and ignored-argument behavior as direct legacy accessor method calls. Test: `object_prototype_accessor_call`
 - Legacy Object prototype accessor helper call forms reject nullish receivers through catchable runtime exceptions. Test: `object_prototype_accessor_nullish_call`
-- Legacy Object prototype accessor helpers no-op after callable validation for object-coercible primitive receivers, and primitive lookup helpers return `undefined`. Test: `object_prototype_accessor_primitives`
+- Legacy Object prototype accessor helpers no-op after getter/setter callable validation for object-coercible primitive receivers, and primitive lookup helpers return `undefined`. Test: `object_prototype_accessor_primitives`
 - Legacy dynamic `__proto__` reads and writes work on dynamic objects, arrays, and functions, including prototype-chain fallback, primitive-setter no-ops, and own data-property shadowing. Test: `object_proto_accessor`
 - Configurable dynamic accessor redefinitions preserve omitted `get`/`set` hooks and omitted descriptor flags, while explicit `get: undefined` / `set: undefined` or side-effect-free `void` hooks clear a hook. Test: `object_accessor_preserve`
 - Non-configurable dynamic accessor descriptors can be compatibly redefined with the same getter/setter identities and enumerable/configurable flags; changed accessors or flags are rejected. Test: `object_accessor_redefine`
@@ -1714,7 +1714,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `object_prototype_accessors` | Object prototype legacy accessor define and lookup helpers |
 | `object_prototype_accessor_call` | Object.prototype legacy accessor helper call-form dispatch |
 | `object_prototype_accessor_nullish_call` | Object.prototype legacy accessor helper call-form nullish receiver rejection |
-| `object_prototype_accessor_primitives` | legacy Object prototype accessor helpers on primitive receivers |
+| `object_prototype_accessor_primitives` | legacy Object prototype accessor helpers on primitive receivers with getter/setter validation |
 | `object_proto_accessor` | legacy __proto__ dynamic getter and setter behavior |
 | `object_literal_stack_alloc` | non-escaping typed object literal locals use stack storage |
 | `object_literal_stack_alloc_helpers` | non-escaping typed object literal and class locals use stack storage through read-only Object/Reflect/Object-prototype helpers |
