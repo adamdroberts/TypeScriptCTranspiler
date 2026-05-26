@@ -32,3 +32,13 @@ const sb = new Set<string>(["y", "z"]);
 show("str-union", sa.union(sb));
 show("str-intersection", sa.intersection(sb));
 show("str-diff", sa.difference(sb));
+
+const da = new Set<any>([1, "x", NaN, -0]);
+const db = new Set<any>([NaN, 0, "y"]);
+show("dyn-union", da.union(db));
+show("dyn-intersection", da.intersection(db));
+show("dyn-diff", da.difference(db));
+show("dyn-symmetric", da.symmetricDifference(db));
+console.log("dyn-subset:", new Set<any>([NaN, 0]).isSubsetOf(da));
+console.log("dyn-superset:", da.isSupersetOf(new Set<any>([NaN, 0])));
+console.log("dyn-disjoint:", da.isDisjointFrom(new Set<any>(["z"])));

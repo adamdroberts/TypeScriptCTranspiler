@@ -17903,7 +17903,10 @@ class Emitter {
         let escapes = false;
         const visit = (n: ts.Node): void => {
             if (escapes) return;
-            if (n !== scope && ts.isFunctionLike(n)) return;
+            if (n !== scope && ts.isFunctionLike(n)) {
+                if (this.nodeContainsSymbolReference(n, sym, ts.isIdentifier(d.name) ? d.name : undefined)) escapes = true;
+                return;
+            }
             if (ts.isIdentifier(n) && this.checker.getSymbolAtLocation(n) === sym) {
                 if (n === d.name) return;
                 const parent = n.parent;
@@ -18178,6 +18181,7 @@ class Emitter {
         const stmt = d.parent.parent;
         const scope = stmt?.parent;
         if (!scope || !ts.isBlock(scope)) return null;
+        if (this.blockContainsNestedFunctionLike(scope)) return null;
 
         let escapes = false;
         let extraCapacity = 0;
@@ -18281,6 +18285,38 @@ class Emitter {
         return escapes ? null : { init, ty: mapped, cap: Math.max(1, init.elements.length + extraCapacity) };
     }
 
+    private nodeContainsSymbolReference(node: ts.Node, sym: ts.Symbol, declarationName?: ts.Identifier): boolean {
+        let found = false;
+        const visit = (n: ts.Node): void => {
+            if (found) return;
+            if (
+                ts.isIdentifier(n) &&
+                n !== declarationName &&
+                this.symbolForIdentifier(n) === sym
+            ) {
+                found = true;
+                return;
+            }
+            ts.forEachChild(n, visit);
+        };
+        ts.forEachChild(node, visit);
+        return found;
+    }
+
+    private blockContainsNestedFunctionLike(block: ts.Block): boolean {
+        let found = false;
+        const visit = (n: ts.Node): void => {
+            if (found) return;
+            if (n !== block && ts.isFunctionLike(n)) {
+                found = true;
+                return;
+            }
+            ts.forEachChild(n, visit);
+        };
+        ts.forEachChild(block, visit);
+        return found;
+    }
+
     private nonEscapingArrayReceiverMethod(method: string): boolean {
         return [
             "at",
@@ -18376,7 +18412,10 @@ class Emitter {
         let extraCapacity = 0;
         const visit = (n: ts.Node): void => {
             if (!safe) return;
-            if (n !== scope && ts.isFunctionLike(n)) return;
+            if (n !== scope && ts.isFunctionLike(n)) {
+                if (this.nodeContainsSymbolReference(n, sym, ts.isIdentifier(d.name) ? d.name : undefined)) safe = false;
+                return;
+            }
             if (ts.isIdentifier(n) && this.checker.getSymbolAtLocation(n) === sym) {
                 if (n === d.name) return;
                 const useCapacity = this.nonEscapingArrayAliasUseExtraCapacity(n, scope);

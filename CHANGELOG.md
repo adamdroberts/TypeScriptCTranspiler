@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- ES2025 Set composition methods now have focused coverage for dynamic `Set<any>` values, including mixed primitive entries and SameValueZero matching. Test: `set_composition`.
 - Dynamic `FinalizationRegistry.register(...)` and `.unregister(...)` now validate dynamic targets and unregister tokens at runtime while treating dynamic `undefined` unregister tokens as omitted. Test: `finalization_registry_dynamic`.
 - Dynamic `WeakRef<any>` now validates object targets at runtime and preserves dynamic values through `.deref(...)`. Test: `weak_ref_dynamic`.
 - Dynamic `WeakMap<any, any>` and `WeakSet<any>` now support nullish empty sources, boxed dynamic array construction, object-key/value runtime validation, and ES-compatible primitive `.get(...)` / `.has(...)` / `.delete(...)` behavior. Test: `weak_collections_dynamic`.
@@ -776,6 +777,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Fixed
+- Local array literals referenced from nested callbacks no longer use stack-backed storage, avoiding invalid `realloc(...)` when callback bodies grow the array. Test: `set_composition`.
 - The e2e harness now treats any directory with `in.ts` as a real case and fails discovery when it lacks `expected.stdout`, `expected.exitcode`, or `compile.emit_c_only`, so malformed fixtures cannot be silently skipped.
 - `crypto.randomUUID(...)` now has coverage for explicit `undefined` option values using defaults. Test: `crypto_random_uuid`.
 - `os.userInfo(...)` now treats explicit `undefined` options and `encoding` properties as defaults. Test: `os_user_info_undefined_options`.

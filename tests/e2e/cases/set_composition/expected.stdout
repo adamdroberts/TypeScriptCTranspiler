@@ -14,3 +14,10 @@ self-subset: true
 str-union [x,y,z]
 str-intersection [y]
 str-diff [x]
+dyn-union [1,x,NaN,0,y]
+dyn-intersection [NaN,0]
+dyn-diff [1,x]
+dyn-symmetric [1,x,y]
+dyn-subset: true
+dyn-superset: true
+dyn-disjoint: true
