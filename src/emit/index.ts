@@ -17683,20 +17683,47 @@ class Emitter {
         for (const { name: fn, type: ft } of baseFields) {
             this.structDecls.line(`${ft.c} ${mangleIdent(fn)};`);
         }
-        for (const m of cd.members) {
-            if (ts.isPropertyDeclaration(m)) {
-                if (isStatic(m)) continue; // emitted as free var, not struct field
-                const fieldName = this.staticPropertyName(m.name);
-                if (!fieldName)
-                    unsupported(m.name, "computed property names in class must resolve to a string or number literal");
-                const fieldType = mapType(m, this.checker);
-                this.structDecls.line(
-                    `${fieldType.c} ${mangleIdent(fieldName)};`,
-                );
-            }
+        for (const field of this.classOwnInstanceFields(cd)) {
+            this.structDecls.line(`${field.type.c} ${mangleIdent(field.name)};`);
         }
         this.structDecls.close(";");
         this.structDecls.line();
+    }
+
+    private classOwnInstanceFields(cd: ts.ClassDeclaration): { name: string; type: CType; initializer?: ts.Expression }[] {
+        const fields: { name: string; type: CType; initializer?: ts.Expression }[] = [];
+        const seen = new Set<string>();
+        for (const m of cd.members) {
+            if (!ts.isPropertyDeclaration(m) || isStatic(m)) continue;
+            const fieldName = this.staticPropertyName(m.name);
+            if (!fieldName)
+                unsupported(m.name, "computed property names in class must resolve to a string or number literal");
+            seen.add(fieldName);
+            fields.push({ name: fieldName, type: mapType(m, this.checker), initializer: m.initializer });
+        }
+        if (!this.isJavaScriptSourceFile(cd.getSourceFile())) return fields;
+        const ctor = cd.members.find((m) => ts.isConstructorDeclaration(m)) as
+            | ts.ConstructorDeclaration
+            | undefined;
+        if (!ctor?.body) return fields;
+        const visit = (n: ts.Node): void => {
+            if (n !== ctor.body && ts.isFunctionLike(n)) return;
+            if (
+                ts.isBinaryExpression(n) &&
+                n.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                ts.isPropertyAccessExpression(n.left) &&
+                n.left.expression.kind === ts.SyntaxKind.ThisKeyword
+            ) {
+                const fieldName = n.left.name.text;
+                if (!seen.has(fieldName)) {
+                    seen.add(fieldName);
+                    fields.push({ name: fieldName, type: T_VALUE });
+                }
+            }
+            ts.forEachChild(n, visit);
+        };
+        visit(ctor.body);
+        return fields;
     }
 
     private baseClassName(cd: ts.ClassDeclaration): string | null {
@@ -17744,17 +17771,10 @@ class Emitter {
                 if (!base) continue;
                 // Recurse for multi-level inheritance.
                 for (const f of this.collectInheritedFields(base)) fields.push(f);
-                for (const m of base.members) {
-                    if (ts.isPropertyDeclaration(m) && m.name && !isStatic(m)) {
-                        const fieldName = this.staticPropertyName(m.name);
-                        if (!fieldName)
-                            unsupported(m.name, "computed property names in class must resolve to a string or number literal");
-                        fields.push({
-                            name: fieldName,
-                            type: mapType(m, this.checker),
-                        });
-                    }
-                }
+                fields.push(...this.classOwnInstanceFields(base).map((field) => ({
+                    name: field.name,
+                    type: field.type,
+                })));
             }
         }
         return fields;
@@ -17823,22 +17843,14 @@ class Emitter {
 
     private classConstructorInitializesAllFields(cd: ts.ClassDeclaration): boolean {
         const ownFields = new Set<string>();
-        for (const m of cd.members) {
-            if (ts.isPropertyDeclaration(m) && !isStatic(m)) {
-                const fieldName = this.staticPropertyName(m.name);
-                if (!fieldName) return false;
-                ownFields.add(fieldName);
-            }
+        for (const field of this.classOwnInstanceFields(cd)) {
+            ownFields.add(field.name);
         }
 
         const inheritedFields = new Set(this.collectInheritedFields(cd).map((f) => f.name));
         const initialized = new Set<string>();
-        for (const m of cd.members) {
-            if (ts.isPropertyDeclaration(m) && !isStatic(m) && m.initializer) {
-                const fieldName = this.staticPropertyName(m.name);
-                if (!fieldName) return false;
-                initialized.add(fieldName);
-            }
+        for (const field of this.classOwnInstanceFields(cd)) {
+            if (field.initializer) initialized.add(field.name);
         }
 
         const ctor = cd.members.find((m) => ts.isConstructorDeclaration(m)) as
@@ -40911,11 +40923,8 @@ class Emitter {
                 }
                 if (ts.isClassDeclaration(stmt) && stmt.name?.text === ty.className) {
                     const fields = this.collectInheritedFields(stmt).map((field) => field.name);
-                    for (const member of stmt.members) {
-                        if (ts.isPropertyDeclaration(member) && member.name && !isStatic(member)) {
-                            const fieldName = this.staticPropertyName(member.name);
-                            if (fieldName) fields.push(fieldName);
-                        }
+                    for (const field of this.classOwnInstanceFields(stmt)) {
+                        fields.push(field.name);
                     }
                     return fields;
                 }
