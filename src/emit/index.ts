@@ -29173,7 +29173,7 @@ class Emitter {
                 const { bindings, body } = this.bindArrayFromCallback(mapfnArg, T_VALUE, u, item, iv, callbackThisArg);
                 const mappedC = this.coerce(body, u, mapfnArg);
                 return (
-                    `({ tsc_array_t* const ${src} = tsc_value_iter_values(${itemsExpr!}); ` +
+                    `({ tsc_array_t* const ${src} = tsc_value_array_from_values(${itemsExpr!}); ` +
                     `${thisArgSetup}` +
                     `tsc_array_t* ${out} = tsc_array_new(sizeof(${u.c}), ${src}->len ? ${src}->len : 1); ` +
                     `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
@@ -29344,13 +29344,10 @@ class Emitter {
         const ignored = this.ignoredArgumentSpecs(ignoredArgs, 0);
         if (r.ty.kind === "value") {
             if (resultArrayType) unsupported(itemsArg, "Array.fromAsync currently requires a typed array, Map, Set, or string source");
-            const missing: EmitResult = { c: "tsc_value_undefined()", ty: T_VALUE };
-            return this.emitSequencedCall("tsc_value_method_slice", T_VALUE, [
+            return this.emitSequencedExpr(T_VALUE, [
                 { value: r, target: T_VALUE, node: itemsArg },
                 ...ignored,
-                { value: missing, target: T_VALUE, node: itemsArg },
-                { value: missing, target: T_VALUE, node: itemsArg },
-            ]);
+            ], ([items]) => `tsc_value_array(tsc_value_array_from_values(${items}))`);
         }
         if (r.ty.kind === "string") {
             return this.emitSequencedExpr(

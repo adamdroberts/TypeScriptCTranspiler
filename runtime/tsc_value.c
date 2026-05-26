@@ -1605,6 +1605,19 @@ tsc_array_t* tsc_value_iter_values(tsc_value_t v) {
     return tsc_array_new(sizeof(tsc_value_t), 1);
 }
 
+tsc_array_t* tsc_value_array_from_values(tsc_value_t v) {
+    if (tsc_value_is_nullish(v)) {
+        tsc_throw_str(tsc_str_from_cstr("Array.from source must not be null or undefined"));
+    }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
+        return value_array_values((const tsc_array_t*)value_ptr(v));
+    }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
+        return value_string_values((const tsc_str_t*)value_ptr(v));
+    }
+    return tsc_array_new(sizeof(tsc_value_t), 1);
+}
+
 tsc_array_t* tsc_value_object_keys(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_keys_dyn((tsc_object_t*)value_ptr(v));

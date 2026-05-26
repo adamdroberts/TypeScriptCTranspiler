@@ -184,10 +184,10 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - All HOFs accept **either** inline arrow **or** named function reference, including direct function and closure callback values where supported. Tests: `fn_refs`, `array_hof`
 - `for-of` iteration. Test: `arrays`
 - `Array.isArray(x)` — resolved at compile time from typed CTypes and at runtime for dynamic values, including direct and nested array Proxy chains with revoked-proxy rejection; the stdlib declaration is a type predicate so guarded `unknown` dynamic values narrow to typed array operations. Tests: `advanced`, `array_static_dynamic`, `array_is_array_narrowing`, `proxy_array_is_array`
-- `Array.from(arr)` — identity copy for typed arrays and dynamic `tsc_value_t` arrays. Tests: `advanced`, `array_static_dynamic`
+- `Array.from(arr)` — identity copy for typed arrays and dynamic `tsc_value_t` arrays. Dynamic strings produce real dynamic arrays of characters, dynamic `null` / `undefined` sources reject through catchable runtime errors after ignored argument evaluation, and non-nullish non-iterable dynamic values return empty arrays in the bounded array-like subset. Tests: `advanced`, `array_static_dynamic`, `array_from_dynamic_edges`
 - `Array.from(set)` — typed Set value copy preserving insertion order. Test: `array_from_set`
 - `Array.from(map)` — typed `Map<K, V>` entry materialization as `ObjectEntry<V, K>[]` in insertion order, including non-string key entries. Tests: `array_from_map`, `map_object_entry_constructors`
-- `Array.from(items, mapfn)` / `Array.from(items, mapfn, thisArg)` transforms typed arrays, typed Set sources, typed `Map<K, V>` entry sources, string code-point sequences, and boxed dynamic array/string sources into typed `U[]`, accepting inline arrow/function-expression callbacks with expression bodies or single-return block bodies, plus function references (including generic functions where the source is typed). Explicit `undefined` mapper arguments take the no-mapper path while preserving optional `thisArg` argument evaluation. Optional mapper `thisArg` values are evaluated once and bound for callbacks that declare `this: any`. Tests: `array_from_mapper`, `array_from_set`, `array_from_map`, `array_from_dynamic_mapper`, `array_from_mapper_this_arg`
+- `Array.from(items, mapfn)` / `Array.from(items, mapfn, thisArg)` transforms typed arrays, typed Set sources, typed `Map<K, V>` entry sources, string code-point sequences, and boxed dynamic array/string sources into typed `U[]`, accepting inline arrow/function-expression callbacks with expression bodies or single-return block bodies, plus function references (including generic functions where the source is typed). Dynamic `null` / `undefined` sources reject before mapping, and non-nullish non-iterable dynamic sources map zero elements. Explicit `undefined` mapper arguments take the no-mapper path while preserving optional `thisArg` argument evaluation. Optional mapper `thisArg` values are evaluated once and bound for callbacks that declare `this: any`. Tests: `array_from_mapper`, `array_from_set`, `array_from_map`, `array_from_dynamic_mapper`, `array_from_dynamic_edges`, `array_from_mapper_this_arg`
 - `Array.of(...items)` — typed array construction, including `Array.of<any>(...)` followed by dynamic array coercion. Tests: `array_of`, `dynamic_array_of`
 
 ### `Map<K, V>`
@@ -929,6 +929,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_flat` | flat + flatMap on homogeneous typed arrays, including scalar flatMap results |
 | `array_from_map` | Array.from over typed Map<K, V> sources with and without mapper callbacks |
 | `array_from_string` | Array.from over strings via string iteration |
+| `array_from_dynamic_edges` | Array.from dynamic nullish, string, and non-iterable edge behavior |
 | `array_hof` | forEach/map/filter/reduce/find/some/every + inline expression/block-body arrows and receiver callback args |
 | `array_hof_this_arg` | typed and dynamic array higher-order methods with evaluated and bound optional thisArg |
 | `array_is_array_narrowing` | Array.isArray type-predicate narrowing over unknown dynamic arrays |
@@ -1985,6 +1986,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_from_mapper` | Array.from(items, mapfn) for typed arrays and string code-point sequences with expression/block-body callbacks |
 | `array_from_mapper_this_arg` | Array.from(items, mapfn, thisArg) with evaluated and bound mapper thisArg |
 | `array_from_dynamic_mapper` | Array.from(dynamic, mapfn) over boxed dynamic array/string sources |
+| `array_from_dynamic_edges` | Array.from dynamic nullish, string, and non-iterable edge behavior |
 | `array_from_set` | Array.from over typed Set sources with and without mapper callbacks |
 | `array_from_map` | Array.from over typed Map<K, V> sources with and without mapper callbacks |
 | `for_in` | for-in over typed classes/interfaces, typed arrays, and dynamic objects with continue/break |
