@@ -1,3 +1,4 @@
 throw getter: getter boom
 noncall getter: 7
-events: throw getter|noncall getter|noncall getter
+callback throw getter: getter boom
+events: throw getter|noncall getter|noncall getter|throw getter

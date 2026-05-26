@@ -28,4 +28,11 @@ Promise.resolve(nonCallableGetter)
         return value;
     });
 
+Promise.resolve("callback")
+    .then((_value: string) => throwingGetter)
+    .catch((reason: any) => {
+        console.log("callback throw getter:", reason);
+        return "callback handled";
+    });
+
 console.log("events:", events.join("|"));
