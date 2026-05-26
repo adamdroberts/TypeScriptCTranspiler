@@ -1,0 +1,12 @@
+desc keys: visible|hidden|base
+visible: 1 true
+hidden: h false
+base: b true
+define: true ok
+delete: true false
+proto before: base
+proto set: true next
+ext before: true
+prevent: true false
+ext after: false
+events: ownKeys:meta-handler|desc:meta-handler:visible|desc:meta-handler:hidden|desc:meta-handler:base|define:meta-handler:made|delete:meta-handler:drop|getPrototypeOf:proto-handler|setPrototypeOf:proto-handler|isExtensible:proto-handler|preventExtensions:proto-handler|isExtensible:proto-handler

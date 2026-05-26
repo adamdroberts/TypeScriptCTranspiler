@@ -1,0 +1,3 @@
+{
+  "description": "Proxy descriptor, key, delete, prototype, and extensibility traps may be inherited from the handler prototype"
+}
