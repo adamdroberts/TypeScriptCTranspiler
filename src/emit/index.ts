@@ -33788,8 +33788,10 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "indexOf expects at least 1 arg");
                 const needle = this.emitExpr(args[0]!);
                 const coerced = this.coerce(needle, et, args[0]!);
-                const fromIndex = args[1] ? this.emitExpr(args[1]) : { c: "0.0", ty: T_NUMBER };
-                if (args[1]) requireNumber(args[1], fromIndex.ty);
+                const fromIndex = args[1] && !this.isUndefinedExpression(args[1])
+                    ? this.emitExpr(args[1])
+                    : { c: "0.0", ty: T_NUMBER };
+                if (args[1] && !this.isUndefinedExpression(args[1])) requireNumber(args[1], fromIndex.ty);
                 return this.emitSequencedExpr(T_NUMBER, [
                     { value: recv },
                     { value: { c: coerced, ty: et }, target: et, node: args[0]! },
@@ -33816,8 +33818,12 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "lastIndexOf expects at least 1 arg");
                 const needle = this.emitExpr(args[0]!);
                 const coerced = this.coerce(needle, et, args[0]!);
-                const fromIndex = args[1] ? this.emitExpr(args[1]) : { c: "INFINITY", ty: T_NUMBER };
-                if (args[1]) requireNumber(args[1], fromIndex.ty);
+                const fromIndex = args[1]
+                    ? this.isUndefinedExpression(args[1])
+                        ? { c: "0.0", ty: T_NUMBER }
+                        : this.emitExpr(args[1])
+                    : { c: "INFINITY", ty: T_NUMBER };
+                if (args[1] && !this.isUndefinedExpression(args[1])) requireNumber(args[1], fromIndex.ty);
                 return this.emitSequencedExpr(T_NUMBER, [
                     { value: recv },
                     { value: { c: coerced, ty: et }, target: et, node: args[0]! },
@@ -33845,8 +33851,10 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "includes expects at least 1 arg");
                 const needle = this.emitExpr(args[0]!);
                 const coerced = this.coerce(needle, et, args[0]!);
-                const fromIndex = args[1] ? this.emitExpr(args[1]) : { c: "0.0", ty: T_NUMBER };
-                if (args[1]) requireNumber(args[1], fromIndex.ty);
+                const fromIndex = args[1] && !this.isUndefinedExpression(args[1])
+                    ? this.emitExpr(args[1])
+                    : { c: "0.0", ty: T_NUMBER };
+                if (args[1] && !this.isUndefinedExpression(args[1])) requireNumber(args[1], fromIndex.ty);
                 return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: recv },
                     { value: { c: coerced, ty: et }, target: et, node: args[0]! },

@@ -4,27 +4,33 @@ typed-last-extra:2
 typed last:3
 typed-includes-extra:3
 typed includes:true
-typed-at-extra:4
+typed-index-undefined-extra:4
+typed index undefined:1
+typed-last-undefined-extra:5
+typed last undefined:-1
+typed-includes-undefined-extra:6
+typed includes undefined:true
+typed-at-extra:7
 typed at:2
-typed-slice-extra:5
+typed-slice-extra:8
 typed slice:2,3
-typed-join-extra:6
+typed-join-extra:9
 typed join:1-2-3-2
-typed-flat-extra:7
+typed-flat-extra:10
 typed flat:1,2
-typed-flat-undefined-extra:8
+typed-flat-undefined-extra:11
 typed flat undefined:1,2
-dynamic-index-extra:9
+dynamic-index-extra:12
 dynamic index:1
-dynamic-last-extra:10
+dynamic-last-extra:13
 dynamic last:3
-dynamic-includes-extra:11
+dynamic-includes-extra:14
 dynamic includes:true
-dynamic-at-extra:12
+dynamic-at-extra:15
 dynamic at:2
-dynamic-slice-extra:13
+dynamic-slice-extra:16
 dynamic slice:2,3
-dynamic-join-extra:14
+dynamic-join-extra:17
 dynamic join:1-2-3-2
-dynamic-flat-extra:15
+dynamic-flat-extra:18
 dynamic flat:1,2
