@@ -466,6 +466,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Revoked object `Proxy` values throw through `Reflect.*` helper paths including get, set, has, deleteProperty, ownKeys, descriptor, prototype, and extensibility helpers. Test: `proxy_revocable_reflect_ops`
 - `Proxy.revocable(...)` revoke functions are idempotent and receiver-independent across direct, `call`, and `apply` invocation forms while preserving revoked-proxy errors after revocation. Test: `proxy_revocable_revoke_function`
 - Proxy boolean-returning traps coerce non-boolean trap results with ToBoolean semantics, including falsy `0` / `""` and truthy string/object values for `set`, `has`, `defineProperty`, `deleteProperty`, `setPrototypeOf`, `isExtensible`, and `preventExtensions` paths, while coerced `isExtensible` results still validate against target extensibility. Test: `proxy_trap_result_coercion`
+- Proxy fixed-data invariant checks use SameValue semantics, rejecting `+0` / `-0` mismatches while preserving `NaN` equality across `get`, `set`, `defineProperty`, and `getOwnPropertyDescriptor` trap validation. Test: `proxy_fixed_data_same_value_invariants`
 - Ordinary falsy proxy trap results preserve false-returning `Reflect.set`, `Reflect.defineProperty`, `Reflect.deleteProperty`, `Reflect.preventExtensions`, and `Reflect.setPrototypeOf` semantics, while `Object.preventExtensions` and `Object.setPrototypeOf` throw on failed proxy trap results. Test: `proxy_falsy_trap_results`
 - Falsy Proxy `defineProperty` trap results preserve false-returning `Reflect.defineProperty(...)` semantics while `Object.defineProperty(...)` and `Object.defineProperties(...)` throw through the catchable Object failure path. Test: `proxy_define_property_falsy_trap_result`
 - `Object.seal(proxy)` and `Object.freeze(proxy)` fail through catchable errors when a proxy `preventExtensions` trap reports `false`, preserving the Object integrity-operation failure path. Test: `proxy_integrity_falsy_trap_results`
@@ -1851,6 +1852,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_has_delete_invariants` | Proxy has/deleteProperty non-configurable and non-extensible target invariant checks after trap dispatch |
 | `proxy_prototype_extensibility_invariants` | Proxy get/set prototype and extensibility trap invariant checks after ignored-argument evaluation and trap dispatch |
 | `proxy_trap_result_coercion` | Proxy boolean-returning traps coerce non-boolean trap results with ToBoolean semantics |
+| `proxy_fixed_data_same_value_invariants` | Proxy fixed-data invariants use SameValue semantics for signed zero and NaN |
 | `proxy_falsy_trap_results` | Proxy falsy trap results preserve Reflect false-returning semantics and Object failure paths |
 | `proxy_integrity_falsy_trap_results` | Proxy falsy preventExtensions trap results make Object.seal and Object.freeze fail |
 | `proxy_integrity_forward` | Proxy Object.seal/Object.freeze forward integrity traps to the target |

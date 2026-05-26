@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Proxy fixed-data invariants now use SameValue semantics for signed zero while still accepting `NaN` matches across `get`, `set`, `defineProperty`, and `getOwnPropertyDescriptor` trap validation. Test: `proxy_fixed_data_same_value_invariants`.
 - Proxy boolean-returning traps now have focused coverage for ToBoolean coercion of non-boolean trap results across `set`, `has`, `defineProperty`, `deleteProperty`, `setPrototypeOf`, `isExtensible`, and `preventExtensions` paths, including coerced `isExtensible` target-state invariant mismatches. Test: `proxy_trap_result_coercion`.
 - Proxy object non-callable trap validation now has focused coverage for evaluating supplied property, value, descriptor, and prototype operands before rejecting the trap value. Test: `proxy_object_trap_callable_validation`.
 - Callable Proxy values now have focused coverage for dynamic `Function.prototype.apply(...)` catchable argument-list validation failures before proxy trap dispatch, while preserving ignored trailing-argument evaluation and valid array-like argument objects through proxy `apply` traps. Test: `proxy_apply_method_validation`.
