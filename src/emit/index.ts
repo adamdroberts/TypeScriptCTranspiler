@@ -1056,6 +1056,9 @@ class Emitter {
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeErrorDescriptorStringValueRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeErrorStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
@@ -1262,6 +1265,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeErrorDescriptorStringValueRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeErrorStringMethodCall(unwrapped, seenConsts)) {
@@ -6479,6 +6485,9 @@ class Emitter {
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeErrorDescriptorStringValueRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeErrorStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
@@ -6579,6 +6588,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeErrorDescriptorStringValueRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeErrorStringMethodCall(unwrapped, seenConsts)) {
@@ -7516,6 +7528,30 @@ class Emitter {
             this.isSideEffectFreeFreshErrorOperand(expr.expression, seenConsts);
     }
 
+    private isSideEffectFreeErrorDescriptorStringValueRead(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (!ts.isPropertyAccessExpression(unwrapped) || unwrapped.name.text !== "value") {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+            return !!init && this.isSideEffectFreeErrorDescriptorStringValueRead(init, seenConsts);
+        }
+        const descriptorExpr = this.unwrapSideEffectFreeStaticExpression(unwrapped.expression);
+        if (
+            ts.isCallExpression(descriptorExpr) &&
+            this.isObjectOrReflectGetOwnPropertyDescriptorCall(descriptorExpr)
+        ) {
+            const key = this.sideEffectFreeObjectPropertyReadKey(descriptorExpr.arguments[1]!, seenConsts);
+            return (key === "name" || key === "message") &&
+                this.isSideEffectFreeFreshErrorOperand(descriptorExpr.arguments[0]!, seenConsts);
+        }
+        const access = this.sideEffectFreeOwnPropertyDescriptorsAccess(descriptorExpr, seenConsts);
+        return access !== null &&
+            (access.key === "name" || access.key === "message") &&
+            this.isSideEffectFreeFreshErrorOperand(access.target, seenConsts);
+    }
+
     private isSideEffectFreeErrorStringMethodCall(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -7835,6 +7871,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeErrorDescriptorStringValueRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeErrorStringMethodCall(unwrapped, seenConsts)) {
