@@ -26061,6 +26061,25 @@ class Emitter {
         const staticCondition = this.staticBooleanValue(expr.condition);
         if (staticCondition === true) return this.emitExpr(expr.whenTrue);
         if (staticCondition === false) return this.emitExpr(expr.whenFalse);
+        if (this.isSideEffectFreeTopLevelConstInitializer(expr.condition)) {
+            const trueString = this.sideEffectFreeStringLiteralText(expr.whenTrue, new Set());
+            const falseString = this.sideEffectFreeStringLiteralText(expr.whenFalse, new Set());
+            if (trueString !== null && trueString === falseString) return this.emitExpr(expr.whenTrue);
+
+            const trueBool = this.sideEffectFreeBooleanLiteralValue(expr.whenTrue, new Set());
+            const falseBool = this.sideEffectFreeBooleanLiteralValue(expr.whenFalse, new Set());
+            if (trueBool !== null && trueBool === falseBool) return this.emitExpr(expr.whenTrue);
+
+            const trueNumber = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.whenTrue, new Set());
+            const falseNumber = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.whenFalse, new Set());
+            if (
+                trueNumber !== null &&
+                falseNumber !== null &&
+                (trueNumber === falseNumber || (Number.isNaN(trueNumber) && Number.isNaN(falseNumber)))
+            ) {
+                return this.emitExpr(expr.whenTrue);
+            }
+        }
         const cond = this.emitBoolExpr(expr.condition);
         const whenT = this.emitExpr(expr.whenTrue);
         const whenF = this.emitExpr(expr.whenFalse);
