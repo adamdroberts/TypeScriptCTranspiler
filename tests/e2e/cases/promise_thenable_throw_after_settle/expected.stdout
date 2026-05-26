@@ -1,0 +1,3 @@
+resolve kept: kept
+reject kept: kept reason
+events: resolve then throw|reject then throw

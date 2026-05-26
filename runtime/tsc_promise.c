@@ -87,7 +87,8 @@ static tsc_value_t promise_thenable_reject(void* env, tsc_value_t this_arg, tsc_
 }
 
 static tsc_promise_t* tsc_promise_resolve_thenable_seen(tsc_value_t value, tsc_array_t* seen) {
-    tsc_promise_t* out = NULL;
+    tsc_promise_t* volatile out = NULL;
+    tsc_promise_thenable_state_t* volatile state = NULL;
     tsc_try_frame_t eh;
     tsc_try_push(&eh);
     if (setjmp(eh.jb) == 0) {
@@ -103,7 +104,7 @@ static tsc_promise_t* tsc_promise_resolve_thenable_seen(tsc_value_t value, tsc_a
         if (!seen) seen = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(seen, value);
         out = tsc_promise_pending();
-        tsc_promise_thenable_state_t* state = (tsc_promise_thenable_state_t*)TSC_GC_MALLOC(sizeof(tsc_promise_thenable_state_t));
+        state = (tsc_promise_thenable_state_t*)TSC_GC_MALLOC(sizeof(tsc_promise_thenable_state_t));
         state->promise = out;
         state->thenable = value;
         state->seen = seen;
@@ -115,13 +116,17 @@ static tsc_promise_t* tsc_promise_resolve_thenable_seen(tsc_value_t value, tsc_a
         tsc_array_push_value(args, reject);
         (void)tsc_value_apply_function(then, value, tsc_value_array(args));
         tsc_try_pop();
-        return out;
+        return (tsc_promise_t*)out;
     }
-    if (out && tsc_promise_is_pending(out)) {
-        tsc_promise_reject_in_place(out, tsc_value_string(tsc_current_error()));
-        return out;
+    tsc_try_pop();
+    if (state && state->done && out) {
+        return (tsc_promise_t*)out;
     }
-    if (out) return out;
+    if (out && tsc_promise_is_pending((tsc_promise_t*)out)) {
+        tsc_promise_reject_in_place((tsc_promise_t*)out, tsc_value_string(tsc_current_error()));
+        return (tsc_promise_t*)out;
+    }
+    if (out) return (tsc_promise_t*)out;
     return tsc_promise_reject(tsc_value_string(tsc_current_error()));
 }
 
