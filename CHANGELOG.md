@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Object.hasOwn(proxy)`, `Object.prototype.hasOwnProperty.call(proxy, key)`, and `Object.prototype.propertyIsEnumerable.call(proxy, key)` now have focused coverage for proxy descriptor-trap dispatch, validation, virtual descriptors, and revocation. Test: `proxy_own_property_helpers`.
 - `Object.getOwnPropertyNames(proxy)` now has focused coverage for proxy `ownKeys` dispatch, ignored trailing arguments, non-enumerable string keys, trap validation, and revocation. Test: `proxy_get_own_property_names`.
 - `Object.getOwnPropertySymbols(proxy)` now drives proxy `ownKeys` traps and invariant validation before returning the current empty symbol set. Test: `proxy_get_own_property_symbols`.
 - Proxy handlers now have focused coverage for descriptor, key, delete, prototype, and extensibility traps inherited from the handler prototype while preserving the handler `this` binding. Test: `proxy_inherited_meta_traps`.
