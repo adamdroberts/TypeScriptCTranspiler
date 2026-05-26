@@ -23739,6 +23739,21 @@ class Emitter {
             if (condition === true) return this.staticSwitchKey(unwrapped.whenTrue, seenConsts);
             if (condition === false) return this.staticSwitchKey(unwrapped.whenFalse, seenConsts);
         }
+        if (ts.isBinaryExpression(unwrapped)) {
+            switch (unwrapped.operatorToken.kind) {
+                case ts.SyntaxKind.QuestionQuestionToken: {
+                    const left = this.staticNullishState(unwrapped.left, seenConsts);
+                    if (left === "nullish") return this.staticSwitchKey(unwrapped.right, seenConsts);
+                    if (left === "nonNullish") return this.staticSwitchKey(unwrapped.left, seenConsts);
+                    break;
+                }
+                case ts.SyntaxKind.CommaToken:
+                    if (this.isSideEffectFreeTopLevelConstInitializer(unwrapped.left, seenConsts)) {
+                        return this.staticSwitchKey(unwrapped.right, seenConsts);
+                    }
+                    break;
+            }
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.staticSwitchKey(init, seenConsts) : null;
     }
