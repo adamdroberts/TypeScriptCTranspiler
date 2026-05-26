@@ -20386,6 +20386,26 @@ class Emitter {
         if (source.ty.kind === "array" && source.ty.elem) {
             arrayExpr = source.c;
             elemType = source.ty.elem;
+        } else if (source.ty.kind === "map" && source.ty.key && source.ty.elem) {
+            const map = this.freshTemp("_yield_map");
+            const out = this.freshTemp("_yield_map_entries");
+            const idx = this.freshTemp("_ymi");
+            const entry = this.freshTemp("_ym_entry");
+            const keyType = source.ty.key;
+            const valueType = source.ty.elem;
+            const entryValueType = entryType(valueType, keyType);
+            const keyAt = `*(${keyType.c}*)((char*)${map}->keys + ${idx} * ${map}->ks)`;
+            const valueAt = `*(${valueType.c}*)((char*)${map}->values + ${idx} * ${map}->vs)`;
+            arrayExpr = (
+                `({ tsc_map_t* const ${map} = ${source.c}; ` +
+                `tsc_array_t* ${out} = tsc_array_new(sizeof(${entryValueType.c}), ${map}->len ? ${map}->len : 1); ` +
+                `for (size_t ${idx} = 0; ${idx} < ${map}->len; ${idx}++) { ` +
+                `${entryValueType.c} ${entry}; ` +
+                `${this.objectEntryKeySet(entry, keyType, keyAt)}; ` +
+                `${this.objectEntrySet(entry, valueType, valueAt)}; ` +
+                `tsc_array_push_raw(${out}, &${entry}); } ${out}; })`
+            );
+            elemType = entryValueType;
         } else if (source.ty.kind === "set" && source.ty.elem) {
             arrayExpr = `tsc_set_values(${source.c})`;
             elemType = source.ty.elem;
