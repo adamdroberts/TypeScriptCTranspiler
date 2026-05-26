@@ -33872,12 +33872,13 @@ class Emitter {
                 });
             }
             case "at": {
-                if (args.length < 1) unsupported(call, "at expects at least 1 arg");
-                const index = this.emitExpr(args[0]!);
-                requireNumber(args[0]!, index.ty);
+                const index = args[0] && !this.isUndefinedExpression(args[0])
+                    ? this.emitExpr(args[0])
+                    : { c: "0.0", ty: T_NUMBER };
+                if (args[0] && !this.isUndefinedExpression(args[0])) requireNumber(args[0], index.ty);
                 return this.emitSequencedExpr(et, [
                     { value: recv },
-                    { value: index, target: T_NUMBER, node: args[0]! },
+                    { value: index, target: T_NUMBER, node: args[0] ?? call.expression },
                     ...this.ignoredArgumentSpecs(args, 1),
                 ], ([arr, idx]) => {
                     const av = this.freshTemp("_arr");

@@ -174,7 +174,7 @@ interface Array<T> extends Iterable<T> {
     indexOf(searchElement: T, fromIndex?: number, ...ignored: any[]): number;
     lastIndexOf(searchElement: T, fromIndex?: number, ...ignored: any[]): number;
     includes(searchElement: T, fromIndex?: number, ...ignored: any[]): boolean;
-    at(index: number, ...ignored: any[]): T | undefined;
+    at(index?: number, ...ignored: any[]): T | undefined;
     reverse(...ignored: any[]): T[];
     toReversed(...ignored: any[]): T[];
     sort(cmp?: (a: T, b: T) => number, ...ignored: any[]): T[];
@@ -219,7 +219,7 @@ interface ReadonlyArray<T> extends Iterable<T> {
     indexOf(searchElement: T, fromIndex?: number, ...ignored: any[]): number;
     lastIndexOf(searchElement: T, fromIndex?: number, ...ignored: any[]): number;
     includes(searchElement: T, fromIndex?: number, ...ignored: any[]): boolean;
-    at(index: number, ...ignored: any[]): T | undefined;
+    at(index?: number, ...ignored: any[]): T | undefined;
     toReversed(...ignored: any[]): T[];
     toSorted(cmp?: (a: T, b: T) => number, ...ignored: any[]): T[];
     with(index: number, value: T, ...ignored: any[]): T[];
