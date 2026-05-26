@@ -8,3 +8,4 @@ own: 0 0 false
 desc: undefined 0
 proto: false false
 reflect: 0 undefined
+reflect get: https://example.com:8443/a/b?x=1#frag undefined true false sljvgxhH

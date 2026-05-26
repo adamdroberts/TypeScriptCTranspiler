@@ -32407,6 +32407,71 @@ class Emitter {
         unsupported(call, `URL method .${method}`);
     }
 
+    private urlPropertyFields(): string[] {
+        return [
+            "href",
+            "protocol",
+            "host",
+            "hostname",
+            "port",
+            "pathname",
+            "search",
+            "hash",
+            "origin",
+        ];
+    }
+
+    private emitUrlReflectGet(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        receiver?: { value: EmitResult; node: ts.Expression },
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const key = this.emitExpr(keyExpr);
+        const fields = this.urlPropertyFields();
+        const specs: SequencedCallArg[] = [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+        ];
+        if (receiver) specs.push({ value: receiver.value, target: T_VALUE, node: receiver.node });
+        specs.push(...ignored);
+        return this.emitSequencedExpr(T_VALUE, specs, ([url, keyC, receiverC]) => {
+            const out = this.freshTemp("_url_get");
+            const checks: string[] = [
+                receiver ? `(void)${receiverC}` : "",
+                `tsc_value_t ${out} = tsc_value_undefined()`,
+            ].filter(Boolean);
+            for (const field of fields) {
+                checks.push(
+                    `if (tsc_str_eq(${keyC}, tsc_str_from_lit("${field}", ${utf8ByteLen(field)}))) ${out} = tsc_value_string(${url}->${mangleIdent(field)})`,
+                );
+            }
+            checks.push(out);
+            return `({ ${checks.join("; ")}; })`;
+        });
+    }
+
+    private emitUrlPropertyKeyCheck(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const key = this.emitExpr(keyExpr);
+        const fields = this.urlPropertyFields();
+        return this.emitSequencedExpr(T_BOOLEAN, [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+            ...ignored,
+        ], ([url, keyC]) => {
+            const checks = fields
+                .map((field) => `tsc_str_eq(${keyC}, tsc_str_from_lit("${field}", ${utf8ByteLen(field)}))`)
+                .join(" || ");
+            return `({ (void)${url}; ${checks}; })`;
+        });
+    }
+
     private dateIgnoredArgSpecs(recv: EmitResult, args: readonly ts.Expression[]): SequencedCallArg[] {
         return [
             { value: recv },
@@ -40706,6 +40771,9 @@ class Emitter {
                 if (mapped.kind === "error") {
                     return this.emitErrorReflectGet(args[0]!, target, args[1]!, receiver, ignored);
                 }
+                if (mapped.kind === "url") {
+                    return this.emitUrlReflectGet(args[0]!, target, args[1]!, receiver, ignored);
+                }
                 if (mapped.kind === "fsstats") {
                     return this.emitFsStatsReflectGet(args[0]!, target, args[1]!, receiver, ignored);
                 }
@@ -40825,6 +40893,9 @@ class Emitter {
                 }
                 if (mapped.kind === "error") {
                     return this.emitErrorPropertyKeyCheck(args[0]!, target, args[1]!, ignored);
+                }
+                if (mapped.kind === "url") {
+                    return this.emitUrlPropertyKeyCheck(args[0]!, target, args[1]!, ignored);
                 }
                 if (mapped.kind === "fsstats") {
                     return this.emitFsStatsOwnKeyCheck(args[0]!, target, args[1]!, ignored);
