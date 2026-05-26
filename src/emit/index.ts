@@ -5802,6 +5802,11 @@ class Emitter {
                 new Set(seenConsts),
             );
         }
+        const descriptorObjectLength = this.sideEffectFreeOwnDataPropertyDescriptorObjectKeyCount(
+            unwrapped,
+            seenConsts,
+        );
+        if (descriptorObjectLength !== null) return descriptorObjectLength;
         const descriptorKeys = this.sideEffectFreeDescriptorBuiltObjectOwnStringKeys(
             unwrapped,
             seenConsts,
@@ -5811,6 +5816,35 @@ class Emitter {
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init
             ? this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(init, seenConsts, enumerableOnly)
+            : null;
+    }
+
+    private sideEffectFreeOwnDataPropertyDescriptorObjectKeyCount(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (!ts.isCallExpression(unwrapped) || !this.isObjectOrReflectGetOwnPropertyDescriptorCall(unwrapped)) {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+            return init
+                ? this.sideEffectFreeOwnDataPropertyDescriptorObjectKeyCount(init, seenConsts)
+                : null;
+        }
+        const propertyKey = this.sideEffectFreeObjectPropertyReadKey(unwrapped.arguments[1]!, seenConsts);
+        if (propertyKey === null) return null;
+        const builtinOwnResult = this.sideEffectFreeFreshBuiltinOwnDataPropertyResult(
+            unwrapped.arguments[0]!,
+            propertyKey,
+            new Set(seenConsts),
+        );
+        if (builtinOwnResult === "present") return 4;
+        if (builtinOwnResult === "absent") return null;
+        return this.sideEffectFreePrimitiveObjectOrArrayPropertyResult(
+            unwrapped.arguments[0]!,
+            propertyKey,
+            new Set(seenConsts),
+        ) === "present"
+            ? 4
             : null;
     }
 
