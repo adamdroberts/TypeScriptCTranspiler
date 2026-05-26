@@ -1,0 +1,3 @@
+call resolve: call value
+apply reject: apply reason
+events: call resolve|apply reject
