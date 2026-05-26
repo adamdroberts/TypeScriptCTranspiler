@@ -2,6 +2,7 @@ enum: 0 0 0
 own: 0 0 undefined 0 undefined
 has: false false
 call: false false
-tag: [object Object]
+direct: false false true
+tag: [object Object] [object Object] [object Object]
 digest: ba7816bf
-trace: kvenrdDRhHcqt
+trace: kvenrdDRhHcqpivtsl

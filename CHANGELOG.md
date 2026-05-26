@@ -6,7 +6,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 - EventEmitter instances now expose empty own-property results through Object and Reflect helpers while preserving listener registry behavior. Test: `event_emitter_object_methods`.
-- Crypto `Hash` instances now expose empty own-property results through Object and Reflect helpers while preserving hash update/digest behavior. Test: `crypto_hash_object_methods`.
+- Crypto `Hash` instances now expose empty own-property results through Object and Reflect helpers plus inherited object-prototype methods while preserving hash update/digest behavior. Test: `crypto_hash_object_methods`.
 - Error instances now expose bounded non-enumerable `name`, `message`, `cause`, and `errors` fields through Object and Reflect own-property helpers while `Object.keys` / `values` / `entries` stay empty. Test: `error_object_methods`.
 - FSDirent instances now expose their bounded `name` field through `Object.keys`, `Object.values`, `Object.entries`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, `Object.prototype.*.call(...)`, `Reflect.ownKeys`, and `Reflect.getOwnPropertyDescriptor`. Test: `fs_dirent_object_methods`.
 - RegExp instances now expose non-enumerable own `lastIndex` metadata through `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, `Object.prototype.*.call(...)`, `Reflect.ownKeys`, and `Reflect.getOwnPropertyDescriptor`, while `Object.keys` / `values` / `entries` stay empty. Test: `regexp_own_properties`.

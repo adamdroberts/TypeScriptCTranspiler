@@ -36524,6 +36524,12 @@ class Emitter {
                     ],
                 );
             }
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Object");
         }
         unsupported(call, `Hash.${method} (only update/digest are supported)`);
     }

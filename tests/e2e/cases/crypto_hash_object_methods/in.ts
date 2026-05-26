@@ -19,6 +19,7 @@ console.log("enum:", keys.length, values.length, entries.length);
 console.log("own:", names.length, reflectKeys.length, String(desc), Object.keys(descs).length, String(reflectDesc));
 console.log("has:", Object.hasOwn(hash, "update", mark("h")), Object.hasOwn(hash, "digest", mark("H")));
 console.log("call:", Object.prototype.hasOwnProperty.call(hash, "update", mark("c")), Object.prototype.propertyIsEnumerable.call(hash, "digest", mark("q")));
-console.log("tag:", Object.prototype.toString.call(hash, mark("t")));
+console.log("direct:", hash.hasOwnProperty("update", mark("p")), hash.propertyIsEnumerable("digest", mark("i")), hash.valueOf(mark("v")) === hash);
+console.log("tag:", Object.prototype.toString.call(hash, mark("t")), hash.toString(mark("s")), hash.toLocaleString(mark("l")));
 console.log("digest:", hash.digest("hex").slice(0, 8));
 console.log("trace:", trace);
