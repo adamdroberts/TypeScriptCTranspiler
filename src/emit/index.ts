@@ -35116,7 +35116,8 @@ class Emitter {
                     { value: recv },
                     { value: len, target: T_NUMBER, node: args[0]! },
                 ];
-                if (args[1] && !this.isUndefinedExpression(args[1])) {
+                const hasPad = !!args[1] && !this.isUndefinedExpression(args[1]);
+                if (hasPad) {
                     specs.push({
                         value: this.emitExpr(args[1]),
                         target: T_STRING,
@@ -35126,7 +35127,7 @@ class Emitter {
                 specs.push(...this.ignoredArgumentSpecs(args, 2));
                 const fn = method === "padStart" ? "tsc_str_pad_start" : "tsc_str_pad_end";
                 return this.emitSequencedExpr(T_STRING, specs, (vals) => {
-                    const pad = vals[2] ?? `tsc_str_from_lit(" ", 1)`;
+                    const pad = hasPad ? vals[2]! : `tsc_str_from_lit(" ", 1)`;
                     return `${fn}(${vals[0]}, ${vals[1]}, ${pad})`;
                 });
             }
