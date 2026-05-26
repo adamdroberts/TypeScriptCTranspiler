@@ -37395,23 +37395,24 @@ class Emitter {
                             node: args[1],
                         });
                     }
+                    specs.push(...this.ignoredArgumentSpecs(args, 2));
                     return this.emitSequencedExpr(T_BUFFER, specs, (vals) => {
                         const encoding = vals[1] ?? `tsc_str_from_lit("utf8", 4)`;
                         return `tsc_buffer_from_str(${vals[0]}, ${encoding})`;
                     });
                 }
                 if (input.ty.kind === "array" && input.ty.elem?.kind === "number") {
-                    return this.emitSequencedCall(
-                        "tsc_buffer_from_array",
+                    return this.emitSequencedExpr(
                         T_BUFFER,
-                        [{ value: input }],
+                        [{ value: input }, ...this.ignoredArgumentSpecs(args, 1)],
+                        ([array]) => `tsc_buffer_from_array(${array})`,
                     );
                 }
                 if (input.ty.kind === "buffer") {
-                    return this.emitSequencedCall(
-                        "tsc_buffer_from_buffer",
+                    return this.emitSequencedExpr(
                         T_BUFFER,
-                        [{ value: input }],
+                        [{ value: input }, ...this.ignoredArgumentSpecs(args, 1)],
+                        ([buffer]) => `tsc_buffer_from_buffer(${buffer})`,
                     );
                 }
                 unsupported(args[0]!, "Buffer.from supports string, number[], or Buffer");
@@ -37428,6 +37429,7 @@ class Emitter {
                     requireNumber(args[1], fill.ty);
                     specs.push({ value: fill, target: T_NUMBER, node: args[1] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_BUFFER, specs, (vals) => {
                     const fill = vals[1] ?? "0";
                     return `tsc_buffer_alloc(${vals[0]}, ${fill})`;
@@ -37435,15 +37437,16 @@ class Emitter {
             }
             case "allocUnsafe":
             case "allocUnsafeSlow": {
-                if (args.length !== 1) unsupported(call, `Buffer.${name} expects size`);
+                if (args.length < 1) unsupported(call, `Buffer.${name} expects size`);
                 const size = this.emitExpr(args[0]!);
                 requireNumber(args[0]!, size.ty);
                 return this.emitSequencedExpr(T_BUFFER, [
                     { value: size, target: T_NUMBER, node: args[0]! },
+                    ...this.ignoredArgumentSpecs(args, 1),
                 ], ([sizeArg]) => `tsc_buffer_alloc(${sizeArg}, 0)`);
             }
             case "concat": {
-                if (args.length < 1 || args.length > 2) unsupported(call, "Buffer.concat expects list and optional totalLength");
+                if (args.length < 1) unsupported(call, "Buffer.concat expects list and optional totalLength");
                 const list = this.emitExpr(args[0]!);
                 if (list.ty.kind !== "array" || list.ty.elem?.kind !== "buffer") {
                     unsupported(args[0]!, "Buffer.concat expects Buffer[]");
@@ -37453,9 +37456,13 @@ class Emitter {
                     const totalLength = this.emitExpr(args[1]);
                     requireNumber(args[1], totalLength.ty);
                     specs.push({ value: totalLength, target: T_NUMBER, node: args[1] });
-                    return this.emitSequencedCall("tsc_buffer_concat_len", T_BUFFER, specs);
+                    specs.push(...this.ignoredArgumentSpecs(args, 2));
+                    return this.emitSequencedExpr(T_BUFFER, specs, ([listArg, totalLengthArg]) =>
+                        `tsc_buffer_concat_len(${listArg}, ${totalLengthArg})`,
+                    );
                 }
-                return this.emitSequencedCall("tsc_buffer_concat", T_BUFFER, specs);
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
+                return this.emitSequencedExpr(T_BUFFER, specs, ([listArg]) => `tsc_buffer_concat(${listArg})`);
             }
             case "isBuffer": {
                 if (args.length < 1) unsupported(call, "Buffer.isBuffer expects value");

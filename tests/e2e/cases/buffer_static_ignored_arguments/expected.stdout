@@ -1,0 +1,4 @@
+from: Hi AB Hi
+alloc: CCC 2 2
+concat: HiAB
+events: from-string|from-array|from-buffer|alloc|alloc-unsafe|alloc-slow|concat

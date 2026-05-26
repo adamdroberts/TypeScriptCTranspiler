@@ -1717,13 +1717,13 @@ interface Buffer {
     [n: number]: number;
 }
 interface BufferConstructor {
-    from(data: string, encoding?: BufferEncoding): Buffer;
-    from(data: number[]): Buffer;
-    from(data: Buffer): Buffer;
-    alloc(size: number, fill?: number): Buffer;
-    allocUnsafe(size: number): Buffer;
-    allocUnsafeSlow(size: number): Buffer;
-    concat(list: Buffer[], totalLength?: number): Buffer;
+    from(data: string, encoding?: BufferEncoding, ...ignored: any[]): Buffer;
+    from(data: number[], ...ignored: any[]): Buffer;
+    from(data: Buffer, ...ignored: any[]): Buffer;
+    alloc(size: number, fill?: number, ...ignored: any[]): Buffer;
+    allocUnsafe(size: number, ...ignored: any[]): Buffer;
+    allocUnsafeSlow(size: number, ...ignored: any[]): Buffer;
+    concat(list: Buffer[], totalLength?: number, ...ignored: any[]): Buffer;
     isBuffer(value: unknown, ...ignored: any[]): boolean;
     byteLength(value: string | Buffer, encoding?: BufferEncoding, ...ignored: any[]): number;
     isEncoding(encoding: string, ...ignored: any[]): boolean;
