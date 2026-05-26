@@ -22,6 +22,7 @@ This is the next item that most directly expands what programs can be written ag
   - Additional typed/dynamic `String.prototype.normalize(form)` coverage routes invalid-form failures through catchable runtime exceptions. Test: `string_normalize_errors`.
   - Additional typed/dynamic string regex/search helper coverage evaluates and ignores trailing arguments for `match(...)`, `matchAll(...)`, `search(...)`, `replace(...)`, and `split(...)`. Test: `string_regex_ignored_arguments`.
   - Additional dynamic string helper coverage evaluates and ignores trailing arguments for `substring(...)`, `substr(...)`, `localeCompare(...)`, and `toLocaleString(...)`. Test: `dynamic_string_ignored_arguments`.
+  - Additional typed string search-position coverage treats explicit `undefined` positions with JavaScript defaults for `indexOf(...)`, `lastIndexOf(...)`, `includes(...)`, `startsWith(...)`, and `endsWith(...)` while preserving ignored trailing argument evaluation. Test: `string_search_positions`.
   - Additional dynamic string/array `.at()` coverage treats omitted indexes as zero while preserving ignored trailing argument evaluation. Tests: `dynamic_string_at`, `dynamic_array_at`.
   - Additional typed array `.at()` coverage treats omitted or explicit `undefined` indexes as zero while preserving ignored trailing argument evaluation. Test: `array_at`.
   - Additional typed array `.flat(undefined, ...ignored)` coverage treats explicit `undefined` depth as the default depth while preserving ignored trailing argument evaluation. Test: `array_read_ignored_arguments`.

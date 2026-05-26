@@ -34819,7 +34819,7 @@ class Emitter {
         const defaultNumber = (c: string): EmitResult => ({ c, ty: T_NUMBER });
         const optionalNumberArg = (index: number, fallback: string): EmitResult => {
             const arg = args[index];
-            if (!arg) return defaultNumber(fallback);
+            if (!arg || this.isUndefinedExpression(arg)) return defaultNumber(fallback);
             const value = this.emitExpr(arg);
             requireNumber(arg, value.ty);
             return value;
@@ -34876,52 +34876,43 @@ class Emitter {
             case "includes": {
                 if (args.length < 1) unsupported(call, "includes expects at least 1 arg");
                 const needle = this.emitExpr(args[0]!);
+                const position = optionalNumberArg(1, "0.0");
                 const specs: SequencedCallArg[] = [
                     { value: recv },
                     { value: needle, target: T_STRING, node: args[0]! },
+                    { value: position, target: T_NUMBER, node: args[1] },
                 ];
-                if (args[1]) {
-                    const position = this.emitExpr(args[1]);
-                    requireNumber(args[1], position.ty);
-                    specs.push({ value: position, target: T_NUMBER, node: args[1] });
-                }
                 specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) =>
-                    `tsc_str_includes(${vals[0]}, ${vals[1]}, ${vals[2] ?? "0.0"})`,
+                    `tsc_str_includes(${vals[0]}, ${vals[1]}, ${vals[2]})`,
                 );
             }
             case "indexOf": {
                 if (args.length < 1) unsupported(call, "indexOf expects at least 1 arg");
                 const needle = this.emitExpr(args[0]!);
+                const position = optionalNumberArg(1, "0.0");
                 const specs: SequencedCallArg[] = [
                     { value: recv },
                     { value: needle, target: T_STRING, node: args[0]! },
+                    { value: position, target: T_NUMBER, node: args[1] },
                 ];
-                if (args[1]) {
-                    const position = this.emitExpr(args[1]);
-                    requireNumber(args[1], position.ty);
-                    specs.push({ value: position, target: T_NUMBER, node: args[1] });
-                }
                 specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
-                    `tsc_str_index_of(${vals[0]}, ${vals[1]}, ${vals[2] ?? "0.0"})`,
+                    `tsc_str_index_of(${vals[0]}, ${vals[1]}, ${vals[2]})`,
                 );
             }
             case "lastIndexOf": {
                 if (args.length < 1) unsupported(call, "lastIndexOf expects at least 1 arg");
                 const needle = this.emitExpr(args[0]!);
+                const position = optionalNumberArg(1, "INFINITY");
                 const specs: SequencedCallArg[] = [
                     { value: recv },
                     { value: needle, target: T_STRING, node: args[0]! },
+                    { value: position, target: T_NUMBER, node: args[1] },
                 ];
-                if (args[1]) {
-                    const position = this.emitExpr(args[1]);
-                    requireNumber(args[1], position.ty);
-                    specs.push({ value: position, target: T_NUMBER, node: args[1] });
-                }
                 specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
-                    `tsc_str_last_index_of(${vals[0]}, ${vals[1]}, ${vals[2] ?? "INFINITY"})`,
+                    `tsc_str_last_index_of(${vals[0]}, ${vals[1]}, ${vals[2]})`,
                 );
             }
             case "localeCompare": {
@@ -34939,35 +34930,29 @@ class Emitter {
             case "startsWith": {
                 if (args.length < 1) unsupported(call, "startsWith expects at least 1 arg");
                 const p = this.emitExpr(args[0]!);
+                const position = optionalNumberArg(1, "0.0");
                 const specs: SequencedCallArg[] = [
                     { value: recv },
                     { value: p, target: T_STRING, node: args[0]! },
+                    { value: position, target: T_NUMBER, node: args[1] },
                 ];
-                if (args[1]) {
-                    const position = this.emitExpr(args[1]);
-                    requireNumber(args[1], position.ty);
-                    specs.push({ value: position, target: T_NUMBER, node: args[1] });
-                }
                 specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) =>
-                    `tsc_str_starts_with(${vals[0]}, ${vals[1]}, ${vals[2] ?? "0.0"})`,
+                    `tsc_str_starts_with(${vals[0]}, ${vals[1]}, ${vals[2]})`,
                 );
             }
             case "endsWith": {
                 if (args.length < 1) unsupported(call, "endsWith expects at least 1 arg");
                 const p = this.emitExpr(args[0]!);
+                const endPosition = optionalNumberArg(1, "INFINITY");
                 const specs: SequencedCallArg[] = [
                     { value: recv },
                     { value: p, target: T_STRING, node: args[0]! },
+                    { value: endPosition, target: T_NUMBER, node: args[1] },
                 ];
-                if (args[1]) {
-                    const endPosition = this.emitExpr(args[1]);
-                    requireNumber(args[1], endPosition.ty);
-                    specs.push({ value: endPosition, target: T_NUMBER, node: args[1] });
-                }
                 specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) =>
-                    `tsc_str_ends_with(${vals[0]}, ${vals[1]}, ${vals[2] ?? "INFINITY"})`,
+                    `tsc_str_ends_with(${vals[0]}, ${vals[1]}, ${vals[2]})`,
                 );
             }
             case "slice": {

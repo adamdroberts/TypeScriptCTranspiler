@@ -241,11 +241,11 @@ All methods on the `String` interface map to `tsc_str_*` runtime calls:
 - `String.fromCharCode(...)` → `tsc_str_from_char_code_n`. Test: `string_codepoints`
 - `String.fromCodePoint(...)` → `tsc_str_from_code_point_n`, with catchable invalid-code-point validation. Tests: `string_from_code_point`, `string_from_code_point_errors`
 - `String.raw` tagged templates concatenate raw segments with stringified substitutions, including dynamic substitution evaluation. Tests: `string_raw`, `string_raw_dynamic`
-- `.indexOf(needle, position?, ...ignored)` / `.lastIndexOf(needle, position?, ...ignored)` → `tsc_str_index_of`, `tsc_str_last_index_of` after evaluating ignored extra arguments. Tests: `string_last_index_of`, `string_search_positions`
+- `.indexOf(needle, position?, ...ignored)` / `.lastIndexOf(needle, position?, ...ignored)` → `tsc_str_index_of`, `tsc_str_last_index_of` after evaluating ignored extra arguments, including explicit `undefined` position defaults. Tests: `string_last_index_of`, `string_search_positions`
 - `.localeCompare(other, ...ignored)` → `tsc_str_locale_compare` using deterministic runtime string ordering after evaluating ignored extra arguments. Test: `string_locale_compare`
-- `.includes(needle, position?, ...ignored)` → `tsc_str_includes` after evaluating ignored extra arguments. Test: `string_search_positions`
-- `.startsWith(p, position?, ...ignored)` → `tsc_str_starts_with` after evaluating ignored extra arguments. Test: `string_search_positions`
-- `.endsWith(p, endPosition?, ...ignored)` → `tsc_str_ends_with` after evaluating ignored extra arguments. Test: `string_search_positions`
+- `.includes(needle, position?, ...ignored)` → `tsc_str_includes` after evaluating ignored extra arguments, including explicit `undefined` position defaults. Test: `string_search_positions`
+- `.startsWith(p, position?, ...ignored)` → `tsc_str_starts_with` after evaluating ignored extra arguments, including explicit `undefined` position defaults. Test: `string_search_positions`
+- `.endsWith(p, endPosition?, ...ignored)` → `tsc_str_ends_with` after evaluating ignored extra arguments, including explicit `undefined` end-position defaults. Test: `string_search_positions`
 - `.slice(start?, end?, ...ignored)` → `tsc_str_slice` after evaluating ignored extra arguments.
 - `.substring(start?, end?, ...ignored)` → `tsc_str_substring`, including clamp/swap semantics after evaluating ignored extra arguments. Test: `string_substring`
 - `.substr(start?, length?, ...ignored)` → `tsc_str_substr`, including negative-start and length clamping semantics after evaluating ignored extra arguments. Test: `string_substr`

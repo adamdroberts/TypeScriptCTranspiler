@@ -17,4 +17,9 @@ console.log("ignored last:", text.lastIndexOf("na", mark("l", 5), mark("L", 0)))
 console.log("ignored includes:", text.includes("na", mark("c", 5), mark("C", 0)));
 console.log("ignored starts:", text.startsWith("nana", mark("s", 2), mark("S", 0)));
 console.log("ignored ends:", text.endsWith("nana", mark("e", 6), mark("E", 0)));
+console.log("undefined index:", text.indexOf("na", undefined, mark("u", 0)));
+console.log("undefined last:", text.lastIndexOf("na", undefined, mark("v", 0)));
+console.log("undefined includes:", text.includes("ba", undefined, mark("w", 0)));
+console.log("undefined starts:", text.startsWith("ba", undefined, mark("x", 0)));
+console.log("undefined ends:", text.endsWith("na", undefined, mark("y", 0)));
 console.log("ignored seen:", seen);
