@@ -11,6 +11,7 @@ function mark(label: string): string {
     ignored += label;
     return label;
 }
+console.log("typed undefined:", (1234).toPrecision(undefined, mark("u")));
 console.log("dynamic:", dynamicNumber.toPrecision(2, mark("p")));
 console.log("dynamic omitted:", dynamicNumber.toPrecision());
 console.log("ignored:", ignored);

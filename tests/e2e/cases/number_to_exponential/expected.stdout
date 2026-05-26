@@ -2,6 +2,7 @@ explicit: 1.23e+3
 zero: 0.000e+0
 omitted: 1.234e+3
 rounded: 1.3e+1
+typed undefined: 1.234e+3
 dynamic: 1.3e+1
 dynamic omitted: 1.25e+1
-ignored: e
+ignored: ue

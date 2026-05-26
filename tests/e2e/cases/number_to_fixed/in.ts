@@ -9,5 +9,6 @@ function mark(label: string): string {
     ignored += label;
     return label;
 }
+console.log("fixed undefined:", (12.34).toFixed(undefined, mark("u")));
 console.log("dynamic:", dynamicNumber.toFixed(1, mark("f")));
 console.log("ignored:", ignored);

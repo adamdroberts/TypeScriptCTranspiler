@@ -9,6 +9,7 @@ function mark(label: string): string {
     ignored += label;
     return label;
 }
+console.log("typed undefined:", (1234).toExponential(undefined, mark("u")));
 console.log("dynamic:", dynamicNumber.toExponential(1, mark("e")));
 console.log("dynamic omitted:", dynamicNumber.toExponential());
 console.log("ignored:", ignored);

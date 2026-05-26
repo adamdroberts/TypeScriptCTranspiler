@@ -2,5 +2,6 @@ fixed0: 12
 fixed2: 12.34
 small: 0.500
 negative: -2.5
+fixed undefined: 12
 dynamic: 7.5
-ignored: f
+ignored: uf

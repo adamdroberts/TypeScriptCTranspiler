@@ -33,11 +33,19 @@ function dynamicMagnitude(): string {
     }
 }
 
+let ignored = "";
+function mark(label: string): string {
+    ignored += label;
+    return label;
+}
+
 console.log("typed low:", typedRadix(1));
 console.log("typed high:", typedRadix(37));
+console.log("typed undefined:", (255).toString(undefined, mark("u")));
 console.log("typed magnitude:", typedMagnitude());
 console.log("dynamic low:", dynamicRadix(1));
 console.log("dynamic high:", dynamicRadix(37));
 console.log("dynamic null:", dynamicRadix(null));
 console.log("dynamic magnitude:", dynamicMagnitude());
 console.log("valid:", typedRadix(16), dynamicRadix(2));
+console.log("ignored:", ignored);

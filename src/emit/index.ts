@@ -35374,56 +35374,58 @@ class Emitter {
         switch (method) {
             case "toString": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
-                if (args[0]) {
+                const hasRadix = !!args[0] && !this.isUndefinedExpression(args[0]);
+                if (hasRadix) {
                     const radix = this.emitExpr(args[0]);
                     requireNumber(args[0], radix.ty);
                     specs.push({ value: radix, target: T_NUMBER, node: args[0] });
                 }
                 specs.push(...this.ignoredArgumentSpecs(args, 1));
                 return this.emitSequencedExpr(T_STRING, specs, (vals) => {
-                    const radix = vals[1] ?? "10.0";
+                    const radix = hasRadix ? vals[1]! : "10.0";
                     return `tsc_str_from_num_radix(${vals[0]}, ${radix})`;
                 });
             }
             case "toFixed": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
-                if (args[0]) {
+                const hasDigits = !!args[0] && !this.isUndefinedExpression(args[0]);
+                if (hasDigits) {
                     const digits = this.emitExpr(args[0]);
                     requireNumber(args[0], digits.ty);
                     specs.push({ value: digits, target: T_NUMBER, node: args[0] });
                 }
                 specs.push(...this.ignoredArgumentSpecs(args, 1));
                 return this.emitSequencedExpr(T_STRING, specs, (vals) => {
-                    const digits = vals[1] ?? "0.0";
+                    const digits = hasDigits ? vals[1]! : "0.0";
                     return `tsc_str_from_num_fixed(${vals[0]}, ${digits})`;
                 });
             }
             case "toExponential": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
-                if (args[0]) {
+                const hasDigits = !!args[0] && !this.isUndefinedExpression(args[0]);
+                if (hasDigits) {
                     const digits = this.emitExpr(args[0]);
                     requireNumber(args[0], digits.ty);
                     specs.push({ value: digits, target: T_NUMBER, node: args[0] });
                 }
                 specs.push(...this.ignoredArgumentSpecs(args, 1));
                 return this.emitSequencedExpr(T_STRING, specs, (vals) => {
-                    const digits = vals[1] ?? "0.0";
-                    const hasDigits = vals[1] ? "true" : "false";
-                    return `tsc_str_from_num_exponential(${vals[0]}, ${digits}, ${hasDigits})`;
+                    const digits = hasDigits ? vals[1]! : "0.0";
+                    return `tsc_str_from_num_exponential(${vals[0]}, ${digits}, ${hasDigits ? "true" : "false"})`;
                 });
             }
             case "toPrecision": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
-                if (args[0]) {
+                const hasPrecision = !!args[0] && !this.isUndefinedExpression(args[0]);
+                if (hasPrecision) {
                     const precision = this.emitExpr(args[0]);
                     requireNumber(args[0], precision.ty);
                     specs.push({ value: precision, target: T_NUMBER, node: args[0] });
                 }
                 specs.push(...this.ignoredArgumentSpecs(args, 1));
                 return this.emitSequencedExpr(T_STRING, specs, (vals) => {
-                    const precision = vals[1] ?? "0.0";
-                    const hasPrecision = vals[1] ? "true" : "false";
-                    return `tsc_str_from_num_precision(${vals[0]}, ${precision}, ${hasPrecision})`;
+                    const precision = hasPrecision ? vals[1]! : "0.0";
+                    return `tsc_str_from_num_precision(${vals[0]}, ${precision}, ${hasPrecision ? "true" : "false"})`;
                 });
             }
             case "toLocaleString":
