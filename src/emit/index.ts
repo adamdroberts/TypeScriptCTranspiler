@@ -20386,6 +20386,9 @@ class Emitter {
         if (source.ty.kind === "array" && source.ty.elem) {
             arrayExpr = source.c;
             elemType = source.ty.elem;
+        } else if (source.ty.kind === "set" && source.ty.elem) {
+            arrayExpr = `tsc_set_values(${source.c})`;
+            elemType = source.ty.elem;
         } else if (source.ty.kind === "string") {
             arrayExpr = `tsc_str_chars(${source.c})`;
             elemType = T_STRING;
