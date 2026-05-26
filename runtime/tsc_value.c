@@ -494,11 +494,18 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
             bool next_writable = has_writable ? writable : current_writable;
             bool next_enumerable = has_enumerable ? enumerable : false;
             bool next_configurable = has_configurable ? configurable : false;
-            if (!next_writable || next_enumerable || next_configurable) return false;
+            if (next_enumerable || next_configurable) return false;
+            if (!current_writable) {
+                if (next_writable) return false;
+                if (!has_value) return true;
+                double raw = tsc_value_as_num(value);
+                if (isnan(raw) || isinf(raw) || raw < 0.0 || floor(raw) != raw || raw > (double)SIZE_MAX) return false;
+                return (size_t)raw == a->len;
+            }
+            if (!next_writable) return false;
             return has_value ? tsc_value_array_set_length(a, value) : true;
         }
         size_t idx = 0;
-        if (a->frozen) return false;
         if (tsc_str_array_index(key, &idx)) {
             bool exists = idx < a->len;
             bool current_writable = !a->frozen;
@@ -507,14 +514,18 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
             bool next_writable = has_writable ? writable : (exists ? current_writable : false);
             bool next_enumerable = has_enumerable ? enumerable : (exists ? current_enumerable : false);
             bool next_configurable = has_configurable ? configurable : (exists ? current_configurable : false);
-            if (!next_writable || !next_enumerable) return false;
             if (exists) {
                 if (next_writable != current_writable || next_enumerable != current_enumerable || next_configurable != current_configurable) return false;
+                if (!current_writable) {
+                    if (has_value && !tsc_value_object_is(value, TSC_ARR(tsc_value_t, a, idx))) return false;
+                    return true;
+                }
             } else if (!a->extensible) {
                 return false;
             } else if (!next_configurable) {
                 return false;
             }
+            if (!next_writable || !next_enumerable) return false;
             return has_value ? tsc_value_set_index(v, (double)idx, value) : true;
         }
     }

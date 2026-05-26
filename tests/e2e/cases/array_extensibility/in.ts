@@ -103,3 +103,20 @@ console.log("frozen delete:", Reflect.deleteProperty(frozen, "0"), frozen[0]);
 console.log("frozen push:", frozen.push(5), frozen.join("|"));
 console.log("frozen fill:", frozen.fill(9).join("|"));
 console.log("frozen reverse:", frozen.reverse().join("|"));
+console.log(
+    "frozen define same:",
+    Reflect.defineProperty(frozen, "0", { value: 3, writable: false, enumerable: true, configurable: false }),
+    Reflect.defineProperty(frozen, "0", { value: 30, writable: false, enumerable: true, configurable: false }),
+    Reflect.defineProperty(frozen, "length", { value: 2, writable: false }),
+    Reflect.defineProperty(frozen, "length", { value: 1, writable: false }),
+);
+const frozenZero = [0];
+Object.freeze(frozenZero);
+console.log(
+    "frozen define signed zero:",
+    Reflect.defineProperty(frozenZero, "0", { value: 0, writable: false, enumerable: true, configurable: false }),
+    Reflect.defineProperty(frozenZero, "0", { value: -0, writable: false, enumerable: true, configurable: false }),
+);
+const frozenEmpty: number[] = [];
+Object.freeze(frozenEmpty);
+console.log("frozen length negative zero:", Reflect.defineProperty(frozenEmpty, "length", { value: -0, writable: false }));

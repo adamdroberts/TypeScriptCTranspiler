@@ -40735,6 +40735,10 @@ class Emitter {
         const elemValue = valueInfo
             ? this.coerce(valueInfo.value, elem, valueNode)
             : `(${elem.c})0`;
+        const boxedElemValue = valueInfo
+            ? this.coerce(valueInfo.value, T_VALUE, valueNode)
+            : "tsc_value_undefined()";
+        const currentElemValue = this.coerce({ c: `TSC_ARR(${elem.c}, ${arrC}, ${idx})`, ty: elem }, T_VALUE, fallbackNode);
         const lengthValue = valueInfo
             ? this.coerce(valueInfo.value, T_VALUE, valueNode)
             : "tsc_value_undefined()";
@@ -40749,7 +40753,7 @@ class Emitter {
                     `${out} = true; ` +
                     `if (${desc.hasValue}) { ` +
                         `double ${newLen} = tsc_value_as_num(${lengthValue}); ` +
-                        `if (isnan(${newLen}) || isinf(${newLen}) || ${newLen} < 0.0 || floor(${newLen}) != ${newLen} || (${newLen} > (double)${arrC}->len && !${arrC}->extensible) || (${arrC}->sealed && (size_t)${newLen} != ${arrC}->len) || ${arrC}->frozen) { ` +
+                        `if (isnan(${newLen}) || isinf(${newLen}) || ${newLen} < 0.0 || floor(${newLen}) != ${newLen} || (${newLen} > (double)${arrC}->len && !${arrC}->extensible) || (${arrC}->sealed && (size_t)${newLen} != ${arrC}->len) || (${arrC}->frozen && (size_t)${newLen} != ${arrC}->len)) { ` +
                             `${out} = false; ` +
                         `} else { ` +
                             `${elem.c} ${zero} = (${elem.c})0; ` +
@@ -40771,7 +40775,7 @@ class Emitter {
                         `if (_next_w == _cur_w && _next_e == _cur_e && _next_c == _cur_c) { ` +
                             `${out} = true; ` +
                             `if (${desc.hasValue}) { ` +
-                                `if (${arrC}->frozen) { ${out} = false; } else { ` +
+                                `if (${arrC}->frozen) { ${out} = tsc_value_object_is(${boxedElemValue}, ${currentElemValue}); } else { ` +
                                     `${elem.c} ${elemTmp} = ${elemValue}; ` +
                                     `TSC_ARR(${elem.c}, ${arrC}, ${idx}) = ${elemTmp}; ` +
                                 `} ` +

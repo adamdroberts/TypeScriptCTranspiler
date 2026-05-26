@@ -37,6 +37,13 @@ console.log("frozen desc:", frozenDesc.writable, frozenDesc.configurable, frozen
 console.log("frozen set:", Reflect.set(frozen, "0", 30), frozen[0]);
 console.log("frozen length:", Reflect.set(frozen, "length", 1), frozen.length);
 console.log("frozen delete:", Reflect.deleteProperty(frozen, "0"), frozen[0]);
+console.log(
+    "frozen define same:",
+    Reflect.defineProperty(frozen, "0", { value: 3, writable: false, enumerable: true, configurable: false }),
+    Reflect.defineProperty(frozen, "0", { value: 30, writable: false, enumerable: true, configurable: false }),
+    Reflect.defineProperty(frozen, "length", { value: 2, writable: false }),
+    Reflect.defineProperty(frozen, "length", { value: 1, writable: false }),
+);
 
 const sealedMethods: any = ["m", "n"];
 Object.seal(sealedMethods);
