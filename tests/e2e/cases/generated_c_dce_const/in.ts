@@ -1438,6 +1438,9 @@ const unused_error_descriptor_in_check = "value" in Object.getOwnPropertyDescrip
 const unused_regexp_descriptor_in_check = "writable" in Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_in_check/g, "lastIndex")!;
 const unused_error_descriptor_delete_call = delete Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_delete"), "message")!.value;
 const unused_regexp_descriptor_delete_call = delete Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_delete/g, "lastIndex")!.writable;
+const unused_error_descriptor_object_create_call = Object.create(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_object_create"), "message")!);
+const unused_regexp_descriptor_set_prototype_call = Object.setPrototypeOf({ dead_regexp_descriptor_set_prototype: 1 }, Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_set_prototype/g, "lastIndex")!);
+const unused_error_descriptor_reflect_set_prototype_call = Reflect.setPrototypeOf({ dead_error_descriptor_reflect_set_prototype: 1 }, Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_reflect_set_prototype"), "message")!);
 const unused_object_property_names_spread_with_call = Object.getOwnPropertyNames({ ...{ dead_object_property_names_spread_with: 1 }, dead_object_property_names_spread_with_tail: 2 }).with(1, "dead_object_property_names_spread_with_replacement");
 const unused_object_property_names_assign_with_call = Object.getOwnPropertyNames(Object.assign({} as { dead_object_property_names_assign_with: number; dead_object_property_names_assign_tail: number }, { dead_object_property_names_assign_with: 1 }, { dead_object_property_names_assign_tail: 2 })).with(1, "dead_object_property_names_assign_replacement");
 const unused_object_property_names_define_property_with_call = Object.getOwnPropertyNames(Object.defineProperty({} as { dead_object_property_names_define_property_with: number }, "dead_object_property_names_define_property_with", { value: 1 })).with(0, "dead_object_property_names_define_property_replacement");
@@ -2824,6 +2827,9 @@ Reflect.preventExtensions(Object.getOwnPropertyDescriptor(/top_level_dead_regexp
 "writable" in Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_in_check/g, "lastIndex")!;
 delete Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_delete"), "message")!.value;
 delete Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_delete/g, "lastIndex")!.writable;
+Object.create(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_object_create"), "message")!);
+Object.setPrototypeOf({ top_level_dead_regexp_descriptor_set_prototype: 1 }, Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_set_prototype/g, "lastIndex")!);
+Reflect.setPrototypeOf({ top_level_dead_error_descriptor_reflect_set_prototype: 1 }, Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_reflect_set_prototype"), "message")!);
 Object.getOwnPropertyNames(Object.assign({} as { top_level_dead_object_property_names_assign_with: number; top_level_dead_object_property_names_assign_tail: number }, { top_level_dead_object_property_names_assign_with: 1 }, { top_level_dead_object_property_names_assign_tail: 2 })).with(1, "top_level_dead_object_property_names_assign_replacement");
 Object.getOwnPropertyNames(Object.defineProperty({} as { top_level_dead_object_property_names_define_property_with: number }, "top_level_dead_object_property_names_define_property_with", { value: 1 })).with(0, "top_level_dead_object_property_names_define_property_replacement");
 Object.getOwnPropertyNames(Object.seal({ top_level_dead_object_property_names_seal_with: 1, top_level_dead_object_property_names_seal_tail: 2 })).with(1, "top_level_dead_object_property_names_seal_replacement");
@@ -4253,6 +4259,9 @@ function usedLocal(value: number): number {
     "writable" in Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_in_check/g, "lastIndex")!;
     delete Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_delete"), "message")!.value;
     delete Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_delete/g, "lastIndex")!.writable;
+    Object.create(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_object_create"), "message")!);
+    Object.setPrototypeOf({ local_dead_regexp_descriptor_set_prototype: 1 }, Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_set_prototype/g, "lastIndex")!);
+    Reflect.setPrototypeOf({ local_dead_error_descriptor_reflect_set_prototype: 1 }, Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_reflect_set_prototype"), "message")!);
     ["local_dead_array_to_string", "local_dead_array_to_string_tail"].toString();
     ["local_dead_array_to_locale_string", "local_dead_array_to_locale_string_tail"].toLocaleString();
     ["local_dead_array_join_length_read"].join("/").length;
