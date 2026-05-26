@@ -1,0 +1,3 @@
+apply method: ctx:x:changed:trap
+apply spread list: ctx2:a:changed:trap
+events: true:2:x,y|true:2:a,b
