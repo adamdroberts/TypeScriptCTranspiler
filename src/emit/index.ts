@@ -30287,7 +30287,9 @@ class Emitter {
                     target,
                     [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
                     ([ref]) =>
-                    `((${target.c})tsc_weakref_deref(${ref!}))`,
+                    target.kind === "value"
+                        ? `((tsc_value_t)(uintptr_t)tsc_weakref_deref(${ref!}))`
+                        : `((${target.c})tsc_weakref_deref(${ref!}))`,
                 );
             }
             case "hasOwnProperty":
@@ -42358,8 +42360,19 @@ class Emitter {
             const mapped = mapTsType(n, ty, this.checker);
             if (mapped.kind !== "weakref" || !mapped.elem)
                 unsupported(n, "new WeakRef() requires <T> type parameter");
-            requireWeakObjectKey(n, mapped.elem, "WeakRef");
+            if (mapped.elem.kind !== "value") requireWeakObjectKey(n, mapped.elem, "WeakRef");
             const r = this.emitExpr(target);
+            if (mapped.elem.kind === "value") {
+                const targetTemp = this.freshTemp("_weak_ref_target");
+                return this.emitSequencedExpr(mapped, [
+                    { value: r, target: T_VALUE, node: target },
+                    ...this.ignoredArgumentSpecs(n.arguments ?? [], 1),
+                ], ([value]) =>
+                    `({ tsc_value_t const ${targetTemp} = ${value!}; ` +
+                    `if (!tsc_value_is_weak_key(${targetTemp})) tsc_throw_str(tsc_str_from_cstr("WeakRef target must be an object")); ` +
+                    `tsc_weakref_new((void*)(uintptr_t)${targetTemp}); })`,
+                );
+            }
             return this.emitSequencedExpr(mapped, [
                 { value: r, target: mapped.elem, node: target },
                 ...this.ignoredArgumentSpecs(n.arguments ?? [], 1),

@@ -215,7 +215,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - Runtime storage reuses pointer-key map/set tables; there is no iteration API exposed.
 
 ### `WeakRef<T>`
-- `new WeakRef(target, ...ignored)` creates a typed weak-reference wrapper after evaluating ignored trailing constructor arguments, and `.deref(...ignored)` returns `T | undefined` after evaluating ignored extra arguments. Tests: `weak_ref`, `weak_ref_finalization_constructor_ignored_arguments`
+- `new WeakRef(target, ...ignored)` creates a typed weak-reference wrapper after evaluating ignored trailing constructor arguments, and dynamic `WeakRef<any>` validates object targets at runtime. `.deref(...ignored)` returns `T | undefined` or the original dynamic value after evaluating ignored extra arguments. Tests: `weak_ref`, `weak_ref_dynamic`, `weak_ref_finalization_constructor_ignored_arguments`
 - `.toString(...ignored)`, `.toLocaleString(...ignored)`, and `.valueOf(...ignored)`. Tests: `collection_object_methods`, `weak_ref`
 - Runtime storage is a small pointer wrapper.
 
@@ -1377,6 +1377,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `map_set_same_value_zero` | Map and Set SameValueZero numeric key semantics |
 | `set_constructor_dynamic` | dynamic Set constructor sources for nullish, array, string, and rejected non-iterable values |
 | `weak_collections_dynamic` | dynamic WeakMap and WeakSet construction, methods, and primitive-key validation |
+| `weak_ref_dynamic` | dynamic WeakRef target validation and deref value preservation |
 | `native_addon` | expected diagnostic for literal native addon imports |
 | `native_addon_manifest_import` | manifest-listed direct `.node` import emits the embedded Node native-addon bridge |
 | `native_addon_manifest_require` | compile-time native-addon manifest lowers an allow-listed require to the embedded Node bridge |
