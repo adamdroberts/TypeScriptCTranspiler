@@ -24179,6 +24179,8 @@ class Emitter {
     }
 
     private emitBoolExpr(expr: ts.Expression): string {
+        const staticValue = this.staticBooleanValue(expr);
+        if (staticValue !== null) return staticValue ? "true" : "false";
         const r = this.emitExpr(expr);
         return this.truthyC(r, expr);
     }
@@ -24335,10 +24337,11 @@ class Emitter {
             const dynamicUpdate = this.emitDynamicPropertyUpdate(pu.operand, op, true);
             if (dynamicUpdate) return dynamicUpdate;
         }
+        if (op === ts.SyntaxKind.ExclamationToken) {
+            return { c: `(!${this.emitBoolExpr(pu.operand)})`, ty: T_BOOLEAN };
+        }
         const inner = this.emitExpr(pu.operand);
         switch (op) {
-            case ts.SyntaxKind.ExclamationToken:
-                return { c: `(!${this.emitBoolExpr(pu.operand)})`, ty: T_BOOLEAN };
             case ts.SyntaxKind.MinusToken:
                 if (inner.ty.kind === "value") {
                     return this.emitSequencedCall("tsc_value_neg", T_VALUE, [
