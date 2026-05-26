@@ -31549,7 +31549,7 @@ class Emitter {
             case "addEventListener": {
                 if (args.length < 2) unsupported(call, "EventTarget.addEventListener expects type, listener, and optional options");
                 const options = this.eventTargetListenerOptions(args[2], "EventTarget.addEventListener");
-                const type = this.emitExpr(args[0]!);
+                const type = this.emitRequiredStringArgument(args[0]!);
                 const listener = this.emitEventListenerExpression(args[1]!);
                 const adapter = this.ensureEventTargetListenerAdapter(args[1]!, listener.ty);
                 return this.emitSequencedExpr(T_VOID, [
@@ -31564,7 +31564,7 @@ class Emitter {
             case "removeEventListener": {
                 if (args.length < 2) unsupported(call, "EventTarget.removeEventListener expects type, listener, and optional options");
                 this.eventTargetListenerOptions(args[2], "EventTarget.removeEventListener");
-                const type = this.emitExpr(args[0]!);
+                const type = this.emitRequiredStringArgument(args[0]!);
                 const listener = this.emitEventListenerExpression(args[1]!);
                 const adapter = this.ensureEventTargetListenerAdapter(args[1]!, listener.ty);
                 return this.emitSequencedExpr(T_VOID, [
@@ -33172,6 +33172,10 @@ class Emitter {
     }
 
     private emitEventEmitterEventName(expr: ts.Expression): EmitResult {
+        return this.emitRequiredStringArgument(expr);
+    }
+
+    private emitRequiredStringArgument(expr: ts.Expression): EmitResult {
         const resolved = this.resolveSideEffectFreeEarlierConstExpression(expr);
         const unwrapped = this.unwrapTransparentExpression(resolved);
         if (this.isUndefinedExpression(unwrapped)) {
@@ -43194,7 +43198,7 @@ class Emitter {
         if (cls === "Event") {
             const args = n.arguments ?? [];
             if (args.length < 1) unsupported(n, "new Event() expects type and optional options");
-            const type = this.emitExpr(args[0]!);
+            const type = this.emitRequiredStringArgument(args[0]!);
             const cancelable = this.eventInitCancelable(args[1]);
             return this.emitSequencedExpr(T_EVENT, [
                 { value: type, target: T_STRING, node: args[0]! },

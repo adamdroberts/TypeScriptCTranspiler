@@ -31,5 +31,12 @@ const plain = new Event("save");
 console.log("dispatch2:", target.dispatchEvent(plain, mark("e")));
 console.log("after2:", plain.defaultPrevented);
 
+const undefinedType: any = undefined;
+target.addEventListener(undefinedType, first);
+const undefinedEvent = new Event(undefinedType);
+console.log("dispatch undefined:", undefinedEvent.type, target.dispatchEvent(undefinedEvent));
+target.removeEventListener(undefinedType, first);
+console.log("dispatch undefined after remove:", target.dispatchEvent(new Event("undefined")));
+
 console.log(seen.join("|"));
 console.log("ignored:", ignoredSeen);

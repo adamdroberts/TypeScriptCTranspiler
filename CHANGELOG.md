@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `EventTarget` listener type arguments and `new Event(type)` now treat explicit `undefined` as the JavaScript `"undefined"` event type for required DOMString slots. Test: `event_target`.
 - EventEmitter event-name arguments now treat explicit `undefined` as the JavaScript `"undefined"` event name for instance and static listener helpers, while `removeAllListeners()` with no argument still uses the omitted-argument "remove all" form. Tests: `event_emitter`, `event_emitter_static_listener_count`.
 - `process.stdout.end(...)` / `process.stderr.end(...)` now treat explicit `undefined` chunks as omitted while still accepting later callback arguments and preserving ignored trailing-argument evaluation. Tests: `process_stdio_end`, `process_stdio_end_ignored_arguments`.
 - Embedded Node bridge builds now compile the exported `eval` / `Function` entry points behind `TSC_UNSAFE_EVAL`, so native-addon manifest builds can link libnode for allow-listed `.node` modules without enabling unsafe runtime code compilation. Focused checks: `runtime_eval_unsafe_bridge`, `runtime_function_unsafe_bridge`, `runtime_function_constructor_unsafe_bridge`, `native_addon_manifest_require`.
