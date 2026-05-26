@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Revoked Proxy handler objects now have focused coverage for throwing during trap lookup on target Proxy operations. Test: `proxy_revoked_handler_lookup`.
 - Proxy handler objects that are themselves Proxy values now have focused coverage for routing trap lookup through the handler proxy before dispatch. Test: `proxy_proxy_handler_lookup`.
 - Proxy handler accessor trap values now have focused coverage for post-lookup callable validation and nullish-result forwarding. Test: `proxy_trap_accessor_validation`.
 - Proxy handler accessor trap properties now have focused coverage for receiver-bound lookup before trap dispatch. Test: `proxy_trap_accessor_lookup`.
