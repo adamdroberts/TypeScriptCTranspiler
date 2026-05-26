@@ -38893,8 +38893,17 @@ class Emitter {
         if (name === "setPrototypeOf") {
             if (args.length < 2) unsupported(call, "Object.setPrototypeOf expects object and prototype");
             const ignored = this.ignoredArgumentSpecs(args, 2);
+            if (primitiveObjectArg) {
+                const obj = this.emitExpr(arg);
+                const proto = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(mapped, [
+                    { value: obj, node: arg },
+                    { value: proto, target: T_VALUE, node: args[1]! },
+                    ...ignored,
+                ], ([o, p]) => `({ tsc_value_object_require_valid_prototype(${p}); ${o}; })`);
+            }
             if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
-                unsupported(arg, "Object.setPrototypeOf currently supports dynamic objects, arrays, and functions only");
+                unsupported(arg, "Object.setPrototypeOf currently supports dynamic objects, arrays, functions, and primitives only");
             }
             const obj = this.emitExpr(arg);
             const proto = this.emitExpr(args[1]!);

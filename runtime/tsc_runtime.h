@@ -541,6 +541,7 @@ tsc_value_t tsc_value_bigint_prototype(void);
 tsc_value_t tsc_value_symbol_prototype(void);
 tsc_value_t tsc_value_object_get_prototype_of(tsc_value_t v);
 bool tsc_value_set_prototype_of(tsc_value_t v, tsc_value_t prototype);
+void tsc_value_object_require_valid_prototype(tsc_value_t prototype);
 bool tsc_value_object_set_prototype_of(tsc_value_t v, tsc_value_t prototype);
 tsc_value_t tsc_reflect_get_prototype_of(tsc_value_t v);
 bool tsc_reflect_set_prototype_of(tsc_value_t v, tsc_value_t prototype);

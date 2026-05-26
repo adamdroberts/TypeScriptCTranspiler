@@ -840,13 +840,17 @@ bool tsc_value_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
     return false;
 }
 
+void tsc_value_object_require_valid_prototype(tsc_value_t prototype) {
+    if (!value_is_valid_prototype(prototype)) {
+        tsc_throw_str(tsc_str_from_cstr("Object.setPrototypeOf prototype must be an object or null"));
+    }
+}
+
 bool tsc_value_object_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
     if (tsc_value_is_nullish(v)) {
         tsc_throw_str(tsc_str_from_cstr("Object.setPrototypeOf target must not be null or undefined"));
     }
-    if (!value_is_valid_prototype(prototype)) {
-        tsc_throw_str(tsc_str_from_cstr("Object.setPrototypeOf prototype must be an object or null"));
-    }
+    tsc_value_object_require_valid_prototype(prototype);
     if (
         !value_is_box(v) ||
         (value_tag(v) != TSC_VALUE_TAG_OBJECT && value_tag(v) != TSC_VALUE_TAG_ARRAY && value_tag(v) != TSC_VALUE_TAG_FUNCTION)
