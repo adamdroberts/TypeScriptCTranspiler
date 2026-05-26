@@ -33590,22 +33590,24 @@ class Emitter {
     private emitErrorConstructor(call: ts.CallExpression | ts.NewExpression, name: string): EmitResult {
         const args = call.arguments ?? [];
         const nameLit = `tsc_str_from_lit("${name}", ${name.length})`;
+        const hasMessage = !!args[0] && !this.isUndefinedExpression(args[0]);
+        const hasCauseOptions = !!args[1] && !this.isUndefinedExpression(args[1]);
         const specs: SequencedCallArg[] = [
             { value: { c: nameLit, ty: T_STRING } },
         ];
-        if (args[0]) {
+        if (hasMessage) {
             specs.push({ value: this.emitExpr(args[0]), target: T_STRING, node: args[0] });
         } else {
             specs.push({ value: { c: `tsc_str_from_lit("", 0)`, ty: T_STRING } });
         }
-        if (args[1]) {
+        if (hasCauseOptions) {
             specs.push({ value: this.emitErrorCauseOption(args[1]), target: T_VALUE, node: args[1] });
         }
         for (const arg of args.slice(2)) {
             specs.push({ value: this.emitExpr(arg), node: arg });
         }
         return this.emitSequencedExpr(T_ERROR, specs, ([nameC, messageC, causeC]) =>
-            args[1]
+            hasCauseOptions
                 ? `tsc_error_new_named_cause(${nameC}, ${messageC}, ${causeC})`
                 : `tsc_error_new_named(${nameC}, ${messageC})`,
         );
@@ -33614,22 +33616,26 @@ class Emitter {
     private emitAggregateErrorConstructor(call: ts.CallExpression | ts.NewExpression): EmitResult {
         const args = call.arguments ?? [];
         if (args.length < 1) unsupported(call, "AggregateError expects errors, optional message, and options");
+        const hasMessage = !!args[1] && !this.isUndefinedExpression(args[1]);
+        const hasCauseOptions = !!args[2] && !this.isUndefinedExpression(args[2]);
         const errors = this.emitExpr(args[0]!);
         const specs: SequencedCallArg[] = [
             { value: errors, target: arrayType(T_VALUE), node: args[0]! },
         ];
-        if (args[1]) {
+        if (hasMessage) {
             const message = this.emitExpr(args[1]);
             specs.push({ value: message, target: T_STRING, node: args[1] });
+        } else {
+            specs.push({ value: { c: `tsc_str_from_lit("", 0)`, ty: T_STRING } });
         }
-        if (args[2]) {
+        if (hasCauseOptions) {
             specs.push({ value: this.emitErrorCauseOption(args[2]), target: T_VALUE, node: args[2] });
         }
         for (const arg of args.slice(3)) {
             specs.push({ value: this.emitExpr(arg), node: arg });
         }
         return this.emitSequencedExpr(T_ERROR, specs, ([errorsC, messageC, causeC]) =>
-            causeC
+            hasCauseOptions
                 ? `tsc_aggregate_error_new_cause(${errorsC}, ${messageC ?? 'tsc_str_from_lit("", 0)'}, ${causeC})`
                 : `tsc_aggregate_error_new(${errorsC}, ${messageC ?? 'tsc_str_from_lit("", 0)'})`,
         );
