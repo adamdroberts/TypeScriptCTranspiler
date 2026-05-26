@@ -1,5 +1,10 @@
 const events: string[] = [];
 
+function note(label: string, value: any): any {
+    events.push(label);
+    return value;
+}
+
 function targetGet(target: any, prop: any, receiver: any): any {
     events.push("targetGet:" + String(prop));
     return Reflect.get(target, prop, receiver);
@@ -37,6 +42,6 @@ Object.defineProperty(target, "hidden", {
 
 const proxy: any = new Proxy(target, handlerProxy);
 
-console.log("get:", proxy.a);
+console.log("get:", Reflect.get(proxy, note("getKey", "a"), note("getReceiver", {})));
 console.log("keys:", Object.keys(proxy).join(","));
 console.log("events:", events.join("|"));
