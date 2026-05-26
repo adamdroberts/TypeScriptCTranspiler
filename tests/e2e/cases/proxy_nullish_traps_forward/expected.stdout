@@ -1,0 +1,13 @@
+get: 1
+set: true 3
+has: true false
+delete: true false
+define: true 4
+desc: H false
+keys: a,b,c
+own: a,hidden,b,c
+proto before: old
+proto set: true next
+ext before: true
+prevent: true false
+ext after: false
