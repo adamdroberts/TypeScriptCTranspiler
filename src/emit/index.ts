@@ -36212,9 +36212,14 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "fs.readdirSync needs path and optional UTF-8/hex/base64/buffer encoding or withFileTypes options");
                 const options = this.validateFsReaddirOptions(args[1], "fs.readdirSync");
                 const p = this.emitExpr(args[0]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 if (options.withFileTypes) {
                     return this.emitSequencedExpr(arrayType(T_FS_DIRENT), [
                         this.fsPathSpec(p, args[0]!, "fs.readdirSync path"),
+                        ...optionSpecs,
                         ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                     ], ([path]) => {
                         const value = `${options.recursive ? "tsc_fs_readdir_recursive_dirents_sync" : "tsc_fs_readdir_dirents_sync"}(${path!})`;
@@ -36224,11 +36229,13 @@ class Emitter {
                 if (options.encoding === "buffer") {
                     return this.emitSequencedExpr(arrayType(T_BUFFER), [
                         this.fsPathSpec(p, args[0]!, "fs.readdirSync path"),
+                        ...optionSpecs,
                         ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                     ], ([path]) => `${options.recursive ? "tsc_fs_readdir_recursive_buffer_sync" : "tsc_fs_readdir_buffer_sync"}(${path!})`);
                 }
                 return this.emitSequencedExpr(arrayType(T_STRING), [
                     this.fsPathSpec(p, args[0]!, "fs.readdirSync path"),
+                    ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => {
                     const value = `${options.recursive ? "tsc_fs_readdir_recursive_sync" : "tsc_fs_readdir_sync"}(${path!})`;
@@ -36881,8 +36888,9 @@ class Emitter {
         options: ts.Expression | undefined,
         label: string,
     ): { withFileTypes: boolean; recursive: boolean; encoding: "utf8" | "hex" | "base64" | "buffer" } {
-        if (!options || this.isUndefinedExpression(options)) return { withFileTypes: false, recursive: false, encoding: "utf8" };
+        if (!options || this.isUndefinedLikeExpression(options)) return { withFileTypes: false, recursive: false, encoding: "utf8" };
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedLikeExpression(resolvedOptions)) return { withFileTypes: false, recursive: false, encoding: "utf8" };
         const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" | "buffer" => {
             node = this.resolveSideEffectFreeEarlierConstExpression(node);
             if (this.isUndefinedExpression(node)) return "utf8";
@@ -37098,8 +37106,13 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "fs.promises.readdir needs path and optional UTF-8/hex/base64/buffer encoding or withFileTypes options");
                 const options = this.validateFsReaddirOptions(args[1], "fs.promises.readdir");
                 const p = this.emitExpr(args[0]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.readdir path"),
+                    ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => {
                     const fn = options.withFileTypes
