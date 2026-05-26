@@ -25371,7 +25371,7 @@ class Emitter {
             ]);
         }
         if (mapped.kind === "buffer") {
-            return this.emitBufferOwnKeyCheck(targetNode, target, keyNode);
+            return this.emitBufferOwnKeyCheck(targetNode, target, keyNode, ignored);
         }
         if (mapped.kind === "error") {
             if (method === "hasOwnProperty") {
