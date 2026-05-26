@@ -32960,6 +32960,10 @@ class Emitter {
         if (call.arguments.length >= 2 && !this.isZeroDelayLiteral(call.arguments[1]!)) {
             unsupported(call.arguments[1]!, "setTimeout in this subset requires an omitted delay or literal 0 delay");
         }
+        const delayNode = call.arguments[1];
+        const delayValue = delayNode && this.shouldEvaluateSideEffectfulVoidDefault(delayNode)
+            ? this.emitExpr(delayNode)
+            : undefined;
         const argNodes = call.arguments.length >= 2
             ? Array.from(call.arguments.slice(2))
             : [];
@@ -32969,8 +32973,12 @@ class Emitter {
         const params = prepared.kind === "function" ? prepared.params ?? [] : [];
         return this.emitSequencedExpr(T_NUMBER, [
             { value: callback, target: callback.ty, node: callbackNode },
+            ...(delayNode && delayValue
+                ? [{ value: delayValue, target: T_VOID, node: delayNode }]
+                : []),
             ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
-        ], ([fn, ...args]) => {
+        ], ([fn, ...values]) => {
+            const args = delayValue ? values.slice(1) : values;
             const envType = `${adapter}_env_t`;
             const env = this.freshTemp("_timeout_env");
             const pieces = [

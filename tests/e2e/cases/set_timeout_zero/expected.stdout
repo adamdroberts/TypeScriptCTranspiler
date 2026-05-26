@@ -1,2 +1,2 @@
-sync
-tick|micro|first:1|tick-from-timeout|micro-from-timeout|last-timeout|undefined-timeout|void-timeout|negative-zero-timeout|nested-timeout|immediate
+sync:delay-side-effect|arg-side-effect
+delay-side-effect|arg-side-effect|tick|micro|first:1|tick-from-timeout|micro-from-timeout|last-timeout|undefined-timeout|void-timeout|negative-zero-timeout|side:arg-side-effect|nested-timeout|immediate

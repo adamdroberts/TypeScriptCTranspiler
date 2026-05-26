@@ -3,6 +3,15 @@ const ZERO_DELAY = 0;
 const NEGATIVE_ZERO_DELAY = -0;
 const UNDEFINED_DELAY = undefined;
 
+function mark(label: string): string {
+    events.push(label);
+    return label;
+}
+
+function note(label: string): void {
+    events.push(label);
+}
+
 setTimeout((label: string, count: number) => {
     events.push(label + ":" + count);
     process.nextTick(() => {
@@ -32,6 +41,10 @@ setTimeout(() => {
     events.push("negative-zero-timeout");
 }, NEGATIVE_ZERO_DELAY);
 
+setTimeout((label: string) => {
+    events.push("side:" + label);
+}, void note("delay-side-effect"), mark("arg-side-effect"));
+
 setImmediate(() => {
     events.push("immediate");
 });
@@ -47,4 +60,4 @@ setImmediate(() => {
     console.log(events.join("|"));
 });
 
-console.log("sync");
+console.log("sync:" + events.join("|"));

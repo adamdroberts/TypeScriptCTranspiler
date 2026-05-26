@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Bounded zero-delay `setTimeout` now preserves side-effectful `void` delay evaluation before callback argument evaluation. Test: `set_timeout_zero`.
 - `timers/promises` immediate helpers now preserve side-effectful `void` delay and whole-options evaluation on supported defaulted `setTimeout(...)`, `setImmediate(...)`, and `scheduler.wait(...)` calls. Tests: `timers_promises_import`, `timers_promises_scheduler`.
 - `os.userInfo(...)` now treats side-effectful `void` whole options as defaulted `undefined` while preserving options-slot evaluation before ignored trailing arguments. Test: `os_user_info_undefined_options`.
 - `events.once(...)` now treats side-effectful `void` whole options as defaulted `undefined` while preserving options-slot evaluation before ignored trailing arguments. Test: `event_emitter_once_options`.
