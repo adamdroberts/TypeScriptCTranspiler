@@ -38742,6 +38742,13 @@ class Emitter {
         if (name === "getPrototypeOf") {
             if (args.length < 1) unsupported(call, "Object.getPrototypeOf expects object");
             const ignored = this.ignoredArgumentSpecs(args, 1);
+            if (mapped.kind === "void") {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: obj, target: T_VALUE, node: arg },
+                    ...ignored,
+                ], ([o]) => `tsc_value_object_get_prototype_of(${o})`);
+            }
             const primitivePrototypeFns: Partial<Record<CType["kind"], string>> = {
                 number: "tsc_value_number_prototype",
                 boolean: "tsc_value_boolean_prototype",
@@ -38993,6 +39000,15 @@ class Emitter {
         if (name === "setPrototypeOf") {
             if (args.length < 2) unsupported(call, "Object.setPrototypeOf expects object and prototype");
             const ignored = this.ignoredArgumentSpecs(args, 2);
+            if (mapped.kind === "void") {
+                const obj = this.emitExpr(arg);
+                const proto = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: obj, target: T_VALUE, node: arg },
+                    { value: proto, target: T_VALUE, node: args[1]! },
+                    ...ignored,
+                ], ([o, p]) => `({ tsc_value_object_set_prototype_of(${o}, ${p}); ${o}; })`);
+            }
             if (primitiveObjectArg) {
                 const obj = this.emitExpr(arg);
                 const proto = this.emitExpr(args[1]!);

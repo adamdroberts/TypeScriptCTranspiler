@@ -1,0 +1,3 @@
+{
+  "description": "Object prototype helpers reject static nullish targets through catchable errors"
+}

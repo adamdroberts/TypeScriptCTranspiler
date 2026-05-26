@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Static Object prototype helpers now reject `null` / `undefined` targets through catchable runtime errors instead of compile-time rejection. Test: `object_static_nullish_prototypes`.
 - Static Object own-property helpers now reject `null` / `undefined` targets through catchable runtime errors instead of compile-time rejection or empty symbol results. Test: `object_static_nullish_own_helpers`.
 - Static `Object.preventExtensions(null | undefined)`, `Object.seal(null | undefined)`, and `Object.freeze(null | undefined)` now return nullish targets unchanged. Test: `object_nullish_integrity_mutators`.
 - Static `Object.isExtensible(null | undefined)`, `Object.isSealed(null | undefined)`, and `Object.isFrozen(null | undefined)` now preserve ES nullish primitive predicate results. Test: `object_nullish_integrity_predicates`.
