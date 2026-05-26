@@ -1,0 +1,3 @@
+{
+  "description": "Object.getOwnPropertyNames on Proxy drives ownKeys traps and returns all string keys"
+}
