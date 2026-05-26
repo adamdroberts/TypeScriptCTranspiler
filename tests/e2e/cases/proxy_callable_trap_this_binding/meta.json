@@ -1,0 +1,3 @@
+{
+  "description": "Callable proxy-valued object traps receive the handler as their this binding"
+}

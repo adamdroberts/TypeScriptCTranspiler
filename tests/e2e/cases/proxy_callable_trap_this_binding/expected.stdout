@@ -1,0 +1,5 @@
+get: value
+has: true
+delete: true
+keys: a
+events: get:handler:3|has:handler:2|delete:handler:2|ownKeys:handler:1|desc:handler:2
