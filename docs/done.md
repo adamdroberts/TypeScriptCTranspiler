@@ -280,7 +280,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `re.exec(s, ...ignored)` → `tsc_regexp_exec`, returning the full match plus captures or `null` after evaluating ignored extra arguments. Tests: `regexp_exec`, `regexp_object_methods`
 - `re.test(s, ...ignored)` → `tsc_regexp_test`, with ignored extra arguments evaluated before being discarded. Test: `regexp_object_methods`
 - `re.source`, `re.flags`, `re.global`, `re.hasIndices`, `re.ignoreCase`, `re.multiline`, `re.dotAll`, `re.sticky`, `re.unicode`, `re.toString(...ignored)`, `re.toLocaleString(...ignored)`, and `re.valueOf(...ignored)`. Tests: `regexp_object_methods`, `regexp_extra_flags`
-- RegExp instances expose non-enumerable own `lastIndex` metadata through `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, `Object.prototype.*.call(...)`, `Reflect.ownKeys`, and `Reflect.getOwnPropertyDescriptor`, while `Object.keys` / `values` / `entries` stay empty. Test: `regexp_own_properties`
+- RegExp instances expose non-enumerable own `lastIndex` metadata through `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, `Object.prototype.*.call(...)`, read-only `Object.isExtensible(...)` / `Object.isSealed(...)` / `Object.isFrozen(...)` checks, `Reflect.ownKeys`, `Reflect.getOwnPropertyDescriptor`, and `Reflect.isExtensible(...)`, while `Object.keys` / `values` / `entries` stay empty. Test: `regexp_own_properties`
 - String-side methods with regex argument: `.replace`, `.replaceAll`, `.match`, `.search`, `.split`
 - Capture groups on non-global `.match()` results. Test: `regex_captures`
 - `.matchAll(regex)` full-match and capture arrays. Test: `string_match_all`
@@ -322,7 +322,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 
 - `throw expr` — stringifies `expr` and `longjmp`s to the nearest enclosing `try`. Test: `exceptions`
 - `try { } catch (e) { } finally { }` — catch binding is `tsc_str_t* e = tsc_current_error()`
-- `new Error(message?, options?, ...ignored)`, callable `Error(message?, options?, ...ignored)`, and the same constructor/callable forms for `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError`, `URIError`, and `AggregateError` create a narrow Error object subset exposing `.name`, `.message`, `.cause`, `.toString(...ignored)`, `.toLocaleString(...ignored)`, and `.valueOf(...ignored)`. Extra constructor and string/value method arguments are evaluated then ignored where JavaScript ignores them, literal and earlier static `const` `{ cause }` options are stored as dynamic values, `AggregateError` stores `.errors`, and throwing one of these errors still stringifies into the existing exception string channel. Error instances expose bounded non-enumerable `name`, `message`, `cause`, and `errors` fields through `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)`, `Object.prototype.*.call(...)`, `Reflect.get`, `Reflect.has`, `Reflect.ownKeys`, and `Reflect.getOwnPropertyDescriptor`, while `Object.keys` / `values` / `entries` and `propertyIsEnumerable(...)` stay empty/false. Tests: `error_instances`, `error_constructors`, `error_more_constructors`, `aggregate_error_constructor`, `error_cause`, `error_object_methods`
+- `new Error(message?, options?, ...ignored)`, callable `Error(message?, options?, ...ignored)`, and the same constructor/callable forms for `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError`, `URIError`, and `AggregateError` create a narrow Error object subset exposing `.name`, `.message`, `.cause`, `.toString(...ignored)`, `.toLocaleString(...ignored)`, and `.valueOf(...ignored)`. Extra constructor and string/value method arguments are evaluated then ignored where JavaScript ignores them, literal and earlier static `const` `{ cause }` options are stored as dynamic values, `AggregateError` stores `.errors`, and throwing one of these errors still stringifies into the existing exception string channel. Error instances expose bounded non-enumerable `name`, `message`, `cause`, and `errors` fields through `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)`, `Object.prototype.*.call(...)`, read-only `Object.isExtensible(...)` / `Object.isSealed(...)` / `Object.isFrozen(...)` checks, `Reflect.get`, `Reflect.has`, `Reflect.ownKeys`, `Reflect.getOwnPropertyDescriptor`, and `Reflect.isExtensible(...)`, while `Object.keys` / `values` / `entries` and `propertyIsEnumerable(...)` stay empty/false. Tests: `error_instances`, `error_constructors`, `error_more_constructors`, `aggregate_error_constructor`, `error_cause`, `error_object_methods`
 - Nested try/catch with re-throw. Test: `exceptions`
 - Uncaught exceptions print `Uncaught: <msg>` and exit 1
 - Runtime: `tsc_try_push`, `tsc_try_pop`, `tsc_throw_str`, `tsc_rethrow`, `tsc_current_error` + `setjmp`/`longjmp`
@@ -1099,7 +1099,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `error_cause` | Error-family and AggregateError literal cause options exposed through .cause |
 | `error_instances` | Error object subset with name/message/stringification/valueOf, ignored extra args, and throw stringification |
 | `error_more_constructors` | ReferenceError, EvalError, and URIError constructors share Error object behavior |
-| `error_object_methods` | Error bounded own-property Object and Reflect helper behavior |
+| `error_object_methods` | Error bounded own-property and integrity Object and Reflect helper behavior |
 | `encode_uri` | URI encode/decode helpers route valid ASCII inputs through the supported string runtime |
 | `event_emitter` | synchronous EventEmitter listener registration, emit, once, removal, and listener counts |
 | `event_emitter_default_max_listeners` | EventEmitter.defaultMaxListeners and events.defaultMaxListeners configure default max listeners |
@@ -1589,7 +1589,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `regexp_exec` | RegExp.exec capture-array results |
 | `regexp_extra_flags` | RegExp hasIndices/sticky flag properties |
 | `regexp_object_methods` | RegExp source/flags/flag booleans and toString/toLocaleString/valueOf |
-| `regexp_own_properties` | RegExp lastIndex own-property Object and Reflect helper behavior |
+| `regexp_own_properties` | RegExp lastIndex own-property and integrity Object and Reflect helper behavior |
 | `release_build` | `--release` size-optimized linking still produces a runnable binary |
 | `rest_spread` | rest parameters plus spread arguments into rest and fixed-arity function/method calls |
 | `nullish` | `??` + `?.` + null returns from functions |

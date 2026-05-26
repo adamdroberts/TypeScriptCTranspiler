@@ -4,5 +4,6 @@ desc: 0 true false false undefined
 descs: lastIndex 0 true false false 0
 own: true false true false
 call: true false
+integrity: true false false true
 tag: [object RegExp]
-trace: kvenrdmDRhHpicqt
+trace: kvenrdmDRhHpicqELFIt

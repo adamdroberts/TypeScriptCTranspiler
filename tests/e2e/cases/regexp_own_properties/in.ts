@@ -17,5 +17,6 @@ console.log("desc:", desc.value, desc.writable, desc.enumerable, desc.configurab
 console.log("descs:", Object.keys(descs).join("|"), descs.lastIndex.value, descs.lastIndex.writable, descs.lastIndex.enumerable, descs.lastIndex.configurable, reflectDesc.value);
 console.log("own:", Object.hasOwn(re, "lastIndex", mark("h")), Object.hasOwn(re, "source", mark("H")), re.hasOwnProperty("lastIndex", mark("p")), re.propertyIsEnumerable("lastIndex", mark("i")));
 console.log("call:", Object.prototype.hasOwnProperty.call(re, "lastIndex", mark("c")), Object.prototype.propertyIsEnumerable.call(re, "lastIndex", mark("q")));
+console.log("integrity:", Object.isExtensible(re, mark("E")), Object.isSealed(re, mark("L")), Object.isFrozen(re, mark("F")), Reflect.isExtensible(re, mark("I")));
 console.log("tag:", Object.prototype.toString.call(re, mark("t")));
 console.log("trace:", trace);
