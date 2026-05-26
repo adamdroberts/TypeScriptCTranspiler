@@ -10,3 +10,4 @@ closed ext true: Proxy isExtensible trap result does not match target
 fake prevent: Proxy preventExtensions trap cannot report success for extensible target
 fake still extensible: true
 real prevent: true
+events: ignored:forward default|ignored:forward set|ignored:forward ext|ignored:forward prevent|ignored:get closed|other proto trap|ignored:get exact|base proto trap|ignored:set closed|set proto:next|ignored:set same|set proto:base|ignored:open ext false|is false trap|ignored:closed ext true|is true trap|ignored:fake prevent|prevent true trap|ignored:real prevent|prevent true trap
