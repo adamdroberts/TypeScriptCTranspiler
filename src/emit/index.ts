@@ -37413,9 +37413,9 @@ class Emitter {
     }
 
     private validateCryptoRandomUUIDOptions(options: ts.Expression, label: string): void {
-        if (this.isUndefinedExpression(options)) return;
+        if (this.isUndefinedLikeExpression(options)) return;
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (this.isUndefinedExpression(resolvedOptions)) return;
+        if (this.isUndefinedLikeExpression(resolvedOptions)) return;
         if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, `${label} options must be an object literal in this subset`);
         }
