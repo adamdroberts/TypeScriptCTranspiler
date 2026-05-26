@@ -1,0 +1,3 @@
+inherited method: method value
+inherited getter: getter value
+events: method then|getter read|getter call
