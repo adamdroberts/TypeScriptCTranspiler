@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE coverage now includes `Object.prototype.hasOwnProperty.call(...)`, `propertyIsEnumerable.call(...)`, and `isPrototypeOf.call(...)` over statically present data descriptor result objects. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now includes `Object.prototype.toString.call(...)` over statically present data descriptor result objects. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now proves `Object.prototype.valueOf.call(...)` on statically present data descriptor result objects remains target-returning for follow-on property reads. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats direct `valueOf()` calls on statically present data descriptor result objects as target-returning for follow-on property reads. Test: `generated_c_dce_const`.
