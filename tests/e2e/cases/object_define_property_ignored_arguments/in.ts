@@ -49,5 +49,17 @@ console.log(
     Reflect.get(typedSample, "name"),
 );
 
+function runtimeSample(): void {}
+const runtimeFunctionDescriptors: any = {
+    length: { value: 0, writable: false, enumerable: false, configurable: false },
+};
+const runtimeFunctionProperties = Object.defineProperties(runtimeSample, runtimeFunctionDescriptors, mark("h"));
+console.log(
+    "runtime function properties:",
+    runtimeFunctionProperties === runtimeSample,
+    Object.hasOwn(runtimeSample, "length"),
+    Reflect.get(runtimeSample, "length"),
+);
+
 console.log("keys:", Object.keys(target).join("|"), Object.keys(values).join("|"), Object.keys(dynamicSample).join("|"));
 console.log("marks:", marks);
