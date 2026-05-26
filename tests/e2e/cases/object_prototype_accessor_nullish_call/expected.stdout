@@ -1,0 +1,4 @@
+define getter null: Object.prototype.__defineGetter__ receiver is null or undefined
+define setter undefined: Object.prototype.__defineSetter__ receiver is null or undefined
+lookup getter null: Object.prototype.__lookupGetter__ receiver is null or undefined
+lookup setter undefined: Object.prototype.__lookupSetter__ receiver is null or undefined

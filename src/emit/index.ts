@@ -44001,6 +44001,9 @@ class Emitter {
                 case "void":
                     if (ts.isExpression(node) && this.isNullExpression(node)) return `tsc_value_null()`;
                     if (ts.isExpression(node) && this.isUndefinedLikeExpression(node)) return `tsc_value_undefined()`;
+                    if (r.c !== "NULL" && r.c !== "(void)0") {
+                        return `({ (void)(${r.c}); tsc_value_undefined(); })`;
+                    }
                     return `tsc_value_undefined()`;
                 case "value":
                     return r.c;
