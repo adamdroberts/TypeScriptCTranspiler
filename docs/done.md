@@ -1813,7 +1813,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_callable_target_validation` | Proxy apply and construct reject non-callable object targets before trap dispatch after argument-list evaluation |
 | `proxy_callable_trap_validation` | Proxy apply and construct traps validate after argument-list evaluation |
 | `proxy_callable_trap_this_binding` | Callable proxy-valued object traps receive the handler as this |
-| `proxy_object_trap_callable_validation` | Proxy object traps reject non-callable trap values before dispatch |
+| `proxy_object_trap_callable_validation` | Proxy object traps reject non-callable trap values before dispatch after supplied operand evaluation |
 | `proxy_nullish_traps_forward` | Nullish Proxy object traps are absent and forward to the target |
 | `proxy_define_accessor` | Proxy defineProperty trap and invariant handling for accessor descriptors, including fixed accessor getter/setter identity |
 | `proxy_define_property_ignored_arguments` | Object.defineProperty and Reflect.defineProperty on Proxy evaluate ignored arguments before trap dispatch |

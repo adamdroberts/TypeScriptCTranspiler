@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Proxy object non-callable trap validation now has focused coverage for evaluating supplied property, value, descriptor, and prototype operands before rejecting the trap value. Test: `proxy_object_trap_callable_validation`.
 - Callable Proxy values now have focused coverage for dynamic `Function.prototype.apply(...)` catchable argument-list validation failures before proxy trap dispatch, while preserving ignored trailing-argument evaluation and valid array-like argument objects through proxy `apply` traps. Test: `proxy_apply_method_validation`.
 - Expression-bodied function values that return `any` from a side-effectful `void` expression now evaluate that expression before boxing the result as `undefined`; legacy Object prototype accessor call forms now have focused nullish receiver coverage with argument evaluation before the catchable receiver error. Test: `object_prototype_accessor_nullish_call`.
 - Dynamic `Function.apply(...)` method calls now have focused coverage for catchable argument-list validation failures while preserving valid array-like argument objects. Test: `function_call_apply_validation`.
