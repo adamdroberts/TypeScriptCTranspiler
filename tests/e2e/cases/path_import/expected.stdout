@@ -1,4 +1,5 @@
 named normalize: x
 named absolute: true
+alias: a false
 namespace basename: file.txt
 namespace normalize: /a/b

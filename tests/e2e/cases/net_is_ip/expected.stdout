@@ -2,4 +2,5 @@ global: 4 6 0
 global bool: true true false false
 namespace: 4 true true
 named: 6 false true
-ignored: 4 true true gnm
+alias: 4 false
+ignored: 4 true true 6 gnma

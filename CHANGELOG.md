@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Aliased named imports for supported `path`, `net`, and `os` module helpers now have focused runtime coverage. Tests: `path_import`, `net_is_ip`, `os_more`.
 - Aliased named imports for supported `crypto` module helpers now have focused runtime coverage for `createHash(...)`, `randomBytes(...)`, and `randomUUID(...)`. Tests: `crypto_import`, `crypto_random_bytes`, `crypto_random_uuid`.
 - Generated-C DCE now covers aliased named imports for deterministic `crypto.createHash(...)`, `Hash.update(...)`, and `Hash.digest(...)` chains. Test: `generated_c_dce_const`.
 - Generated-C DCE now covers aliased named imports for supported `events` module helper calls such as `getMaxListeners(...)`, `listenerCount(...)`, and `setMaxListeners(...)`. Test: `generated_c_dce_const`.
