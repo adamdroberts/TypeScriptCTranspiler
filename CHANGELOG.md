@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Boxed function `length` metadata redefinitions now use SameValue semantics, rejecting signed-zero changes while preserving compatible `Reflect.defineProperty(...)` and Object failure behavior. Test: `function_integrity`.
 - Non-configurable non-writable data descriptor redefinitions now have focused coverage for SameValue signed-zero behavior while preserving `NaN` compatibility. Test: `object_descriptor_redefine`.
 - Proxy fixed-data invariants now use SameValue semantics for signed zero while still accepting `NaN` matches across `get`, `set`, `defineProperty`, and `getOwnPropertyDescriptor` trap validation. Test: `proxy_fixed_data_same_value_invariants`.
 - Proxy boolean-returning traps now have focused coverage for ToBoolean coercion of non-boolean trap results across `set`, `has`, `defineProperty`, `deleteProperty`, `setPrototypeOf`, `isExtensible`, and `preventExtensions` paths, including coerced `isExtensible` target-state invariant mismatches. Test: `proxy_trap_result_coercion`.

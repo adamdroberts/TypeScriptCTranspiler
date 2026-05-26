@@ -1391,7 +1391,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `fs_lutimes` | fs.lutimesSync and immediate-settled fs.promises.lutimes on symlinks |
 | `fs_mkdir_mode_options` | fs.mkdirSync and immediate-settled fs.promises.mkdir numeric mode and const recursive options |
 | `function_closures` | returned closures with function-scope captures and mutable captured state |
-| `function_integrity` | stable boxed direct function identity, own length/name metadata, typed function Object/Reflect helpers, function seal/freeze state, trapless function Proxy integrity forwarding, and function-target Proxy metadata/ownKeys invariant coverage |
+| `function_integrity` | stable boxed direct function identity, own length/name metadata with SameValue redefinition checks, typed function Object/Reflect helpers, function seal/freeze state, trapless function Proxy integrity forwarding, and function-target Proxy metadata/ownKeys invariant coverage |
 | `function_call_apply_defaults` | dynamic function call/apply thisArg forwarding, array-like apply lists, and omitted/nullish apply argument lists |
 | `function_call_apply_validation` | dynamic Function.apply method argument-list validation |
 | `function_prototypes` | boxed function Object/Reflect prototype and extensibility state |
