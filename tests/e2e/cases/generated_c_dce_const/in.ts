@@ -1418,6 +1418,8 @@ const unused_error_reflect_own_keys_with_call = Reflect.ownKeys(new AggregateErr
 const unused_error_symbols_empty_map_call = Object.getOwnPropertySymbols(new TypeError("dead_error_symbols_empty_map")).map(() => Symbol("dead_error_symbols_empty_map_callback"));
 const unused_error_descriptor_value_upper_call = Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_value_upper_call"), "message")!.value.toUpperCase();
 const unused_error_descriptors_value_upper_call = Object.getOwnPropertyDescriptors(new TypeError("dead_error_descriptors_value_upper_call")).message.value.toUpperCase();
+const unused_regexp_descriptor_value_read = Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_value_read/g, "lastIndex")!.value;
+const unused_regexp_descriptors_value_read = Object.getOwnPropertyDescriptors(new RegExp("dead_regexp_descriptors_value_read", "g")).lastIndex.value;
 const unused_object_property_names_spread_with_call = Object.getOwnPropertyNames({ ...{ dead_object_property_names_spread_with: 1 }, dead_object_property_names_spread_with_tail: 2 }).with(1, "dead_object_property_names_spread_with_replacement");
 const unused_object_property_names_assign_with_call = Object.getOwnPropertyNames(Object.assign({} as { dead_object_property_names_assign_with: number; dead_object_property_names_assign_tail: number }, { dead_object_property_names_assign_with: 1 }, { dead_object_property_names_assign_tail: 2 })).with(1, "dead_object_property_names_assign_replacement");
 const unused_object_property_names_define_property_with_call = Object.getOwnPropertyNames(Object.defineProperty({} as { dead_object_property_names_define_property_with: number }, "dead_object_property_names_define_property_with", { value: 1 })).with(0, "dead_object_property_names_define_property_replacement");
@@ -2784,6 +2786,8 @@ Reflect.ownKeys(new URIError("top_level_dead_error_reflect_own_keys_with")).with
 Object.getOwnPropertySymbols(new RangeError("top_level_dead_error_symbols_empty_map")).map(() => Symbol("top_level_dead_error_symbols_empty_map_callback"));
 Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_value_upper_call"), "message")!.value.toUpperCase();
 Object.getOwnPropertyDescriptors(new TypeError("top_level_dead_error_descriptors_value_upper_call")).message.value.toUpperCase();
+Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_value_read/g, "lastIndex")!.value;
+Object.getOwnPropertyDescriptors(new RegExp("top_level_dead_regexp_descriptors_value_read", "g")).lastIndex.value;
 Object.getOwnPropertyNames(Object.assign({} as { top_level_dead_object_property_names_assign_with: number; top_level_dead_object_property_names_assign_tail: number }, { top_level_dead_object_property_names_assign_with: 1 }, { top_level_dead_object_property_names_assign_tail: 2 })).with(1, "top_level_dead_object_property_names_assign_replacement");
 Object.getOwnPropertyNames(Object.defineProperty({} as { top_level_dead_object_property_names_define_property_with: number }, "top_level_dead_object_property_names_define_property_with", { value: 1 })).with(0, "top_level_dead_object_property_names_define_property_replacement");
 Object.getOwnPropertyNames(Object.seal({ top_level_dead_object_property_names_seal_with: 1, top_level_dead_object_property_names_seal_tail: 2 })).with(1, "top_level_dead_object_property_names_seal_replacement");
@@ -4193,6 +4197,8 @@ function usedLocal(value: number): number {
     Object.getOwnPropertySymbols(new EvalError("local_dead_error_symbols_empty_map")).map(() => Symbol("local_dead_error_symbols_empty_map_callback"));
     Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_value_upper_call"), "message")!.value.toUpperCase();
     Object.getOwnPropertyDescriptors(new TypeError("local_dead_error_descriptors_value_upper_call")).message.value.toUpperCase();
+    Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_value_read/g, "lastIndex")!.value;
+    Object.getOwnPropertyDescriptors(new RegExp("local_dead_regexp_descriptors_value_read", "g")).lastIndex.value;
     ["local_dead_array_to_string", "local_dead_array_to_string_tail"].toString();
     ["local_dead_array_to_locale_string", "local_dead_array_to_locale_string_tail"].toLocaleString();
     ["local_dead_array_join_length_read"].join("/").length;

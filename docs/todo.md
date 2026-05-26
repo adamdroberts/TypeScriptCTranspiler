@@ -61,6 +61,7 @@ This is the next item that most directly expands what programs can be written ag
   - Generated-C DCE now carries exact Error-family own-key length proofs for Object/Reflect helper results over pure fresh Error instances. Test: `generated_c_dce_const`.
   - Generated-C DCE now treats descriptor-result property reads over pure fresh Error-family own data properties as side-effect-free. Test: `generated_c_dce_const`.
   - Generated-C DCE now treats string methods on pure fresh Error-family `name`/`message` descriptor values as side-effect-free. Test: `generated_c_dce_const`.
+  - Generated-C DCE now treats descriptor-result property reads over pure fresh RegExp `lastIndex` own data properties as side-effect-free. Test: `generated_c_dce_const`.
   - Benchmark output now records `tsc2c` binary size together with timing/ops data, `bench:check` can enforce per-run JSON threshold policies for size, `tsc2c` time, and speed ratios, `bench:smoke` provides a default local/CI smoke policy, `bench:long` provides a scheduled/manual long-run threshold policy, `.github/workflows/ci.yml` wires Linux gcc/clang build, no-GC e2e, and benchmark smoke checks, and scheduled/manual long benchmark checks remain on Linux gcc. Remaining work is broader generated-C DCE, further binary-size optimization, and CI matrix expansion (Linux gcc/clang ✓, macOS, Windows later)
 
 ---

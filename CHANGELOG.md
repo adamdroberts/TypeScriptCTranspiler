@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE now treats descriptor-result property reads over pure fresh RegExp `lastIndex` own data properties as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats string methods on pure fresh Error-family `name`/`message` descriptor values as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats descriptor-result property reads over pure fresh Error-family own data properties as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now carries exact Error-family own-key length proofs for Object/Reflect helper results over pure fresh Error instances. Test: `generated_c_dce_const`.
