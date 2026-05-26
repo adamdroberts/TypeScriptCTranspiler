@@ -25,6 +25,8 @@ const text: any = "ab";
 report("null", (): Map<any, any> => new Map<any, any>(nil, mark("a")));
 report("undefined", (): Map<any, any> => new Map<any, any>(undef));
 report("pairs", (): Map<any, any> => new Map<any, any>(pairs));
+const roundTrip: any = Array.from(new Map<any, any>(pairs));
+console.log("entries:", roundTrip.length, roundTrip[0][0], roundTrip[0][1], roundTrip[1][0], roundTrip[1][1], roundTrip[2][0], roundTrip[2][1]);
 report("bad", (): Map<any, any> => new Map<any, any>(bad, mark("b")));
 report("bad entry", (): Map<any, any> => new Map<any, any>(badEntry));
 report("short entry", (): Map<any, any> => new Map<any, any>(shortEntry));
