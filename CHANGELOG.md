@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE static boolean analysis now folds side-effect-free primitive equality checks, including absent descriptor comparisons against `undefined`. Test: `generated_c_dce_const`.
 - Generated-C DCE now emits a single branch for used ternary expressions whose side-effect-free condition selects identical static primitive branch values. Test: `generated_c_dce_const`.
 - Generated-C DCE static boolean, nullish, and switch-key analysis now folds side-effect-free conditional expressions when both branches have the same static result. Test: `generated_c_dce_const`.
 - Generated-C DCE static switch-key selection now uses side-effect-free boolean expression proofs for boolean switch keys. Test: `generated_c_dce_const`.

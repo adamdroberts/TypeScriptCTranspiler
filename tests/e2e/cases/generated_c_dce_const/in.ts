@@ -4982,6 +4982,21 @@ function sameBranchSwitchDce(): number {
     }
 }
 
+function absentDescriptorEqualityDce(): string {
+    // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+    return Object.getOwnPropertyDescriptor(new Error("local_dead_absent_descriptor_equality_condition"), "missing", "local_dead_absent_descriptor_equality_ignored") === undefined
+        ? "kept_absent_descriptor_equality"
+        : "local_dead_absent_descriptor_equality_false";
+}
+
+function primitiveEqualityDce(): string {
+    const leftNumber: number = 7;
+    const rightNumber: number = 8;
+    return ("static_equality" === "static_equality" && leftNumber !== rightNumber && null == undefined)
+        ? "kept_primitive_equality"
+        : "local_dead_primitive_equality_false";
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -5134,6 +5149,8 @@ console.log(
     sameBranchConditionalDce(),
     sameBranchNullishDce(),
     sameBranchSwitchDce(),
+    absentDescriptorEqualityDce(),
+    primitiveEqualityDce(),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),

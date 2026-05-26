@@ -23405,6 +23405,25 @@ class Emitter {
         }
         if (ts.isBinaryExpression(unwrapped)) {
             switch (unwrapped.operatorToken.kind) {
+                case ts.SyntaxKind.EqualsEqualsEqualsToken:
+                case ts.SyntaxKind.ExclamationEqualsEqualsToken:
+                case ts.SyntaxKind.EqualsEqualsToken:
+                case ts.SyntaxKind.ExclamationEqualsToken: {
+                    const equal = this.staticPrimitiveEqualityValue(
+                        unwrapped.left,
+                        unwrapped.right,
+                        unwrapped.operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken ||
+                            unwrapped.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken,
+                        seenConsts,
+                    );
+                    if (equal !== null) {
+                        return unwrapped.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken ||
+                            unwrapped.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken
+                            ? !equal
+                            : equal;
+                    }
+                    return null;
+                }
                 case ts.SyntaxKind.AmpersandAmpersandToken: {
                     const left = this.staticBooleanValue(unwrapped.left, seenConsts);
                     if (left === false) return false;
@@ -23441,6 +23460,43 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.staticBooleanValue(init, seenConsts) : null;
+    }
+
+    private staticPrimitiveEqualityValue(
+        left: ts.Expression,
+        right: ts.Expression,
+        loose: boolean,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean | null {
+        const leftKey = this.staticPrimitiveEqualityKey(left, seenConsts);
+        const rightKey = this.staticPrimitiveEqualityKey(right, seenConsts);
+        if (!leftKey || !rightKey) return null;
+        if (leftKey === "number:NaN" || rightKey === "number:NaN") return false;
+        if (leftKey === rightKey) return true;
+        if (loose) {
+            return (
+                (leftKey === "null" && rightKey === "undefined") ||
+                (leftKey === "undefined" && rightKey === "null")
+            );
+        }
+        return false;
+    }
+
+    private staticPrimitiveEqualityKey(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): string | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (unwrapped.kind === ts.SyntaxKind.NullKeyword) return "null";
+        if (this.isSideEffectFreeUndefinedValue(unwrapped, seenConsts)) return "undefined";
+        const bool = this.sideEffectFreeBooleanLiteralValue(unwrapped, seenConsts);
+        if (bool !== null) return `boolean:${bool}`;
+        const text = this.sideEffectFreeStringLiteralText(unwrapped, seenConsts);
+        if (text !== null) return `string:${text}`;
+        const number = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped, seenConsts);
+        if (number !== null) return Number.isNaN(number) ? "number:NaN" : `number:${Object.is(number, -0) ? 0 : number}`;
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.staticPrimitiveEqualityKey(init, seenConsts) : null;
     }
 
     private staticNullishState(
