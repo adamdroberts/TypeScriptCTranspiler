@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic `Function.apply(...)` method calls now have focused coverage for catchable argument-list validation failures while preserving valid array-like argument objects. Test: `function_call_apply_validation`.
 - Dynamic function `apply(...)` calls now have focused coverage for array-like argument-list objects normalizing through the boxed function dispatcher. Test: `function_call_apply_defaults`.
 - Callable Proxy values now have focused coverage for dynamic `Function.prototype.call(...)` with omitted, explicit `undefined`, and explicit `null` receivers while forwarding an empty normalized argument list through proxy `apply` traps. Test: `proxy_call_empty_arguments_list`.
 - Callable Proxy values now have focused coverage for dynamic `Function.prototype.apply(...)` with omitted, `null`, and `undefined` argument lists normalized to empty arrays while still evaluating ignored trailing arguments. Test: `proxy_apply_empty_arguments_list`.
