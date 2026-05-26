@@ -1,0 +1,6 @@
+union: 1,2,3,4
+intersection: 3
+difference: 1,2
+symmetric: 1,2,4
+predicates: true true true
+events: union|intersection|difference|symmetric|subset|superset|disjoint

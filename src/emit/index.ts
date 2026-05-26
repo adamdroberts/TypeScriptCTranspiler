@@ -30590,7 +30590,7 @@ class Emitter {
             case "intersection":
             case "difference":
             case "symmetricDifference": {
-                if (args.length !== 1)
+                if (args.length < 1)
                     unsupported(call, `Set.${method} expects one Set<T> argument`);
                 const other = this.emitExpr(args[0]!);
                 if (other.ty.kind !== "set" || !sameCType(other.ty.elem!, e))
@@ -30598,14 +30598,14 @@ class Emitter {
                 const fn = method === "symmetricDifference" ? "tsc_set_symmetric_difference" : `tsc_set_${method}`;
                 return this.emitSequencedExpr(
                     recv.ty,
-                    [{ value: recv }, { value: other }],
+                    [{ value: recv }, { value: other }, ...this.ignoredArgumentSpecs(args, 1)],
                     ([a, b]) => `${fn}(${a!}, ${b!})`,
                 );
             }
             case "isSubsetOf":
             case "isSupersetOf":
             case "isDisjointFrom": {
-                if (args.length !== 1)
+                if (args.length < 1)
                     unsupported(call, `Set.${method} expects one Set<T> argument`);
                 const other = this.emitExpr(args[0]!);
                 if (other.ty.kind !== "set" || !sameCType(other.ty.elem!, e))
@@ -30617,7 +30617,7 @@ class Emitter {
                         : "tsc_set_is_disjoint_from";
                 return this.emitSequencedExpr(
                     T_BOOLEAN,
-                    [{ value: recv }, { value: other }],
+                    [{ value: recv }, { value: other }, ...this.ignoredArgumentSpecs(args, 1)],
                     ([a, b]) => `${fnName}(${a!}, ${b!})`,
                 );
             }
