@@ -1,0 +1,3 @@
+{
+  "description": "Proxy object, apply, and construct traps may be inherited from the handler prototype"
+}

@@ -1,0 +1,6 @@
+get: inherited value
+set: value:set
+has: true true
+apply: apply:x
+construct: y true
+events: get:object-handler|get:object-handler|set:object-handler|has:object-handler|has:object-handler|apply:callable-handler|construct:callable-handler
