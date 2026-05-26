@@ -28870,6 +28870,16 @@ class Emitter {
         const specs: SequencedCallArg[] = [
             { value: recv, target: T_VALUE, node: call.expression },
         ];
+        if (args.some((arg) => ts.isSpreadElement(arg))) {
+            const argList = this.emitSpreadCallArgumentList(args);
+            return this.emitSequencedExpr(T_VALUE, [
+                { value: recv, target: T_VALUE, node: call.expression },
+                { value: argList, node: call },
+            ], ([target, list]) => {
+                const fn = this.freshTemp("_dyn_call_fn");
+                return `({ tsc_value_t ${fn} = tsc_value_get_prop(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)})); tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${list})); })`;
+            });
+        }
         for (const arg of args) {
             specs.push({ value: this.emitExpr(arg), target: T_VALUE, node: arg });
         }

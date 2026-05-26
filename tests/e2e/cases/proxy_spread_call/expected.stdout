@@ -1,0 +1,4 @@
+direct: undefined:x:y:trap
+method: holder:a:b:trap
+forward: ctx:m:n
+events: trap:undefined:x,y|trap:holder:a,b
