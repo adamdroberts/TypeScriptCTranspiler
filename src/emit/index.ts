@@ -23473,6 +23473,25 @@ class Emitter {
                 ? "nonNullish"
                 : null;
         }
+        if (ts.isBinaryExpression(unwrapped)) {
+            switch (unwrapped.operatorToken.kind) {
+                case ts.SyntaxKind.QuestionQuestionToken: {
+                    const left = this.staticNullishState(unwrapped.left, seenConsts);
+                    if (left === "nullish") return this.staticNullishState(unwrapped.right, seenConsts);
+                    if (left === "nonNullish") return this.staticNullishState(unwrapped.left, seenConsts);
+                    return null;
+                }
+                case ts.SyntaxKind.CommaToken:
+                    return this.isSideEffectFreeTopLevelConstInitializer(unwrapped.left, seenConsts)
+                        ? this.staticNullishState(unwrapped.right, seenConsts)
+                        : null;
+            }
+        }
+        if (ts.isConditionalExpression(unwrapped)) {
+            const condition = this.staticBooleanValue(unwrapped.condition, seenConsts);
+            if (condition === true) return this.staticNullishState(unwrapped.whenTrue, seenConsts);
+            if (condition === false) return this.staticNullishState(unwrapped.whenFalse, seenConsts);
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.staticNullishState(init, seenConsts) : null;
     }
