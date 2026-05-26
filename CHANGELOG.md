@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Callable Proxy handler accessor trap properties now have focused coverage for receiver-bound `apply` / `construct` lookup before trap dispatch. Test: `proxy_callable_trap_accessor_lookup`.
 - Revoked callable Proxy handler objects now have focused coverage for throwing during `apply` / `construct` trap lookup on callable target Proxy operations. Test: `proxy_revoked_callable_handler_lookup`.
 - Callable Proxy handler objects that are themselves Proxy values now have focused coverage for routing `apply` / `construct` trap lookup through the handler proxy before dispatch. Test: `proxy_callable_handler_lookup`.
 - Proxy `apply` traps now have focused coverage for receiving a normalized real argument array from array-like `Reflect.apply(...)` inputs and for forwarding trap-mutated arguments into target calls. Test: `proxy_apply_arguments_list`.
