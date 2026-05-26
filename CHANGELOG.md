@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Proxy `apply` traps now have focused coverage for receiving a normalized real argument array from array-like `Reflect.apply(...)` inputs and for forwarding trap-mutated arguments into target calls. Test: `proxy_apply_arguments_list`.
 - Proxy `construct` traps now have focused coverage for receiving a normalized real argument array from array-like `Reflect.construct(...)` inputs and for forwarding trap-mutated arguments into target construction. Test: `proxy_construct_arguments_list`.
 - Proxy `get` and `set` traps now have focused coverage for receiving the direct proxy receiver or explicit `Reflect.get` / `Reflect.set` receiver identity. Test: `proxy_receiver_identity`.
 - Revoked Proxy handler objects now have focused coverage for throwing during trap lookup on target Proxy operations. Test: `proxy_revoked_handler_lookup`.
