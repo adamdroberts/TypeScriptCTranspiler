@@ -1,0 +1,4 @@
+apply before: ctx:x
+construct before: y
+apply after: Cannot perform 'get' on a proxy that has been revoked
+construct after: Cannot perform 'get' on a proxy that has been revoked
