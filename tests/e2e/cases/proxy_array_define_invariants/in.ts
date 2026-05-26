@@ -1,4 +1,12 @@
+const events: string[] = [];
+
+function mark(label: string): string {
+    events.push("ignored:" + label);
+    return label;
+}
+
 function trueDefine(target: any, prop: any, desc: any): boolean {
+    events.push("define:" + String(prop));
     return true;
 }
 
@@ -13,7 +21,7 @@ try {
             writable: true,
             enumerable: true,
             configurable: true,
-        }),
+        }, mark("add closed")),
     );
 } catch (err: any) {
     console.log("add closed:", err);
@@ -28,7 +36,7 @@ try {
             writable: true,
             enumerable: true,
             configurable: false,
-        }),
+        }, mark("new nonconfig")),
     );
 } catch (err: any) {
     console.log("new nonconfig:", err);
@@ -45,7 +53,7 @@ try {
             writable: false,
             enumerable: true,
             configurable: false,
-        }),
+        }, mark("change frozen")),
     );
 } catch (err: any) {
     console.log("change frozen:", err);
@@ -61,5 +69,6 @@ console.log(
         writable: true,
         enumerable: true,
         configurable: false,
-    }),
+    }, mark("sealed compatible")),
 );
+console.log("events:", events.join("|"));
