@@ -1,5 +1,6 @@
 named delay: named delay
 named immediate: named immediate
+alias: alias delay alias immediate
 namespace delay: namespace delay
 default immediate: default immediate
 options: option delay option immediate

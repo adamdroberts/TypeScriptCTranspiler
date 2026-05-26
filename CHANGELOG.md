@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Aliased named imports for supported `timers` and `timers/promises` helpers now have focused runtime coverage. Tests: `timers_module_import`, `timers_promises_import`, `timers_promises_scheduler`.
 - Aliased named imports for supported `url` module helpers now have focused runtime coverage for `URL`, `fileURLToPath(...)`, and `pathToFileURL(...)`. Tests: `url_module_import`, `url_file_path_helpers`.
 - Aliased named imports for supported `buffer` base64 helpers and `console` methods now have focused runtime coverage. Tests: `buffer_base64_import`, `console_module_import`.
 - Aliased named imports for supported `path`, `net`, and `os` module helpers now have focused runtime coverage. Tests: `path_import`, `net_is_ip`, `os_more`.

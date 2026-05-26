@@ -1,4 +1,4 @@
-import timersDefault, { clearTimeout, setTimeout as importedTimeout } from "node:timers";
+import timersDefault, { clearImmediate as importedClearImmediate, clearTimeout, clearTimeout as clearTimeoutAlias, setImmediate as importedImmediate, setTimeout as importedTimeout } from "node:timers";
 import * as timers from "timers";
 
 const events: string[] = [];
@@ -8,10 +8,15 @@ const droppedTimeout = importedTimeout((): void => {
 }, 0);
 clearTimeout(droppedTimeout);
 
-const droppedImmediate = timers.setImmediate((): void => {
+const droppedTimeoutAlias = importedTimeout((): void => {
+    events.push("dropped-timeout-alias");
+}, 0);
+clearTimeoutAlias(droppedTimeoutAlias);
+
+const droppedImmediate = importedImmediate((): void => {
     events.push("dropped-immediate");
 });
-timersDefault.clearImmediate(droppedImmediate);
+importedClearImmediate(droppedImmediate);
 
 importedTimeout((label: string): void => {
     events.push(label);
@@ -20,6 +25,10 @@ importedTimeout((label: string): void => {
 timers.setTimeout((label: string): void => {
     events.push(label);
 }, 0, "namespace-timeout");
+
+importedImmediate((label: string): void => {
+    events.push(label);
+}, "named-immediate");
 
 timersDefault.setImmediate((label: string): void => {
     events.push(label);

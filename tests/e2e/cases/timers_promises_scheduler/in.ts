@@ -1,7 +1,8 @@
-import timersPromises, { scheduler } from "node:timers/promises";
+import timersPromises, { scheduler, scheduler as schedulerAlias } from "node:timers/promises";
 import * as timersPromisesNs from "timers/promises";
 
 let namedWait = "pending";
+let aliasWait = "pending";
 let defaultYield = "pending";
 let namespaceWait = "pending";
 let optionWait = "pending";
@@ -16,6 +17,10 @@ const undefinedDelay = undefined;
 
 scheduler.wait(0, schedulerOptions).then((_value: any): void => {
     namedWait = "settled";
+});
+
+schedulerAlias.wait(undefinedDelay).then((_value: any): void => {
+    aliasWait = "settled";
 });
 
 timersPromises.scheduler.yield().then((_value: any): void => {
@@ -38,5 +43,5 @@ timersPromises.scheduler.yield((ignoredOrder += "Y", 2)).then((_value: any): voi
     ignoredYield = "settled";
 });
 
-console.log("scheduler:", namedWait, defaultYield, namespaceWait, optionWait);
+console.log("scheduler:", namedWait, aliasWait, defaultYield, namespaceWait, optionWait);
 console.log("ignored:", ignoredWait, ignoredYield, ignoredOrder);

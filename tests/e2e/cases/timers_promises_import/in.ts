@@ -1,9 +1,11 @@
 import timersPromises from "timers/promises";
-import { setTimeout as delay, setImmediate } from "node:timers/promises";
+import { setTimeout as delay, setTimeout as delayAlias, setImmediate, setImmediate as setImmediateAlias } from "node:timers/promises";
 import * as nodeTimersPromises from "node:timers/promises";
 
 let namedDelay = "";
 let namedImmediate = "";
+let aliasDelay = "";
+let aliasImmediate = "";
 let namespaceDelay = "";
 let defaultImmediate = "";
 let optionDelay = "";
@@ -26,6 +28,14 @@ delay(0, "named delay", delayOptions).then((value: string): void => {
 
 setImmediate("named immediate", immediateOptions).then((value: string): void => {
     namedImmediate = value;
+});
+
+delayAlias(0, "alias delay").then((value: string): void => {
+    aliasDelay = value;
+});
+
+setImmediateAlias("alias immediate").then((value: string): void => {
+    aliasImmediate = value;
 });
 
 nodeTimersPromises.setTimeout(undefinedDelay, "namespace delay", noOptions).then((value: string): void => {
@@ -54,6 +64,7 @@ timersPromises.setImmediate("ignored immediate", undefined, (ignoredOrder += "I"
 
 console.log("named delay:", namedDelay);
 console.log("named immediate:", namedImmediate);
+console.log("alias:", aliasDelay, aliasImmediate);
 console.log("namespace delay:", namespaceDelay);
 console.log("default immediate:", defaultImmediate);
 console.log("options:", optionDelay, optionImmediate);
