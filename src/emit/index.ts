@@ -7680,7 +7680,11 @@ class Emitter {
             ts.isIdentifier(expr.expression.expression) &&
             this.isUnshadowedGlobalIdentifier(expr.expression.expression, "Reflect") &&
             expr.expression.name.text === "get" &&
-            expr.arguments.length === 2
+            (expr.arguments.length === 2 || expr.arguments.length === 3) &&
+            (
+                expr.arguments.length === 2 ||
+                this.isSideEffectFreeTopLevelConstInitializer(expr.arguments[2]!, seenConsts)
+            )
         ) {
             const key = this.sideEffectFreeObjectPropertyReadKey(expr.arguments[1]!, seenConsts);
             return key === null ? null : { receiver: expr.arguments[0]!, key };
@@ -9408,11 +9412,17 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): boolean {
         if (
-            call.arguments.length !== 2 ||
+            (call.arguments.length !== 2 && call.arguments.length !== 3) ||
             !ts.isPropertyAccessExpression(call.expression) ||
             !ts.isIdentifier(call.expression.expression) ||
             !this.isUnshadowedGlobalIdentifier(call.expression.expression, "Reflect") ||
             call.expression.name.text !== "get"
+        ) {
+            return false;
+        }
+        if (
+            call.arguments.length === 3 &&
+            !this.isSideEffectFreeTopLevelConstInitializer(call.arguments[2]!, seenConsts)
         ) {
             return false;
         }

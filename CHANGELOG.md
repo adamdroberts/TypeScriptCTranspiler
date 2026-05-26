@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE now treats three-argument `Reflect.get(descriptor, key, receiver)` over statically present data descriptor result objects as side-effect-free when the receiver expression is pure. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused `Promise.resolve(...)` calls over direct and `Reflect.get(...)` boolean flag reads from statically present data descriptor result objects. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats boolean data descriptor flag reads, including `Reflect.get(descriptor, "configurable")`, as side-effect-free primitive operands for string/value coercion pruning. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now includes direct `Object.getOwnPropertyNames(...)`, `Object.values(...)`, and `Object.entries(...)` enumeration over statically present data descriptor result objects. Test: `generated_c_dce_const`.
