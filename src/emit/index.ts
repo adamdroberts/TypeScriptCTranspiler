@@ -31676,13 +31676,18 @@ class Emitter {
                 ], ([ee, event]) => `tsc_event_emitter_once_promise(${ee}, ${event})`);
             }
             case "setMaxListeners": {
-                if (args.length !== 2) unsupported(call, "events.setMaxListeners expects count and emitter");
+                if (args.length < 2) unsupported(call, "events.setMaxListeners expects count and at least one emitter");
                 const count = this.emitExpr(args[0]!);
-                const emitter = this.emitExpr(args[1]!);
-                return this.emitSequencedExpr(T_VOID, [
+                const specs: SequencedCallArg[] = [
                     { value: count, target: T_NUMBER, node: args[0]! },
-                    { value: emitter, target: T_EVENT_EMITTER, node: args[1]! },
-                ], ([n, ee]) => `tsc_event_emitter_set_max_listeners(${ee}, ${n})`);
+                ];
+                for (let i = 1; i < args.length; i++) {
+                    const emitter = this.emitExpr(args[i]!);
+                    specs.push({ value: emitter, target: T_EVENT_EMITTER, node: args[i]! });
+                }
+                return this.emitSequencedExpr(T_VOID, specs, ([n, ...emitters]) =>
+                    `({ ${emitters.map((ee) => `tsc_event_emitter_set_max_listeners(${ee}, ${n})`).join("; ")}; (void)0; })`,
+                );
             }
             case "getMaxListeners": {
                 if (args.length < 1) unsupported(call, "events.getMaxListeners expects emitter");
