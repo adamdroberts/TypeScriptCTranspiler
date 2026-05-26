@@ -1,5 +1,5 @@
 import * as nodeDns from "node:dns";
-import { promises } from "dns";
+import { promises, promises as dnsPromisesAlias } from "dns";
 
 dns.promises.lookup("127.0.0.1").then((result: any): void => {
     console.log("global promise:", result.address, result.family);
@@ -13,6 +13,10 @@ promises.lookup("127.0.0.1", { family: 4 }).then((result: any): void => {
     console.log("named promise:", result.address, result.family);
 });
 
+dnsPromisesAlias.lookup("127.0.0.1", { family: 4 }).then((result: any): void => {
+    console.log("alias promise:", result.address, result.family);
+});
+
 let ignoredOrder = "";
 nodeDns.promises.lookup("127.0.0.1", { family: 4 }, (ignoredOrder += "N", 1)).then((result: any): void => {
     console.log("namespace ignored:", result.address, result.family, ignoredOrder);
@@ -20,4 +24,8 @@ nodeDns.promises.lookup("127.0.0.1", { family: 4 }, (ignoredOrder += "N", 1)).th
 
 promises.lookup("127.0.0.1", { family: 4 }, (ignoredOrder += "P", 2)).then((result: any): void => {
     console.log("named ignored:", result.address, result.family, ignoredOrder);
+});
+
+dnsPromisesAlias.lookup("127.0.0.1", { family: 4 }, (ignoredOrder += "A", 3)).then((result: any): void => {
+    console.log("alias ignored:", result.address, result.family, ignoredOrder);
 });

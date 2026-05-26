@@ -1,5 +1,7 @@
 global promise: 127.0.0.1 4
 namespace promise: 127.0.0.1 4
 named promise: 127.0.0.1 4
+alias promise: 127.0.0.1 4
 namespace ignored: 127.0.0.1 4 N
 named ignored: 127.0.0.1 4 NP
+alias ignored: 127.0.0.1 4 NPA
