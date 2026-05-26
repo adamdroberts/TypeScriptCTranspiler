@@ -1799,7 +1799,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_array_has_delete_invariants` | array Proxy has/deleteProperty traps enforce non-configurable and non-extensible key invariants after trap dispatch |
 | `proxy_array_object_helpers` | trapless array Proxy Object/Reflect own-key, value, descriptor, has, and enumerability forwarding |
 | `proxy_array_is_array` | Array.isArray follows array Proxy chains and rejects revoked array proxies |
-| `proxy_array_prototype_invariants` | array Proxy getPrototypeOf/setPrototypeOf traps forward and enforce non-extensible prototype invariants |
+| `proxy_array_prototype_invariants` | array Proxy getPrototypeOf/setPrototypeOf traps forward and enforce non-extensible prototype invariants after ignored-argument evaluation and trap dispatch |
 | `proxy_array_to_string_tag` | Object.prototype.toString.call tags array Proxy chains as Array |
 | `proxy_direct_call` | direct dynamic calls through callable Proxy values |
 | `proxy_method_call` | dynamic object method calls through callable Proxy property values |
