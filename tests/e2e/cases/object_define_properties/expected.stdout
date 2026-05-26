@@ -6,3 +6,4 @@ closed desc: true true
 closed: 4
 closed set: 9
 json: {"a":1,"closed":9}
+static failed: Object.defineProperties failed

@@ -38862,7 +38862,7 @@ class Emitter {
                         const k = vals[1]!;
                         const getterEnv = getterEnvPos >= 0 ? vals[getterEnvPos]! : "NULL";
                         const setterEnv = setterEnvPos >= 0 ? vals[setterEnvPos]! : "NULL";
-                        return `({ tsc_value_define_accessor_desc(${dynamicObjectArg(o)}, ${k}, ${desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${desc.hasGetter}, ${desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${desc.hasSetter}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable}); ${o}; })`;
+                        return `({ if (!tsc_value_define_accessor_desc(${dynamicObjectArg(o)}, ${k}, ${desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${desc.hasGetter}, ${desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${desc.hasSetter}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`;
                     },
                 );
             }
@@ -38877,7 +38877,7 @@ class Emitter {
                     { value, target: T_VALUE, node: desc.value ?? args[2]! },
                     ...ignored,
                 ],
-                ([o, k, v]) => `({ tsc_value_define_property_desc(${dynamicObjectArg(o!)}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable}); ${o}; })`,
+                ([o, k, v]) => `({ if (!tsc_value_define_property_desc(${dynamicObjectArg(o!)}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`,
             );
         }
         if (name === "defineProperties") {
@@ -41236,13 +41236,13 @@ class Emitter {
                 if (entry.desc.kind === "data") {
                     const value = vals[entry.valuePos!]!;
                     pieces.push(
-                        `tsc_value_define_property_desc(${target}, ${key}, ${value}, ${entry.desc.hasValue}, ${entry.desc.writable}, ${entry.desc.hasWritable}, ${entry.desc.enumerable}, ${entry.desc.hasEnumerable}, ${entry.desc.configurable}, ${entry.desc.hasConfigurable})`,
+                        `if (!tsc_value_define_property_desc(${target}, ${key}, ${value}, ${entry.desc.hasValue}, ${entry.desc.writable}, ${entry.desc.hasWritable}, ${entry.desc.enumerable}, ${entry.desc.hasEnumerable}, ${entry.desc.configurable}, ${entry.desc.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperties failed"))`,
                     );
                 } else {
                     const getterEnv = entry.getterEnvPos != null ? vals[entry.getterEnvPos]! : "NULL";
                     const setterEnv = entry.setterEnvPos != null ? vals[entry.setterEnvPos]! : "NULL";
                     pieces.push(
-                        `tsc_value_define_accessor_desc(${target}, ${key}, ${entry.desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${entry.desc.hasGetter}, ${entry.desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${entry.desc.hasSetter}, ${entry.desc.enumerable}, ${entry.desc.hasEnumerable}, ${entry.desc.configurable}, ${entry.desc.hasConfigurable})`,
+                        `if (!tsc_value_define_accessor_desc(${target}, ${key}, ${entry.desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${entry.desc.hasGetter}, ${entry.desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${entry.desc.hasSetter}, ${entry.desc.enumerable}, ${entry.desc.hasEnumerable}, ${entry.desc.configurable}, ${entry.desc.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperties failed"))`,
                     );
                 }
             }

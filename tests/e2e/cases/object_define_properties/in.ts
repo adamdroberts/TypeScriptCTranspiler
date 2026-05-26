@@ -26,6 +26,14 @@ function install(target: any): any {
     });
 }
 
+function report(label: string, fn: () => any): void {
+    try {
+        console.log(label + ":", fn());
+    } catch (e: any) {
+        console.log(label + ":", e);
+    }
+}
+
 const obj: any = {};
 const returned: any = install(obj);
 console.log("same:", returned === obj);
@@ -39,3 +47,12 @@ console.log("closed:", obj.closed);
 obj.closed = 9;
 console.log("closed set:", obj.closed);
 console.log("json:", JSON.stringify(obj));
+
+const closedTarget: any = {};
+Object.preventExtensions(closedTarget);
+report("static failed", (): any => Object.defineProperties(closedTarget, {
+    blocked: {
+        value: 1,
+        enumerable: true,
+    },
+}));
