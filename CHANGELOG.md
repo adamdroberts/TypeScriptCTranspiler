@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `fs.realpathSync(...)`, `fs.readlinkSync(...)`, `fs.mkdtempSync(...)`, and immediate `fs.promises.realpath(...)` / `readlink(...)` / `mkdtemp(...)` now treat side-effectful `void` whole-options arguments as defaulted while preserving options-slot evaluation before ignored extras. Test: `fs_link_mkdtemp_ignored_arguments`.
 - `fs.statSync(...)`, `fs.lstatSync(...)`, and immediate `fs.promises.stat(...)` / `lstat(...)` now treat side-effectful `void` whole-options arguments as defaulted while preserving options-slot evaluation before ignored extras. Test: `fs_stat_ignored_arguments`.
 - `fs.readdirSync(...)` and immediate `fs.promises.readdir(...)` now treat side-effectful `void` whole-options arguments as defaulted while preserving options-slot evaluation before ignored extras. Test: `fs_readdir_ignored_arguments`.
 - `fs.writeFileSync(...)`, `fs.appendFileSync(...)`, and immediate `fs.promises.writeFile(...)` / `appendFile(...)` now treat side-effectful `void` whole-options arguments as defaulted while preserving options-slot evaluation before ignored extras. Test: `fs_write_append_ignored_arguments`.

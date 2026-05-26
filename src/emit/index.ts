@@ -36274,8 +36274,13 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "fs.realpathSync needs path and optional UTF-8/hex/base64/buffer encoding options");
                 const result = this.validateFsEncodingOptions(args[1], "fs.realpathSync");
                 const p = this.emitExpr(args[0]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 return this.emitSequencedExpr(result === "buffer" ? T_BUFFER : T_STRING, [
                     this.fsPathSpec(p, args[0]!, "fs.realpathSync path"),
+                    ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => {
                     const value = `tsc_fs_realpath_sync(${path!})`;
@@ -36286,8 +36291,13 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "fs.readlinkSync needs path and optional UTF-8/hex/base64/buffer encoding options");
                 const result = this.validateFsEncodingOptions(args[1], "fs.readlinkSync");
                 const p = this.emitExpr(args[0]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 return this.emitSequencedExpr(result === "buffer" ? T_BUFFER : T_STRING, [
                     this.fsPathSpec(p, args[0]!, "fs.readlinkSync path"),
+                    ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => {
                     const value = `tsc_fs_readlink_sync(${path!})`;
@@ -36319,8 +36329,13 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "fs.mkdtempSync needs prefix and optional UTF-8/hex/base64/buffer encoding options");
                 const result = this.validateFsEncodingOptions(args[1], "fs.mkdtempSync");
                 const prefix = this.emitExpr(args[0]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 return this.emitSequencedExpr(result === "buffer" ? T_BUFFER : T_STRING, [
                     this.fsPathSpec(prefix, args[0]!, "fs.mkdtempSync prefix"),
+                    ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([value]) => {
                     const dir = `tsc_fs_mkdtemp_sync(${value!})`;
@@ -36625,8 +36640,9 @@ class Emitter {
     }
 
     private validateFsEncodingOptions(options: ts.Expression | undefined, label: string): "utf8" | "hex" | "base64" | "buffer" {
-        if (!options || this.isUndefinedExpression(options)) return "utf8";
+        if (!options || this.isUndefinedLikeExpression(options)) return "utf8";
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedLikeExpression(resolvedOptions)) return "utf8";
         const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" | "buffer" => {
             node = this.resolveSideEffectFreeEarlierConstExpression(node);
             if (this.isUndefinedExpression(node)) return "utf8";
@@ -37184,8 +37200,13 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "fs.promises.realpath needs a path and optional UTF-8/hex/base64/buffer encoding options");
                 const result = this.validateFsEncodingOptions(args[1], "fs.promises.realpath");
                 const p = this.emitExpr(args[0]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.realpath path"),
+                    ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => {
                     const value = `tsc_fs_realpath_sync(${path!})`;
@@ -37199,8 +37220,13 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "fs.promises.readlink needs a path and optional UTF-8/hex/base64/buffer encoding options");
                 const result = this.validateFsEncodingOptions(args[1], "fs.promises.readlink");
                 const p = this.emitExpr(args[0]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.readlink path"),
+                    ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => {
                     const value = `tsc_fs_readlink_sync(${path!})`;
@@ -37239,8 +37265,13 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "fs.promises.mkdtemp needs prefix and optional UTF-8/hex/base64/buffer encoding options");
                 const result = this.validateFsEncodingOptions(args[1], "fs.promises.mkdtemp");
                 const prefix = this.emitExpr(args[0]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(prefix, args[0]!, "fs.promises.mkdtemp prefix"),
+                    ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => {
                     const value = `tsc_fs_mkdtemp_sync(${path!})`;

@@ -13,24 +13,28 @@ function mark(label: string): string {
     return label;
 }
 
+function note(label: string): void {
+    events.push(label);
+}
+
 fs.rmSync(root, { recursive: true, force: true });
 fs.mkdirSync(nested, { recursive: true });
 fs.writeFileSync(target, "target");
 fs.symlinkSync(target, link);
 
-const real = fs.realpathSync(path.join(nested, ".."), void 0, mark("real"));
-const read = readlinkSync(link, void 0, mark("read"));
-const made = mkdtempSync(syncPrefix, void 0, mark("mkd"));
+const real = fs.realpathSync(path.join(nested, ".."), void note("real-options"), mark("real"));
+const read = readlinkSync(link, void note("read-options"), mark("read"));
+const made = mkdtempSync(syncPrefix, void note("mkd-options"), mark("mkd"));
 
-fs.promises.realpath(path.join(nested, ".."), void 0, mark("preal")).then((value: string): void => {
+fs.promises.realpath(path.join(nested, ".."), void note("preal-options"), mark("preal")).then((value: string): void => {
     console.log("promise real:", value === root);
 });
 
-fs.promises.readlink(link, void 0, mark("pread")).then((value: string): void => {
+fs.promises.readlink(link, void note("pread-options"), mark("pread")).then((value: string): void => {
     console.log("promise read:", value === target);
 });
 
-fs.promises.mkdtemp(promisePrefix, void 0, mark("pmkd")).then((value: string): void => {
+fs.promises.mkdtemp(promisePrefix, void note("pmkd-options"), mark("pmkd")).then((value: string): void => {
     console.log("promise mkd:", value.indexOf(promisePrefix) === 0, fs.statSync(value).isDirectory());
     fs.rmSync(value, { recursive: true, force: true });
 });
