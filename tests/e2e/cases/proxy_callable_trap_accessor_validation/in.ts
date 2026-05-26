@@ -16,6 +16,11 @@ function Target(this: any, value: any): any {
     this.value = value;
 }
 
+function args(label: string, value: any): any[] {
+    events.push(label);
+    return [value];
+}
+
 const badApplyHandler: any = { marker: "bad-apply" };
 Object.defineProperty(badApplyHandler, "apply", {
     get: function(this: any): any {
@@ -27,7 +32,7 @@ Object.defineProperty(badApplyHandler, "apply", {
 });
 const badApply: any = new Proxy(add as any, badApplyHandler);
 report("bad apply", function(): any {
-    return Reflect.apply(badApply, { base: "ctx" }, ["x"]);
+    return Reflect.apply(badApply, { base: "ctx" }, args("badApplyArgs", "x"));
 });
 
 const undefinedApplyHandler: any = { marker: "undefined-apply" };
@@ -40,7 +45,7 @@ Object.defineProperty(undefinedApplyHandler, "apply", {
     configurable: true,
 });
 const undefinedApply: any = new Proxy(add as any, undefinedApplyHandler);
-console.log("undefined apply:", Reflect.apply(undefinedApply, { base: "ctx" }, ["x"]));
+console.log("undefined apply:", Reflect.apply(undefinedApply, { base: "ctx" }, args("undefinedApplyArgs", "x")));
 
 const badConstructHandler: any = { marker: "bad-construct" };
 Object.defineProperty(badConstructHandler, "construct", {
@@ -53,7 +58,7 @@ Object.defineProperty(badConstructHandler, "construct", {
 });
 const badConstruct: any = new Proxy(Target as any, badConstructHandler);
 report("bad construct", function(): any {
-    return Reflect.construct(badConstruct, ["x"]);
+    return Reflect.construct(badConstruct, args("badConstructArgs", "x"));
 });
 
 const nullConstructHandler: any = { marker: "null-construct" };
@@ -66,6 +71,6 @@ Object.defineProperty(nullConstructHandler, "construct", {
     configurable: true,
 });
 const nullConstruct: any = new Proxy(Target as any, nullConstructHandler);
-const made: any = Reflect.construct(nullConstruct, ["y"]);
+const made: any = Reflect.construct(nullConstruct, args("nullConstructArgs", "y"));
 console.log("null construct:", made.value);
 console.log("events:", events.join("|"));

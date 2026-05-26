@@ -2,4 +2,4 @@ bad apply: Proxy apply trap must be callable
 undefined apply: ctx:x
 bad construct: Proxy construct trap must be callable
 null construct: y
-events: badApply:bad-apply|undefinedApply:undefined-apply|badConstruct:bad-construct|nullConstruct:null-construct
+events: badApplyArgs|badApply:bad-apply|undefinedApplyArgs|undefinedApply:undefined-apply|badConstructArgs|badConstruct:bad-construct|nullConstructArgs|nullConstruct:null-construct
