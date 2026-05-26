@@ -777,7 +777,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Crypto hashing now uses OpenSSL EVP digest APIs instead of deprecated `SHA*_Init` / `SHA*_Update` / `SHA*_Final` calls.
 
 ### Fixed
-- Local array literals referenced from nested callbacks no longer use stack-backed storage, avoiding invalid `realloc(...)` when callback bodies grow the array. Test: `set_composition`.
+- Local array literals referenced from nested callbacks no longer use stack-backed storage, avoiding invalid `realloc(...)` when callback bodies grow the array. Tests: `array_literal_stack_alloc_callback_growth`, `set_composition`.
 - The e2e harness now treats any directory with `in.ts` as a real case and fails discovery when it lacks `expected.stdout`, `expected.exitcode`, or `compile.emit_c_only`, so malformed fixtures cannot be silently skipped.
 - `crypto.randomUUID(...)` now has coverage for explicit `undefined` option values using defaults. Test: `crypto_random_uuid`.
 - `os.userInfo(...)` now treats explicit `undefined` options and `encoding` properties as defaults. Test: `os_user_info_undefined_options`.
