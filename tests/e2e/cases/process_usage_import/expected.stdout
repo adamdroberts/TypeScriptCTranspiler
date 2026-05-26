@@ -1,5 +1,6 @@
 named ids: true true
+alias ids: true true
 namespace ids: true true true
-memory: number true number
-resource: number true number
-ignored: mr
+memory: number true number number
+resource: number true number number
+ignored: mars

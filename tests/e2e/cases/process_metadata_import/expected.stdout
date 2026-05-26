@@ -1,5 +1,7 @@
 named cwd: true
 named uptime: true
+alias cwd: true
+alias uptime: true
 namespace cwd: true
 namespace uptime: true
-ignored: true true cu
+ignored: true true true cau

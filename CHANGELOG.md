@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Aliased named imports for supported `process` metadata, usage, control, and stdio helpers now have focused runtime coverage. Tests: `process_metadata_import`, `process_metadata_value_import`, `process_usage_import`, `process_control_import`, `process_stdio_import`, `process_stdio_metadata_import`.
 - Aliased named imports for supported `dns` and `dns/promises` lookup helpers now have focused runtime coverage. Tests: `dns_lookup`, `dns_promises_lookup`, `dns_promises_subpath_import`.
 - Aliased named imports for supported `timers` and `timers/promises` helpers now have focused runtime coverage. Tests: `timers_module_import`, `timers_promises_import`, `timers_promises_scheduler`.
 - Aliased named imports for supported `url` module helpers now have focused runtime coverage for `URL`, `fileURLToPath(...)`, and `pathToFileURL(...)`. Tests: `url_module_import`, `url_file_path_helpers`.

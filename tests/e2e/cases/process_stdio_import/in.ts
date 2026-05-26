@@ -1,4 +1,4 @@
-import { stdout } from "node:process";
+import { stderr as stderrAlias, stdout, stdout as stdoutAlias } from "node:process";
 import * as proc from "process";
 
 let callbacks = 0;
@@ -19,5 +19,12 @@ const namespace = proc.stdout.write(Buffer.from("ns:"), () => {
 const err = proc.stderr.write("", "utf8", () => {
     callbacks += 4;
 });
+const alias = stdoutAlias.write("alias:", mark("a"), () => {
+    callbacks += 8;
+    stdoutAlias.write("alias-cb:");
+});
+const aliasErr = stderrAlias.write("", "utf8", () => {
+    callbacks += 16;
+});
 
-console.log("stdio imports", named, namespace, err, callbacks, seen);
+console.log("stdio imports", named, namespace, err, alias, aliasErr, callbacks, seen);

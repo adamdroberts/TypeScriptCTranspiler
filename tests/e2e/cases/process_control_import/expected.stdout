@@ -1,2 +1,2 @@
-cpu: number number true true
-kill: true true
+cpu: number number true true true
+kill: true true true

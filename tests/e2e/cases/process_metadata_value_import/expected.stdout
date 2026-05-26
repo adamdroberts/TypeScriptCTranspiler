@@ -1,4 +1,5 @@
 named: true true true true v
+alias: true true true true v
 namespace ids: true true true true
 namespace strings: true v
 objects: string string boolean
