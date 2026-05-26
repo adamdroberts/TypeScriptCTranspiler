@@ -963,6 +963,15 @@ class Emitter {
             if (this.isSideEffectFreeEventEmitterDefaultMaxListenersRead(expr)) {
                 return true;
             }
+            if (
+                this.sideEffectFreePrimitiveObjectOrArrayPropertyResult(
+                    expr.expression,
+                    expr.name.text,
+                    new Set(seenConsts),
+                ) !== "unsafe"
+            ) {
+                return true;
+            }
             return this.isSideEffectFreeObjectReadOperand(expr.expression, seenConsts);
         }
         if (ts.isElementAccessExpression(expr) && expr.argumentExpression) {
@@ -5718,6 +5727,45 @@ class Emitter {
             : null;
     }
 
+    private sideEffectFreeFreshBuiltinOwnDataPropertyResult(
+        expr: ts.Expression,
+        key: string,
+        seenConsts: Set<ts.Symbol>,
+    ): "present" | "absent" | "unsafe" {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isRegularExpressionLiteral(unwrapped)) {
+            return key === "lastIndex" ? "present" : "absent";
+        }
+        if (ts.isNewExpression(unwrapped) && ts.isIdentifier(unwrapped.expression)) {
+            if (!this.isSideEffectFreeNewExpression(unwrapped, seenConsts)) return "unsafe";
+            const name = unwrapped.expression.text;
+            if (name === "RegExp") {
+                return key === "lastIndex" ? "present" : "absent";
+            }
+            if (
+                name === "Error" ||
+                name === "TypeError" ||
+                name === "RangeError" ||
+                name === "SyntaxError" ||
+                name === "ReferenceError" ||
+                name === "EvalError" ||
+                name === "URIError" ||
+                name === "AggregateError"
+            ) {
+                return key === "name" ||
+                    key === "message" ||
+                    key === "cause" ||
+                    key === "errors"
+                    ? "present"
+                    : "absent";
+            }
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init
+            ? this.sideEffectFreeFreshBuiltinOwnDataPropertyResult(init, key, seenConsts)
+            : "unsafe";
+    }
+
     private sideEffectFreeStaticBuiltObjectOwnStringKeyCount(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -9175,6 +9223,13 @@ class Emitter {
         }
         const propertyKey = this.sideEffectFreeObjectPropertyReadKey(call.arguments[1]!, seenConsts);
         if (propertyKey === null) return "unsafe";
+        const builtinOwnResult = this.sideEffectFreeFreshBuiltinOwnDataPropertyResult(
+            call.arguments[0]!,
+            propertyKey,
+            new Set(seenConsts),
+        );
+        if (builtinOwnResult === "present") return "present";
+        if (builtinOwnResult === "absent") return "unsafe";
         return this.sideEffectFreePrimitiveObjectOrArrayPropertyResult(
             call.arguments[0]!,
             propertyKey,
@@ -9330,6 +9385,13 @@ class Emitter {
         }
         const access = this.sideEffectFreeOwnPropertyDescriptorsAccess(expr, seenConsts);
         if (access === null) return null;
+        const builtinOwnResult = this.sideEffectFreeFreshBuiltinOwnDataPropertyResult(
+            access.target,
+            access.key,
+            new Set(seenConsts),
+        );
+        if (builtinOwnResult === "present") return "present";
+        if (builtinOwnResult === "absent") return "unsafe";
         return this.sideEffectFreePrimitiveObjectOrArrayPropertyResult(
             access.target,
             access.key,
