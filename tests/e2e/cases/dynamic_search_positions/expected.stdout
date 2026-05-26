@@ -6,4 +6,7 @@ dyn ends: true
 dyn array index: 2
 dyn array includes: false
 dyn array last: 2
-ignored: ilnsexca
+dyn last null: -1
+dyn ends null: false
+dyn array last null: 0
+ignored: ilnsexcapqr

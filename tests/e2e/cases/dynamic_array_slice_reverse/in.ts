@@ -14,6 +14,9 @@ console.log("tail:", tail.join("|"));
 const clipped: any = values.slice(-10, 2);
 console.log("clipped:", clipped.join("|"));
 
+const nullEnd: any = values.slice(1, null);
+console.log("null end:[" + nullEnd.join("|") + "]");
+
 const reversed: any = values.reverse(mark("r"));
 console.log("reverse:", reversed.join("|"), values.join("|"), Object.is(reversed, values), seen);
 

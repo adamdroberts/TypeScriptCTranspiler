@@ -1,5 +1,6 @@
 mid: b|c a|b|c|d
 tail: c|d
 clipped: a|b
+null end:[]
 reverse: d|c|b|a d|c|b|a true r
 copy reverse: a|b|c|d d|c|b|a rc

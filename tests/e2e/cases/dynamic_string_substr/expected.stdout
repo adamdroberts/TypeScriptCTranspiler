@@ -1,3 +1,5 @@
 middle: cd
 tail: def
 empty: 
+null start: ab
+null length:[]

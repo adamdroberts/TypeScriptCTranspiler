@@ -1995,7 +1995,7 @@ int tsc_value_cmp(tsc_value_t a, tsc_value_t b) {
 }
 
 double value_slice_arg(tsc_value_t v, double fallback) {
-    if (tsc_value_is_nullish(v)) return fallback;
+    if (tsc_value_is_undefined(v)) return fallback;
     double n = tsc_value_as_num(v);
     return isnan(n) ? 0.0 : n;
 }
