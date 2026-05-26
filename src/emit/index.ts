@@ -24683,6 +24683,24 @@ class Emitter {
             if (chain) return chain;
         }
 
+        if (
+            (op === ts.SyntaxKind.AmpersandAmpersandToken ||
+                op === ts.SyntaxKind.BarBarToken) &&
+            this.prepareType(mapType(bin, this.checker)).kind === "boolean"
+        ) {
+            const leftBoolean = this.staticBooleanValue(bin.left);
+            if (leftBoolean !== null) {
+                if (op === ts.SyntaxKind.AmpersandAmpersandToken) {
+                    return leftBoolean
+                        ? { c: this.emitBoolExpr(bin.right), ty: T_BOOLEAN }
+                        : { c: "false", ty: T_BOOLEAN };
+                }
+                return leftBoolean
+                    ? { c: "true", ty: T_BOOLEAN }
+                    : { c: this.emitBoolExpr(bin.right), ty: T_BOOLEAN };
+            }
+        }
+
         if (op === ts.SyntaxKind.QuestionQuestionToken) {
             const leftNullish = this.staticNullishState(bin.left);
             if (leftNullish === "nullish") return this.emitExpr(bin.right);
