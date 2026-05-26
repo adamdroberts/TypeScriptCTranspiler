@@ -21,7 +21,7 @@ interface IteratorYieldResult<T> { done?: false; value: T; }
 interface IteratorReturnResult<TReturn> { done: true; value: TReturn; }
 type IteratorResult<T, TReturn = any> = IteratorYieldResult<T> | IteratorReturnResult<TReturn>;
 interface Iterator<T, TReturn = any, TNext = undefined> {
-    next(...args: [] | [TNext]): IteratorResult<T, TReturn>;
+    next(value?: TNext, ...ignored: any[]): IteratorResult<T, TReturn>;
 }
 interface Iterable<T> {
     [Symbol.iterator](): Iterator<T>;
@@ -30,9 +30,9 @@ interface IterableIterator<T> extends Iterator<T> {
     [Symbol.iterator](): IterableIterator<T>;
 }
 interface Generator<T = unknown, TReturn = any, TNext = unknown> extends Iterator<T, TReturn, TNext> {
-    next(...args: [] | [TNext]): IteratorResult<T, TReturn>;
-    return(value: TReturn): IteratorResult<T, TReturn>;
-    throw(e: any): IteratorResult<T, TReturn>;
+    next(value?: TNext, ...ignored: any[]): IteratorResult<T, TReturn>;
+    return(value?: TReturn, ...ignored: any[]): IteratorResult<T, TReturn>;
+    throw(e: any, ...ignored: any[]): IteratorResult<T, TReturn>;
     [Symbol.iterator](): Generator<T, TReturn, TNext>;
 }
 

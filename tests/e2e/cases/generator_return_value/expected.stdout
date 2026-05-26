@@ -3,3 +3,4 @@ done: true omega
 after: true undefined
 return first: alpha
 return: true forced true undefined
+events: return-extra-a|return-extra-b

@@ -4,3 +4,4 @@ next: false 7 false 8 true done
 close first: 1
 return: true stop true undefined
 throw: boom
+throw events: throw-extra

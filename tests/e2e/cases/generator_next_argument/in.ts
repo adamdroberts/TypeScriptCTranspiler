@@ -13,8 +13,8 @@ function* values(): Generator<number, string, undefined> {
 
 const iter = values();
 const first: any = iter.next(mark("first"));
-const second: any = iter.next(mark("second"));
-const third: any = iter.next(mark("third"));
+const second: any = iter.next(mark("second"), mark("second-extra"));
+const third: any = iter.next(mark("third"), mark("third-extra-a"), mark("third-extra-b"));
 
 console.log("steps:", first.done, first.value, second.done, second.value, third.done, String(third.value));
 console.log("events:", events.join("|"));

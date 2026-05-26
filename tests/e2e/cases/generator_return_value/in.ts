@@ -3,6 +3,11 @@ function* words(): Generator<string, string, undefined> {
     return "omega";
 }
 
+const events: string[] = [];
+function mark(label: string): undefined {
+    events.push(label);
+}
+
 const iter = words();
 const first: any = iter.next();
 const done: any = iter.next();
@@ -14,6 +19,7 @@ console.log("after:", after.done, String(after.value));
 
 const closed = words();
 console.log("return first:", (closed.next() as any).value);
-const forced: any = closed.return("forced");
+const forced: any = closed.return("forced", mark("return-extra-a"), mark("return-extra-b"));
 const forcedAfter: any = closed.next();
 console.log("return:", forced.done, forced.value, forcedAfter.done, String(forcedAfter.value));
+console.log("events:", events.join("|"));

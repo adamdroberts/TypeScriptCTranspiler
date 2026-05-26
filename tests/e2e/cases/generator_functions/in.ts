@@ -37,8 +37,14 @@ const closed: any = closer.return("stop");
 const afterClosed: any = closer.next();
 console.log("return:", closed.done, closed.value, afterClosed.done, String(afterClosed.value));
 
+const throwEvents: string[] = [];
+function markThrow(label: string): undefined {
+    throwEvents.push(label);
+}
+
 try {
-    range(0, 0).throw("boom");
+    range(0, 0).throw("boom", markThrow("throw-extra"));
 } catch (e) {
     console.log("throw:", e);
 }
+console.log("throw events:", throwEvents.join("|"));

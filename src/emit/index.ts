@@ -33946,7 +33946,6 @@ class Emitter {
                 );
             }
             case "next": {
-                if (args.length > 1) unsupported(call, "next expects 0 or 1 args");
                 const av = this.freshTemp("_iter");
                 const out = this.freshTemp("_step");
                 const current = this.freshTemp("_current");
@@ -33971,30 +33970,35 @@ class Emitter {
                 );
             }
             case "return": {
-                if (args.length > 1) unsupported(call, "return expects 0 or 1 args");
-                const value = args[0]
-                    ? this.coerce(this.emitExpr(args[0]), T_VALUE, args[0])
-                    : "tsc_value_undefined()";
                 const av = this.freshTemp("_iter");
                 const out = this.freshTemp("_step");
-                return {
-                    c:
-                        `({ tsc_array_t* const ${av} = ${recv.c}; ${av}->iter_pos = ${av}->len; ` +
+                const specs: SequencedCallArg[] = [{ value: recv }];
+                if (args[0]) specs.push({ value: this.emitExpr(args[0]), target: T_VALUE, node: args[0] });
+                specs.push(...this.ignoredArgumentSpecs(args, 1));
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    specs,
+                    ([arr, valueArg]) =>
+                        `({ tsc_array_t* const ${av} = ${arr!}; ${av}->iter_pos = ${av}->len; ` +
                         `${av}->iter_return_consumed = true; ` +
                         `tsc_object_t* ${out} = tsc_object_new(); ` +
                         `tsc_object_set(${out}, tsc_str_from_lit("done", 4), tsc_value_bool(true)); ` +
-                        `tsc_object_set(${out}, tsc_str_from_lit("value", 5), ${value}); ` +
+                        `tsc_object_set(${out}, tsc_str_from_lit("value", 5), ${valueArg ?? "tsc_value_undefined()"}); ` +
                         `tsc_value_object(${out}); })`,
-                    ty: T_VALUE,
-                };
+                );
             }
             case "throw": {
-                if (args.length !== 1) unsupported(call, "throw expects 1 arg");
+                if (args.length < 1) unsupported(call, "throw expects 1 arg");
                 const err = this.emitExpr(args[0]!);
-                return {
-                    c: `({ tsc_throw_str(${this.coerceToString(err, args[0]!)}); tsc_value_undefined(); })`,
-                    ty: T_VALUE,
-                };
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv },
+                        { value: err, target: T_STRING, node: args[0]! },
+                        ...this.ignoredArgumentSpecs(args, 1),
+                    ],
+                    ([, errArg]) => `({ tsc_throw_str(${errArg!}); tsc_value_undefined(); })`,
+                );
             }
             case "hasOwnProperty":
             case "propertyIsEnumerable": {
