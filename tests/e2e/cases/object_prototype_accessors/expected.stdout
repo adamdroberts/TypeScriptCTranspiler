@@ -1,0 +1,8 @@
+define: gs
+read: 3 gsG
+write: 11 gsGS
+desc: true true function function
+lookup: true true gsGSlL
+child: true 16
+child write: 25 gsGSlLGS
+data: undefined undefined 99

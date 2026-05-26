@@ -27857,6 +27857,43 @@ class Emitter {
                 return oneRequiredOneOptional("tsc_value_method_last_index_of", { c: "tsc_value_num(INFINITY)", ty: T_VALUE });
             case "at":
                 return oneArg("tsc_value_method_at", { c: "tsc_value_num(0.0)", ty: T_VALUE });
+            case "__defineGetter__":
+            case "__defineSetter__": {
+                if (args.length < 2) unsupported(call, `${method} expects key and accessor`);
+                const key = this.emitExpr(args[0]!);
+                const accessor = this.emitExpr(args[1]!);
+                const fn = method === "__defineGetter__"
+                    ? "tsc_value_object_define_getter"
+                    : "tsc_value_object_define_setter";
+                return this.emitSequencedExpr(
+                    T_VOID,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: key, target: T_STRING, node: args[0]! },
+                        { value: accessor, target: T_VALUE, node: args[1]! },
+                        ...this.ignoredArgumentSpecs(args, 2),
+                    ],
+                    ([target, keyValue, accessorValue]) =>
+                        `({ if (!${fn}(${target}, ${keyValue}, ${accessorValue})) tsc_throw_str(tsc_str_from_cstr("Object.prototype.${method} failed")); })`,
+                );
+            }
+            case "__lookupGetter__":
+            case "__lookupSetter__": {
+                if (args.length < 1) unsupported(call, `${method} expects key`);
+                const key = this.emitExpr(args[0]!);
+                const fn = method === "__lookupGetter__"
+                    ? "tsc_value_object_lookup_getter"
+                    : "tsc_value_object_lookup_setter";
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: key, target: T_STRING, node: args[0]! },
+                        ...this.ignoredArgumentSpecs(args, 1),
+                    ],
+                    ([target, keyValue]) => `${fn}(${target}, ${keyValue})`,
+                );
+            }
             case "hasOwnProperty":
                 if (args.length < 1) unsupported(call, "hasOwnProperty expects at least 1 arg");
                 return this.emitSequencedExpr(

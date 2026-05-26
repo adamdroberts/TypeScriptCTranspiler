@@ -627,6 +627,87 @@ bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_
     return false;
 }
 
+bool tsc_value_object_define_getter(tsc_value_t v, tsc_str_t* key, tsc_value_t getter) {
+    if (tsc_value_is_nullish(v)) {
+        tsc_throw_str(tsc_str_from_cstr("Object.prototype.__defineGetter__ receiver is null or undefined"));
+    }
+    if (!value_is_callable_function(getter)) {
+        tsc_throw_str(tsc_str_from_cstr("Object.prototype.__defineGetter__ getter must be callable"));
+    }
+    return tsc_value_define_accessor_desc(
+        v,
+        key,
+        tsc_value_dynamic_accessor_getter,
+        dynamic_accessor_env(getter),
+        true,
+        NULL,
+        NULL,
+        false,
+        true,
+        true,
+        true,
+        true
+    );
+}
+
+bool tsc_value_object_define_setter(tsc_value_t v, tsc_str_t* key, tsc_value_t setter) {
+    if (tsc_value_is_nullish(v)) {
+        tsc_throw_str(tsc_str_from_cstr("Object.prototype.__defineSetter__ receiver is null or undefined"));
+    }
+    if (!value_is_callable_function(setter)) {
+        tsc_throw_str(tsc_str_from_cstr("Object.prototype.__defineSetter__ setter must be callable"));
+    }
+    return tsc_value_define_accessor_desc(
+        v,
+        key,
+        NULL,
+        NULL,
+        false,
+        tsc_value_dynamic_accessor_setter,
+        dynamic_accessor_env(setter),
+        true,
+        true,
+        true,
+        true,
+        true
+    );
+}
+
+static tsc_value_t lookup_accessor(tsc_value_t v, tsc_str_t* key, const char* field, size_t field_len, const char* nullish_message) {
+    if (tsc_value_is_nullish(v)) {
+        tsc_throw_str(tsc_str_from_cstr(nullish_message));
+    }
+    tsc_value_t cur = v;
+    while (!tsc_value_is_nullish(cur) && !tsc_value_is_undefined(cur)) {
+        tsc_value_t desc = tsc_value_get_own_property_descriptor(cur, key);
+        if (!tsc_value_is_undefined(desc)) {
+            return tsc_value_get_prop(desc, tsc_str_from_lit(field, field_len));
+        }
+        cur = tsc_value_get_prototype_of(cur);
+    }
+    return tsc_value_undefined();
+}
+
+tsc_value_t tsc_value_object_lookup_getter(tsc_value_t v, tsc_str_t* key) {
+    return lookup_accessor(
+        v,
+        key,
+        "get",
+        3,
+        "Object.prototype.__lookupGetter__ receiver is null or undefined"
+    );
+}
+
+tsc_value_t tsc_value_object_lookup_setter(tsc_value_t v, tsc_str_t* key) {
+    return lookup_accessor(
+        v,
+        key,
+        "set",
+        3,
+        "Object.prototype.__lookupSetter__ receiver is null or undefined"
+    );
+}
+
 bool tsc_reflect_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
     require_reflect_object_target(v, "Reflect.defineProperty target must be an object");
     return tsc_value_define_property_desc(v, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
