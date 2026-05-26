@@ -33954,7 +33954,7 @@ class Emitter {
                 return { c: `({ ${pieces.join("; ")}; })`, ty: recv.ty };
             }
             case "join": {
-                const sep = args[0]
+                const sep = args[0] && !this.isUndefinedExpression(args[0])
                     ? this.emitExpr(args[0])
                     : { c: `tsc_str_from_lit(",", 1)`, ty: T_STRING };
                 return this.emitSequencedExpr(
