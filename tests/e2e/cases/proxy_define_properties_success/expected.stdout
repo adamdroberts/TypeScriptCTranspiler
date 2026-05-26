@@ -1,0 +1,4 @@
+same: true x
+events: define:a:A:true:true:true|define:hidden:H:false:true:false
+target: a a,hidden A false false
+bad: Object.defineProperty descriptor must be an object  
