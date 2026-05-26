@@ -445,6 +445,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Proxy handler accessor trap properties are read with the handler object as receiver before dispatching the returned trap function. Test: `proxy_trap_accessor_lookup`
 - Callable Proxy handler accessor trap properties are read with the handler object as receiver before dispatching returned `apply` and `construct` trap functions. Test: `proxy_callable_trap_accessor_lookup`
 - Proxy handler accessor trap values are validated after lookup, with non-callable values rejected and nullish results treated as absent traps that forward to the target. Test: `proxy_trap_accessor_validation`
+- Callable Proxy handler accessor trap values are validated after lookup, with non-callable `apply` / `construct` values rejected and nullish results treated as absent traps that forward to the target. Test: `proxy_callable_trap_accessor_validation`
 - Proxy handler objects can themselves be Proxy values, routing trap-property lookup through the handler proxy before dispatching the target proxy trap. Test: `proxy_proxy_handler_lookup`
 - Callable Proxy handler objects can themselves be Proxy values, routing `apply` and `construct` trap-property lookup through the handler proxy before dispatching the callable target proxy trap. Test: `proxy_callable_handler_lookup`
 - Revoked Proxy handler objects throw during trap lookup for target Proxy operations. Test: `proxy_revoked_handler_lookup`
@@ -1762,6 +1763,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_trap_accessor_lookup` | Proxy handler accessor trap properties are read with handler receiver before dispatch |
 | `proxy_callable_trap_accessor_lookup` | callable Proxy handler accessor trap properties are read with handler receiver before apply/construct dispatch |
 | `proxy_trap_accessor_validation` | Proxy handler accessor trap values validate after lookup and nullish results forward |
+| `proxy_callable_trap_accessor_validation` | callable Proxy handler accessor trap values validate after lookup and nullish results forward |
 | `proxy_proxy_handler_lookup` | Proxy handler objects may themselves be Proxy values for trap lookup |
 | `proxy_callable_handler_lookup` | callable Proxy handler objects may themselves be Proxy values for apply/construct trap lookup |
 | `proxy_revoked_handler_lookup` | revoked Proxy handler objects throw during target Proxy trap lookup |
