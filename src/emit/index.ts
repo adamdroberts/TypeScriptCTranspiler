@@ -31700,11 +31700,15 @@ class Emitter {
                 const eventName = this.emitEventEmitterEventName(args[1]!);
                 const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
                 if (mapped.kind !== "promise") unsupported(call, "events.once result must be Promise<any[]>");
-                return this.emitSequencedExpr(mapped, [
+                const specs: SequencedCallArg[] = [
                     { value: emitter, target: T_EVENT_EMITTER, node: args[0]! },
                     { value: eventName, target: T_STRING, node: args[1]! },
-                    ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
-                ], ([ee, event]) => `tsc_event_emitter_once_promise(${ee}, ${event})`);
+                ];
+                if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
+                    specs.push({ value: this.emitExpr(args[2]), target: T_VOID, node: args[2] });
+                }
+                specs.push(...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2));
+                return this.emitSequencedExpr(mapped, specs, ([ee, event]) => `tsc_event_emitter_once_promise(${ee}, ${event})`);
             }
             case "setMaxListeners": {
                 if (args.length < 2) unsupported(call, "events.setMaxListeners expects count and at least one emitter");
@@ -31780,9 +31784,9 @@ class Emitter {
     }
 
     private eventEmitterOnceOptions(options: ts.Expression | undefined, label: string): void {
-        if (!options || this.isUndefinedExpression(options)) return;
+        if (!options || this.isUndefinedLikeExpression(options)) return;
         options = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (this.isUndefinedExpression(options)) return;
+        if (this.isUndefinedLikeExpression(options)) return;
         if (!ts.isObjectLiteralExpression(options)) {
             unsupported(options, `${label} options must be an object literal in this subset`);
         }

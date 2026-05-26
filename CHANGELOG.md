@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `events.once(...)` now treats side-effectful `void` whole options as defaulted `undefined` while preserving options-slot evaluation before ignored trailing arguments. Test: `event_emitter_once_options`.
 - `EventTarget.addEventListener(...)` and `removeEventListener(...)` now treat side-effectful `void` listener options as defaulted `undefined` while preserving options-slot evaluation before ignored trailing arguments. Test: `event_target`.
 - `crypto.randomUUID(...)` now treats side-effectful `void` whole options as defaulted `undefined` while still evaluating the options expression before ignored trailing arguments. Test: `crypto_random_uuid`.
 - `dns.lookup(...)` and `dns.promises.lookup(...)` now accept an explicit `undefined` whole options argument while preserving side-effectful `void` option-slot evaluation before callbacks or ignored trailing arguments. Test: `dns_lookup_option_forms`.

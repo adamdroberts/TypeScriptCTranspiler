@@ -8,7 +8,7 @@ function mark(label: string): string {
 }
 
 const first = new EventEmitter();
-const firstReady = once(first, "ready", void 0, mark("a"));
+const firstReady = once(first, "ready", void mark("o"), mark("a"));
 first.emit("ready", "alpha", 1);
 firstReady.then((args) => {
     console.log("undefined options:", args[0], args[1]);
