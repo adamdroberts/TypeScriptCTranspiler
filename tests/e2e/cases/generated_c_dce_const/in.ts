@@ -1424,6 +1424,8 @@ const unused_error_descriptor_reflect_get_value_receiver_upper_call = Reflect.ge
 const unused_error_descriptor_nested_descriptor_value_upper_call = Object.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_nested_descriptor_value_upper"), "message")!, "value", "dead_error_descriptor_nested_descriptor_ignored")!.value.toUpperCase();
 // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
 const unused_error_descriptor_nested_descriptor_flag_value_of_call = Object.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_nested_descriptor_flag_value_of"), "message")!, "enumerable", "dead_error_descriptor_nested_descriptor_flag_ignored")!.value.valueOf();
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+const unused_error_descriptor_nested_reflect_get_value_upper_call = Reflect.get(Object.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_nested_reflect_get_value_upper"), "message")!, "value", "dead_error_descriptor_nested_reflect_get_value_ignored")!, "value", { dead_error_descriptor_nested_reflect_get_value_receiver: true }).toUpperCase();
 const unused_regexp_descriptor_value_read = Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_value_read/g, "lastIndex")!.value;
 const unused_regexp_descriptors_value_read = Object.getOwnPropertyDescriptors(new RegExp("dead_regexp_descriptors_value_read", "g")).lastIndex.value;
 const unused_regexp_descriptor_value_to_string_call = Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_value_to_string_call/g, "lastIndex")!.value.toString().length;
@@ -1433,6 +1435,8 @@ const unused_regexp_descriptor_reflect_get_value_to_string_call = Reflect.get(Ob
 const unused_regexp_descriptor_nested_reflect_descriptor_value_to_string_call = Reflect.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_nested_reflect_descriptor_value_to_string/g, "lastIndex")!, "value", "dead_regexp_descriptor_nested_reflect_descriptor_ignored")!.value.toString().length;
 // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
 const unused_regexp_descriptor_nested_reflect_descriptor_flag_value_of_call = Reflect.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_nested_reflect_descriptor_flag_value_of/g, "lastIndex")!, "writable", "dead_regexp_descriptor_nested_reflect_descriptor_flag_ignored")!.value.valueOf();
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+const unused_regexp_descriptor_nested_reflect_get_value_to_string_call = Reflect.get(Reflect.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_nested_reflect_get_value_to_string/g, "lastIndex")!, "value", "dead_regexp_descriptor_nested_reflect_get_value_ignored")!, "value", { dead_regexp_descriptor_nested_reflect_get_value_receiver: true }).toString().length;
 const unused_error_descriptors_keys_with_call = Object.keys(Object.getOwnPropertyDescriptors(new Error("dead_error_descriptors_keys_with"))).with(3, "dead_error_descriptors_keys_with_replacement");
 const unused_regexp_descriptors_values_with_call = Object.values(Object.getOwnPropertyDescriptors(/dead_regexp_descriptors_values_with/g)).with(0, { value: 1 });
 const unused_date_descriptors_own_keys_empty_map_call = Reflect.ownKeys(Object.getOwnPropertyDescriptors(new Date("2020-01-13T14:15:16Z"))).map(() => "dead_date_descriptors_own_keys_empty_map");
@@ -1504,6 +1508,8 @@ const unused_error_descriptor_reflect_get_configurable_to_locale_string_call = R
 const unused_promise_resolve_regexp_descriptor_writable_call = Promise.resolve(Object.getOwnPropertyDescriptor(/dead_promise_resolve_regexp_descriptor_writable/g, "lastIndex")!.writable);
 const unused_promise_resolve_error_descriptor_reflect_get_enumerable_call = Promise.resolve(Reflect.get(Object.getOwnPropertyDescriptor(new Error("dead_promise_resolve_error_descriptor_reflect_get_enumerable"), "message")!, "enumerable"));
 const unused_promise_resolve_error_descriptor_reflect_get_enumerable_receiver_call = Promise.resolve(Reflect.get(Object.getOwnPropertyDescriptor(new Error("dead_promise_resolve_error_descriptor_reflect_get_enumerable_receiver"), "message")!, "enumerable", { dead_promise_resolve_error_descriptor_reflect_get_enumerable_receiver_arg: true }));
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+const unused_promise_resolve_error_descriptor_nested_reflect_get_enumerable_call = Promise.resolve(Reflect.get(Object.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(new Error("dead_promise_resolve_error_descriptor_nested_reflect_get_enumerable"), "message")!, "enumerable", "dead_promise_resolve_error_descriptor_nested_reflect_get_enumerable_ignored")!, "value", { dead_promise_resolve_error_descriptor_nested_reflect_get_enumerable_receiver: true }));
 const unused_error_descriptor_object_prototype_to_string_length_read = Object.prototype.toString.call(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_object_prototype_to_string_length_target"), "message")!).length + "dead_error_descriptor_object_prototype_to_string_length_read".length;
 const unused_regexp_descriptor_object_prototype_to_string_upper_call = (Object.prototype.toString.call(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_object_prototype_to_string_upper/g, "lastIndex")!).toUpperCase(), "dead_regexp_descriptor_object_prototype_to_string_upper_marker".length);
 const unused_error_descriptor_object_prototype_to_locale_string_length_read = Object.prototype.toLocaleString.call(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_object_prototype_to_locale_string_length_target"), "message")!).length + "dead_error_descriptor_object_prototype_to_locale_string_length_read".length;
@@ -2888,6 +2894,8 @@ Reflect.get(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_desc
 Object.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_nested_descriptor_value_upper"), "message")!, "value", "top_level_dead_error_descriptor_nested_descriptor_ignored")!.value.toUpperCase();
 // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
 Object.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_nested_descriptor_flag_value_of"), "message")!, "enumerable", "top_level_dead_error_descriptor_nested_descriptor_flag_ignored")!.value.valueOf();
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+Reflect.get(Object.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_nested_reflect_get_value_upper"), "message")!, "value", "top_level_dead_error_descriptor_nested_reflect_get_value_ignored")!, "value", { top_level_dead_error_descriptor_nested_reflect_get_value_receiver: true }).toUpperCase();
 Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_value_read/g, "lastIndex")!.value;
 Object.getOwnPropertyDescriptors(new RegExp("top_level_dead_regexp_descriptors_value_read", "g")).lastIndex.value;
 Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_value_to_string_call/g, "lastIndex")!.value.toString().length;
@@ -2897,6 +2905,8 @@ Reflect.get(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_re
 Reflect.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_nested_reflect_descriptor_value_to_string/g, "lastIndex")!, "value", "top_level_dead_regexp_descriptor_nested_reflect_descriptor_ignored")!.value.toString().length;
 // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
 Reflect.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_nested_reflect_descriptor_flag_value_of/g, "lastIndex")!, "writable", "top_level_dead_regexp_descriptor_nested_reflect_descriptor_flag_ignored")!.value.valueOf();
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+Reflect.get(Reflect.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_nested_reflect_get_value_to_string/g, "lastIndex")!, "value", "top_level_dead_regexp_descriptor_nested_reflect_get_value_ignored")!, "value", { top_level_dead_regexp_descriptor_nested_reflect_get_value_receiver: true }).toString().length;
 Object.keys(Object.getOwnPropertyDescriptors(new Error("top_level_dead_error_descriptors_keys_with"))).with(3, "top_level_dead_error_descriptors_keys_with_replacement");
 Object.values(Object.getOwnPropertyDescriptors(/top_level_dead_regexp_descriptors_values_with/g)).with(0, { value: 1 });
 Reflect.ownKeys(Object.getOwnPropertyDescriptors(new Date("2020-01-14T15:16:17Z"))).map(() => "top_level_dead_date_descriptors_own_keys_empty_map");
@@ -2968,6 +2978,8 @@ Reflect.get(Object.getOwnPropertyDescriptor(new TypeError("top_level_dead_error_
 Promise.resolve(Object.getOwnPropertyDescriptor(/top_level_dead_promise_resolve_regexp_descriptor_writable/g, "lastIndex")!.writable);
 Promise.resolve(Reflect.get(Object.getOwnPropertyDescriptor(new Error("top_level_dead_promise_resolve_error_descriptor_reflect_get_enumerable"), "message")!, "enumerable"));
 Promise.resolve(Reflect.get(Object.getOwnPropertyDescriptor(new Error("top_level_dead_promise_resolve_error_descriptor_reflect_get_enumerable_receiver"), "message")!, "enumerable", { top_level_dead_promise_resolve_error_descriptor_reflect_get_enumerable_receiver_arg: true }));
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+Promise.resolve(Reflect.get(Object.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(new Error("top_level_dead_promise_resolve_error_descriptor_nested_reflect_get_enumerable"), "message")!, "enumerable", "top_level_dead_promise_resolve_error_descriptor_nested_reflect_get_enumerable_ignored")!, "value", { top_level_dead_promise_resolve_error_descriptor_nested_reflect_get_enumerable_receiver: true }));
 Object.prototype.toString.call(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_object_prototype_to_string_length_target"), "message")!).length + "top_level_dead_error_descriptor_object_prototype_to_string_length_read".length;
 (Object.prototype.toString.call(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_object_prototype_to_string_upper/g, "lastIndex")!).toUpperCase(), "top_level_dead_regexp_descriptor_object_prototype_to_string_upper_marker".length);
 Object.prototype.toLocaleString.call(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_object_prototype_to_locale_string_length_target"), "message")!).length + "top_level_dead_error_descriptor_object_prototype_to_locale_string_length_read".length;
@@ -4395,6 +4407,8 @@ function usedLocal(value: number): number {
     Object.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_nested_descriptor_value_upper"), "message")!, "value", "local_dead_error_descriptor_nested_descriptor_ignored")!.value.toUpperCase();
     // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
     Object.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_nested_descriptor_flag_value_of"), "message")!, "enumerable", "local_dead_error_descriptor_nested_descriptor_flag_ignored")!.value.valueOf();
+    // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+    Reflect.get(Object.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_nested_reflect_get_value_upper"), "message")!, "value", "local_dead_error_descriptor_nested_reflect_get_value_ignored")!, "value", { local_dead_error_descriptor_nested_reflect_get_value_receiver: true }).toUpperCase();
     Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_value_read/g, "lastIndex")!.value;
     Object.getOwnPropertyDescriptors(new RegExp("local_dead_regexp_descriptors_value_read", "g")).lastIndex.value;
     Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_value_to_string_call/g, "lastIndex")!.value.toString().length;
@@ -4404,6 +4418,8 @@ function usedLocal(value: number): number {
     Reflect.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_nested_reflect_descriptor_value_to_string/g, "lastIndex")!, "value", "local_dead_regexp_descriptor_nested_reflect_descriptor_ignored")!.value.toString().length;
     // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
     Reflect.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_nested_reflect_descriptor_flag_value_of/g, "lastIndex")!, "writable", "local_dead_regexp_descriptor_nested_reflect_descriptor_flag_ignored")!.value.valueOf();
+    // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+    Reflect.get(Reflect.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_nested_reflect_get_value_to_string/g, "lastIndex")!, "value", "local_dead_regexp_descriptor_nested_reflect_get_value_ignored")!, "value", { local_dead_regexp_descriptor_nested_reflect_get_value_receiver: true }).toString().length;
     Object.keys(Object.getOwnPropertyDescriptors(new Error("local_dead_error_descriptors_keys_with"))).with(3, "local_dead_error_descriptors_keys_with_replacement");
     Object.values(Object.getOwnPropertyDescriptors(/local_dead_regexp_descriptors_values_with/g)).with(0, { value: 1 });
     Reflect.ownKeys(Object.getOwnPropertyDescriptors(new Date("2020-01-15T16:17:18Z"))).map(() => "local_dead_date_descriptors_own_keys_empty_map");
@@ -4475,6 +4491,8 @@ function usedLocal(value: number): number {
     Promise.resolve(Object.getOwnPropertyDescriptor(/local_dead_promise_resolve_regexp_descriptor_writable/g, "lastIndex")!.writable);
     Promise.resolve(Reflect.get(Object.getOwnPropertyDescriptor(new Error("local_dead_promise_resolve_error_descriptor_reflect_get_enumerable"), "message")!, "enumerable"));
     Promise.resolve(Reflect.get(Object.getOwnPropertyDescriptor(new Error("local_dead_promise_resolve_error_descriptor_reflect_get_enumerable_receiver"), "message")!, "enumerable", { local_dead_promise_resolve_error_descriptor_reflect_get_enumerable_receiver_arg: true }));
+    // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+    Promise.resolve(Reflect.get(Object.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(new Error("local_dead_promise_resolve_error_descriptor_nested_reflect_get_enumerable"), "message")!, "enumerable", "local_dead_promise_resolve_error_descriptor_nested_reflect_get_enumerable_ignored")!, "value", { local_dead_promise_resolve_error_descriptor_nested_reflect_get_enumerable_receiver: true }));
     Object.prototype.toString.call(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_object_prototype_to_string_length_target"), "message")!).length + "local_dead_error_descriptor_object_prototype_to_string_length_read".length;
     (Object.prototype.toString.call(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_object_prototype_to_string_upper/g, "lastIndex")!).toUpperCase(), "local_dead_regexp_descriptor_object_prototype_to_string_upper_marker".length);
     Object.prototype.toLocaleString.call(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_object_prototype_to_locale_string_length_target"), "message")!).length + "local_dead_error_descriptor_object_prototype_to_locale_string_length_read".length;
