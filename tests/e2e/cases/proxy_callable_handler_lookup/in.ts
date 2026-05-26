@@ -4,6 +4,11 @@ function Target(this: any, value: any): any {
     this.value = value;
 }
 
+function args(label: string, value: any): any[] {
+    events.push(label);
+    return [value];
+}
+
 function targetApply(target: any, thisArg: any, args: any): any {
     events.push("targetApply:" + thisArg.base + ":" + args[0]);
     return thisArg.base + ":" + args[0];
@@ -28,7 +33,7 @@ const handlerTarget: any = {
 handlerProxy = new Proxy(handlerTarget, { get: handlerGet as any });
 callableProxy = new Proxy(Target as any, handlerProxy);
 
-console.log("apply:", Reflect.apply(callableProxy, { base: "ctx" }, ["x"]));
-const made: any = new callableProxy("y");
+console.log("apply:", Reflect.apply(callableProxy, { base: "ctx" }, args("applyArgs", "x")));
+const made: any = Reflect.construct(callableProxy, args("constructArgs", "y"));
 console.log("construct:", made.built, made.newTargetIsProxy);
 console.log("events:", events.join("|"));
