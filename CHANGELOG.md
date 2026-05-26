@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Aliased named imports for supported `events` module helpers now route to the exported helper instead of the local alias name. Test: `event_emitter_more`.
 - Aliased named imports for `stream.isReadable(...)` / `isWritable(...)` / `isErrored(...)` / `isDestroyed(...)` / `isDisturbed(...)` now route to the exported stream predicate instead of the local alias name. Test: `stream_stdio_predicates`.
 - Generated-C DCE now prunes unused pure `stream.isReadable(...)`, `isWritable(...)`, `isErrored(...)`, `isDestroyed(...)`, and `isDisturbed(...)` calls over bounded process stdio streams or side-effect-free non-stream/nullish operands across named, namespace, and default stream imports, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused bounded `process.stdin` / `stdout` / `stderr` no-op compatibility methods such as `isPaused(...)`, `setEncoding(...)`, `pause(...)`, `resume(...)`, `pipe(...)`, `unpipe(...)`, listener no-ops, `setDefaultEncoding(...)`, `cork(...)`, and `uncork(...)` when their arguments are side-effect-free; primitive `Promise.resolve(...)` inputs are covered for void/boolean methods. Test: `generated_c_dce_const`.

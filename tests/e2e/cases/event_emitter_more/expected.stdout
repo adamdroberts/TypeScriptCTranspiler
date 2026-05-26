@@ -1,6 +1,7 @@
 names: data|other
 names ignored: data|other opqxe
 static count: 3
+static alias count: 1
 emit1: true
 after once: 2
 emit2: true

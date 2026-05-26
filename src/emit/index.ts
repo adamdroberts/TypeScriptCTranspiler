@@ -25680,14 +25680,10 @@ class Emitter {
         if (timersNamed) {
             return this.emitTimersCall(call, timersNamed);
         }
-        if (
-            this.isNamedImportFrom(calleeId, ["events", "node:events"], "listenerCount") ||
-            this.isNamedImportFrom(calleeId, ["events", "node:events"], "getEventListeners") ||
-            this.isNamedImportFrom(calleeId, ["events", "node:events"], "once") ||
-            this.isNamedImportFrom(calleeId, ["events", "node:events"], "setMaxListeners") ||
-            this.isNamedImportFrom(calleeId, ["events", "node:events"], "getMaxListeners")
-        ) {
-            return this.emitEventsStaticCall(call, name);
+        const eventsNamed = ["listenerCount", "getEventListeners", "once", "setMaxListeners", "getMaxListeners"]
+            .find((exported) => this.isNamedImportFrom(calleeId, ["events", "node:events"], exported));
+        if (eventsNamed) {
+            return this.emitEventsStaticCall(call, eventsNamed);
         }
         const streamNamed = ["isReadable", "isWritable", "isErrored", "isDestroyed", "isDisturbed"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["stream", "node:stream"], exported));

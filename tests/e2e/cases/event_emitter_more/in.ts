@@ -1,4 +1,4 @@
-import { EventEmitter, listenerCount } from "events";
+import { EventEmitter, listenerCount, listenerCount as listenerCountAlias } from "events";
 
 const emitter = new EventEmitter();
 const seen: string[] = [];
@@ -24,6 +24,7 @@ emitter.on("other", (): void => {
 console.log("names:", emitter.eventNames().join("|"));
 console.log("names ignored:", emitter.eventNames(mark("e")).join("|"), ignoredSeen);
 console.log("static count:", listenerCount(emitter, "data"));
+console.log("static alias count:", listenerCountAlias(emitter, "other"));
 console.log("emit1:", emitter.emit("data", "a"));
 console.log("after once:", listenerCount(emitter, "data"));
 console.log("emit2:", emitter.emit("data", "b"));
