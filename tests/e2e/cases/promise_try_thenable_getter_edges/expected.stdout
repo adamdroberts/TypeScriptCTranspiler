@@ -1,0 +1,3 @@
+try throw getter: try getter boom
+try noncall getter: 9
+events: try throw getter|try noncall getter|try noncall getter
