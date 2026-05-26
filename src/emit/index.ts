@@ -30022,10 +30022,11 @@ class Emitter {
     }
 
     private emitMapGroupBy(call: ts.CallExpression): EmitResult {
-        if (call.arguments.length !== 2)
+        if (call.arguments.length < 2)
             unsupported(call, "Map.groupBy expects (items, keyFn)");
         const itemsArg = call.arguments[0]!;
         const keyArg = call.arguments[1]!;
+        const ignored = this.ignoredArgumentSpecs(call.arguments, 2);
         const callType = this.prepareType(
             mapTsType(call, this.checker.getTypeAtLocation(call), this.checker),
         );
@@ -30045,7 +30046,7 @@ class Emitter {
             unsupported(itemsArg, "Map.groupBy items must be an array, Set, Map, string, or dynamic iterable matching the result element type T[]");
         }
 
-        return this.emitSequencedExpr(callType, [{ value: items }], ([itemsExpr]) => {
+        return this.emitSequencedExpr(callType, [{ value: items }, ...ignored], ([itemsExpr]) => {
             const src = this.freshTemp("_gb_src");
             const map = this.freshTemp("_gb_map");
             const iv = this.freshTemp("_gb_i");
@@ -40107,10 +40108,11 @@ class Emitter {
     }
 
     private emitObjectGroupBy(call: ts.CallExpression): EmitResult {
-        if (call.arguments.length !== 2)
+        if (call.arguments.length < 2)
             unsupported(call, "Object.groupBy expects (items, keyFn)");
         const itemsArg = call.arguments[0]!;
         const keyArg = call.arguments[1]!;
+        const ignored = this.ignoredArgumentSpecs(call.arguments, 2);
         const items = this.emitExpr(itemsArg);
         if (items.ty.kind !== "array" && items.ty.kind !== "set" && items.ty.kind !== "map" && items.ty.kind !== "string" && items.ty.kind !== "value")
             unsupported(itemsArg, "Object.groupBy expects an array, Set, Map, string, or dynamic iterable");
@@ -40122,7 +40124,7 @@ class Emitter {
                 ? entryType(items.ty.elem!, items.ty.key!)
                 : items.ty.elem!;
 
-        return this.emitSequencedExpr(T_VALUE, [{ value: items }], ([itemsExpr]) => {
+        return this.emitSequencedExpr(T_VALUE, [{ value: items }, ...ignored], ([itemsExpr]) => {
             const src = this.freshTemp("_ogb_src");
             const out = this.freshTemp("_ogb_out");
             const iv = this.freshTemp("_ogb_i");

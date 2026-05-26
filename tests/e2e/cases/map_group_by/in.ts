@@ -86,6 +86,14 @@ console.log("parities:", parity.size);
 printNumberGroup(parity, 0);
 printNumberGroup(parity, 1);
 
+let ignoredOrder = "";
+const ignoredGroups = Map.groupBy([1, 2], (n) => n > 1 ? "large" : "small", (ignoredOrder += "A", 1), (ignoredOrder += "B", 2));
+console.log("ignored args:", ignoredGroups.size, ignoredOrder);
+const ignoredSmall = ignoredGroups.get("small");
+const ignoredLarge = ignoredGroups.get("large");
+console.log("ignored small:", ignoredSmall === undefined ? "(none)" : joinNumbers(ignoredSmall));
+console.log("ignored large:", ignoredLarge === undefined ? "(none)" : joinNumbers(ignoredLarge));
+
 function classify(person: Person, index: number): string {
     return index < 3 ? "first-half" : "second-half";
 }

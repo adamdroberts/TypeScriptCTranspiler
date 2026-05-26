@@ -14,6 +14,10 @@ console.log("a:", JSON.stringify(byInitial.a));
 console.log("b:", JSON.stringify(byInitial.b));
 console.log("c:", JSON.stringify(byInitial.c));
 
+let ignoredOrder = "";
+const ignoredGroups = Object.groupBy(["x", "yy"], (w) => w.length > 1 ? "long" : "short", (ignoredOrder += "A", 1), (ignoredOrder += "B", 2)) as any;
+console.log("ignored:", JSON.stringify(ignoredGroups.short), JSON.stringify(ignoredGroups.long), ignoredOrder);
+
 function classify(n: number, i: number): string {
     return i < 3 ? "first" : "last";
 }

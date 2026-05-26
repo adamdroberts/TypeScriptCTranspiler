@@ -299,11 +299,11 @@ interface ObjectConstructor {
     preventExtensions<T>(o: T, ...ignored: any[]): T;
     seal<T>(o: T, ...ignored: any[]): T;
     setPrototypeOf<T>(o: T, proto: any, ...ignored: any[]): T;
-    groupBy<T>(items: T[], keyFn: (item: T, index: number) => string): unknown;
-    groupBy<T>(items: Set<T>, keyFn: (item: T, index: number) => string): unknown;
-    groupBy<MK, MV>(items: Map<MK, MV>, keyFn: (item: ObjectEntry<MV, MK>, index: number) => string): unknown;
-    groupBy(items: string, keyFn: (item: string, index: number) => string): unknown;
-    groupBy(items: any, keyFn: (item: any, index: number) => string): unknown;
+    groupBy<T>(items: T[], keyFn: (item: T, index: number) => string, ...ignored: any[]): unknown;
+    groupBy<T>(items: Set<T>, keyFn: (item: T, index: number) => string, ...ignored: any[]): unknown;
+    groupBy<MK, MV>(items: Map<MK, MV>, keyFn: (item: ObjectEntry<MV, MK>, index: number) => string, ...ignored: any[]): unknown;
+    groupBy(items: string, keyFn: (item: string, index: number) => string, ...ignored: any[]): unknown;
+    groupBy(items: any, keyFn: (item: any, index: number) => string, ...ignored: any[]): unknown;
 }
 declare var Object: ObjectConstructor;
 
@@ -387,11 +387,11 @@ interface MapConstructor {
     new <K, V>(entries: ObjectEntry<V, K>[], ...ignored: any[]): Map<K, V>;
     new <K, V>(entries: Map<K, V>, ...ignored: any[]): Map<K, V>;
     new <K, V>(): Map<K, V>;
-    groupBy<T, K>(items: T[], callbackfn: (value: T, index: number) => K): Map<K, T[]>;
-    groupBy<T, K>(items: Set<T>, callbackfn: (value: T, index: number) => K): Map<K, T[]>;
-    groupBy<MK, MV, K>(items: Map<MK, MV>, callbackfn: (value: ObjectEntry<MV, MK>, index: number) => K): Map<K, ObjectEntry<MV, MK>[]>;
-    groupBy<K>(items: string, callbackfn: (value: string, index: number) => K): Map<K, string[]>;
-    groupBy<K>(items: any, callbackfn: (value: any, index: number) => K): Map<K, any[]>;
+    groupBy<T, K>(items: T[], callbackfn: (value: T, index: number) => K, ...ignored: any[]): Map<K, T[]>;
+    groupBy<T, K>(items: Set<T>, callbackfn: (value: T, index: number) => K, ...ignored: any[]): Map<K, T[]>;
+    groupBy<MK, MV, K>(items: Map<MK, MV>, callbackfn: (value: ObjectEntry<MV, MK>, index: number) => K, ...ignored: any[]): Map<K, ObjectEntry<MV, MK>[]>;
+    groupBy<K>(items: string, callbackfn: (value: string, index: number) => K, ...ignored: any[]): Map<K, string[]>;
+    groupBy<K>(items: any, callbackfn: (value: any, index: number) => K, ...ignored: any[]): Map<K, any[]>;
 }
 declare var Map: MapConstructor;
 
