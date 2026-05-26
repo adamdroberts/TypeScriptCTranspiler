@@ -17,4 +17,5 @@ const descs: any = Object.getOwnPropertyDescriptors(u);
 console.log("desc:", String(Object.getOwnPropertyDescriptor(u, "href")), Object.keys(descs).length);
 console.log("proto:", u.hasOwnProperty("href"), u.propertyIsEnumerable("href"));
 console.log("reflect:", Reflect.ownKeys(u).length, String(Reflect.getOwnPropertyDescriptor(u, "href")));
+console.log("integrity:", Object.isExtensible(u, mark("E")), Object.isSealed(u, mark("L")), Object.isFrozen(u, mark("F")), Reflect.isExtensible(u, mark("I")));
 console.log("reflect get:", Reflect.get(u, "href", {}, mark("g")), String(Reflect.get(u, "missing", mark("x"))), Reflect.has(u, "href", mark("h")), Reflect.has(u, "missing", mark("H")), seen);
