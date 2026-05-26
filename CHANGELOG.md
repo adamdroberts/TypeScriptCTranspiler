@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Proxy handler accessor trap properties now have focused coverage for receiver-bound lookup before trap dispatch. Test: `proxy_trap_accessor_lookup`.
 - Nullish Proxy object traps now have focused coverage for being treated as absent and forwarding to the target across object, descriptor, own-key, prototype, and extensibility operations. Test: `proxy_nullish_traps_forward`.
 - Callable proxy-valued object traps now have focused coverage for receiving the handler object as their `this` binding when dispatched. Test: `proxy_callable_trap_this_binding`.
 - `Object.keys(proxy)`, `Object.values(proxy)`, `Object.entries(proxy)`, and `Reflect.ownKeys(proxy)` now have focused coverage for ignored trailing-argument evaluation before proxy `ownKeys` dispatch. Test: `proxy_ownkeys_helper_ignored_arguments`.
