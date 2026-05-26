@@ -1,6 +1,6 @@
 import { ADDRCONFIG, ALL, V4MAPPED as dnsV4Mapped } from "dns";
 import { createHash } from "crypto";
-import { EventEmitter, EventEmitter as ImportedEventEmitter, defaultMaxListeners, getMaxListeners, listenerCount, once as eventsOnce, setMaxListeners } from "events";
+import { EventEmitter, EventEmitter as ImportedEventEmitter, defaultMaxListeners, getMaxListeners, getMaxListeners as getMaxListenersAlias, listenerCount, listenerCount as listenerCountAlias, once as eventsOnce, setMaxListeners, setMaxListeners as setMaxListenersAlias } from "events";
 import { constants as fsConstants } from "fs";
 import * as nodeCrypto from "node:crypto";
 import * as nodeDns from "node:dns";
@@ -178,7 +178,9 @@ const unused_event_emitter_to_string_call = new EventEmitter().toString("dead_ev
 const unused_event_static_listener_count_call = EventEmitter.listenerCount(new EventEmitter(), "dead_event_static_listener_count");
 const unused_events_namespace_get_max_call = nodeEvents.getMaxListeners(new EventEmitter(), "dead_events_namespace_get_max_ignored".length);
 const unused_events_named_get_max_call = getMaxListeners(new EventEmitter(), "dead_events_named_get_max_ignored".length);
+const unused_events_named_alias_get_max_call = getMaxListenersAlias(new EventEmitter(), "dead_events_named_alias_get_max_ignored".length);
 const unused_events_named_listener_count_call = listenerCount(new EventEmitter(), "dead_events_named_listener_count");
+const unused_events_named_alias_listener_count_call = listenerCountAlias(new EventEmitter(), "dead_events_named_alias_listener_count");
 const unused_events_namespace_get_event_listeners_call = nodeEvents.getEventListeners(new EventEmitter(), "dead_events_namespace_get_event_listeners");
 const unused_event_emitter_set_max_call = new EventEmitter().setMaxListeners(11);
 const unused_event_emitter_remove_all_call = new EventEmitter().removeAllListeners("dead_event_emitter_remove_all");
@@ -632,8 +634,10 @@ const unused_promise_resolve_event_emitter_to_string_call = Promise.resolve(new 
 const unused_promise_resolve_event_static_listener_count_call = Promise.resolve(EventEmitter.listenerCount(new EventEmitter(), "dead_promise_resolve_event_static_listener_count"));
 const unused_promise_resolve_events_namespace_get_max_call = Promise.resolve(nodeEvents.getMaxListeners(new EventEmitter(), "dead_promise_resolve_events_namespace_get_max_ignored".length));
 const unused_promise_resolve_events_named_get_max_call = Promise.resolve(getMaxListeners(new EventEmitter(), "dead_promise_resolve_events_named_get_max_ignored".length));
+const unused_promise_resolve_events_named_alias_get_max_call = Promise.resolve(getMaxListenersAlias(new EventEmitter(), "dead_promise_resolve_events_named_alias_get_max_ignored".length));
 const unused_promise_resolve_events_namespace_set_max_call = Promise.resolve(nodeEvents.setMaxListeners(12, new EventEmitter()));
 const unused_promise_resolve_events_named_set_max_call = Promise.resolve(setMaxListeners(13, new EventEmitter()));
+const unused_promise_resolve_events_named_alias_set_max_call = Promise.resolve(setMaxListenersAlias(14, new EventEmitter()));
 const unused_promise_resolve_event_emitter_emit_call = Promise.resolve(new EventEmitter().emit("dead_promise_resolve_event_emitter_emit", "dead_promise_resolve_event_emitter_emit_payload"));
 const unused_promise_resolve_event_prevent_default_call = Promise.resolve(new Event("dead_promise_resolve_event_prevent_default_call", { cancelable: true }).preventDefault("dead_promise_resolve_event_prevent_default_ignored".length));
 const unused_promise_resolve_event_to_string_call = Promise.resolve(new Event("dead_promise_resolve_event_to_string_call").toString("dead_promise_resolve_event_to_string_ignored".length));
@@ -1822,7 +1826,9 @@ new EventEmitter().toString("top_level_dead_event_emitter_to_string_ignored".len
 EventEmitter.listenerCount(new EventEmitter(), "top_level_dead_event_static_listener_count");
 nodeEvents.getMaxListeners(new EventEmitter(), "top_level_dead_events_namespace_get_max_ignored".length);
 getMaxListeners(new EventEmitter(), "top_level_dead_events_named_get_max_ignored".length);
+getMaxListenersAlias(new EventEmitter(), "top_level_dead_events_named_alias_get_max_ignored".length);
 listenerCount(new EventEmitter(), "top_level_dead_events_named_listener_count");
+listenerCountAlias(new EventEmitter(), "top_level_dead_events_named_alias_listener_count");
 nodeEvents.getEventListeners(new EventEmitter(), "top_level_dead_events_namespace_get_event_listeners");
 new EventEmitter().setMaxListeners(14);
 new EventEmitter().removeAllListeners("top_level_dead_event_emitter_remove_all");
@@ -1882,8 +1888,10 @@ Promise.resolve(new EventEmitter().toString("top_level_dead_promise_resolve_even
 Promise.resolve(EventEmitter.listenerCount(new EventEmitter(), "top_level_dead_promise_resolve_event_static_listener_count"));
 Promise.resolve(nodeEvents.getMaxListeners(new EventEmitter(), "top_level_dead_promise_resolve_events_namespace_get_max_ignored".length));
 Promise.resolve(getMaxListeners(new EventEmitter(), "top_level_dead_promise_resolve_events_named_get_max_ignored".length));
+Promise.resolve(getMaxListenersAlias(new EventEmitter(), "top_level_dead_promise_resolve_events_named_alias_get_max_ignored".length));
 Promise.resolve(nodeEvents.setMaxListeners(17, new EventEmitter()));
 Promise.resolve(setMaxListeners(18, new EventEmitter()));
+Promise.resolve(setMaxListenersAlias(19, new EventEmitter()));
 Promise.resolve(new EventEmitter().emit("top_level_dead_promise_resolve_event_emitter_emit", "top_level_dead_promise_resolve_event_emitter_emit_payload"));
 Promise.resolve(new Event("top_level_dead_promise_resolve_event_prevent_default_call", { cancelable: true }).preventDefault("top_level_dead_promise_resolve_event_prevent_default_ignored".length));
 Promise.resolve(new Event("top_level_dead_promise_resolve_event_to_string_call").toString("top_level_dead_promise_resolve_event_to_string_ignored".length));
@@ -3111,7 +3119,9 @@ function usedLocal(value: number): number {
     EventEmitter.listenerCount(new EventEmitter(), "local_dead_event_static_listener_count");
     nodeEvents.getMaxListeners(new EventEmitter(), "local_dead_events_namespace_get_max_ignored".length);
     getMaxListeners(new EventEmitter(), "local_dead_events_named_get_max_ignored".length);
+    getMaxListenersAlias(new EventEmitter(), "local_dead_events_named_alias_get_max_ignored".length);
     listenerCount(new EventEmitter(), "local_dead_events_named_listener_count");
+    listenerCountAlias(new EventEmitter(), "local_dead_events_named_alias_listener_count");
     nodeEvents.getEventListeners(new EventEmitter(), "local_dead_events_namespace_get_event_listeners");
     new EventEmitter().setMaxListeners(19);
     new EventEmitter().removeAllListeners("local_dead_event_emitter_remove_all");
@@ -3171,8 +3181,10 @@ function usedLocal(value: number): number {
     Promise.resolve(EventEmitter.listenerCount(new EventEmitter(), "local_dead_promise_resolve_event_static_listener_count"));
     Promise.resolve(nodeEvents.getMaxListeners(new EventEmitter(), "local_dead_promise_resolve_events_namespace_get_max_ignored".length));
     Promise.resolve(getMaxListeners(new EventEmitter(), "local_dead_promise_resolve_events_named_get_max_ignored".length));
+    Promise.resolve(getMaxListenersAlias(new EventEmitter(), "local_dead_promise_resolve_events_named_alias_get_max_ignored".length));
     Promise.resolve(nodeEvents.setMaxListeners(22, new EventEmitter()));
     Promise.resolve(setMaxListeners(23, new EventEmitter()));
+    Promise.resolve(setMaxListenersAlias(24, new EventEmitter()));
     Promise.resolve(new EventEmitter().emit("local_dead_promise_resolve_event_emitter_emit", "local_dead_promise_resolve_event_emitter_emit_payload"));
     Promise.resolve(new Event("local_dead_promise_resolve_event_prevent_default_call", { cancelable: true }).preventDefault("local_dead_promise_resolve_event_prevent_default_ignored".length));
     Promise.resolve(new Event("local_dead_promise_resolve_event_to_string_call").toString("local_dead_promise_resolve_event_to_string_ignored".length));
