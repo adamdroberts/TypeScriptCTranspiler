@@ -1636,6 +1636,11 @@ const unused_collection_object_has_own_call = Object.hasOwn(new Set<string>(), "
 const unused_collection_reflect_own_keys_call = Reflect.ownKeys(new WeakRef<object>({ label: "dead_collection_reflect_weak_ref" }));
 const unused_url_object_keys_call = Object.keys(new URL("https://dead-url-object-keys.test/path"));
 const unused_url_reflect_own_keys_call = Reflect.ownKeys(new URL("https://dead-url-reflect-own-keys.test/path"));
+const unused_builtin_date_object_keys_call = Object.keys(new Date("2020-01-07T08:09:10Z"));
+const unused_builtin_error_property_names_call = Object.getOwnPropertyNames(new Error("dead_builtin_error_property_names"));
+const unused_builtin_regexp_object_values_call = Object.values(new RegExp("dead_builtin_regexp_object_values", "g"));
+const unused_builtin_event_reflect_own_keys_call = Reflect.ownKeys(new Event("dead_builtin_event_reflect_own_keys"));
+const unused_builtin_event_target_object_entries_call = Object.entries(new EventTarget());
 const unused_reflect_has_call = Reflect.has({ dead_reflect_has: 1 }, "dead_reflect_has");
 const unused_reflect_own_keys_call = Reflect.ownKeys({ dead_reflect_own_keys: 1 });
 const unused_reflect_get_call = Reflect.get({ dead_reflect_get: 1 }, "dead_reflect_get");
@@ -2921,6 +2926,11 @@ Object.hasOwn(new FinalizationRegistry<string>(() => "top_level_dead_collection_
 Reflect.ownKeys(new WeakRef<object>({ label: "top_level_dead_collection_reflect_weak_ref" }));
 Object.keys(new URL("https://top-level-dead-url-object-keys.test/path"));
 Reflect.ownKeys(new URL("https://top-level-dead-url-reflect-own-keys.test/path"));
+Object.keys(new Date("2020-01-08T09:10:11Z"));
+Object.getOwnPropertyNames(new TypeError("top_level_dead_builtin_type_error_property_names"));
+Object.values(/top_level_dead_builtin_regexp_object_values/g);
+Reflect.ownKeys(new Event("top_level_dead_builtin_event_reflect_own_keys"));
+Object.entries(new EventTarget());
 Reflect.has({ top_level_dead_reflect_has: 1 }, "top_level_dead_reflect_has");
 Reflect.ownKeys({ top_level_dead_reflect_own_keys: 1 });
 Reflect.get({ top_level_dead_reflect_get: 1 }, "top_level_dead_reflect_get");
@@ -4330,6 +4340,11 @@ function usedLocal(value: number): number {
     Reflect.ownKeys(new WeakRef<object>({ label: "local_dead_collection_reflect_weak_ref" }));
     Object.keys(new URL("https://local-dead-url-object-keys.test/path"));
     Reflect.ownKeys(new URL("https://local-dead-url-reflect-own-keys.test/path"));
+    Object.keys(new Date("2020-01-09T10:11:12Z"));
+    Object.getOwnPropertyNames(new RangeError("local_dead_builtin_range_error_property_names"));
+    Object.values(new RegExp("local_dead_builtin_regexp_object_values", "i"));
+    Reflect.ownKeys(new Event("local_dead_builtin_event_reflect_own_keys"));
+    Object.entries(new EventTarget());
     Reflect.get({ local_dead_reflect_get: 1 }, "local_dead_reflect_get");
     Reflect.get(["local_dead_reflect_get_array"], "0");
     Reflect.set({ local_dead_reflect_set_target: 1 }, "local_dead_reflect_set_key", "local_dead_reflect_set_value");

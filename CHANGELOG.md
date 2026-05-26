@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE now prunes unused Object/Reflect enumeration helpers over pure fresh `Date`, `RegExp`, `Error`, `Event`, and `EventTarget` instances. Test: `generated_c_dce_const`.
 - Aliased named `promises` imports from `"fs"` / `"node:fs"` now route to the immediate `fs.promises` subset. Test: `fs_promises_import`.
 - Aliased named imports for supported `child_process` callback and sync helpers now have focused runtime coverage. Tests: `child_process_callback_ignored_arguments`, `child_process_sync_ignored_arguments`.
 - Aliased named imports for supported `process.env`, `process.hrtime`, and `process.umask` helpers now have focused runtime coverage. Tests: `process_env_import`, `process_hrtime_import`, `process_umask_import`.

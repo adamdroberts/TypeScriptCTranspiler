@@ -12275,6 +12275,9 @@ class Emitter {
         if (ts.isObjectLiteralExpression(unwrapped) || ts.isArrayLiteralExpression(unwrapped)) {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
         }
+        if (ts.isRegularExpressionLiteral(unwrapped)) {
+            return true;
+        }
         if (this.isSideEffectFreeArrayOperand(unwrapped, new Set(seenConsts))) {
             return true;
         }
@@ -12305,7 +12308,19 @@ class Emitter {
                 unwrapped.expression.text === "WeakSet" ||
                 unwrapped.expression.text === "WeakRef" ||
                 unwrapped.expression.text === "FinalizationRegistry" ||
-                unwrapped.expression.text === "URL"
+                unwrapped.expression.text === "URL" ||
+                unwrapped.expression.text === "Date" ||
+                unwrapped.expression.text === "RegExp" ||
+                unwrapped.expression.text === "Error" ||
+                unwrapped.expression.text === "TypeError" ||
+                unwrapped.expression.text === "RangeError" ||
+                unwrapped.expression.text === "SyntaxError" ||
+                unwrapped.expression.text === "ReferenceError" ||
+                unwrapped.expression.text === "EvalError" ||
+                unwrapped.expression.text === "URIError" ||
+                unwrapped.expression.text === "AggregateError" ||
+                unwrapped.expression.text === "Event" ||
+                unwrapped.expression.text === "EventTarget"
             )
         ) {
             return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
