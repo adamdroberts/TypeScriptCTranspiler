@@ -1384,6 +1384,9 @@ class Emitter {
         if (ts.isObjectLiteralExpression(unwrapped) || ts.isArrayLiteralExpression(unwrapped)) {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
         }
+        if (this.isSideEffectFreeOwnDataPropertyDescriptorObjectOperand(unwrapped, seenConsts)) {
+            return true;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeInRightOperand(init, seenConsts);
     }
