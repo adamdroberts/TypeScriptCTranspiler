@@ -236,6 +236,8 @@ static inline bool value_is_valid_prototype(tsc_value_t v) {
 #define TSC_BKT_EMPTY     ((size_t)-1)
 #define TSC_BKT_TOMBSTONE ((size_t)-2)
 
+bool tsc_value_same_value_zero(tsc_value_t a, tsc_value_t b);
+
 static bool key_eq(tsc_key_kind_t kk, size_t ks, const void* a, const void* b) {
     switch (kk) {
         case TSC_KEY_NUM: {
@@ -253,6 +255,10 @@ static bool key_eq(tsc_key_kind_t kk, size_t ks, const void* a, const void* b) {
         case TSC_KEY_BOOL: {
             bool x, y; memcpy(&x, a, sizeof x); memcpy(&y, b, sizeof y);
             return x == y;
+        }
+        case TSC_KEY_VALUE: {
+            tsc_value_t x, y; memcpy(&x, a, sizeof x); memcpy(&y, b, sizeof y);
+            return tsc_value_same_value_zero(x, y);
         }
     }
     (void)ks;
@@ -345,7 +351,6 @@ tsc_value_t value_descriptor_from_function_key(const tsc_function_identity_t* fn
 tsc_value_t value_descriptors_from_array(const tsc_array_t* src);
 tsc_value_t value_descriptors_from_string(const tsc_str_t* src);
 tsc_value_t value_descriptor_from_prop(const tsc_object_prop_t* prop);
-bool tsc_value_same_value_zero(tsc_value_t a, tsc_value_t b);
 double value_slice_arg(tsc_value_t v, double fallback);
 size_t value_array_forward_start(size_t len, double from_index);
 bool value_array_last_start(size_t len, double from_index, size_t* out);

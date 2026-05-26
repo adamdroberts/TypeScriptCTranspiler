@@ -198,11 +198,11 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - Direct `for...of` with `[key, value]` destructuring. Test: `map_set_for_of`
 - `.size` property. Test: `map_set`, `wordcount`
 - `.toString(...ignored)`, `.toLocaleString(...ignored)`, and `.valueOf(...ignored)`. Test: `collection_object_methods`
-- Key equality is polymorphic by tag: SameValueZero numbers, string content, booleans, and pointers. Runtime: `key_eq`
+- Key equality is polymorphic by tag: SameValueZero numbers, dynamic values, string content, booleans, and pointers. Runtime: `key_eq`
 - ES2024 static `Map.groupBy(...)` groups typed array, typed Set, typed Map entry, string, boxed dynamic array, or boxed dynamic string sources by the callback's return value, returning typed `Map<K, T[]>` groups or `Map<K, ObjectEntry<MV, MK>[]>` for Map sources. Set and Map sources preserve insertion order and string/dynamic-string sources use code-point order for callback index assignment. The callback may be an inline arrow/function expression with an expression body or single-return block body, or a function reference (including generic functions); callbacks that declare `this: any` receive the JavaScript default `undefined` receiver. Tests: `map_group_by`, `map_group_by_dynamic_source`, `group_by_this_param`
 
 ### `Set<T>`
-- `new Set<T>()`, `new Set(valuesArray, ...ignored)`, and `new Set(existingSet, ...ignored)` — `tsc_set_new(sizeof(T), keyKind, initialCap)` plus per-value insertion, with supported source constructor extras evaluated and ignored. Tests: `map_set_constructors`, `set_constructor_from_set`, `collection_constructor_ignored_arguments`
+- `new Set<T>()`, `new Set(valuesArray, ...ignored)`, `new Set(existingSet, ...ignored)`, and `new Set<any>(dynamicSource, ...ignored)` for nullish empty, boxed dynamic array, and boxed dynamic string sources — `tsc_set_new(sizeof(T), keyKind, initialCap)` plus per-value insertion, with supported source constructor extras evaluated and ignored and non-iterable dynamic sources rejected through catchable runtime errors. Tests: `map_set_constructors`, `set_constructor_from_set`, `set_constructor_dynamic`, `collection_constructor_ignored_arguments`
 - `.add(v)`, `.has(v)`, `.delete(v)`, `.clear()`, `.keys(...ignored)`, `.values(...ignored)`, `.forEach((value, value2, set) => expr, thisArg?, ...ignored)`, `.size`; numeric values use SameValueZero semantics, ignored key/value iterator arguments are evaluated before being discarded, and `forEach` accepts inline expression-body or single-return block-body callbacks and named callback references. Optional `thisArg` values are evaluated once and bound for callbacks that declare `this: any`, and trailing ignored arguments are evaluated before iteration. Tests: `map_set`, `map_set_same_value_zero`, `set_keys`, `map_set_for_each`, `map_set_for_each_refs`, `map_set_for_each_this_arg`
 - Direct `for...of` over values. Test: `map_set_for_of`
 - `.toString(...ignored)`, `.toLocaleString(...ignored)`, and `.valueOf(...ignored)`. Test: `collection_object_methods`
@@ -1374,6 +1374,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `map_set_for_each_this_arg` | Map and Set forEach callbacks with evaluated and bound optional thisArg |
 | `map_set_for_of` | direct Map `[key, value]` and Set value iteration |
 | `map_set_same_value_zero` | Map and Set SameValueZero numeric key semantics |
+| `set_constructor_dynamic` | dynamic Set constructor sources for nullish, array, string, and rejected non-iterable values |
 | `native_addon` | expected diagnostic for literal native addon imports |
 | `native_addon_manifest_import` | manifest-listed direct `.node` import emits the embedded Node native-addon bridge |
 | `native_addon_manifest_require` | compile-time native-addon manifest lowers an allow-listed require to the embedded Node bridge |

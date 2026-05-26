@@ -42081,6 +42081,24 @@ class Emitter {
             if (args.length >= 1) {
                 const values = this.emitExpr(args[0]!);
                 const ignored = this.ignoredArgumentSpecs(args, 1);
+                if (values.ty.kind === "value" && e.kind === "value") {
+                    return this.emitSequencedExpr(mapped, [
+                        { value: values, target: T_VALUE, node: args[0]! },
+                        ...ignored,
+                    ], ([source]) => {
+                        const set = this.freshTemp("_set_init");
+                        const src = this.freshTemp("_set_src");
+                        const idx = this.freshTemp("_i");
+                        const value = this.freshTemp("_value");
+                        return (
+                            `({ tsc_array_t* const ${src} = tsc_value_collection_constructor_values(${source}); ` +
+                            `tsc_set_t* ${set} = tsc_set_new(sizeof(tsc_value_t), ${keyKindOf(e)}, ${src}->len); ` +
+                            `for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { ` +
+                            `tsc_value_t ${value} = TSC_ARR(tsc_value_t, ${src}, ${idx}); ` +
+                            `tsc_set_add_raw(${set}, &${value}); } ${set}; })`
+                        );
+                    });
+                }
                 if (
                     (values.ty.kind !== "array" && values.ty.kind !== "set") ||
                     !values.ty.elem ||

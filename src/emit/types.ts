@@ -167,6 +167,7 @@ export function keyKindOf(t: CType): number {
     switch (t.kind) {
         case "number": return 0;
         case "string": return 1;
+        case "value": return 4;
         case "boolean": return 3;
         default: return 2; /* pointer — class, array, map, set */
     }

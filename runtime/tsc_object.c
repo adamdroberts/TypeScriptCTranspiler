@@ -1762,6 +1762,22 @@ uint64_t key_hash(tsc_key_kind_t kk, const void* k) {
             bool b; memcpy(&b, k, sizeof b);
             return splitmix64_mix(b ? 0x9e3779b97f4a7c15ULL : 0x517cc1b727220a95ULL);
         }
+        case TSC_KEY_VALUE: {
+            tsc_value_t v; memcpy(&v, k, sizeof v);
+            if (!value_is_box(v)) return num_hash(value_as_num(v));
+            switch (value_tag(v)) {
+                case TSC_VALUE_TAG_UNDEFINED: return splitmix64_mix(0x0f1f2f3f4f5f6f70ULL);
+                case TSC_VALUE_TAG_NULL: return splitmix64_mix(0x1021324354657687ULL);
+                case TSC_VALUE_TAG_FALSE: return splitmix64_mix(0x517cc1b727220a95ULL);
+                case TSC_VALUE_TAG_TRUE: return splitmix64_mix(0x9e3779b97f4a7c15ULL);
+                case TSC_VALUE_TAG_STRING: return tsc_str_cached_hash((const tsc_str_t*)value_ptr(v));
+                case TSC_VALUE_TAG_FUNCTION:
+                case TSC_VALUE_TAG_ARRAY:
+                case TSC_VALUE_TAG_OBJECT:
+                    return splitmix64_mix((uint64_t)(uintptr_t)value_ptr(v) ^ (uint64_t)value_tag(v));
+            }
+            return splitmix64_mix(v);
+        }
     }
     return 0;
 }

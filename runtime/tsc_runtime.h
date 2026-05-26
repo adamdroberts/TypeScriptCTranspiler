@@ -581,6 +581,7 @@ tsc_value_t tsc_value_object_assign(tsc_value_t target, tsc_value_t source);
 double tsc_value_length(tsc_value_t v);
 tsc_array_t* tsc_value_iter_values(tsc_value_t v);
 tsc_array_t* tsc_value_array_from_values(tsc_value_t v);
+tsc_array_t* tsc_value_collection_constructor_values(tsc_value_t v);
 tsc_array_t* tsc_value_object_keys(tsc_value_t v);
 tsc_array_t* tsc_value_object_values(tsc_value_t v);
 tsc_array_t* tsc_value_object_entries(tsc_value_t v);
@@ -762,6 +763,7 @@ typedef enum {
     TSC_KEY_STR = 1,
     TSC_KEY_PTR = 2,
     TSC_KEY_BOOL = 3,
+    TSC_KEY_VALUE = 4,
 } tsc_key_kind_t;
 
 typedef struct tsc_map {

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic `new Set<any>(source, ...ignored)` now accepts nullish empty sources plus boxed dynamic arrays and strings, rejects non-iterable dynamic sources through catchable runtime errors, and uses SameValueZero equality for dynamic Set values. Test: `set_constructor_dynamic`.
 - Dynamic `Array.fromAsync(...)` now resolves boxed strings to real dynamic arrays, resolves non-nullish non-iterable dynamic values to empty arrays in the bounded array-like subset, and converts dynamic `null` / `undefined` source failures into rejected Promise records. Test: `array_from_async_dynamic_edges`.
 - Dynamic `Array.from(...)` now returns real dynamic arrays for boxed strings, returns empty arrays for non-nullish non-iterable dynamic values in the bounded array-like subset, and rejects dynamic `null` / `undefined` sources through catchable runtime errors. Test: `array_from_dynamic_edges`.
 - Dynamic `Object.fromEntries(...)` now rejects non-array inputs and malformed entry pairs through catchable runtime errors instead of silently producing or skipping entries. Test: `object_from_entries_errors`.

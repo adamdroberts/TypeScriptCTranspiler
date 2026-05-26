@@ -1,0 +1,6 @@
+null: 0 
+undefined: 0 
+array: 2 1|two
+string: 2 a|b
+bad: collection constructor source is not iterable
+marks: ab
