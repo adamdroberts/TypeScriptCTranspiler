@@ -9,3 +9,4 @@ real before: true
 real prevent: true false
 real after: false
 exact proto: base
+events: ignored:bad proto|bad proto trap|ignored:closed proto|other proto trap|ignored:set closed|set proto:other|ignored:set same|set proto:base|ignored:extensible mismatch|is false trap|ignored:closed extensible mismatch|is true trap|ignored:prevent mismatch|prevent fake trap|ignored:real before|is real trap|ignored:real prevent|prevent real trap|ignored:real after|is real trap|ignored:exact proto|base proto trap
