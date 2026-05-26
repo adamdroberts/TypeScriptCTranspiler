@@ -36,5 +36,9 @@ dynamic-slice-extra:18
 dynamic slice:2,3
 dynamic-join-extra:19
 dynamic join:1-2-3-2
-dynamic-flat-extra:20
+dynamic-join-undefined-extra:20
+dynamic join undefined:1,2,3,2
+dynamic-join-null-extra:21
+dynamic join null:1null2null3null2
+dynamic-flat-extra:22
 dynamic flat:1,2

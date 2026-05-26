@@ -2125,7 +2125,7 @@ tsc_value_t tsc_value_method_locale_compare(tsc_value_t recv, tsc_value_t other)
 tsc_value_t tsc_value_method_join(tsc_value_t recv, tsc_value_t separator) {
     if (!value_is_box(recv) || value_tag(recv) != TSC_VALUE_TAG_ARRAY) return tsc_value_string(tsc_str_from_lit("", 0));
     tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-    tsc_str_t* sep = tsc_value_is_nullish(separator) ? tsc_str_from_lit(",", 1) : tsc_value_to_string(separator);
+    tsc_str_t* sep = tsc_value_is_undefined(separator) ? tsc_str_from_lit(",", 1) : tsc_value_to_string(separator);
     tsc_str_t* out = tsc_str_from_lit("", 0);
     for (size_t i = 0; i < a->len; i++) {
         if (i > 0) out = tsc_str_concat(out, sep);

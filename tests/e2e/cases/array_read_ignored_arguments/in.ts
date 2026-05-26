@@ -32,4 +32,6 @@ console.log("dynamic includes:" + dyn.includes(3, 0, mark("dynamic-includes-extr
 console.log("dynamic at:" + dyn.at(-1, mark("dynamic-at-extra")));
 console.log("dynamic slice:" + dyn.slice(1, 3, mark("dynamic-slice-extra")).join(","));
 console.log("dynamic join:" + dyn.join("-", mark("dynamic-join-extra")));
+console.log("dynamic join undefined:" + dyn.join(undefined, mark("dynamic-join-undefined-extra")));
+console.log("dynamic join null:" + dyn.join(null, mark("dynamic-join-null-extra")));
 console.log("dynamic flat:" + dynNested.flat(1, mark("dynamic-flat-extra")).join(","));
