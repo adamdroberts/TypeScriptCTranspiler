@@ -12094,6 +12094,9 @@ class Emitter {
         if (this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeFreshBuiltinObjectOperand(unwrapped, seenConsts)) {
+            return true;
+        }
         const targetOperand = this.sideEffectFreeExtensibleObjectTargetReturningOperand(
             unwrapped,
             seenConsts,
@@ -12117,6 +12120,43 @@ class Emitter {
             this.isObjectDefinePropertiesCall(unwrapped)
         ) &&
             this.isSideEffectFreeStaticCall(unwrapped, seenConsts);
+    }
+
+    private isSideEffectFreeFreshBuiltinObjectOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isRegularExpressionLiteral(unwrapped)) return true;
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            (
+                unwrapped.expression.text === "Map" ||
+                unwrapped.expression.text === "Set" ||
+                unwrapped.expression.text === "WeakMap" ||
+                unwrapped.expression.text === "WeakSet" ||
+                unwrapped.expression.text === "WeakRef" ||
+                unwrapped.expression.text === "FinalizationRegistry" ||
+                unwrapped.expression.text === "URL" ||
+                unwrapped.expression.text === "Date" ||
+                unwrapped.expression.text === "RegExp" ||
+                unwrapped.expression.text === "Error" ||
+                unwrapped.expression.text === "TypeError" ||
+                unwrapped.expression.text === "RangeError" ||
+                unwrapped.expression.text === "SyntaxError" ||
+                unwrapped.expression.text === "ReferenceError" ||
+                unwrapped.expression.text === "EvalError" ||
+                unwrapped.expression.text === "URIError" ||
+                unwrapped.expression.text === "AggregateError" ||
+                unwrapped.expression.text === "Event" ||
+                unwrapped.expression.text === "EventTarget"
+            )
+        ) {
+            return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeFreshBuiltinObjectOperand(init, seenConsts);
     }
 
     private sideEffectFreeExtensibleObjectTargetReturningOperand(
@@ -12275,9 +12315,7 @@ class Emitter {
         if (ts.isObjectLiteralExpression(unwrapped) || ts.isArrayLiteralExpression(unwrapped)) {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
         }
-        if (ts.isRegularExpressionLiteral(unwrapped)) {
-            return true;
-        }
+        if (this.isSideEffectFreeFreshBuiltinObjectOperand(unwrapped, seenConsts)) return true;
         if (this.isSideEffectFreeArrayOperand(unwrapped, new Set(seenConsts))) {
             return true;
         }
@@ -12297,33 +12335,6 @@ class Emitter {
             this.isSideEffectFreeStaticCall(unwrapped, seenConsts)
         ) {
             return true;
-        }
-        if (
-            ts.isNewExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            (
-                unwrapped.expression.text === "Map" ||
-                unwrapped.expression.text === "Set" ||
-                unwrapped.expression.text === "WeakMap" ||
-                unwrapped.expression.text === "WeakSet" ||
-                unwrapped.expression.text === "WeakRef" ||
-                unwrapped.expression.text === "FinalizationRegistry" ||
-                unwrapped.expression.text === "URL" ||
-                unwrapped.expression.text === "Date" ||
-                unwrapped.expression.text === "RegExp" ||
-                unwrapped.expression.text === "Error" ||
-                unwrapped.expression.text === "TypeError" ||
-                unwrapped.expression.text === "RangeError" ||
-                unwrapped.expression.text === "SyntaxError" ||
-                unwrapped.expression.text === "ReferenceError" ||
-                unwrapped.expression.text === "EvalError" ||
-                unwrapped.expression.text === "URIError" ||
-                unwrapped.expression.text === "AggregateError" ||
-                unwrapped.expression.text === "Event" ||
-                unwrapped.expression.text === "EventTarget"
-            )
-        ) {
-            return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeObjectEnumerationOperand(init, seenConsts);
