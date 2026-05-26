@@ -11,6 +11,7 @@ function mark(label: string): string {
 
 console.log("nfc:", decomposed.normalize("NFC") === composed);
 console.log("default:", decomposed.normalize() === composed);
+console.log("undefined:", decomposed.normalize(undefined) === composed);
 console.log("nfd:", composed.normalize("NFD") === decomposed);
 console.log("nfkc:", angstromSign.normalize("NFKC") === angstrom);
 console.log("nfkd:", angstromSign.normalize("NFKD") === angstrom.normalize("NFD"));

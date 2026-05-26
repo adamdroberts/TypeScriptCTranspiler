@@ -16,5 +16,6 @@ parts len: 4
    d
 ignored case: HELLO, WORLD! hello, world! hi ult
 ignored repeat/pad: ababab ..go go.. ultrpq
+undefined pad: [  go] [go  ]
 ignored split: 2 ultrpqs
 ignored replace: xba xbx ultrpqsRA

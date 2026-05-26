@@ -22,6 +22,7 @@ function mark(label: string): string {
 
 console.log("ignored case:", s.toUpperCase(mark("u")), s.toLowerCase(mark("l")), "  hi  ".trim(mark("t")), seen);
 console.log("ignored repeat/pad:", "ab".repeat(3, mark("r")), "go".padStart(4, ".", mark("p")), "go".padEnd(4, ".", mark("q")), seen);
+console.log("undefined pad:", "[" + "go".padStart(4, undefined) + "]", "[" + "go".padEnd(4, undefined) + "]");
 const limited = "a,b,c".split(",", 2, mark("s"));
 console.log("ignored split:", limited.length, seen);
 console.log("ignored replace:", "aba".replace("a", "x", mark("R")), "aba".replaceAll("a", "x", mark("A")), seen);

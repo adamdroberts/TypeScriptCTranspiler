@@ -35035,19 +35035,17 @@ class Emitter {
                     ([s]) => `tsc_str_to_lower(${s!})`,
                 );
             case "normalize": {
-                const specs: SequencedCallArg[] = [{ value: recv }];
-                if (args[0]) {
-                    specs.push({
-                        value: this.emitExpr(args[0]),
-                        target: T_STRING,
-                        node: args[0],
-                    });
-                }
+                const form = args[0] && !this.isUndefinedExpression(args[0])
+                    ? this.emitExpr(args[0])
+                    : { c: `tsc_str_from_lit("NFC", 3)`, ty: T_STRING };
+                const specs: SequencedCallArg[] = [
+                    { value: recv },
+                    { value: form, target: T_STRING, node: args[0] },
+                ];
                 specs.push(...this.ignoredArgumentSpecs(args, 1));
-                return this.emitSequencedExpr(T_STRING, specs, (vals) => {
-                    const form = vals[1] ?? `tsc_str_from_lit("NFC", 3)`;
-                    return `tsc_str_normalize(${vals[0]}, ${form})`;
-                });
+                return this.emitSequencedExpr(T_STRING, specs, (vals) =>
+                    `tsc_str_normalize(${vals[0]}, ${vals[1]})`,
+                );
             }
             case "trim":
                 return this.emitSequencedExpr(
@@ -35103,7 +35101,7 @@ class Emitter {
                     { value: recv },
                     { value: len, target: T_NUMBER, node: args[0]! },
                 ];
-                if (args[1]) {
+                if (args[1] && !this.isUndefinedExpression(args[1])) {
                     specs.push({
                         value: this.emitExpr(args[1]),
                         target: T_STRING,

@@ -1,5 +1,6 @@
 nfc: true
 default: true
+undefined: true
 nfd: true
 nfkc: true
 nfkd: true
