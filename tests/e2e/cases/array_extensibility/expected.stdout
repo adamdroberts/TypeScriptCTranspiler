@@ -19,7 +19,9 @@ sealed new: false 2
 sealed delete: false 10
 sealed push: 2 10|2
 sealed fill: 5|5
+sealed define props failed: Object.defineProperties failed
 sealed define props: 2 6|5
+sealed object define failed: Object.defineProperty failed
 freeze identity: true
 frozen: false true true
 frozen desc: false false

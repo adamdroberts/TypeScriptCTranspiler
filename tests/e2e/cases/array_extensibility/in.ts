@@ -1,5 +1,13 @@
 const extensible = ["a", "b"];
 
+function report(label: string, fn: () => any): void {
+    try {
+        console.log(label + ":", fn());
+    } catch (e: any) {
+        console.log(label + ":", e);
+    }
+}
+
 console.log("before:", Object.isExtensible(extensible), Object.isSealed(extensible), Object.isFrozen(extensible));
 console.log(
     "define existing:",
@@ -73,11 +81,17 @@ console.log("sealed new:", Reflect.set(sealed, "2", 3), sealed.length);
 console.log("sealed delete:", Reflect.deleteProperty(sealed, "0"), sealed[0]);
 console.log("sealed push:", sealed.push(11), sealed.join("|"));
 console.log("sealed fill:", sealed.fill(5).join("|"));
-Object.defineProperties(sealed, {
+report("sealed define props failed", (): any => Object.defineProperties(sealed, {
     "0": { value: 6, writable: true, enumerable: true, configurable: false },
     "2": { value: 7, writable: true, enumerable: true, configurable: true },
-});
+}));
 console.log("sealed define props:", sealed.length, sealed.join("|"));
+report("sealed object define failed", (): any => Object.defineProperty(sealed, "2", {
+    value: 8,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+}));
 
 const frozen = [3, 4];
 console.log("freeze identity:", Object.freeze(frozen) === frozen);

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Typed-array `Object.defineProperty(...)` and `Object.defineProperties(...)` now throw through the catchable runtime exception path when descriptor application fails, while Reflect descriptor helpers continue returning `false`. Test: `array_extensibility`.
 - Static `Object.defineProperty(...)` and `Object.defineProperties(...)` descriptor emission now throws through the catchable runtime exception path when a definition fails. Tests: `object_define_property`, `object_define_properties`.
 - `Object.defineProperties(...)` now accepts function targets through the same static and runtime descriptor-map paths as dynamic objects, preserving ignored trailing-argument evaluation and returning the original typed function value. Test: `object_define_property_ignored_arguments`.
 - EventEmitter instances now expose empty own-property results through Object and Reflect helpers while preserving listener registry behavior. Test: `event_emitter_object_methods`.

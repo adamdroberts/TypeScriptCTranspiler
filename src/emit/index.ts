@@ -39963,6 +39963,9 @@ class Emitter {
                 valueResult && desc.value ? { value: valueResult, node: desc.value } : null,
                 keyExpr,
             );
+            if (returnObject) {
+                pieces.push(`if (!${out}) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed"))`);
+            }
             pieces.push(returnObject ? arrC : out);
             return `({ ${pieces.join("; ")}; })`;
         });
@@ -40100,14 +40103,16 @@ class Emitter {
                 const valueInfo = entry.value && entry.valueNode && entry.valuePos != null
                     ? { value: { c: vals[entry.valuePos]!, ty: entry.value.ty }, node: entry.valueNode }
                     : null;
-                pieces.push(...this.typedArrayDefinePropertyPieces(
+                const defined = this.typedArrayDefinePropertyPieces(
                     arrC,
                     elem,
                     key,
                     entry.desc,
                     valueInfo,
                     descriptorsExpr,
-                ).pieces);
+                );
+                pieces.push(...defined.pieces);
+                pieces.push(`if (!${defined.out}) tsc_throw_str(tsc_str_from_cstr("Object.defineProperties failed"))`);
             }
             return `({ ${pieces.join("; ")}; ${arrC}; })`;
         });
