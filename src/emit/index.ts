@@ -28177,6 +28177,16 @@ class Emitter {
         switch (method) {
             case "call": {
                 const thisArg = args[0] ? this.emitExpr(args[0]) : missing;
+                if (args.slice(1).some((arg) => ts.isSpreadElement(arg))) {
+                    const argList = this.emitSpreadCallArgumentList(args.slice(1));
+                    return this.emitSequencedExpr(T_VALUE, [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: thisArg, target: T_VALUE, node: args[0] ?? call.expression },
+                        { value: argList, node: call },
+                    ], ([fn, thisArgValue, list]) =>
+                        `tsc_value_apply_function(${fn}, ${thisArgValue}, tsc_value_array(${list}))`,
+                    );
+                }
                 const specs: SequencedCallArg[] = [
                     { value: recv, target: T_VALUE, node: call.expression },
                     { value: thisArg, target: T_VALUE, node: args[0] ?? call.expression },
