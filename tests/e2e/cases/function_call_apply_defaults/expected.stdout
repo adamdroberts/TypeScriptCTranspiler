@@ -1,5 +1,6 @@
 call args: call:x:y
 apply args: apply:x:y
+apply array-like: array-like:a:b
 ignored: apply-extra
 apply extra: extra:x:y
 ignored: typed-extra

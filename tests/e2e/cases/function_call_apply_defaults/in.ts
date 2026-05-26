@@ -11,6 +11,7 @@ const fn: any = show;
 
 console.log("call args:", fn.call({ tag: "call" }, "x", "y"));
 console.log("apply args:", fn.apply({ tag: "apply" }, ["x", "y"]));
+console.log("apply array-like:", fn.apply({ tag: "array-like" }, { 0: "a", 1: "b", length: 2 }));
 console.log("apply extra:", fn.apply({ tag: "extra" }, ["x", "y"], mark("apply-extra")));
 console.log("typed apply extra:", show.apply({ tag: "typed" }, ["a", "b"], mark("typed-extra")));
 console.log("apply omitted:", fn.apply({ tag: "omitted" }));
