@@ -29852,9 +29852,10 @@ class Emitter {
                 }
                 const kt = this.freshTemp("_mk");
                 const vt = this.freshTemp("_mv");
+                const fallback = v.kind === "value" ? "tsc_value_undefined()" : `(${v.c})0`;
                 return {
                     c:
-                        `({ tsc_map_t* const ${mt} = ${recv.c}; ${k.c} ${kt} = ${kc}; ${v.c} ${vt} = (${v.c})0; ` +
+                        `({ tsc_map_t* const ${mt} = ${recv.c}; ${k.c} ${kt} = ${kc}; ${v.c} ${vt} = ${fallback}; ` +
                         `tsc_map_get_raw(${mt}, &${kt}, &${vt}); ${vt}; })`,
                     ty: v,
                 };
@@ -42014,6 +42015,12 @@ class Emitter {
             if (args.length >= 1) {
                 const entries = this.emitExpr(args[0]!);
                 const ignored = this.ignoredArgumentSpecs(args, 1);
+                if (entries.ty.kind === "value" && k.kind === "value" && v.kind === "value") {
+                    return this.emitSequencedExpr(mapped, [
+                        { value: entries, target: T_VALUE, node: args[0]! },
+                        ...ignored,
+                    ], ([source]) => `tsc_value_map_constructor_entries(${source})`);
+                }
                 if (entries.ty.kind === "map") {
                     if (
                         !entries.ty.key ||

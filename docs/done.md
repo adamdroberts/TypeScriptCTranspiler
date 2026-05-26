@@ -191,8 +191,8 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - `Array.of(...items)` — typed array construction, including `Array.of<any>(...)` followed by dynamic array coercion. Tests: `array_of`, `dynamic_array_of`
 
 ### `Map<K, V>`
-- `new Map<K, V>()`, `new Map(Object.entries(obj), ...ignored)`, typed `ObjectEntry<V, K>[]` sources including non-string keys, and `new Map(existingMap, ...ignored)` for typed Map sources — `tsc_map_new(sizeof(K), sizeof(V), keyKind, initialCap)`, with supported source constructor extras evaluated and ignored. Tests: `map_set_constructors`, `map_constructor_from_map`, `map_object_entry_constructors`, `collection_constructor_ignored_arguments`
-- `.set(k, v)`, `.get(k)`, `.has(k)`, `.delete(k)`, `.clear()`; numeric keys use SameValueZero semantics so `NaN` matches `NaN` and `-0` matches `0`. Tests: `map_set`, `map_set_same_value_zero`
+- `new Map<K, V>()`, `new Map(Object.entries(obj), ...ignored)`, typed `ObjectEntry<V, K>[]` sources including non-string keys, `new Map(existingMap, ...ignored)` for typed Map sources, and `new Map<any, any>(dynamicSource, ...ignored)` for nullish empty and boxed dynamic array pair sources — `tsc_map_new(sizeof(K), sizeof(V), keyKind, initialCap)`, with supported source constructor extras evaluated and ignored and non-iterable or malformed dynamic sources rejected through catchable runtime errors. Tests: `map_set_constructors`, `map_constructor_from_map`, `map_constructor_dynamic`, `map_object_entry_constructors`, `collection_constructor_ignored_arguments`
+- `.set(k, v)`, `.get(k)`, `.has(k)`, `.delete(k)`, `.clear()`; numeric keys use SameValueZero semantics so `NaN` matches `NaN` and `-0` matches `0`, and dynamic-value maps return dynamic `undefined` for missing `.get(...)` keys. Tests: `map_set`, `map_set_same_value_zero`, `map_constructor_dynamic`
 - `.keys(...ignored)`, `.values(...ignored)` — returns typed array; `.entries(...ignored)` returns a typed `ObjectEntry<V, K>[]`. Ignored extra arguments are evaluated before being discarded. Tests: `map_entries`, `map_object_entry_constructors`
 - `.forEach((value, key, map) => expr, thisArg?, ...ignored)` — inline expression-body or single-return block-body callbacks and named callback references over insertion order; optional `thisArg` values are evaluated once and bound for callbacks that declare `this: any`, and trailing ignored arguments are evaluated before iteration. Tests: `map_set_for_each`, `map_set_for_each_refs`, `map_set_for_each_this_arg`
 - Direct `for...of` with `[key, value]` destructuring. Test: `map_set_for_of`
@@ -1365,6 +1365,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `line_directives` | generated C contains TS source `#line` markers |
 | `logical_assign` | logical assignment with RHS short-circuiting |
 | `map_constructor_from_map` | typed Map copy construction from another Map |
+| `map_constructor_dynamic` | dynamic Map constructor sources for nullish, pair-array, and rejected malformed entries |
 | `map_group_by_dynamic_source` | ES2024 Map.groupBy over boxed dynamic array and string sources |
 | `map_object_entry_constructors` | typed ObjectEntry tuples with non-string keys through Map/WeakMap constructors and Map entry materialization |
 | `map_set` | Map + Set with all methods |

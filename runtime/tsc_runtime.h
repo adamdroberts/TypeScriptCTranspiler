@@ -582,6 +582,7 @@ double tsc_value_length(tsc_value_t v);
 tsc_array_t* tsc_value_iter_values(tsc_value_t v);
 tsc_array_t* tsc_value_array_from_values(tsc_value_t v);
 tsc_array_t* tsc_value_collection_constructor_values(tsc_value_t v);
+struct tsc_map* tsc_value_map_constructor_entries(tsc_value_t entries);
 tsc_array_t* tsc_value_object_keys(tsc_value_t v);
 tsc_array_t* tsc_value_object_values(tsc_value_t v);
 tsc_array_t* tsc_value_object_entries(tsc_value_t v);
