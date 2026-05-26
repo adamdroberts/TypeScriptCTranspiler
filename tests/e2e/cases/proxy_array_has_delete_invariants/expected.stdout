@@ -4,3 +4,4 @@ has closed: Proxy has trap cannot report false for key on non-extensible target
 delete length: Proxy deleteProperty trap cannot report deletion of non-configurable key
 delete sealed: Proxy deleteProperty trap cannot report deletion of non-configurable key
 delete closed: Proxy deleteProperty trap cannot report deletion of key on non-extensible target
+events: has:length|has:0|has:0|ignored:delete length|delete:length|ignored:delete sealed|delete:0|ignored:delete closed|delete:0

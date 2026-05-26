@@ -1,8 +1,17 @@
+const events: string[] = [];
+
+function mark(label: string): string {
+    events.push("ignored:" + label);
+    return label;
+}
+
 function falseHas(target: any, prop: any): boolean {
+    events.push("has:" + String(prop));
     return false;
 }
 
 function trueDelete(target: any, prop: any): boolean {
+    events.push("delete:" + String(prop));
     return true;
 }
 
@@ -33,7 +42,7 @@ try {
 
 const lengthDeleteProxy: any = new Proxy(["d"], { deleteProperty: trueDelete as any });
 try {
-    console.log("delete length:", Reflect.deleteProperty(lengthDeleteProxy, "length"));
+    console.log("delete length:", Reflect.deleteProperty(lengthDeleteProxy, "length", mark("delete length")));
 } catch (err: any) {
     console.log("delete length:", err);
 }
@@ -42,7 +51,7 @@ const sealedDeleteTarget: any = ["x"];
 Object.seal(sealedDeleteTarget);
 const sealedDeleteProxy: any = new Proxy(sealedDeleteTarget, { deleteProperty: trueDelete as any });
 try {
-    console.log("delete sealed:", Reflect.deleteProperty(sealedDeleteProxy, "0"));
+    console.log("delete sealed:", Reflect.deleteProperty(sealedDeleteProxy, "0", mark("delete sealed")));
 } catch (err: any) {
     console.log("delete sealed:", err);
 }
@@ -51,7 +60,9 @@ const closedDeleteTarget: any = ["z"];
 Object.preventExtensions(closedDeleteTarget);
 const closedDeleteProxy: any = new Proxy(closedDeleteTarget, { deleteProperty: trueDelete as any });
 try {
-    console.log("delete closed:", Reflect.deleteProperty(closedDeleteProxy, "0"));
+    console.log("delete closed:", Reflect.deleteProperty(closedDeleteProxy, "0", mark("delete closed")));
 } catch (err: any) {
     console.log("delete closed:", err);
 }
+
+console.log("events:", events.join("|"));
