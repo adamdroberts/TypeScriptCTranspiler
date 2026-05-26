@@ -4,3 +4,4 @@ extra closed: Proxy ownKeys trap result included extra key on non-extensible tar
 missing closed: Proxy ownKeys trap result missing key on non-extensible target
 exact closed: a
 object keys: Proxy ownKeys trap result missing non-configurable key
+events: ignored:missing fixed|missing fixed trap|ignored:duplicate|duplicate trap|ignored:extra closed|extra closed trap|ignored:missing closed|missing closed trap|ignored:exact closed|exact closed trap|ignored:object keys|object keys trap
