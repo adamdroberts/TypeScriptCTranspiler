@@ -3,6 +3,7 @@ own: 0 0 undefined 0 undefined
 has: false false
 call: false false
 direct: false false true
+integrity: true false false true
 tag: [object Object] [object Object] [object Object]
 digest: ba7816bf
-trace: kvenrdDRhHcqpivtsl
+trace: kvenrdDRhHcqpivELFItsl

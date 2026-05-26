@@ -2,6 +2,7 @@ enum: 0 0 0
 own: 0 0 undefined 0 undefined
 has: false false false false
 call: false false
+integrity: true false false true
 tag: [object EventEmitter] [object EventEmitter]
 emit: true ready
-trace: kvenrdDRhHpicqt
+trace: kvenrdDRhHpicqELFIts
