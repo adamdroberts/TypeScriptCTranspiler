@@ -19,3 +19,9 @@ try {
 } catch (e: any) {
     console.log("bad getter:", e);
 }
+try {
+    text.__defineSetter__("x", 1);
+    console.log("bad setter: ok");
+} catch (e: any) {
+    console.log("bad setter:", e);
+}
