@@ -88,6 +88,7 @@ This is the next item that most directly expands what programs can be written ag
   - Generated-C DCE static boolean analysis now folds side-effect-free logical, nullish, comma, and conditional expression trees, allowing deeper nested branch pruning from absent descriptor proofs. Test: `generated_c_dce_const`.
   - Generated-C DCE static nullish analysis now folds side-effect-free nullish, comma, and conditional expression trees, allowing deeper fallback pruning from absent descriptor proofs. Test: `generated_c_dce_const`.
   - Generated-C DCE static switch-key selection now follows side-effect-free nullish and comma expression trees, allowing selected switch-clause pruning from absent descriptor proofs. Test: `generated_c_dce_const`.
+  - Generated-C DCE static switch-key selection now uses side-effect-free boolean expression proofs for boolean switch keys, allowing selected switch-clause pruning from absent descriptor boolean proofs. Test: `generated_c_dce_const`.
   - Generated-C DCE coverage now includes inherited `toString()`, `toLocaleString()`, and `valueOf()` calls on statically present data descriptor result objects. Test: `generated_c_dce_const`.
   - Generated-C DCE now treats `Object.prototype.toLocaleString.call(...)` on statically present data descriptor result objects as side-effect-free. Test: `generated_c_dce_const`.
   - Generated-C DCE now treats inherited `hasOwnProperty(...)` and `propertyIsEnumerable(...)` calls on statically present data descriptor result objects as side-effect-free. Test: `generated_c_dce_const`.

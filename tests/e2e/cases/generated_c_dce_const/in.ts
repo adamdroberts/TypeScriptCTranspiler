@@ -4939,6 +4939,22 @@ function absentDescriptorSwitchDce(): number {
     }
 }
 
+function absentDescriptorBooleanSwitchDce(): number {
+    // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+    const local_absent_descriptor_boolean_switch_key = ((Object.getOwnPropertyDescriptor(new Error("local_dead_absent_descriptor_boolean_switch_condition"), "missing", "local_dead_absent_descriptor_boolean_switch_ignored") as unknown as boolean)
+        || true) as boolean;
+    switch (local_absent_descriptor_boolean_switch_key) {
+        case false:
+            console.log("local_dead_absent_descriptor_boolean_switch_false");
+            return 297;
+        case true:
+            return 298;
+        default:
+            console.log("local_dead_absent_descriptor_boolean_switch_default");
+            return 299;
+    }
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -5087,6 +5103,7 @@ console.log(
     absentDescriptorNullishChain(),
     staticSwitchDce(),
     absentDescriptorSwitchDce(),
+    absentDescriptorBooleanSwitchDce(),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),

@@ -23734,6 +23734,14 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         const direct = this.switchCaseKey(unwrapped);
         if (direct) return direct;
+        try {
+            if (this.prepareType(mapType(unwrapped, this.checker)).kind === "boolean") {
+                const bool = this.staticBooleanValue(unwrapped, seenConsts);
+                if (bool !== null) return bool ? "b:true" : "b:false";
+            }
+        } catch {
+            // Keep switch selection conservative for expressions mapType cannot lower.
+        }
         if (ts.isConditionalExpression(unwrapped)) {
             const condition = this.staticBooleanValue(unwrapped.condition, seenConsts);
             if (condition === true) return this.staticSwitchKey(unwrapped.whenTrue, seenConsts);
