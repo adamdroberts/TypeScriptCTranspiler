@@ -724,6 +724,10 @@ const unused_promise_resolve_bitwise_not_call = Promise.resolve(~"dead_promise_r
 const unused_promise_reject_literal_call = Promise.reject("dead_promise_reject_literal");
 const unused_promise_reject_string_call = Promise.reject(String("dead_promise_reject_string"));
 const unused_promise_reject_void_call = Promise.reject(void String("dead_promise_reject_void"));
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+const unused_promise_reject_error_absent_descriptor_call = Promise.reject(Object.getOwnPropertyDescriptor(new Error("dead_promise_reject_error_absent_descriptor"), "missing", "dead_promise_reject_error_absent_descriptor_ignored"));
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+const unused_promise_reject_regexp_absent_reflect_descriptor_call = Promise.reject(Reflect.getOwnPropertyDescriptor(/dead_promise_reject_regexp_absent_reflect_descriptor/g, "source", "dead_promise_reject_regexp_absent_reflect_descriptor_ignored"));
 const unused_promise_try_literal_call = Promise.try(() => "dead_promise_try_literal");
 const unused_promise_try_function_call = Promise.try(function () {
     return String("dead_promise_try_function");
@@ -2331,6 +2335,10 @@ Promise.resolve(void String("top_level_dead_promise_resolve_void"));
 Promise.resolve(typeof String("top_level_dead_promise_resolve_typeof"));
 Promise.resolve(!"top_level_dead_promise_resolve_prefix_bang".length);
 Promise.resolve(~"top_level_dead_promise_resolve_prefix_tilde".length);
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+Promise.reject(Object.getOwnPropertyDescriptor(new Error("top_level_dead_promise_reject_error_absent_descriptor"), "missing", "top_level_dead_promise_reject_error_absent_descriptor_ignored"));
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+Promise.reject(Reflect.getOwnPropertyDescriptor(/top_level_dead_promise_reject_regexp_absent_reflect_descriptor/g, "source", "top_level_dead_promise_reject_regexp_absent_reflect_descriptor_ignored"));
 Promise.try(() => "top_level_dead_promise_try_literal");
 Promise.try(function () {
     return String("top_level_dead_promise_try_function");
@@ -3755,6 +3763,10 @@ function usedLocal(value: number): number {
     Promise.resolve(typeof String("local_dead_promise_resolve_typeof"));
     Promise.resolve(!"local_dead_promise_resolve_prefix_bang".length);
     Promise.resolve(~"local_dead_promise_resolve_prefix_tilde".length);
+    // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+    Promise.reject(Object.getOwnPropertyDescriptor(new Error("local_dead_promise_reject_error_absent_descriptor"), "missing", "local_dead_promise_reject_error_absent_descriptor_ignored"));
+    // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+    Promise.reject(Reflect.getOwnPropertyDescriptor(/local_dead_promise_reject_regexp_absent_reflect_descriptor/g, "source", "local_dead_promise_reject_regexp_absent_reflect_descriptor_ignored"));
     Promise.try(() => "local_dead_promise_try_literal");
     Promise.try(function () {
         return String("local_dead_promise_try_function");
