@@ -37662,6 +37662,7 @@ class Emitter {
                     requireNumber(args[1], end.ty);
                     specs.push({ value: end, target: T_NUMBER, node: args[1] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_BUFFER, specs, (vals) => {
                     const b = vals[0]!;
                     const start = vals[1] ?? "0";
@@ -37670,7 +37671,7 @@ class Emitter {
                 });
             }
             case "fill": {
-                if (args.length < 1 || args.length > 3) unsupported(call, "Buffer.fill expects value and optional start/end");
+                if (args.length < 1) unsupported(call, "Buffer.fill expects value and optional start/end");
                 const value = this.emitExpr(args[0]!);
                 requireNumber(args[0]!, value.ty);
                 const specs: SequencedCallArg[] = [
@@ -37687,6 +37688,7 @@ class Emitter {
                     requireNumber(args[2], end.ty);
                     specs.push({ value: end, target: T_NUMBER, node: args[2] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 3));
                 return this.emitSequencedExpr(T_BUFFER, specs, (vals) => {
                     const b = vals[0]!;
                     const start = vals[2] ?? "0";
@@ -37695,7 +37697,7 @@ class Emitter {
                 });
             }
             case "write": {
-                if (args.length < 1 || args.length > 4) unsupported(call, "Buffer.write expects string, optional offset, length, and encoding");
+                if (args.length < 1) unsupported(call, "Buffer.write expects string, optional offset, length, and encoding");
                 const input = this.emitExpr(args[0]!);
                 const specs: SequencedCallArg[] = [
                     { value: recv },
@@ -37714,6 +37716,7 @@ class Emitter {
                 if (args[3]) {
                     specs.push({ value: this.emitExpr(args[3]), target: T_STRING, node: args[3] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 4));
                 return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
                     const offset = vals[2] ?? "0";
                     const length = vals[3] ?? "NAN";
@@ -37723,13 +37726,13 @@ class Emitter {
             }
             case "readInt8":
             case "readUInt8": {
-                if (args.length > 1) unsupported(call, `Buffer.${method} expects optional offset`);
                 const specs: SequencedCallArg[] = [{ value: recv }];
                 if (args[0]) {
                     const offset = this.emitExpr(args[0]);
                     requireNumber(args[0], offset.ty);
                     specs.push({ value: offset, target: T_NUMBER, node: args[0] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 1));
                 const fn = method === "readInt8" ? "tsc_buffer_read_int8" : "tsc_buffer_read_uint8";
                 return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
                     `${fn}(${vals[0]}, ${vals[1] ?? "0"})`,
@@ -37737,7 +37740,7 @@ class Emitter {
             }
             case "writeInt8":
             case "writeUInt8": {
-                if (args.length < 1 || args.length > 2) unsupported(call, `Buffer.${method} expects value and optional offset`);
+                if (args.length < 1) unsupported(call, `Buffer.${method} expects value and optional offset`);
                 const value = this.emitExpr(args[0]!);
                 requireNumber(args[0]!, value.ty);
                 const specs: SequencedCallArg[] = [
@@ -37749,6 +37752,7 @@ class Emitter {
                     requireNumber(args[1], offset.ty);
                     specs.push({ value: offset, target: T_NUMBER, node: args[1] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
                 const fn = method === "writeInt8" ? "tsc_buffer_write_int8" : "tsc_buffer_write_uint8";
                 return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
                     `${fn}(${vals[0]}, ${vals[1]}, ${vals[2] ?? "0"})`,
@@ -37766,13 +37770,13 @@ class Emitter {
             case "readUInt16BE":
             case "readUInt32LE":
             case "readUInt32BE": {
-                if (args.length > 1) unsupported(call, `Buffer.${method} expects optional offset`);
                 const specs: SequencedCallArg[] = [{ value: recv }];
                 if (args[0]) {
                     const offset = this.emitExpr(args[0]);
                     requireNumber(args[0], offset.ty);
                     specs.push({ value: offset, target: T_NUMBER, node: args[0] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 1));
                 const fn = {
                     readInt16LE: "tsc_buffer_read_int16_le",
                     readInt16BE: "tsc_buffer_read_int16_be",
@@ -37803,7 +37807,7 @@ class Emitter {
             case "writeUInt16BE":
             case "writeUInt32LE":
             case "writeUInt32BE": {
-                if (args.length < 1 || args.length > 2) unsupported(call, `Buffer.${method} expects value and optional offset`);
+                if (args.length < 1) unsupported(call, `Buffer.${method} expects value and optional offset`);
                 const value = this.emitExpr(args[0]!);
                 requireNumber(args[0]!, value.ty);
                 const specs: SequencedCallArg[] = [
@@ -37815,6 +37819,7 @@ class Emitter {
                     requireNumber(args[1], offset.ty);
                     specs.push({ value: offset, target: T_NUMBER, node: args[1] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
                 const fn = {
                     writeInt16LE: "tsc_buffer_write_int16_le",
                     writeInt16BE: "tsc_buffer_write_int16_be",
@@ -37842,18 +37847,19 @@ class Emitter {
                 );
             }
             case "copy": {
-                if (args.length < 1 || args.length > 4) unsupported(call, "Buffer.copy expects target and optional target/source bounds");
+                if (args.length < 1) unsupported(call, "Buffer.copy expects target and optional target/source bounds");
                 const target = this.emitExpr(args[0]!);
                 if (target.ty.kind !== "buffer") unsupported(args[0]!, "Buffer.copy target must be Buffer");
                 const specs: SequencedCallArg[] = [
                     { value: recv },
                     { value: target },
                 ];
-                for (let i = 1; i < args.length; i++) {
+                for (let i = 1; i < Math.min(args.length, 4); i++) {
                     const bound = this.emitExpr(args[i]!);
                     requireNumber(args[i]!, bound.ty);
                     specs.push({ value: bound, target: T_NUMBER, node: args[i]! });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 4));
                 return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
                     const source = vals[0]!;
                     const targetBuffer = vals[1]!;
@@ -37866,7 +37872,7 @@ class Emitter {
             case "indexOf":
             case "lastIndexOf":
             case "includes": {
-                if (args.length < 1 || args.length > 2) unsupported(call, `Buffer.${method} expects value and optional byteOffset`);
+                if (args.length < 1) unsupported(call, `Buffer.${method} expects value and optional byteOffset`);
                 const value = this.emitExpr(args[0]!);
                 if (!["number", "string", "buffer"].includes(value.ty.kind)) {
                     unsupported(args[0]!, `Buffer.${method} expects number, string, or Buffer`);
@@ -37881,6 +37887,7 @@ class Emitter {
                     requireNumber(args[1], offset.ty);
                     specs.push({ value: offset, target: T_NUMBER, node: args[1] });
                 }
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
                 const ty = method === "includes" ? T_BOOLEAN : T_NUMBER;
                 return this.emitSequencedExpr(ty, specs, ([buffer, needle, offset]) => {
                     const suffix = value.ty.kind === "number" ? "byte" : value.ty.kind === "string" ? "str" : "buffer";
@@ -37901,19 +37908,19 @@ class Emitter {
                 );
             }
             case "compare": {
-                if (args.length !== 1) unsupported(call, "Buffer.compare expects other");
+                if (args.length < 1) unsupported(call, "Buffer.compare expects other");
                 const other = this.emitExpr(args[0]!);
                 if (other.ty.kind !== "buffer") unsupported(args[0]!, "Buffer.compare expects Buffer");
-                return this.emitSequencedCall(
-                    "tsc_buffer_compare",
+                return this.emitSequencedExpr(
                     T_NUMBER,
-                    [{ value: recv }, { value: other }],
+                    [{ value: recv }, { value: other }, ...this.ignoredArgumentSpecs(args, 1)],
+                    ([left, right]) => `tsc_buffer_compare(${left}, ${right})`,
                 );
             }
             case "hasOwnProperty":
             case "propertyIsEnumerable":
-                if (args.length !== 1) unsupported(call, `Buffer.${method} expects 1 arg`);
-                return this.emitBufferOwnKeyCheck(call.expression, recv, args[0]!);
+                if (args.length < 1) unsupported(call, `Buffer.${method} expects 1 arg`);
+                return this.emitBufferOwnKeyCheck(call.expression, recv, args[0]!, this.ignoredArgumentSpecs(args, 1));
         }
         unsupported(call, `Buffer method .${method}`);
     }
