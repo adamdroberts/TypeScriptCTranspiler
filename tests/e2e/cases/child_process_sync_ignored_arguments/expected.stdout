@@ -1,6 +1,9 @@
 exec: exec
+exec-alias: alias-exec
 file: file
+file-alias: alias-file
 file-options-length: 0
 spawn: 0 spawn
+spawn-alias: 0 alias-spawn
 spawn-options: 0 0
-events: exec-extra|file-extra|file-options-extra|spawn-extra|spawn-options-extra
+events: exec-extra|alias-exec-extra|file-extra|alias-file-extra|file-options-extra|spawn-extra|alias-spawn-extra|spawn-options-extra
