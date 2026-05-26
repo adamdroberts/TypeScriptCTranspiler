@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Pure JavaScript packages loaded through `allowJs` now have focused coverage for default-exported function declarations. Test: `node_modules_js_default_function`.
 - Materialized synchronous `yield*` now has focused coverage for custom iterator objects whose `next()` method is inherited. Test: `generator_yield_star_custom_iterator_inherited_next`.
 - Materialized synchronous `yield*` now has focused coverage for direct self-iterable custom iterator objects. Test: `generator_yield_star_custom_iterator_self`.
 - Materialized synchronous `yield*` now supports typed custom iterable classes whose `[Symbol.iterator]()` returns a class iterator object with `next()`. Test: `generator_yield_star_custom_iterator`.
