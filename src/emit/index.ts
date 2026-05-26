@@ -29432,7 +29432,7 @@ class Emitter {
                     : items.ty.kind === "string"
                         ? `tsc_str_chars(${itemsExpr})`
                         : items.ty.kind === "value"
-                            ? `tsc_value_iter_values(${itemsExpr})`
+                            ? `tsc_value_array_from_values(${itemsExpr})`
                             : itemsExpr;
             const itemExpr = `TSC_ARR(${sourceType.c}, ${src}, ${iv})`;
             const { bindings, body } = this.bindArrayFromCallback(mapfnArg, sourceType, elem, item, iv, callbackThisArg);
@@ -29444,12 +29444,13 @@ class Emitter {
                     `${elem.c} ${pushed} = ${fulfill}; tsc_array_push_raw(${out}, &${pushed});`
                 : `${elem.c} ${mapped} = ${this.coerce(body, elem, mapfnArg)}; tsc_array_push_raw(${out}, &${mapped});`;
             return (
-                `({ tsc_array_t* const ${src} = ${sourceArray}; ` +
+                `({ tsc_array_t* ${src} = NULL; ` +
                 `${thisArgSetup}` +
-                `tsc_array_t* ${out} = tsc_array_new(sizeof(${elem.c}), ${src}->len ? ${src}->len : 1); ` +
+                `tsc_array_t* ${out} = NULL; ` +
                 `tsc_promise_t* ${result} = NULL; bool ${pending} = false; ` +
                 `tsc_try_frame_t ${eh}; tsc_try_push(&${eh}); ` +
-                `if (setjmp(${eh}.jb) == 0) { ` +
+                `if (setjmp(${eh}.jb) == 0) { ${src} = ${sourceArray}; ` +
+                `${out} = tsc_array_new(sizeof(${elem.c}), ${src}->len ? ${src}->len : 1); ` +
                 `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
                 `${sourceType.c} ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
                 `${pushMapped} } ` +
@@ -29483,9 +29484,17 @@ class Emitter {
             return this.emitSequencedExpr(promiseType, [
                 { value: source, target: T_VALUE, node: itemsArg },
                 ...ignored,
-            ], ([items]) =>
-                `tsc_promise_resolve_array(tsc_value_iter_values(${items}))`,
-            );
+            ], ([items]) => {
+                const result = this.freshTemp("_from_async_result");
+                const src = this.freshTemp("_from_async_src");
+                const eh = this.freshTemp("_from_async_eh");
+                return (
+                    `({ tsc_promise_t* ${result} = NULL; tsc_array_t* ${src} = NULL; ` +
+                    `tsc_try_frame_t ${eh}; tsc_try_push(&${eh}); ` +
+                    `if (setjmp(${eh}.jb) == 0) { ${src} = tsc_value_array_from_values(${items}); tsc_try_pop(); ${result} = tsc_promise_resolve_array(${src}); ` +
+                    `} else { ${result} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } ${result}; })`
+                );
+            });
         }
         if (sourceElem?.kind === "promise") {
             return this.emitSequencedExpr(promiseType, [
