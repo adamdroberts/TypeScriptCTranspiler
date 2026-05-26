@@ -1,0 +1,4 @@
+object: true A a
+reflect: true B a,b
+marks: object,reflect
+events: define:a:A:true:object|define:b:B:false:object,reflect
