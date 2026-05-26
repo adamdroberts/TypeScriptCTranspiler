@@ -27967,7 +27967,6 @@ class Emitter {
             if (!a) unsupported(call, "Array.fromAsync needs an argument");
             const mapfn = call.arguments[1];
             if (!mapfn || this.isUndefinedExpression(mapfn)) {
-                if (call.arguments.length > 3) unsupported(call, "Array.fromAsync(items, mapfn) expects optional thisArg");
                 return this.emitArrayFromAsyncWithoutMapper(
                     call,
                     a,
@@ -27975,8 +27974,14 @@ class Emitter {
                     mapfn ? call.arguments.slice(1) : [],
                 );
             }
-            if (call.arguments.length > 3) unsupported(call, "Array.fromAsync(items, mapfn) expects optional thisArg");
-            return this.emitArrayFromAsyncWithMapper(call, a, mapfn, call.arguments[2], promiseType);
+            return this.emitArrayFromAsyncWithMapper(
+                call,
+                a,
+                mapfn,
+                call.arguments[2],
+                promiseType,
+                call.arguments.slice(3),
+            );
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Map" && memberName === "groupBy") {
             return this.emitMapGroupBy(call);
@@ -29867,6 +29872,7 @@ class Emitter {
         mapfnArg: ts.Expression,
         thisArg: ts.Expression | undefined,
         promiseType: CType,
+        ignoredArgs: readonly ts.Expression[] = [],
     ): EmitResult {
         if (promiseType.kind !== "promise" || !promiseType.elem || promiseType.elem.kind !== "array" || !promiseType.elem.elem) {
             unsupported(call, "Array.fromAsync result must be Promise<T[]>");
@@ -29877,11 +29883,7 @@ class Emitter {
         const elem = this.prepareType(resultElem);
         const items = this.emitExpr(itemsArg);
         const thisArgValue = thisArg ? this.emitExpr(thisArg) : null;
-        const thisArgTemp = thisArgValue ? this.freshTemp("_this_arg") : null;
-        const thisArgSetup = thisArgValue
-            ? `tsc_value_t ${thisArgTemp} = ${this.coerce(thisArgValue, T_VALUE, thisArg!)}; `
-            : "";
-        const callbackThisArg = thisArgTemp ?? "tsc_value_undefined()";
+        const ignored = this.ignoredArgumentSpecs(ignoredArgs, 0);
         const sourceType = items.ty.kind === "map"
             ? entryType(items.ty.elem!, items.ty.key!)
             : items.ty.kind === "string"
@@ -29892,53 +29894,58 @@ class Emitter {
         if (!sourceType || (items.ty.kind !== "array" && items.ty.kind !== "set" && items.ty.kind !== "map" && items.ty.kind !== "string" && items.ty.kind !== "value")) {
             unsupported(itemsArg, "Array.fromAsync(items, mapfn) currently supports typed array, Map, Set, dynamic, or string sources");
         }
-        return this.emitSequencedExpr(promiseType, [
-            { value: items, target: items.ty.kind === "value" ? T_VALUE : items.ty, node: itemsArg },
-        ], ([itemsExpr]) => {
-            const src = this.freshTemp("_afa_src");
-            const out = this.freshTemp("_afa_out");
-            const result = this.freshTemp("_afa_result");
-            const pending = this.freshTemp("_afa_pending");
-            const iv = this.freshTemp("_afa_i");
-            const item = this.freshTemp("_afa_item");
-            const mapped = this.freshTemp("_afa_mapped");
-            const promise = this.freshTemp("_afa_promise");
-            const pushed = this.freshTemp("_afa_value");
-            const eh = this.freshTemp("_afa_eh");
-            const sourceArray = items.ty.kind === "set"
-                ? `tsc_set_values(${itemsExpr})`
-                : items.ty.kind === "map"
-                    ? this.mapEntriesArrayExpr(itemsArg, itemsExpr, items.ty, "Array.fromAsync(Map)").c
-                    : items.ty.kind === "string"
-                        ? `tsc_str_chars(${itemsExpr})`
-                        : items.ty.kind === "value"
-                            ? `tsc_value_array_from_values(${itemsExpr})`
-                            : itemsExpr;
-            const itemExpr = `TSC_ARR(${sourceType.c}, ${src}, ${iv})`;
-            const { bindings, body } = this.bindArrayFromCallback(mapfnArg, sourceType, elem, item, iv, callbackThisArg);
-            const fulfill = this.coerce(this.promiseFulfilledValue(elem, promise), elem, call);
-            const pushMapped = body.ty.kind === "promise"
-                ? `${body.ty.c} ${promise} = ${body.c}; ` +
-                    `if (tsc_promise_is_rejected(${promise})) { ${result} = tsc_promise_reject(tsc_promise_reason(${promise})); break; } ` +
-                    `if (tsc_promise_is_pending(${promise})) { ${pending} = true; continue; } ` +
-                    `${elem.c} ${pushed} = ${fulfill}; tsc_array_push_raw(${out}, &${pushed});`
-                : `${elem.c} ${mapped} = ${this.coerce(body, elem, mapfnArg)}; tsc_array_push_raw(${out}, &${mapped});`;
-            return (
-                `({ tsc_array_t* ${src} = NULL; ` +
-                `${thisArgSetup}` +
-                `tsc_array_t* ${out} = NULL; ` +
-                `tsc_promise_t* ${result} = NULL; bool ${pending} = false; ` +
-                `tsc_try_frame_t ${eh}; tsc_try_push(&${eh}); ` +
-                `if (setjmp(${eh}.jb) == 0) { ${src} = ${sourceArray}; ` +
-                `${out} = tsc_array_new(sizeof(${elem.c}), ${src}->len ? ${src}->len : 1); ` +
-                `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
-                `${sourceType.c} ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
-                `${pushMapped} } ` +
-                `tsc_try_pop(); ` +
-                `} else { ${result} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } ` +
-                `${result} ? ${result} : (${pending} ? tsc_promise_pending() : tsc_promise_resolve_array(${out})); })`
-            );
-        });
+        return this.emitSequencedExpr(
+            promiseType,
+            [
+                { value: items, target: items.ty.kind === "value" ? T_VALUE : items.ty, node: itemsArg },
+                ...(thisArgValue ? [{ value: thisArgValue, target: T_VALUE, node: thisArg! }] : []),
+                ...ignored,
+            ],
+            ([itemsExpr, thisArgExpr]) => {
+                const callbackThisArg = thisArgValue ? thisArgExpr! : "tsc_value_undefined()";
+                const src = this.freshTemp("_afa_src");
+                const out = this.freshTemp("_afa_out");
+                const result = this.freshTemp("_afa_result");
+                const pending = this.freshTemp("_afa_pending");
+                const iv = this.freshTemp("_afa_i");
+                const item = this.freshTemp("_afa_item");
+                const mapped = this.freshTemp("_afa_mapped");
+                const promise = this.freshTemp("_afa_promise");
+                const pushed = this.freshTemp("_afa_value");
+                const eh = this.freshTemp("_afa_eh");
+                const sourceArray = items.ty.kind === "set"
+                    ? `tsc_set_values(${itemsExpr})`
+                    : items.ty.kind === "map"
+                        ? this.mapEntriesArrayExpr(itemsArg, itemsExpr, items.ty, "Array.fromAsync(Map)").c
+                        : items.ty.kind === "string"
+                            ? `tsc_str_chars(${itemsExpr})`
+                            : items.ty.kind === "value"
+                                ? `tsc_value_array_from_values(${itemsExpr})`
+                                : itemsExpr;
+                const itemExpr = `TSC_ARR(${sourceType.c}, ${src}, ${iv})`;
+                const { bindings, body } = this.bindArrayFromCallback(mapfnArg, sourceType, elem, item, iv, callbackThisArg);
+                const fulfill = this.coerce(this.promiseFulfilledValue(elem, promise), elem, call);
+                const pushMapped = body.ty.kind === "promise"
+                    ? `${body.ty.c} ${promise} = ${body.c}; ` +
+                        `if (tsc_promise_is_rejected(${promise})) { ${result} = tsc_promise_reject(tsc_promise_reason(${promise})); break; } ` +
+                        `if (tsc_promise_is_pending(${promise})) { ${pending} = true; continue; } ` +
+                        `${elem.c} ${pushed} = ${fulfill}; tsc_array_push_raw(${out}, &${pushed});`
+                    : `${elem.c} ${mapped} = ${this.coerce(body, elem, mapfnArg)}; tsc_array_push_raw(${out}, &${mapped});`;
+                return (
+                    `({ tsc_array_t* ${src} = NULL; ` +
+                    `tsc_array_t* ${out} = NULL; ` +
+                    `tsc_promise_t* ${result} = NULL; bool ${pending} = false; ` +
+                    `tsc_try_frame_t ${eh}; tsc_try_push(&${eh}); ` +
+                    `if (setjmp(${eh}.jb) == 0) { ${src} = ${sourceArray}; ` +
+                    `${out} = tsc_array_new(sizeof(${elem.c}), ${src}->len ? ${src}->len : 1); ` +
+                    `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
+                    `${sourceType.c} ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
+                    `${pushMapped} } ` +
+                    `tsc_try_pop(); ` +
+                    `} else { ${result} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } ` +
+                    `${result} ? ${result} : (${pending} ? tsc_promise_pending() : tsc_promise_resolve_array(${out})); })`
+                );
+            });
     }
 
     private emitArrayFromAsyncWithoutMapper(

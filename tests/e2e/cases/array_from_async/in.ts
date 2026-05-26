@@ -58,6 +58,11 @@ Array.fromAsync("uv", undefined, (console.log("undefined mapper thisArg evaluate
     console.log("undefined mapper string:", values.join("|"));
 });
 
+let ignoredOrder = "";
+Array.fromAsync("z", undefined, (ignoredOrder += "T", { unused: true }), (ignoredOrder += "E", 0)).then((values) => {
+    console.log("undefined mapper ignored:", values.join("|"), ignoredOrder);
+});
+
 const dynamicArraySource: any = [9, "ten", true];
 Array.fromAsync(dynamicArraySource).then((values) => {
     console.log("dynamic array:", values.join("|"));
@@ -92,6 +97,13 @@ Array.fromAsync([1, 2], function (this: any, value: number): Promise<number> {
     return Promise.resolve(value + (this.offset as number));
 }, { offset: 30 }).then((values) => {
     console.log("async mapper thisArg:", values.join("|"));
+});
+
+let mappedIgnoredOrder = "";
+Array.fromAsync([2], function (this: any, value: number): number {
+    return value + (this.offset as number);
+}, (mappedIgnoredOrder += "T", { offset: 40 }), (mappedIgnoredOrder += "E", 0)).then((values) => {
+    console.log("mapper ignored:", values.join("|"), mappedIgnoredOrder);
 });
 
 Array.fromAsync([1, 2], (value) => value === 2 ? Promise.reject<number>("mapper bad") : Promise.resolve(value)).catch((reason) => {
