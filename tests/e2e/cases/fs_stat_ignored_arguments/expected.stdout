@@ -1,2 +1,2 @@
 stats: true true 5 true
-events: stat|lstat|missing
+events: stat-options|stat|lstat-options|lstat|missing

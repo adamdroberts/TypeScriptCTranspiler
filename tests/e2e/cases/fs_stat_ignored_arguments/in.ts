@@ -8,11 +8,15 @@ function mark(label: string): string {
     return label;
 }
 
+function note(label: string): void {
+    events.push(label);
+}
+
 rmSync(path, { force: true });
 writeFileSync(path, "stats");
 
-const stat = fs.statSync(path, void 0, mark("stat"));
-const lstat = lstatSync(path, void 0, mark("lstat"));
+const stat = fs.statSync(path, void note("stat-options"), mark("stat"));
+const lstat = lstatSync(path, void note("lstat-options"), mark("lstat"));
 const missing = statSync(path + ".missing", { throwIfNoEntry: false }, mark("missing"));
 
 rmSync(path, { force: true });

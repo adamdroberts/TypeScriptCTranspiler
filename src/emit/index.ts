@@ -36246,8 +36246,13 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "fs.statSync needs path and optional { bigint: false, throwIfNoEntry } options");
                 const options = this.validateFsStatsOptions(args[1], "fs.statSync");
                 const p = this.emitExpr(args[0]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 return this.emitSequencedExpr(T_FS_STATS, [
                     this.fsPathSpec(p, args[0]!, "fs.statSync path"),
+                    ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => `${options.throwIfNoEntry ? "tsc_fs_stat_sync" : "tsc_fs_stat_sync_no_throw"}(${path!})`);
             }
@@ -36255,8 +36260,13 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "fs.lstatSync needs path and optional { bigint: false, throwIfNoEntry } options");
                 const options = this.validateFsStatsOptions(args[1], "fs.lstatSync");
                 const p = this.emitExpr(args[0]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 return this.emitSequencedExpr(T_FS_STATS, [
                     this.fsPathSpec(p, args[0]!, "fs.lstatSync path"),
+                    ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => `${options.throwIfNoEntry ? "tsc_fs_lstat_sync" : "tsc_fs_lstat_sync_no_throw"}(${path!})`);
             }
@@ -36959,8 +36969,9 @@ class Emitter {
     private validateFsStatsOptions(options: ts.Expression | undefined, label: string): { throwIfNoEntry: boolean } {
         let throwIfNoEntry = true;
         if (!options) return { throwIfNoEntry };
-        if (this.isUndefinedExpression(options)) return { throwIfNoEntry };
+        if (this.isUndefinedLikeExpression(options)) return { throwIfNoEntry };
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedLikeExpression(resolvedOptions)) return { throwIfNoEntry };
         if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, `${label} options must be an object literal in this subset`);
         }
@@ -37142,9 +37153,14 @@ class Emitter {
                 const options = this.validateFsStatsOptions(args[1], "fs.promises.stat");
                 if (mapped.elem?.kind !== "fsstats") unsupported(call, "fs.promises.stat result must be Promise<FSStats>");
                 const p = this.emitExpr(args[0]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 const fn = options.throwIfNoEntry ? "tsc_fs_stat_sync" : "tsc_fs_stat_sync_no_throw";
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.stat path"),
+                    ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => settle(`tsc_promise_resolve_fs_stats(${fn}(${path!}))`));
             }
@@ -37153,9 +37169,14 @@ class Emitter {
                 const options = this.validateFsStatsOptions(args[1], "fs.promises.lstat");
                 if (mapped.elem?.kind !== "fsstats") unsupported(call, "fs.promises.lstat result must be Promise<FSStats>");
                 const p = this.emitExpr(args[0]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 const fn = options.throwIfNoEntry ? "tsc_fs_lstat_sync" : "tsc_fs_lstat_sync_no_throw";
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.lstat path"),
+                    ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => settle(`tsc_promise_resolve_fs_stats(${fn}(${path!}))`));
             }
