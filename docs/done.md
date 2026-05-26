@@ -15,7 +15,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - String literals with full C escape handling for UTF-8 and non-BMP code points → `escapeCString` in `src/emit/cbuf.ts`. Test: `hello`, `strings`, `string_for_of`
 - Template literals with `${expr}` interpolation → `emitTemplate`. Test: `greet`, `fizzbuzz`
 - Tagged template calls with a `TemplateStringsArray` first parameter and fixed substitution parameters. Test: `tagged_templates`
-- `String.raw` tagged templates preserve raw template segments and stringify substitutions at compile time. Test: `string_raw`
+- `String.raw` tagged templates preserve raw template segments and stringify compile-time or dynamic substitutions left-to-right. Tests: `string_raw`, `string_raw_dynamic`
 - Boolean literals `true` / `false`. Test: `json`
 - `null` / `undefined` / `NaN` / `Infinity` globals, with inferred top-level and local nullish variables stored as boxed values so `typeof` and strict equality preserve JavaScript null-vs-undefined identity, and uninitialized dynamic variables defaulting to JavaScript `undefined` in top-level, local, and captured storage. Tests: `nullish`, `stdlib_os`, `nullish_variable_storage`, `uninitialized_dynamic_variables`
 - Array literals `[1, 2, 3]` with spread `[0, ...a, 6]` → `emitArrayLiteral`. Test: `advanced`
@@ -239,7 +239,7 @@ All methods on the `String` interface map to `tsc_str_*` runtime calls:
 - `.codePointAt(i?, ...ignored)` → `tsc_str_code_point_at` after evaluating ignored extra arguments. Tests: `string_codepoints`, `string_char_code_at`
 - `String.fromCharCode(...)` → `tsc_str_from_char_code_n`. Test: `string_codepoints`
 - `String.fromCodePoint(...)` → `tsc_str_from_code_point_n`, with catchable invalid-code-point validation. Tests: `string_from_code_point`, `string_from_code_point_errors`
-- `String.raw` tagged templates concatenate raw segments with stringified substitutions. Test: `string_raw`
+- `String.raw` tagged templates concatenate raw segments with stringified substitutions, including dynamic substitution evaluation. Tests: `string_raw`, `string_raw_dynamic`
 - `.indexOf(needle, position?, ...ignored)` / `.lastIndexOf(needle, position?, ...ignored)` → `tsc_str_index_of`, `tsc_str_last_index_of` after evaluating ignored extra arguments. Tests: `string_last_index_of`, `string_search_positions`
 - `.localeCompare(other, ...ignored)` → `tsc_str_locale_compare` using deterministic runtime string ordering after evaluating ignored extra arguments. Test: `string_locale_compare`
 - `.includes(needle, position?, ...ignored)` → `tsc_str_includes` after evaluating ignored extra arguments. Test: `string_search_positions`
@@ -1579,6 +1579,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `symbol_bigint_object_methods` | Symbol/BigInt toLocaleString and valueOf object methods |
 | `tagged_templates` | tagged template calls with cooked string segments |
 | `string_raw` | String.raw tagged templates preserving raw escape text |
+| `string_raw_dynamic` | String.raw dynamic substitutions preserving raw text and left-to-right evaluation |
 | `tail_calls` | direct self-tail recursion lowered to a loop |
 | `typed_object_has_own` | typed Object.hasOwn, hasOwnProperty, and propertyIsEnumerable field checks |
 | `typed_object_methods` | typed Object toString/toLocaleString/valueOf prototype fallback |
@@ -1941,6 +1942,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `string_from_code_point` | String.fromCodePoint Unicode scalar construction |
 | `string_from_code_point_errors` | String.fromCodePoint invalid-code-point failures are catchable |
 | `string_raw` | String.raw tagged templates preserving raw escape text |
+| `string_raw_dynamic` | String.raw dynamic substitutions preserving raw text and left-to-right evaluation |
 | `string_for_of` | Unicode string `for...of` iteration |
 | `string_last_index_of` | String.lastIndexOf |
 | `string_locale_compare` | String.localeCompare |

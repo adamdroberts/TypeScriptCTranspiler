@@ -23121,17 +23121,22 @@ class Emitter {
         const expressions = ts.isTemplateExpression(tt.template)
             ? tt.template.templateSpans.map((span) => span.expression)
             : [];
-        let expr = `tsc_str_from_lit("${escapeCString(parts[0] ?? "")}", ${utf8ByteLen(parts[0] ?? "")})`;
-        for (let i = 0; i < expressions.length; i++) {
-            const inner = this.emitExpr(expressions[i]!);
-            const asStr = this.coerceToString(inner, expressions[i]!);
-            expr = `tsc_str_concat(${expr}, ${asStr})`;
-            const lit = parts[i + 1] ?? "";
-            if (lit.length > 0) {
-                expr = `tsc_str_concat(${expr}, tsc_str_from_lit("${escapeCString(lit)}", ${utf8ByteLen(lit)}))`;
+        const specs = expressions.map((expression): SequencedCallArg => ({
+            value: this.emitExpr(expression),
+            node: expression,
+            stringify: true,
+        }));
+        return this.emitSequencedExpr(T_STRING, specs, (args) => {
+            let expr = `tsc_str_from_lit("${escapeCString(parts[0] ?? "")}", ${utf8ByteLen(parts[0] ?? "")})`;
+            for (let i = 0; i < args.length; i++) {
+                expr = `tsc_str_concat(${expr}, ${args[i]})`;
+                const lit = parts[i + 1] ?? "";
+                if (lit.length > 0) {
+                    expr = `tsc_str_concat(${expr}, tsc_str_from_lit("${escapeCString(lit)}", ${utf8ByteLen(lit)}))`;
+                }
             }
-        }
-        return { c: expr, ty: T_STRING };
+            return expr;
+        });
     }
 
     private templateStringParts(
