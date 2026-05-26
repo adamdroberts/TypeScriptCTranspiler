@@ -1,0 +1,3 @@
+{
+  "description": "Object and Reflect getOwnPropertyDescriptor on Proxy evaluate ignored arguments before trap dispatch"
+}

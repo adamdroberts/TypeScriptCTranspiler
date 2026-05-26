@@ -1,0 +1,4 @@
+object: A true
+reflect: B false
+marks: object,reflect
+events: desc:a:object|desc:b:object,reflect
