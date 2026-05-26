@@ -25373,6 +25373,9 @@ class Emitter {
         if (mapped.kind === "buffer") {
             return this.emitBufferOwnKeyCheck(targetNode, target, keyNode);
         }
+        if (mapped.kind === "fsstats") {
+            return this.emitFsStatsOwnKeyCheck(targetNode, target, keyNode, ignored);
+        }
         if (mapped.kind === "fsdirent") {
             return this.emitFsDirentOwnKeyCheck(targetNode, target, keyNode, ignored);
         }
@@ -36668,6 +36671,10 @@ class Emitter {
             );
         }
         switch (method) {
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+                if (args.length < 1) unsupported(call, `Stats.${method} expects at least 1 arg`);
+                return this.emitFsStatsOwnKeyCheck(call.expression, recv, args[0]!, this.ignoredArgumentSpecs(args, 1));
             case "toLocaleString":
             case "toString":
                 return this.emitSequencedExpr(
@@ -37976,6 +37983,10 @@ class Emitter {
                 const value = this.emitExpr(arg);
                 return this.emitBufferOwnKeys(arg, value, ignored);
             }
+            if (mapped.kind === "fsstats") {
+                const value = this.emitExpr(arg);
+                return this.emitFsStatsOwnPropertyNames(arg, value, ignored);
+            }
             if (mapped.kind === "fsdirent") {
                 const value = this.emitExpr(arg);
                 return this.emitFsDirentOwnPropertyNames(arg, value, ignored);
@@ -38055,6 +38066,10 @@ class Emitter {
                 const value = this.emitExpr(arg);
                 return this.emitBufferObjectValues(arg, value, ignored);
             }
+            if (mapped.kind === "fsstats") {
+                const value = this.emitExpr(arg);
+                return this.emitFsStatsObjectValues(arg, value, ignored);
+            }
             if (mapped.kind === "fsdirent") {
                 const value = this.emitExpr(arg);
                 return this.emitFsDirentObjectValues(arg, value, ignored);
@@ -38128,6 +38143,10 @@ class Emitter {
             if (mapped.kind === "buffer") {
                 const value = this.emitExpr(arg);
                 return this.emitBufferObjectEntries(arg, value, ignored);
+            }
+            if (mapped.kind === "fsstats") {
+                const value = this.emitExpr(arg);
+                return this.emitFsStatsObjectEntries(arg, value, ignored);
             }
             if (mapped.kind === "fsdirent") {
                 const value = this.emitExpr(arg);
@@ -38236,6 +38255,10 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 return this.emitBufferOwnKeys(arg, obj, ignored);
             }
+            if (mapped.kind === "fsstats") {
+                const obj = this.emitExpr(arg);
+                return this.emitFsStatsOwnPropertyNames(arg, obj, ignored);
+            }
             if (mapped.kind === "fsdirent") {
                 const obj = this.emitExpr(arg);
                 return this.emitFsDirentOwnPropertyNames(arg, obj, ignored);
@@ -38340,6 +38363,10 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 return this.emitBufferGetOwnPropertyDescriptor(arg, obj, args[1]!, ignored);
             }
+            if (mapped.kind === "fsstats") {
+                const obj = this.emitExpr(arg);
+                return this.emitFsStatsGetOwnPropertyDescriptor(arg, obj, args[1]!, ignored);
+            }
             if (mapped.kind === "fsdirent") {
                 const obj = this.emitExpr(arg);
                 return this.emitFsDirentGetOwnPropertyDescriptor(arg, obj, args[1]!, ignored);
@@ -38408,6 +38435,10 @@ class Emitter {
             if (mapped.kind === "buffer") {
                 const obj = this.emitExpr(arg);
                 return this.emitBufferGetOwnPropertyDescriptors(arg, obj, ignored);
+            }
+            if (mapped.kind === "fsstats") {
+                const obj = this.emitExpr(arg);
+                return this.emitFsStatsGetOwnPropertyDescriptors(arg, obj, ignored);
             }
             if (mapped.kind === "fsdirent") {
                 const obj = this.emitExpr(arg);
@@ -38496,6 +38527,10 @@ class Emitter {
             if (mapped.kind === "buffer") {
                 const obj = this.emitExpr(arg);
                 return this.emitBufferOwnKeyCheck(arg, obj, args[1]!, ignored);
+            }
+            if (mapped.kind === "fsstats") {
+                const obj = this.emitExpr(arg);
+                return this.emitFsStatsOwnKeyCheck(arg, obj, args[1]!, ignored);
             }
             if (mapped.kind === "fsdirent") {
                 const obj = this.emitExpr(arg);
@@ -39272,6 +39307,157 @@ class Emitter {
             const out = this.freshTemp("_re_descs");
             const desc = this.freshTemp("_re_desc");
             return `({ (void)${regexp}; tsc_object_t* ${out} = tsc_object_new(); { ${this.typedArrayDescriptorInit(desc, "tsc_value_num(0.0)", "true", "false", "false")}; tsc_object_set(${out}, tsc_str_from_lit("lastIndex", 9), tsc_value_object(${desc})); } tsc_value_object(${out}); })`;
+        });
+    }
+
+    private fsStatsOwnFields(): { name: string; value: (stats: string) => string }[] {
+        return [
+            { name: "dev", value: (stats) => `tsc_fs_stats_dev(${stats})` },
+            { name: "ino", value: (stats) => `tsc_fs_stats_ino(${stats})` },
+            { name: "size", value: (stats) => `tsc_fs_stats_size(${stats})` },
+            { name: "mode", value: (stats) => `tsc_fs_stats_mode(${stats})` },
+            { name: "nlink", value: (stats) => `tsc_fs_stats_nlink(${stats})` },
+            { name: "uid", value: (stats) => `tsc_fs_stats_uid(${stats})` },
+            { name: "gid", value: (stats) => `tsc_fs_stats_gid(${stats})` },
+            { name: "rdev", value: (stats) => `tsc_fs_stats_rdev(${stats})` },
+            { name: "blksize", value: (stats) => `tsc_fs_stats_blksize(${stats})` },
+            { name: "blocks", value: (stats) => `tsc_fs_stats_blocks(${stats})` },
+            { name: "atimeMs", value: (stats) => `tsc_fs_stats_atime_ms(${stats})` },
+            { name: "mtimeMs", value: (stats) => `tsc_fs_stats_mtime_ms(${stats})` },
+            { name: "ctimeMs", value: (stats) => `tsc_fs_stats_ctime_ms(${stats})` },
+            { name: "birthtimeMs", value: (stats) => `tsc_fs_stats_birthtime_ms(${stats})` },
+        ];
+    }
+
+    private emitFsStatsOwnPropertyNames(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const fields = this.fsStatsOwnFields();
+        return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: objExpr }, ...ignored], ([stats]) => {
+            const out = this.freshTemp("_stats_keys");
+            const pieces = [
+                `(void)${stats}`,
+                `tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), ${fields.length})`,
+            ];
+            for (const field of fields) {
+                const key = this.freshTemp("_stats_key");
+                pieces.push(`tsc_str_t* ${key} = tsc_str_from_lit("${field.name}", ${field.name.length})`);
+                pieces.push(`tsc_array_push_raw(${out}, &${key})`);
+            }
+            pieces.push(out);
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
+    private emitFsStatsObjectValues(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const fields = this.fsStatsOwnFields();
+        return this.emitSequencedExpr(arrayType(T_VALUE), [{ value: obj, node: objExpr }, ...ignored], ([stats]) => {
+            const out = this.freshTemp("_stats_values");
+            const pieces = [`tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), ${fields.length})`];
+            for (const field of fields) {
+                const value = this.freshTemp("_stats_value");
+                pieces.push(`tsc_value_t ${value} = tsc_value_num(${field.value(stats!)})`);
+                pieces.push(`tsc_array_push_raw(${out}, &${value})`);
+            }
+            pieces.push(out);
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
+    private emitFsStatsObjectEntries(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const fields = this.fsStatsOwnFields();
+        const elemType = entryType(T_VALUE);
+        return this.emitSequencedExpr(arrayType(elemType), [{ value: obj, node: objExpr }, ...ignored], ([stats]) => {
+            const out = this.freshTemp("_stats_entries");
+            const pieces = [`tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${fields.length})`];
+            for (const field of fields) {
+                const entry = this.freshTemp("_stats_entry");
+                pieces.push(`${elemType.c} ${entry}`);
+                pieces.push(`${entry}.key = tsc_str_from_lit("${field.name}", ${field.name.length})`);
+                pieces.push(this.objectEntrySet(entry, T_VALUE, `tsc_value_num(${field.value(stats!)})`));
+                pieces.push(`tsc_array_push_raw(${out}, &${entry})`);
+            }
+            pieces.push(out);
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
+    private emitFsStatsGetOwnPropertyDescriptor(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const key = this.emitExpr(keyExpr);
+        const fields = this.fsStatsOwnFields();
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+            ...ignored,
+        ], ([stats, keyC]) => {
+            const out = this.freshTemp("_stats_desc_out");
+            const checks = [`tsc_value_t ${out} = tsc_value_undefined()`];
+            for (const field of fields) {
+                const desc = this.freshTemp("_stats_desc");
+                checks.push(
+                    `if (tsc_str_eq(${keyC}, tsc_str_from_lit("${field.name}", ${field.name.length}))) { ` +
+                    `${this.typedArrayDescriptorInit(desc, `tsc_value_num(${field.value(stats!)})`, "true", "true", "true")}; ` +
+                    `${out} = tsc_value_object(${desc}); }`,
+                );
+            }
+            checks.push(out);
+            return `({ ${checks.join("; ")}; })`;
+        });
+    }
+
+    private emitFsStatsGetOwnPropertyDescriptors(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const fields = this.fsStatsOwnFields();
+        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }, ...ignored], ([stats]) => {
+            const out = this.freshTemp("_stats_descs");
+            const pieces = [`tsc_object_t* ${out} = tsc_object_new()`];
+            for (const field of fields) {
+                const desc = this.freshTemp("_stats_desc");
+                pieces.push(
+                    `{ ${this.typedArrayDescriptorInit(desc, `tsc_value_num(${field.value(stats!)})`, "true", "true", "true")}; ` +
+                    `tsc_object_set(${out}, tsc_str_from_lit("${field.name}", ${field.name.length}), tsc_value_object(${desc})); }`,
+                );
+            }
+            pieces.push(`tsc_value_object(${out})`);
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
+    private emitFsStatsOwnKeyCheck(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const key = this.emitExpr(keyExpr);
+        const fields = this.fsStatsOwnFields();
+        return this.emitSequencedExpr(T_BOOLEAN, [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+            ...ignored,
+        ], ([stats, keyC]) => {
+            const checks = fields
+                .map((field) => `tsc_str_eq(${keyC}, tsc_str_from_lit("${field.name}", ${field.name.length}))`)
+                .join(" || ");
+            return `({ (void)${stats}; ${checks}; })`;
         });
     }
 
@@ -40330,6 +40516,9 @@ class Emitter {
                 if (mapped.kind === "buffer") {
                     return this.emitBufferGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
                 }
+                if (mapped.kind === "fsstats") {
+                    return this.emitFsStatsGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
+                }
                 if (mapped.kind === "fsdirent") {
                     return this.emitFsDirentGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
                 }
@@ -40429,6 +40618,10 @@ class Emitter {
                 if (mapped.kind === "buffer") {
                     const target = this.emitExpr(args[0]!);
                     return this.emitBufferOwnKeys(args[0]!, target, ignored);
+                }
+                if (mapped.kind === "fsstats") {
+                    const target = this.emitExpr(args[0]!);
+                    return this.emitFsStatsOwnPropertyNames(args[0]!, target, ignored);
                 }
                 if (mapped.kind === "fsdirent") {
                     const target = this.emitExpr(args[0]!);
