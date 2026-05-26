@@ -5,6 +5,7 @@ delete target: Reflect.deleteProperty target must be an object
 ownKeys target: Reflect.ownKeys target must be an object
 gopd target: Reflect.getOwnPropertyDescriptor target must be an object
 define target: Reflect.defineProperty target must be an object
+trace: gsvhdpfD
 valid get: 1
 valid set: true 2
 valid has: true
