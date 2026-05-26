@@ -37413,15 +37413,18 @@ class Emitter {
             }
             case "digest": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
-                const encoding = args[0]
-                    ? this.emitExpr(args[0])
-                    : { c: `tsc_str_from_lit("hex", 3)`, ty: T_STRING };
-                specs.push({ value: encoding, target: T_STRING, node: args[0] ?? call });
+                const hasEncoding = !!args[0] && !this.isUndefinedExpression(args[0]);
+                if (hasEncoding) {
+                    specs.push({ value: this.emitExpr(args[0]), target: T_STRING, node: args[0] });
+                }
                 specs.push(...this.ignoredArgumentSpecs(args, 1));
                 return this.emitSequencedExpr(
                     T_STRING,
                     specs,
-                    ([hash, encodingArg]) => `tsc_hash_digest(${hash}, ${encodingArg})`,
+                    (vals) => {
+                        const encodingArg = hasEncoding ? vals[1]! : `tsc_str_from_lit("hex", 3)`;
+                        return `tsc_hash_digest(${vals[0]}, ${encodingArg})`;
+                    },
                 );
             }
             case "hasOwnProperty":
@@ -37442,7 +37445,8 @@ class Emitter {
                 const input = this.emitExpr(args[0]!);
                 if (input.ty.kind === "string") {
                     const specs: SequencedCallArg[] = [{ value: input, target: T_STRING, node: args[0]! }];
-                    if (args[1]) {
+                    const hasEncoding = !!args[1] && !this.isUndefinedExpression(args[1]);
+                    if (hasEncoding) {
                         specs.push({
                             value: this.emitExpr(args[1]),
                             target: T_STRING,
@@ -37451,7 +37455,7 @@ class Emitter {
                     }
                     specs.push(...this.ignoredArgumentSpecs(args, 2));
                     return this.emitSequencedExpr(T_BUFFER, specs, (vals) => {
-                        const encoding = vals[1] ?? `tsc_str_from_lit("utf8", 4)`;
+                        const encoding = hasEncoding ? vals[1]! : `tsc_str_from_lit("utf8", 4)`;
                         return `tsc_buffer_from_str(${vals[0]}, ${encoding})`;
                     });
                 }
@@ -37478,14 +37482,15 @@ class Emitter {
                 const specs: SequencedCallArg[] = [
                     { value: size, target: T_NUMBER, node: args[0]! },
                 ];
-                if (args[1]) {
+                const hasFill = !!args[1] && !this.isUndefinedExpression(args[1]);
+                if (hasFill) {
                     const fill = this.emitExpr(args[1]);
                     requireNumber(args[1], fill.ty);
                     specs.push({ value: fill, target: T_NUMBER, node: args[1] });
                 }
                 specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_BUFFER, specs, (vals) => {
-                    const fill = vals[1] ?? "0";
+                    const fill = hasFill ? vals[1]! : "0";
                     return `tsc_buffer_alloc(${vals[0]}, ${fill})`;
                 });
             }
@@ -37506,7 +37511,8 @@ class Emitter {
                     unsupported(args[0]!, "Buffer.concat expects Buffer[]");
                 }
                 const specs: SequencedCallArg[] = [{ value: list }];
-                if (args[1]) {
+                const hasTotalLength = !!args[1] && !this.isUndefinedExpression(args[1]);
+                if (hasTotalLength) {
                     const totalLength = this.emitExpr(args[1]);
                     requireNumber(args[1], totalLength.ty);
                     specs.push({ value: totalLength, target: T_NUMBER, node: args[1] });
@@ -37541,11 +37547,13 @@ class Emitter {
                 const specs: SequencedCallArg[] = [
                     { value, target: T_STRING, node: args[0]! },
                 ];
-                if (args[1]) specs.push({ value: this.emitExpr(args[1]), target: T_STRING, node: args[1] });
+                const hasEncoding = !!args[1] && !this.isUndefinedExpression(args[1]);
+                if (hasEncoding) specs.push({ value: this.emitExpr(args[1]), target: T_STRING, node: args[1] });
                 specs.push(...this.ignoredArgumentSpecs(args, 2));
-                return this.emitSequencedExpr(T_NUMBER, specs, ([input, encoding]) =>
-                    `tsc_buffer_byte_length_str(${input!}, ${encoding ?? `tsc_str_from_lit("utf8", 4)`})`,
-                );
+                return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
+                    const encoding = hasEncoding ? vals[1]! : `tsc_str_from_lit("utf8", 4)`;
+                    return `tsc_buffer_byte_length_str(${vals[0]!}, ${encoding})`;
+                });
             }
             case "isEncoding": {
                 if (args.length < 1) unsupported(call, "Buffer.isEncoding expects encoding");
@@ -37691,7 +37699,8 @@ class Emitter {
                 );
             case "toString": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
-                if (args[0]) {
+                const hasEncoding = !!args[0] && !this.isUndefinedExpression(args[0]);
+                if (hasEncoding) {
                     specs.push({
                         value: this.emitExpr(args[0]),
                         target: T_STRING,
@@ -37700,7 +37709,7 @@ class Emitter {
                 }
                 specs.push(...this.ignoredArgumentSpecs(args, 1));
                 return this.emitSequencedExpr(T_STRING, specs, (vals) => {
-                    const encoding = vals[1] ?? `tsc_str_from_lit("utf8", 4)`;
+                    const encoding = hasEncoding ? vals[1]! : `tsc_str_from_lit("utf8", 4)`;
                     return `tsc_buffer_to_string(${vals[0]}, ${encoding})`;
                 });
             }
@@ -37713,12 +37722,14 @@ class Emitter {
             case "slice":
             case "subarray": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
-                if (args[0]) {
+                const hasStart = !!args[0] && !this.isUndefinedExpression(args[0]);
+                const hasEnd = !!args[1] && !this.isUndefinedExpression(args[1]);
+                if (hasStart) {
                     const start = this.emitExpr(args[0]);
                     requireNumber(args[0], start.ty);
                     specs.push({ value: start, target: T_NUMBER, node: args[0] });
                 }
-                if (args[1]) {
+                if (hasEnd) {
                     const end = this.emitExpr(args[1]);
                     requireNumber(args[1], end.ty);
                     specs.push({ value: end, target: T_NUMBER, node: args[1] });
@@ -37726,8 +37737,9 @@ class Emitter {
                 specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_BUFFER, specs, (vals) => {
                     const b = vals[0]!;
-                    const start = vals[1] ?? "0";
-                    const end = vals[2] ?? `(double)${b}->len`;
+                    let next = 1;
+                    const start = hasStart ? vals[next++]! : "0";
+                    const end = hasEnd ? vals[next++]! : `(double)${b}->len`;
                     return `tsc_buffer_slice(${b}, ${start}, ${end})`;
                 });
             }
@@ -37739,12 +37751,14 @@ class Emitter {
                     { value: recv },
                     { value, target: T_NUMBER, node: args[0]! },
                 ];
-                if (args[1]) {
+                const hasStart = !!args[1] && !this.isUndefinedExpression(args[1]);
+                const hasEnd = !!args[2] && !this.isUndefinedExpression(args[2]);
+                if (hasStart) {
                     const start = this.emitExpr(args[1]);
                     requireNumber(args[1], start.ty);
                     specs.push({ value: start, target: T_NUMBER, node: args[1] });
                 }
-                if (args[2]) {
+                if (hasEnd) {
                     const end = this.emitExpr(args[2]);
                     requireNumber(args[2], end.ty);
                     specs.push({ value: end, target: T_NUMBER, node: args[2] });
@@ -37752,8 +37766,9 @@ class Emitter {
                 specs.push(...this.ignoredArgumentSpecs(args, 3));
                 return this.emitSequencedExpr(T_BUFFER, specs, (vals) => {
                     const b = vals[0]!;
-                    const start = vals[2] ?? "0";
-                    const end = vals[3] ?? `(double)${b}->len`;
+                    let next = 2;
+                    const start = hasStart ? vals[next++]! : "0";
+                    const end = hasEnd ? vals[next++]! : `(double)${b}->len`;
                     return `tsc_buffer_fill(${b}, ${vals[1]}, ${start}, ${end})`;
                 });
             }
@@ -37764,31 +37779,36 @@ class Emitter {
                     { value: recv },
                     { value: input, target: T_STRING, node: args[0]! },
                 ];
-                if (args[1]) {
+                const hasOffset = !!args[1] && !this.isUndefinedExpression(args[1]);
+                const hasLength = !!args[2] && !this.isUndefinedExpression(args[2]);
+                const hasEncoding = !!args[3] && !this.isUndefinedExpression(args[3]);
+                if (hasOffset) {
                     const offset = this.emitExpr(args[1]);
                     requireNumber(args[1], offset.ty);
                     specs.push({ value: offset, target: T_NUMBER, node: args[1] });
                 }
-                if (args[2]) {
+                if (hasLength) {
                     const length = this.emitExpr(args[2]);
                     requireNumber(args[2], length.ty);
                     specs.push({ value: length, target: T_NUMBER, node: args[2] });
                 }
-                if (args[3]) {
+                if (hasEncoding) {
                     specs.push({ value: this.emitExpr(args[3]), target: T_STRING, node: args[3] });
                 }
                 specs.push(...this.ignoredArgumentSpecs(args, 4));
                 return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
-                    const offset = vals[2] ?? "0";
-                    const length = vals[3] ?? "NAN";
-                    const encoding = vals[4] ?? `tsc_str_from_lit("utf8", 4)`;
+                    let next = 2;
+                    const offset = hasOffset ? vals[next++]! : "0";
+                    const length = hasLength ? vals[next++]! : "NAN";
+                    const encoding = hasEncoding ? vals[next++]! : `tsc_str_from_lit("utf8", 4)`;
                     return `tsc_buffer_write(${vals[0]}, ${vals[1]}, ${offset}, ${length}, ${encoding})`;
                 });
             }
             case "readInt8":
             case "readUInt8": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
-                if (args[0]) {
+                const hasOffset = !!args[0] && !this.isUndefinedExpression(args[0]);
+                if (hasOffset) {
                     const offset = this.emitExpr(args[0]);
                     requireNumber(args[0], offset.ty);
                     specs.push({ value: offset, target: T_NUMBER, node: args[0] });
@@ -37796,7 +37816,7 @@ class Emitter {
                 specs.push(...this.ignoredArgumentSpecs(args, 1));
                 const fn = method === "readInt8" ? "tsc_buffer_read_int8" : "tsc_buffer_read_uint8";
                 return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
-                    `${fn}(${vals[0]}, ${vals[1] ?? "0"})`,
+                    `${fn}(${vals[0]}, ${hasOffset ? vals[1]! : "0"})`,
                 );
             }
             case "writeInt8":
@@ -37808,7 +37828,8 @@ class Emitter {
                     { value: recv },
                     { value, target: T_NUMBER, node: args[0]! },
                 ];
-                if (args[1]) {
+                const hasOffset = !!args[1] && !this.isUndefinedExpression(args[1]);
+                if (hasOffset) {
                     const offset = this.emitExpr(args[1]);
                     requireNumber(args[1], offset.ty);
                     specs.push({ value: offset, target: T_NUMBER, node: args[1] });
@@ -37816,7 +37837,7 @@ class Emitter {
                 specs.push(...this.ignoredArgumentSpecs(args, 2));
                 const fn = method === "writeInt8" ? "tsc_buffer_write_int8" : "tsc_buffer_write_uint8";
                 return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
-                    `${fn}(${vals[0]}, ${vals[1]}, ${vals[2] ?? "0"})`,
+                    `${fn}(${vals[0]}, ${vals[1]}, ${hasOffset ? vals[2]! : "0"})`,
                 );
             }
             case "readInt16LE":
@@ -37832,7 +37853,8 @@ class Emitter {
             case "readUInt32LE":
             case "readUInt32BE": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
-                if (args[0]) {
+                const hasOffset = !!args[0] && !this.isUndefinedExpression(args[0]);
+                if (hasOffset) {
                     const offset = this.emitExpr(args[0]);
                     requireNumber(args[0], offset.ty);
                     specs.push({ value: offset, target: T_NUMBER, node: args[0] });
@@ -37853,7 +37875,7 @@ class Emitter {
                     readUInt32BE: "tsc_buffer_read_uint32_be",
                 }[method]!;
                 return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
-                    `${fn}(${vals[0]}, ${vals[1] ?? "0"})`,
+                    `${fn}(${vals[0]}, ${hasOffset ? vals[1]! : "0"})`,
                 );
             }
             case "writeInt16LE":
@@ -37875,7 +37897,8 @@ class Emitter {
                     { value: recv },
                     { value, target: T_NUMBER, node: args[0]! },
                 ];
-                if (args[1]) {
+                const hasOffset = !!args[1] && !this.isUndefinedExpression(args[1]);
+                if (hasOffset) {
                     const offset = this.emitExpr(args[1]);
                     requireNumber(args[1], offset.ty);
                     specs.push({ value: offset, target: T_NUMBER, node: args[1] });
@@ -37896,7 +37919,7 @@ class Emitter {
                     writeUInt32BE: "tsc_buffer_write_uint32_be",
                 }[method]!;
                 return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
-                    `${fn}(${vals[0]}, ${vals[1]}, ${vals[2] ?? "0"})`,
+                    `${fn}(${vals[0]}, ${vals[1]}, ${hasOffset ? vals[2]! : "0"})`,
                 );
             }
             case "swap16":
@@ -37915,18 +37938,32 @@ class Emitter {
                     { value: recv },
                     { value: target },
                 ];
-                for (let i = 1; i < Math.min(args.length, 4); i++) {
-                    const bound = this.emitExpr(args[i]!);
-                    requireNumber(args[i]!, bound.ty);
-                    specs.push({ value: bound, target: T_NUMBER, node: args[i]! });
+                const hasTargetStart = !!args[1] && !this.isUndefinedExpression(args[1]);
+                const hasSourceStart = !!args[2] && !this.isUndefinedExpression(args[2]);
+                const hasSourceEnd = !!args[3] && !this.isUndefinedExpression(args[3]);
+                if (hasTargetStart) {
+                    const bound = this.emitExpr(args[1]);
+                    requireNumber(args[1], bound.ty);
+                    specs.push({ value: bound, target: T_NUMBER, node: args[1] });
+                }
+                if (hasSourceStart) {
+                    const bound = this.emitExpr(args[2]);
+                    requireNumber(args[2], bound.ty);
+                    specs.push({ value: bound, target: T_NUMBER, node: args[2] });
+                }
+                if (hasSourceEnd) {
+                    const bound = this.emitExpr(args[3]);
+                    requireNumber(args[3], bound.ty);
+                    specs.push({ value: bound, target: T_NUMBER, node: args[3] });
                 }
                 specs.push(...this.ignoredArgumentSpecs(args, 4));
                 return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
                     const source = vals[0]!;
                     const targetBuffer = vals[1]!;
-                    const targetStart = vals[2] ?? "0";
-                    const sourceStart = vals[3] ?? "0";
-                    const sourceEnd = vals[4] ?? `(double)${source}->len`;
+                    let next = 2;
+                    const targetStart = hasTargetStart ? vals[next++]! : "0";
+                    const sourceStart = hasSourceStart ? vals[next++]! : "0";
+                    const sourceEnd = hasSourceEnd ? vals[next++]! : `(double)${source}->len`;
                     return `tsc_buffer_copy(${source}, ${targetBuffer}, ${targetStart}, ${sourceStart}, ${sourceEnd})`;
                 });
             }
@@ -37943,7 +37980,8 @@ class Emitter {
                     { value: recv },
                     { value, target: valueTarget, node: args[0]! },
                 ];
-                if (args[1]) {
+                const hasOffset = !!args[1] && !this.isUndefinedExpression(args[1]);
+                if (hasOffset) {
                     const offset = this.emitExpr(args[1]);
                     requireNumber(args[1], offset.ty);
                     specs.push({ value: offset, target: T_NUMBER, node: args[1] });
@@ -37954,7 +37992,7 @@ class Emitter {
                     const suffix = value.ty.kind === "number" ? "byte" : value.ty.kind === "string" ? "str" : "buffer";
                     const fn = method === "lastIndexOf" ? `tsc_buffer_last_index_of_${suffix}` : `tsc_buffer_index_of_${suffix}`;
                     const defaultOffset = method === "lastIndexOf" ? "NAN" : "0";
-                    const found = `${fn}(${buffer!}, ${needle!}, ${offset ?? defaultOffset})`;
+                    const found = `${fn}(${buffer!}, ${needle!}, ${hasOffset ? offset! : defaultOffset})`;
                     return method === "includes" ? `(${found} >= 0.0)` : found;
                 });
             }

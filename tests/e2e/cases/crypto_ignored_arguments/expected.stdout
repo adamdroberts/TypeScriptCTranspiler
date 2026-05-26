@@ -1,4 +1,5 @@
 hash: a9993e364706816aba3e25717850c26c9cd0d89d
+default: 86f7e437
 named: ba7816bf
 bytes: 2 1
-events: create-global|update-string|update-buffer|digest-global|create-named|update-named|digest-named|random-global|random-named
+events: create-global|update-string|update-buffer|digest-global|digest-default|create-named|update-named|digest-named|random-global|random-named

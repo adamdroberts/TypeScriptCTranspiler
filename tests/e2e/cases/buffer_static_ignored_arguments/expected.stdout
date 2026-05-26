@@ -1,4 +1,8 @@
 from: Hi AB Hi
+from default: 36383639
 alloc: CCC 2 2
+alloc default: 0000
 concat: HiAB
-events: from-string|from-array|from-buffer|alloc|alloc-unsafe|alloc-slow|concat
+concat default: AB
+byteLength default: 2
+events: from-string|from-array|from-buffer|alloc|alloc-unsafe|alloc-slow|concat|from-default-encoding|alloc-default-fill|concat-default-length|byte-length-default

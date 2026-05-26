@@ -1,10 +1,17 @@
 slice: bc cd
+slice undef: ab cdef abcdef
+toString undef: hé
 fill: 00414100
+fill undef: BBB
 write: 2 007a7a00
+write undef: 2 78790000
 num write: 1 3 8
 num read: 255 -2 1.5
+num undef: 1 2 255 -3
 copy: 3 bcd
+copy undef: 4 cdef
 search: 2 2 true
+search undef: 0 4 true
 compare: 1
 own: true true
-events: slice|subarray|fill|write|write-u8|write-i16|write-float|read-u8|read-i16|read-float|copy|index|last|includes|compare|has|enum
+events: slice|subarray|slice-start-undefined|slice-end-undefined|subarray-undefined|toString-undefined|fill|fill-undefined|write|write-undefined|write-u8|write-i16|write-float|read-u8|read-i16|read-float|write-u8-undefined|write-i16-undefined|read-u8-undefined|read-i16-undefined|copy|copy-undefined|index|last|includes|index-undefined|last-undefined|includes-undefined|compare|has|enum
