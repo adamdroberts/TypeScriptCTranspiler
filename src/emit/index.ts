@@ -38801,6 +38801,10 @@ class Emitter {
         if (name === "isExtensible") {
             if (args.length < 1) unsupported(call, "Object.isExtensible expects object");
             const ignored = this.ignoredArgumentSpecs(args, 1);
+            if (mapped.kind === "void") {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, false)`);
+            }
             if (primitiveObjectArg) {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, false)`);
@@ -38821,6 +38825,10 @@ class Emitter {
         if (name === "isSealed") {
             if (args.length < 1) unsupported(call, "Object.isSealed expects object");
             const ignored = this.ignoredArgumentSpecs(args, 1);
+            if (mapped.kind === "void") {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, true)`);
+            }
             if (primitiveObjectArg) {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, true)`);
@@ -38841,6 +38849,10 @@ class Emitter {
         if (name === "isFrozen") {
             if (args.length < 1) unsupported(call, "Object.isFrozen expects object");
             const ignored = this.ignoredArgumentSpecs(args, 1);
+            if (mapped.kind === "void") {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, true)`);
+            }
             if (primitiveObjectArg) {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, true)`);

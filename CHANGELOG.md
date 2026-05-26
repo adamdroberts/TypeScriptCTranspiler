@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Static `Object.isExtensible(null | undefined)`, `Object.isSealed(null | undefined)`, and `Object.isFrozen(null | undefined)` now preserve ES nullish primitive predicate results. Test: `object_nullish_integrity_predicates`.
 - `Object.setPrototypeOf(...)` now accepts typed primitive targets while preserving prototype-value validation. Test: `object_set_prototype_of_primitives`.
 - `Object.getPrototypeOf(...)` now accepts non-nullish primitive targets, returning stable boxed-primitive prototype placeholders. Test: `object_get_prototype_of_primitives`.
 - Legacy Object prototype accessor helpers `__defineGetter__`, `__defineSetter__`, `__lookupGetter__`, and `__lookupSetter__` now work on dynamic objects. Test: `object_prototype_accessors`.
