@@ -39,5 +39,11 @@ emitter.on("keep", listener);
 emitter.removeAllListeners(undefined, mark("u"));
 console.log("undefined remove:", emitter.listenerCount("undefined"), emitter.listenerCount("keep"));
 
+const undefinedName: any = undefined;
+emitter.on(undefinedName, listener);
+console.log("undefined event:", emitter.listenerCount(undefinedName), emitter.emit(undefinedName, "delta", 4));
+emitter.off(undefinedName, listener);
+console.log("undefined after off:", emitter.listenerCount("undefined"));
+
 console.log("seen:", seen.join("|"));
 console.log("ignored:", ignored);

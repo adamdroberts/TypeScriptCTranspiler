@@ -31401,7 +31401,7 @@ class Emitter {
             case "once":
             case "prependOnceListener": {
                 if (args.length < 2) unsupported(call, `EventEmitter.${method} expects eventName and listener`);
-                const eventName = this.emitExpr(args[0]!);
+                const eventName = this.emitEventEmitterEventName(args[0]!);
                 const listener = this.emitEventListenerExpression(args[1]!);
                 const adapter = this.ensureEventListenerAdapter(args[1]!, listener.ty);
                 return this.emitSequencedExpr(T_EVENT_EMITTER, [
@@ -31416,7 +31416,7 @@ class Emitter {
             case "off":
             case "removeListener": {
                 if (args.length < 2) unsupported(call, `EventEmitter.${method} expects eventName and listener`);
-                const eventName = this.emitExpr(args[0]!);
+                const eventName = this.emitEventEmitterEventName(args[0]!);
                 const listener = this.emitEventListenerExpression(args[1]!);
                 const adapter = this.ensureEventListenerAdapter(args[1]!, listener.ty);
                 return this.emitSequencedExpr(T_EVENT_EMITTER, [
@@ -31431,9 +31431,7 @@ class Emitter {
             case "removeAllListeners": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
                 if (args[0]) {
-                    const eventName = this.isUndefinedExpression(args[0])
-                        ? { c: `tsc_str_from_lit("undefined", 9)`, ty: T_STRING }
-                        : this.emitExpr(args[0]);
+                    const eventName = this.emitEventEmitterEventName(args[0]);
                     specs.push({ value: eventName, target: T_STRING, node: args[0] });
                 }
                 specs.push(...this.ignoredArgumentSpecs(args, args[0] ? 1 : 0));
@@ -31445,7 +31443,7 @@ class Emitter {
             }
             case "emit": {
                 if (args.length < 1) unsupported(call, "EventEmitter.emit expects eventName");
-                const eventName = this.emitExpr(args[0]!);
+                const eventName = this.emitEventEmitterEventName(args[0]!);
                 const specs: SequencedCallArg[] = [
                     { value: recv },
                     { value: eventName, target: T_STRING, node: args[0]! },
@@ -31468,7 +31466,7 @@ class Emitter {
             }
             case "listenerCount": {
                 if (args.length < 1) unsupported(call, "EventEmitter.listenerCount expects eventName and optional listener");
-                const eventName = this.emitExpr(args[0]!);
+                const eventName = this.emitEventEmitterEventName(args[0]!);
                 if (args[1] && !this.isUndefinedExpression(args[1])) {
                     const listener = this.emitEventListenerExpression(args[1]);
                     return this.emitSequencedExpr(T_NUMBER, [
@@ -31492,7 +31490,7 @@ class Emitter {
             }
             case "listeners": {
                 if (args.length < 1) unsupported(call, "EventEmitter.listeners expects eventName");
-                const eventName = this.emitExpr(args[0]!);
+                const eventName = this.emitEventEmitterEventName(args[0]!);
                 return this.emitSequencedExpr(arrayType(T_VALUE), [
                     { value: recv },
                     { value: eventName, target: T_STRING, node: args[0]! },
@@ -31501,7 +31499,7 @@ class Emitter {
             }
             case "rawListeners": {
                 if (args.length < 1) unsupported(call, "EventEmitter.rawListeners expects eventName");
-                const eventName = this.emitExpr(args[0]!);
+                const eventName = this.emitEventEmitterEventName(args[0]!);
                 return this.emitSequencedExpr(arrayType(T_VALUE), [
                     { value: recv },
                     { value: eventName, target: T_STRING, node: args[0]! },
@@ -31659,7 +31657,7 @@ class Emitter {
             case "listenerCount": {
                 if (args.length < 2) unsupported(call, "events.listenerCount expects emitter, eventName, and optional listener");
                 const emitter = this.emitExpr(args[0]!);
-                const eventName = this.emitExpr(args[1]!);
+                const eventName = this.emitEventEmitterEventName(args[1]!);
                 if (args[2]) {
                     const listener = this.emitEventListenerExpression(args[2]);
                     return this.emitSequencedExpr(T_NUMBER, [
@@ -31680,7 +31678,7 @@ class Emitter {
             case "getEventListeners": {
                 if (args.length < 2) unsupported(call, "events.getEventListeners expects emitter and eventName");
                 const emitter = this.emitExpr(args[0]!);
-                const eventName = this.emitExpr(args[1]!);
+                const eventName = this.emitEventEmitterEventName(args[1]!);
                 return this.emitSequencedExpr(arrayType(T_VALUE), [
                     { value: emitter, target: T_EVENT_EMITTER, node: args[0]! },
                     { value: eventName, target: T_STRING, node: args[1]! },
@@ -31691,7 +31689,7 @@ class Emitter {
                 if (args.length < 2) unsupported(call, "events.once expects emitter, eventName, and optional options");
                 this.eventEmitterOnceOptions(args[2], "events.once");
                 const emitter = this.emitExpr(args[0]!);
-                const eventName = this.emitExpr(args[1]!);
+                const eventName = this.emitEventEmitterEventName(args[1]!);
                 const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
                 if (mapped.kind !== "promise") unsupported(call, "events.once result must be Promise<any[]>");
                 return this.emitSequencedExpr(mapped, [
@@ -33169,6 +33167,15 @@ class Emitter {
                     return this.emitFunctionReferenceClosure(expr, declaredType);
                 }
             }
+        }
+        return this.emitExpr(expr);
+    }
+
+    private emitEventEmitterEventName(expr: ts.Expression): EmitResult {
+        const resolved = this.resolveSideEffectFreeEarlierConstExpression(expr);
+        const unwrapped = this.unwrapTransparentExpression(resolved);
+        if (this.isUndefinedExpression(unwrapped)) {
+            return { c: `tsc_str_from_lit("undefined", 9)`, ty: T_STRING };
         }
         return this.emitExpr(expr);
     }

@@ -4,3 +4,4 @@ named: x
 named: x
 other: x
 after once: 2 1 gsno
+static undefined: 1 1

@@ -24,3 +24,7 @@ console.log("namespace static:", events.EventEmitter.listenerCount(emitter, "dat
 
 emitter.emit("data", "x");
 console.log("after once:", events.EventEmitter.listenerCount(emitter, "data"), EventEmitter.listenerCount(emitter, "data", named), ignoredSeen);
+
+const undefinedName: any = undefined;
+emitter.on(undefinedName, other);
+console.log("static undefined:", EventEmitter.listenerCount(emitter, undefinedName), events.getEventListeners(emitter, undefinedName).length);
