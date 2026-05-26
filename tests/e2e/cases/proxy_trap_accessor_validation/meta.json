@@ -1,0 +1,3 @@
+{
+  "description": "Proxy accessor trap values are validated after lookup and nullish accessor results forward"
+}
