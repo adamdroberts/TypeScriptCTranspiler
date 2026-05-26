@@ -1,0 +1,3 @@
+{
+  "description": "child_process helpers treat side-effectful void whole options as defaults"
+}

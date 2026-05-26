@@ -32073,10 +32073,14 @@ class Emitter {
                 unsupported(call, "child_process.exec expects command, optional options, and callback");
             }
             const command = this.emitExpr(call.arguments[0]!);
-            const hasOptions = this.isStaticObjectLiteralExpression(call.arguments[1]);
+            const hasOptions = this.isStaticObjectLiteralExpression(call.arguments[1]) || this.isUndefinedLikeExpression(call.arguments[1]!);
             const callbackNode = hasOptions ? call.arguments[2] : call.arguments[1]!;
             if (!callbackNode) unsupported(call, "child_process.exec expects command, optional options, and callback");
             const options = hasOptions ? this.childProcessFileOptions(call.arguments[1]) : this.emptyChildProcessFileOptions();
+            const optionSpecs: SequencedCallArg[] = [];
+            if (hasOptions && this.shouldEvaluateSideEffectfulVoidDefault(call.arguments[1]!)) {
+                optionSpecs.push({ value: this.emitExpr(call.arguments[1]!), target: T_VOID, node: call.arguments[1]! });
+            }
             const consumedArgCount = hasOptions ? 3 : 2;
             const callback = this.emitExpr(callbackNode);
             const callbackType = this.prepareType(callback.ty);
@@ -32085,6 +32089,7 @@ class Emitter {
             }
             return this.emitSequencedExpr(T_VOID, [
                 { value: command, target: T_STRING, node: call.arguments[0]! },
+                ...optionSpecs,
                 options.cwd
                     ? { value: options.cwd, target: T_STRING, node: options.cwd.node }
                     : { value: { c: "NULL", ty: T_STRING } },
@@ -32109,7 +32114,18 @@ class Emitter {
                 { value: { c: options.killSignal, ty: T_NUMBER } },
                 { value: callback, target: callbackType, node: callbackNode },
                 ...this.ignoredArgumentSpecs(call.arguments, consumedArgCount),
-            ], ([commandC, cwdC, envC, shellC, uidC, gidC, maxBufferC, timeoutC, killSignalC, callbackC]) => {
+            ], (values) => {
+                const offset = optionSpecs.length;
+                const commandC = values[0]!;
+                const cwdC = values[1 + offset]!;
+                const envC = values[2 + offset]!;
+                const shellC = values[3 + offset]!;
+                const uidC = values[4 + offset]!;
+                const gidC = values[5 + offset]!;
+                const maxBufferC = values[6 + offset]!;
+                const timeoutC = values[7 + offset]!;
+                const killSignalC = values[8 + offset]!;
+                const callbackC = values[9 + offset]!;
                 const result = this.freshTemp("_child");
                 const status = `tsc_value_as_num(tsc_value_get_prop(${result}, tsc_str_from_lit("status", 6)))`;
                 const error = `tsc_value_get_prop(${result}, tsc_str_from_lit("error", 5))`;
@@ -32142,10 +32158,12 @@ class Emitter {
             let callback: EmitResult;
             let callbackType: CType;
             let consumedArgCount = 2;
-            if (this.isStaticObjectLiteralExpression(secondNode)) {
+            let optionNode: ts.Expression | undefined;
+            if (this.isStaticObjectLiteralExpression(secondNode) || this.isUndefinedLikeExpression(secondNode)) {
                 callbackNode = call.arguments[2];
                 if (!callbackNode) unsupported(call, "child_process.execFile expects file, options, and callback");
                 options = this.childProcessFileOptions(secondNode);
+                optionNode = secondNode;
                 consumedArgCount = 3;
                 callback = this.emitExpr(callbackNode);
                 callbackType = this.prepareType(callback.ty);
@@ -32163,10 +32181,11 @@ class Emitter {
                     if (args.ty.kind !== "array" || args.ty.elem?.kind !== "string") {
                         unsupported(argsNode, "child_process.execFile args must be string[]");
                     }
-                    const optionsAsThirdArg = this.isStaticObjectLiteralExpression(call.arguments[2]);
+                    const optionsAsThirdArg = this.isStaticObjectLiteralExpression(call.arguments[2]) || (!!call.arguments[2] && this.isUndefinedLikeExpression(call.arguments[2]!));
                     callbackNode = optionsAsThirdArg ? call.arguments[3] : call.arguments[2];
                     if (!callbackNode) unsupported(call, "child_process.execFile expects file, args, optional options, and callback");
                     options = optionsAsThirdArg ? this.childProcessFileOptions(call.arguments[2]) : this.emptyChildProcessFileOptions();
+                    optionNode = optionsAsThirdArg ? call.arguments[2] : undefined;
                     consumedArgCount = optionsAsThirdArg ? 4 : 3;
                     callback = this.emitExpr(callbackNode);
                     callbackType = this.prepareType(callback.ty);
@@ -32175,9 +32194,14 @@ class Emitter {
             if (callbackType.kind !== "function" || !callbackType.ret) {
                 unsupported(callbackNode, "child_process.execFile callback must be a function");
             }
+            const optionSpecs: SequencedCallArg[] = [];
+            if (optionNode && this.shouldEvaluateSideEffectfulVoidDefault(optionNode)) {
+                optionSpecs.push({ value: this.emitExpr(optionNode), target: T_VOID, node: optionNode });
+            }
             return this.emitSequencedExpr(T_VOID, [
                 { value: file, target: T_STRING, node: call.arguments[0]! },
                 { value: args, target: arrayType(T_STRING), node: argsNode },
+                ...optionSpecs,
                 options.cwd
                     ? { value: options.cwd, target: T_STRING, node: options.cwd.node }
                     : { value: { c: "NULL", ty: T_STRING } },
@@ -32205,7 +32229,20 @@ class Emitter {
                 { value: { c: options.killSignal, ty: T_NUMBER } },
                 { value: callback, target: callbackType, node: callbackNode },
                 ...this.ignoredArgumentSpecs(call.arguments, consumedArgCount),
-            ], ([fileC, argsC, cwdC, envC, shellC, argv0C, uidC, gidC, maxBufferC, timeoutC, killSignalC, callbackC]) => {
+            ], (values) => {
+                const offset = optionSpecs.length;
+                const fileC = values[0]!;
+                const argsC = values[1]!;
+                const cwdC = values[2 + offset]!;
+                const envC = values[3 + offset]!;
+                const shellC = values[4 + offset]!;
+                const argv0C = values[5 + offset]!;
+                const uidC = values[6 + offset]!;
+                const gidC = values[7 + offset]!;
+                const maxBufferC = values[8 + offset]!;
+                const timeoutC = values[9 + offset]!;
+                const killSignalC = values[10 + offset]!;
+                const callbackC = values[11 + offset]!;
                 const result = this.freshTemp("_child");
                 const status = `tsc_value_as_num(tsc_value_get_prop(${result}, tsc_str_from_lit("status", 6)))`;
                 const error = `tsc_value_get_prop(${result}, tsc_str_from_lit("error", 5))`;
@@ -32233,8 +32270,13 @@ class Emitter {
             const optionsNode = call.arguments[1];
             const options = this.childProcessFileOptions(optionsNode);
             const encoding = this.childProcessEncodingOption(optionsNode, "execSync");
+            const optionSpecs: SequencedCallArg[] = [];
+            if (optionsNode && this.shouldEvaluateSideEffectfulVoidDefault(optionsNode)) {
+                optionSpecs.push({ value: this.emitExpr(optionsNode), target: T_VOID, node: optionsNode });
+            }
             return this.emitSequencedExpr(encoding ? T_STRING : T_BUFFER, [
                 { value: command, target: T_STRING, node: call.arguments[0]! },
+                ...optionSpecs,
                 options.cwd
                     ? { value: options.cwd, target: T_STRING, node: options.cwd.node }
                     : { value: { c: "NULL", ty: T_STRING } },
@@ -32261,7 +32303,18 @@ class Emitter {
                     : { value: { c: "-1.0", ty: T_NUMBER } },
                 { value: { c: options.killSignal, ty: T_NUMBER } },
                 ...this.ignoredArgumentSpecs(call.arguments, 2),
-            ], ([commandC, cwdC, inputC, envC, shellC, uidC, gidC, maxBufferC, timeoutC, killSignalC]) => {
+            ], (values) => {
+                const offset = optionSpecs.length;
+                const commandC = values[0]!;
+                const cwdC = values[1 + offset]!;
+                const inputC = values[2 + offset]!;
+                const envC = values[3 + offset]!;
+                const shellC = values[4 + offset]!;
+                const uidC = values[5 + offset]!;
+                const gidC = values[6 + offset]!;
+                const maxBufferC = values[7 + offset]!;
+                const timeoutC = values[8 + offset]!;
+                const killSignalC = values[9 + offset]!;
                 const callC = `tsc_child_process_exec_sync(${commandC}, ${cwdC}, ${inputC}, ${envC}, ${shellC}, ${uidC}, ${gidC}, ${maxBufferC}, ${timeoutC}, (int)${killSignalC})`;
                 return encoding ? `tsc_buffer_to_string(${callC}, tsc_str_from_lit("utf8", 4))` : callC;
             });
@@ -32271,16 +32324,21 @@ class Emitter {
                 unsupported(call, "child_process.execFileSync expects file, optional args, and optional { cwd }");
             }
             const file = this.emitExpr(call.arguments[0]!);
-            const optionsAsSecondArg = this.isStaticObjectLiteralExpression(call.arguments[1]);
+            const optionsAsSecondArg = this.isStaticObjectLiteralExpression(call.arguments[1]) || (!!call.arguments[1] && this.isUndefinedLikeExpression(call.arguments[1]!));
             const argsNode = optionsAsSecondArg ? undefined : call.arguments[1];
             const optionsNode = optionsAsSecondArg ? call.arguments[1] : call.arguments[2];
             const consumedArgCount = optionsAsSecondArg ? 2 : optionsNode ? 3 : argsNode ? 2 : 1;
             const fileOptions = this.childProcessFileOptions(optionsNode);
             const encoding = this.childProcessEncodingOption(optionsNode, "execFileSync");
+            const optionSpecs: SequencedCallArg[] = [];
+            if (optionsNode && this.shouldEvaluateSideEffectfulVoidDefault(optionsNode)) {
+                optionSpecs.push({ value: this.emitExpr(optionsNode), target: T_VOID, node: optionsNode });
+            }
             if (!argsNode) {
                 return this.emitSequencedExpr(encoding ? T_STRING : T_BUFFER, [
                     { value: file, target: T_STRING, node: call.arguments[0]! },
                     { value: { c: "NULL", ty: arrayType(T_STRING) } },
+                    ...optionSpecs,
                     fileOptions.cwd
                         ? { value: fileOptions.cwd, target: T_STRING, node: fileOptions.cwd.node }
                         : { value: { c: "NULL", ty: T_STRING } },
@@ -32310,7 +32368,20 @@ class Emitter {
                         : { value: { c: "-1.0", ty: T_NUMBER } },
                     { value: { c: fileOptions.killSignal, ty: T_NUMBER } },
                     ...this.ignoredArgumentSpecs(call.arguments, consumedArgCount),
-                ], ([fileC, argsC, cwdC, inputC, envC, shellC, argv0C, uidC, gidC, maxBufferC, timeoutC, killSignalC]) => {
+                ], (values) => {
+                    const offset = optionSpecs.length;
+                    const fileC = values[0]!;
+                    const argsC = values[1]!;
+                    const cwdC = values[2 + offset]!;
+                    const inputC = values[3 + offset]!;
+                    const envC = values[4 + offset]!;
+                    const shellC = values[5 + offset]!;
+                    const argv0C = values[6 + offset]!;
+                    const uidC = values[7 + offset]!;
+                    const gidC = values[8 + offset]!;
+                    const maxBufferC = values[9 + offset]!;
+                    const timeoutC = values[10 + offset]!;
+                    const killSignalC = values[11 + offset]!;
                     const callC = `tsc_child_process_exec_file_sync(${fileC}, ${argsC}, ${cwdC}, ${inputC}, ${envC}, ${shellC}, ${argv0C}, ${uidC}, ${gidC}, ${maxBufferC}, ${timeoutC}, (int)${killSignalC})`;
                     return encoding ? `tsc_buffer_to_string(${callC}, tsc_str_from_lit("utf8", 4))` : callC;
                 });
@@ -32322,6 +32393,7 @@ class Emitter {
             return this.emitSequencedExpr(encoding ? T_STRING : T_BUFFER, [
                 { value: file, target: T_STRING, node: call.arguments[0]! },
                 { value: args, target: arrayType(T_STRING), node: argsNode },
+                ...optionSpecs,
                 fileOptions.cwd
                     ? { value: fileOptions.cwd, target: T_STRING, node: fileOptions.cwd.node }
                     : { value: { c: "NULL", ty: T_STRING } },
@@ -32351,7 +32423,20 @@ class Emitter {
                     : { value: { c: "-1.0", ty: T_NUMBER } },
                 { value: { c: fileOptions.killSignal, ty: T_NUMBER } },
                 ...this.ignoredArgumentSpecs(call.arguments, consumedArgCount),
-            ], ([fileC, argsC, cwdC, inputC, envC, shellC, argv0C, uidC, gidC, maxBufferC, timeoutC, killSignalC]) => {
+            ], (values) => {
+                const offset = optionSpecs.length;
+                const fileC = values[0]!;
+                const argsC = values[1]!;
+                const cwdC = values[2 + offset]!;
+                const inputC = values[3 + offset]!;
+                const envC = values[4 + offset]!;
+                const shellC = values[5 + offset]!;
+                const argv0C = values[6 + offset]!;
+                const uidC = values[7 + offset]!;
+                const gidC = values[8 + offset]!;
+                const maxBufferC = values[9 + offset]!;
+                const timeoutC = values[10 + offset]!;
+                const killSignalC = values[11 + offset]!;
                 const callC = `tsc_child_process_exec_file_sync(${fileC}, ${argsC}, ${cwdC}, ${inputC}, ${envC}, ${shellC}, ${argv0C}, ${uidC}, ${gidC}, ${maxBufferC}, ${timeoutC}, (int)${killSignalC})`;
                 return encoding ? `tsc_buffer_to_string(${callC}, tsc_str_from_lit("utf8", 4))` : callC;
             });
@@ -32613,7 +32698,7 @@ class Emitter {
     private childProcessEncodingOption(options: ts.Expression | undefined, method: string): "utf8" | null {
         if (!options) return null;
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (this.isUndefinedExpression(resolvedOptions)) return null;
+        if (this.isUndefinedLikeExpression(resolvedOptions)) return null;
         if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, "child_process options must be an object literal in this subset");
         }
@@ -32701,9 +32786,9 @@ class Emitter {
         timeout: (EmitResult & { node: ts.Expression }) | null;
         killSignal: string;
     } {
-        if (!options || this.isUndefinedExpression(options)) return this.emptyChildProcessFileOptions();
+        if (!options || this.isUndefinedLikeExpression(options)) return this.emptyChildProcessFileOptions();
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (this.isUndefinedExpression(resolvedOptions)) return this.emptyChildProcessFileOptions();
+        if (this.isUndefinedLikeExpression(resolvedOptions)) return this.emptyChildProcessFileOptions();
         if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, "child_process options must be an object literal in this subset");
         }

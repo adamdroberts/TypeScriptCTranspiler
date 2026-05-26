@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `child_process.exec(...)` / `execFile(...)` callbacks and `execSync(...)` / `execFileSync(...)` now treat side-effectful `void` whole-options arguments as defaulted while preserving options-slot evaluation before callbacks or ignored extras. Test: `child_process_void_options`.
 - `fs.rmSync(...)`, `fs.rmdirSync(...)`, and immediate `fs.promises.rm(...)` / `rmdir(...)` now treat side-effectful `void` whole-options arguments as defaulted while preserving options-slot evaluation before ignored extras. Test: `fs_recursive_options`.
 - `fs.cpSync(...)` and immediate `fs.promises.cp(...)` now treat side-effectful `void` whole-options arguments as defaulted while preserving options-slot evaluation before ignored extras. Test: `fs_cp_options`.
 - `fs.mkdirSync(...)` and immediate `fs.promises.mkdir(...)` now treat side-effectful `void` whole-options arguments as defaulted while preserving options-slot evaluation before ignored extras. Test: `fs_mkdir_mode_options`.

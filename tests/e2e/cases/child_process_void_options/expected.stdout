@@ -1,0 +1,5 @@
+sync: sync file 0
+exec: true exec 0
+file-cb: true file-cb 0
+file-second: true 0 0
+events: execSync-options|execSync-extra|execFileSync-options|execFileSync-extra|execFileSync-second-options|execFileSync-second-extra|exec-options|exec-extra|execFile-options|execFile-extra|execFile-second-options|execFile-second-extra
