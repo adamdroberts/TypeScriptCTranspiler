@@ -1,0 +1,9 @@
+zero set: false undefined
+string set: true undefined
+empty delete: false 1
+object delete: true 1
+zero set proto: false false
+object zero set proto: Object.setPrototypeOf failed
+string set proto: true false
+empty prevent: false true
+object empty prevent: Object.preventExtensions failed
