@@ -185,7 +185,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - Typed array higher-order methods accept optional `thisArg` values, evaluate them once, and bind them for direct and inline callbacks that declare `this: any`. Test: `array_hof_this_arg`
 - All HOFs accept **either** inline arrow **or** named function reference, including direct function and closure callback values where supported. Tests: `fn_refs`, `array_hof`
 - `for-of` iteration. Test: `arrays`
-- `Array.isArray(x)` — resolved at compile time from typed CTypes and at runtime for dynamic values, including direct and nested array Proxy chains with revoked-proxy rejection; the stdlib declaration is a type predicate so guarded `unknown` dynamic values narrow to typed array operations. Tests: `advanced`, `array_static_dynamic`, `array_is_array_narrowing`, `proxy_array_is_array`
+- `Array.isArray(value, ...ignored)` — resolved at compile time from typed CTypes and at runtime for dynamic values while evaluating ignored trailing arguments, including direct and nested array Proxy chains with revoked-proxy rejection; the stdlib declaration is a type predicate so guarded `unknown` dynamic values narrow to typed array operations. Tests: `advanced`, `array_static_dynamic`, `array_is_array_ignored_arguments`, `array_is_array_narrowing`, `proxy_array_is_array`
 - `Array.from(arr)` — identity copy for typed arrays and dynamic `tsc_value_t` arrays. Dynamic strings produce real dynamic arrays of characters, dynamic `null` / `undefined` sources reject through catchable runtime errors after ignored argument evaluation, and non-nullish non-iterable dynamic values return empty arrays in the bounded array-like subset. Tests: `advanced`, `array_static_dynamic`, `array_from_dynamic_edges`
 - `Array.from(set)` — typed Set value copy preserving insertion order. Test: `array_from_set`
 - `Array.from(map)` — typed `Map<K, V>` entry materialization as `ObjectEntry<V, K>[]` in insertion order, including non-string key entries and dynamic `Map<any, any>` entries. Tests: `array_from_map`, `map_object_entry_constructors`, `map_constructor_dynamic`
@@ -978,6 +978,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_from_dynamic_edges` | Array.from dynamic nullish, string, and non-iterable edge behavior |
 | `array_hof` | forEach/map/filter/reduce/find/some/every + inline expression/block-body arrows and receiver callback args |
 | `array_hof_this_arg` | typed and dynamic array higher-order methods with evaluated and bound optional thisArg |
+| `array_is_array_ignored_arguments` | Array.isArray evaluates and ignores trailing arguments |
 | `array_is_array_narrowing` | Array.isArray type-predicate narrowing over unknown dynamic arrays |
 | `array_keys_values` | Array.keys index arrays and Array.values shallow copies |
 | `array_last_index_of` | Array.lastIndexOf |
