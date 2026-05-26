@@ -1430,6 +1430,10 @@ const unused_error_descriptors_symbols_empty_for_each_call = Object.getOwnProper
 const unused_error_descriptor_keys_with_call = Object.keys(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_keys_with"), "message")!).with(3, "dead_error_descriptor_keys_with_replacement");
 const unused_regexp_descriptor_reflect_own_keys_with_call = Reflect.ownKeys(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_reflect_own_keys_with/g, "lastIndex")!).with(3, "dead_regexp_descriptor_reflect_own_keys_with_replacement");
 const unused_error_descriptor_symbols_empty_map_call = Object.getOwnPropertySymbols(Object.getOwnPropertyDescriptor(new TypeError("dead_error_descriptor_symbols_empty_map"), "name")!).map(() => "dead_error_descriptor_symbols_empty_map_callback");
+const unused_error_descriptor_get_prototype_call = Object.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_get_prototype"), "message")!);
+const unused_regexp_descriptor_is_extensible_call = Reflect.isExtensible(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_is_extensible/g, "lastIndex")!);
+const unused_error_descriptor_freeze_call = Object.freeze(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_freeze"), "message")!);
+const unused_regexp_descriptor_prevent_extensions_call = Reflect.preventExtensions(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_prevent_extensions/g, "lastIndex")!);
 const unused_object_property_names_spread_with_call = Object.getOwnPropertyNames({ ...{ dead_object_property_names_spread_with: 1 }, dead_object_property_names_spread_with_tail: 2 }).with(1, "dead_object_property_names_spread_with_replacement");
 const unused_object_property_names_assign_with_call = Object.getOwnPropertyNames(Object.assign({} as { dead_object_property_names_assign_with: number; dead_object_property_names_assign_tail: number }, { dead_object_property_names_assign_with: 1 }, { dead_object_property_names_assign_tail: 2 })).with(1, "dead_object_property_names_assign_replacement");
 const unused_object_property_names_define_property_with_call = Object.getOwnPropertyNames(Object.defineProperty({} as { dead_object_property_names_define_property_with: number }, "dead_object_property_names_define_property_with", { value: 1 })).with(0, "dead_object_property_names_define_property_replacement");
@@ -2808,6 +2812,10 @@ Object.getOwnPropertySymbols(Object.getOwnPropertyDescriptors(new Error("top_lev
 Object.keys(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_keys_with"), "message")!).with(3, "top_level_dead_error_descriptor_keys_with_replacement");
 Reflect.ownKeys(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_reflect_own_keys_with/g, "lastIndex")!).with(3, "top_level_dead_regexp_descriptor_reflect_own_keys_with_replacement");
 Object.getOwnPropertySymbols(Object.getOwnPropertyDescriptor(new TypeError("top_level_dead_error_descriptor_symbols_empty_map"), "name")!).map(() => "top_level_dead_error_descriptor_symbols_empty_map_callback");
+Object.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_get_prototype"), "message")!);
+Reflect.isExtensible(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_is_extensible/g, "lastIndex")!);
+Object.freeze(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_freeze"), "message")!);
+Reflect.preventExtensions(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_prevent_extensions/g, "lastIndex")!);
 Object.getOwnPropertyNames(Object.assign({} as { top_level_dead_object_property_names_assign_with: number; top_level_dead_object_property_names_assign_tail: number }, { top_level_dead_object_property_names_assign_with: 1 }, { top_level_dead_object_property_names_assign_tail: 2 })).with(1, "top_level_dead_object_property_names_assign_replacement");
 Object.getOwnPropertyNames(Object.defineProperty({} as { top_level_dead_object_property_names_define_property_with: number }, "top_level_dead_object_property_names_define_property_with", { value: 1 })).with(0, "top_level_dead_object_property_names_define_property_replacement");
 Object.getOwnPropertyNames(Object.seal({ top_level_dead_object_property_names_seal_with: 1, top_level_dead_object_property_names_seal_tail: 2 })).with(1, "top_level_dead_object_property_names_seal_replacement");
@@ -4229,6 +4237,10 @@ function usedLocal(value: number): number {
     Object.keys(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_keys_with"), "message")!).with(3, "local_dead_error_descriptor_keys_with_replacement");
     Reflect.ownKeys(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_reflect_own_keys_with/g, "lastIndex")!).with(3, "local_dead_regexp_descriptor_reflect_own_keys_with_replacement");
     Object.getOwnPropertySymbols(Object.getOwnPropertyDescriptor(new TypeError("local_dead_error_descriptor_symbols_empty_map"), "name")!).map(() => "local_dead_error_descriptor_symbols_empty_map_callback");
+    Object.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_get_prototype"), "message")!);
+    Reflect.isExtensible(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_is_extensible/g, "lastIndex")!);
+    Object.freeze(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_freeze"), "message")!);
+    Reflect.preventExtensions(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_prevent_extensions/g, "lastIndex")!);
     ["local_dead_array_to_string", "local_dead_array_to_string_tail"].toString();
     ["local_dead_array_to_locale_string", "local_dead_array_to_locale_string_tail"].toLocaleString();
     ["local_dead_array_join_length_read"].join("/").length;

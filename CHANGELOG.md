@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE now treats statically present `Object.getOwnPropertyDescriptor(...)` / `Reflect.getOwnPropertyDescriptor(...)` data descriptor results as side-effect-free read-only object and fresh mutation operands. Test: `generated_c_dce_const`.
 - Generated-C DCE now carries exact four-key data descriptor object length proofs for `Object.getOwnPropertyDescriptor(...)` / `Reflect.getOwnPropertyDescriptor(...)` results when the source property is statically present. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now includes Reflect own-key and symbol-enumeration paths over `Object.getOwnPropertyDescriptors(...)` descriptor maps with known own-property names. Test: `generated_c_dce_const`.
 - Generated-C DCE now carries exact descriptor-map key length proofs for `Object.getOwnPropertyDescriptors(...)` over side-effect-free sources with known own-property names. Test: `generated_c_dce_const`.

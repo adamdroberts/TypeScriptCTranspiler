@@ -1365,6 +1365,9 @@ class Emitter {
         ) {
             return true;
         }
+        if (this.isSideEffectFreeOwnDataPropertyDescriptorObjectOperand(unwrapped, seenConsts)) {
+            return true;
+        }
         const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
         if (targetOperand) {
             return this.isSideEffectFreeObjectIdentityOperand(targetOperand, new Set(seenConsts));
@@ -5846,6 +5849,13 @@ class Emitter {
         ) === "present"
             ? 4
             : null;
+    }
+
+    private isSideEffectFreeOwnDataPropertyDescriptorObjectOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return this.sideEffectFreeOwnDataPropertyDescriptorObjectKeyCount(expr, seenConsts) !== null;
     }
 
     private sideEffectFreeDescriptorBuiltObjectOwnStringKeys(
@@ -12358,6 +12368,9 @@ class Emitter {
         if (this.isSideEffectFreeFreshBuiltinObjectOperand(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeOwnDataPropertyDescriptorObjectOperand(unwrapped, seenConsts)) {
+            return true;
+        }
         const targetOperand = this.sideEffectFreeExtensibleObjectTargetReturningOperand(
             unwrapped,
             seenConsts,
@@ -12578,6 +12591,9 @@ class Emitter {
         }
         if (this.isSideEffectFreeFreshBuiltinObjectOperand(unwrapped, seenConsts)) return true;
         if (this.isSideEffectFreeArrayOperand(unwrapped, new Set(seenConsts))) {
+            return true;
+        }
+        if (this.isSideEffectFreeOwnDataPropertyDescriptorObjectOperand(unwrapped, seenConsts)) {
             return true;
         }
         const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
