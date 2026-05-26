@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Object.getPrototypeOf(proxy)`, `Object.setPrototypeOf(proxy, proto)`, `Object.isExtensible(proxy)`, and `Object.preventExtensions(proxy)` now have focused coverage for ignored trailing-argument evaluation before proxy trap dispatch. Test: `proxy_object_helper_ignored_arguments`.
 - `Object.defineProperties(proxy, descriptors)` now has focused coverage for successful multi-descriptor `defineProperty` trap dispatch, ignored trailing arguments, descriptor flags, and descriptor-map validation before trap calls. Test: `proxy_define_properties_success`.
 - `Object.hasOwn(proxy)`, `Object.prototype.hasOwnProperty.call(proxy, key)`, and `Object.prototype.propertyIsEnumerable.call(proxy, key)` now have focused coverage for proxy descriptor-trap dispatch, validation, virtual descriptors, and revocation. Test: `proxy_own_property_helpers`.
 - `Object.getOwnPropertyNames(proxy)` now has focused coverage for proxy `ownKeys` dispatch, ignored trailing arguments, non-enumerable string keys, trap validation, and revocation. Test: `proxy_get_own_property_names`.
