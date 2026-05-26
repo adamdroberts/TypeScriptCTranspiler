@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Callable Proxy values now have focused coverage for dynamic `Function.prototype.apply(...)` with omitted, `null`, and `undefined` argument lists normalized to empty arrays while still evaluating ignored trailing arguments. Test: `proxy_apply_empty_arguments_list`.
 - Callable Proxy values now have focused coverage for dynamic `Function.prototype.apply(...)` with array-like and spread-built argument lists forwarded as normalized arrays through proxy `apply` traps. Test: `proxy_apply_method_arguments_list`.
 - Callable Proxy values now support dynamic `Function.prototype.call(...)` with spread arguments after the explicit `thisArg`, forwarding the normalized argument list through proxy `apply` traps. Test: `proxy_call_spread`.
 - Callable Proxy values now support direct and method spread calls through dynamic spread-argument lowering, preserving method receiver identity through the proxy `apply` trap. Test: `proxy_spread_call`.
