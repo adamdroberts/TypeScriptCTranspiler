@@ -1,0 +1,3 @@
+{
+  "description": "Proxy handler accessor trap properties are read with the handler as receiver before dispatch"
+}

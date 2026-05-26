@@ -1,0 +1,3 @@
+get: A
+keys: a
+events: trapGetter:get:handler|getTrap:a|trapGetter:ownKeys:handler|ownKeysTrap|trapGetter:desc:handler|descTrap:a|trapGetter:desc:handler|descTrap:hidden
