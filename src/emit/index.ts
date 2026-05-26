@@ -38492,6 +38492,8 @@ class Emitter {
         }
         const staticString = this.staticComputedStringExpression(cur);
         if (staticString !== null) return staticString;
+        const staticResolvedString = staticStringExpressionText(cur);
+        if (staticResolvedString !== null) return staticResolvedString;
         if (ts.isIdentifier(cur)) {
             const sym = this.symbolForIdentifier(cur);
             const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
