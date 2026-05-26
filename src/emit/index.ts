@@ -7552,6 +7552,30 @@ class Emitter {
             this.isSideEffectFreeFreshErrorOperand(access.target, seenConsts);
     }
 
+    private isSideEffectFreeRegExpDescriptorNumberValueRead(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (!ts.isPropertyAccessExpression(unwrapped) || unwrapped.name.text !== "value") {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+            return !!init && this.isSideEffectFreeRegExpDescriptorNumberValueRead(init, seenConsts);
+        }
+        const descriptorExpr = this.unwrapSideEffectFreeStaticExpression(unwrapped.expression);
+        if (
+            ts.isCallExpression(descriptorExpr) &&
+            this.isObjectOrReflectGetOwnPropertyDescriptorCall(descriptorExpr)
+        ) {
+            const key = this.sideEffectFreeObjectPropertyReadKey(descriptorExpr.arguments[1]!, seenConsts);
+            return key === "lastIndex" &&
+                this.isSideEffectFreeFreshRegExpOperand(descriptorExpr.arguments[0]!, seenConsts);
+        }
+        const access = this.sideEffectFreeOwnPropertyDescriptorsAccess(descriptorExpr, seenConsts);
+        return access !== null &&
+            access.key === "lastIndex" &&
+            this.isSideEffectFreeFreshRegExpOperand(access.target, seenConsts);
+    }
+
     private isSideEffectFreeErrorStringMethodCall(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -12251,6 +12275,9 @@ class Emitter {
         ) {
             return true;
         }
+        if (this.isSideEffectFreeRegExpDescriptorNumberValueRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (
             ts.isPrefixUnaryExpression(unwrapped) &&
             (
@@ -12636,6 +12663,9 @@ class Emitter {
                 return true;
         }
         if (ts.isNumericLiteral(unwrapped) || ts.isBigIntLiteral(unwrapped)) {
+            return true;
+        }
+        if (this.isSideEffectFreeRegExpDescriptorNumberValueRead(unwrapped, seenConsts)) {
             return true;
         }
         if (
