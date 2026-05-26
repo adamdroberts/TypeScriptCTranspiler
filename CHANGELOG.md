@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `fs.readdirSync(...)` and immediate `fs.promises.readdir(...)` now accept `{ withFileTypes: true, encoding: "hex" | "base64" }`, returning bounded Dirent objects with encoded string `name` values. Test: `fs_readdir_dirent_encoded_options`.
 - `stream.isReadable(...)`, `stream.isWritable(...)`, and `stream.isDestroyed(...)` now return `null` for nullish/plain non-stream values while `stream.isErrored(...)` and `stream.isDisturbed(...)` return `false`, preserving argument evaluation across named, namespace, and default imports. Test: `stream_non_stream_predicates`.
 - Frozen typed and dynamic arrays now accept compatible no-op `Reflect.defineProperty(...)` data and `length` descriptor redefinitions while rejecting value changes, including signed-zero fixed-index mismatches. Tests: `array_extensibility`, `dynamic_array_extensibility`.
 - Boxed function `length` metadata redefinitions now use SameValue semantics, rejecting signed-zero changes while preserving compatible `Reflect.defineProperty(...)` and Object failure behavior. Test: `function_integrity`.
