@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Object.keys(proxy)`, `Object.values(proxy)`, `Object.entries(proxy)`, and `Reflect.ownKeys(proxy)` now have focused coverage for ignored trailing-argument evaluation before proxy `ownKeys` dispatch. Test: `proxy_ownkeys_helper_ignored_arguments`.
 - `Object.getOwnPropertyDescriptor(proxy, key)` and `Reflect.getOwnPropertyDescriptor(proxy, key)` now have focused coverage for ignored trailing-argument evaluation before proxy descriptor-trap dispatch. Test: `proxy_descriptor_helper_ignored_arguments`.
 - `Object.defineProperty(proxy, key, descriptor)` and `Reflect.defineProperty(proxy, key, descriptor)` now have focused coverage for ignored trailing-argument evaluation before proxy `defineProperty` trap dispatch. Test: `proxy_define_property_ignored_arguments`.
 - `Reflect.getPrototypeOf(proxy)`, `Reflect.setPrototypeOf(proxy, proto)`, `Reflect.isExtensible(proxy)`, and `Reflect.preventExtensions(proxy)` now have focused coverage for ignored trailing-argument evaluation before proxy trap dispatch. Test: `proxy_reflect_helper_ignored_arguments`.
