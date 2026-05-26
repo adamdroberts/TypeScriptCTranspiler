@@ -68,6 +68,7 @@ This is the next item that most directly expands what programs can be written ag
   - Generated-C DCE now carries exact four-key data descriptor object length proofs for `Object.getOwnPropertyDescriptor(...)` / `Reflect.getOwnPropertyDescriptor(...)` results when the source property is statically present. Test: `generated_c_dce_const`.
   - Generated-C DCE now treats statically present `Object.getOwnPropertyDescriptor(...)` / `Reflect.getOwnPropertyDescriptor(...)` data descriptor results as side-effect-free read-only object and fresh mutation operands. Test: `generated_c_dce_const`.
   - Generated-C DCE now treats `in` checks against statically present data descriptor result objects as side-effect-free. Test: `generated_c_dce_const`.
+  - Generated-C DCE now treats `delete` operations against fresh statically present data descriptor result objects as side-effect-free when the descriptor object is not reused. Test: `generated_c_dce_const`.
   - Benchmark output now records `tsc2c` binary size together with timing/ops data, `bench:check` can enforce per-run JSON threshold policies for size, `tsc2c` time, and speed ratios, `bench:smoke` provides a default local/CI smoke policy, `bench:long` provides a scheduled/manual long-run threshold policy, `.github/workflows/ci.yml` wires Linux gcc/clang build, no-GC e2e, and benchmark smoke checks, and scheduled/manual long benchmark checks remain on Linux gcc. Remaining work is broader generated-C DCE, further binary-size optimization, and CI matrix expansion (Linux gcc/clang ✓, macOS, Windows later)
 
 ---

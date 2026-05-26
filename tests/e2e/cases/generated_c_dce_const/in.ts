@@ -1436,6 +1436,8 @@ const unused_error_descriptor_freeze_call = Object.freeze(Object.getOwnPropertyD
 const unused_regexp_descriptor_prevent_extensions_call = Reflect.preventExtensions(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_prevent_extensions/g, "lastIndex")!);
 const unused_error_descriptor_in_check = "value" in Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_in_check"), "message")!;
 const unused_regexp_descriptor_in_check = "writable" in Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_in_check/g, "lastIndex")!;
+const unused_error_descriptor_delete_call = delete Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_delete"), "message")!.value;
+const unused_regexp_descriptor_delete_call = delete Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_delete/g, "lastIndex")!.writable;
 const unused_object_property_names_spread_with_call = Object.getOwnPropertyNames({ ...{ dead_object_property_names_spread_with: 1 }, dead_object_property_names_spread_with_tail: 2 }).with(1, "dead_object_property_names_spread_with_replacement");
 const unused_object_property_names_assign_with_call = Object.getOwnPropertyNames(Object.assign({} as { dead_object_property_names_assign_with: number; dead_object_property_names_assign_tail: number }, { dead_object_property_names_assign_with: 1 }, { dead_object_property_names_assign_tail: 2 })).with(1, "dead_object_property_names_assign_replacement");
 const unused_object_property_names_define_property_with_call = Object.getOwnPropertyNames(Object.defineProperty({} as { dead_object_property_names_define_property_with: number }, "dead_object_property_names_define_property_with", { value: 1 })).with(0, "dead_object_property_names_define_property_replacement");
@@ -2820,6 +2822,8 @@ Object.freeze(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_de
 Reflect.preventExtensions(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_prevent_extensions/g, "lastIndex")!);
 "value" in Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_in_check"), "message")!;
 "writable" in Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_in_check/g, "lastIndex")!;
+delete Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_delete"), "message")!.value;
+delete Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_delete/g, "lastIndex")!.writable;
 Object.getOwnPropertyNames(Object.assign({} as { top_level_dead_object_property_names_assign_with: number; top_level_dead_object_property_names_assign_tail: number }, { top_level_dead_object_property_names_assign_with: 1 }, { top_level_dead_object_property_names_assign_tail: 2 })).with(1, "top_level_dead_object_property_names_assign_replacement");
 Object.getOwnPropertyNames(Object.defineProperty({} as { top_level_dead_object_property_names_define_property_with: number }, "top_level_dead_object_property_names_define_property_with", { value: 1 })).with(0, "top_level_dead_object_property_names_define_property_replacement");
 Object.getOwnPropertyNames(Object.seal({ top_level_dead_object_property_names_seal_with: 1, top_level_dead_object_property_names_seal_tail: 2 })).with(1, "top_level_dead_object_property_names_seal_replacement");
@@ -4247,6 +4251,8 @@ function usedLocal(value: number): number {
     Reflect.preventExtensions(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_prevent_extensions/g, "lastIndex")!);
     "value" in Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_in_check"), "message")!;
     "writable" in Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_in_check/g, "lastIndex")!;
+    delete Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_delete"), "message")!.value;
+    delete Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_delete/g, "lastIndex")!.writable;
     ["local_dead_array_to_string", "local_dead_array_to_string_tail"].toString();
     ["local_dead_array_to_locale_string", "local_dead_array_to_locale_string_tail"].toLocaleString();
     ["local_dead_array_join_length_read"].join("/").length;
