@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Aliased named imports from `"path/posix"` / `"node:path/posix"` now route to the supported POSIX path subset. Test: `path_posix_subpath_import`.
 - Aliased named imports from `"fs/promises"` / `"node:fs/promises"` now route to the immediate `fs.promises` subset. Test: `fs_promises_subpath_import`.
 - Aliased named imports for supported `process` metadata, usage, control, and stdio helpers now have focused runtime coverage. Tests: `process_metadata_import`, `process_metadata_value_import`, `process_usage_import`, `process_control_import`, `process_stdio_import`, `process_stdio_metadata_import`.
 - Aliased named imports for supported `dns` and `dns/promises` lookup helpers now have focused runtime coverage. Tests: `dns_lookup`, `dns_promises_lookup`, `dns_promises_subpath_import`.

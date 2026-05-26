@@ -526,7 +526,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `path.join(...parts)` → `tsc_path_join`
 - `path.resolve(...parts)` → `tsc_path_resolve` (against `getcwd()`)
 - `path.normalize(path, ...ignored)`, `path.isAbsolute(path, ...ignored)`, `path.relative(from, to, ...ignored)`, `path.toNamespacedPath(path, ...ignored)`, `path.parse(path, ...ignored)`, and `path.format(pathObject, ...ignored)` implement a bounded POSIX subset for segment cleanup, leading-slash absolute detection, relative path construction, POSIX no-op namespacing, and dynamic parsed-path records while evaluating ignored extra arguments after consumed inputs. `path.sep`, `path.delimiter`, `path.posix.*`, and named `posix` imports expose the same POSIX subset. Default, named, aliased named, and namespace imports from `"path"` / `"node:path"` route to the same supported subset. Tests: `path_normalize`, `path_import`, `path_default_import`, `path_constants`, `path_relative`, `path_to_namespaced`, `path_parse_format`, `path_posix`
-- Direct named, namespace, and default imports from `"path/posix"` / `"node:path/posix"` route to the same POSIX path subset. Test: `path_posix_subpath_import`
+- Direct named, aliased named, namespace, and default imports from `"path/posix"` / `"node:path/posix"` route to the same POSIX path subset. Test: `path_posix_subpath_import`
 - `path.basename(path, suffix?, ...ignored)` / `dirname(path, ...ignored)` / `extname(path, ...ignored)`. Test: `path_basename_suffix`
 - Test: `fs_roundtrip`
 
@@ -1258,7 +1258,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `path_normalize` | bounded POSIX path.normalize segment cleanup and path.isAbsolute checks |
 | `path_parse_format` | bounded POSIX path.parse/path.format dynamic path objects |
 | `path_posix` | path.posix and named posix imports route to the supported POSIX path subset |
-| `path_posix_subpath_import` | direct path/posix and node:path/posix imports |
+| `path_posix_subpath_import` | direct path/posix and node:path/posix imports, including aliased named helpers |
 | `path_relative` | bounded POSIX path.relative and named node:path import |
 | `path_to_namespaced` | path.toNamespacedPath POSIX no-op for global, namespace, named, and posix forms |
 | `process_argv_meta` | process argv0/execPath/execArgv metadata |
