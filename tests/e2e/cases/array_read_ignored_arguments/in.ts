@@ -17,6 +17,7 @@ console.log("typed last undefined:" + nums.lastIndexOf(2, undefined, mark("typed
 console.log("typed includes undefined:" + ro.includes(1, undefined, mark("typed-includes-undefined-extra")));
 console.log("typed at:" + nums.at(-1, mark("typed-at-extra")));
 console.log("typed slice:" + nums.slice(1, 3, mark("typed-slice-extra")).join(","));
+console.log("typed slice undefined:" + nums.slice(undefined, undefined, mark("typed-slice-undefined-extra")).join(","));
 console.log("typed join:" + nums.join("-", mark("typed-join-extra")));
 console.log("typed flat:" + nested.flat(1, mark("typed-flat-extra")).join(","));
 console.log("typed flat undefined:" + nested.flat(undefined, mark("typed-flat-undefined-extra")).join(","));

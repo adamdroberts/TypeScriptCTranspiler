@@ -33912,12 +33912,14 @@ class Emitter {
             }
             case "slice": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
-                if (args[0]) {
+                const hasStart = !!args[0] && !this.isUndefinedExpression(args[0]);
+                const hasEnd = !!args[1] && !this.isUndefinedExpression(args[1]);
+                if (hasStart) {
                     const start = this.emitExpr(args[0]);
                     requireNumber(args[0], start.ty);
                     specs.push({ value: start, target: T_NUMBER, node: args[0] });
                 }
-                if (args[1]) {
+                if (hasEnd) {
                     const end = this.emitExpr(args[1]);
                     requireNumber(args[1], end.ty);
                     specs.push({ value: end, target: T_NUMBER, node: args[1] });
@@ -33925,8 +33927,9 @@ class Emitter {
                 specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(recv.ty, specs, (vals) => {
                     const arr = vals[0]!;
-                    const start = vals[1] ?? "0";
-                    const end = vals[2] ?? `(double)${arr}->len`;
+                    let next = 1;
+                    const start = hasStart ? vals[next++]! : "0";
+                    const end = hasEnd ? vals[next++]! : `(double)${arr}->len`;
                     return `tsc_array_slice(${arr}, ${start}, ${end})`;
                 });
             }
@@ -34144,12 +34147,14 @@ class Emitter {
                     { value: recv },
                     { value, target: et, node: args[0]! },
                 ];
-                if (args[1]) {
+                const hasStart = !!args[1] && !this.isUndefinedExpression(args[1]);
+                const hasEnd = !!args[2] && !this.isUndefinedExpression(args[2]);
+                if (hasStart) {
                     const start = this.emitExpr(args[1]);
                     requireNumber(args[1], start.ty);
                     specs.push({ value: start, target: T_NUMBER, node: args[1] });
                 }
-                if (args[2]) {
+                if (hasEnd) {
                     const end = this.emitExpr(args[2]);
                     requireNumber(args[2], end.ty);
                     specs.push({ value: end, target: T_NUMBER, node: args[2] });
@@ -34157,8 +34162,9 @@ class Emitter {
                 specs.push(...this.ignoredArgumentSpecs(args, 3));
                 return this.emitSequencedExpr(recv.ty, specs, (vals) => {
                     const arr = vals[0]!;
-                    const start = vals[2] ?? "0.0";
-                    const end = vals[3] ?? `(double)${arr}->len`;
+                    let next = 2;
+                    const start = hasStart ? vals[next++]! : "0.0";
+                    const end = hasEnd ? vals[next++]! : `(double)${arr}->len`;
                     return `({ if (!${arr}->frozen) tsc_array_fill(${arr}, &(${et.c}){${vals[1]}}, ${start}, ${end}); ${arr}; })`;
                 });
             }
@@ -34173,7 +34179,8 @@ class Emitter {
                     { value: target, target: T_NUMBER, node: args[0]! },
                     { value: startExpr, target: T_NUMBER, node: args[1]! },
                 ];
-                if (args[2]) {
+                const hasEnd = !!args[2] && !this.isUndefinedExpression(args[2]);
+                if (hasEnd) {
                     const end = this.emitExpr(args[2]);
                     requireNumber(args[2], end.ty);
                     specs.push({ value: end, target: T_NUMBER, node: args[2] });
@@ -34181,7 +34188,7 @@ class Emitter {
                 specs.push(...this.ignoredArgumentSpecs(args, 3));
                 return this.emitSequencedExpr(recv.ty, specs, (vals) => {
                     const arr = vals[0]!;
-                    const end = vals[3] ?? `(double)${arr}->len`;
+                    const end = hasEnd ? vals[3]! : `(double)${arr}->len`;
                     return `({ if (!${arr}->frozen) tsc_array_copy_within(${arr}, ${vals[1]}, ${vals[2]}, ${end}); ${arr}; })`;
                 });
             }
