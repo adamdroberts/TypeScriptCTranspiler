@@ -16,5 +16,6 @@ const descs: any = Object.getOwnPropertyDescriptors(d, mark("D"));
 const reflectDesc: any = Reflect.getOwnPropertyDescriptor(d, "getTime", mark("R"));
 console.log("desc:", String(desc), Object.keys(descs).length, String(reflectDesc));
 console.log("own:", Object.hasOwn(d, "getTime", mark("h")), d.hasOwnProperty("getTime", mark("p")), d.propertyIsEnumerable("getTime", mark("i")));
+console.log("integrity:", Object.isExtensible(d, mark("E")), Object.isSealed(d, mark("L")), Object.isFrozen(d, mark("F")), Reflect.isExtensible(d, mark("I")));
 console.log("tag:", Object.prototype.toString.call(d, mark("t")), d.toString().startsWith("Thu Jan 01 1970"));
 console.log("trace:", trace);

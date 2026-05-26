@@ -38006,6 +38006,10 @@ class Emitter {
             emptyOwnBuiltinObjectArg ||
             mapped.kind === "regexp" ||
             mapped.kind === "error";
+        const fixedBuiltinIntegrityArg =
+            emptyEnumerableBuiltinObjectArg ||
+            mapped.kind === "fsstats" ||
+            mapped.kind === "fsdirent";
         const dynamicObjectArg = (value: string): string => {
             if (mapped.kind === "array") return `tsc_value_array(${value})`;
             if (mapped.kind === "function") return this.coerce({ c: value, ty: mapped }, T_VALUE, arg);
@@ -38702,6 +38706,10 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, false)`);
             }
+            if (fixedBuiltinIntegrityArg) {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, true)`);
+            }
             if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
                 unsupported(arg, "Object.isExtensible currently supports dynamic objects, arrays, functions, and primitives only");
             }
@@ -38718,6 +38726,10 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, true)`);
             }
+            if (fixedBuiltinIntegrityArg) {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, false)`);
+            }
             if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
                 unsupported(arg, "Object.isSealed currently supports dynamic objects, arrays, functions, and primitives only");
             }
@@ -38733,6 +38745,10 @@ class Emitter {
             if (primitiveObjectArg) {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, true)`);
+            }
+            if (fixedBuiltinIntegrityArg) {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, false)`);
             }
             if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
                 unsupported(arg, "Object.isFrozen currently supports dynamic objects, arrays, functions, and primitives only");
@@ -40937,6 +40953,12 @@ class Emitter {
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
+                if (this.isFixedBuiltinIntegrityType(mapped)) {
+                    return this.emitSequencedExpr(T_BOOLEAN, [
+                        { value: target, node: args[0]! },
+                        ...ignored,
+                    ], ([t]) => `((void)${t}, true)`);
+                }
                 return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: target, target: (mapped.kind === "value" || mapped.kind === "function") ? T_VALUE : undefined, node: args[0]! },
                     ...ignored,
@@ -41081,6 +41103,31 @@ class Emitter {
             }
         }
         unsupported(call, `Reflect.${name}`);
+    }
+
+    private isFixedBuiltinIntegrityType(ty: CType): boolean {
+        switch (ty.kind) {
+            case "map":
+            case "set":
+            case "weakmap":
+            case "weakset":
+            case "weakref":
+            case "finregistry":
+            case "promise":
+            case "eventemitter":
+            case "event":
+            case "eventtarget":
+            case "date":
+            case "url":
+            case "hash":
+            case "regexp":
+            case "error":
+            case "fsstats":
+            case "fsdirent":
+                return true;
+            default:
+                return false;
+        }
     }
 
     private descriptorData(desc: ts.Expression): DescriptorData {

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Date and other fixed built-in object values now support read-only `Object.isExtensible(...)`, `Object.isSealed(...)`, `Object.isFrozen(...)`, and `Reflect.isExtensible(...)` checks with ignored trailing-argument evaluation. Test: `date_object_methods`.
 - `Object.prototype.hasOwnProperty.call(...)` and `propertyIsEnumerable.call(...)` on Buffer instances now evaluate ignored trailing arguments. Test: `buffer_object_methods`.
 - Typed-array `Object.defineProperty(...)` and `Object.defineProperties(...)` now throw through the catchable runtime exception path when descriptor application fails, while Reflect descriptor helpers continue returning `false`. Test: `array_extensibility`.
 - Static `Object.defineProperty(...)` and `Object.defineProperties(...)` descriptor emission now throws through the catchable runtime exception path when a definition fails. Tests: `object_define_property`, `object_define_properties`.
