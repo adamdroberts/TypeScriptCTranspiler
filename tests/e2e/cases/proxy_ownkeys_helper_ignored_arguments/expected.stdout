@@ -1,0 +1,6 @@
+keys: a,b
+values: A,B
+entries: a:A,b:B
+own: a,hidden,b
+marks: keys,values,entries,reflect
+events: ownKeys:keys|desc:a:keys|desc:hidden:keys|desc:b:keys|ownKeys:keys,values|desc:a:keys,values|desc:hidden:keys,values|desc:b:keys,values|get:a:keys,values|get:b:keys,values|ownKeys:keys,values,entries|desc:a:keys,values,entries|desc:hidden:keys,values,entries|desc:b:keys,values,entries|get:a:keys,values,entries|get:b:keys,values,entries|ownKeys:keys,values,entries,reflect
