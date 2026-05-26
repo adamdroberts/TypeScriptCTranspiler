@@ -12,3 +12,4 @@ accessor wrong getter: Proxy getOwnPropertyDescriptor trap cannot report differe
 accessor wrong setter: Proxy getOwnPropertyDescriptor trap cannot report different setter for non-configurable accessor key
 real descriptor: 1 false false
 keys descriptor: Proxy getOwnPropertyDescriptor trap cannot hide non-configurable key
+events: ignored:bad descriptor|bad trap:x|ignored:hide fixed|hide trap:fixed|ignored:hide closed|hide trap:x|ignored:new closed|data trap:missing|ignored:new fixed|fixed new trap:x|ignored:config false|config false trap:x|ignored:wrong fixed|wrong fixed trap:fixed|ignored:writable fixed|writable fixed trap:fixed|ignored:wrong enumerable|wrong enumerable trap:fixed|ignored:accessor as data|accessor as data trap:x|ignored:accessor wrong getter|wrong accessor getter trap:x|ignored:accessor wrong setter|wrong accessor setter trap:x|ignored:real descriptor|real trap:fixed|ignored:keys descriptor|own fixed trap|hide trap:fixed
