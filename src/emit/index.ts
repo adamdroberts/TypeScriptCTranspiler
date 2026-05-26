@@ -235,6 +235,8 @@ class Emitter {
     private nodeFunctionAdapters = new Set<string>();
     private dynamicFunctionAdapters = new Map<string, string>();
     private classInstanceMethodValueAdapters = new Map<string, string>();
+    private classInstanceFieldGetterAdapters = new Map<string, string>();
+    private classInstanceFieldSetterAdapters = new Map<string, string>();
     private decoratorAddInitializerAdapter: string | null = null;
     private decoratorApplyFieldInitializersHelper = false;
     private eventListenerAdapters = new Map<string, string>();
@@ -19646,6 +19648,76 @@ class Emitter {
         return [...methods.values()];
     }
 
+    private classInstanceFieldsForValueBox(cd: ts.ClassDeclaration): {
+        publicName: string;
+        owner: ts.ClassDeclaration;
+        type: CType;
+    }[] {
+        const fields = new Map<string, { publicName: string; owner: ts.ClassDeclaration; type: CType }>();
+        const base = this.baseClassDecl(cd);
+        if (base) {
+            for (const item of this.classInstanceFieldsForValueBox(base)) {
+                fields.set(item.publicName, item);
+            }
+        }
+        for (const field of this.classOwnInstanceFields(cd)) {
+            fields.set(field.name, { publicName: field.name, owner: cd, type: this.prepareType(field.type) });
+        }
+        return [...fields.values()];
+    }
+
+    private ensureClassInstanceFieldGetterAdapter(
+        owner: ts.ClassDeclaration,
+        publicName: string,
+        type: CType,
+    ): string {
+        if (!owner.name) unsupported(owner, "class field getter adapters require a named class");
+        const fieldName = mangleIdent(publicName);
+        const key = `${owner.name.text}.${fieldName}.get`;
+        const existing = this.classInstanceFieldGetterAdapters.get(key);
+        if (existing) return existing;
+        const name = `${owner.name.text}_${fieldName}_dynamic_get`;
+        this.classInstanceFieldGetterAdapters.set(key, name);
+        const signature = `static tsc_value_t ${name}(void* env, tsc_value_t receiver)`;
+        this.protos.line(signature + ";");
+        const buf = new CBuf();
+        buf.open(signature);
+        buf.line("(void)env;");
+        buf.line(`${owner.name.text}_t* self = ${this.coerce({ c: "receiver", ty: T_VALUE }, classType(owner.name.text), owner)};`);
+        buf.line(`${type.c} result = self->${fieldName};`);
+        buf.line(`return ${this.coerce({ c: "result", ty: type }, T_VALUE, owner)};`);
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
+    private ensureClassInstanceFieldSetterAdapter(
+        owner: ts.ClassDeclaration,
+        publicName: string,
+        type: CType,
+    ): string {
+        if (!owner.name) unsupported(owner, "class field setter adapters require a named class");
+        const fieldName = mangleIdent(publicName);
+        const key = `${owner.name.text}.${fieldName}.set`;
+        const existing = this.classInstanceFieldSetterAdapters.get(key);
+        if (existing) return existing;
+        const name = `${owner.name.text}_${fieldName}_dynamic_set`;
+        this.classInstanceFieldSetterAdapters.set(key, name);
+        const signature = `static bool ${name}(void* env, tsc_value_t receiver, tsc_value_t value)`;
+        this.protos.line(signature + ";");
+        const buf = new CBuf();
+        buf.open(signature);
+        buf.line("(void)env;");
+        buf.line(`${owner.name.text}_t* self = ${this.coerce({ c: "receiver", ty: T_VALUE }, classType(owner.name.text), owner)};`);
+        buf.line(`self->${fieldName} = ${this.coerce({ c: "value", ty: T_VALUE }, type, owner)};`);
+        buf.line("return true;");
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
     private classValueBoxExpression(r: EmitResult, node: ts.Node): string {
         if (r.ty.kind !== "class" || !r.ty.className) return `tsc_value_class(${r.c})`;
         const cd = this.findClassDecl(r.ty.className);
@@ -19659,6 +19731,14 @@ class Emitter {
             pieces.push(
                 `tsc_object_define(${obj}, tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)}), ` +
                 `tsc_value_function_generic_named(${adapter}, NULL, ${length}.0, tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)})), true, false, true)`,
+            );
+        }
+        for (const { publicName, owner, type } of this.classInstanceFieldsForValueBox(cd)) {
+            const getter = this.ensureClassInstanceFieldGetterAdapter(owner, publicName, type);
+            const setter = this.ensureClassInstanceFieldSetterAdapter(owner, publicName, type);
+            pieces.push(
+                `tsc_object_define_accessor(${obj}, tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)}), ` +
+                `${getter}, NULL, true, ${setter}, NULL, true, true, true, true, true)`,
             );
         }
         pieces.push(`tsc_value_object(${obj})`);
