@@ -8,4 +8,5 @@ map desc: undefined 0
 weak own: 0 0 false
 reflect own: 0 undefined
 proto own: false false false
-ignored: [object Map] [object Set] true [object WeakSet] 7 mswxr
+integrity: true false false true true
+ignored: [object Map] [object Set] true [object WeakSet] 7 ELFIRmswxr

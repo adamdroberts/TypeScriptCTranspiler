@@ -35,4 +35,5 @@ console.log("map desc:", String(Object.getOwnPropertyDescriptor(map, "size")), O
 console.log("weak own:", Object.keys(weakMap).length, Object.getOwnPropertyNames(weakRef).length, Object.hasOwn(weakSet, "add"));
 console.log("reflect own:", Reflect.ownKeys(map).length, String(Reflect.getOwnPropertyDescriptor(weakMap, "x")));
 console.log("proto own:", map.hasOwnProperty("size"), set.propertyIsEnumerable("size"), weakRef.hasOwnProperty("deref"));
+console.log("integrity:", Object.isExtensible(map, mark("E")), Object.isSealed(set, mark("L")), Object.isFrozen(weakMap, mark("F")), Reflect.isExtensible(weakSet, mark("I")), Object.isExtensible(weakRef, mark("R")));
 console.log("ignored:", map.toString(mark("m")), set.toLocaleString(mark("s")), weakMap.valueOf(mark("w")) === weakMap, weakSet.toString(mark("x")), weakRef.deref(mark("r"))?.id ?? -1, trace);
