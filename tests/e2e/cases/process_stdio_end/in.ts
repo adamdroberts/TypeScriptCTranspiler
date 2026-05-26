@@ -19,6 +19,8 @@ const chunk = Buffer.from("bufend:");
 proc.stdout.end(chunk, mark("e"), done);
 process.stdout.end(done);
 stderr.end("", done);
+process.stdout.end(undefined, done);
+stderr.end(undefined, "utf8", done);
 
 console.log("seen", seen, finishedInCallback);
 console.log("writable", stdout.writable, stderr.writable);

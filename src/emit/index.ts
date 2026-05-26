@@ -27649,6 +27649,29 @@ class Emitter {
                     }
                 }
             }
+            if (!chunk && call.arguments.length >= 2) {
+                const secondNode = call.arguments[1]!;
+                ignoredStart = 2;
+                if (!this.isUndefinedExpression(secondNode)) {
+                    const second = this.emitExpr(secondNode);
+                    if (second.ty.kind === "function") {
+                        callback = { value: second, node: secondNode };
+                    } else {
+                        encoding = { value: second, node: secondNode };
+                    }
+                }
+            }
+            if (!chunk && !callback && call.arguments.length >= 3) {
+                const thirdNode = call.arguments[2]!;
+                ignoredStart = 3;
+                if (!this.isUndefinedExpression(thirdNode)) {
+                    const third = this.emitExpr(thirdNode);
+                    if (third.ty.kind !== "function") {
+                        unsupported(thirdNode, `process.${streamName}.end callback must be a function`);
+                    }
+                    callback = { value: third, node: thirdNode };
+                }
+            }
             if (chunk && call.arguments.length >= 2) {
                 const secondNode = call.arguments[1]!;
                 ignoredStart = 2;
