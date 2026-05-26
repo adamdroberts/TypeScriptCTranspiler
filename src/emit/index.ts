@@ -31430,8 +31430,10 @@ class Emitter {
             }
             case "removeAllListeners": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
-                if (args[0] && !this.isUndefinedExpression(args[0])) {
-                    const eventName = this.emitExpr(args[0]);
+                if (args[0]) {
+                    const eventName = this.isUndefinedExpression(args[0])
+                        ? { c: `tsc_str_from_lit("undefined", 9)`, ty: T_STRING }
+                        : this.emitExpr(args[0]);
                     specs.push({ value: eventName, target: T_STRING, node: args[0] });
                 }
                 specs.push(...this.ignoredArgumentSpecs(args, args[0] ? 1 : 0));

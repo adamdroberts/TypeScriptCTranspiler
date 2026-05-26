@@ -33,5 +33,11 @@ console.log("emit2:", emitter.emit("data", "beta", 2));
 emitter.removeAllListeners("data", mark("r"));
 console.log("count after remove:", emitter.listenerCount("data"));
 console.log("emit3:", emitter.emit("data", "gamma", 3));
+
+emitter.on("undefined", named);
+emitter.on("keep", listener);
+emitter.removeAllListeners(undefined, mark("u"));
+console.log("undefined remove:", emitter.listenerCount("undefined"), emitter.listenerCount("keep"));
+
 console.log("seen:", seen.join("|"));
 console.log("ignored:", ignored);

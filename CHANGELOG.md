@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `EventEmitter.removeAllListeners(undefined, ...ignored)` now treats explicit `undefined` as the JavaScript `"undefined"` event name instead of the omitted-argument "remove all" form while still evaluating ignored extras. Test: `event_emitter`.
 - `process.stdout.end(...)` / `process.stderr.end(...)` now treat explicit `undefined` chunks as omitted while still accepting later callback arguments and preserving ignored trailing-argument evaluation. Tests: `process_stdio_end`, `process_stdio_end_ignored_arguments`.
 - Embedded Node bridge builds now compile the exported `eval` / `Function` entry points behind `TSC_UNSAFE_EVAL`, so native-addon manifest builds can link libnode for allow-listed `.node` modules without enabling unsafe runtime code compilation. Focused checks: `runtime_eval_unsafe_bridge`, `runtime_function_unsafe_bridge`, `runtime_function_constructor_unsafe_bridge`, `native_addon_manifest_require`.
 - Ambient `Reflect.*` declarations now expose ignored trailing arguments to match the implemented Object/Reflect helper behavior. Test: `reflect_ignored_arguments`.
