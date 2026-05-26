@@ -7630,6 +7630,16 @@ class Emitter {
             return !!init && this.isSideEffectFreeErrorDescriptorStringValueRead(init, seenConsts);
         }
         const descriptorExpr = this.unwrapSideEffectFreeStaticExpression(unwrapped.expression);
+        const targetDescriptorExpr = this.sideEffectFreeObjectTargetReturningOperand(
+            descriptorExpr,
+            seenConsts,
+        );
+        if (targetDescriptorExpr) {
+            return this.isSideEffectFreeErrorDescriptorStringValueRead(
+                ts.factory.createPropertyAccessExpression(targetDescriptorExpr, "value"),
+                new Set(seenConsts),
+            );
+        }
         if (
             ts.isCallExpression(descriptorExpr) &&
             this.isObjectOrReflectGetOwnPropertyDescriptorCall(descriptorExpr)
@@ -7654,6 +7664,16 @@ class Emitter {
             return !!init && this.isSideEffectFreeRegExpDescriptorNumberValueRead(init, seenConsts);
         }
         const descriptorExpr = this.unwrapSideEffectFreeStaticExpression(unwrapped.expression);
+        const targetDescriptorExpr = this.sideEffectFreeObjectTargetReturningOperand(
+            descriptorExpr,
+            seenConsts,
+        );
+        if (targetDescriptorExpr) {
+            return this.isSideEffectFreeRegExpDescriptorNumberValueRead(
+                ts.factory.createPropertyAccessExpression(targetDescriptorExpr, "value"),
+                new Set(seenConsts),
+            );
+        }
         if (
             ts.isCallExpression(descriptorExpr) &&
             this.isObjectOrReflectGetOwnPropertyDescriptorCall(descriptorExpr)
@@ -10793,8 +10813,30 @@ class Emitter {
                 seenConsts,
             );
             if (valueOfReceiver) return valueOfReceiver;
+            const builtinValueOfReceiver = this.sideEffectFreeBuiltinValueOfTargetReturningOperand(
+                expr,
+                seenConsts,
+            );
+            if (builtinValueOfReceiver) return builtinValueOfReceiver;
         }
         return null;
+    }
+
+    private sideEffectFreeBuiltinValueOfTargetReturningOperand(
+        expr: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): ts.Expression | null {
+        if (
+            !ts.isPropertyAccessExpression(expr.expression) ||
+            expr.expression.name.text !== "valueOf" ||
+            expr.arguments.length !== 0
+        ) {
+            return null;
+        }
+        const receiver = expr.expression.expression;
+        return this.isSideEffectFreeOwnDataPropertyDescriptorObjectOperand(receiver, seenConsts)
+            ? receiver
+            : null;
     }
 
     private sideEffectFreeObjectPrototypeValueOfTargetReturningOperand(

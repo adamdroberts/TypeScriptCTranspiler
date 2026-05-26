@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE now treats direct `valueOf()` calls on statically present data descriptor result objects as target-returning for follow-on property reads. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now includes inherited `toString()`, `toLocaleString()`, and `valueOf()` calls on statically present data descriptor result objects. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats `Object.prototype.toLocaleString.call(...)` on statically present data descriptor result objects as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats inherited `hasOwnProperty(...)` and `propertyIsEnumerable(...)` calls on statically present data descriptor result objects as side-effect-free. Test: `generated_c_dce_const`.
