@@ -1,0 +1,3 @@
+{
+  "description": "Object.hasOwn and Object prototype own-property helpers on Proxy drive descriptor traps and validation"
+}
