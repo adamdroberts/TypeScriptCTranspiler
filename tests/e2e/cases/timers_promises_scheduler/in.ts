@@ -12,7 +12,6 @@ let ignoredOrder = "";
 const noSignal = undefined;
 const refDisabled = false;
 const schedulerOptions = { signal: noSignal, ref: refDisabled };
-const schedulerVoidOptions = { ref: undefined, signal: void 0 };
 const undefinedDelay = undefined;
 
 scheduler.wait(0, schedulerOptions).then((_value: any): void => {
@@ -27,7 +26,7 @@ timersPromisesNs.scheduler.wait(undefinedDelay).then((_value: any): void => {
     namespaceWait = "settled";
 });
 
-timersPromises.scheduler.wait(void 0, schedulerVoidOptions).then((_value: any): void => {
+timersPromises.scheduler.wait(void (ignoredOrder += "D"), void (ignoredOrder += "O"), (ignoredOrder += "E", 1)).then((_value: any): void => {
     optionWait = "settled";
 });
 

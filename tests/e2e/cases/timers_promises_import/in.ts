@@ -19,7 +19,6 @@ const delayOptions = { signal: noSignal, ref: refDisabled };
 const immediateOptions = { ref: refEnabled, signal: noSignal };
 const noOptions = undefined;
 const undefinedDelay = undefined;
-const voidOptions = { ref: undefined, signal: void 0 };
 
 delay(0, "named delay", delayOptions).then((value: string): void => {
     namedDelay = value;
@@ -37,11 +36,11 @@ timersPromises.setImmediate("default immediate").then((value: string): void => {
     defaultImmediate = value;
 });
 
-nodeTimersPromises.setTimeout(void 0, "option delay", voidOptions).then((value: string): void => {
+nodeTimersPromises.setTimeout(void (ignoredOrder += "T"), "option delay", void (ignoredOrder += "O"), (ignoredOrder += "E", 3)).then((value: string): void => {
     optionDelay = value;
 });
 
-timersPromises.setImmediate("option immediate", { ref: false }).then((value: string): void => {
+timersPromises.setImmediate("option immediate", void (ignoredOrder += "M")).then((value: string): void => {
     optionImmediate = value;
 });
 

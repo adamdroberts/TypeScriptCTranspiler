@@ -33009,29 +33009,42 @@ class Emitter {
                 }
                 const options = call.arguments[2];
                 this.validateTimersPromisesOptions(options, "timers/promises.setTimeout");
-                const ignored = this.ignoredArgumentSpecs(call.arguments, 3);
+                const specs: SequencedCallArg[] = [];
+                if (delay && this.shouldEvaluateSideEffectfulVoidDefault(delay)) {
+                    specs.push({ value: this.emitExpr(delay), target: T_VOID, node: delay });
+                }
                 const valueNode = call.arguments[1];
+                const optionSpecs: SequencedCallArg[] = [];
+                if (options && this.shouldEvaluateSideEffectfulVoidDefault(options)) {
+                    optionSpecs.push({ value: this.emitExpr(options), target: T_VOID, node: options });
+                }
+                optionSpecs.push(...this.ignoredArgumentSpecs(call.arguments, 3));
                 if (!valueNode) {
-                    return this.emitSequencedExpr(mapped, ignored, () => "tsc_promise_resolve(tsc_value_undefined())");
+                    return this.emitSequencedExpr(mapped, [...specs, ...optionSpecs], () => "tsc_promise_resolve(tsc_value_undefined())");
                 }
                 const value = this.emitExpr(valueNode);
                 return this.emitSequencedExpr(mapped, [
+                    ...specs,
                     { value, node: valueNode },
-                    ...ignored,
-                ], ([resolved]) => this.promiseResolveResult({ c: resolved!, ty: value.ty }, valueNode));
+                    ...optionSpecs,
+                ], (values) => this.promiseResolveResult({ c: values[specs.length]!, ty: value.ty }, valueNode));
             }
             case "setImmediate": {
                 const options = call.arguments[1];
                 this.validateTimersPromisesOptions(options, "timers/promises.setImmediate");
-                const ignored = this.ignoredArgumentSpecs(call.arguments, 2);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (options && this.shouldEvaluateSideEffectfulVoidDefault(options)) {
+                    optionSpecs.push({ value: this.emitExpr(options), target: T_VOID, node: options });
+                }
+                optionSpecs.push(...this.ignoredArgumentSpecs(call.arguments, 2));
                 const valueNode = call.arguments[0];
                 if (!valueNode) {
-                    return this.emitSequencedExpr(mapped, ignored, () => "tsc_promise_resolve(tsc_value_undefined())");
+                    return this.emitSequencedExpr(mapped, optionSpecs, () => "tsc_promise_resolve(tsc_value_undefined())");
                 }
                 const value = this.emitExpr(valueNode);
                 return this.emitSequencedExpr(mapped, [
                     { value, node: valueNode },
-                    ...ignored,
+                    ...optionSpecs,
                 ], ([resolved]) => this.promiseResolveResult({ c: resolved!, ty: value.ty }, valueNode));
             }
         }
@@ -33049,9 +33062,17 @@ class Emitter {
                 }
                 const options = call.arguments[1];
                 this.validateTimersPromisesOptions(options, "timers/promises.scheduler.wait");
+                const specs: SequencedCallArg[] = [];
+                if (delay && this.shouldEvaluateSideEffectfulVoidDefault(delay)) {
+                    specs.push({ value: this.emitExpr(delay), target: T_VOID, node: delay });
+                }
+                if (options && this.shouldEvaluateSideEffectfulVoidDefault(options)) {
+                    specs.push({ value: this.emitExpr(options), target: T_VOID, node: options });
+                }
+                specs.push(...this.ignoredArgumentSpecs(call.arguments, 2));
                 return this.emitSequencedExpr(
                     mapped,
-                    this.ignoredArgumentSpecs(call.arguments, 2),
+                    specs,
                     () => "tsc_promise_resolve(tsc_value_undefined())",
                 );
             }
@@ -33067,9 +33088,9 @@ class Emitter {
     }
 
     private validateTimersPromisesOptions(options: ts.Expression | undefined, label: string): void {
-        if (!options || this.isUndefinedExpression(options)) return;
+        if (!options || this.isUndefinedLikeExpression(options)) return;
         const unwrapped = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (this.isUndefinedExpression(unwrapped)) return;
+        if (this.isUndefinedLikeExpression(unwrapped)) return;
         if (!ts.isObjectLiteralExpression(unwrapped)) {
             unsupported(options, `${label} options must be undefined or an object literal with undefined signal/ref fields in this immediate subset`);
         }
