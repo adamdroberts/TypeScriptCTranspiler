@@ -2,5 +2,8 @@ sync file: true
 sync removed: false
 promise removed: false
 force missing: false
+default removed: false false
 rmdir sync removed: false
 rmdir promise removed: false
+promise default removed: false false
+events: rm-options|rmdir-options|prm-options|prmdir-options

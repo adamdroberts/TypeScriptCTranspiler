@@ -36437,8 +36437,13 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "fs.rmSync needs path and optional options");
                 const p = this.emitExpr(args[0]!);
                 const options = this.emitFsBooleanOptions(args[1], ["recursive", "force"], `fs.${name}`, ["maxRetries", "retryDelay"]);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 return this.emitSequencedExpr(T_VOID, [
                     this.fsPathSpec(p, args[0]!, `fs.${name} path`),
+                    ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => `tsc_fs_rm_sync_opts(${path!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"})`);
             }
@@ -36448,8 +36453,13 @@ class Emitter {
                 const p = this.emitExpr(args[0]!);
                 if (name === "rmdirSync") {
                     const options = this.emitFsBooleanOptions(args[1], ["recursive"], `fs.${name}`, ["maxRetries", "retryDelay"]);
+                    const optionSpecs: SequencedCallArg[] = [];
+                    if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                        optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                    }
                     return this.emitSequencedExpr(T_VOID, [
                         this.fsPathSpec(p, args[0]!, `fs.${name} path`),
+                        ...optionSpecs,
                         ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                     ], ([path]) => `tsc_fs_rmdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"})`);
                 }
@@ -36615,8 +36625,9 @@ class Emitter {
     ): Record<string, boolean> {
         const out: Record<string, boolean> = {};
         for (const key of allowed) out[key] = false;
-        if (!options || this.isUndefinedExpression(options)) return out;
+        if (!options || this.isUndefinedLikeExpression(options)) return out;
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedLikeExpression(resolvedOptions)) return out;
         if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, `${label} options must be an object literal in this subset`);
         }
@@ -37416,8 +37427,13 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "fs.promises.rm needs path and optional options");
                 const p = this.emitExpr(args[0]!);
                 const options = this.emitFsBooleanOptions(args[1], ["recursive", "force"], `fs.promises.${name}`, ["maxRetries", "retryDelay"]);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
+                    ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) =>
                     settle(`({ tsc_fs_rm_sync_opts(${path!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`),
@@ -37429,8 +37445,13 @@ class Emitter {
                 const p = this.emitExpr(args[0]!);
                 if (name === "rmdir") {
                     const options = this.emitFsBooleanOptions(args[1], ["recursive"], `fs.promises.${name}`, ["maxRetries", "retryDelay"]);
+                    const optionSpecs: SequencedCallArg[] = [];
+                    if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                        optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                    }
                     return this.emitSequencedExpr(mapped, [
                         this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
+                        ...optionSpecs,
                         ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                     ], ([path]) =>
                         settle(`({ tsc_fs_rmdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`),
