@@ -19,5 +19,6 @@ const reflectTargetDesc: any = Reflect.getOwnPropertyDescriptor(target, "dispatc
 const reflectEventDesc: any = Reflect.getOwnPropertyDescriptor(event, "cancelable", mark("G"));
 console.log("desc:", String(targetDesc), String(eventDesc), Object.keys(targetDescs).length, Object.keys(eventDescs).length, String(reflectTargetDesc), String(reflectEventDesc));
 console.log("own:", Object.hasOwn(target, "addEventListener", mark("h")), Object.hasOwn(event, "type", mark("H")), target.hasOwnProperty("dispatchEvent", mark("p")), event.propertyIsEnumerable("cancelable", mark("i")));
+console.log("integrity:", Object.isExtensible(target, mark("E")), Object.isSealed(event, mark("L")), Object.isFrozen(target, mark("F")), Reflect.isExtensible(event, mark("I")));
 console.log("tag:", Object.prototype.toString.call(target, mark("t")), Object.prototype.toString.call(event, mark("T")));
 console.log("trace:", trace);
