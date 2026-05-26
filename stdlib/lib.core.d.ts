@@ -487,19 +487,19 @@ declare class Proxy<T extends object> {
 }
 
 declare namespace Reflect {
-    function apply(target: any, thisArgument: any, argumentsList: ArrayLike<any>): any;
-    function construct(target: Function, argumentsList: ArrayLike<any>, newTarget?: Function): any;
-    function defineProperty(target: object, propertyKey: PropertyKey, attributes: PropertyDescriptor): boolean;
-    function deleteProperty(target: object, propertyKey: PropertyKey): boolean;
-    function get(target: object, propertyKey: PropertyKey, receiver?: any): any;
-    function getOwnPropertyDescriptor(target: object, propertyKey: PropertyKey): PropertyDescriptor | undefined;
-    function getPrototypeOf(target: object): object | null;
-    function has(target: object, propertyKey: PropertyKey): boolean;
-    function isExtensible(target: object): boolean;
-    function ownKeys(target: object): ArrayLike<PropertyKey>;
-    function preventExtensions(target: object): boolean;
-    function set(target: object, propertyKey: PropertyKey, value: any, receiver?: any): boolean;
-    function setPrototypeOf(target: object, proto: object | null): boolean;
+    function apply(target: any, thisArgument: any, argumentsList: ArrayLike<any>, ...ignored: any[]): any;
+    function construct(target: Function, argumentsList: ArrayLike<any>, newTarget?: Function, ...ignored: any[]): any;
+    function defineProperty(target: object, propertyKey: PropertyKey, attributes: PropertyDescriptor, ...ignored: any[]): boolean;
+    function deleteProperty(target: object, propertyKey: PropertyKey, ...ignored: any[]): boolean;
+    function get(target: object, propertyKey: PropertyKey, receiver?: any, ...ignored: any[]): any;
+    function getOwnPropertyDescriptor(target: object, propertyKey: PropertyKey, ...ignored: any[]): PropertyDescriptor | undefined;
+    function getPrototypeOf(target: object, ...ignored: any[]): object | null;
+    function has(target: object, propertyKey: PropertyKey, ...ignored: any[]): boolean;
+    function isExtensible(target: object, ...ignored: any[]): boolean;
+    function ownKeys(target: object, ...ignored: any[]): ArrayLike<PropertyKey>;
+    function preventExtensions(target: object, ...ignored: any[]): boolean;
+    function set(target: object, propertyKey: PropertyKey, value: any, receiver?: any, ...ignored: any[]): boolean;
+    function setPrototypeOf(target: object, proto: object | null, ...ignored: any[]): boolean;
 }
 
 interface FinalizationRegistry<T> {
