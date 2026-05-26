@@ -1,0 +1,5 @@
+define null literal: Object.defineProperty failed
+define undefined runtime: Object.defineProperty failed
+defines null literal: Object.defineProperties failed
+defines undefined runtime: Object.defineProperties failed
+marks: abcdefgh
