@@ -1,2 +1,4 @@
 sync: 448
 promise: 488/488
+side: true true
+events: sync-options|promise-options

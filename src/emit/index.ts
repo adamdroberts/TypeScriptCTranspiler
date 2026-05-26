@@ -36418,11 +36418,20 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "fs.mkdirSync needs path and optional options");
                 const p = this.emitExpr(args[0]!);
                 const options = this.emitFsMkdirOptions(args[1], `fs.${name}`);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 return this.emitSequencedExpr(T_VOID, [
                     this.fsPathSpec(p, args[0]!, `fs.${name} path`),
+                    ...optionSpecs,
                     options.mode,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
-                ], ([path, mode]) => `tsc_fs_mkdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"}, ${mode!})`);
+                ], (values) => {
+                    const path = values[0]!;
+                    const mode = values[1 + optionSpecs.length]!;
+                    return `tsc_fs_mkdir_sync_opts(${path}, ${options.recursive ? "true" : "false"}, ${mode})`;
+                });
             }
             case "rmSync": {
                 if (args.length < 1) unsupported(call, "fs.rmSync needs path and optional options");
@@ -36496,10 +36505,13 @@ class Emitter {
 
     private emitFsMkdirOptions(options: ts.Expression | undefined, label: string): { recursive: boolean; mode: SequencedCallArg } {
         const defaultMode: SequencedCallArg = { value: { c: "511.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
-        if (!options || this.isUndefinedExpression(options)) {
+        if (!options || this.isUndefinedLikeExpression(options)) {
             return { recursive: false, mode: { ...defaultMode, node: options ?? undefined } };
         }
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedLikeExpression(resolvedOptions)) {
+            return { recursive: false, mode: { ...defaultMode, node: options ?? undefined } };
+        }
         if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             const mode = this.emitExpr(resolvedOptions);
             if (mode.ty.kind !== "number") unsupported(options, `${label} mode must be numeric in this subset`);
@@ -37376,13 +37388,20 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "fs.promises.mkdir needs path and optional options");
                 const p = this.emitExpr(args[0]!);
                 const options = this.emitFsMkdirOptions(args[1], `fs.promises.${name}`);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
+                    ...optionSpecs,
                     options.mode,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
-                ], ([path, mode]) =>
-                    settle(`({ tsc_fs_mkdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"}, ${mode!}); tsc_promise_resolve(tsc_value_undefined()); })`),
-                );
+                ], (values) => {
+                    const path = values[0]!;
+                    const mode = values[1 + optionSpecs.length]!;
+                    return settle(`({ tsc_fs_mkdir_sync_opts(${path}, ${options.recursive ? "true" : "false"}, ${mode}); tsc_promise_resolve(tsc_value_undefined()); })`);
+                });
             }
             case "rm": {
                 if (args.length < 1) unsupported(call, "fs.promises.rm needs path and optional options");
