@@ -23369,7 +23369,7 @@ class Emitter {
         if (unwrapped.kind === ts.SyntaxKind.FalseKeyword) return false;
         if (
             unwrapped.kind === ts.SyntaxKind.NullKeyword ||
-            this.isUnshadowedUndefinedExpression(unwrapped)
+            this.isSideEffectFreeUndefinedValue(unwrapped, seenConsts)
         ) {
             return false;
         }
@@ -23414,7 +23414,7 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (
             unwrapped.kind === ts.SyntaxKind.NullKeyword ||
-            this.isUnshadowedUndefinedExpression(unwrapped)
+            this.isSideEffectFreeUndefinedValue(unwrapped, seenConsts)
         ) {
             return "nullish";
         }

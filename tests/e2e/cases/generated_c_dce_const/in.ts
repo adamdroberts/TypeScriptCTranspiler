@@ -3242,6 +3242,14 @@ for (; false; console.log("top_level_dead_for_false_increment")) {
 if (0 as number) {
     console.log("top_level_dead_zero_if");
 }
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+if (Object.getOwnPropertyDescriptor(new Error("top_level_dead_absent_descriptor_if_condition"), "missing", "top_level_dead_absent_descriptor_if_ignored")) {
+    console.log("top_level_dead_absent_descriptor_if_branch");
+}
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+if (Reflect.getOwnPropertyDescriptor(/top_level_dead_absent_reflect_descriptor_if_condition/g, "source", "top_level_dead_absent_reflect_descriptor_if_ignored")) {
+    console.log("top_level_dead_absent_reflect_descriptor_if_branch");
+}
 if (top_level_static_truthy_string) {
     "top_level_dead_truthy_then";
 } else {
@@ -4789,6 +4797,14 @@ function usedLocal(value: number): number {
     (undefined as string | undefined) ?? "local_dead_static_nullish_expr_fallback";
     for (; false; console.log("local_dead_for_false_increment")) {
         console.log("local_dead_for_false_body");
+    }
+    // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+    if (Object.getOwnPropertyDescriptor(new Error("local_dead_absent_descriptor_if_condition"), "missing", "local_dead_absent_descriptor_if_ignored")) {
+        console.log("local_dead_absent_descriptor_if_branch");
+    }
+    // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+    if (Reflect.getOwnPropertyDescriptor(/local_dead_absent_reflect_descriptor_if_condition/g, "source", "local_dead_absent_reflect_descriptor_if_ignored")) {
+        console.log("local_dead_absent_reflect_descriptor_if_branch");
     }
     const unused_local_seed = "dead";
     const unused_local_chain = unused_local_seed;
