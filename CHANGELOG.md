@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE static boolean analysis now folds side-effect-free logical, nullish, comma, and conditional expression trees for deeper branch pruning. Test: `generated_c_dce_const`.
 - Generated-C DCE now emits only the selected side of boolean-typed `&&` / `||` expressions when the left side is statically known and side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now emits only the selected side of used nullish coalescing expressions when the left side is statically nullish or non-nullish and side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now emits static boolean constants directly for side-effect-free boolean contexts, including prefix `!` over absent descriptor conditions. Test: `generated_c_dce_const`.

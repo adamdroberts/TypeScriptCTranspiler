@@ -23403,6 +23403,37 @@ class Emitter {
             const inner = this.staticBooleanValue(unwrapped.operand, seenConsts);
             return inner === null ? null : !inner;
         }
+        if (ts.isBinaryExpression(unwrapped)) {
+            switch (unwrapped.operatorToken.kind) {
+                case ts.SyntaxKind.AmpersandAmpersandToken: {
+                    const left = this.staticBooleanValue(unwrapped.left, seenConsts);
+                    if (left === false) return false;
+                    if (left === true) return this.staticBooleanValue(unwrapped.right, seenConsts);
+                    return null;
+                }
+                case ts.SyntaxKind.BarBarToken: {
+                    const left = this.staticBooleanValue(unwrapped.left, seenConsts);
+                    if (left === true) return true;
+                    if (left === false) return this.staticBooleanValue(unwrapped.right, seenConsts);
+                    return null;
+                }
+                case ts.SyntaxKind.QuestionQuestionToken: {
+                    const left = this.staticNullishState(unwrapped.left, seenConsts);
+                    if (left === "nullish") return this.staticBooleanValue(unwrapped.right, seenConsts);
+                    if (left === "nonNullish") return this.staticBooleanValue(unwrapped.left, seenConsts);
+                    return null;
+                }
+                case ts.SyntaxKind.CommaToken:
+                    return this.isSideEffectFreeTopLevelConstInitializer(unwrapped.left, seenConsts)
+                        ? this.staticBooleanValue(unwrapped.right, seenConsts)
+                        : null;
+            }
+        }
+        if (ts.isConditionalExpression(unwrapped)) {
+            const condition = this.staticBooleanValue(unwrapped.condition, seenConsts);
+            if (condition === true) return this.staticBooleanValue(unwrapped.whenTrue, seenConsts);
+            if (condition === false) return this.staticBooleanValue(unwrapped.whenFalse, seenConsts);
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.staticBooleanValue(init, seenConsts) : null;
     }
