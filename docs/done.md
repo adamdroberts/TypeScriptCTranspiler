@@ -486,7 +486,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Runtime: `tsc_os_*`. Tests: `stdlib_os`, `os_more`, `os_default_import`, `os_dev_null`, `os_host_more`, `os_system_stats`, `os_user_info`, `os_user_info_undefined_options`
 
 ### `crypto`
-- `crypto.createHash("sha1" | "sha256" | "sha512").update(data).digest("hex" | "base64")` backed by OpenSSL SHA helpers from the global `crypto` object, default imports, named imports, and namespace imports from `"crypto"` / `"node:crypto"`, with catchable validation failures for unsupported algorithms and digest encodings. `Hash.update(...)` accepts strings and Buffers. Tests: `crypto_sha256`, `crypto_hash_more`, `crypto_import`, `crypto_default_import`, `crypto_digest_base64`, `crypto_errors`
+- `crypto.createHash("sha1" | "sha256" | "sha512").update(data).digest("hex" | "base64")` backed by OpenSSL SHA helpers from the global `crypto` object, default imports, named imports, and namespace imports from `"crypto"` / `"node:crypto"`, with catchable validation failures for unsupported algorithms and digest encodings. `Hash.update(...)` accepts strings and Buffers, and Hash instances expose empty own-property results through Object and Reflect helpers. Tests: `crypto_sha256`, `crypto_hash_more`, `crypto_hash_object_methods`, `crypto_import`, `crypto_default_import`, `crypto_digest_base64`, `crypto_errors`
 - `crypto.randomBytes(size)` returns a Buffer filled by OpenSSL `RAND_bytes` with a libc `rand()` fallback, through the global crypto object and default/named/namespace imports from `"crypto"` / `"node:crypto"`, with catchable invalid-size validation. Tests: `crypto_random_bytes`, `crypto_default_import`, `crypto_errors`
 - `crypto.randomUUID([{ disableEntropyCache }], ...ignored)` returns RFC 4122 version 4 UUID strings through the global crypto object and default/named/namespace imports from `"crypto"` / `"node:crypto"`; the bounded options object is accepted for Node-compatible call sites, explicit `undefined` and side-effect-free `void` option values use defaults, earlier static `const` aliases can provide supported option objects and boolean option values, and ignored extra arguments are evaluated. Tests: `crypto_random_uuid`, `crypto_default_import`
 
@@ -1072,6 +1072,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `console_format` | first-argument console `%` specifier formatting |
 | `crypto_sha256` | sha256 update + hex digest |
 | `crypto_hash_more` | sha1/sha512 digests and Buffer-backed hash updates |
+| `crypto_hash_object_methods` | crypto Hash empty own-property Object and Reflect helper behavior |
 | `crypto_import` | crypto/node:crypto createHash named and namespace imports |
 | `crypto_default_import` | default crypto imports route to the supported crypto helper subset |
 | `crypto_digest_base64` | crypto Hash.digest base64 output |

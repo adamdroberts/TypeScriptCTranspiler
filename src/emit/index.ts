@@ -37928,7 +37928,8 @@ class Emitter {
             mapped.kind === "event" ||
             mapped.kind === "eventtarget" ||
             mapped.kind === "date" ||
-            mapped.kind === "url";
+            mapped.kind === "url" ||
+            mapped.kind === "hash";
         const emptyEnumerableBuiltinObjectArg =
             emptyOwnBuiltinObjectArg ||
             mapped.kind === "regexp" ||
@@ -40693,7 +40694,8 @@ class Emitter {
                     mapped.kind === "event" ||
                     mapped.kind === "eventtarget" ||
                     mapped.kind === "date" ||
-                    mapped.kind === "url"
+                    mapped.kind === "url" ||
+                    mapped.kind === "hash"
                 ) {
                     const key = this.emitExpr(args[1]!);
                     return this.emitSequencedExpr(T_VALUE, [
@@ -40803,7 +40805,8 @@ class Emitter {
                     mapped.kind === "event" ||
                     mapped.kind === "eventtarget" ||
                     mapped.kind === "date" ||
-                    mapped.kind === "url"
+                    mapped.kind === "url" ||
+                    mapped.kind === "hash"
                 ) {
                     const target = this.emitExpr(args[0]!);
                     return this.emitSequencedExpr(arrayType(T_STRING), [{ value: target, node: args[0]! }, ...ignored], ([t]) =>
