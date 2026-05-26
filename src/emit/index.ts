@@ -1702,11 +1702,16 @@ class Emitter {
                 method === "seal" ||
                 method === "freeze"
             ) &&
-            call.arguments.length === 1 &&
+            call.arguments.length >= 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
         ) {
-            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) ||
-                this.isSideEffectFreeNonNullishPrimitiveObjectOperand(call.arguments[0]!, seenConsts);
+            return (
+                this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) ||
+                this.isSideEffectFreeNonNullishPrimitiveObjectOperand(call.arguments[0]!, seenConsts)
+            ) &&
+                Array.from(call.arguments).slice(1).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
         }
         if (
             ts.isIdentifier(recv) &&
@@ -1939,10 +1944,13 @@ class Emitter {
         if (
             ts.isIdentifier(recv) &&
             method === "preventExtensions" &&
-            call.arguments.length === 1 &&
+            call.arguments.length >= 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Reflect")
         ) {
-            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts);
+            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) &&
+                Array.from(call.arguments).slice(1).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
         }
         if (
             ts.isIdentifier(recv) &&

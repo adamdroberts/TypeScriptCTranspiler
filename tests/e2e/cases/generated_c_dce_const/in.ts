@@ -1460,6 +1460,14 @@ const unused_error_descriptor_freeze_call = Object.freeze(Object.getOwnPropertyD
 const unused_error_descriptor_seal_call = Object.seal(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_seal"), "message")!);
 const unused_regexp_descriptor_object_prevent_extensions_call = Object.preventExtensions(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_object_prevent_extensions/g, "lastIndex")!);
 const unused_regexp_descriptor_prevent_extensions_call = Reflect.preventExtensions(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_prevent_extensions/g, "lastIndex")!);
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+const unused_error_descriptor_freeze_ignored_call = Object.freeze(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_freeze_ignored"), "message")!, "dead_error_descriptor_freeze_ignored_arg");
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+const unused_error_descriptor_seal_ignored_call = Object.seal(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_seal_ignored"), "message")!, "dead_error_descriptor_seal_ignored_arg");
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+const unused_regexp_descriptor_object_prevent_extensions_ignored_call = Object.preventExtensions(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_object_prevent_extensions_ignored/g, "lastIndex")!, "dead_regexp_descriptor_object_prevent_extensions_ignored_arg");
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+const unused_regexp_descriptor_reflect_prevent_extensions_ignored_call = Reflect.preventExtensions(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_reflect_prevent_extensions_ignored/g, "lastIndex")!, "dead_regexp_descriptor_reflect_prevent_extensions_ignored_arg");
 const unused_error_descriptor_in_check = "value" in Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_in_check"), "message")!;
 const unused_regexp_descriptor_in_check = "writable" in Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_in_check/g, "lastIndex")!;
 const unused_error_descriptor_delete_call = delete Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_delete"), "message")!.value;
@@ -2908,6 +2916,14 @@ Object.freeze(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_de
 Object.seal(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_seal"), "message")!);
 Object.preventExtensions(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_object_prevent_extensions/g, "lastIndex")!);
 Reflect.preventExtensions(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_prevent_extensions/g, "lastIndex")!);
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+Object.freeze(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_freeze_ignored"), "message")!, "top_level_dead_error_descriptor_freeze_ignored_arg");
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+Object.seal(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_seal_ignored"), "message")!, "top_level_dead_error_descriptor_seal_ignored_arg");
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+Object.preventExtensions(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_object_prevent_extensions_ignored/g, "lastIndex")!, "top_level_dead_regexp_descriptor_object_prevent_extensions_ignored_arg");
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+Reflect.preventExtensions(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_reflect_prevent_extensions_ignored/g, "lastIndex")!, "top_level_dead_regexp_descriptor_reflect_prevent_extensions_ignored_arg");
 "value" in Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_in_check"), "message")!;
 "writable" in Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_in_check/g, "lastIndex")!;
 delete Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_delete"), "message")!.value;
@@ -4399,6 +4415,14 @@ function usedLocal(value: number): number {
     Object.seal(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_seal"), "message")!);
     Object.preventExtensions(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_object_prevent_extensions/g, "lastIndex")!);
     Reflect.preventExtensions(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_prevent_extensions/g, "lastIndex")!);
+    // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+    Object.freeze(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_freeze_ignored"), "message")!, "local_dead_error_descriptor_freeze_ignored_arg");
+    // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+    Object.seal(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_seal_ignored"), "message")!, "local_dead_error_descriptor_seal_ignored_arg");
+    // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+    Object.preventExtensions(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_object_prevent_extensions_ignored/g, "lastIndex")!, "local_dead_regexp_descriptor_object_prevent_extensions_ignored_arg");
+    // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+    Reflect.preventExtensions(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_reflect_prevent_extensions_ignored/g, "lastIndex")!, "local_dead_regexp_descriptor_reflect_prevent_extensions_ignored_arg");
     "value" in Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_in_check"), "message")!;
     "writable" in Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_in_check/g, "lastIndex")!;
     delete Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_delete"), "message")!.value;
