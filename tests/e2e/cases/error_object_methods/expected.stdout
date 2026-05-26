@@ -1,0 +1,9 @@
+enum: 0 0 0
+names: name|message|cause|errors name|message|cause|errors
+desc: boom true false true undefined
+descs: name|message|cause|errors Error root 0
+reflect: root Error 1 one
+own: true false true false
+call: true false true false
+tag: [object Error] Error: boom
+trace: kvenrdmDRghHpicqsSt

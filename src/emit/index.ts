@@ -25373,6 +25373,17 @@ class Emitter {
         if (mapped.kind === "buffer") {
             return this.emitBufferOwnKeyCheck(targetNode, target, keyNode);
         }
+        if (mapped.kind === "error") {
+            if (method === "hasOwnProperty") {
+                return this.emitErrorOwnKeyCheck(targetNode, target, keyNode, ignored);
+            }
+            const key = this.emitExpr(keyNode);
+            return this.emitSequencedExpr(T_BOOLEAN, [
+                { value: target, node: targetNode },
+                { value: key, target: T_STRING, node: keyNode },
+                ...ignored,
+            ], ([value, keyC]) => `({ (void)${value}; (void)${keyC}; false; })`);
+        }
         if (mapped.kind === "fsstats") {
             return this.emitFsStatsOwnKeyCheck(targetNode, target, keyNode, ignored);
         }
@@ -32660,8 +32671,17 @@ class Emitter {
                     ([error]) => error,
                 );
             case "hasOwnProperty":
-            case "propertyIsEnumerable":
-                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Error");
+                if (call.arguments.length < 1) unsupported(call, "Error.hasOwnProperty expects at least 1 arg");
+                return this.emitErrorOwnKeyCheck(call.expression, recv, call.arguments[0]!, this.ignoredArgumentSpecs(call.arguments, 1));
+            case "propertyIsEnumerable": {
+                if (call.arguments.length < 1) unsupported(call, "Error.propertyIsEnumerable expects at least 1 arg");
+                const key = this.emitExpr(call.arguments[0]!);
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: recv, node: call.expression },
+                    { value: key, target: T_STRING, node: call.arguments[0]! },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ], ([error, prop]) => `({ (void)${error}; (void)${prop}; false; })`);
+            }
         }
         unsupported(call, `Error method .${method}`);
     }
@@ -37911,7 +37931,8 @@ class Emitter {
             mapped.kind === "url";
         const emptyEnumerableBuiltinObjectArg =
             emptyOwnBuiltinObjectArg ||
-            mapped.kind === "regexp";
+            mapped.kind === "regexp" ||
+            mapped.kind === "error";
         const dynamicObjectArg = (value: string): string => {
             if (mapped.kind === "array") return `tsc_value_array(${value})`;
             if (mapped.kind === "function") return this.coerce({ c: value, ty: mapped }, T_VALUE, arg);
@@ -38255,6 +38276,10 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 return this.emitBufferOwnKeys(arg, obj, ignored);
             }
+            if (mapped.kind === "error") {
+                const obj = this.emitExpr(arg);
+                return this.emitErrorOwnPropertyNames(arg, obj, ignored);
+            }
             if (mapped.kind === "fsstats") {
                 const obj = this.emitExpr(arg);
                 return this.emitFsStatsOwnPropertyNames(arg, obj, ignored);
@@ -38363,6 +38388,10 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 return this.emitBufferGetOwnPropertyDescriptor(arg, obj, args[1]!, ignored);
             }
+            if (mapped.kind === "error") {
+                const obj = this.emitExpr(arg);
+                return this.emitErrorGetOwnPropertyDescriptor(arg, obj, args[1]!, ignored);
+            }
             if (mapped.kind === "fsstats") {
                 const obj = this.emitExpr(arg);
                 return this.emitFsStatsGetOwnPropertyDescriptor(arg, obj, args[1]!, ignored);
@@ -38435,6 +38464,10 @@ class Emitter {
             if (mapped.kind === "buffer") {
                 const obj = this.emitExpr(arg);
                 return this.emitBufferGetOwnPropertyDescriptors(arg, obj, ignored);
+            }
+            if (mapped.kind === "error") {
+                const obj = this.emitExpr(arg);
+                return this.emitErrorGetOwnPropertyDescriptors(arg, obj, ignored);
             }
             if (mapped.kind === "fsstats") {
                 const obj = this.emitExpr(arg);
@@ -38527,6 +38560,10 @@ class Emitter {
             if (mapped.kind === "buffer") {
                 const obj = this.emitExpr(arg);
                 return this.emitBufferOwnKeyCheck(arg, obj, args[1]!, ignored);
+            }
+            if (mapped.kind === "error") {
+                const obj = this.emitExpr(arg);
+                return this.emitErrorOwnKeyCheck(arg, obj, args[1]!, ignored);
             }
             if (mapped.kind === "fsstats") {
                 const obj = this.emitExpr(arg);
@@ -39266,6 +39303,155 @@ class Emitter {
             `tsc_object_set(${desc}, tsc_str_from_lit("enumerable", 10), tsc_value_bool(${enumerable})); ` +
             `tsc_object_set(${desc}, tsc_str_from_lit("configurable", 12), tsc_value_bool(${configurable}))`
         );
+    }
+
+    private errorOwnFields(): { name: string; value: (error: string) => string }[] {
+        return [
+            { name: "name", value: (error) => `tsc_value_string(${error}->name)` },
+            { name: "message", value: (error) => `tsc_value_string(${error}->message)` },
+            { name: "cause", value: (error) => `${error}->cause` },
+            { name: "errors", value: (error) => `tsc_value_array(${error}->errors ? ${error}->errors : tsc_array_new(sizeof(tsc_value_t), 1))` },
+        ];
+    }
+
+    private emitErrorOwnPropertyNames(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const fields = this.errorOwnFields();
+        return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: objExpr }, ...ignored], ([error]) => {
+            const out = this.freshTemp("_err_keys");
+            const pieces = [
+                `(void)${error}`,
+                `tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), ${fields.length})`,
+            ];
+            for (const field of fields) {
+                const key = this.freshTemp("_err_key");
+                pieces.push(`tsc_str_t* ${key} = tsc_str_from_lit("${field.name}", ${utf8ByteLen(field.name)})`);
+                pieces.push(`tsc_array_push_raw(${out}, &${key})`);
+            }
+            pieces.push(out);
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
+    private emitErrorGetOwnPropertyDescriptor(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const key = this.emitExpr(keyExpr);
+        const fields = this.errorOwnFields();
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+            ...ignored,
+        ], ([error, keyC]) => {
+            const out = this.freshTemp("_err_desc_out");
+            const checks = [`tsc_value_t ${out} = tsc_value_undefined()`];
+            for (const field of fields) {
+                const desc = this.freshTemp("_err_desc");
+                checks.push(
+                    `if (tsc_str_eq(${keyC}, tsc_str_from_lit("${field.name}", ${utf8ByteLen(field.name)}))) { ` +
+                    `${this.typedArrayDescriptorInit(desc, field.value(error!), "true", "false", "true")}; ` +
+                    `${out} = tsc_value_object(${desc}); }`,
+                );
+            }
+            checks.push(out);
+            return `({ ${checks.join("; ")}; })`;
+        });
+    }
+
+    private emitErrorGetOwnPropertyDescriptors(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const fields = this.errorOwnFields();
+        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }, ...ignored], ([error]) => {
+            const out = this.freshTemp("_err_descs");
+            const pieces = [`tsc_object_t* ${out} = tsc_object_new()`];
+            for (const field of fields) {
+                const desc = this.freshTemp("_err_desc");
+                pieces.push(
+                    `{ ${this.typedArrayDescriptorInit(desc, field.value(error!), "true", "false", "true")}; ` +
+                    `tsc_object_set(${out}, tsc_str_from_lit("${field.name}", ${utf8ByteLen(field.name)}), tsc_value_object(${desc})); }`,
+                );
+            }
+            pieces.push(`tsc_value_object(${out})`);
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
+    private emitErrorOwnKeyCheck(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        return this.emitErrorKeyCheck(objExpr, obj, keyExpr, ignored);
+    }
+
+    private emitErrorPropertyKeyCheck(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        return this.emitErrorKeyCheck(objExpr, obj, keyExpr, ignored);
+    }
+
+    private emitErrorKeyCheck(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const key = this.emitExpr(keyExpr);
+        const fields = this.errorOwnFields();
+        return this.emitSequencedExpr(T_BOOLEAN, [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+            ...ignored,
+        ], ([error, keyC]) => {
+            const checks = fields
+                .map((field) => `tsc_str_eq(${keyC}, tsc_str_from_lit("${field.name}", ${utf8ByteLen(field.name)}))`)
+                .join(" || ");
+            return `({ (void)${error}; ${checks}; })`;
+        });
+    }
+
+    private emitErrorReflectGet(
+        objExpr: ts.Expression,
+        obj: EmitResult,
+        keyExpr: ts.Expression,
+        receiver?: { value: EmitResult; node: ts.Expression },
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const key = this.emitExpr(keyExpr);
+        const fields = this.errorOwnFields();
+        const specs: SequencedCallArg[] = [
+            { value: obj, node: objExpr },
+            { value: key, target: T_STRING, node: keyExpr },
+        ];
+        if (receiver) specs.push({ value: receiver.value, target: T_VALUE, node: receiver.node });
+        specs.push(...ignored);
+        return this.emitSequencedExpr(T_VALUE, specs, ([error, keyC, receiverC]) => {
+            const out = this.freshTemp("_err_get");
+            const checks: string[] = [
+                receiver ? `(void)${receiverC}` : "",
+                `tsc_value_t ${out} = tsc_value_undefined()`,
+            ].filter(Boolean);
+            for (const field of fields) {
+                checks.push(
+                    `if (tsc_str_eq(${keyC}, tsc_str_from_lit("${field.name}", ${utf8ByteLen(field.name)}))) ${out} = ${field.value(error!)}`,
+                );
+            }
+            checks.push(out);
+            return `({ ${checks.join("; ")}; })`;
+        });
     }
 
     private emitRegExpOwnPropertyNames(
@@ -40458,6 +40644,9 @@ class Emitter {
                 if (mapped.kind === "buffer") {
                     return this.emitBufferReflectGet(args[0]!, target, args[1]!, receiver, ignored);
                 }
+                if (mapped.kind === "error") {
+                    return this.emitErrorReflectGet(args[0]!, target, args[1]!, receiver, ignored);
+                }
                 if (mapped.kind === "class") {
                     return this.emitTypedReflectGet(args[0]!, target, args[1]!, targetType, receiver, ignored);
                 }
@@ -40516,6 +40705,9 @@ class Emitter {
                 if (mapped.kind === "buffer") {
                     return this.emitBufferGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
                 }
+                if (mapped.kind === "error") {
+                    return this.emitErrorGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
+                }
                 if (mapped.kind === "fsstats") {
                     return this.emitFsStatsGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
                 }
@@ -40563,6 +40755,9 @@ class Emitter {
                 }
                 if (mapped.kind === "buffer") {
                     return this.emitBufferPropertyKeyCheck(args[0]!, target, args[1]!, true, ignored);
+                }
+                if (mapped.kind === "error") {
+                    return this.emitErrorPropertyKeyCheck(args[0]!, target, args[1]!, ignored);
                 }
                 if (mapped.kind === "class") {
                     return this.emitTypedObjectHasOwn(
@@ -40618,6 +40813,10 @@ class Emitter {
                 if (mapped.kind === "buffer") {
                     const target = this.emitExpr(args[0]!);
                     return this.emitBufferOwnKeys(args[0]!, target, ignored);
+                }
+                if (mapped.kind === "error") {
+                    const target = this.emitExpr(args[0]!);
+                    return this.emitErrorOwnPropertyNames(args[0]!, target, ignored);
                 }
                 if (mapped.kind === "fsstats") {
                     const target = this.emitExpr(args[0]!);
