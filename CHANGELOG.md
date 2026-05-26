@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Ambient `Reflect.*` declarations now expose ignored trailing arguments to match the implemented Object/Reflect helper behavior. Test: `reflect_ignored_arguments`.
 - Module-level `events.setMaxListeners(count, emitter, ...emitters)` now applies the count to each supplied supported `EventEmitter` target while preserving argument evaluation order. Test: `event_emitter_set_max_listeners_multi`.
 - `child_process.exec(...)` and `execFile(...)` callback subsets now evaluate and ignore trailing arguments after the callback slot across supported callback, options, and args/options forms. Test: `child_process_callback_ignored_arguments`.
 - `child_process.execSync(...)`, `execFileSync(...)`, and `spawnSync(...)` now evaluate and ignore trailing arguments after their supported sync operand slots. Test: `child_process_sync_ignored_arguments`.
