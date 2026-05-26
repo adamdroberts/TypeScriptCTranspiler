@@ -93,7 +93,7 @@ static void validate_proxy_get_result(const tsc_object_t* proxy, const tsc_str_t
         bool writable = has_writable ? tsc_value_is_truthy(writable_value) : false;
         tsc_value_t target_value = tsc_value_undefined();
         bool has_value = descriptor_has_prop(target_desc, "value", 5, &target_value);
-        if (has_value && !writable && !tsc_value_same_value_zero(result, target_value)) {
+        if (has_value && !writable && !tsc_value_object_is(result, target_value)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy get trap cannot report different value for non-configurable non-writable key"));
         }
         return;
@@ -105,7 +105,7 @@ static void validate_proxy_get_result(const tsc_object_t* proxy, const tsc_str_t
         const tsc_object_t* target_desc = (const tsc_object_t*)value_ptr(target_desc_value);
         tsc_value_t target_value = tsc_value_undefined();
         bool target_has_value = descriptor_has_prop(target_desc, "value", 5, &target_value);
-        if (target_has_value && !tsc_value_same_value_zero(result, target_value)) {
+        if (target_has_value && !tsc_value_object_is(result, target_value)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy get trap cannot report different value for non-configurable non-writable key"));
         }
         return;
@@ -116,7 +116,7 @@ static void validate_proxy_get_result(const tsc_object_t* proxy, const tsc_str_t
     if (found < 0) return;
     const tsc_object_prop_t* prop = &target->props[(size_t)found];
     if (prop->configurable) return;
-    if (!prop->accessor && !prop->writable && !tsc_value_same_value_zero(result, prop->value)) {
+    if (!prop->accessor && !prop->writable && !tsc_value_object_is(result, prop->value)) {
         tsc_throw_str(tsc_str_from_cstr("Proxy get trap cannot report different value for non-configurable non-writable key"));
     }
     if (prop->accessor && !prop->getter && !tsc_value_is_undefined(result)) {
@@ -140,7 +140,7 @@ static void validate_proxy_set_result(const tsc_object_t* proxy, const tsc_str_t
         bool writable = has_writable ? tsc_value_is_truthy(writable_value) : false;
         tsc_value_t target_value = tsc_value_undefined();
         bool has_value = descriptor_has_prop(target_desc, "value", 5, &target_value);
-        if (has_value && !writable && !tsc_value_same_value_zero(value, target_value)) {
+        if (has_value && !writable && !tsc_value_object_is(value, target_value)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy set trap cannot report success changing non-configurable non-writable key"));
         }
         return;
@@ -152,7 +152,7 @@ static void validate_proxy_set_result(const tsc_object_t* proxy, const tsc_str_t
         const tsc_object_t* target_desc = (const tsc_object_t*)value_ptr(target_desc_value);
         tsc_value_t target_value = tsc_value_undefined();
         bool target_has_value = descriptor_has_prop(target_desc, "value", 5, &target_value);
-        if (target_has_value && !tsc_value_same_value_zero(value, target_value)) {
+        if (target_has_value && !tsc_value_object_is(value, target_value)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy set trap cannot report success changing non-configurable non-writable key"));
         }
         return;
@@ -163,7 +163,7 @@ static void validate_proxy_set_result(const tsc_object_t* proxy, const tsc_str_t
     if (found < 0) return;
     const tsc_object_prop_t* prop = &target->props[(size_t)found];
     if (prop->configurable) return;
-    if (!prop->accessor && !prop->writable && !tsc_value_same_value_zero(value, prop->value)) {
+    if (!prop->accessor && !prop->writable && !tsc_value_object_is(value, prop->value)) {
         tsc_throw_str(tsc_str_from_cstr("Proxy set trap cannot report success changing non-configurable non-writable key"));
     }
     if (prop->accessor && !prop->setter) {
@@ -217,7 +217,7 @@ static void validate_proxy_define_property_result(const tsc_object_t* proxy, con
         if (has_writable && writable && !target_writable) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot make non-configurable non-writable key writable"));
         }
-        if (!target_writable && target_has_value && has_value && !tsc_value_same_value_zero(value, target_value)) {
+        if (!target_writable && target_has_value && has_value && !tsc_value_object_is(value, target_value)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot change non-configurable non-writable key"));
         }
         (void)target_has_writable;
@@ -258,7 +258,7 @@ static void validate_proxy_define_property_result(const tsc_object_t* proxy, con
         if (has_writable && writable) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot make non-configurable non-writable key writable"));
         }
-        if (target_has_value && has_value && !tsc_value_same_value_zero(value, target_value)) {
+        if (target_has_value && has_value && !tsc_value_object_is(value, target_value)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot change non-configurable non-writable key"));
         }
         (void)getter_value;
@@ -294,10 +294,10 @@ static void validate_proxy_define_property_result(const tsc_object_t* proxy, con
         if (has_value || has_writable) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot redefine non-configurable accessor key as data"));
         }
-        if (has_getter && !tsc_value_same_value_zero(getter_value, prop->getter_value)) {
+        if (has_getter && !tsc_value_object_is(getter_value, prop->getter_value)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot change non-configurable accessor getter"));
         }
-        if (has_setter && !tsc_value_same_value_zero(setter_value, prop->setter_value)) {
+        if (has_setter && !tsc_value_object_is(setter_value, prop->setter_value)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot change non-configurable accessor setter"));
         }
         return;
@@ -308,7 +308,7 @@ static void validate_proxy_define_property_result(const tsc_object_t* proxy, con
     if (has_writable && writable && !prop->writable) {
         tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot make non-configurable non-writable key writable"));
     }
-    if (!prop->writable && has_value && !tsc_value_same_value_zero(value, prop->value)) {
+    if (!prop->writable && has_value && !tsc_value_object_is(value, prop->value)) {
         tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot change non-configurable non-writable key"));
     }
 }
@@ -398,7 +398,7 @@ void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* p
             if (writable) {
                 tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report non-configurable non-writable key as writable"));
             }
-            if (target_has_value && has_value && !tsc_value_same_value_zero(value, target_value)) {
+            if (target_has_value && has_value && !tsc_value_object_is(value, target_value)) {
                 tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key"));
             }
         }
@@ -460,7 +460,7 @@ void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* p
         if (writable) {
             tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report non-configurable non-writable key as writable"));
         }
-        if (target_has_value && has_value && !tsc_value_same_value_zero(value, target_value)) {
+        if (target_has_value && has_value && !tsc_value_object_is(value, target_value)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key"));
         }
         (void)has_writable;
@@ -522,10 +522,10 @@ void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* p
         if (has_value || has_writable) {
             tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report data descriptor for non-configurable accessor key"));
         }
-        if (has_get && !tsc_value_same_value_zero(get_value, prop->getter_value)) {
+        if (has_get && !tsc_value_object_is(get_value, prop->getter_value)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report different getter for non-configurable accessor key"));
         }
-        if (has_set && !tsc_value_same_value_zero(set_value, prop->setter_value)) {
+        if (has_set && !tsc_value_object_is(set_value, prop->setter_value)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report different setter for non-configurable accessor key"));
         }
         return;
@@ -537,7 +537,7 @@ void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* p
         if (writable) {
             tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report non-configurable non-writable key as writable"));
         }
-        if (has_value && !tsc_value_same_value_zero(value, prop->value)) {
+        if (has_value && !tsc_value_object_is(value, prop->value)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key"));
         }
     }
@@ -693,7 +693,7 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
             if (has_configurable && configurable) return false;
             if (has_enumerable && enumerable != p->enumerable) return false;
             if (has_writable && writable && !p->writable) return false;
-            if (!p->writable && has_value && !tsc_value_same_value_zero(value, p->value)) return false;
+            if (!p->writable && has_value && !tsc_value_object_is(value, p->value)) return false;
         }
         if (has_value || has_writable) {
             p->accessor = false;
