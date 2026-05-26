@@ -38578,9 +38578,14 @@ class Emitter {
             case "loadavg": return ret(arrayType(T_NUMBER), `tsc_os_loadavg()`);
             case "userInfo":
                 this.validateOsUserInfoOptions(call.arguments[0]);
+                const specs: SequencedCallArg[] = [];
+                if (call.arguments[0] && this.shouldEvaluateSideEffectfulVoidDefault(call.arguments[0])) {
+                    specs.push({ value: this.emitExpr(call.arguments[0]), target: T_VOID, node: call.arguments[0] });
+                }
+                specs.push(...this.ignoredArgumentSpecs(call.arguments, call.arguments[0] ? 1 : 0));
                 return this.emitSequencedExpr(
                     T_VALUE,
-                    this.ignoredArgumentSpecs(call.arguments, call.arguments[0] ? 1 : 0),
+                    specs,
                     () => `tsc_os_user_info()`,
                 );
             case "cpus": {
@@ -38596,9 +38601,9 @@ class Emitter {
     }
 
     private validateOsUserInfoOptions(options: ts.Expression | undefined): void {
-        if (!options || this.isUndefinedExpression(options)) return;
+        if (!options || this.isUndefinedLikeExpression(options)) return;
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (this.isUndefinedExpression(resolvedOptions)) return;
+        if (this.isUndefinedLikeExpression(resolvedOptions)) return;
         if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, "os.userInfo options must be an object literal in this subset");
         }
