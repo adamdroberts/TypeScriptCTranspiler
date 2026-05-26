@@ -7,5 +7,6 @@ descs: 14 4 4
 reflect: 4 undefined true false
 own: true false true true
 call: true true
+integrity: true false false true
 tag: [object Stats] [object Stats]
-trace: kvenrdmDRgxsShHpicqt
+trace: kvenrdmDRgxsShHpicqELFIt

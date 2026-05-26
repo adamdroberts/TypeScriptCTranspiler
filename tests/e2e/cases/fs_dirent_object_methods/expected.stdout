@@ -6,5 +6,6 @@ descs: name file.txt file.txt
 reflect: file.txt undefined true false
 own: true false true true
 call: true true
+integrity: true false false true
 tag: [object Dirent] [object Dirent]
-trace: edmDRgxkvnrsShHpicqt
+trace: edmDRgxkvnrsShHpicqELFIt

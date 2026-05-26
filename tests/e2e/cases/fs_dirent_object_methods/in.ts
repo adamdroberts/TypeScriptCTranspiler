@@ -28,6 +28,7 @@ console.log("descs:", Object.keys(descs).join("|"), descs.name.value, reflectDes
 console.log("reflect:", reflectName, String(reflectMissing), Reflect.has(entry, "name", mark("s")), Reflect.has(entry, "missing", mark("S")));
 console.log("own:", Object.hasOwn(entry, "name", mark("h")), Object.hasOwn(entry, "missing", mark("H")), entry.hasOwnProperty("name", mark("p")), entry.propertyIsEnumerable("name", mark("i")));
 console.log("call:", Object.prototype.hasOwnProperty.call(entry, "name", mark("c")), Object.prototype.propertyIsEnumerable.call(entry, "name", mark("q")));
+console.log("integrity:", Object.isExtensible(entry, mark("E")), Object.isSealed(entry, mark("L")), Object.isFrozen(entry, mark("F")), Reflect.isExtensible(entry, mark("I")));
 console.log("tag:", Object.prototype.toString.call(entry, mark("t")), entry.toString());
 console.log("trace:", trace);
 
