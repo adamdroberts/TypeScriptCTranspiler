@@ -309,6 +309,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Pure JavaScript package default-exported classes import through `allowJs`. Test: `node_modules_js_default_class`
 - Pure JavaScript package named class exports with constructor-assigned fields import through `allowJs`. Test: `node_modules_js_named_class`
 - Pure JavaScript package class inheritance with constructor-assigned fields imports through `allowJs`. Test: `node_modules_js_class_extends`
+- Pure JavaScript package class instances erased to `any` keep AOT-generated instance method wrappers callable through dynamic method dispatch. Test: `node_modules_js_class_dynamic_method`
 - CommonJS `require(...)` package edges resolve package `exports` and package-private `imports` condition maps through `node-addons`, `require`, `node`, and `default` branches in package order while building the AOT module graph, including array fallback targets, wildcard target substitution, and package-internal `#...` requires from the selected CommonJS source. Tests: `node_modules_package_require_conditions`, `node_modules_package_require_node_addons_conditions`, `node_modules_package_require_pattern_conditions`, `node_modules_package_require_array_conditions`
 - Function-scoped static literal CommonJS `require(...)` bindings and local `require`/`module.require` aliases are included in the module graph and lower eagerly for namespace member calls, destructured member calls, bound default-function calls, and direct default-function calls, including destructuring defaults for absent static exports and rest bindings over remaining known named exports. Tests: `node_modules_commonjs_function_scope_require`, `node_modules_commonjs_function_scope_require_alias`
 - Top-level and function-scoped CommonJS inline `module.require.bind(module)(spec)` calls, `module.require.bind(module)` aliases, module-alias forms such as `mod.require.bind(mod)`, and already-static require alias forms such as `req.bind(module)` are treated as static AOT require aliases for package-local member export metadata and runtime dispatch. Tests: `node_modules_commonjs_module_require_bind_alias`, `node_modules_commonjs_module_alias_require_bind_alias`, `node_modules_commonjs_require_alias_bind_alias`, `node_modules_commonjs_function_scope_require_alias`
@@ -1570,6 +1571,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_js_default_anonymous_function` | pure-JS package default anonymous function imports through allowJs |
 | `node_modules_js_default_arrow` | pure-JS package default arrow-function imports through allowJs |
 | `node_modules_js_default_class` | pure-JS package default class imports through allowJs |
+| `node_modules_js_class_dynamic_method` | pure-JS package class methods remain callable after any erasure |
 | `node_modules_js_class_extends` | pure-JS package class inheritance imports through allowJs |
 | `node_modules_js_named_arrow` | pure-JS package named arrow-function imports through allowJs |
 | `node_modules_js_named_class` | pure-JS package named class imports through allowJs |

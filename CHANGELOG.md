@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Pure JavaScript package class instances erased to `any` now keep AOT-generated instance method wrappers callable through dynamic method dispatch. Test: `node_modules_js_class_dynamic_method`.
 - Pure JavaScript packages loaded through `allowJs` now have focused coverage for class inheritance with constructor-assigned fields. Test: `node_modules_js_class_extends`.
 - Pure JavaScript packages loaded through `allowJs` now have focused coverage for named class exports with constructor-assigned fields. Test: `node_modules_js_named_class`.
 - Pure JavaScript packages loaded through `allowJs` now have focused coverage for default-exported classes. Test: `node_modules_js_default_class`.
