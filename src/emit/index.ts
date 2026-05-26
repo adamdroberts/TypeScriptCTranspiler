@@ -16395,6 +16395,22 @@ class Emitter {
         return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
     }
 
+    private emitNativeAddonRequireDestructureValue(
+        nativeAddon: EmitResult,
+        exportName: string,
+        element: ts.BindingElement,
+    ): EmitResult {
+        const key = `tsc_str_from_lit("${escapeCString(exportName)}", ${utf8ByteLen(exportName)})`;
+        const value = `tsc_value_get_prop(${nativeAddon.c}, ${key})`;
+        if (!element.initializer) return { c: value, ty: T_VALUE };
+        const fallback = this.emitExpr(element.initializer);
+        const tmp = this.freshTemp("_reqprop");
+        return {
+            c: `({ tsc_value_t ${tmp} = ${value}; tsc_value_is_undefined(${tmp}) ? ${this.coerce(fallback, T_VALUE, element.initializer)} : ${tmp}; })`,
+            ty: T_VALUE,
+        };
+    }
+
     private emitTopLevelRequireDestructuring(
         initBuf: CBuf,
         d: ts.VariableDeclaration,
@@ -16422,9 +16438,9 @@ class Emitter {
                     unsupported(element.name, "top-level require destructuring requires identifier bindings");
                 }
                 const localName = this.declaredName(element.name);
-                const key = `tsc_str_from_lit("${escapeCString(exportName)}", ${utf8ByteLen(exportName)})`;
+                const value = this.emitNativeAddonRequireDestructureValue(nativeAddon, exportName, element);
                 this.globalDecls.line(`static tsc_value_t ${localName};`);
-                initBuf.line(`${localName} = tsc_value_get_prop(${nativeAddon.c}, ${key});`);
+                initBuf.line(`${localName} = ${value.c};`);
                 const sym = this.symbolForIdentifier(element.name);
                 if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
             }
@@ -21475,8 +21491,7 @@ class Emitter {
                     unsupported(element.name, "require destructuring requires identifier bindings");
                 }
                 const localName = mangleIdent(element.name.text);
-                const key = `tsc_str_from_lit("${escapeCString(exportName)}", ${utf8ByteLen(exportName)})`;
-                const value = { c: `tsc_value_get_prop(${nativeAddon.c}, ${key})`, ty: T_VALUE };
+                const value = this.emitNativeAddonRequireDestructureValue(nativeAddon, exportName, element);
                 const sym = this.symbolForIdentifier(element.name);
                 if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
                 const cell = this.currentFunctionCellForSymbol(sym);
