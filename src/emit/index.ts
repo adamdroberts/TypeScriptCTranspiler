@@ -32009,12 +32009,15 @@ class Emitter {
 
     private emitChildProcessCall(call: ts.CallExpression, method: string): EmitResult {
         if (method === "exec") {
-            if (call.arguments.length < 2 || call.arguments.length > 3) {
+            if (call.arguments.length < 2) {
                 unsupported(call, "child_process.exec expects command, optional options, and callback");
             }
             const command = this.emitExpr(call.arguments[0]!);
-            const options = call.arguments.length === 3 ? this.childProcessFileOptions(call.arguments[1]) : this.emptyChildProcessFileOptions();
-            const callbackNode = call.arguments[call.arguments.length - 1]!;
+            const hasOptions = this.isStaticObjectLiteralExpression(call.arguments[1]);
+            const callbackNode = hasOptions ? call.arguments[2] : call.arguments[1]!;
+            if (!callbackNode) unsupported(call, "child_process.exec expects command, optional options, and callback");
+            const options = hasOptions ? this.childProcessFileOptions(call.arguments[1]) : this.emptyChildProcessFileOptions();
+            const consumedArgCount = hasOptions ? 3 : 2;
             const callback = this.emitExpr(callbackNode);
             const callbackType = this.prepareType(callback.ty);
             if (callbackType.kind !== "function" || !callbackType.ret) {
@@ -32045,6 +32048,7 @@ class Emitter {
                     : { value: { c: "-1.0", ty: T_NUMBER } },
                 { value: { c: options.killSignal, ty: T_NUMBER } },
                 { value: callback, target: callbackType, node: callbackNode },
+                ...this.ignoredArgumentSpecs(call.arguments, consumedArgCount),
             ], ([commandC, cwdC, envC, shellC, uidC, gidC, maxBufferC, timeoutC, killSignalC, callbackC]) => {
                 const result = this.freshTemp("_child");
                 const status = `tsc_value_as_num(tsc_value_get_prop(${result}, tsc_str_from_lit("status", 6)))`;
@@ -32066,24 +32070,48 @@ class Emitter {
             });
         }
         if (method === "execFile") {
-            if (call.arguments.length < 2 || call.arguments.length > 4) {
+            if (call.arguments.length < 2) {
                 unsupported(call, "child_process.execFile expects file, args, optional options, and callback");
             }
             const file = this.emitExpr(call.arguments[0]!);
-            const optionsAsSecondArg = call.arguments.length === 3 && this.isStaticObjectLiteralExpression(call.arguments[1]!);
-            const argsNode = optionsAsSecondArg || call.arguments.length === 2 ? undefined : call.arguments[1]!;
-            const args = argsNode ? this.emitExpr(argsNode) : { c: "NULL", ty: arrayType(T_STRING) };
-            if (argsNode && (args.ty.kind !== "array" || args.ty.elem?.kind !== "string")) {
-                unsupported(argsNode, "child_process.execFile args must be string[]");
+            const secondNode = call.arguments[1]!;
+            let argsNode: ts.Expression | undefined;
+            let args: EmitResult = { c: "NULL", ty: arrayType(T_STRING) };
+            let options = this.childProcessFileOptions(undefined);
+            let callbackNode: ts.Expression | undefined;
+            let callback: EmitResult;
+            let callbackType: CType;
+            let consumedArgCount = 2;
+            if (this.isStaticObjectLiteralExpression(secondNode)) {
+                callbackNode = call.arguments[2];
+                if (!callbackNode) unsupported(call, "child_process.execFile expects file, options, and callback");
+                options = this.childProcessFileOptions(secondNode);
+                consumedArgCount = 3;
+                callback = this.emitExpr(callbackNode);
+                callbackType = this.prepareType(callback.ty);
+            } else {
+                const second = this.emitExpr(secondNode);
+                const secondType = this.prepareType(second.ty);
+                if (secondType.kind === "function" && secondType.ret) {
+                    callbackNode = secondNode;
+                    callback = second;
+                    callbackType = secondType;
+                    consumedArgCount = 2;
+                } else {
+                    argsNode = secondNode;
+                    args = second;
+                    if (args.ty.kind !== "array" || args.ty.elem?.kind !== "string") {
+                        unsupported(argsNode, "child_process.execFile args must be string[]");
+                    }
+                    const optionsAsThirdArg = this.isStaticObjectLiteralExpression(call.arguments[2]);
+                    callbackNode = optionsAsThirdArg ? call.arguments[3] : call.arguments[2];
+                    if (!callbackNode) unsupported(call, "child_process.execFile expects file, args, optional options, and callback");
+                    options = optionsAsThirdArg ? this.childProcessFileOptions(call.arguments[2]) : this.emptyChildProcessFileOptions();
+                    consumedArgCount = optionsAsThirdArg ? 4 : 3;
+                    callback = this.emitExpr(callbackNode);
+                    callbackType = this.prepareType(callback.ty);
+                }
             }
-            const options = optionsAsSecondArg
-                ? this.childProcessFileOptions(call.arguments[1])
-                : call.arguments.length === 4
-                    ? this.childProcessFileOptions(call.arguments[2])
-                    : this.emptyChildProcessFileOptions();
-            const callbackNode = call.arguments[call.arguments.length - 1]!;
-            const callback = this.emitExpr(callbackNode);
-            const callbackType = this.prepareType(callback.ty);
             if (callbackType.kind !== "function" || !callbackType.ret) {
                 unsupported(callbackNode, "child_process.execFile callback must be a function");
             }
@@ -32116,6 +32144,7 @@ class Emitter {
                     : { value: { c: "-1.0", ty: T_NUMBER } },
                 { value: { c: options.killSignal, ty: T_NUMBER } },
                 { value: callback, target: callbackType, node: callbackNode },
+                ...this.ignoredArgumentSpecs(call.arguments, consumedArgCount),
             ], ([fileC, argsC, cwdC, envC, shellC, argv0C, uidC, gidC, maxBufferC, timeoutC, killSignalC, callbackC]) => {
                 const result = this.freshTemp("_child");
                 const status = `tsc_value_as_num(tsc_value_get_prop(${result}, tsc_str_from_lit("status", 6)))`;

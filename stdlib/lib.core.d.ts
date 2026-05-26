@@ -2007,12 +2007,12 @@ interface ChildProcessExecSyncBufferOptions extends ChildProcessExecSyncOptions 
     encoding: "buffer";
 }
 interface ChildProcessModule {
-    exec(command: string, callback: ChildProcessExecCallback): void;
-    exec(command: string, options: ChildProcessExecOptions, callback: ChildProcessExecCallback): void;
-    execFile(file: string, callback: ChildProcessExecCallback): void;
-    execFile(file: string, options: ChildProcessExecFileOptions, callback: ChildProcessExecCallback): void;
-    execFile(file: string, args: string[], callback: ChildProcessExecCallback): void;
-    execFile(file: string, args: string[], options: ChildProcessExecFileOptions, callback: ChildProcessExecCallback): void;
+    exec(command: string, callback: ChildProcessExecCallback, ...ignored: any[]): void;
+    exec(command: string, options: ChildProcessExecOptions, callback: ChildProcessExecCallback, ...ignored: any[]): void;
+    execFile(file: string, callback: ChildProcessExecCallback, ...ignored: any[]): void;
+    execFile(file: string, options: ChildProcessExecFileOptions, callback: ChildProcessExecCallback, ...ignored: any[]): void;
+    execFile(file: string, args: string[], callback: ChildProcessExecCallback, ...ignored: any[]): void;
+    execFile(file: string, args: string[], options: ChildProcessExecFileOptions, callback: ChildProcessExecCallback, ...ignored: any[]): void;
     execSync(command: string, options: ChildProcessExecSyncStringOptions, ...ignored: any[]): string;
     execSync(command: string, options: ChildProcessExecSyncBufferOptions, ...ignored: any[]): Buffer;
     execSync(command: string, options?: ChildProcessExecSyncOptions, ...ignored: any[]): Buffer;
@@ -2026,12 +2026,12 @@ interface ChildProcessModule {
     spawnSync(file: string, args: string[], options: ChildProcessSpawnSyncUtf8Options, ...ignored: any[]): any;
 }
 declare module "child_process" {
-    export function exec(command: string, callback: ChildProcessExecCallback): void;
-    export function exec(command: string, options: ChildProcessExecOptions, callback: ChildProcessExecCallback): void;
-    export function execFile(file: string, callback: ChildProcessExecCallback): void;
-    export function execFile(file: string, options: ChildProcessExecFileOptions, callback: ChildProcessExecCallback): void;
-    export function execFile(file: string, args: string[], callback: ChildProcessExecCallback): void;
-    export function execFile(file: string, args: string[], options: ChildProcessExecFileOptions, callback: ChildProcessExecCallback): void;
+    export function exec(command: string, callback: ChildProcessExecCallback, ...ignored: any[]): void;
+    export function exec(command: string, options: ChildProcessExecOptions, callback: ChildProcessExecCallback, ...ignored: any[]): void;
+    export function execFile(file: string, callback: ChildProcessExecCallback, ...ignored: any[]): void;
+    export function execFile(file: string, options: ChildProcessExecFileOptions, callback: ChildProcessExecCallback, ...ignored: any[]): void;
+    export function execFile(file: string, args: string[], callback: ChildProcessExecCallback, ...ignored: any[]): void;
+    export function execFile(file: string, args: string[], options: ChildProcessExecFileOptions, callback: ChildProcessExecCallback, ...ignored: any[]): void;
     export function execSync(command: string, options: ChildProcessExecSyncStringOptions, ...ignored: any[]): string;
     export function execSync(command: string, options: ChildProcessExecSyncBufferOptions, ...ignored: any[]): Buffer;
     export function execSync(command: string, options?: ChildProcessExecSyncOptions, ...ignored: any[]): Buffer;
@@ -2047,12 +2047,12 @@ declare module "child_process" {
     export default defaultChildProcess;
 }
 declare module "node:child_process" {
-    export function exec(command: string, callback: ChildProcessExecCallback): void;
-    export function exec(command: string, options: ChildProcessExecOptions, callback: ChildProcessExecCallback): void;
-    export function execFile(file: string, callback: ChildProcessExecCallback): void;
-    export function execFile(file: string, options: ChildProcessExecFileOptions, callback: ChildProcessExecCallback): void;
-    export function execFile(file: string, args: string[], callback: ChildProcessExecCallback): void;
-    export function execFile(file: string, args: string[], options: ChildProcessExecFileOptions, callback: ChildProcessExecCallback): void;
+    export function exec(command: string, callback: ChildProcessExecCallback, ...ignored: any[]): void;
+    export function exec(command: string, options: ChildProcessExecOptions, callback: ChildProcessExecCallback, ...ignored: any[]): void;
+    export function execFile(file: string, callback: ChildProcessExecCallback, ...ignored: any[]): void;
+    export function execFile(file: string, options: ChildProcessExecFileOptions, callback: ChildProcessExecCallback, ...ignored: any[]): void;
+    export function execFile(file: string, args: string[], callback: ChildProcessExecCallback, ...ignored: any[]): void;
+    export function execFile(file: string, args: string[], options: ChildProcessExecFileOptions, callback: ChildProcessExecCallback, ...ignored: any[]): void;
     export function execSync(command: string, options: ChildProcessExecSyncStringOptions, ...ignored: any[]): string;
     export function execSync(command: string, options: ChildProcessExecSyncBufferOptions, ...ignored: any[]): Buffer;
     export function execSync(command: string, options?: ChildProcessExecSyncOptions, ...ignored: any[]): Buffer;
