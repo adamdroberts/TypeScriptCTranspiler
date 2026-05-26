@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Typed and dynamic array predicate/search higher-order methods now have focused coverage for ignored trailing-argument evaluation across `findIndex`, `findLast`, `findLastIndex`, and `every`. Test: `array_hof_predicate_ignored_arguments`.
 - Pure JavaScript packages loaded through `allowJs` now have focused coverage for named function-expression exports. Test: `node_modules_js_named_function_expression`.
 - Pure JavaScript packages loaded through `allowJs` now have focused coverage for named arrow-function exports. Test: `node_modules_js_named_arrow`.
 - Pure JavaScript packages loaded through `allowJs` now have focused coverage for default arrow-function exports. Test: `node_modules_js_default_arrow`.

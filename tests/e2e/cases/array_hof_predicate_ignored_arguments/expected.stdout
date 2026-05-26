@@ -1,0 +1,27 @@
+typed-find-index-this:1
+typed-find-index-extra:2
+typed findIndex:2
+typed-find-last-this:3
+typed-find-last-extra:4
+typed findLast:3
+typed-find-last-index-this:5
+typed-find-last-index-extra:6
+typed findLastIndex:2
+typed-every-this:7
+typed-every-extra:8
+typed every:true
+readonly-find-last-index-this:9
+readonly-find-last-index-extra:10
+readonly findLastIndex:3
+dynamic-find-index-this:11
+dynamic-find-index-extra:12
+dynamic findIndex:2
+dynamic-find-last-this:13
+dynamic-find-last-extra:14
+dynamic findLast:3
+dynamic-find-last-index-this:15
+dynamic-find-last-index-extra:16
+dynamic findLastIndex:2
+dynamic-every-this:17
+dynamic-every-extra:18
+dynamic every:true
