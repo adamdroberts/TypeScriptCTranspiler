@@ -3,3 +3,4 @@ closed true: Proxy isExtensible trap result does not match target
 fake prevent: Proxy preventExtensions trap cannot report success for extensible target
 fake still extensible: true
 real prevent: true
+events: ignored:open false|is false:1|ignored:closed true|is true:1|ignored:fake prevent|prevent true:1|ignored:real prevent|prevent true:1
