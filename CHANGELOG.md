@@ -6,6 +6,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 - Legacy Object prototype accessor helpers `__defineGetter__`, `__defineSetter__`, `__lookupGetter__`, and `__lookupSetter__` now work on dynamic objects. Test: `object_prototype_accessors`.
+- Legacy dynamic `__proto__` reads and writes now cover dynamic objects, arrays, and functions. Test: `object_proto_accessor`.
 - Date and other fixed built-in object values now support read-only `Object.isExtensible(...)`, `Object.isSealed(...)`, `Object.isFrozen(...)`, and `Reflect.isExtensible(...)` checks with ignored trailing-argument evaluation. Test: `date_object_methods`.
 - Collection-like built-ins now cover read-only Object/Reflect integrity checks with ignored trailing-argument evaluation. Test: `collection_object_methods`.
 - `Object.prototype.hasOwnProperty.call(...)` and `propertyIsEnumerable.call(...)` on Buffer instances now evaluate ignored trailing arguments. Test: `buffer_object_methods`.

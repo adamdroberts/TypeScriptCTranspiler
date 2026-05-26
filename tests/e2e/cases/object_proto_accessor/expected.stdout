@@ -1,0 +1,7 @@
+set: true true base
+primitive: true base
+child: true base
+own: own true
+own write: next true
+array: true true
+function: true true

@@ -275,6 +275,7 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
         if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER && str_lit_eq(key, "listener")) {
             return value_event_listener_identity(ident->code.event_raw_identity.identity);
         }
+        if (str_lit_eq(key, "__proto__")) return ident->prototype;
         return tsc_value_undefined();
     }
     if (value_tag(v) == TSC_VALUE_TAG_OBJECT) {
@@ -287,6 +288,7 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
         if (a->es == sizeof(tsc_value_t) && tsc_str_array_index(key, &idx) && idx < a->len) {
             return TSC_ARR(tsc_value_t, a, idx);
         }
+        if (str_lit_eq(key, "__proto__")) return a->prototype;
     }
     if (value_tag(v) == TSC_VALUE_TAG_STRING) {
         const tsc_str_t* s = (const tsc_str_t*)value_ptr(v);
@@ -854,9 +856,17 @@ bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(v);
+        if (str_lit_eq(key, "__proto__")) {
+            if (!value_is_valid_prototype(value)) return true;
+            return tsc_value_set_prototype_of(v, value);
+        }
         if (tsc_str_is_length_key(key)) return tsc_value_array_set_length(a, value);
         size_t idx = 0;
         if (tsc_str_array_index(key, &idx)) return tsc_value_set_index(v, (double)idx, value);
+    }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION && str_lit_eq(key, "__proto__")) {
+        if (!value_is_valid_prototype(value)) return true;
+        return tsc_value_set_prototype_of(v, value);
     }
     return false;
 }
