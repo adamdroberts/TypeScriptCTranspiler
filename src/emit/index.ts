@@ -71,10 +71,12 @@ interface EmitResult {
 
 interface SequencedCallArg {
     value: EmitResult;
+    lazyValue?: () => EmitResult;
     target?: CType;
     node?: ts.Expression;
     stringify?: boolean;
     pass?: (tmp: string) => string;
+    paramSymbol?: ts.Symbol;
 }
 
 interface TailFunctionContext {
@@ -245,6 +247,7 @@ class Emitter {
     private capturedCellsCache = new WeakMap<ts.FunctionLikeDeclaration, Map<ts.Symbol, CaptureCell>>();
     private cellScopes: Map<ts.Symbol, CaptureCell>[] = [];
     private closureEnvScopes: Map<ts.Symbol, ClosureEnvBinding>[] = [];
+    private argumentValueScopes: Map<ts.Symbol, string>[] = [];
     private catchStringSymbols = new Set<ts.Symbol>();
     private referencedTopLevelFunctions = new WeakSet<ts.FunctionDeclaration>();
     private referencedTopLevelLiftedArrows = new WeakSet<ts.VariableDeclaration>();
@@ -17400,6 +17403,12 @@ class Emitter {
 
     private identifierRead(id: ts.Identifier): string {
         const sym = this.symbolForIdentifier(id);
+        if (sym) {
+            for (let i = this.argumentValueScopes.length - 1; i >= 0; i--) {
+                const value = this.argumentValueScopes[i]!.get(sym);
+                if (value) return value;
+            }
+        }
         const env = this.closureEnvBindingForSymbol(sym);
         if (env) return `(*${env.ptr})`;
         const cell = this.captureCellForSymbol(sym);
@@ -20346,11 +20355,35 @@ class Emitter {
         unsupported(param, `optional parameter without default cannot be omitted for ${prepared.c}`);
     }
 
+    private precedingParameterSymbols(param: ts.ParameterDeclaration): Set<ts.Symbol> {
+        const owner = param.parent;
+        const out = new Set<ts.Symbol>();
+        if (
+            !(
+                ts.isFunctionDeclaration(owner) ||
+                ts.isFunctionExpression(owner) ||
+                ts.isArrowFunction(owner) ||
+                ts.isMethodDeclaration(owner) ||
+                ts.isConstructorDeclaration(owner)
+            )
+        ) {
+            return out;
+        }
+        for (const p of owner.parameters) {
+            if (p === param) break;
+            if (!ts.isIdentifier(p.name)) continue;
+            const sym = this.symbolForIdentifier(p.name);
+            if (sym) out.add(sym);
+        }
+        return out;
+    }
+
     private validateDefaultParameterInitializer(param: ts.ParameterDeclaration): void {
         const init = param.initializer;
         if (!init) return;
         const owner = param.parent;
-        const paramSyms = new Set<ts.Symbol>();
+        const precedingParamSyms = this.precedingParameterSymbols(param);
+        const disallowedParamSyms = new Set<ts.Symbol>();
         if (
             ts.isFunctionDeclaration(owner) ||
             ts.isFunctionExpression(owner) ||
@@ -20361,7 +20394,7 @@ class Emitter {
             for (const p of owner.parameters) {
                 if (!ts.isIdentifier(p.name)) continue;
                 const sym = this.symbolForIdentifier(p.name);
-                if (sym) paramSyms.add(sym);
+                if (sym && !precedingParamSyms.has(sym)) disallowedParamSyms.add(sym);
             }
         }
         const visit = (node: ts.Node): void => {
@@ -20373,8 +20406,8 @@ class Emitter {
                     unsupported(node, "default parameter initializers cannot reference arguments yet");
                 }
                 const sym = this.symbolForIdentifier(node);
-                if (sym && paramSyms.has(sym)) {
-                    unsupported(node, "default parameter initializers cannot reference parameters yet");
+                if (sym && disallowedParamSyms.has(sym)) {
+                    unsupported(node, "default parameter initializers can only reference earlier parameters");
                 }
             }
             ts.forEachChild(node, visit);
@@ -25188,22 +25221,32 @@ class Emitter {
     ): EmitResult {
         const pieces: string[] = [];
         const args: string[] = [];
-        for (const spec of specs) {
-            const target = spec.stringify ? T_STRING : (spec.target ?? spec.value.ty);
-            const node = spec.node ?? this.currentSf!;
-            const init = spec.stringify
-                ? this.coerceToString(spec.value, node)
-                : spec.target
-                    ? this.coerce(spec.value, spec.target, node)
-                    : spec.value.c;
-            if (target.kind === "void") {
-                pieces.push(`(void)(${init})`);
-                args.push(spec.pass ? spec.pass("NULL") : "NULL");
-                continue;
+        const argumentValueScope = new Map<ts.Symbol, string>();
+        this.argumentValueScopes.push(argumentValueScope);
+        try {
+            for (const spec of specs) {
+                const value = spec.lazyValue ? spec.lazyValue() : spec.value;
+                if (!value) unsupported(spec.node ?? this.currentSf!, "missing sequenced argument value");
+                const target = spec.stringify ? T_STRING : (spec.target ?? value.ty);
+                const node = spec.node ?? this.currentSf!;
+                const init = spec.stringify
+                    ? this.coerceToString(value, node)
+                    : spec.target
+                        ? this.coerce(value, spec.target, node)
+                        : value.c;
+                if (target.kind === "void") {
+                    pieces.push(`(void)(${init})`);
+                    args.push(spec.pass ? spec.pass("NULL") : "NULL");
+                    if (spec.paramSymbol) argumentValueScope.set(spec.paramSymbol, "NULL");
+                    continue;
+                }
+                const tmp = this.freshTemp("_arg");
+                pieces.push(`${target.c} ${tmp} = ${init}`);
+                args.push(spec.pass ? spec.pass(tmp) : tmp);
+                if (spec.paramSymbol) argumentValueScope.set(spec.paramSymbol, tmp);
             }
-            const tmp = this.freshTemp("_arg");
-            pieces.push(`${target.c} ${tmp} = ${init}`);
-            args.push(spec.pass ? spec.pass(tmp) : tmp);
+        } finally {
+            this.argumentValueScopes.pop();
         }
         const expr = build(args);
         if (pieces.length === 0) return { c: expr, ty: ret };
@@ -26968,16 +27011,21 @@ class Emitter {
                         unsupported(argExpr, "spread arguments require a rest parameter target");
                     }
                     const r = this.emitExpr(argExpr);
-                    specs.push({ value: r, target: paramType, node: argExpr });
+                    specs.push({ value: r, target: paramType, node: argExpr, paramSymbol: param });
                     continue;
                 }
                 if (!paramDecl || !ts.isParameter(paramDecl)) {
                     unsupported(call, "missing argument for parameter");
                 }
-                const r = paramDecl.initializer
-                    ? this.emitMissingDefaultArgument(paramDecl)
-                    : this.emitMissingOptionalArgument(paramDecl, paramType);
-                specs.push({ value: r, target: paramType, node: paramDecl.initializer });
+                specs.push({
+                    value: { c: "tsc_value_undefined()", ty: T_VALUE },
+                    lazyValue: () => paramDecl.initializer
+                        ? this.emitMissingDefaultArgument(paramDecl)
+                        : this.emitMissingOptionalArgument(paramDecl, paramType),
+                    target: paramType,
+                    node: paramDecl.initializer,
+                    paramSymbol: param,
+                });
             }
             return specs;
         }
@@ -27000,7 +27048,7 @@ class Emitter {
                     this.checker,
                 ));
             }
-            specs.push({ value: r, target: paramType, node: argExpr });
+            specs.push({ value: r, target: paramType, node: argExpr, paramSymbol: param });
         }
 
         const restDecl = paramDecls[restIndex];
@@ -43042,15 +43090,21 @@ class Emitter {
                 const argExpr = argList[i];
                 const paramDecl = ctorDecl.parameters[i];
                 const paramType = paramTypes[i]!;
+                const paramSymbol = paramDecl ? this.symbolForBindingName(paramDecl.name) : undefined;
                 if (argExpr) {
-                    specs.push({ value: this.emitExpr(argExpr), target: paramType, node: argExpr });
+                    specs.push({ value: this.emitExpr(argExpr), target: paramType, node: argExpr, paramSymbol });
                     continue;
                 }
                 if (!paramDecl) unsupported(n, "missing argument for constructor parameter");
-                const r = paramDecl.initializer
-                    ? this.emitMissingDefaultArgument(paramDecl)
-                    : this.emitMissingOptionalArgument(paramDecl, paramType);
-                specs.push({ value: r, target: paramType, node: paramDecl.initializer });
+                specs.push({
+                    value: { c: "tsc_value_undefined()", ty: T_VALUE },
+                    lazyValue: () => paramDecl.initializer
+                        ? this.emitMissingDefaultArgument(paramDecl)
+                        : this.emitMissingOptionalArgument(paramDecl, paramType),
+                    target: paramType,
+                    node: paramDecl.initializer,
+                    paramSymbol,
+                });
             }
             if (ts.canHaveDecorators(classDecl) && (ts.getDecorators(classDecl) ?? []).length > 0) {
                 return this.emitDecoratedClassNew(n, classDecl, cls, specs);

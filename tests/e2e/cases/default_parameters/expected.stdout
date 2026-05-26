@@ -1,6 +1,8 @@
 hello world hello Ada
 add: 8 7
+earlier: 10 5 hello Ada
 factory: gen-1 gen-2 2
 first: counter 1 3 8
-second: custom 10 12
-static: tag! item!
+second: custom 10 12 16
+static: tag! item! x:x!
+range: 5 8
