@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `stream.isReadable(...)`, `stream.isWritable(...)`, and `stream.isDestroyed(...)` now return `null` for nullish/plain non-stream values while `stream.isErrored(...)` and `stream.isDisturbed(...)` return `false`, preserving argument evaluation across named, namespace, and default imports. Test: `stream_non_stream_predicates`.
 - Frozen typed and dynamic arrays now accept compatible no-op `Reflect.defineProperty(...)` data and `length` descriptor redefinitions while rejecting value changes, including signed-zero fixed-index mismatches. Tests: `array_extensibility`, `dynamic_array_extensibility`.
 - Boxed function `length` metadata redefinitions now use SameValue semantics, rejecting signed-zero changes while preserving compatible `Reflect.defineProperty(...)` and Object failure behavior. Test: `function_integrity`.
 - Non-configurable non-writable data descriptor redefinitions now have focused coverage for SameValue signed-zero behavior while preserving `NaN` compatibility. Test: `object_descriptor_redefine`.

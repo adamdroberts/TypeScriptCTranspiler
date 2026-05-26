@@ -613,6 +613,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `stream.isReadable(...)` / `stream.isWritable(...)` from `"stream"` / `"node:stream"` classify the bounded process stdio stream subset across named, namespace, and default imports, with ignored extra arguments evaluated. Test: `stream_stdio_predicates`
 - `stream.isErrored(...)` / `stream.isDestroyed(...)` from `"stream"` / `"node:stream"` return `false` for the bounded process stdio stream subset across named, namespace, and default imports, with ignored extra arguments evaluated. Test: `stream_stdio_state_predicates`
 - `stream.isDisturbed(...)` from `"stream"` / `"node:stream"` returns `false` for the bounded process stdio stream subset across named, namespace, and default imports, with ignored extra arguments evaluated. Test: `stream_stdio_disturbed_predicate`
+- Stream state predicates return Node-compatible `null` or `false` results for nullish/plain non-stream values while evaluating supplied arguments. Test: `stream_non_stream_predicates`
 - `process.cwd()` → `tsc_process_cwd`
 - `process.chdir(directory, ...ignored)` → `tsc_process_chdir`; named, namespace, and default `chdir` process imports route to the same helper and evaluate ignored trailing arguments. Test: `process_chdir_ignored_arguments`
 - `process.platform`, `process.arch`, `process.pid`, `process.ppid`, `process.version`, `process.versions`, `process.release`, `process.features`, and `process.uptime(...ignored)` expose synchronous process metadata, with ignored extra-argument evaluation where Node ignores extras. Default process imports plus named and namespace `cwd` / `uptime` imports and read-only metadata value imports from `"process"` / `"node:process"` route to the same runtime helpers.
@@ -1299,6 +1300,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `stream_stdio_predicates` | stream isReadable/isWritable classify process stdio streams |
 | `stream_stdio_state_predicates` | stream isErrored/isDestroyed classify process stdio streams |
 | `stream_stdio_disturbed_predicate` | stream isDisturbed classifies process stdio streams |
+| `stream_non_stream_predicates` | stream state predicates return null or false for non-stream values |
 | `process_title` | process.title readonly argv0-backed metadata |
 | `process_umask` | process.umask read/update/restore behavior |
 | `process_umask_import` | named and namespace process umask imports use existing runtime helper |
