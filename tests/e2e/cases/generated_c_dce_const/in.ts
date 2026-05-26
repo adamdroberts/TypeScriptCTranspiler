@@ -1431,6 +1431,9 @@ const unused_error_descriptors_reflect_own_keys_with_call = Reflect.ownKeys(Obje
 const unused_error_descriptors_symbols_empty_for_each_call = Object.getOwnPropertySymbols(Object.getOwnPropertyDescriptors(new Error("dead_error_descriptors_symbols_empty_for_each"))).forEach(() => "dead_error_descriptors_symbols_empty_for_each_callback");
 const unused_error_descriptor_keys_with_call = Object.keys(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_keys_with"), "message")!).with(3, "dead_error_descriptor_keys_with_replacement");
 const unused_regexp_descriptor_reflect_own_keys_with_call = Reflect.ownKeys(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_reflect_own_keys_with/g, "lastIndex")!).with(3, "dead_regexp_descriptor_reflect_own_keys_with_replacement");
+const unused_error_descriptor_property_names_with_call = Object.getOwnPropertyNames(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_property_names_with"), "message")!).with(3, "dead_error_descriptor_property_names_with_replacement");
+const unused_regexp_descriptor_values_with_call = Object.values(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_values_with/g, "lastIndex")!).with(1, false);
+const unused_error_descriptor_entries_with_call = Object.entries(Object.getOwnPropertyDescriptor(new TypeError("dead_error_descriptor_entries_with"), "name")!).with(0, ["dead_error_descriptor_entries_with_key", "dead_error_descriptor_entries_with_value"]);
 const unused_error_descriptor_symbols_empty_map_call = Object.getOwnPropertySymbols(Object.getOwnPropertyDescriptor(new TypeError("dead_error_descriptor_symbols_empty_map"), "name")!).map(() => "dead_error_descriptor_symbols_empty_map_callback");
 const unused_error_descriptor_get_prototype_call = Object.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_get_prototype"), "message")!);
 const unused_error_descriptor_reflect_get_prototype_call = Reflect.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_reflect_get_prototype"), "message")!);
@@ -2856,6 +2859,9 @@ Reflect.ownKeys(Object.getOwnPropertyDescriptors(new TypeError("top_level_dead_e
 Object.getOwnPropertySymbols(Object.getOwnPropertyDescriptors(new Error("top_level_dead_error_descriptors_symbols_empty_for_each"))).forEach(() => "top_level_dead_error_descriptors_symbols_empty_for_each_callback");
 Object.keys(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_keys_with"), "message")!).with(3, "top_level_dead_error_descriptor_keys_with_replacement");
 Reflect.ownKeys(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_reflect_own_keys_with/g, "lastIndex")!).with(3, "top_level_dead_regexp_descriptor_reflect_own_keys_with_replacement");
+Object.getOwnPropertyNames(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_property_names_with"), "message")!).with(3, "top_level_dead_error_descriptor_property_names_with_replacement");
+Object.values(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_values_with/g, "lastIndex")!).with(1, false);
+Object.entries(Object.getOwnPropertyDescriptor(new TypeError("top_level_dead_error_descriptor_entries_with"), "name")!).with(0, ["top_level_dead_error_descriptor_entries_with_key", "top_level_dead_error_descriptor_entries_with_value"]);
 Object.getOwnPropertySymbols(Object.getOwnPropertyDescriptor(new TypeError("top_level_dead_error_descriptor_symbols_empty_map"), "name")!).map(() => "top_level_dead_error_descriptor_symbols_empty_map_callback");
 Object.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_get_prototype"), "message")!);
 Reflect.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_reflect_get_prototype"), "message")!);
@@ -4324,6 +4330,9 @@ function usedLocal(value: number): number {
     Object.getOwnPropertySymbols(Object.getOwnPropertyDescriptors(new Error("local_dead_error_descriptors_symbols_empty_for_each"))).forEach(() => "local_dead_error_descriptors_symbols_empty_for_each_callback");
     Object.keys(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_keys_with"), "message")!).with(3, "local_dead_error_descriptor_keys_with_replacement");
     Reflect.ownKeys(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_reflect_own_keys_with/g, "lastIndex")!).with(3, "local_dead_regexp_descriptor_reflect_own_keys_with_replacement");
+    Object.getOwnPropertyNames(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_property_names_with"), "message")!).with(3, "local_dead_error_descriptor_property_names_with_replacement");
+    Object.values(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_values_with/g, "lastIndex")!).with(1, false);
+    Object.entries(Object.getOwnPropertyDescriptor(new TypeError("local_dead_error_descriptor_entries_with"), "name")!).with(0, ["local_dead_error_descriptor_entries_with_key", "local_dead_error_descriptor_entries_with_value"]);
     Object.getOwnPropertySymbols(Object.getOwnPropertyDescriptor(new TypeError("local_dead_error_descriptor_symbols_empty_map"), "name")!).map(() => "local_dead_error_descriptor_symbols_empty_map_callback");
     Object.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_get_prototype"), "message")!);
     Reflect.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_reflect_get_prototype"), "message")!);

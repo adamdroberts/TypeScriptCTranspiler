@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE coverage now includes direct `Object.getOwnPropertyNames(...)`, `Object.values(...)`, and `Object.entries(...)` enumeration over statically present data descriptor result objects. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now includes static `Object.hasOwn(...)`, `Reflect.has(...)`, and `Reflect.getPrototypeOf(...)` helper calls over statically present data descriptor result objects. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats `Reflect.get(descriptor, "value")` over statically present Error-family and RegExp data descriptor result objects as equivalent to direct descriptor `.value` reads. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now includes Object integrity predicates and target-returning integrity mutators over statically present data descriptor result objects. Test: `generated_c_dce_const`.
