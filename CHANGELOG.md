@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Promise.resolve(...)` now has focused coverage that dynamic thenable methods are invoked with the thenable object as `this`, including getter-returned methods. Test: `promise_thenable_this_binding`.
 - `Promise.resolve(...)` now has focused coverage for inherited dynamic `then` methods and inherited dynamic `then` getters. Test: `promise_thenable_inherited_then`.
 - `Promise.try(...)` now has focused coverage for returned dynamic thenables whose `then` getter throws or returns a non-callable value. Test: `promise_try_thenable_getter_edges`.
 - Promise.resolve and immediate Promise callback return handling now have focused coverage for dynamic thenables whose `then` getter throws or returns a non-callable value. Test: `promise_thenable_getter_edges`.
