@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Frozen typed and dynamic arrays now accept compatible no-op `Reflect.defineProperty(...)` data and `length` descriptor redefinitions while rejecting value changes, including signed-zero fixed-index mismatches. Tests: `array_extensibility`, `dynamic_array_extensibility`.
 - Boxed function `length` metadata redefinitions now use SameValue semantics, rejecting signed-zero changes while preserving compatible `Reflect.defineProperty(...)` and Object failure behavior. Test: `function_integrity`.
 - Non-configurable non-writable data descriptor redefinitions now have focused coverage for SameValue signed-zero behavior while preserving `NaN` compatibility. Test: `object_descriptor_redefine`.
 - Proxy fixed-data invariants now use SameValue semantics for signed zero while still accepting `NaN` matches across `get`, `set`, `defineProperty`, and `getOwnPropertyDescriptor` trap validation. Test: `proxy_fixed_data_same_value_invariants`.

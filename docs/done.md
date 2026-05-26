@@ -1943,13 +1943,13 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_includes_same_value_zero` | typed and dynamic Array.includes SameValueZero behavior |
 | `array_reduce_right` | Array.reduceRight reverse accumulation with explicit initial value |
 | `array_search_from_index` | Array indexOf/includes/lastIndexOf fromIndex handling |
-| `array_extensibility` | typed array Object/Reflect extensibility, seal, freeze, descriptor, and write state |
+| `array_extensibility` | typed array Object/Reflect extensibility, seal, freeze, compatible frozen descriptor redefinition, and write state |
 | `array_prototypes` | typed array Object/Reflect prototype reads and writes with non-extensible guards |
 | `dynamic_array_at` | dynamic Array.at positive and negative index lookup |
 | `dynamic_array_copy_within` | dynamic Array.copyWithin overlapping copy |
 | `dynamic_array_define_property` | dynamic array Object/Reflect defineProperty for dense indexes and length |
 | `dynamic_array_entries` | dynamic Array.entries materialized `[string, value]` arrays |
-| `dynamic_array_extensibility` | dynamic array Object/Reflect extensibility, seal, freeze, descriptor, and mutator state |
+| `dynamic_array_extensibility` | dynamic array Object/Reflect extensibility, seal, freeze, compatible frozen descriptor redefinition, and mutator state |
 | `dynamic_array_fill` | dynamic Array.fill range mutation |
 | `dynamic_array_flat` | dynamic Array.flat depth behavior |
 | `dynamic_array_flatmap` | dynamic Array.flatMap with inline callbacks |
