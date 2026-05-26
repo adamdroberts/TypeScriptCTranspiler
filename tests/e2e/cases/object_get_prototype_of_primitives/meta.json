@@ -1,0 +1,3 @@
+{
+  "description": "Object.getPrototypeOf returns stable prototype placeholders for non-nullish primitive targets"
+}

@@ -1,0 +1,5 @@
+typed stable: true true true
+typed distinct: true true true
+dynamic stable: true true true
+proto tags: [object Object] [object Object]
+marks: abcde

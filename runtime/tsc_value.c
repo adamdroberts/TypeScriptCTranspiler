@@ -762,6 +762,61 @@ tsc_value_t tsc_value_get_prototype_of(tsc_value_t v) {
     return tsc_value_undefined();
 }
 
+static tsc_value_t primitive_prototype(tsc_object_t** slot) {
+    if (!*slot) *slot = tsc_object_new();
+    return tsc_value_object(*slot);
+}
+
+tsc_value_t tsc_value_number_prototype(void) {
+    static tsc_object_t* proto = NULL;
+    return primitive_prototype(&proto);
+}
+
+tsc_value_t tsc_value_boolean_prototype(void) {
+    static tsc_object_t* proto = NULL;
+    return primitive_prototype(&proto);
+}
+
+tsc_value_t tsc_value_string_prototype(void) {
+    static tsc_object_t* proto = NULL;
+    return primitive_prototype(&proto);
+}
+
+tsc_value_t tsc_value_bigint_prototype(void) {
+    static tsc_object_t* proto = NULL;
+    return primitive_prototype(&proto);
+}
+
+tsc_value_t tsc_value_symbol_prototype(void) {
+    static tsc_object_t* proto = NULL;
+    return primitive_prototype(&proto);
+}
+
+tsc_value_t tsc_value_object_get_prototype_of(tsc_value_t v) {
+    if (tsc_value_is_nullish(v)) {
+        tsc_throw_str(tsc_str_from_cstr("Object.getPrototypeOf target must not be null or undefined"));
+    }
+    if (value_is_box(v)) {
+        switch (value_tag(v)) {
+            case TSC_VALUE_TAG_OBJECT:
+            case TSC_VALUE_TAG_ARRAY:
+            case TSC_VALUE_TAG_FUNCTION:
+                return tsc_value_get_prototype_of(v);
+            case TSC_VALUE_TAG_FALSE:
+            case TSC_VALUE_TAG_TRUE:
+                return tsc_value_boolean_prototype();
+            case TSC_VALUE_TAG_STRING:
+                return tsc_value_string_prototype();
+            case TSC_VALUE_TAG_UNDEFINED:
+            case TSC_VALUE_TAG_NULL:
+                break;
+        }
+    } else {
+        return tsc_value_number_prototype();
+    }
+    return tsc_value_undefined();
+}
+
 bool tsc_value_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_set_prototype_of((tsc_object_t*)value_ptr(v), prototype);

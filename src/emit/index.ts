@@ -38679,16 +38679,29 @@ class Emitter {
         if (name === "getPrototypeOf") {
             if (args.length < 1) unsupported(call, "Object.getPrototypeOf expects object");
             const ignored = this.ignoredArgumentSpecs(args, 1);
+            const primitivePrototypeFns: Partial<Record<CType["kind"], string>> = {
+                number: "tsc_value_number_prototype",
+                boolean: "tsc_value_boolean_prototype",
+                string: "tsc_value_string_prototype",
+                bigint: "tsc_value_bigint_prototype",
+                symbol: "tsc_value_symbol_prototype",
+            };
+            const primitivePrototypeFn = primitivePrototypeFns[mapped.kind];
+            if (primitivePrototypeFn) {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: obj, node: arg },
+                    ...ignored,
+                ], ([o]) => `({ (void)${o}; ${primitivePrototypeFn}(); })`);
+            }
             if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
-                unsupported(arg, "Object.getPrototypeOf currently supports dynamic objects, arrays, and functions only");
+                unsupported(arg, "Object.getPrototypeOf currently supports dynamic objects, arrays, functions, and primitives only");
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(T_VALUE, [
                 { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
                 ...ignored,
-            ], ([o]) =>
-                `({ if (tsc_value_is_nullish(${dynamicObjectArg(o!)})) tsc_throw_str(tsc_str_from_cstr("Object.getPrototypeOf target must not be null or undefined")); tsc_value_get_prototype_of(${dynamicObjectArg(o!)}); })`,
-            );
+            ], ([o]) => `tsc_value_object_get_prototype_of(${dynamicObjectArg(o!)})`);
         }
         if (name === "hasOwn") {
             if (args.length < 2) unsupported(call, "Object.hasOwn expects object and key");
