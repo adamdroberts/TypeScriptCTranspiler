@@ -31552,12 +31552,16 @@ class Emitter {
                 const type = this.emitRequiredStringArgument(args[0]!);
                 const listener = this.emitEventListenerExpression(args[1]!);
                 const adapter = this.ensureEventTargetListenerAdapter(args[1]!, listener.ty);
-                return this.emitSequencedExpr(T_VOID, [
+                const specs: SequencedCallArg[] = [
                     { value: recv },
                     { value: type, target: T_STRING, node: args[0]! },
                     { value: listener, target: listener.ty, node: args[1]! },
-                    ...this.ignoredArgumentSpecs(args, 3),
-                ], ([target, eventType, fn]) =>
+                ];
+                if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
+                    specs.push({ value: this.emitExpr(args[2]), target: T_VOID, node: args[2] });
+                }
+                specs.push(...this.ignoredArgumentSpecs(args, 3));
+                return this.emitSequencedExpr(T_VOID, specs, ([target, eventType, fn]) =>
                     `tsc_event_target_add(${target}, ${eventType}, ${adapter}, (void*)${fn}, ${this.eventListenerIdentity(args[1]!, fn)}, ${options.once ? "true" : "false"})`,
                 );
             }
@@ -31567,12 +31571,16 @@ class Emitter {
                 const type = this.emitRequiredStringArgument(args[0]!);
                 const listener = this.emitEventListenerExpression(args[1]!);
                 const adapter = this.ensureEventTargetListenerAdapter(args[1]!, listener.ty);
-                return this.emitSequencedExpr(T_VOID, [
+                const specs: SequencedCallArg[] = [
                     { value: recv },
                     { value: type, target: T_STRING, node: args[0]! },
                     { value: listener, target: listener.ty, node: args[1]! },
-                    ...this.ignoredArgumentSpecs(args, 3),
-                ], ([target, eventType, fn]) =>
+                ];
+                if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
+                    specs.push({ value: this.emitExpr(args[2]), target: T_VOID, node: args[2] });
+                }
+                specs.push(...this.ignoredArgumentSpecs(args, 3));
+                return this.emitSequencedExpr(T_VOID, specs, ([target, eventType, fn]) =>
                     `tsc_event_target_remove(${target}, ${eventType}, ${adapter}, ${this.eventListenerIdentity(args[1]!, fn)})`,
                 );
             }
@@ -31597,9 +31605,9 @@ class Emitter {
 
     private eventTargetListenerOptions(options: ts.Expression | undefined, label: string): { once: boolean } {
         const out = { once: false };
-        if (!options || this.isUndefinedExpression(options)) return out;
+        if (!options || this.isUndefinedLikeExpression(options)) return out;
         options = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (this.isUndefinedExpression(options)) return out;
+        if (this.isUndefinedLikeExpression(options)) return out;
         if (this.sideEffectFreeBooleanLiteralValue(options, new Set()) !== null) {
             return out;
         }
@@ -31985,6 +31993,10 @@ class Emitter {
     }
 
     private shouldEvaluateDnsDefaultOptions(options: ts.Expression): boolean {
+        return this.shouldEvaluateSideEffectfulVoidDefault(options);
+    }
+
+    private shouldEvaluateSideEffectfulVoidDefault(options: ts.Expression): boolean {
         const resolved = this.resolveSideEffectFreeEarlierConstExpression(options);
         const unwrapped = this.unwrapTransparentExpression(resolved);
         return ts.isVoidExpression(unwrapped) && !this.isSideEffectFreeTopLevelConstInitializer(unwrapped.expression);
