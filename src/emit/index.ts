@@ -20416,11 +20416,12 @@ class Emitter {
             arrayExpr = `tsc_value_iter_values(${source.c})`;
             elemType = T_VALUE;
         } else if (source.ty.kind === "class") {
-            const custom = this.emitCustomIterableArray(y.expression, source);
+            const custom = this.emitCustomIterableArray(y.expression, source) ??
+                this.emitCustomIteratorArray(y.expression, source);
             if (!custom) {
                 unsupported(
                     y.expression,
-                    "yield* over a class currently needs [Symbol.iterator]() returning a typed array-backed IterableIterator<T>",
+                    "yield* over a class currently needs [Symbol.iterator]() returning a typed array-backed IterableIterator<T> or class iterator object",
                 );
             }
             arrayExpr = custom.c;
@@ -21702,6 +21703,7 @@ class Emitter {
         if (!sig) unsupported(method, "could not resolve iterator method signature");
         const ret = mapTsType(method, sig.getReturnType(), this.checker);
         if (ret.kind !== "array" || !ret.elem) {
+            if (ret.kind === "class") return null;
             unsupported(
                 method,
                 "[Symbol.iterator]() must return a typed array-backed IterableIterator<T>",
@@ -21719,6 +21721,57 @@ class Emitter {
                 },
             ],
         );
+    }
+
+    private emitCustomIteratorArray(
+        expr: ts.Expression,
+        iter: EmitResult,
+    ): EmitResult | null {
+        const cd = this.classDeclForExpression(expr);
+        if (!cd) return null;
+        const found = this.findSymbolIteratorMethod(cd);
+        if (!found) return null;
+        const { owner, method } = found;
+        const sig = this.checker.getSignatureFromDeclaration(method);
+        if (!sig) unsupported(method, "could not resolve iterator method signature");
+        const iteratorType = this.prepareType(mapTsType(method, sig.getReturnType(), this.checker));
+        if (iteratorType.kind !== "class" || !iteratorType.className) return null;
+        const iteratorDecl = this.findClassDecl(iteratorType.className);
+        if (!iteratorDecl) return null;
+        const foundNext = this.findNamedClassMethod(iteratorDecl, "next");
+        if (!foundNext) return null;
+        const { owner: nextOwner, method: next } = foundNext;
+        const nextSig = this.checker.getSignatureFromDeclaration(next);
+        if (!nextSig) unsupported(next, "could not resolve iterator next() signature");
+        const stepTsType = nextSig.getReturnType();
+        const stepType = this.prepareType(mapTsType(next, stepTsType, this.checker));
+        if (stepType.kind !== "class") return null;
+        const doneType = this.objectFieldType(next, stepTsType, "done", next.name);
+        if (doneType.kind !== "boolean") unsupported(next, "iterator next().done must be boolean");
+        const valueType = this.objectFieldType(next, stepTsType, "value", next.name);
+        if (valueType.kind === "void") unsupported(next, "iterator next().value cannot be void");
+
+        const recv = this.freshTemp("_yield_iter_recv");
+        const iterVar = this.freshTemp("_yield_iter");
+        const out = this.freshTemp("_yield_iter_values");
+        const step = this.freshTemp("_yield_iter_step");
+        const value = this.freshTemp("_yield_iter_value");
+        const selfArg = owner.name!.text === iter.ty.className
+            ? recv
+            : `((${owner.name!.text}_t*)${recv})`;
+        const nextOwnerName = nextOwner.name!.text;
+        const nextSelfArg = nextOwnerName === iteratorType.className
+            ? iterVar
+            : `((${nextOwnerName}_t*)${iterVar})`;
+        const c = (
+            `({ ${iter.ty.c} ${recv} = ${iter.c}; ` +
+            `${iteratorType.c} const ${iterVar} = ${owner.name!.text}___tsc_iterator(${selfArg}); ` +
+            `tsc_array_t* ${out} = tsc_array_new(sizeof(${valueType.c}), 4); ` +
+            `while (true) { ${stepType.c} const ${step} = ${nextOwnerName}_next(${nextSelfArg}); ` +
+            `if (${step}->done) break; ${valueType.c} ${value} = ${step}->value; ` +
+            `tsc_array_push_raw(${out}, &${value}); } ${out}; })`
+        );
+        return { c, ty: arrayType(valueType) };
     }
 
     private emitCustomIteratorForOf(
