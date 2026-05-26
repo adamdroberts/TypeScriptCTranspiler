@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Object.groupBy(...)` and `Map.groupBy(...)` now evaluate and ignore trailing arguments after the grouping callback. Tests: `object_group_by`, `map_group_by`.
 - `Array.from(...)` now evaluates and ignores trailing arguments after the optional `thisArg` across the undefined-mapper and mapper callback paths. Test: `array_from_mapper`.
 - `Array.fromAsync(...)` now evaluates and ignores trailing arguments after the optional `thisArg` across the undefined-mapper and mapper callback paths. Test: `array_from_async`.
 - CommonJS computed export names now reuse the finite static string resolver for bracket assignments and descriptor-based keys, so `exports[keys[0]]`, `module.exports[keyMap.name]`, and `Object.defineProperty(exports, keys[0], ...)` can become AOT named export metadata when the collection lookup has a single static string result. Tests: `node_modules_commonjs_computed_string_exports`, `node_modules_commonjs_define_property_computed_exports`.
