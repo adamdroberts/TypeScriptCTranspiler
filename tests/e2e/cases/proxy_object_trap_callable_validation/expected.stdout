@@ -10,3 +10,4 @@ bad getProto: Proxy getPrototypeOf trap must be callable
 bad setProto: Proxy setPrototypeOf trap must be callable
 bad isExtensible: Proxy isExtensible trap must be callable
 bad preventExtensions: Proxy preventExtensions trap must be callable
+events: get-key|set-key|set-value|has-key|delete-key|define-key|define-desc|descriptor-key|setProto-value
