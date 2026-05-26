@@ -898,9 +898,21 @@ const kept_promise_then_rejected_reachable_side_effectful_fulfill_arg = Promise.
 const unused_promise_catch_passthrough_catch_call = Promise.reject<string>("dead_promise_catch_passthrough_source")
     .catch()
     .catch((reason) => "dead_promise_catch_passthrough_callback");
+// @ts-ignore: intentional absent-descriptor handler coverage for generated-C DCE.
+const unused_promise_then_absent_descriptor_handler_call = Promise.resolve("dead_promise_then_absent_descriptor_handler_source")
+    .then(Object.getOwnPropertyDescriptor(new Error("dead_promise_then_absent_descriptor_handler"), "missing", "dead_promise_then_absent_descriptor_handler_ignored") as undefined)
+    .then(() => "dead_promise_then_absent_descriptor_handler_callback");
+// @ts-ignore: intentional absent-descriptor handler coverage for generated-C DCE.
+const unused_promise_catch_absent_descriptor_handler_call = Promise.reject<string>("dead_promise_catch_absent_descriptor_handler_source")
+    .catch(Reflect.getOwnPropertyDescriptor(/dead_promise_catch_absent_descriptor_handler/g, "source", "dead_promise_catch_absent_descriptor_handler_ignored") as undefined)
+    .catch((reason) => "dead_promise_catch_absent_descriptor_handler_callback");
 const unused_promise_finally_passthrough_then_call = Promise.resolve("dead_promise_finally_passthrough_source")
     .finally(undefined)
     .then(() => "dead_promise_finally_passthrough_callback");
+// @ts-ignore: intentional absent-descriptor handler coverage for generated-C DCE.
+const unused_promise_finally_absent_descriptor_handler_call = Promise.resolve("dead_promise_finally_absent_descriptor_handler_source")
+    .finally(Object.getOwnPropertyDescriptor(new Error("dead_promise_finally_absent_descriptor_handler"), "missing", "dead_promise_finally_absent_descriptor_handler_ignored") as undefined)
+    .then(() => "dead_promise_finally_absent_descriptor_handler_callback");
 const unused_promise_finally_callback_then_call = Promise.resolve("dead_promise_finally_callback_source")
     .finally(() => "dead_promise_finally_callback_passthrough")
     .then(() => "dead_promise_finally_callback_then_callback");
@@ -2487,9 +2499,21 @@ Promise.resolve("top_level_dead_promise_then_passthrough_source")
 Promise.reject<string>("top_level_dead_promise_catch_passthrough_source")
     .catch()
     .catch((reason) => "top_level_dead_promise_catch_passthrough_callback");
+// @ts-ignore: intentional absent-descriptor handler coverage for generated-C DCE.
+Promise.resolve("top_level_dead_promise_then_absent_descriptor_handler_source")
+    .then(Object.getOwnPropertyDescriptor(new Error("top_level_dead_promise_then_absent_descriptor_handler"), "missing", "top_level_dead_promise_then_absent_descriptor_handler_ignored") as undefined)
+    .then(() => "top_level_dead_promise_then_absent_descriptor_handler_callback");
+// @ts-ignore: intentional absent-descriptor handler coverage for generated-C DCE.
+Promise.reject<string>("top_level_dead_promise_catch_absent_descriptor_handler_source")
+    .catch(Reflect.getOwnPropertyDescriptor(/top_level_dead_promise_catch_absent_descriptor_handler/g, "source", "top_level_dead_promise_catch_absent_descriptor_handler_ignored") as undefined)
+    .catch((reason) => "top_level_dead_promise_catch_absent_descriptor_handler_callback");
 Promise.resolve("top_level_dead_promise_finally_passthrough_source")
     .finally(undefined)
     .then(() => "top_level_dead_promise_finally_passthrough_callback");
+// @ts-ignore: intentional absent-descriptor handler coverage for generated-C DCE.
+Promise.resolve("top_level_dead_promise_finally_absent_descriptor_handler_source")
+    .finally(Object.getOwnPropertyDescriptor(new Error("top_level_dead_promise_finally_absent_descriptor_handler"), "missing", "top_level_dead_promise_finally_absent_descriptor_handler_ignored") as undefined)
+    .then(() => "top_level_dead_promise_finally_absent_descriptor_handler_callback");
 Promise.resolve("top_level_dead_promise_finally_callback_source")
     .finally(() => "top_level_dead_promise_finally_callback_passthrough")
     .then(() => "top_level_dead_promise_finally_callback_then_callback");
@@ -3915,9 +3939,21 @@ function usedLocal(value: number): number {
     Promise.reject<string>("local_dead_promise_catch_passthrough_source")
         .catch()
         .catch((reason) => "local_dead_promise_catch_passthrough_callback");
+    // @ts-ignore: intentional absent-descriptor handler coverage for generated-C DCE.
+    Promise.resolve("local_dead_promise_then_absent_descriptor_handler_source")
+        .then(Object.getOwnPropertyDescriptor(new Error("local_dead_promise_then_absent_descriptor_handler"), "missing", "local_dead_promise_then_absent_descriptor_handler_ignored") as undefined)
+        .then(() => "local_dead_promise_then_absent_descriptor_handler_callback");
+    // @ts-ignore: intentional absent-descriptor handler coverage for generated-C DCE.
+    Promise.reject<string>("local_dead_promise_catch_absent_descriptor_handler_source")
+        .catch(Reflect.getOwnPropertyDescriptor(/local_dead_promise_catch_absent_descriptor_handler/g, "source", "local_dead_promise_catch_absent_descriptor_handler_ignored") as undefined)
+        .catch((reason) => "local_dead_promise_catch_absent_descriptor_handler_callback");
     Promise.resolve("local_dead_promise_finally_passthrough_source")
         .finally(undefined)
         .then(() => "local_dead_promise_finally_passthrough_callback");
+    // @ts-ignore: intentional absent-descriptor handler coverage for generated-C DCE.
+    Promise.resolve("local_dead_promise_finally_absent_descriptor_handler_source")
+        .finally(Object.getOwnPropertyDescriptor(new Error("local_dead_promise_finally_absent_descriptor_handler"), "missing", "local_dead_promise_finally_absent_descriptor_handler_ignored") as undefined)
+        .then(() => "local_dead_promise_finally_absent_descriptor_handler_callback");
     Promise.resolve("local_dead_promise_finally_callback_source")
         .finally(() => "local_dead_promise_finally_callback_passthrough")
         .then(() => "local_dead_promise_finally_callback_then_callback");

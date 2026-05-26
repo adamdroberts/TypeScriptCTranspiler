@@ -7267,6 +7267,12 @@ class Emitter {
     ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (this.isUndefinedExpression(unwrapped)) return true;
+        if (
+            ts.isCallExpression(unwrapped) &&
+            this.isSideEffectFreeAbsentOwnPropertyDescriptorCall(unwrapped, seenConsts)
+        ) {
+            return true;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeUndefinedValue(init, seenConsts);
     }
@@ -8788,7 +8794,7 @@ class Emitter {
                 }
                 if (
                     recvState === "fulfilled" &&
-                    this.isUndefinedOrOmittedPromiseHandler(unwrapped.arguments[0])
+                    this.isUndefinedOrOmittedPromiseHandler(unwrapped.arguments[0], seenConsts)
                 ) {
                     return this.isSideEffectFreeUnevaluatedPromiseCallback(unwrapped.arguments[1], seenConsts)
                         ? "fulfilled"
@@ -8806,7 +8812,7 @@ class Emitter {
                 }
                 if (
                     recvState === "rejected" &&
-                    this.isUndefinedOrOmittedPromiseHandler(unwrapped.arguments[1])
+                    this.isUndefinedOrOmittedPromiseHandler(unwrapped.arguments[1], seenConsts)
                 ) {
                     return this.isSideEffectFreeUnevaluatedPromiseCallback(unwrapped.arguments[0], seenConsts)
                         ? "rejected"
@@ -8836,7 +8842,7 @@ class Emitter {
                         ? "fulfilled"
                         : null;
                 }
-                if (this.isUndefinedOrOmittedPromiseHandler(unwrapped.arguments[0])) {
+                if (this.isUndefinedOrOmittedPromiseHandler(unwrapped.arguments[0], seenConsts)) {
                     return "rejected";
                 }
                 return this.sideEffectFreePromiseHandlerCallbackOperandState(
@@ -8851,7 +8857,7 @@ class Emitter {
                         ? "pending"
                         : null;
                 }
-                if (this.isUndefinedOrOmittedPromiseHandler(unwrapped.arguments[0])) {
+                if (this.isUndefinedOrOmittedPromiseHandler(unwrapped.arguments[0], seenConsts)) {
                     return recvState;
                 }
                 return this.sideEffectFreePromiseHandlerCallbackOperandState(
@@ -8867,8 +8873,11 @@ class Emitter {
         return init ? this.sideEffectFreePromiseInstanceChainState(init, seenConsts) : null;
     }
 
-    private isUndefinedOrOmittedPromiseHandler(expr: ts.Expression | undefined): boolean {
-        return !expr || this.isUndefinedExpression(expr);
+    private isUndefinedOrOmittedPromiseHandler(
+        expr: ts.Expression | undefined,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return !expr || this.isSideEffectFreeUndefinedValue(expr, seenConsts);
     }
 
     private sideEffectFreePromiseRejectState(
