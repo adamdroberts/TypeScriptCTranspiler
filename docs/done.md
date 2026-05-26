@@ -13,7 +13,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - BigInt literals (`0n`, `0xfn`, `0o77n`, `0b101n`), `BigInt(value, ...ignored)`, arithmetic/comparison/equality, unary minus, compound arithmetic assignment, `typeof`, `.toString(radix?, ...ignored)`, `.toLocaleString(...ignored)`, `.valueOf(...ignored)`, and inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)` backed by GMP, with catchable constructor/operator/radix validation failures. Tests: `bigint`, `bigint_errors`, `symbol_bigint_object_methods`
 - Symbol values via `Symbol(description?, ...ignored)`, `Symbol.for(key, ...ignored)`, `Symbol.keyFor(sym, ...ignored)`, `Symbol.iterator`, `Symbol.asyncIterator`, `.description`, `.toString(...ignored)`, `.toLocaleString(...ignored)`, `.valueOf(...ignored)`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, equality, and `typeof`. Tests: `symbols`, `symbol_bigint_object_methods`
 - String literals with full C escape handling for UTF-8 and non-BMP code points → `escapeCString` in `src/emit/cbuf.ts`. Test: `hello`, `strings`, `string_for_of`
-- Template literals with `${expr}` interpolation → `emitTemplate`. Test: `greet`, `fizzbuzz`
+- Template literals with `${expr}` interpolation evaluate substitutions left-to-right → `emitTemplate`. Tests: `greet`, `fizzbuzz`, `template_literal_eval_order`
 - Tagged template calls with a `TemplateStringsArray` first parameter and fixed substitution parameters. Test: `tagged_templates`
 - `String.raw` tagged templates preserve raw template segments and stringify compile-time or dynamic substitutions left-to-right. Tests: `string_raw`, `string_raw_dynamic`
 - Boolean literals `true` / `false`. Test: `json`
@@ -1581,6 +1581,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `string_raw` | String.raw tagged templates preserving raw escape text |
 | `string_raw_dynamic` | String.raw dynamic substitutions preserving raw text and left-to-right evaluation |
 | `tail_calls` | direct self-tail recursion lowered to a loop |
+| `template_literal_eval_order` | template literal substitutions preserve left-to-right evaluation |
 | `typed_object_has_own` | typed Object.hasOwn, hasOwnProperty, and propertyIsEnumerable field checks |
 | `typed_object_methods` | typed Object toString/toLocaleString/valueOf prototype fallback |
 | `typed_object_property_names` | typed Object.getOwnPropertyNames field-list expansion |

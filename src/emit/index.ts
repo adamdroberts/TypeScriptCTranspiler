@@ -23052,17 +23052,23 @@ class Emitter {
 
     private emitTemplate(te: ts.TemplateExpression): EmitResult {
         const headText = te.head.text;
-        let expr = `tsc_str_from_lit("${escapeCString(headText)}", ${utf8ByteLen(headText)})`;
-        for (const span of te.templateSpans) {
-            const inner = this.emitExpr(span.expression);
-            const asStr = this.coerceToString(inner, span.expression);
-            expr = `tsc_str_concat(${expr}, ${asStr})`;
-            const lit = span.literal.text;
-            if (lit.length > 0) {
-                expr = `tsc_str_concat(${expr}, tsc_str_from_lit("${escapeCString(lit)}", ${utf8ByteLen(lit)}))`;
+        const spans = te.templateSpans;
+        const specs = spans.map((span): SequencedCallArg => ({
+            value: this.emitExpr(span.expression),
+            node: span.expression,
+            stringify: true,
+        }));
+        return this.emitSequencedExpr(T_STRING, specs, (args) => {
+            let expr = `tsc_str_from_lit("${escapeCString(headText)}", ${utf8ByteLen(headText)})`;
+            for (let i = 0; i < args.length; i++) {
+                expr = `tsc_str_concat(${expr}, ${args[i]})`;
+                const lit = spans[i]!.literal.text;
+                if (lit.length > 0) {
+                    expr = `tsc_str_concat(${expr}, tsc_str_from_lit("${escapeCString(lit)}", ${utf8ByteLen(lit)}))`;
+                }
             }
-        }
-        return { c: expr, ty: T_STRING };
+            return expr;
+        });
     }
 
     private emitTaggedTemplate(tt: ts.TaggedTemplateExpression): EmitResult {
