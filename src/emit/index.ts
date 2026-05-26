@@ -2865,7 +2865,8 @@ class Emitter {
             this.isSideEffectFreeFreshWeakMapOperand(recv, seenConsts) ||
             this.isSideEffectFreeFreshWeakSetOperand(recv, seenConsts) ||
             this.isSideEffectFreeFreshWeakRefOperand(recv, seenConsts) ||
-            this.isSideEffectFreeFreshFinRegistryOperand(recv, seenConsts);
+            this.isSideEffectFreeFreshFinRegistryOperand(recv, seenConsts) ||
+            this.isSideEffectFreeOwnDataPropertyDescriptorObjectOperand(recv, seenConsts);
         if (!recvPure) return false;
         switch (method) {
             case "hasOwnProperty":
