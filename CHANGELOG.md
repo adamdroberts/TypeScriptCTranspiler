@@ -145,6 +145,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Typed array `toSpliced(...)` now treats explicit `undefined` start/delete-count arguments as JavaScript defaults while preserving argument-count semantics. Test: `array_to_spliced`.
 - Typed array `slice(...)`, `fill(...)`, and `copyWithin(...)` now treat explicit `undefined` optional bounds as JavaScript defaults. Tests: `array_read_ignored_arguments`, `array_mutator_ignored_arguments`.
 - Typed string `normalize(...)`, `padStart(...)`, and `padEnd(...)` now treat explicit `undefined` optional arguments as JavaScript defaults while preserving ignored trailing-argument evaluation. Tests: `string_normalize`, `strings`.
+- Typed `BigInt.prototype.toString(undefined, ...ignored)` now defaults to radix 10 while preserving ignored trailing-argument evaluation. Test: `symbol_bigint_object_methods`.
 - Typed string `slice(...)`, `substring(...)`, `substr(...)`, and `split(...)` now treat explicit `undefined` optional arguments as JavaScript defaults. Tests: `strings`, `string_substring`, `string_substr`, `string_split_limit`.
 - Typed string search-position helpers now treat explicit `undefined` positions with JavaScript defaults while preserving ignored trailing arguments. Test: `string_search_positions`.
 - Typed array `indexOf(...)`, `lastIndexOf(...)`, and `includes(...)` now treat explicit `undefined` search positions with JavaScript semantics while preserving ignored trailing arguments. Test: `array_read_ignored_arguments`.

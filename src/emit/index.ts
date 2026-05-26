@@ -35674,14 +35674,15 @@ class Emitter {
                 );
             case "toString": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
-                if (args[0]) {
+                const hasRadix = !!args[0] && !this.isUndefinedExpression(args[0]);
+                if (hasRadix) {
                     const radix = this.emitExpr(args[0]);
                     requireNumber(args[0], radix.ty);
                     specs.push({ value: radix, target: T_NUMBER, node: args[0] });
                 }
                 specs.push(...this.ignoredArgumentSpecs(args, 1));
                 return this.emitSequencedExpr(T_STRING, specs, (vals) => {
-                    const radix = vals[1] ?? "10.0";
+                    const radix = hasRadix ? vals[1]! : "10.0";
                     return `tsc_bigint_to_string(${vals[0]}, ${radix})`;
                 });
             }
