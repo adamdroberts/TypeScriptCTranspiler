@@ -38102,6 +38102,22 @@ class Emitter {
             return value;
         };
         if (name === "assign") {
+            if (mapped.kind === "void") {
+                const specs: SequencedCallArg[] = [
+                    { value: this.emitExpr(arg), target: T_VALUE, node: arg },
+                ];
+                for (const source of args.slice(1)) {
+                    specs.push({ value: this.emitExpr(source), target: T_VALUE, node: source });
+                }
+                return this.emitSequencedExpr(T_VALUE, specs, ([target, ...sources]) => {
+                    const targetArg = target!;
+                    if (sources.length === 0) {
+                        return `({ if (tsc_value_is_nullish(${targetArg})) tsc_throw_str(tsc_str_from_cstr("Object.assign target must not be null or undefined")); ${targetArg}; })`;
+                    }
+                    const calls = sources.map((source) => `tsc_value_object_assign(${targetArg}, ${source})`);
+                    return `({ ${calls.join("; ")}; ${targetArg}; })`;
+                });
+            }
             if (mapped.kind === "array") {
                 const target = this.emitExpr(arg);
                 return this.emitTypedArrayObjectAssign(call, arg, target, args.slice(1));
@@ -38121,7 +38137,9 @@ class Emitter {
             }
             return this.emitSequencedExpr(T_VALUE, specs, ([target, ...sources]) => {
                 const targetArg = target!;
-                if (sources.length === 0) return targetArg;
+                if (sources.length === 0) {
+                    return `({ if (tsc_value_is_nullish(${targetArg})) tsc_throw_str(tsc_str_from_cstr("Object.assign target must not be null or undefined")); ${targetArg}; })`;
+                }
                 const calls = sources.map((source) => `tsc_value_object_assign(${targetArg}, ${source})`);
                 return `({ ${calls.join("; ")}; ${targetArg}; })`;
             });

@@ -1,0 +1,3 @@
+{
+  "description": "Object.assign rejects static nullish targets through catchable errors"
+}

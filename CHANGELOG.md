@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Object.assign(null | undefined, source?)` now rejects static nullish targets through catchable runtime errors, and dynamic nullish targets now reject even when no source is supplied. Tests: `object_assign_static_nullish_target`, `object_assign_nullish_target`.
 - Static Object prototype helpers now reject `null` / `undefined` targets through catchable runtime errors instead of compile-time rejection. Test: `object_static_nullish_prototypes`.
 - Static Object own-property helpers now reject `null` / `undefined` targets through catchable runtime errors instead of compile-time rejection or empty symbol results. Test: `object_static_nullish_own_helpers`.
 - Static `Object.preventExtensions(null | undefined)`, `Object.seal(null | undefined)`, and `Object.freeze(null | undefined)` now return nullish targets unchanged. Test: `object_nullish_integrity_mutators`.
