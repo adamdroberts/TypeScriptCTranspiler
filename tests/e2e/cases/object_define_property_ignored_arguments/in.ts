@@ -34,5 +34,20 @@ console.log(
     dynamicSample.name,
 );
 
+function typedSample(): void {}
+const typedFunctionProperties = Object.defineProperties(
+    typedSample,
+    {
+        name: { value: "typedSample", writable: false, enumerable: false, configurable: false },
+    },
+    mark("g"),
+);
+console.log(
+    "typed function properties:",
+    typedFunctionProperties === typedSample,
+    Object.hasOwn(typedSample, "name"),
+    Reflect.get(typedSample, "name"),
+);
+
 console.log("keys:", Object.keys(target).join("|"), Object.keys(values).join("|"), Object.keys(dynamicSample).join("|"));
 console.log("marks:", marks);

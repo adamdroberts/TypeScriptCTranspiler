@@ -38890,8 +38890,8 @@ class Emitter {
                     : { c: this.coerce(obj, mapped, arg), ty: mapped };
                 return this.emitTypedArrayDefineProperties(arg, arrayObj, args[1]!, ignored);
             }
-            if (mapped.kind !== "value") {
-                unsupported(arg, "Object.defineProperties currently supports dynamic objects and arrays only");
+            if (mapped.kind !== "value" && mapped.kind !== "function") {
+                unsupported(arg, "Object.defineProperties currently supports dynamic objects, arrays, and functions only");
             }
             const obj = this.emitExpr(arg);
             if (!ts.isObjectLiteralExpression(args[1]!)) {
@@ -41175,7 +41175,10 @@ class Emitter {
         if (!ts.isObjectLiteralExpression(descriptorsExpr)) {
             unsupported(descriptorsExpr, "Object.defineProperties descriptor map must be an object literal");
         }
-        const specs: SequencedCallArg[] = [{ value: obj, target: T_VALUE, node: objExpr }];
+        const returnsFunctionTarget = obj.ty.kind === "function";
+        const specs: SequencedCallArg[] = [
+            { value: obj, target: returnsFunctionTarget ? undefined : T_VALUE, node: objExpr },
+        ];
         const entries: {
             key: string;
             desc: DescriptorData;
@@ -41216,21 +41219,24 @@ class Emitter {
             entries.push(entry);
         }
         specs.push(...ignored);
-        return this.emitSequencedExpr(T_VALUE, specs, (vals) => {
+        return this.emitSequencedExpr(returnsFunctionTarget ? obj.ty : T_VALUE, specs, (vals) => {
             const o = vals[0]!;
+            const target = returnsFunctionTarget
+                ? this.coerce({ c: o, ty: obj.ty }, T_VALUE, objExpr)
+                : o;
             const pieces: string[] = [];
             for (const entry of entries) {
                 const key = `tsc_str_from_lit("${escapeCString(entry.key)}", ${utf8ByteLen(entry.key)})`;
                 if (entry.desc.kind === "data") {
                     const value = vals[entry.valuePos!]!;
                     pieces.push(
-                        `tsc_value_define_property_desc(${o}, ${key}, ${value}, ${entry.desc.hasValue}, ${entry.desc.writable}, ${entry.desc.hasWritable}, ${entry.desc.enumerable}, ${entry.desc.hasEnumerable}, ${entry.desc.configurable}, ${entry.desc.hasConfigurable})`,
+                        `tsc_value_define_property_desc(${target}, ${key}, ${value}, ${entry.desc.hasValue}, ${entry.desc.writable}, ${entry.desc.hasWritable}, ${entry.desc.enumerable}, ${entry.desc.hasEnumerable}, ${entry.desc.configurable}, ${entry.desc.hasConfigurable})`,
                     );
                 } else {
                     const getterEnv = entry.getterEnvPos != null ? vals[entry.getterEnvPos]! : "NULL";
                     const setterEnv = entry.setterEnvPos != null ? vals[entry.setterEnvPos]! : "NULL";
                     pieces.push(
-                        `tsc_value_define_accessor_desc(${o}, ${key}, ${entry.desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${entry.desc.hasGetter}, ${entry.desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${entry.desc.hasSetter}, ${entry.desc.enumerable}, ${entry.desc.hasEnumerable}, ${entry.desc.configurable}, ${entry.desc.hasConfigurable})`,
+                        `tsc_value_define_accessor_desc(${target}, ${key}, ${entry.desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${entry.desc.hasGetter}, ${entry.desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${entry.desc.hasSetter}, ${entry.desc.enumerable}, ${entry.desc.hasEnumerable}, ${entry.desc.configurable}, ${entry.desc.hasConfigurable})`,
                     );
                 }
             }
