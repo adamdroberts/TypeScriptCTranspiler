@@ -8,12 +8,16 @@ function mark(label: string): string {
     return label;
 }
 
+function note(label: string): void {
+    events.push(label);
+}
+
 fs.writeFileSync(file, "read file ignored\n");
 
-const text = fs.readFileSync(file, void 0, mark("global")).trim();
+const text = fs.readFileSync(file, void note("global-options"), mark("global")).trim();
 const buffer = readFileSync(file, { encoding: "buffer" }, mark("named"));
 
-fs.promises.readFile(file, void 0, mark("promise")).then((value: string): void => {
+fs.promises.readFile(file, void note("promise-options"), mark("promise")).then((value: string): void => {
     console.log("promise:", value.trim());
 });
 

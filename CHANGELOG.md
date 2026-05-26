@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `fs.readFileSync(...)` and immediate `fs.promises.readFile(...)` now treat side-effectful `void` whole-options arguments as defaulted while preserving options-slot evaluation before ignored extras. Test: `fs_read_file_ignored_arguments`.
 - `new Event(type, void sideEffect)` now treats the options argument as defaulted while preserving options-slot evaluation before ignored trailing arguments. Test: `event_target_undefined_options`.
 - Bounded zero-delay `setTimeout` now preserves side-effectful `void` delay evaluation before callback argument evaluation. Test: `set_timeout_zero`.
 - `timers/promises` immediate helpers now preserve side-effectful `void` delay and whole-options evaluation on supported defaulted `setTimeout(...)`, `setImmediate(...)`, and `scheduler.wait(...)` calls. Tests: `timers_promises_import`, `timers_promises_scheduler`.

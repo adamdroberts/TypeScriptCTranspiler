@@ -36114,8 +36114,13 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "fs.readFileSync needs path and optional UTF-8/hex/base64/buffer encoding/flag options");
                 const result = this.validateFsReadFileOptions(args[1], "fs.readFileSync");
                 const p = this.emitExpr(args[0]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 return this.emitSequencedExpr(result === "buffer" ? T_BUFFER : T_STRING, [
                     this.fsPathSpec(p, args[0]!, "fs.readFileSync path"),
+                    ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => this.emitFsReadFileResult(path!, result));
             }
@@ -36637,8 +36642,9 @@ class Emitter {
     }
 
     private validateFsReadFileOptions(options: ts.Expression | undefined, label: string): "utf8" | "hex" | "base64" | "buffer" {
-        if (!options || this.isUndefinedExpression(options)) return "utf8";
+        if (!options || this.isUndefinedLikeExpression(options)) return "utf8";
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedLikeExpression(resolvedOptions)) return "utf8";
         const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" | "buffer" => {
             node = this.resolveSideEffectFreeEarlierConstExpression(node);
             if (this.isUndefinedExpression(node)) return "utf8";
@@ -37003,8 +37009,13 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "fs.promises.readFile needs path and optional UTF-8/hex/base64/buffer/null encoding/flag options");
                 const result = this.validateFsReadFileOptions(args[1], "fs.promises.readFile");
                 const p = this.emitExpr(args[0]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.readFile path"),
+                    ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => {
                     const read = result === "buffer"
