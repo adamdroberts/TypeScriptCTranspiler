@@ -3,6 +3,7 @@ console.log("len:", s.length);
 console.log("upper:", s.toUpperCase());
 console.log("lower:", s.toLowerCase());
 console.log("slice:", s.slice(7, 12));
+console.log("slice undefined:", s.slice(undefined, undefined));
 console.log("includes World:", s.includes("World"));
 console.log("startsWith Hello:", s.startsWith("Hello"));
 console.log("endsWith !:", s.endsWith("!"));

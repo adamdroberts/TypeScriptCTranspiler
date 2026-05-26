@@ -246,9 +246,9 @@ All methods on the `String` interface map to `tsc_str_*` runtime calls:
 - `.includes(needle, position?, ...ignored)` → `tsc_str_includes` after evaluating ignored extra arguments, including explicit `undefined` position defaults. Test: `string_search_positions`
 - `.startsWith(p, position?, ...ignored)` → `tsc_str_starts_with` after evaluating ignored extra arguments, including explicit `undefined` position defaults. Test: `string_search_positions`
 - `.endsWith(p, endPosition?, ...ignored)` → `tsc_str_ends_with` after evaluating ignored extra arguments, including explicit `undefined` end-position defaults. Test: `string_search_positions`
-- `.slice(start?, end?, ...ignored)` → `tsc_str_slice` after evaluating ignored extra arguments.
-- `.substring(start?, end?, ...ignored)` → `tsc_str_substring`, including clamp/swap semantics after evaluating ignored extra arguments. Test: `string_substring`
-- `.substr(start?, length?, ...ignored)` → `tsc_str_substr`, including negative-start and length clamping semantics after evaluating ignored extra arguments. Test: `string_substr`
+- `.slice(start?, end?, ...ignored)` → `tsc_str_slice`, including explicit `undefined` defaults after evaluating ignored extra arguments. Test: `strings`
+- `.substring(start?, end?, ...ignored)` → `tsc_str_substring`, including clamp/swap semantics and explicit `undefined` defaults after evaluating ignored extra arguments. Test: `string_substring`
+- `.substr(start?, length?, ...ignored)` → `tsc_str_substr`, including negative-start, length clamping semantics, and explicit `undefined` defaults after evaluating ignored extra arguments. Test: `string_substr`
 - `.toUpperCase(...ignored)` / `.toLowerCase(...ignored)` → `tsc_str_to_upper`, `tsc_str_to_lower` after evaluating ignored extra arguments. Test: `strings`
 - `.toString(...ignored)` / `.toLocaleString(...ignored)` / `.valueOf(...ignored)` return the typed string receiver unchanged after evaluating ignored extra arguments, and inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)` report string indexes plus non-enumerable `length` ownership. Test: `string_object_methods`
 - `.normalize(form?, ...ignored)` → `tsc_str_normalize` backed by ICU for NFC/NFD/NFKC/NFKD after evaluating ignored extra arguments, with catchable invalid-form validation. Tests: `string_normalize`, `string_normalize_errors`
@@ -262,7 +262,7 @@ All methods on the `String` interface map to `tsc_str_*` runtime calls:
 - `.match(regexOrString, ...ignored)` → `tsc_str_match_regex`; string patterns are lowered through `RegExp(pattern)` after evaluating ignored extra arguments. Test: `string_match_string`
 - `.matchAll(regexOrString, ...ignored)` → `tsc_str_match_all_regex`, returning `string[][]` groups; string patterns are lowered through global `RegExp(pattern, "g")` after evaluating ignored extra arguments. Tests: `string_match_all`, `string_match_string`
 - `.search(regexOrString, ...ignored)` → `tsc_str_search_regex`; string patterns are lowered through `RegExp(pattern)` after evaluating ignored extra arguments. Tests: `string_search_regex`, `string_search_string`
-- `.split(sep, limit?, ...ignored)` / `.split(regex, limit?, ...ignored)` → `tsc_str_split` / `tsc_str_split_limit_num` / `tsc_str_split_regex` / `tsc_str_split_regex_limit_num`; RegExp separator captures are included in the output after evaluating ignored extra arguments. Tests: `string_split_limit`, `strings`
+- `.split(sep, limit?, ...ignored)` / `.split(regex, limit?, ...ignored)` → `tsc_str_split` / `tsc_str_split_limit_num` / `tsc_str_split_regex` / `tsc_str_split_regex_limit_num`; explicit `undefined` limits take the no-limit path, and RegExp separator captures are included in the output after evaluating ignored extra arguments. Tests: `string_split_limit`, `strings`
 - `.concat(...strings)` → repeated `tsc_str_concat`. Test: `string_concat`
 - `for...of` over strings → `tsc_str_chars`, yielding one string per UTF-8 code point. Test: `string_for_of`
 - String + anything → concat with automatic stringification

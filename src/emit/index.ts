@@ -34956,60 +34956,43 @@ class Emitter {
                 );
             }
             case "slice": {
-                const specs: SequencedCallArg[] = [{ value: recv }];
-                if (args.length >= 1) {
-                    const start = this.emitExpr(args[0]!);
-                    requireNumber(args[0]!, start.ty);
-                    specs.push({ value: start, target: T_NUMBER, node: args[0]! });
-                }
-                if (args.length >= 2) {
-                    const end = this.emitExpr(args[1]!);
-                    requireNumber(args[1]!, end.ty);
-                    specs.push({ value: end, target: T_NUMBER, node: args[1]! });
-                }
+                const start = optionalNumberArg(0, "0.0");
+                const end = optionalNumberArg(1, "INFINITY");
+                const specs: SequencedCallArg[] = [
+                    { value: recv },
+                    { value: start, target: T_NUMBER, node: args[0] },
+                    { value: end, target: T_NUMBER, node: args[1] },
+                ];
                 specs.push(...this.ignoredArgumentSpecs(args, 2));
-                return this.emitSequencedExpr(T_STRING, specs, (vals) => {
-                    const s = vals[0]!;
-                    const start = vals[1] ?? "0";
-                    const end = vals[2] ?? `(double)${s}->len`;
-                    return `tsc_str_slice(${s}, ${start}, ${end})`;
-                });
+                return this.emitSequencedExpr(T_STRING, specs, (vals) =>
+                    `tsc_str_slice(${vals[0]}, ${vals[1]}, ${vals[2]})`,
+                );
             }
             case "substring": {
                 const start = optionalNumberArg(0, "0.0");
+                const end = optionalNumberArg(1, "INFINITY");
                 const specs: SequencedCallArg[] = [
                     { value: recv },
                     { value: start, target: T_NUMBER, node: args[0] },
+                    { value: end, target: T_NUMBER, node: args[1] },
                 ];
-                if (args[1]) {
-                    const end = this.emitExpr(args[1]);
-                    requireNumber(args[1], end.ty);
-                    specs.push({ value: end, target: T_NUMBER, node: args[1] });
-                }
                 specs.push(...this.ignoredArgumentSpecs(args, 2));
-                return this.emitSequencedExpr(T_STRING, specs, (vals) => {
-                    const s = vals[0]!;
-                    const end = vals[2] ?? `(double)${s}->len`;
-                    return `tsc_str_substring(${s}, ${vals[1]}, ${end})`;
-                });
+                return this.emitSequencedExpr(T_STRING, specs, (vals) =>
+                    `tsc_str_substring(${vals[0]}, ${vals[1]}, ${vals[2]})`,
+                );
             }
             case "substr": {
                 const start = optionalNumberArg(0, "0.0");
+                const length = optionalNumberArg(1, "INFINITY");
                 const specs: SequencedCallArg[] = [
                     { value: recv },
                     { value: start, target: T_NUMBER, node: args[0] },
+                    { value: length, target: T_NUMBER, node: args[1] },
                 ];
-                if (args[1]) {
-                    const length = this.emitExpr(args[1]);
-                    requireNumber(args[1], length.ty);
-                    specs.push({ value: length, target: T_NUMBER, node: args[1] });
-                }
                 specs.push(...this.ignoredArgumentSpecs(args, 2));
-                return this.emitSequencedExpr(T_STRING, specs, (vals) => {
-                    const s = vals[0]!;
-                    const length = vals[2] ?? "INFINITY";
-                    return `tsc_str_substr(${s}, ${vals[1]}, ${length})`;
-                });
+                return this.emitSequencedExpr(T_STRING, specs, (vals) =>
+                    `tsc_str_substr(${vals[0]}, ${vals[1]}, ${vals[2]})`,
+                );
             }
             case "concat": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
@@ -35270,7 +35253,7 @@ class Emitter {
             case "split": {
                 if (args.length < 1) unsupported(call, "split expects at least 1 arg");
                 const sep = this.emitExpr(args[0]!);
-                const limit = args[1] ? this.emitExpr(args[1]) : null;
+                const limit = args[1] && !this.isUndefinedExpression(args[1]) ? this.emitExpr(args[1]) : null;
                 if (limit) requireNumber(args[1]!, limit.ty);
                 const ignored = this.ignoredArgumentSpecs(args, 2);
                 if (sep.ty.kind === "regexp") {

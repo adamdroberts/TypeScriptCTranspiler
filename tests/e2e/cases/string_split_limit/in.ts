@@ -1,6 +1,9 @@
 const parts = "a,b,c,d".split(",", 2);
 console.log("string:", parts.join("|"), parts.length);
 
+const unlimited = "a,b,c,d".split(",", undefined);
+console.log("undefined:", unlimited.join("|"), unlimited.length);
+
 const chars = "abcd".split("", 3);
 console.log("chars:", chars.join("-"), chars.length);
 

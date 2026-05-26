@@ -1,4 +1,5 @@
 string: a|b 2
+undefined: a|b|c|d 4
 chars: a-b-c 3
 regex: one|two 2
 captures: a|1|b|22|c 5

@@ -1,5 +1,6 @@
 tail: cdef
 range: cde
+undefined: abcdef
 negative: ef
 wide: ef
 zero: 

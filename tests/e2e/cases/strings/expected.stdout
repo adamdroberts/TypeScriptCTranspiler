@@ -2,6 +2,7 @@ len: 13
 upper: HELLO, WORLD!
 lower: hello, world!
 slice: World
+slice undefined: Hello, World!
 includes World: true
 startsWith Hello: true
 endsWith !: true

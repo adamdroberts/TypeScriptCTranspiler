@@ -1,5 +1,6 @@
 tail: script
 range: sc
+undefined: typescript
 swap: sc
 negative: type
 wide: script
