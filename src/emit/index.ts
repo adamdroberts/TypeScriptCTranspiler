@@ -8230,6 +8230,12 @@ class Emitter {
             return true;
         }
         if (
+            ts.isCallExpression(unwrapped) &&
+            this.isSideEffectFreeAbsentOwnPropertyDescriptorCall(unwrapped, seenConsts)
+        ) {
+            return true;
+        }
+        if (
             ts.isPrefixUnaryExpression(unwrapped) &&
             (
                 unwrapped.operator === ts.SyntaxKind.PlusToken ||
@@ -9545,6 +9551,29 @@ class Emitter {
         ) === "present"
             ? "present"
             : "unsafe";
+    }
+
+    private isSideEffectFreeAbsentOwnPropertyDescriptorCall(
+        call: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (!this.isObjectOrReflectGetOwnPropertyDescriptorCall(call, seenConsts)) {
+            return false;
+        }
+        const propertyKey = this.sideEffectFreeObjectPropertyReadKey(call.arguments[1]!, seenConsts);
+        if (propertyKey === null) return false;
+        const builtinOwnResult = this.sideEffectFreeFreshBuiltinOwnDataPropertyResult(
+            call.arguments[0]!,
+            propertyKey,
+            new Set(seenConsts),
+        );
+        if (builtinOwnResult === "absent") return true;
+        if (builtinOwnResult === "present") return false;
+        return this.sideEffectFreePrimitiveObjectOrArrayPropertyResult(
+            call.arguments[0]!,
+            propertyKey,
+            new Set(seenConsts),
+        ) === "absent";
     }
 
     private isObjectOrReflectGetOwnPropertyDescriptorCall(
