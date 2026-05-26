@@ -31814,11 +31814,18 @@ class Emitter {
         if (callbackType.kind !== "function" || !callbackType.ret) {
             unsupported(callbackNode, "dns.lookup callback must be a function");
         }
-        return this.emitSequencedExpr(T_VOID, [
-            { value: host, target: T_STRING, node: hostNode },
+        const evaluateDefaultOptions = !!optionsNode && this.shouldEvaluateDnsDefaultOptions(optionsNode);
+        const specs: SequencedCallArg[] = [{ value: host, target: T_STRING, node: hostNode }];
+        if (optionsNode && evaluateDefaultOptions) {
+            specs.push({ value: this.emitExpr(optionsNode), target: T_VOID, node: optionsNode });
+        }
+        specs.push(
             { value: callback, target: callbackType, node: callbackNode },
             ...this.ignoredArgumentSpecs(call.arguments, callbackIndex + 1),
-        ], ([hostC, callbackC]) => {
+        );
+        return this.emitSequencedExpr(T_VOID, specs, (values) => {
+            const hostC = values[0];
+            const callbackC = values[evaluateDefaultOptions ? 2 : 1];
             const result = this.freshTemp("_dns");
             const err: EmitResult = {
                 c: `${result}.error ? tsc_value_string(${result}.error) : tsc_value_null()`,
@@ -31916,9 +31923,9 @@ class Emitter {
 
     private dnsLookupOptions(options: ts.Expression | undefined): { family: number; all: boolean; hints: number } {
         const out = { family: 0, all: false, hints: 0 };
-        if (!options || this.isUndefinedExpression(options)) return out;
+        if (!options || this.isUndefinedLikeExpression(options)) return out;
         options = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (this.isUndefinedExpression(options)) return out;
+        if (this.isUndefinedLikeExpression(options)) return out;
         const numericFamily = this.dnsLookupNumberValue(options);
         if (numericFamily !== null) {
             out.family = numericFamily;
@@ -31977,6 +31984,12 @@ class Emitter {
         return out;
     }
 
+    private shouldEvaluateDnsDefaultOptions(options: ts.Expression): boolean {
+        const resolved = this.resolveSideEffectFreeEarlierConstExpression(options);
+        const unwrapped = this.unwrapTransparentExpression(resolved);
+        return ts.isVoidExpression(unwrapped) && !this.isSideEffectFreeTopLevelConstInitializer(unwrapped.expression);
+    }
+
     private emitDnsPromisesCall(call: ts.CallExpression, method: string): EmitResult {
         if (method !== "lookup") unsupported(call, `dns.promises.${method}`);
         if (call.arguments.length < 1) {
@@ -31985,12 +31998,15 @@ class Emitter {
         const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
         if (mapped.kind !== "promise") unsupported(call, "dns.promises.lookup result must be Promise<T>");
         const hostNode = call.arguments[0]!;
-        const lookupOptions = this.dnsLookupOptions(call.arguments[1]);
+        const optionsNode = call.arguments[1];
+        const lookupOptions = this.dnsLookupOptions(optionsNode);
         const host = this.emitExpr(hostNode);
-        return this.emitSequencedExpr(mapped, [
-            { value: host, target: T_STRING, node: hostNode },
-            ...this.ignoredArgumentSpecs(call.arguments, 2),
-        ], ([hostC]) => {
+        const specs: SequencedCallArg[] = [{ value: host, target: T_STRING, node: hostNode }];
+        if (optionsNode && this.shouldEvaluateDnsDefaultOptions(optionsNode)) {
+            specs.push({ value: this.emitExpr(optionsNode), target: T_VOID, node: optionsNode });
+        }
+        specs.push(...this.ignoredArgumentSpecs(call.arguments, 2));
+        return this.emitSequencedExpr(mapped, specs, ([hostC]) => {
             const result = this.freshTemp("_dns");
             const out = this.freshTemp("_dns_promise");
             if (lookupOptions.all) {

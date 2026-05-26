@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `dns.lookup(...)` and `dns.promises.lookup(...)` now accept an explicit `undefined` whole options argument while preserving side-effectful `void` option-slot evaluation before callbacks or ignored trailing arguments. Test: `dns_lookup_option_forms`.
 - `EventTarget` listener type arguments and `new Event(type)` now treat explicit `undefined` as the JavaScript `"undefined"` event type for required DOMString slots. Test: `event_target`.
 - EventEmitter event-name arguments now treat explicit `undefined` as the JavaScript `"undefined"` event name for instance and static listener helpers, while `removeAllListeners()` with no argument still uses the omitted-argument "remove all" form. Tests: `event_emitter`, `event_emitter_static_listener_count`.
 - `process.stdout.end(...)` / `process.stderr.end(...)` now treat explicit `undefined` chunks as omitted while still accepting later callback arguments and preserving ignored trailing-argument evaluation. Tests: `process_stdio_end`, `process_stdio_end_ignored_arguments`.
