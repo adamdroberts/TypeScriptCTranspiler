@@ -113,3 +113,11 @@ const nonExtensibleTarget: any = {};
 Object.preventExtensions(nonExtensibleTarget);
 const zeroExtensibleProxy: any = new Proxy(nonExtensibleTarget, { isExtensible: zeroIsExtensible as any });
 console.log("zero isExtensible:", Reflect.isExtensible(zeroExtensibleProxy), Object.isExtensible(zeroExtensibleProxy));
+
+const extensibleMismatchProxy: any = new Proxy({}, { isExtensible: zeroIsExtensible as any });
+report("zero isExtensible mismatch", (): any => Reflect.isExtensible(extensibleMismatchProxy));
+
+const nonExtensibleMismatchTarget: any = {};
+Object.preventExtensions(nonExtensibleMismatchTarget);
+const nonExtensibleMismatchProxy: any = new Proxy(nonExtensibleMismatchTarget, { isExtensible: stringIsExtensible as any });
+report("string isExtensible mismatch", (): any => Object.isExtensible(nonExtensibleMismatchProxy));

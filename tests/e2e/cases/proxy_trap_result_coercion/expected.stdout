@@ -14,3 +14,5 @@ empty prevent: false true
 object empty prevent: Object.preventExtensions failed
 string isExtensible: true true
 zero isExtensible: false false
+zero isExtensible mismatch: Proxy isExtensible trap result does not match target
+string isExtensible mismatch: Proxy isExtensible trap result does not match target
