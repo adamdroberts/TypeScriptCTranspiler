@@ -37272,24 +37272,30 @@ class Emitter {
 
     private emitCryptoCall(call: ts.CallExpression, name: string): EmitResult {
         if (name === "createHash") {
-            if (call.arguments.length !== 1)
+            if (call.arguments.length < 1)
                 unsupported(call, "crypto.createHash expects 1 arg");
             const alg = this.emitExpr(call.arguments[0]!);
-            return this.emitSequencedCall(
-                "tsc_crypto_create_hash",
+            return this.emitSequencedExpr(
                 T_HASH,
-                [{ value: alg, target: T_STRING, node: call.arguments[0]! }],
+                [
+                    { value: alg, target: T_STRING, node: call.arguments[0]! },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ],
+                ([algorithm]) => `tsc_crypto_create_hash(${algorithm})`,
             );
         }
         if (name === "randomBytes") {
-            if (call.arguments.length !== 1)
+            if (call.arguments.length < 1)
                 unsupported(call, "crypto.randomBytes expects 1 arg");
             const size = this.emitExpr(call.arguments[0]!);
             requireNumber(call.arguments[0]!, size.ty);
-            return this.emitSequencedCall(
-                "tsc_crypto_random_bytes",
+            return this.emitSequencedExpr(
                 T_BUFFER,
-                [{ value: size, target: T_NUMBER, node: call.arguments[0]! }],
+                [
+                    { value: size, target: T_NUMBER, node: call.arguments[0]! },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ],
+                ([sizeArg]) => `tsc_crypto_random_bytes(${sizeArg})`,
             );
         }
         if (name === "randomUUID") {
@@ -37335,39 +37341,41 @@ class Emitter {
         const args = call.arguments;
         switch (method) {
             case "update": {
-                if (args.length !== 1) unsupported(call, "Hash.update expects 1 arg");
+                if (args.length < 1) unsupported(call, "Hash.update expects 1 arg");
                 const data = this.emitExpr(args[0]!);
                 if (data.ty.kind === "buffer") {
-                    return this.emitSequencedCall(
-                        "tsc_hash_update_buffer",
+                    return this.emitSequencedExpr(
                         recv.ty,
                         [
                             { value: recv },
                             { value: data },
+                            ...this.ignoredArgumentSpecs(args, 1),
                         ],
+                        ([hash, buffer]) => `tsc_hash_update_buffer(${hash}, ${buffer})`,
                     );
                 }
                 if (data.ty.kind !== "string") unsupported(args[0]!, "Hash.update expects string or Buffer");
-                return this.emitSequencedCall(
-                    "tsc_hash_update",
+                return this.emitSequencedExpr(
                     recv.ty,
                     [
                         { value: recv },
                         { value: data, target: T_STRING, node: args[0]! },
+                        ...this.ignoredArgumentSpecs(args, 1),
                     ],
+                    ([hash, input]) => `tsc_hash_update(${hash}, ${input})`,
                 );
             }
             case "digest": {
+                const specs: SequencedCallArg[] = [{ value: recv }];
                 const encoding = args[0]
                     ? this.emitExpr(args[0])
                     : { c: `tsc_str_from_lit("hex", 3)`, ty: T_STRING };
-                return this.emitSequencedCall(
-                    "tsc_hash_digest",
+                specs.push({ value: encoding, target: T_STRING, node: args[0] ?? call });
+                specs.push(...this.ignoredArgumentSpecs(args, 1));
+                return this.emitSequencedExpr(
                     T_STRING,
-                    [
-                        { value: recv },
-                        { value: encoding, target: T_STRING, node: args[0] ?? call },
-                    ],
+                    specs,
+                    ([hash, encodingArg]) => `tsc_hash_digest(${hash}, ${encodingArg})`,
                 );
             }
             case "hasOwnProperty":

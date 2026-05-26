@@ -1642,25 +1642,25 @@ interface CryptoRandomUUIDOptions {
     disableEntropyCache?: boolean;
 }
 interface CryptoHash {
-    update(data: string | Buffer): CryptoHash;
-    digest(encoding: "hex" | "base64"): string;
+    update(data: string | Buffer, ...ignored: any[]): CryptoHash;
+    digest(encoding?: "hex" | "base64", ...ignored: any[]): string;
 }
 interface Crypto {
-    createHash(algorithm: CryptoHashAlgorithm): CryptoHash;
-    randomBytes(size: number): Buffer;
+    createHash(algorithm: CryptoHashAlgorithm, ...ignored: any[]): CryptoHash;
+    randomBytes(size: number, ...ignored: any[]): Buffer;
     randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
 }
 declare const crypto: Crypto;
 declare module "crypto" {
-    export function createHash(algorithm: CryptoHashAlgorithm): CryptoHash;
-    export function randomBytes(size: number): Buffer;
+    export function createHash(algorithm: CryptoHashAlgorithm, ...ignored: any[]): CryptoHash;
+    export function randomBytes(size: number, ...ignored: any[]): Buffer;
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
     const defaultCrypto: Crypto;
     export default defaultCrypto;
 }
 declare module "node:crypto" {
-    export function createHash(algorithm: CryptoHashAlgorithm): CryptoHash;
-    export function randomBytes(size: number): Buffer;
+    export function createHash(algorithm: CryptoHashAlgorithm, ...ignored: any[]): CryptoHash;
+    export function randomBytes(size: number, ...ignored: any[]): Buffer;
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
     const defaultCrypto: Crypto;
     export default defaultCrypto;
