@@ -337,10 +337,21 @@ tsc_value_t callNodeFunction(void* rawEnv, tsc_value_t, tsc_array_t* args) {
 } // namespace
 
 extern "C" tsc_value_t tsc_node_eval(tsc_str_t* source) {
+#ifndef TSC_UNSAFE_EVAL
+    (void)source;
+    tsc_panic("embedded Node unsafe eval bridge disabled: compile with --unsafe-eval");
+    return tsc_value_undefined();
+#else
     return evalSource(source);
+#endif
 }
 
 extern "C" tsc_value_t tsc_node_function(tsc_str_t* body) {
+#ifndef TSC_UNSAFE_EVAL
+    (void)body;
+    tsc_panic("embedded Node unsafe Function bridge disabled: compile with --unsafe-eval");
+    return tsc_value_undefined();
+#else
     std::string wrapped = "(function(){";
     wrapped += tscToString(body);
     wrapped += "\n})";
@@ -374,10 +385,18 @@ extern "C" tsc_value_t tsc_node_function(tsc_str_t* body) {
     NodeFunctionEnv* env = new NodeFunctionEnv();
     env->fn.Reset(isolate, v8::Local<v8::Function>::Cast(result));
     return tsc_value_function_generic(callNodeFunction, env);
+#endif
 }
 
 extern "C" tsc_value_t tsc_node_function_call(tsc_value_t fn, tsc_array_t* args) {
+#ifndef TSC_UNSAFE_EVAL
+    (void)fn;
+    (void)args;
+    tsc_panic("embedded Node unsafe Function bridge disabled: compile with --unsafe-eval");
+    return tsc_value_undefined();
+#else
     return tsc_value_apply_function(fn, tsc_value_undefined(), tsc_value_array(args));
+#endif
 }
 
 extern "C" tsc_value_t tsc_node_native_addon(tsc_str_t* resolved_path) {

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Embedded Node bridge builds now compile the exported `eval` / `Function` entry points behind `TSC_UNSAFE_EVAL`, so native-addon manifest builds can link libnode for allow-listed `.node` modules without enabling unsafe runtime code compilation. Focused checks: `runtime_eval_unsafe_bridge`, `runtime_function_unsafe_bridge`, `runtime_function_constructor_unsafe_bridge`, `native_addon_manifest_require`.
 - Ambient `Reflect.*` declarations now expose ignored trailing arguments to match the implemented Object/Reflect helper behavior. Test: `reflect_ignored_arguments`.
 - Module-level `events.setMaxListeners(count, emitter, ...emitters)` now applies the count to each supplied supported `EventEmitter` target while preserving argument evaluation order. Test: `event_emitter_set_max_listeners_multi`.
 - `child_process.exec(...)` and `execFile(...)` callback subsets now evaluate and ignore trailing arguments after the callback slot across supported callback, options, and args/options forms. Test: `child_process_callback_ignored_arguments`.

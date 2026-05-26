@@ -347,7 +347,7 @@ Every `.ts` file reachable from the entry is compiled into the same `main.c`. Ea
 Some TS/JS features require build-time proof, an explicit security allow list, or an explicitly gated embedded-Node bridge:
 
 1. **Native C++ addons** under `node_modules/*/build/Release/*.node` — default builds reject them; known native-addon manifests route through the embedded Node bridge rather than direct C++ calls. `bun run test:native-addon-smoke` exercises a real N-API addon when `libnode` is available.
-2. **`eval`** and the `Function` constructor — constant and allow-listed sources compile AOT by default. Unknown runtime strings require `--unsafe-eval`, which emits embedded Node bridge calls and requires `libnode` at link time.
+2. **`eval`** and the `Function` constructor — constant and allow-listed sources compile AOT by default. Unknown runtime strings require `--unsafe-eval`, which emits embedded Node bridge calls behind the `TSC_UNSAFE_EVAL` compile flag and requires `libnode` at link time.
 3. **Dynamic `require(variable)`** — finite const-string specifiers and manifest-listed alternatives are part of the AOT graph; non-finite unlisted specifiers remain rejected.
 
 ## Tests
