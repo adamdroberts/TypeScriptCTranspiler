@@ -10908,7 +10908,9 @@ class Emitter {
         if (
             !ts.isPropertyAccessExpression(expr.expression) ||
             expr.expression.name.text !== "valueOf" ||
-            expr.arguments.length !== 0
+            !Array.from(expr.arguments).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            )
         ) {
             return null;
         }
