@@ -166,7 +166,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - `.copyWithin(target, start, end?, ...ignored)` — in-place via `tsc_array_copy_within`, including explicit `undefined` end defaults after evaluating ignored extra arguments. Tests: `array_copy_within`, `array_mutator_ignored_arguments`
 - `.at(index?, ...ignored)` — positive and negative index lookup, defaulting omitted or explicit `undefined` indexes to zero after evaluating ignored extra arguments. Tests: `array_at`, `array_read_ignored_arguments`
 - `.with(index, value, ...ignored)` — copy via `tsc_array_with` after evaluating ignored extra arguments; original array remains unchanged, negative indices count from the end, and out-of-range failures are catchable. Tests: `array_with`, `array_with_errors`, `array_mutator_ignored_arguments`
-- `.toSpliced(start?, deleteCount?, ...items)` — copy via `tsc_array_to_spliced`; original array remains unchanged. Test: `array_to_spliced`
+- `.toSpliced(start?, deleteCount?, ...items)` — copy via `tsc_array_to_spliced`; original array remains unchanged, and explicit `undefined` start/delete-count values use JavaScript defaults while preserving argument-count semantics. Test: `array_to_spliced`
 - `.slice(start?, end?, ...ignored)` — `tsc_array_slice`, including explicit `undefined` defaults after evaluating ignored extra arguments. Test: `array_read_ignored_arguments`
 - `.concat(...items)` — copy plus `tsc_array_append`/`tsc_array_push_raw`; accepts array arguments, single element arguments, and spread elements inside array-literal arguments. Test: `array_concat_values`
 - `.join(sep?, ...ignored)` — with type-driven element stringification after evaluating ignored extra arguments. Test: `array_read_ignored_arguments`

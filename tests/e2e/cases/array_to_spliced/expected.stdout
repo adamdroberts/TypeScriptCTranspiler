@@ -1,5 +1,7 @@
 changed: 1,9,8,4
 tail: 1,2
 inserted: 1,2,7,3,4
+undefined start: 9,3,4
+undefined delete: 1,8,2,3,4
 copy: 1,2,3,4
 orig: 1,2,3,4

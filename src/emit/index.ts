@@ -34116,10 +34116,12 @@ class Emitter {
             }
             case "toSpliced": {
                 const zero: EmitResult = { c: "0.0", ty: T_NUMBER };
-                const start = args[0] ? this.emitExpr(args[0]) : zero;
-                const deleteCount = args[1] ? this.emitExpr(args[1]) : zero;
-                if (args[0]) requireNumber(args[0], start.ty);
-                if (args[1]) requireNumber(args[1], deleteCount.ty);
+                const hasStart = !!args[0] && !this.isUndefinedExpression(args[0]);
+                const hasDeleteCount = !!args[1] && !this.isUndefinedExpression(args[1]);
+                const start = hasStart ? this.emitExpr(args[0]!) : zero;
+                const deleteCount = hasDeleteCount ? this.emitExpr(args[1]!) : zero;
+                if (hasStart) requireNumber(args[0]!, start.ty);
+                if (hasDeleteCount) requireNumber(args[1]!, deleteCount.ty);
                 const specs: SequencedCallArg[] = [
                     { value: recv },
                     { value: start, target: T_NUMBER, node: args[0] ?? call.expression },
