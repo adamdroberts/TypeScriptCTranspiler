@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE now carries exact own-key proofs through object spreads and `Object.assign(...)` sources built from statically present data descriptor result objects. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats statically present data descriptor result objects as side-effect-free prototype operands for unused `Object.create(...)`, `Object.setPrototypeOf(...)`, and `Reflect.setPrototypeOf(...)` calls. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats `delete` operations against fresh statically present data descriptor result objects as side-effect-free when the descriptor object is not reused. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats `in` checks against statically present data descriptor result objects as side-effect-free. Test: `generated_c_dce_const`.

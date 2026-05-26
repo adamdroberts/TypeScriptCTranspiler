@@ -5857,6 +5857,28 @@ class Emitter {
             : null;
     }
 
+    private sideEffectFreeOwnDataPropertyDescriptorObjectOwnStringKeys(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): string[] | null {
+        return this.sideEffectFreeOwnDataPropertyDescriptorObjectKeyCount(expr, seenConsts) === null
+            ? null
+            : ["value", "writable", "enumerable", "configurable"];
+    }
+
+    private sideEffectFreeOwnDataPropertyDescriptorObjectOwnDataEntries(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): { key: string; value: ts.Expression }[] | null {
+        const keys = this.sideEffectFreeOwnDataPropertyDescriptorObjectOwnStringKeys(expr, seenConsts);
+        if (keys === null) return null;
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        return keys.map((key) => ({
+            key,
+            value: ts.factory.createPropertyAccessExpression(unwrapped, key),
+        }));
+    }
+
     private isSideEffectFreeOwnDataPropertyDescriptorObjectOperand(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -6019,6 +6041,11 @@ class Emitter {
             }
             return keys;
         }
+        const descriptorKeys = this.sideEffectFreeOwnDataPropertyDescriptorObjectOwnStringKeys(
+            unwrapped,
+            seenConsts,
+        );
+        if (descriptorKeys !== null) return new Set(descriptorKeys);
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectLiteralOwnStringKeys(init, seenConsts) : null;
     }
@@ -10862,6 +10889,11 @@ class Emitter {
             }
             return Array.from(entries, ([key, value]) => ({ key, value }));
         }
+        const descriptorEntries = this.sideEffectFreeOwnDataPropertyDescriptorObjectOwnDataEntries(
+            unwrapped,
+            seenConsts,
+        );
+        if (descriptorEntries !== null) return descriptorEntries;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeObjectLiteralOwnDataEntries(init, seenConsts) : null;
     }
@@ -12867,6 +12899,9 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (ts.isObjectLiteralExpression(unwrapped)) {
             return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+        }
+        if (this.isSideEffectFreeOwnDataPropertyDescriptorObjectOperand(unwrapped, seenConsts)) {
+            return true;
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeObjectSpreadOperand(init, seenConsts);
