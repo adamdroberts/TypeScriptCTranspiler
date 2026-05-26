@@ -621,14 +621,14 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `process.cwd()` → `tsc_process_cwd`
 - `process.chdir(directory, ...ignored)` → `tsc_process_chdir`; named, namespace, and default `chdir` process imports route to the same helper and evaluate ignored trailing arguments. Test: `process_chdir_ignored_arguments`
 - `process.platform`, `process.arch`, `process.pid`, `process.ppid`, `process.version`, `process.versions`, `process.release`, `process.features`, and `process.uptime(...ignored)` expose synchronous process metadata, with ignored extra-argument evaluation where Node ignores extras. Default process imports plus named, aliased named, and namespace `cwd` / `uptime` imports and read-only metadata value imports from `"process"` / `"node:process"` route to the same runtime helpers.
-- `process.hrtime([previous], ...ignored)` returns a monotonic `[seconds, nanoseconds]` pair, with previous-mark diff support, and `process.hrtime.bigint(...ignored)` returns a monotonic nanosecond BigInt timestamp. Named and namespace `hrtime` imports from `"process"` / `"node:process"` route to the same helpers.
+- `process.hrtime([previous], ...ignored)` returns a monotonic `[seconds, nanoseconds]` pair, with previous-mark diff support, and `process.hrtime.bigint(...ignored)` returns a monotonic nanosecond BigInt timestamp. Named, aliased named, and namespace `hrtime` imports from `"process"` / `"node:process"` route to the same helpers.
 - `process.nextTick(callback, ...args)` plus named and namespace `nextTick` imports from `"process"` / `"node:process"` support a bounded callback queue with typed callback arguments and no fixed arity cap, drained after module initialization and before process exit. Callback functions with explicit `this: any` parameters receive runtime `undefined`.
 - `setTimeout(callback, 0, ...args)` plus explicit `undefined` / `void` / `-0` delay forms support a bounded zero-delay callback queue with typed callback arguments and no fixed arity cap, drained after `process.nextTick` and `queueMicrotask` callbacks before `setImmediate` and process exit; zero, negative-zero, and undefined delay values may use earlier static `const` aliases, and side-effectful `void` delay defaults preserve evaluation before callback arguments. It returns a numeric handle accepted by `clearTimeout(handle)` or `clearInterval(handle)` before the drain; omitted or undefined-valued clear handles are no-op clears that still evaluate ignored arguments. Callback functions with explicit `this: any` parameters receive runtime `undefined`.
 - `setImmediate(callback, ...args)` supports a bounded callback queue with typed callback arguments and no fixed arity cap, drained after `process.nextTick`, `queueMicrotask`, and zero-delay `setTimeout` callbacks before process exit. It returns a numeric handle accepted by `clearImmediate(handle)` before the drain; omitted or undefined-valued clear handles are no-op clears that still evaluate ignored arguments. Callback functions with explicit `this: any` parameters receive runtime `undefined`.
 - Named, aliased named, namespace, and default imports from `"timers"` / `"node:timers"` route to the same bounded zero-delay `setTimeout` / `clearTimeout` / `clearInterval` and before-exit `setImmediate` / `clearImmediate` scheduler helpers. Test: `timers_module_import`
 - Named, aliased named, namespace, and default imports from `"timers/promises"` / `"node:timers/promises"` expose an immediate-settled subset for `setTimeout(0 | undefined | void 0, value?, options?, ...ignored)`, `setImmediate(value?, options?, ...ignored)`, `scheduler.wait(0 | undefined, options?, ...ignored)`, and `scheduler.yield(...ignored)`, where supported undefined/zero delay values and options may use earlier static `const` aliases, options may be explicit `undefined`, `void`, object literals, or aliases for supported option objects and undefined `signal` / literal-or-undefined `ref` values, side-effectful `void` delay/options defaults preserve evaluation, and trailing extras after the supported option slots are evaluated and ignored; nonzero delays and real signal handling remain deferred with real timer integration. Tests: `timers_promises_import`, `timers_promises_scheduler`
 - `process.getuid(...ignored)`, `process.getgid(...ignored)`, `process.geteuid(...ignored)`, `process.getegid(...ignored)`, and `process.getgroups(...ignored)` expose POSIX process identity values. Named, aliased named, and namespace imports from `"process"` / `"node:process"` route to the same helpers.
-- `process.umask(mask?, ...ignored)` reads or updates the native process file mode creation mask. Named and namespace imports from `"process"` / `"node:process"` route to the same helper.
+- `process.umask(mask?, ...ignored)` reads or updates the native process file mode creation mask. Named, aliased named, and namespace imports from `"process"` / `"node:process"` route to the same helper.
 - `process.memoryUsage(...ignored)` returns a Node-shaped dynamic object with numeric `rss`, `heapTotal`, `heapUsed`, `external`, and `arrayBuffers` fields. `process.memoryUsage.rss(...ignored)` returns the RSS counter directly. RSS is populated from `getrusage` where available; heap fields are placeholders until a tracked allocator lands. Named, aliased named, and namespace imports from `"process"` / `"node:process"` route to the same helpers. Tests: `process_memory_usage`, `process_memory_usage_rss`
 - `process.cpuUsage(previousValue?, ...ignored)` returns a Node-shaped dynamic object with numeric `user` and `system` microsecond counters populated from `getrusage`; when a previous usage object is supplied it returns elapsed user/system CPU deltas. Named, aliased named, and namespace imports from `"process"` / `"node:process"` route to the same helper. Tests: `process_cpu_usage`, `process_cpu_usage_previous`
 - `process.resourceUsage(...ignored)` returns a Node-shaped dynamic object with numeric `getrusage` counters for CPU time, RSS, page faults, filesystem I/O, IPC, signals, and context switches. Named, aliased named, and namespace imports from `"process"` / `"node:process"` route to the same helper.
@@ -1269,7 +1269,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `process_cpu_usage` | process.cpuUsage numeric user/system fields |
 | `process_cpu_usage_previous` | process.cpuUsage previous-value deltas and ignored extras |
 | `process_default_import` | default process imports use existing process helpers |
-| `process_env_import` | named and namespace process env imports use process.env helpers |
+| `process_env_import` | named, aliased named, and namespace process env imports use process.env helpers |
 | `process_env_mutation` | process.env property/element reads, writes, and deletes |
 | `process_exit_ignored_arguments` | process.exit evaluates and ignores trailing arguments |
 | `process_exit_import` | named, namespace, and default process exit imports use the exit helper |
@@ -1277,7 +1277,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `process_getgroups` | process.getgroups POSIX supplementary group metadata |
 | `process_hrtime` | process.hrtime monotonic timestamp and diff pairs |
 | `process_hrtime_bigint` | process.hrtime.bigint monotonic nanosecond BigInt timestamp |
-| `process_hrtime_import` | named and namespace process hrtime imports use existing runtime helpers |
+| `process_hrtime_import` | named, aliased named, and namespace process hrtime imports use existing runtime helpers |
 | `process_kill_ignored_arguments` | process.kill evaluates and ignores trailing arguments |
 | `process_kill_signal_zero` | process.kill signal 0 existence probe |
 | `process_memory_usage` | process.memoryUsage numeric memory fields |
@@ -1317,7 +1317,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `stream_non_stream_predicates` | stream state predicates return null or false for non-stream values |
 | `process_title` | process.title readonly argv0-backed metadata |
 | `process_umask` | process.umask read/update/restore behavior |
-| `process_umask_import` | named and namespace process umask imports use existing runtime helper |
+| `process_umask_import` | named, aliased named, and namespace process umask imports use existing runtime helper |
 | `process_usage_import` | named, aliased named, and namespace process POSIX and usage imports use existing runtime helpers |
 | `process_versions` | process.version and process.versions metadata |
 | `promise_any_aggregate` | Promise.any rejects with an AggregateError-shaped object when every input rejects |

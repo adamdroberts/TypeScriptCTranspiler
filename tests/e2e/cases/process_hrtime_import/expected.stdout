@@ -1,4 +1,5 @@
 named: 2 true true 2
+alias: 2 true true 2
 namespace: 2 true true 2
-bigint: bigint bigint
-ignored: np
+bigint: bigint bigint bigint
+ignored: nap
