@@ -7737,14 +7737,27 @@ class Emitter {
             const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
             return !!init && this.isSideEffectFreeDescriptorBooleanFlagRead(init, seenConsts);
         }
+        const descriptorExpr = this.unwrapSideEffectFreeStaticExpression(access.receiver);
         if (
             access.key !== "writable" &&
             access.key !== "enumerable" &&
             access.key !== "configurable"
         ) {
+            if (
+                access.key === "value" &&
+                ts.isCallExpression(descriptorExpr) &&
+                this.isObjectOrReflectGetOwnPropertyDescriptorCall(descriptorExpr, seenConsts)
+            ) {
+                const key = this.sideEffectFreeObjectPropertyReadKey(descriptorExpr.arguments[1]!, seenConsts);
+                if (key === "writable" || key === "enumerable" || key === "configurable") {
+                    return this.isSideEffectFreeDescriptorBooleanFlagRead(
+                        ts.factory.createPropertyAccessExpression(descriptorExpr.arguments[0]!, key),
+                        new Set(seenConsts),
+                    );
+                }
+            }
             return false;
         }
-        const descriptorExpr = this.unwrapSideEffectFreeStaticExpression(access.receiver);
         const targetDescriptorExpr = this.sideEffectFreeObjectTargetReturningOperand(
             descriptorExpr,
             seenConsts,
