@@ -1,0 +1,5 @@
+direct get: A
+reflect get: A
+direct set: B undefined
+reflect set: true C undefined
+events: get:a:true:proxy|get:a:false:explicit|set:b:B:true:proxy|set:c:C:false:explicit
