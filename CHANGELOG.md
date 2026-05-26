@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Materialized synchronous generators now support bare `yield;` as an `undefined` yielded value. Test: `generator_yield_undefined`.
 - Template literal interpolation now has focused coverage for dynamic substitutions preserving left-to-right expression evaluation. Test: `template_literal_eval_order`.
 - `String.raw` tagged templates now have focused coverage for dynamic substitutions, including runtime stringification and left-to-right expression evaluation. Test: `string_raw_dynamic`.
 - Materialized synchronous `yield*` now has focused coverage for dynamic array and string iterable sources. Test: `generator_yield_star_dynamic`.

@@ -20365,14 +20365,16 @@ class Emitter {
     private emitYieldStmt(buf: CBuf, y: ts.YieldExpression): void {
         const gen = this.generatorStack[this.generatorStack.length - 1];
         if (!gen) unsupported(y, "yield outside of generator function");
-        if (!y.expression) unsupported(y, "yield without a value");
         if (y.asteriskToken) {
             this.emitYieldStarStmt(buf, y, gen);
             return;
         }
-        const value = this.emitExpr(y.expression);
+        const value = y.expression
+            ? this.emitExpr(y.expression)
+            : { c: "NULL", ty: T_VOID };
+        const valueNode = y.expression ?? y;
         const tmp = this.freshTemp("_yield");
-        buf.line(`${gen.elemType.c} ${tmp} = ${this.coerce(value, gen.elemType, y.expression)};`);
+        buf.line(`${gen.elemType.c} ${tmp} = ${this.coerce(value, gen.elemType, valueNode)};`);
         buf.line(`tsc_array_push_raw(${gen.arrayVar}, &${tmp});`);
     }
 
