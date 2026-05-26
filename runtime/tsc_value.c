@@ -476,7 +476,7 @@ static bool tsc_value_define_function_metadata_desc(const tsc_function_identity_
     if (has_configurable && configurable) return false;
     if (has_enumerable && enumerable) return false;
     if (has_writable && writable) return false;
-    if (has_value && !tsc_value_same_value_zero(value, current)) return false;
+    if (has_value && !tsc_value_object_is(value, current)) return false;
     return true;
 }
 

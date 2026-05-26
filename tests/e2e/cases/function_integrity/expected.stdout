@@ -17,6 +17,8 @@ typed reflect proto: reflect
 typed reflect prevent: true true false
 typed function define: true true false 1
 typed function delete: false false true true true
+function length samevalue: true false true
+function length samevalue object: Object.defineProperty failed
 seal before: false false
 seal: true false true false
 freeze: true false true true

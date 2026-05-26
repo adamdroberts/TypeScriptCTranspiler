@@ -19,6 +19,7 @@ function TypedFreeze(this: any): void {}
 function TypedReflect(this: any, value: number): void {}
 function TypedDefine(this: any, value: number): void {}
 function TypedDelete(this: any): void {}
+function ZeroLength(this: any): void {}
 
 const first: any = Stable as any;
 const second: any = Stable as any;
@@ -60,6 +61,15 @@ console.log("typed reflect prevent:", Reflect.isExtensible(TypedReflect), Reflec
 const defineResult = Object.defineProperty(TypedDefine, "name", { value: "TypedDefine", writable: false, enumerable: false, configurable: false });
 console.log("typed function define:", defineResult === TypedDefine, Reflect.defineProperty(TypedDefine, "length", { value: 1, writable: false, enumerable: false, configurable: false }), Reflect.defineProperty(TypedDefine, "length", { value: 9 }), Reflect.get(TypedDefine, "length"));
 console.log("typed function delete:", Reflect.deleteProperty(TypedDelete, "length"), Reflect.deleteProperty(TypedDelete, "name"), Reflect.deleteProperty(TypedDelete, "missing"), Reflect.has(TypedDelete, "length"), Reflect.has(TypedDelete, "name"));
+
+const zeroLength: any = ZeroLength as any;
+console.log("function length samevalue:", Reflect.defineProperty(zeroLength, "length", { value: 0, writable: false, enumerable: false, configurable: false }), Reflect.defineProperty(zeroLength, "length", { value: -0, writable: false, enumerable: false, configurable: false }), Object.is(Reflect.get(zeroLength, "length"), 0));
+try {
+    Object.defineProperty(zeroLength, "length", { value: -0, writable: false, enumerable: false, configurable: false });
+    console.log("function length samevalue object:", "ok");
+} catch (err: any) {
+    console.log("function length samevalue object:", err);
+}
 
 const sealed: any = Sealed as any;
 console.log("seal before:", Object.isSealed(sealed), Object.isFrozen(sealed));
