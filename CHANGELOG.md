@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Nullish callable Proxy `apply` / `construct` traps now have focused coverage for being treated as absent and forwarding to the function target. Test: `proxy_callable_nullish_traps_forward`.
 - Callable Proxy handler accessor trap values now have focused coverage for post-lookup `apply` / `construct` callable validation and nullish-result forwarding. Test: `proxy_callable_trap_accessor_validation`.
 - Callable Proxy handler accessor trap properties now have focused coverage for receiver-bound `apply` / `construct` lookup before trap dispatch. Test: `proxy_callable_trap_accessor_lookup`.
 - Revoked callable Proxy handler objects now have focused coverage for throwing during `apply` / `construct` trap lookup on callable target Proxy operations. Test: `proxy_revoked_callable_handler_lookup`.
