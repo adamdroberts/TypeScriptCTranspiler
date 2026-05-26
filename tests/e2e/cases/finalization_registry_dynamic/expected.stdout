@@ -1,0 +1,7 @@
+unregister: true false
+cleaned: 0
+bad target: FinalizationRegistry target must be an object
+null target: FinalizationRegistry target must be an object
+bad token: FinalizationRegistry unregisterToken must be an object
+unregister bad: FinalizationRegistry unregisterToken must be an object
+marks: abc

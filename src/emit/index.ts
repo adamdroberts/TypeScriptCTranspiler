@@ -30314,8 +30314,23 @@ class Emitter {
                     unsupported(call, "FinalizationRegistry.register expects (target, heldValue, unregisterToken?)");
                 const targetArg = args[0]!;
                 const targetRes = this.emitExpr(targetArg);
-                requireWeakObjectKey(targetArg, targetRes.ty, "FinalizationRegistry target");
+                if (targetRes.ty.kind !== "value") {
+                    requireWeakObjectKey(targetArg, targetRes.ty, "FinalizationRegistry target");
+                }
                 const heldValue = this.emitExpr(args[1]!);
+                const targetCheck = (target: string) => targetRes.ty.kind === "value"
+                    ? `if (!tsc_value_is_weak_key(${target})) tsc_throw_str(tsc_str_from_cstr("FinalizationRegistry target must be an object")); `
+                    : "";
+                const tokenExpr = (registry: string, tokenRes: EmitResult, token: string) => {
+                    if (tokenRes.ty.kind === "value") {
+                        return (
+                            `if (tsc_value_is_undefined(${token})) { tsc_finregistry_register(${registry}, NULL); } ` +
+                            `else { if (!tsc_value_is_weak_key(${token})) tsc_throw_str(tsc_str_from_cstr("FinalizationRegistry unregisterToken must be an object")); ` +
+                            `tsc_finregistry_register(${registry}, (void*)(uintptr_t)${token}); }`
+                        );
+                    }
+                    return `tsc_finregistry_register(${registry}, (void*)${token})`;
+                };
                 // target and heldValue are accepted but ignored after evaluation — cleanup callback never fires.
                 // Only unregisterToken is tracked so that unregister(token) returns the right boolean.
                 if (args.length >= 3 && this.isUndefinedExpression(args[2]!)) {
@@ -30327,13 +30342,15 @@ class Emitter {
                             { value: heldValue },
                             ...this.ignoredArgumentSpecs(args, 3),
                         ],
-                        ([r]) => `(tsc_finregistry_register(${r!}, NULL), (void)0)`,
+                        ([r, target]) => `({ ${targetCheck(target!)}tsc_finregistry_register(${r!}, NULL); (void)0; })`,
                     );
                 }
                 if (args.length === 3) {
                     const tokenArg = args[2]!;
                     const tokenRes = this.emitExpr(tokenArg);
-                    requireWeakObjectKey(tokenArg, tokenRes.ty, "FinalizationRegistry unregisterToken");
+                    if (tokenRes.ty.kind !== "value") {
+                        requireWeakObjectKey(tokenArg, tokenRes.ty, "FinalizationRegistry unregisterToken");
+                    }
                     return this.emitSequencedExpr(
                         T_VOID,
                         [
@@ -30342,13 +30359,15 @@ class Emitter {
                             { value: heldValue },
                             { value: tokenRes },
                         ],
-                        ([r, , , tok]) => `(tsc_finregistry_register(${r!}, (void*)${tok!}), (void)0)`,
+                        ([r, target, , tok]) => `({ ${targetCheck(target!)}${tokenExpr(r!, tokenRes, tok!)}; (void)0; })`,
                     );
                 }
                 if (args.length > 3) {
                     const tokenArg = args[2]!;
                     const tokenRes = this.emitExpr(tokenArg);
-                    requireWeakObjectKey(tokenArg, tokenRes.ty, "FinalizationRegistry unregisterToken");
+                    if (tokenRes.ty.kind !== "value") {
+                        requireWeakObjectKey(tokenArg, tokenRes.ty, "FinalizationRegistry unregisterToken");
+                    }
                     return this.emitSequencedExpr(
                         T_VOID,
                         [
@@ -30358,13 +30377,13 @@ class Emitter {
                             { value: tokenRes },
                             ...this.ignoredArgumentSpecs(args, 3),
                         ],
-                        ([r, , , tok]) => `(tsc_finregistry_register(${r!}, (void*)${tok!}), (void)0)`,
+                        ([r, target, , tok]) => `({ ${targetCheck(target!)}${tokenExpr(r!, tokenRes, tok!)}; (void)0; })`,
                     );
                 }
                 return this.emitSequencedExpr(
                     T_VOID,
                     [{ value: recv }, { value: targetRes }, { value: heldValue }],
-                    ([r]) => `(tsc_finregistry_register(${r!}, NULL), (void)0)`,
+                    ([r, target]) => `({ ${targetCheck(target!)}tsc_finregistry_register(${r!}, NULL); (void)0; })`,
                 );
             }
             case "unregister": {
@@ -30372,11 +30391,18 @@ class Emitter {
                     unsupported(call, "FinalizationRegistry.unregister expects (unregisterToken)");
                 const tokenArg = call.arguments[0]!;
                 const tokenRes = this.emitExpr(tokenArg);
-                requireWeakObjectKey(tokenArg, tokenRes.ty, "FinalizationRegistry unregisterToken");
+                if (tokenRes.ty.kind !== "value") {
+                    requireWeakObjectKey(tokenArg, tokenRes.ty, "FinalizationRegistry unregisterToken");
+                }
+                const tokenTemp = this.freshTemp("_finreg_token");
                 return this.emitSequencedExpr(
                     T_BOOLEAN,
                     [{ value: recv }, { value: tokenRes }, ...this.ignoredArgumentSpecs(call.arguments, 1)],
-                    ([r, tok]) => `tsc_finregistry_unregister(${r!}, (void*)${tok!})`,
+                    ([r, tok]) => tokenRes.ty.kind === "value"
+                        ? `({ tsc_value_t const ${tokenTemp} = ${tok!}; ` +
+                            `if (!tsc_value_is_weak_key(${tokenTemp})) tsc_throw_str(tsc_str_from_cstr("FinalizationRegistry unregisterToken must be an object")); ` +
+                            `tsc_finregistry_unregister(${r!}, (void*)(uintptr_t)${tokenTemp}); })`
+                        : `tsc_finregistry_unregister(${r!}, (void*)${tok!})`,
                 );
             }
             case "hasOwnProperty":

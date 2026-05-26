@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic `FinalizationRegistry.register(...)` and `.unregister(...)` now validate dynamic targets and unregister tokens at runtime while treating dynamic `undefined` unregister tokens as omitted. Test: `finalization_registry_dynamic`.
 - Dynamic `WeakRef<any>` now validates object targets at runtime and preserves dynamic values through `.deref(...)`. Test: `weak_ref_dynamic`.
 - Dynamic `WeakMap<any, any>` and `WeakSet<any>` now support nullish empty sources, boxed dynamic array construction, object-key/value runtime validation, and ES-compatible primitive `.get(...)` / `.has(...)` / `.delete(...)` behavior. Test: `weak_collections_dynamic`.
 - Dynamic `new Map<any, any>(source, ...ignored)` now accepts nullish empty sources and boxed dynamic arrays of pair arrays, rejects non-iterable or malformed dynamic sources through catchable runtime errors, uses SameValueZero equality for dynamic Map keys, and returns dynamic `undefined` for missing `.get(...)` keys. Test: `map_constructor_dynamic`.
