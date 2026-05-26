@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE now prunes unused bounded `process.stdin` / `stdout` / `stderr` no-op compatibility methods such as `isPaused(...)`, `setEncoding(...)`, `pause(...)`, `resume(...)`, `pipe(...)`, `unpipe(...)`, listener no-ops, `setDefaultEncoding(...)`, `cork(...)`, and `uncork(...)` when their arguments are side-effect-free; primitive `Promise.resolve(...)` inputs are covered for void/boolean methods. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused `process.stdin` / `stdout` / `stderr` inert state metadata reads such as `destroyed`, `closed`, `errored`, readable state, and writable state flags, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`.
 - CommonJS package-source `require.call(module, spec)`, `require.apply(module, args)`, module-alias `mod.require.call/apply(mod, ...)`, require-alias `call(module, spec)`, and `Reflect.apply(...)` wrapper variants now have focused AOT metadata coverage alongside the existing `module.require` call/apply forms. Test: `node_modules_commonjs_module_require_call_wrapper`.
 - `fs.copyFileSync(...)` and immediate `fs.promises.copyFile(...)` now treat side-effectful `void` flag arguments as default copy flags while preserving flag-slot evaluation before ignored extras. Test: `fs_copy_flags`.

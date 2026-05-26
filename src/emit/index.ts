@@ -1459,6 +1459,9 @@ class Emitter {
         if (this.isSideEffectFreeBufferMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeProcessStdioMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
         if (this.isSideEffectFreeProcessCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
@@ -2719,6 +2722,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreePrimitiveEventTargetMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreePrimitiveProcessStdioMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
         return method === "test" &&
@@ -11359,6 +11365,82 @@ class Emitter {
             default:
                 return false;
         }
+    }
+
+    private isSideEffectFreeProcessStdioMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const streamName = this.processStdioStreamReceiverName(
+            this.unwrapSideEffectFreeStaticExpression(recv),
+        );
+        if (!streamName) return false;
+        const ignoredAfter = (index: number): boolean =>
+            Array.from(args).slice(index).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+        switch (method) {
+            case "addListener":
+            case "off":
+            case "on":
+            case "once":
+            case "removeListener":
+                return args.length >= 2 &&
+                    this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
+                    this.isSideEffectFreeEventListenerOperand(args[1]!, seenConsts) &&
+                    ignoredAfter(2);
+            case "removeAllListeners":
+                return ignoredAfter(0);
+            case "isPaused":
+                return streamName === "stdin" && ignoredAfter(0);
+            case "pause":
+            case "resume":
+                return streamName === "stdin" && ignoredAfter(0);
+            case "setEncoding":
+                return streamName === "stdin" &&
+                    args.length >= 1 &&
+                    this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
+                    ignoredAfter(1);
+            case "pipe":
+                return streamName === "stdin" &&
+                    args.length >= 1 &&
+                    !!this.processWritableStreamReceiverName(
+                        this.unwrapSideEffectFreeStaticExpression(args[0]!),
+                    ) &&
+                    ignoredAfter(1);
+            case "unpipe":
+                return streamName === "stdin" &&
+                    (
+                        args.length === 0 ||
+                        this.isSideEffectFreeUndefinedValue(args[0]!, seenConsts) ||
+                        !!this.processWritableStreamReceiverName(
+                            this.unwrapSideEffectFreeStaticExpression(args[0]!),
+                        )
+                    ) &&
+                    ignoredAfter(args.length > 0 ? 1 : 0);
+            case "setDefaultEncoding":
+                return streamName !== "stdin" &&
+                    args.length >= 1 &&
+                    this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
+                    ignoredAfter(1);
+            case "cork":
+            case "uncork":
+                return streamName !== "stdin" && ignoredAfter(0);
+            default:
+                return false;
+        }
+    }
+
+    private isSideEffectFreePrimitiveProcessStdioMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return method !== "read" &&
+            this.isSideEffectFreeProcessStdioMethodCall(recv, method, args, seenConsts);
     }
 
     private isSideEffectFreeCommonJSPathIdentifier(expr: ts.Identifier): boolean {
