@@ -20415,6 +20415,16 @@ class Emitter {
         } else if (source.ty.kind === "value") {
             arrayExpr = `tsc_value_iter_values(${source.c})`;
             elemType = T_VALUE;
+        } else if (source.ty.kind === "class") {
+            const custom = this.emitCustomIterableArray(y.expression, source);
+            if (!custom) {
+                unsupported(
+                    y.expression,
+                    "yield* over a class currently needs [Symbol.iterator]() returning a typed array-backed IterableIterator<T>",
+                );
+            }
+            arrayExpr = custom.c;
+            elemType = custom.ty.elem!;
         } else {
             unsupported(y.expression, "yield* currently supports arrays, strings, and dynamic iterable values");
         }
