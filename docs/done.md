@@ -1477,7 +1477,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_commonjs_define_properties_own_descriptors_accessor_exports` | narrow CommonJS package `Object.defineProperties(exports, Object.getOwnPropertyDescriptors(staticObject))` getter and method descriptor-preserving exports |
 | `node_modules_commonjs_define_properties_descriptor_identifier_exports` | narrow CommonJS package `Object.defineProperties(exports, { name: descriptor })` descriptor-variable exports |
 | `node_modules_commonjs_define_property_default_export` | narrow CommonJS package `Object.defineProperty(exports, "default", { value })` default-export interop |
-| `node_modules_commonjs_define_property_computed_exports` | narrow CommonJS package statically computed `Object.defineProperty` and `Object.defineProperties` export keys |
+| `node_modules_commonjs_define_property_computed_exports` | narrow CommonJS package statically computed `Object.defineProperty` and `Object.defineProperties` export keys, including static string collection lookups |
 | `node_modules_commonjs_define_property_exports` | narrow CommonJS package `Object.defineProperty(exports, name, { value })` data exports |
 | `node_modules_commonjs_define_property_identifier_exports` | narrow CommonJS package `Object.defineProperty(exports, name, descriptor)` data exports |
 | `node_modules_commonjs_define_property_require_member_exports` | narrow CommonJS package descriptor values backed by `require("./local.js").member` |
