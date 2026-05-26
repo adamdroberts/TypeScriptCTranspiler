@@ -1,0 +1,3 @@
+{
+  "description": "Proxy Object prototype/extensibility helpers evaluate ignored arguments before trap dispatch"
+}

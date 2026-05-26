@@ -1,0 +1,6 @@
+proto: base
+set: true next
+ext: true
+prevent: true false
+marks: g,s,e,p
+events: getProto|setProto:next|isExtensible|preventExtensions
