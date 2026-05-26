@@ -1,0 +1,3 @@
+{
+  "description": "Object.defineProperty and Object.defineProperties throw for falsy Proxy defineProperty trap results"
+}

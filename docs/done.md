@@ -431,6 +431,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Revoked object `Proxy` values throw through `Reflect.*` helper paths including get, set, has, deleteProperty, ownKeys, descriptor, prototype, and extensibility helpers. Test: `proxy_revocable_reflect_ops`
 - `Proxy.revocable(...)` revoke functions are idempotent and receiver-independent across direct, `call`, and `apply` invocation forms while preserving revoked-proxy errors after revocation. Test: `proxy_revocable_revoke_function`
 - Ordinary falsy proxy trap results preserve false-returning `Reflect.set`, `Reflect.defineProperty`, `Reflect.deleteProperty`, `Reflect.preventExtensions`, and `Reflect.setPrototypeOf` semantics, while `Object.preventExtensions` and `Object.setPrototypeOf` throw on failed proxy trap results. Test: `proxy_falsy_trap_results`
+- Falsy Proxy `defineProperty` trap results preserve false-returning `Reflect.defineProperty(...)` semantics while `Object.defineProperty(...)` and `Object.defineProperties(...)` throw through the catchable Object failure path. Test: `proxy_define_property_falsy_trap_result`
 - `Object.seal(proxy)` and `Object.freeze(proxy)` fail through catchable errors when a proxy `preventExtensions` trap reports `false`, preserving the Object integrity-operation failure path. Test: `proxy_integrity_falsy_trap_results`
 - `Object.seal(proxy)` and `Object.freeze(proxy)` drive proxy integrity traps through `preventExtensions`, `ownKeys`, `getOwnPropertyDescriptor`, and `defineProperty` so forwarding handlers seal or freeze the underlying target. Test: `proxy_integrity_forward`
 - `Object.seal(proxy)` and `Object.freeze(proxy)` fail through catchable errors when proxy integrity `defineProperty` traps return `false` after successful extension prevention. Test: `proxy_integrity_define_failure`
@@ -1742,6 +1743,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_callable_trap_validation` | Proxy apply and construct traps must be callable before dispatch |
 | `proxy_object_trap_callable_validation` | Proxy object traps reject non-callable trap values before dispatch |
 | `proxy_define_accessor` | Proxy defineProperty trap and invariant handling for accessor descriptors, including fixed accessor getter/setter identity |
+| `proxy_define_property_falsy_trap_result` | Proxy defineProperty falsy trap results for Reflect and Object helpers |
 | `proxy_nested_callable_identity` | nested callable Proxy typeof/string/JSON/apply/construct identity |
 | `proxy_construct_forward` | trapless constructable Proxy values forward dynamic construction to function targets |
 | `proxy_construct_new_target` | Proxy construct traps receive the normalized newTarget identity |

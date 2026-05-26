@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Proxy `defineProperty` falsy-trap handling now has focused coverage for the throwing `Object.defineProperty(...)` and `Object.defineProperties(...)` paths alongside the false-returning `Reflect.defineProperty(...)` path. Test: `proxy_define_property_falsy_trap_result`.
 - `child_process` sync and `spawnSync` UTF-8 result paths now have focused coverage for the `"utf-8"` encoding alias. Test: `child_process_utf8_dash_encoding_options`.
 - Typed and dynamic array predicate/search higher-order methods now have focused coverage for ignored trailing-argument evaluation across `findIndex`, `findLast`, `findLastIndex`, and `every`. Test: `array_hof_predicate_ignored_arguments`.
 - Pure JavaScript packages loaded through `allowJs` now have focused coverage for named function-expression exports. Test: `node_modules_js_named_function_expression`.
