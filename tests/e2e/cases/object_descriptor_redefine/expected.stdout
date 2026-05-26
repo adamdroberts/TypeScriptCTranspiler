@@ -7,3 +7,8 @@ set after lock: false 3
 same locked: true 3
 bad enum: false 3
 bad writable: false 3
+plus zero same: true true
+plus zero negative: false true
+negative zero same: true true
+negative zero plus: false true
+nan same: true true
