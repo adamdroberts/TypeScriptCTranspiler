@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `timers/promises` immediate helpers now evaluate and ignore trailing arguments after supported option slots, including `scheduler.yield(...ignored)`. Tests: `timers_promises_import`, `timers_promises_scheduler`.
 - `Object.groupBy(...)` and `Map.groupBy(...)` now evaluate and ignore trailing arguments after the grouping callback. Tests: `object_group_by`, `map_group_by`.
 - `Array.from(...)` now evaluates and ignores trailing arguments after the optional `thisArg` across the undefined-mapper and mapper callback paths. Test: `array_from_mapper`.
 - `Array.fromAsync(...)` now evaluates and ignores trailing arguments after the optional `thisArg` across the undefined-mapper and mapper callback paths. Test: `array_from_async`.
