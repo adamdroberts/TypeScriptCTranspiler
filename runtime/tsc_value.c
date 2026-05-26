@@ -676,6 +676,14 @@ bool tsc_value_define_properties_descriptor_map(tsc_value_t v, tsc_value_t descr
     return true;
 }
 
+static bool value_is_object_coercible_primitive(tsc_value_t v) {
+    if (!value_is_box(v)) return true;
+    tsc_value_tag_t tag = value_tag(v);
+    return tag == TSC_VALUE_TAG_FALSE ||
+        tag == TSC_VALUE_TAG_TRUE ||
+        tag == TSC_VALUE_TAG_STRING;
+}
+
 bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_getter_t getter, void* getter_env, bool has_getter, tsc_accessor_setter_t setter, void* setter_env, bool has_setter, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_define_accessor((tsc_object_t*)value_ptr(v), key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
@@ -690,6 +698,7 @@ bool tsc_value_object_define_getter(tsc_value_t v, tsc_str_t* key, tsc_value_t g
     if (!value_is_callable_function(getter)) {
         tsc_throw_str(tsc_str_from_cstr("Object.prototype.__defineGetter__ getter must be callable"));
     }
+    if (value_is_object_coercible_primitive(v)) return true;
     return tsc_value_define_accessor_desc(
         v,
         key,
@@ -713,6 +722,7 @@ bool tsc_value_object_define_setter(tsc_value_t v, tsc_str_t* key, tsc_value_t s
     if (!value_is_callable_function(setter)) {
         tsc_throw_str(tsc_str_from_cstr("Object.prototype.__defineSetter__ setter must be callable"));
     }
+    if (value_is_object_coercible_primitive(v)) return true;
     return tsc_value_define_accessor_desc(
         v,
         key,

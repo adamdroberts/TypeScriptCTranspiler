@@ -1,0 +1,3 @@
+{
+  "description": "legacy Object prototype accessor helpers no-op on object-coercible primitive receivers"
+}

@@ -1,0 +1,4 @@
+number getter: ok
+string setter: ok
+boolean lookup: undefined undefined
+bad getter: Object.prototype.__defineGetter__ getter must be callable
