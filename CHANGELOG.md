@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Materialized synchronous `yield*` now has focused coverage for dynamic array and string iterable sources. Test: `generator_yield_star_dynamic`.
 - ES2025 Set composition methods now have focused coverage for dynamic `Set<any>` values, including mixed primitive entries and SameValueZero matching. Test: `set_composition`.
 - Dynamic `FinalizationRegistry.register(...)` and `.unregister(...)` now validate dynamic targets and unregister tokens at runtime while treating dynamic `undefined` unregister tokens as omitted. Test: `finalization_registry_dynamic`.
 - Dynamic `WeakRef<any>` now validates object targets at runtime and preserves dynamic values through `.deref(...)`. Test: `weak_ref_dynamic`.
