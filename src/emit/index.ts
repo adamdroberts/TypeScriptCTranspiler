@@ -1759,11 +1759,14 @@ class Emitter {
         if (
             ts.isIdentifier(recv) &&
             method === "hasOwn" &&
-            call.arguments.length === 2 &&
+            call.arguments.length >= 2 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
         ) {
             return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts) &&
-                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts);
+                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts) &&
+                Array.from(call.arguments).slice(2).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
         }
         if (
             ts.isIdentifier(recv) &&
@@ -1858,11 +1861,14 @@ class Emitter {
                 method === "has" ||
                 method === "getOwnPropertyDescriptor"
             ) &&
-            call.arguments.length === 2 &&
+            call.arguments.length >= 2 &&
             this.isUnshadowedGlobalIdentifier(recv, "Reflect")
         ) {
             return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts) &&
-                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts);
+                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts) &&
+                Array.from(call.arguments).slice(2).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
         }
         if (
             ts.isIdentifier(recv) &&
