@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE now covers aliased named imports for deterministic `crypto.createHash(...)`, `Hash.update(...)`, and `Hash.digest(...)` chains. Test: `generated_c_dce_const`.
 - Generated-C DCE now covers aliased named imports for supported `events` module helper calls such as `getMaxListeners(...)`, `listenerCount(...)`, and `setMaxListeners(...)`. Test: `generated_c_dce_const`.
 - Aliased named imports for supported `events` module helpers now route to the exported helper instead of the local alias name. Test: `event_emitter_more`.
 - Aliased named imports for `stream.isReadable(...)` / `isWritable(...)` / `isErrored(...)` / `isDestroyed(...)` / `isDisturbed(...)` now route to the exported stream predicate instead of the local alias name. Test: `stream_stdio_predicates`.
