@@ -38873,6 +38873,13 @@ class Emitter {
         if (name === "preventExtensions") {
             if (args.length < 1) unsupported(call, "Object.preventExtensions expects object");
             const ignored = this.ignoredArgumentSpecs(args, 1);
+            if (mapped.kind === "void") {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: obj, target: T_VALUE, node: arg },
+                    ...ignored,
+                ], ([o]) => o!);
+            }
             if (primitiveObjectArg) {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(mapped, [{ value: obj, node: arg }, ...ignored], ([o]) => o);
@@ -38889,6 +38896,13 @@ class Emitter {
         if (name === "seal") {
             if (args.length < 1) unsupported(call, "Object.seal expects object");
             const ignored = this.ignoredArgumentSpecs(args, 1);
+            if (mapped.kind === "void") {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: obj, target: T_VALUE, node: arg },
+                    ...ignored,
+                ], ([o]) => o!);
+            }
             if (primitiveObjectArg) {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(mapped, [{ value: obj, node: arg }, ...ignored], ([o]) => o);
@@ -38928,6 +38942,13 @@ class Emitter {
         if (name === "freeze") {
             if (args.length < 1) unsupported(call, "Object.freeze expects object");
             const ignored = this.ignoredArgumentSpecs(args, 1);
+            if (mapped.kind === "void") {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: obj, target: T_VALUE, node: arg },
+                    ...ignored,
+                ], ([o]) => o!);
+            }
             if (primitiveObjectArg) {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(mapped, [{ value: obj, node: arg }, ...ignored], ([o]) => o);

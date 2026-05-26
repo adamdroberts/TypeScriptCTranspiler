@@ -1,0 +1,3 @@
+{
+  "description": "Object integrity mutators return static nullish targets unchanged"
+}
