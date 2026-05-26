@@ -4885,6 +4885,12 @@ function absentDescriptorNot(): boolean {
     return !Object.getOwnPropertyDescriptor(new Error("local_dead_absent_descriptor_not_condition"), "missing", "local_dead_absent_descriptor_not_ignored");
 }
 
+function absentDescriptorNullish(): string {
+    // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+    return (Object.getOwnPropertyDescriptor(new Error("local_dead_absent_descriptor_nullish_condition"), "missing", "local_dead_absent_descriptor_nullish_ignored") as undefined)
+        ?? "kept_absent_descriptor_nullish";
+}
+
 function staticSwitchDce(): number {
     const local_static_switch_key: "a" | "b" = top_level_static_false ? "a" : "b";
     switch (local_static_switch_key) {
@@ -5042,6 +5048,7 @@ console.log(
     literalTruthiness(),
     absentDescriptorTernary(),
     absentDescriptorNot(),
+    absentDescriptorNullish(),
     staticSwitchDce(),
     branchExit(true),
     nestedBlockExit(),

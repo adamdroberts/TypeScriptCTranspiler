@@ -24683,6 +24683,12 @@ class Emitter {
             if (chain) return chain;
         }
 
+        if (op === ts.SyntaxKind.QuestionQuestionToken) {
+            const leftNullish = this.staticNullishState(bin.left);
+            if (leftNullish === "nullish") return this.emitExpr(bin.right);
+            if (leftNullish === "nonNullish") return this.emitExpr(bin.left);
+        }
+
         const left = this.emitExpr(bin.left);
         const right = this.emitExpr(bin.right);
 

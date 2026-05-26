@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE now emits only the selected side of used nullish coalescing expressions when the left side is statically nullish or non-nullish and side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now emits static boolean constants directly for side-effect-free boolean contexts, including prefix `!` over absent descriptor conditions. Test: `generated_c_dce_const`.
 - Generated-C DCE now emits only the selected branch for used ternary expressions whose condition is statically known and side-effect-free, including absent descriptor conditions. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats statically absent Object/Reflect `getOwnPropertyDescriptor(...)` results as falsy/nullish for dead branch pruning when ignored trailing arguments are pure. Test: `generated_c_dce_const`.
