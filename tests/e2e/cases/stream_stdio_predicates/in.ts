@@ -1,6 +1,6 @@
 import streamDefault from "node:stream";
 import * as streamNs from "stream";
-import { isReadable, isWritable } from "node:stream";
+import { isReadable, isReadable as readableAlias, isWritable, isWritable as writableAlias } from "node:stream";
 import processDefault, { stdin, stdout, stderr } from "node:process";
 
 let ignored = 0;
@@ -11,6 +11,7 @@ function mark(): number {
 
 console.log("named readable:", isReadable(stdin), isReadable(stdout), isReadable(stderr));
 console.log("named writable:", isWritable(stdin), isWritable(stdout), isWritable(stderr));
+console.log("alias:", readableAlias(stdin), writableAlias(stderr, mark()));
 console.log("namespace:", streamNs.isReadable(processDefault.stdin), streamNs.isWritable(processDefault.stdout));
 console.log("default:", streamDefault.isReadable(processDefault.stderr), streamDefault.isWritable(processDefault.stderr, mark()));
 console.log("ignored:", ignored);

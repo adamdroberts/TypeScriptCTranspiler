@@ -1,5 +1,6 @@
 named readable: true false false
 named writable: false true true
+alias: true true
 namespace: true true
 default: false true
-ignored: 1
+ignored: 2

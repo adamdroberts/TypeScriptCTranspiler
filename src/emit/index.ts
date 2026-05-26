@@ -25689,14 +25689,10 @@ class Emitter {
         ) {
             return this.emitEventsStaticCall(call, name);
         }
-        if (
-            this.isNamedImportFrom(calleeId, ["stream", "node:stream"], "isReadable") ||
-            this.isNamedImportFrom(calleeId, ["stream", "node:stream"], "isWritable") ||
-            this.isNamedImportFrom(calleeId, ["stream", "node:stream"], "isErrored") ||
-            this.isNamedImportFrom(calleeId, ["stream", "node:stream"], "isDestroyed") ||
-            this.isNamedImportFrom(calleeId, ["stream", "node:stream"], "isDisturbed")
-        ) {
-            return this.emitStreamCall(call, name);
+        const streamNamed = ["isReadable", "isWritable", "isErrored", "isDestroyed", "isDisturbed"]
+            .find((exported) => this.isNamedImportFrom(calleeId, ["stream", "node:stream"], exported));
+        if (streamNamed) {
+            return this.emitStreamCall(call, streamNamed);
         }
         const cryptoNamed = ["createHash", "randomBytes", "randomUUID"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["crypto", "node:crypto"], exported));
