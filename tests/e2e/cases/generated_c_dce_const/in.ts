@@ -1438,6 +1438,10 @@ const unused_error_descriptor_entries_with_call = Object.entries(Object.getOwnPr
 const unused_error_descriptor_symbols_empty_map_call = Object.getOwnPropertySymbols(Object.getOwnPropertyDescriptor(new TypeError("dead_error_descriptor_symbols_empty_map"), "name")!).map(() => "dead_error_descriptor_symbols_empty_map_callback");
 const unused_error_descriptor_get_prototype_call = Object.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_get_prototype"), "message")!);
 const unused_error_descriptor_reflect_get_prototype_call = Reflect.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_reflect_get_prototype"), "message")!);
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+const unused_error_descriptor_get_prototype_ignored_call = Object.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_get_prototype_ignored"), "message")!, "dead_error_descriptor_get_prototype_ignored_arg");
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+const unused_error_descriptor_reflect_get_prototype_ignored_call = Reflect.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_reflect_get_prototype_ignored"), "message")!, "dead_error_descriptor_reflect_get_prototype_ignored_arg");
 const unused_error_descriptor_object_has_own_call = Object.hasOwn(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_object_has_own"), "message")!, "value");
 const unused_regexp_descriptor_reflect_has_call = Reflect.has(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_reflect_has/g, "lastIndex")!, "writable");
 // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
@@ -1448,6 +1452,10 @@ const unused_error_descriptor_object_is_extensible_call = Object.isExtensible(Ob
 const unused_regexp_descriptor_object_is_sealed_call = Object.isSealed(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_object_is_sealed/g, "lastIndex")!);
 const unused_error_descriptor_object_is_frozen_call = Object.isFrozen(Object.getOwnPropertyDescriptor(new TypeError("dead_error_descriptor_object_is_frozen"), "name")!);
 const unused_regexp_descriptor_is_extensible_call = Reflect.isExtensible(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_is_extensible/g, "lastIndex")!);
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+const unused_error_descriptor_object_is_extensible_ignored_call = Object.isExtensible(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_object_is_extensible_ignored"), "message")!, "dead_error_descriptor_object_is_extensible_ignored_arg");
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+const unused_regexp_descriptor_reflect_is_extensible_ignored_call = Reflect.isExtensible(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_reflect_is_extensible_ignored/g, "lastIndex")!, "dead_regexp_descriptor_reflect_is_extensible_ignored_arg");
 const unused_error_descriptor_freeze_call = Object.freeze(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_freeze"), "message")!);
 const unused_error_descriptor_seal_call = Object.seal(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_seal"), "message")!);
 const unused_regexp_descriptor_object_prevent_extensions_call = Object.preventExtensions(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_object_prevent_extensions/g, "lastIndex")!);
@@ -2878,6 +2886,10 @@ Object.entries(Object.getOwnPropertyDescriptor(new TypeError("top_level_dead_err
 Object.getOwnPropertySymbols(Object.getOwnPropertyDescriptor(new TypeError("top_level_dead_error_descriptor_symbols_empty_map"), "name")!).map(() => "top_level_dead_error_descriptor_symbols_empty_map_callback");
 Object.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_get_prototype"), "message")!);
 Reflect.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_reflect_get_prototype"), "message")!);
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+Object.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_get_prototype_ignored"), "message")!, "top_level_dead_error_descriptor_get_prototype_ignored_arg");
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+Reflect.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_reflect_get_prototype_ignored"), "message")!, "top_level_dead_error_descriptor_reflect_get_prototype_ignored_arg");
 Object.hasOwn(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_object_has_own"), "message")!, "value");
 Reflect.has(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_reflect_has/g, "lastIndex")!, "writable");
 // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
@@ -2888,6 +2900,10 @@ Object.isExtensible(Object.getOwnPropertyDescriptor(new Error("top_level_dead_er
 Object.isSealed(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_object_is_sealed/g, "lastIndex")!);
 Object.isFrozen(Object.getOwnPropertyDescriptor(new TypeError("top_level_dead_error_descriptor_object_is_frozen"), "name")!);
 Reflect.isExtensible(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_is_extensible/g, "lastIndex")!);
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+Object.isExtensible(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_object_is_extensible_ignored"), "message")!, "top_level_dead_error_descriptor_object_is_extensible_ignored_arg");
+// @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+Reflect.isExtensible(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_reflect_is_extensible_ignored/g, "lastIndex")!, "top_level_dead_regexp_descriptor_reflect_is_extensible_ignored_arg");
 Object.freeze(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_freeze"), "message")!);
 Object.seal(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_seal"), "message")!);
 Object.preventExtensions(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_object_prevent_extensions/g, "lastIndex")!);
@@ -4361,6 +4377,10 @@ function usedLocal(value: number): number {
     Object.getOwnPropertySymbols(Object.getOwnPropertyDescriptor(new TypeError("local_dead_error_descriptor_symbols_empty_map"), "name")!).map(() => "local_dead_error_descriptor_symbols_empty_map_callback");
     Object.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_get_prototype"), "message")!);
     Reflect.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_reflect_get_prototype"), "message")!);
+    // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+    Object.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_get_prototype_ignored"), "message")!, "local_dead_error_descriptor_get_prototype_ignored_arg");
+    // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+    Reflect.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_reflect_get_prototype_ignored"), "message")!, "local_dead_error_descriptor_reflect_get_prototype_ignored_arg");
     Object.hasOwn(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_object_has_own"), "message")!, "value");
     Reflect.has(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_reflect_has/g, "lastIndex")!, "writable");
     // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
@@ -4371,6 +4391,10 @@ function usedLocal(value: number): number {
     Object.isSealed(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_object_is_sealed/g, "lastIndex")!);
     Object.isFrozen(Object.getOwnPropertyDescriptor(new TypeError("local_dead_error_descriptor_object_is_frozen"), "name")!);
     Reflect.isExtensible(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_is_extensible/g, "lastIndex")!);
+    // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+    Object.isExtensible(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_object_is_extensible_ignored"), "message")!, "local_dead_error_descriptor_object_is_extensible_ignored_arg");
+    // @ts-ignore: intentional ignored-argument coverage for generated-C DCE.
+    Reflect.isExtensible(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_reflect_is_extensible_ignored/g, "lastIndex")!, "local_dead_regexp_descriptor_reflect_is_extensible_ignored_arg");
     Object.freeze(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_freeze"), "message")!);
     Object.seal(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_seal"), "message")!);
     Object.preventExtensions(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_object_prevent_extensions/g, "lastIndex")!);

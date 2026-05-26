@@ -1659,19 +1659,25 @@ class Emitter {
                 method === "getOwnPropertySymbols" ||
                 method === "getOwnPropertyDescriptors"
             ) &&
-            call.arguments.length === 1 &&
+            call.arguments.length >= 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
         ) {
-            return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts);
+            return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts) &&
+                Array.from(call.arguments).slice(1).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
         }
         if (
             ts.isIdentifier(recv) &&
             method === "getOwnPropertyDescriptor" &&
-            call.arguments.length === 2 &&
+            call.arguments.length >= 2 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
         ) {
             return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts) &&
-                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts);
+                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts) &&
+                Array.from(call.arguments).slice(2).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
         }
         if (
             ts.isIdentifier(recv) &&
@@ -1681,10 +1687,13 @@ class Emitter {
                 method === "isSealed" ||
                 method === "isFrozen"
             ) &&
-            call.arguments.length === 1 &&
+            call.arguments.length >= 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
         ) {
-            return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts);
+            return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts) &&
+                Array.from(call.arguments).slice(1).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
         }
         if (
             ts.isIdentifier(recv) &&
@@ -1850,10 +1859,13 @@ class Emitter {
         if (
             ts.isIdentifier(recv) &&
             method === "ownKeys" &&
-            call.arguments.length === 1 &&
+            call.arguments.length >= 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Reflect")
         ) {
-            return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts);
+            return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts) &&
+                Array.from(call.arguments).slice(1).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
         }
         if (
             ts.isIdentifier(recv) &&
@@ -1916,10 +1928,13 @@ class Emitter {
                 method === "getPrototypeOf" ||
                 method === "isExtensible"
             ) &&
-            call.arguments.length === 1 &&
+            call.arguments.length >= 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Reflect")
         ) {
-            return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts);
+            return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts) &&
+                Array.from(call.arguments).slice(1).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
         }
         if (
             ts.isIdentifier(recv) &&
