@@ -24,6 +24,7 @@ This is the next item that most directly expands what programs can be written ag
   - Additional dynamic string helper coverage evaluates and ignores trailing arguments for `substring(...)`, `substr(...)`, `localeCompare(...)`, and `toLocaleString(...)`. Test: `dynamic_string_ignored_arguments`.
   - Additional dynamic string/array `.at()` coverage treats omitted indexes as zero while preserving ignored trailing argument evaluation. Tests: `dynamic_string_at`, `dynamic_array_at`.
   - Additional typed array `.at()` coverage treats omitted or explicit `undefined` indexes as zero while preserving ignored trailing argument evaluation. Test: `array_at`.
+  - Additional typed array `.flat(undefined, ...ignored)` coverage treats explicit `undefined` depth as the default depth while preserving ignored trailing argument evaluation. Test: `array_read_ignored_arguments`.
   - Additional `Array.isArray(value, ...ignored)` coverage evaluates and ignores trailing arguments on typed, non-array, and dynamic-value paths. Test: `array_is_array_ignored_arguments`.
   - Additional BigInt constructor/operator/radix coverage routes invalid string/number, zero division/modulo, invalid exponent, and invalid radix failures through catchable runtime exceptions. Test: `bigint_errors`.
   - Additional URL constructor/base-resolution and file-URL path coverage routes invalid absolute URLs, invalid bases, non-file URL paths, and remote-host file URLs through catchable runtime exceptions. Test: `url_errors`.

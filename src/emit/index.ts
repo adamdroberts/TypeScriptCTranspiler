@@ -34208,7 +34208,10 @@ class Emitter {
     }
 
     private emitArrayFlat(call: ts.CallExpression, recv: EmitResult): EmitResult {
-        const depth = call.arguments[0] ? this.constantFlatDepth(call.arguments[0]!) : 1;
+        const depthArg = call.arguments[0];
+        const depth = depthArg && !this.isUndefinedExpression(depthArg)
+            ? this.constantFlatDepth(depthArg)
+            : 1;
         let resultTy = recv.ty;
         if (depth > 0) {
             for (let i = 0; i < depth; i++) {
