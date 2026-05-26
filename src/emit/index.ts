@@ -5445,6 +5445,12 @@ class Emitter {
         if (returnedArrayLength !== null) return returnedArrayLength;
         const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
         if (objectLength !== null) return objectLength;
+        const builtinObjectLength = this.sideEffectFreeFreshBuiltinObjectOwnStringKeyCount(
+            unwrapped,
+            seenConsts,
+            false,
+        );
+        if (builtinObjectLength !== null) return builtinObjectLength;
         const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(
             unwrapped,
             seenConsts,
@@ -5480,6 +5486,12 @@ class Emitter {
         }
         const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
         if (objectLength !== null) return objectLength;
+        const builtinObjectLength = this.sideEffectFreeFreshBuiltinObjectOwnStringKeyCount(
+            unwrapped,
+            seenConsts,
+            true,
+        );
+        if (builtinObjectLength !== null) return builtinObjectLength;
         const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(
             unwrapped,
             seenConsts,
@@ -5512,6 +5524,9 @@ class Emitter {
         if (returnedArrayLength !== null) return 0;
         const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
         if (objectLength !== null) return 0;
+        if (this.sideEffectFreeFreshBuiltinObjectOwnStringKeyCount(unwrapped, seenConsts, true) !== null) {
+            return 0;
+        }
         const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(
             unwrapped,
             seenConsts,
@@ -5547,6 +5562,12 @@ class Emitter {
         }
         const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
         if (objectLength !== null) return objectLength;
+        const builtinObjectLength = this.sideEffectFreeFreshBuiltinObjectOwnStringKeyCount(
+            unwrapped,
+            seenConsts,
+            false,
+        );
+        if (builtinObjectLength !== null) return builtinObjectLength;
         const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(
             unwrapped,
             seenConsts,
@@ -5582,6 +5603,12 @@ class Emitter {
         }
         const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
         if (objectLength !== null) return objectLength;
+        const builtinObjectLength = this.sideEffectFreeFreshBuiltinObjectOwnStringKeyCount(
+            unwrapped,
+            seenConsts,
+            false,
+        );
+        if (builtinObjectLength !== null) return builtinObjectLength;
         const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(
             unwrapped,
             seenConsts,
@@ -5610,6 +5637,12 @@ class Emitter {
         }
         const objectLength = this.sideEffectFreeObjectLiteralOwnStringKeyCount(unwrapped, seenConsts);
         if (objectLength !== null) return objectLength;
+        const builtinObjectLength = this.sideEffectFreeFreshBuiltinObjectOwnStringKeyCount(
+            unwrapped,
+            seenConsts,
+            true,
+        );
+        if (builtinObjectLength !== null) return builtinObjectLength;
         const staticBuiltObjectLength = this.sideEffectFreeStaticBuiltObjectOwnStringKeyCount(
             unwrapped,
             seenConsts,
@@ -5630,6 +5663,44 @@ class Emitter {
     ): number | null {
         const keys = this.sideEffectFreeObjectLiteralOwnStringKeys(expr, seenConsts);
         return keys === null ? null : keys.size;
+    }
+
+    private sideEffectFreeFreshBuiltinObjectOwnStringKeyCount(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+        includeNonEnumerable: boolean,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isRegularExpressionLiteral(unwrapped)) {
+            return includeNonEnumerable ? 1 : 0;
+        }
+        if (ts.isNewExpression(unwrapped) && ts.isIdentifier(unwrapped.expression)) {
+            const name = unwrapped.expression.text;
+            if (name === "RegExp") {
+                return this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+                    ? (includeNonEnumerable ? 1 : 0)
+                    : null;
+            }
+            const emptyOwnKeyBuiltins = new Set([
+                "Map",
+                "Set",
+                "WeakMap",
+                "WeakSet",
+                "WeakRef",
+                "FinalizationRegistry",
+                "URL",
+                "Date",
+                "Event",
+                "EventTarget",
+            ]);
+            if (emptyOwnKeyBuiltins.has(name)) {
+                return this.isSideEffectFreeNewExpression(unwrapped, seenConsts) ? 0 : null;
+            }
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init
+            ? this.sideEffectFreeFreshBuiltinObjectOwnStringKeyCount(init, seenConsts, includeNonEnumerable)
+            : null;
     }
 
     private sideEffectFreeStaticBuiltObjectOwnStringKeyCount(

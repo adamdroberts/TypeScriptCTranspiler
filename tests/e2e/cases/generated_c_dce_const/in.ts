@@ -1295,8 +1295,10 @@ const unused_array_from_object_keys_empty_set_mapper_call = Array.from(new Set(O
 const unused_array_from_object_entries_empty_map_mapper_call = Array.from(new Map(Object.entries({})), (entry) => entry[0] + "dead_array_from_object_entries_empty_map_mapper");
 const unused_object_keys_empty_map_call = Object.keys({}).map(() => "dead_object_keys_empty_map");
 const unused_object_keys_array_empty_map_call = Object.keys([] as string[]).map(() => "dead_object_keys_array_empty_map");
+const unused_object_keys_date_empty_map_call = Object.keys(new Date("2020-01-13T14:15:16Z")).map(() => "dead_object_keys_date_empty_map");
 const unused_object_property_names_empty_map_call = Object.getOwnPropertyNames({}).map(() => "dead_object_property_names_empty_map");
 const unused_object_values_empty_map_call = Object.values({}).map(() => "dead_object_values_empty_map");
+const unused_object_values_event_empty_for_each_call = Object.values(new Event("dead_object_values_event_empty")).forEach(() => "dead_object_values_event_empty_for_each");
 const unused_object_entries_empty_map_call = Object.entries({}).map(() => "dead_object_entries_empty_map");
 const unused_reflect_own_keys_empty_map_call = Reflect.ownKeys({}).map(() => "dead_reflect_own_keys_empty_map");
 const unused_empty_array_flat_map_call = [].flatMap(() => ["dead_empty_array_flat_map"]);
@@ -1410,6 +1412,7 @@ const unused_object_keys_from_entries_empty_map_copy_call = Object.keys(Object.f
 const unused_object_keys_create_descriptor_with_call = Object.keys(Object.create(null, { dead_object_keys_create_descriptor_with: { value: 1, enumerable: true }, dead_object_keys_create_descriptor_tail: { value: 2, enumerable: true } })).with(1, "dead_object_keys_create_descriptor_replacement");
 const unused_object_keys_freeze_with_call = Object.keys(Object.freeze({ dead_object_keys_freeze_with: 1, dead_object_keys_freeze_tail: 2 })).with(1, "dead_object_keys_freeze_replacement");
 const unused_object_property_names_with_call = Object.getOwnPropertyNames({ dead_object_property_names_with: 1 }).with(0, "dead_object_property_names_with_replacement");
+const unused_regexp_property_names_with_call = Object.getOwnPropertyNames(/dead_regexp_property_names_with/g).with(0, "dead_regexp_property_names_with_replacement");
 const unused_object_property_names_spread_with_call = Object.getOwnPropertyNames({ ...{ dead_object_property_names_spread_with: 1 }, dead_object_property_names_spread_with_tail: 2 }).with(1, "dead_object_property_names_spread_with_replacement");
 const unused_object_property_names_assign_with_call = Object.getOwnPropertyNames(Object.assign({} as { dead_object_property_names_assign_with: number; dead_object_property_names_assign_tail: number }, { dead_object_property_names_assign_with: 1 }, { dead_object_property_names_assign_tail: 2 })).with(1, "dead_object_property_names_assign_replacement");
 const unused_object_property_names_define_property_with_call = Object.getOwnPropertyNames(Object.defineProperty({} as { dead_object_property_names_define_property_with: number }, "dead_object_property_names_define_property_with", { value: 1 })).with(0, "dead_object_property_names_define_property_replacement");
@@ -1435,6 +1438,7 @@ const unused_object_entries_assign_with_call = Object.entries(Object.assign({} a
 const unused_object_entries_create_descriptor_with_call = Object.entries(Object.create(null, { dead_object_entries_create_descriptor_with: { value: "dead_object_entries_create_descriptor_with", enumerable: true }, dead_object_entries_create_descriptor_tail: { value: "dead_object_entries_create_descriptor_tail", enumerable: true } })).with(1, ["dead_object_entries_create_descriptor_key", "dead_object_entries_create_descriptor_value"]);
 const unused_object_entries_set_prototype_with_call = Object.entries(Object.setPrototypeOf({ dead_object_entries_set_prototype_with: "dead_object_entries_set_prototype_with", dead_object_entries_set_prototype_tail: "dead_object_entries_set_prototype_tail" }, null)).with(1, ["dead_object_entries_set_prototype_key", "dead_object_entries_set_prototype_value"]);
 const unused_reflect_own_keys_with_call = Reflect.ownKeys({ dead_reflect_own_keys_with: 1 }).with(0, "dead_reflect_own_keys_with_replacement");
+const unused_reflect_own_keys_regexp_with_call = Reflect.ownKeys(new RegExp("dead_reflect_own_keys_regexp_with", "g")).with(0, "dead_reflect_own_keys_regexp_with_replacement");
 const unused_reflect_own_keys_from_entries_empty_map_const_call = Reflect.ownKeys(Object.fromEntries(unused_object_from_entries_empty_map_source));
 const unused_reflect_own_keys_from_entries_empty_map_copy_call = Reflect.ownKeys(Object.fromEntries(unused_object_from_entries_empty_map_copy_source));
 const unused_reflect_own_keys_spread_with_call = Reflect.ownKeys({ ...{ dead_reflect_own_keys_spread_with: 1 }, dead_reflect_own_keys_spread_with_tail: 2 }).with(1, "dead_reflect_own_keys_spread_with_replacement");
@@ -2669,8 +2673,10 @@ Array.from(new Set(Object.keys({})), (value) => value + "top_level_dead_array_fr
 Array.from(new Map(Object.entries({})), (entry) => entry[0] + "top_level_dead_array_from_object_entries_empty_map_mapper");
 Object.keys({}).map(() => "top_level_dead_object_keys_empty_map");
 Object.keys([] as string[]).map(() => "top_level_dead_object_keys_array_empty_map");
+Object.keys(new Date("2020-01-14T15:16:17Z")).map(() => "top_level_dead_object_keys_date_empty_map");
 Object.getOwnPropertyNames({}).map(() => "top_level_dead_object_property_names_empty_map");
 Object.values({}).map(() => "top_level_dead_object_values_empty_map");
+Object.values(new Event("top_level_dead_object_values_event_empty")).forEach(() => "top_level_dead_object_values_event_empty_for_each");
 Object.entries({}).map(() => "top_level_dead_object_entries_empty_map");
 Reflect.ownKeys({}).map(() => "top_level_dead_reflect_own_keys_empty_map");
 [].flatMap(() => ["top_level_dead_empty_array_flat_map"]);
@@ -2767,6 +2773,7 @@ Object.keys(Object.fromEntries<{ top_level_dead_object_keys_from_entries_with: n
 Object.keys(Object.create(null, { top_level_dead_object_keys_create_descriptor_with: { value: 1, enumerable: true }, top_level_dead_object_keys_create_descriptor_tail: { value: 2, enumerable: true } })).with(1, "top_level_dead_object_keys_create_descriptor_replacement");
 Object.keys(Object.freeze({ top_level_dead_object_keys_freeze_with: 1, top_level_dead_object_keys_freeze_tail: 2 })).with(1, "top_level_dead_object_keys_freeze_replacement");
 Object.getOwnPropertyNames({ top_level_dead_object_property_names_with: 1 }).with(0, "top_level_dead_object_property_names_with_replacement");
+Object.getOwnPropertyNames(/top_level_dead_regexp_property_names_with/g).with(0, "top_level_dead_regexp_property_names_with_replacement");
 Object.getOwnPropertyNames(Object.assign({} as { top_level_dead_object_property_names_assign_with: number; top_level_dead_object_property_names_assign_tail: number }, { top_level_dead_object_property_names_assign_with: 1 }, { top_level_dead_object_property_names_assign_tail: 2 })).with(1, "top_level_dead_object_property_names_assign_replacement");
 Object.getOwnPropertyNames(Object.defineProperty({} as { top_level_dead_object_property_names_define_property_with: number }, "top_level_dead_object_property_names_define_property_with", { value: 1 })).with(0, "top_level_dead_object_property_names_define_property_replacement");
 Object.getOwnPropertyNames(Object.seal({ top_level_dead_object_property_names_seal_with: 1, top_level_dead_object_property_names_seal_tail: 2 })).with(1, "top_level_dead_object_property_names_seal_replacement");
@@ -2779,6 +2786,7 @@ Object.entries(Object.assign({} as { top_level_dead_object_entries_assign_with: 
 Object.entries(Object.create(null, { top_level_dead_object_entries_create_descriptor_with: { value: "top_level_dead_object_entries_create_descriptor_with", enumerable: true }, top_level_dead_object_entries_create_descriptor_tail: { value: "top_level_dead_object_entries_create_descriptor_tail", enumerable: true } })).with(1, ["top_level_dead_object_entries_create_descriptor_key", "top_level_dead_object_entries_create_descriptor_value"]);
 Object.entries(Object.setPrototypeOf({ top_level_dead_object_entries_set_prototype_with: "top_level_dead_object_entries_set_prototype_with", top_level_dead_object_entries_set_prototype_tail: "top_level_dead_object_entries_set_prototype_tail" }, null)).with(1, ["top_level_dead_object_entries_set_prototype_key", "top_level_dead_object_entries_set_prototype_value"]);
 Reflect.ownKeys({ top_level_dead_reflect_own_keys_with: 1 }).with(0, "top_level_dead_reflect_own_keys_with_replacement");
+Reflect.ownKeys(new RegExp("top_level_dead_reflect_own_keys_regexp_with", "g")).with(0, "top_level_dead_reflect_own_keys_regexp_with_replacement");
 Reflect.ownKeys(Object.assign({} as { top_level_dead_reflect_own_keys_assign_with: number; top_level_dead_reflect_own_keys_assign_tail: number }, { top_level_dead_reflect_own_keys_assign_with: 1 }, { top_level_dead_reflect_own_keys_assign_tail: 2 })).with(1, "top_level_dead_reflect_own_keys_assign_replacement");
 Reflect.ownKeys(Object.defineProperties({} as { top_level_dead_reflect_own_keys_define_properties_with: number; top_level_dead_reflect_own_keys_define_properties_tail: number }, { top_level_dead_reflect_own_keys_define_properties_with: { value: 1 }, top_level_dead_reflect_own_keys_define_properties_tail: { value: 2 } })).with(1, "top_level_dead_reflect_own_keys_define_properties_replacement");
 Reflect.ownKeys(Object.freeze({ top_level_dead_reflect_own_keys_freeze_with: 1, top_level_dead_reflect_own_keys_freeze_tail: 2 })).with(1, "top_level_dead_reflect_own_keys_freeze_replacement");
@@ -4040,8 +4048,10 @@ function usedLocal(value: number): number {
     Array.from(new Map(Object.entries({})), (entry) => entry[0] + "local_dead_array_from_object_entries_empty_map_mapper");
     Object.keys({}).map(() => "local_dead_object_keys_empty_map");
     Object.keys([] as string[]).map(() => "local_dead_object_keys_array_empty_map");
+    Object.keys(new Date("2020-01-15T16:17:18Z")).map(() => "local_dead_object_keys_date_empty_map");
     Object.getOwnPropertyNames({}).map(() => "local_dead_object_property_names_empty_map");
     Object.values({}).map(() => "local_dead_object_values_empty_map");
+    Object.values(new Event("local_dead_object_values_event_empty")).forEach(() => "local_dead_object_values_event_empty_for_each");
     Object.entries({}).map(() => "local_dead_object_entries_empty_map");
     Reflect.ownKeys({}).map(() => "local_dead_reflect_own_keys_empty_map");
     [].flatMap(() => ["local_dead_empty_array_flat_map"]);
@@ -4151,6 +4161,7 @@ function usedLocal(value: number): number {
     Object.keys(Object.create(null, { local_dead_object_keys_create_descriptor_with: { value: 1, enumerable: true }, local_dead_object_keys_create_descriptor_tail: { value: 2, enumerable: true } })).with(1, "local_dead_object_keys_create_descriptor_replacement");
     Object.keys(Object.freeze({ local_dead_object_keys_freeze_with: 1, local_dead_object_keys_freeze_tail: 2 })).with(1, "local_dead_object_keys_freeze_replacement");
     Object.getOwnPropertyNames({ local_dead_object_property_names_with: 1 }).with(0, "local_dead_object_property_names_with_replacement");
+    Object.getOwnPropertyNames(/local_dead_regexp_property_names_with/g).with(0, "local_dead_regexp_property_names_with_replacement");
     Object.getOwnPropertyNames(Object.assign({} as { local_dead_object_property_names_assign_with: number; local_dead_object_property_names_assign_tail: number }, { local_dead_object_property_names_assign_with: 1 }, { local_dead_object_property_names_assign_tail: 2 })).with(1, "local_dead_object_property_names_assign_replacement");
     Object.getOwnPropertyNames(Object.defineProperty({} as { local_dead_object_property_names_define_property_with: number }, "local_dead_object_property_names_define_property_with", { value: 1 })).with(0, "local_dead_object_property_names_define_property_replacement");
     Object.getOwnPropertyNames(Object.seal({ local_dead_object_property_names_seal_with: 1, local_dead_object_property_names_seal_tail: 2 })).with(1, "local_dead_object_property_names_seal_replacement");
@@ -4163,6 +4174,7 @@ function usedLocal(value: number): number {
     Object.entries(Object.create(null, { local_dead_object_entries_create_descriptor_with: { value: "local_dead_object_entries_create_descriptor_with", enumerable: true }, local_dead_object_entries_create_descriptor_tail: { value: "local_dead_object_entries_create_descriptor_tail", enumerable: true } })).with(1, ["local_dead_object_entries_create_descriptor_key", "local_dead_object_entries_create_descriptor_value"]);
     Object.entries(Object.setPrototypeOf({ local_dead_object_entries_set_prototype_with: "local_dead_object_entries_set_prototype_with", local_dead_object_entries_set_prototype_tail: "local_dead_object_entries_set_prototype_tail" }, null)).with(1, ["local_dead_object_entries_set_prototype_key", "local_dead_object_entries_set_prototype_value"]);
     Reflect.ownKeys({ local_dead_reflect_own_keys_with: 1 }).with(0, "local_dead_reflect_own_keys_with_replacement");
+    Reflect.ownKeys(new RegExp("local_dead_reflect_own_keys_regexp_with", "g")).with(0, "local_dead_reflect_own_keys_regexp_with_replacement");
     Reflect.ownKeys(Object.assign({} as { local_dead_reflect_own_keys_assign_with: number; local_dead_reflect_own_keys_assign_tail: number }, { local_dead_reflect_own_keys_assign_with: 1 }, { local_dead_reflect_own_keys_assign_tail: 2 })).with(1, "local_dead_reflect_own_keys_assign_replacement");
     Reflect.ownKeys(Object.defineProperties({} as { local_dead_reflect_own_keys_define_properties_with: number; local_dead_reflect_own_keys_define_properties_tail: number }, { local_dead_reflect_own_keys_define_properties_with: { value: 1 }, local_dead_reflect_own_keys_define_properties_tail: { value: 2 } })).with(1, "local_dead_reflect_own_keys_define_properties_replacement");
     Reflect.ownKeys(Object.freeze({ local_dead_reflect_own_keys_freeze_with: 1, local_dead_reflect_own_keys_freeze_tail: 2 })).with(1, "local_dead_reflect_own_keys_freeze_replacement");
