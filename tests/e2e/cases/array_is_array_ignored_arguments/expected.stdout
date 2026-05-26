@@ -1,0 +1,4 @@
+typed: true
+string: false
+dynamic: true false
+events: typed|string|dynamic-array|dynamic-object

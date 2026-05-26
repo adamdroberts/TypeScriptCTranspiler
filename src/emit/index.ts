@@ -27990,11 +27990,20 @@ class Emitter {
             if (!a) unsupported(call, "Array.isArray needs an argument");
             const r = this.emitExpr(a);
             if (r.ty.kind === "value") {
-                return this.emitSequencedCall("tsc_value_is_array", T_BOOLEAN, [
-                    { value: r, target: T_VALUE, node: a },
-                ]);
+                return this.emitSequencedExpr(
+                    T_BOOLEAN,
+                    [
+                        { value: r, target: T_VALUE, node: a },
+                        ...this.ignoredArgumentSpecs(call.arguments, 1),
+                    ],
+                    ([value]) => `tsc_value_is_array(${value})`,
+                );
             }
-            return { c: r.ty.kind === "array" ? "true" : "false", ty: T_BOOLEAN };
+            return this.emitSequencedExpr(
+                T_BOOLEAN,
+                [{ value: r, node: a }, ...this.ignoredArgumentSpecs(call.arguments, 1)],
+                () => r.ty.kind === "array" ? "true" : "false",
+            );
         }
 
         const recv = this.emitExpr(recvExpr);
