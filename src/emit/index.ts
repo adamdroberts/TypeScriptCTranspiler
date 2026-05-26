@@ -1499,6 +1499,13 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
+            this.isStreamModuleIdentifier(recv) &&
+            this.isSideEffectFreeStreamCall(method, call.arguments, seenConsts)
+        ) {
+            return true;
+        }
+        if (
+            ts.isIdentifier(recv) &&
             method === "isArray" &&
             call.arguments.length === 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Array")
@@ -2725,6 +2732,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreePrimitiveProcessStdioMethodCall(recv, method, call.arguments, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreePrimitiveStreamMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
         return method === "test" &&
@@ -6562,6 +6572,10 @@ class Emitter {
         if (eventsExport !== null) {
             return this.isSideEffectFreeEventsStaticCall(eventsExport, call.arguments, seenConsts);
         }
+        const streamExport = this.namedImportExportName(call.expression, ["stream", "node:stream"]);
+        if (streamExport !== null) {
+            return this.isSideEffectFreeStreamCall(streamExport, call.arguments, seenConsts);
+        }
         const cryptoExport = this.namedImportExportName(call.expression, ["crypto", "node:crypto"]);
         if (cryptoExport !== null) {
             return this.isSideEffectFreeCryptoCall(cryptoExport, call.arguments, seenConsts);
@@ -7168,6 +7182,42 @@ class Emitter {
             method === "getMaxListeners" ||
             method === "setMaxListeners"
         ) && this.isSideEffectFreeEventsStaticCall(method, args, seenConsts);
+    }
+
+    private isSideEffectFreeStreamCall(
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (
+            method !== "isReadable" &&
+            method !== "isWritable" &&
+            method !== "isErrored" &&
+            method !== "isDestroyed" &&
+            method !== "isDisturbed"
+        ) {
+            return false;
+        }
+        if (args.length < 1) return false;
+        const target = this.unwrapSideEffectFreeStaticExpression(args[0]!);
+        return (
+            !!this.processStdioStreamReceiverName(target) ||
+            this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts)
+        ) &&
+            Array.from(args).slice(1).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            );
+    }
+
+    private isSideEffectFreePrimitiveStreamMethodCall(
+        recv: ts.Expression,
+        method: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return ts.isIdentifier(recv) &&
+            this.isStreamModuleIdentifier(recv) &&
+            this.isSideEffectFreeStreamCall(method, args, seenConsts);
     }
 
     private isSideEffectFreeDateConstructorArgs(
@@ -7806,6 +7856,13 @@ class Emitter {
             if (
                 eventsExport !== null &&
                 this.isSideEffectFreePrimitiveEventsStaticCall(eventsExport, unwrapped.arguments, seenConsts)
+            ) {
+                return true;
+            }
+            const streamExport = this.namedImportExportName(unwrapped.expression, ["stream", "node:stream"]);
+            if (
+                streamExport !== null &&
+                this.isSideEffectFreeStreamCall(streamExport, unwrapped.arguments, seenConsts)
             ) {
                 return true;
             }
