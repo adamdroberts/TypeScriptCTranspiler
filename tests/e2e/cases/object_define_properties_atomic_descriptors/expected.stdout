@@ -1,0 +1,4 @@
+bad descriptor: Object.defineProperty descriptor must be an object
+after bad descriptor:  undefined
+bad accessor: Object.defineProperty getter must be callable
+after bad accessor:  undefined

@@ -546,7 +546,26 @@ bool tsc_value_dynamic_accessor_setter(void* env, tsc_value_t receiver, tsc_valu
     return true;
 }
 
-bool tsc_value_define_property_descriptor(tsc_value_t v, tsc_str_t* key, tsc_value_t desc) {
+typedef struct tsc_parsed_property_descriptor {
+    tsc_str_t* key;
+    bool accessor;
+    tsc_value_t value;
+    bool has_value;
+    bool writable;
+    bool has_writable;
+    tsc_accessor_getter_t getter;
+    void* getter_env;
+    bool has_getter;
+    tsc_accessor_setter_t setter;
+    void* setter_env;
+    bool has_setter;
+    bool enumerable;
+    bool has_enumerable;
+    bool configurable;
+    bool has_configurable;
+} tsc_parsed_property_descriptor_t;
+
+static tsc_parsed_property_descriptor_t parse_property_descriptor(tsc_value_t desc) {
     if (!value_is_box(desc) || value_tag(desc) != TSC_VALUE_TAG_OBJECT) {
         tsc_throw_str(tsc_str_from_cstr("Object.defineProperty descriptor must be an object"));
     }
@@ -562,55 +581,79 @@ bool tsc_value_define_property_descriptor(tsc_value_t v, tsc_str_t* key, tsc_val
     bool has_configurable = descriptor_field(desc, "configurable", 12, &configurable_value);
     bool has_getter = descriptor_field(desc, "get", 3, &getter_value);
     bool has_setter = descriptor_field(desc, "set", 3, &setter_value);
+    tsc_parsed_property_descriptor_t out;
+    out.key = NULL;
+    out.accessor = has_getter || has_setter;
+    out.value = value;
+    out.has_value = has_value;
+    out.writable = has_writable ? tsc_value_is_truthy(writable_value) : false;
+    out.has_writable = has_writable;
+    out.getter = NULL;
+    out.getter_env = NULL;
+    out.has_getter = has_getter;
+    out.setter = NULL;
+    out.setter_env = NULL;
+    out.has_setter = has_setter;
+    out.enumerable = has_enumerable ? tsc_value_is_truthy(enumerable_value) : false;
+    out.has_enumerable = has_enumerable;
+    out.configurable = has_configurable ? tsc_value_is_truthy(configurable_value) : false;
+    out.has_configurable = has_configurable;
     if (has_getter || has_setter) {
         if (has_value || has_writable) {
             tsc_throw_str(tsc_str_from_cstr("Object.defineProperty descriptor cannot mix value with get/set"));
         }
-        tsc_accessor_getter_t getter = NULL;
-        void* getter_env = NULL;
-        tsc_accessor_setter_t setter = NULL;
-        void* setter_env = NULL;
         if (has_getter && !tsc_value_is_undefined(getter_value)) {
             if (!value_is_callable_function(getter_value)) {
                 tsc_throw_str(tsc_str_from_cstr("Object.defineProperty getter must be callable"));
             }
-            getter = tsc_value_dynamic_accessor_getter;
-            getter_env = dynamic_accessor_env(getter_value);
+            out.getter = tsc_value_dynamic_accessor_getter;
+            out.getter_env = dynamic_accessor_env(getter_value);
         }
         if (has_setter && !tsc_value_is_undefined(setter_value)) {
             if (!value_is_callable_function(setter_value)) {
                 tsc_throw_str(tsc_str_from_cstr("Object.defineProperty setter must be callable"));
             }
-            setter = tsc_value_dynamic_accessor_setter;
-            setter_env = dynamic_accessor_env(setter_value);
+            out.setter = tsc_value_dynamic_accessor_setter;
+            out.setter_env = dynamic_accessor_env(setter_value);
         }
+    }
+    return out;
+}
+
+static bool apply_property_descriptor(tsc_value_t v, tsc_str_t* key, const tsc_parsed_property_descriptor_t* desc) {
+    if (desc->accessor) {
         return tsc_value_define_accessor_desc(
             v,
             key,
-            getter,
-            getter_env,
-            has_getter,
-            setter,
-            setter_env,
-            has_setter,
-            has_enumerable ? tsc_value_is_truthy(enumerable_value) : false,
-            has_enumerable,
-            has_configurable ? tsc_value_is_truthy(configurable_value) : false,
-            has_configurable
+            desc->getter,
+            desc->getter_env,
+            desc->has_getter,
+            desc->setter,
+            desc->setter_env,
+            desc->has_setter,
+            desc->enumerable,
+            desc->has_enumerable,
+            desc->configurable,
+            desc->has_configurable
         );
     }
     return tsc_value_define_property_desc(
         v,
         key,
-        value,
-        has_value,
-        has_writable ? tsc_value_is_truthy(writable_value) : false,
-        has_writable,
-        has_enumerable ? tsc_value_is_truthy(enumerable_value) : false,
-        has_enumerable,
-        has_configurable ? tsc_value_is_truthy(configurable_value) : false,
-        has_configurable
+        desc->value,
+        desc->has_value,
+        desc->writable,
+        desc->has_writable,
+        desc->enumerable,
+        desc->has_enumerable,
+        desc->configurable,
+        desc->has_configurable
     );
+}
+
+bool tsc_value_define_property_descriptor(tsc_value_t v, tsc_str_t* key, tsc_value_t desc) {
+    tsc_parsed_property_descriptor_t parsed = parse_property_descriptor(desc);
+    return apply_property_descriptor(v, key, &parsed);
 }
 
 bool tsc_value_define_properties_descriptor_map(tsc_value_t v, tsc_value_t descriptors) {
@@ -618,10 +661,17 @@ bool tsc_value_define_properties_descriptor_map(tsc_value_t v, tsc_value_t descr
         tsc_throw_str(tsc_str_from_cstr("Object.defineProperties descriptor map must be an object"));
     }
     tsc_array_t* keys = tsc_value_object_keys(descriptors);
+    tsc_array_t* parsed = tsc_array_new(sizeof(tsc_parsed_property_descriptor_t), keys->len ? keys->len : 1);
     for (size_t i = 0; i < keys->len; i++) {
         tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
         tsc_value_t desc = tsc_value_get_prop(descriptors, key);
-        if (!tsc_value_define_property_descriptor(v, key, desc)) return false;
+        tsc_parsed_property_descriptor_t prop = parse_property_descriptor(desc);
+        prop.key = key;
+        tsc_array_push_raw(parsed, &prop);
+    }
+    for (size_t i = 0; i < parsed->len; i++) {
+        tsc_parsed_property_descriptor_t prop = TSC_ARR(tsc_parsed_property_descriptor_t, parsed, i);
+        if (!apply_property_descriptor(v, prop.key, &prop)) return false;
     }
     return true;
 }
