@@ -5868,7 +5868,7 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): number | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (!ts.isCallExpression(unwrapped) || !this.isObjectOrReflectGetOwnPropertyDescriptorCall(unwrapped)) {
+        if (!ts.isCallExpression(unwrapped) || !this.isObjectOrReflectGetOwnPropertyDescriptorCall(unwrapped, seenConsts)) {
             const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
             return init
                 ? this.sideEffectFreeOwnDataPropertyDescriptorObjectKeyCount(init, seenConsts)
@@ -7676,9 +7676,15 @@ class Emitter {
         }
         if (
             ts.isCallExpression(descriptorExpr) &&
-            this.isObjectOrReflectGetOwnPropertyDescriptorCall(descriptorExpr)
+            this.isObjectOrReflectGetOwnPropertyDescriptorCall(descriptorExpr, seenConsts)
         ) {
             const key = this.sideEffectFreeObjectPropertyReadKey(descriptorExpr.arguments[1]!, seenConsts);
+            if (key === "value") {
+                return this.isSideEffectFreeErrorDescriptorStringValueRead(
+                    ts.factory.createPropertyAccessExpression(descriptorExpr.arguments[0]!, "value"),
+                    new Set(seenConsts),
+                );
+            }
             return (key === "name" || key === "message") &&
                 this.isSideEffectFreeFreshErrorOperand(descriptorExpr.arguments[0]!, seenConsts);
         }
@@ -7778,9 +7784,15 @@ class Emitter {
         }
         if (
             ts.isCallExpression(descriptorExpr) &&
-            this.isObjectOrReflectGetOwnPropertyDescriptorCall(descriptorExpr)
+            this.isObjectOrReflectGetOwnPropertyDescriptorCall(descriptorExpr, seenConsts)
         ) {
             const key = this.sideEffectFreeObjectPropertyReadKey(descriptorExpr.arguments[1]!, seenConsts);
+            if (key === "value") {
+                return this.isSideEffectFreeRegExpDescriptorNumberValueRead(
+                    ts.factory.createPropertyAccessExpression(descriptorExpr.arguments[0]!, "value"),
+                    new Set(seenConsts),
+                );
+            }
             return key === "lastIndex" &&
                 this.isSideEffectFreeFreshRegExpOperand(descriptorExpr.arguments[0]!, seenConsts);
         }
@@ -9522,11 +9534,17 @@ class Emitter {
             : "unsafe";
     }
 
-    private isObjectOrReflectGetOwnPropertyDescriptorCall(expr: ts.CallExpression): boolean {
+    private isObjectOrReflectGetOwnPropertyDescriptorCall(
+        expr: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
         return ts.isPropertyAccessExpression(expr.expression) &&
             ts.isIdentifier(expr.expression.expression) &&
             expr.expression.name.text === "getOwnPropertyDescriptor" &&
-            expr.arguments.length === 2 &&
+            expr.arguments.length >= 2 &&
+            Array.from(expr.arguments).slice(2).every((arg) =>
+                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+            ) &&
             (
                 this.isUnshadowedGlobalIdentifier(expr.expression.expression, "Object") ||
                 this.isUnshadowedGlobalIdentifier(expr.expression.expression, "Reflect")
@@ -9630,7 +9648,7 @@ class Emitter {
                 seenConsts,
             );
         }
-        if (ts.isCallExpression(unwrapped) && this.isObjectOrReflectGetOwnPropertyDescriptorCall(unwrapped)) {
+        if (ts.isCallExpression(unwrapped) && this.isObjectOrReflectGetOwnPropertyDescriptorCall(unwrapped, seenConsts)) {
             return this.sideEffectFreePrimitiveDescriptorPropertyReadResult(
                 unwrapped,
                 key,

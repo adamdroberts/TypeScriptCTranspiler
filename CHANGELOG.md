@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE coverage now includes nested Object/Reflect `getOwnPropertyDescriptor(...)` helper calls over statically present data descriptor result objects when trailing ignored arguments are pure. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused Object/Reflect integrity mutator calls over statically present data descriptor result objects when trailing ignored arguments are pure. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused Object/Reflect prototype and extensibility helper calls over statically present data descriptor result objects when trailing ignored arguments are pure. Test: `generated_c_dce_const`.
 - Generated-C DCE now prunes unused `Object.hasOwn(...)` and `Reflect.has(...)` calls over statically present data descriptor result objects when trailing ignored arguments are pure. Test: `generated_c_dce_const`.
