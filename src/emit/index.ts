@@ -11336,12 +11336,25 @@ class Emitter {
         );
         if (!streamName) return false;
         switch (expr.name.text) {
+            case "closed":
+            case "destroyed":
+            case "errored":
             case "fd":
             case "isTTY":
                 return true;
             case "readable":
                 return true;
+            case "readableEnded":
+            case "readableFlowing":
+            case "readableLength":
+                return streamName === "stdin";
             case "writable":
+                return streamName !== "stdin";
+            case "writableCorked":
+            case "writableEnded":
+            case "writableFinished":
+            case "writableLength":
+            case "writableNeedDrain":
                 return streamName !== "stdin";
             default:
                 return false;
