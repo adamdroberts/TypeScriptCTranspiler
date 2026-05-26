@@ -1948,7 +1948,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `url_file_path_helpers` | node:url fileURLToPath and pathToFileURL helpers |
 | `url_module_import` | node:url imports route to the supported URL constructor and canParse helpers |
 | `url_errors` | URL constructor/base/file-path validation failures are catchable |
-| `url_object_methods` | URL toString/toJSON/toLocaleString/valueOf |
+| `url_object_methods` | URL toString/toJSON/toLocaleString/valueOf and object helper coverage |
 | `url_parse` | URL parsing fields |
 | `utility_record_type` | standard Record utility type in the no-lib shim erases to ordinary object runtime behavior |
 | `weak_collections` | typed WeakMap/WeakSet with object keys |
