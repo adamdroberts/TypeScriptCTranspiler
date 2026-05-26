@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic `Object.fromEntries(...)` now rejects non-array inputs and malformed entry pairs through catchable runtime errors instead of silently producing or skipping entries. Test: `object_from_entries_errors`.
 - Static `Object.defineProperty(number | string | boolean | bigint | symbol, ...)` and `Object.defineProperties(...)` primitive targets now reject through catchable runtime errors after evaluating keys, descriptors, and ignored trailing arguments. Test: `object_primitive_define_properties`.
 - Static `Object.defineProperty(null | undefined, ...)` and `Object.defineProperties(null | undefined, ...)` targets now reject through catchable runtime errors after evaluating keys, descriptors, and ignored trailing arguments. Test: `object_static_nullish_define_properties`.
 - `Object.assign(null | undefined, source?)` now rejects static nullish targets through catchable runtime errors, and dynamic nullish targets now reject even when no source is supplied. Tests: `object_assign_static_nullish_target`, `object_assign_nullish_target`.

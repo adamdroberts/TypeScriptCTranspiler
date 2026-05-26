@@ -1,0 +1,5 @@
+null: Object.fromEntries entries must be an array
+number: Object.fromEntries entries must be an array
+bad entry: Object.fromEntries entry must be an array pair
+short entry: Object.fromEntries entry must be an array pair
+good: 3

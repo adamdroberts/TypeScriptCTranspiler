@@ -1650,14 +1650,18 @@ tsc_array_t* tsc_value_object_entries(tsc_value_t v) {
 tsc_value_t tsc_value_object_from_entries(tsc_value_t entries) {
     tsc_object_t* out = tsc_object_new();
     if (!value_is_box(entries) || value_tag(entries) != TSC_VALUE_TAG_ARRAY) {
-        return tsc_value_object(out);
+        tsc_throw_str(tsc_str_from_cstr("Object.fromEntries entries must be an array"));
     }
     tsc_array_t* outer = (tsc_array_t*)value_ptr(entries);
     for (size_t i = 0; i < outer->len; i++) {
         tsc_value_t pair_value = TSC_ARR(tsc_value_t, outer, i);
-        if (!value_is_box(pair_value) || value_tag(pair_value) != TSC_VALUE_TAG_ARRAY) continue;
+        if (!value_is_box(pair_value) || value_tag(pair_value) != TSC_VALUE_TAG_ARRAY) {
+            tsc_throw_str(tsc_str_from_cstr("Object.fromEntries entry must be an array pair"));
+        }
         tsc_array_t* pair = (tsc_array_t*)value_ptr(pair_value);
-        if (pair->len < 2) continue;
+        if (pair->len < 2) {
+            tsc_throw_str(tsc_str_from_cstr("Object.fromEntries entry must be an array pair"));
+        }
         tsc_str_t* key = tsc_value_to_string(TSC_ARR(tsc_value_t, pair, 0));
         tsc_value_t value = TSC_ARR(tsc_value_t, pair, 1);
         tsc_object_set(out, key, value);
