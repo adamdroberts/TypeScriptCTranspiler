@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE now treats `Object.prototype.toLocaleString.call(...)` on statically present data descriptor result objects as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats inherited `hasOwnProperty(...)` and `propertyIsEnumerable(...)` calls on statically present data descriptor result objects as side-effect-free. Test: `generated_c_dce_const`.
 - Generated-C DCE coverage now includes statically present data descriptor result objects used as descriptor operands for unused `Reflect.defineProperty(...)` and `Object.create(..., descriptors)` calls. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats statically present data descriptor result objects as side-effect-free data descriptor operands for unused fresh-target `Object.defineProperty(...)` and `Object.defineProperties(...)` calls. Test: `generated_c_dce_const`.

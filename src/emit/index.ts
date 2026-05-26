@@ -2973,7 +2973,8 @@ class Emitter {
         const receiver = unwrapped.arguments[0]!;
         return (
             this.isSideEffectFreeStringCoercion(receiver, seenConsts) ||
-            this.isSideEffectFreeNonStringPrimitiveObjectOperand(receiver, seenConsts)
+            this.isSideEffectFreeNonStringPrimitiveObjectOperand(receiver, seenConsts) ||
+            this.isSideEffectFreeOwnDataPropertyDescriptorObjectOperand(receiver, seenConsts)
         ) &&
             Array.from(unwrapped.arguments).slice(1).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)

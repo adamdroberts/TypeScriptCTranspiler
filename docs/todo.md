@@ -69,6 +69,7 @@ This is the next item that most directly expands what programs can be written ag
   - Generated-C DCE now treats statically present `Object.getOwnPropertyDescriptor(...)` / `Reflect.getOwnPropertyDescriptor(...)` data descriptor results as side-effect-free read-only object and fresh mutation operands. Test: `generated_c_dce_const`.
   - Generated-C DCE now treats `in` checks against statically present data descriptor result objects as side-effect-free. Test: `generated_c_dce_const`.
   - Generated-C DCE now treats `delete` operations against fresh statically present data descriptor result objects as side-effect-free when the descriptor object is not reused. Test: `generated_c_dce_const`.
+  - Generated-C DCE now treats `Object.prototype.toLocaleString.call(...)` on statically present data descriptor result objects as side-effect-free. Test: `generated_c_dce_const`.
   - Generated-C DCE now treats inherited `hasOwnProperty(...)` and `propertyIsEnumerable(...)` calls on statically present data descriptor result objects as side-effect-free. Test: `generated_c_dce_const`.
   - Generated-C DCE coverage now includes statically present data descriptor result objects used as descriptor operands for unused `Reflect.defineProperty(...)` and `Object.create(..., descriptors)` calls. Test: `generated_c_dce_const`.
   - Generated-C DCE now treats statically present data descriptor result objects as side-effect-free data descriptor operands for unused fresh-target `Object.defineProperty(...)` and `Object.defineProperties(...)` calls. Test: `generated_c_dce_const`.
