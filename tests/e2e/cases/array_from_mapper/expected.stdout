@@ -7,3 +7,5 @@ sizes: 1,1,1,1,1
 undefined mapper array: 1,2,3,4
 undefined mapper thisArg evaluated
 undefined mapper string: x|y
+undefined mapper ignored: z TE
+mapper ignored: 42 TE

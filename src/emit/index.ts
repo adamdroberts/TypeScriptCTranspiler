@@ -27952,10 +27952,8 @@ class Emitter {
             if (!a) unsupported(call, "Array.from needs an argument");
             const mapfn = call.arguments[1];
             if (mapfn && !this.isUndefinedExpression(mapfn)) {
-                if (call.arguments.length > 3) unsupported(call, "Array.from(items, mapfn) expects optional thisArg");
-                return this.emitArrayFromWithMapper(call, a, mapfn, call.arguments[2]);
+                return this.emitArrayFromWithMapper(call, a, mapfn, call.arguments[2], undefined, call.arguments.slice(3));
             }
-            if (call.arguments.length > 3) unsupported(call, "Array.from(items, mapfn) expects optional thisArg");
             return this.emitArrayFromWithoutMapper(call, a, undefined, mapfn ? call.arguments.slice(1) : []);
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Array" && memberName === "fromAsync") {
@@ -29629,6 +29627,7 @@ class Emitter {
         mapfnArg: ts.Expression,
         thisArg: ts.Expression | undefined,
         resultArrayType?: CType,
+        ignoredArgs: readonly ts.Expression[] = [],
     ): EmitResult {
         const callType = resultArrayType
             ? this.prepareType(resultArrayType)
@@ -29639,16 +29638,17 @@ class Emitter {
 
         const items = this.emitExpr(itemsArg);
         const thisArgValue = thisArg ? this.emitExpr(thisArg) : null;
-        const thisArgTemp = thisArgValue ? this.freshTemp("_this_arg") : null;
-        const thisArgSetup = thisArgValue
-            ? `tsc_value_t ${thisArgTemp} = ${this.coerce(thisArgValue, T_VALUE, thisArg!)}; `
-            : "";
-        const callbackThisArg = thisArgTemp ?? "tsc_value_undefined()";
+        const ignored = this.ignoredArgumentSpecs(ignoredArgs, 0);
         if (items.ty.kind === "string") {
-            return this.emitArrayFromMapperStringSource(call, items, mapfnArg, u, thisArgSetup, callbackThisArg);
+            return this.emitArrayFromMapperStringSource(call, items, mapfnArg, u, thisArgValue, thisArg, ignored);
         }
         if (items.ty.kind === "value") {
-            return this.emitSequencedExpr(callType, [{ value: items, target: T_VALUE, node: itemsArg }], ([itemsExpr]) => {
+            return this.emitSequencedExpr(callType, [
+                { value: items, target: T_VALUE, node: itemsArg },
+                ...(thisArgValue ? [{ value: thisArgValue, target: T_VALUE, node: thisArg! }] : []),
+                ...ignored,
+            ], ([itemsExpr, thisArgExpr]) => {
+                const callbackThisArg = thisArgValue ? thisArgExpr! : "tsc_value_undefined()";
                 const src = this.freshTemp("_af_dyn_src");
                 const out = this.freshTemp("_af_dyn_out");
                 const iv = this.freshTemp("_af_dyn_i");
@@ -29659,7 +29659,6 @@ class Emitter {
                 const mappedC = this.coerce(body, u, mapfnArg);
                 return (
                     `({ tsc_array_t* const ${src} = tsc_value_array_from_values(${itemsExpr!}); ` +
-                    `${thisArgSetup}` +
                     `tsc_array_t* ${out} = tsc_array_new(sizeof(${u.c}), ${src}->len ? ${src}->len : 1); ` +
                     `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
                     `tsc_value_t ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
@@ -29677,7 +29676,12 @@ class Emitter {
             return source;
         };
 
-        return this.emitSequencedExpr(callType, [{ value: items }], ([itemsExpr]) => {
+        return this.emitSequencedExpr(callType, [
+            { value: items },
+            ...(thisArgValue ? [{ value: thisArgValue, target: T_VALUE, node: thisArg! }] : []),
+            ...ignored,
+        ], ([itemsExpr, thisArgExpr]) => {
+            const callbackThisArg = thisArgValue ? thisArgExpr! : "tsc_value_undefined()";
             const src = this.freshTemp("_af_src");
             const out = this.freshTemp("_af_out");
             const iv = this.freshTemp("_af_i");
@@ -29688,7 +29692,6 @@ class Emitter {
             const mappedC = this.coerce(body, u, mapfnArg);
             return (
                 `({ tsc_array_t* const ${src} = ${sourceArray(itemsExpr!)}; ` +
-                `${thisArgSetup}` +
                 `tsc_array_t* ${out} = tsc_array_new(sizeof(${u.c}), ${src}->len ? ${src}->len : 1); ` +
                 `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
                 `${t.c} ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
@@ -29703,12 +29706,18 @@ class Emitter {
         items: EmitResult,
         mapfnArg: ts.Expression,
         u: CType,
-        thisArgSetup: string,
-        callbackThisArg: string,
+        thisArgValue: EmitResult | null,
+        thisArg: ts.Expression | undefined,
+        ignored: readonly SequencedCallArg[],
     ): EmitResult {
         // String source: walk one code point per iteration via tsc_str_chars.
         const callType = arrayType(u);
-        return this.emitSequencedExpr(callType, [{ value: items }], ([s]) => {
+        return this.emitSequencedExpr(callType, [
+            { value: items },
+            ...(thisArgValue ? [{ value: thisArgValue, target: T_VALUE, node: thisArg! }] : []),
+            ...ignored,
+        ], ([s, thisArgExpr]) => {
+            const callbackThisArg = thisArgValue ? thisArgExpr! : "tsc_value_undefined()";
             const src = this.freshTemp("_afs_src");
             const out = this.freshTemp("_afs_out");
             const iv = this.freshTemp("_afs_i");
@@ -29719,7 +29728,6 @@ class Emitter {
             const mappedC = this.coerce(body, u, mapfnArg);
             return (
                 `({ tsc_array_t* const ${src} = tsc_str_chars(${s}); ` +
-                `${thisArgSetup}` +
                 `tsc_array_t* ${out} = tsc_array_new(sizeof(${u.c}), ${src}->len ? ${src}->len : 1); ` +
                 `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
                 `tsc_str_t* ${item} = ${itemExpr}; ${bindings.join(" ")} ` +

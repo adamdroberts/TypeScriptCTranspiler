@@ -27,3 +27,13 @@ console.log("undefined mapper array:", unchanged.join(","));
 
 const chars = Array.from("xy", undefined, (console.log("undefined mapper thisArg evaluated"), { unused: true }));
 console.log("undefined mapper string:", chars.join("|"));
+
+let ignoredOrder = "";
+const ignoredChars = Array.from("z", undefined, (ignoredOrder += "T", { unused: true }), (ignoredOrder += "E", 0));
+console.log("undefined mapper ignored:", ignoredChars.join("|"), ignoredOrder);
+
+let mappedIgnoredOrder = "";
+const mappedIgnored = Array.from([2], function (this: any, value: number): number {
+    return value + (this.offset as number);
+}, (mappedIgnoredOrder += "T", { offset: 40 }), (mappedIgnoredOrder += "E", 0));
+console.log("mapper ignored:", mappedIgnored.join("|"), mappedIgnoredOrder);
