@@ -12,11 +12,15 @@ tsc_value_t tsc_value_num(double n) {
 }
 
 tsc_value_t tsc_value_string(tsc_str_t* s) { return value_box(TSC_VALUE_TAG_STRING, (uintptr_t)s); }
-tsc_value_t tsc_value_class(void* ptr) {
-    if (!ptr) return tsc_value_null();
+tsc_object_t* tsc_object_new_class(void* ptr) {
     tsc_object_t* o = tsc_object_new();
     o->class_ptr = ptr;
-    return tsc_value_object(o);
+    return o;
+}
+
+tsc_value_t tsc_value_class(void* ptr) {
+    if (!ptr) return tsc_value_null();
+    return tsc_value_object(tsc_object_new_class(ptr));
 }
 
 bool tsc_value_is_nullish(tsc_value_t v) {

@@ -725,6 +725,7 @@ tsc_value_t tsc_value_method_pad_start(tsc_value_t recv, tsc_value_t target, tsc
 tsc_value_t tsc_value_method_pad_end(tsc_value_t recv, tsc_value_t target, tsc_value_t pad);
 
 tsc_object_t* tsc_object_new(void);
+tsc_object_t* tsc_object_new_class(void* ptr);
 bool tsc_object_set(tsc_object_t* o, tsc_str_t* key, tsc_value_t value);
 bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver);
 bool tsc_object_define(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, bool writable, bool enumerable, bool configurable);

@@ -234,6 +234,7 @@ class Emitter {
     private timeoutAdapters = new Map<string, string>();
     private nodeFunctionAdapters = new Set<string>();
     private dynamicFunctionAdapters = new Map<string, string>();
+    private classInstanceMethodValueAdapters = new Map<string, string>();
     private decoratorAddInitializerAdapter: string | null = null;
     private decoratorApplyFieldInitializersHelper = false;
     private eventListenerAdapters = new Map<string, string>();
@@ -19567,6 +19568,101 @@ class Emitter {
         buf.line();
         this.closureDefs.write(buf.toString());
         return name;
+    }
+
+    private ensureClassInstanceMethodValueAdapter(
+        owner: ts.ClassDeclaration,
+        member: ts.MethodDeclaration,
+    ): string {
+        if (!owner.name) unsupported(owner, "class method value adapters require a named class");
+        if (isStatic(member)) unsupported(member, "class method value adapters require an instance method");
+        if (this.isGenericMethod(member)) unsupported(member, "generic class methods cannot be boxed dynamically");
+        const methodName = this.classMethodCName(member.name);
+        if (!methodName) unsupported(member, "computed instance method names");
+        const key = `${owner.name.text}.${methodName}`;
+        const existing = this.classInstanceMethodValueAdapters.get(key);
+        if (existing) return existing;
+        const name = `${owner.name.text}_${methodName}_dynamic_value`;
+        this.classInstanceMethodValueAdapters.set(key, name);
+        const sig = this.checker.getSignatureFromDeclaration(member);
+        if (!sig) unsupported(member, "could not resolve instance method signature");
+        const params = sig.getParameters();
+        const paramTypes = params.map((param) => {
+            const decl = param.valueDeclaration;
+            if (!decl || !ts.isParameter(decl)) {
+                unsupported(member, "instance method value parameter declaration unavailable");
+            }
+            return this.prepareType(mapTsType(
+                decl,
+                this.checker.getTypeOfSymbolAtLocation(param, member),
+                this.checker,
+            ));
+        });
+        const ret = this.prepareType(mapTsType(member, sig.getReturnType(), this.checker));
+        const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
+        this.protos.line(signature + ";");
+        const buf = new CBuf();
+        buf.open(signature);
+        buf.line("(void)env;");
+        buf.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
+        buf.line(`${owner.name.text}_t* self = ${this.coerce({ c: "this_arg", ty: T_VALUE }, classType(owner.name.text), member)};`);
+        const callArgs: string[] = ["self"];
+        for (let i = 0; i < paramTypes.length; i++) {
+            const raw = `(${i} < args->len ? TSC_ARR(tsc_value_t, args, ${i}) : tsc_value_undefined())`;
+            callArgs.push(this.coerce({ c: raw, ty: T_VALUE }, paramTypes[i]!, member));
+        }
+        const call = `${owner.name.text}_${methodName}(${callArgs.join(", ")})`;
+        if (ret.kind === "void" || ret.kind === "never") {
+            buf.line(`${call};`);
+            buf.line("return tsc_value_undefined();");
+        } else {
+            buf.line(`${ret.c} result = ${call};`);
+            buf.line(`return ${this.coerce({ c: "result", ty: ret }, T_VALUE, member)};`);
+        }
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
+    private classInstanceMethodsForValueBox(cd: ts.ClassDeclaration): {
+        publicName: string;
+        owner: ts.ClassDeclaration;
+        method: ts.MethodDeclaration;
+    }[] {
+        const methods = new Map<string, { publicName: string; owner: ts.ClassDeclaration; method: ts.MethodDeclaration }>();
+        const base = this.baseClassDecl(cd);
+        if (base) {
+            for (const item of this.classInstanceMethodsForValueBox(base)) {
+                methods.set(item.publicName, item);
+            }
+        }
+        for (const method of cd.members) {
+            if (!ts.isMethodDeclaration(method) || isStatic(method) || this.isGenericMethod(method)) continue;
+            const publicName = this.staticPropertyName(method.name);
+            if (!publicName) continue;
+            methods.set(publicName, { publicName, owner: cd, method });
+        }
+        return [...methods.values()];
+    }
+
+    private classValueBoxExpression(r: EmitResult, node: ts.Node): string {
+        if (r.ty.kind !== "class" || !r.ty.className) return `tsc_value_class(${r.c})`;
+        const cd = this.findClassDecl(r.ty.className);
+        if (!cd) return `tsc_value_class(${r.c})`;
+        const obj = this.freshTemp("_class_box");
+        const pieces = [`tsc_object_t* ${obj} = tsc_object_new_class(${r.c})`];
+        for (const { publicName, owner, method } of this.classInstanceMethodsForValueBox(cd)) {
+            const adapter = this.ensureClassInstanceMethodValueAdapter(owner, method);
+            const sig = this.checker.getSignatureFromDeclaration(method);
+            const length = sig?.getParameters().length ?? method.parameters.length;
+            pieces.push(
+                `tsc_object_define(${obj}, tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)}), ` +
+                `tsc_value_function_generic_named(${adapter}, NULL, ${length}.0, tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)})), true, false, true)`,
+            );
+        }
+        pieces.push(`tsc_value_object(${obj})`);
+        return `({ ${pieces.join("; ")}; })`;
     }
 
     private classStaticGetterDecoratorValue(
@@ -43801,7 +43897,7 @@ class Emitter {
                 case "function":
                     return `tsc_value_function_generic_named(${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${r.c}, ${(r.ty.params ?? []).length}.0, ${this.functionValueNameLiteral(node)})`;
                 case "class":
-                    return `tsc_value_class(${r.c})`;
+                    return this.classValueBoxExpression(r, node);
                 case "void":
                     if (ts.isExpression(node) && this.isNullExpression(node)) return `tsc_value_null()`;
                     if (ts.isExpression(node) && this.isUndefinedLikeExpression(node)) return `tsc_value_undefined()`;
