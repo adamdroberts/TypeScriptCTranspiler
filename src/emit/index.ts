@@ -36588,15 +36588,20 @@ class Emitter {
                     this.fsPathSpec(b, args[1]!, `fs.${name} destination`),
                 ];
                 if (isCopy) {
+                    const optionSpecs: SequencedCallArg[] = [];
+                    if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
+                        optionSpecs.push({ value: this.emitExpr(args[2]), target: T_VOID, node: args[2] });
+                    }
+                    specs.push(...optionSpecs);
                     const flagsArg = args[2] ? this.staticOptionValue(args[2]) : undefined;
                     specs.push({
-                        value: flagsArg && !this.isUndefinedExpression(flagsArg) ? this.emitExpr(args[2]!) : { c: "0.0", ty: T_NUMBER },
+                        value: flagsArg && !this.isUndefinedLikeExpression(flagsArg) ? this.emitExpr(args[2]!) : { c: "0.0", ty: T_NUMBER },
                         target: T_NUMBER,
                         node: args[2] ?? call,
                     });
                     specs.push(...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2));
-                    return this.emitSequencedExpr(T_VOID, specs, ([src, dest, flags]) =>
-                        `tsc_fs_copy_file_sync_mode(${src!}, ${dest!}, ${flags!})`,
+                    return this.emitSequencedExpr(T_VOID, specs, (values) =>
+                        `tsc_fs_copy_file_sync_mode(${values[0]!}, ${values[1]!}, ${values[2 + optionSpecs.length]!})`,
                     );
                 }
                 specs.push(...this.ignoredArgumentSpecs(args, 2));
@@ -37585,9 +37590,14 @@ class Emitter {
                     this.fsPathSpec(b, args[1]!, `fs.promises.${name} destination`),
                 ];
                 if (isCopy) {
+                    const optionSpecs: SequencedCallArg[] = [];
+                    if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
+                        optionSpecs.push({ value: this.emitExpr(args[2]), target: T_VOID, node: args[2] });
+                    }
+                    specs.push(...optionSpecs);
                     const flagsArg = args[2] ? this.staticOptionValue(args[2]) : undefined;
                     specs.push({
-                        value: flagsArg && !this.isUndefinedExpression(flagsArg) ? this.emitExpr(args[2]!) : { c: "0.0", ty: T_NUMBER },
+                        value: flagsArg && !this.isUndefinedLikeExpression(flagsArg) ? this.emitExpr(args[2]!) : { c: "0.0", ty: T_NUMBER },
                         target: T_NUMBER,
                         node: args[2] ?? call,
                     });
@@ -37595,9 +37605,12 @@ class Emitter {
                 } else {
                     specs.push(...this.ignoredArgumentSpecs(args, 2));
                 }
-                return this.emitSequencedExpr(mapped, specs, ([src, dest, flags]) =>
-                    settle(`({ ${isCopy ? `tsc_fs_copy_file_sync_mode(${src!}, ${dest!}, ${flags!})` : `tsc_fs_rename_sync(${src!}, ${dest!})`}; tsc_promise_resolve(tsc_value_undefined()); })`),
-                );
+                return this.emitSequencedExpr(mapped, specs, (values) => {
+                    const src = values[0]!;
+                    const dest = values[1]!;
+                    const flags = values[2 + (isCopy && args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2]) ? 1 : 0)];
+                    return settle(`({ ${isCopy ? `tsc_fs_copy_file_sync_mode(${src}, ${dest}, ${flags!})` : `tsc_fs_rename_sync(${src}, ${dest})`}; tsc_promise_resolve(tsc_value_undefined()); })`);
+                });
             }
         }
         unsupported(call, `fs.promises.${name} (settled subset only)`);

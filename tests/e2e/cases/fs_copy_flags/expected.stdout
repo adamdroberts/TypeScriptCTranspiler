@@ -3,8 +3,11 @@ after excl: existing
 after overwrite: source
 sync default alias: source
 sync void default: source
+sync side default: source
 sync excl alias: fs.copyFileSync: destination already exists
 promise default alias: source
 promise void default: source
+promise side default: source
 promise excl: fs.copyFileSync: destination already exists
+events: sync-flags|promise-flags
 constants: 1 2 4
