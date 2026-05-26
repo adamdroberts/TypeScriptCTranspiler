@@ -10,3 +10,4 @@ define configurable fixed: Proxy defineProperty trap cannot report configurable 
 define fixed changed: Proxy defineProperty trap cannot change non-configurable non-writable key
 define fixed same: true
 define accessor data: Proxy defineProperty trap cannot redefine non-configurable accessor key as data
+events: ignored:get fixed|get:fixed|ignored:get accessor|get:hidden|ignored:get accessor ok|pass get:hidden|ignored:set fixed|set:fixed=changed|ignored:set same|set:fixed=fixed|ignored:set accessor|set:hidden=value|ignored:define closed|define:x|ignored:define new fixed|define:x|ignored:define configurable fixed|define:x|ignored:define fixed changed|define:x|ignored:define fixed same|define:x|ignored:define accessor data|define:x
