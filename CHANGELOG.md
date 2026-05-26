@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Proxy handlers now have focused coverage for descriptor, key, delete, prototype, and extensibility traps inherited from the handler prototype while preserving the handler `this` binding. Test: `proxy_inherited_meta_traps`.
 - Proxy handlers now have focused coverage for object, apply, and construct traps inherited from the handler prototype while preserving the handler `this` binding. Test: `proxy_inherited_traps`.
 - Returned dynamic thenables from immediate Promise callbacks and `Promise.try(...)` now have focused coverage for preserving the first settlement when `then` throws afterward. Test: `promise_returned_thenable_throw_after_settle`.
 - Dynamic thenable assimilation now preserves the first settlement when the `then` method throws after calling `resolve(...)` or `reject(...)`. Test: `promise_thenable_throw_after_settle`.
