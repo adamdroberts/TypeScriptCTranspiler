@@ -18,6 +18,10 @@ const REMOVE_OPTIONS = {
     capture: void 0,
 } as const;
 
+function note(label: string): void {
+    seen.push(label);
+}
+
 function first(event: Event): void {
     seen.push("first:" + event.type + ":" + event.cancelable);
 }
@@ -29,6 +33,8 @@ function once(event: Event): void {
 target.addEventListener("save", first, FIRST_OPTIONS);
 target.addEventListener("save", once, ONCE_OPTIONS);
 
+const sideDefault = new Event("other", void note("event-options"));
+console.log("side default:", sideDefault.type, sideDefault.cancelable);
 console.log("default event:", target.dispatchEvent(new Event("save", void 0)));
 console.log("undefined cancelable:", target.dispatchEvent(new Event("save", DEFAULT_EVENT_OPTIONS)));
 

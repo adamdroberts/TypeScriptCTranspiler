@@ -32737,9 +32737,9 @@ class Emitter {
     }
 
     private eventInitCancelable(options: ts.Expression | undefined): string {
-        if (!options || this.isUndefinedExpression(options)) return "false";
+        if (!options || this.isUndefinedLikeExpression(options)) return "false";
         const cur = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (this.isUndefinedExpression(cur)) return "false";
+        if (this.isUndefinedLikeExpression(cur)) return "false";
         if (!ts.isObjectLiteralExpression(cur)) {
             unsupported(options, "Event options must be an object literal in this subset");
         }
@@ -43266,8 +43266,13 @@ class Emitter {
             if (args.length < 1) unsupported(n, "new Event() expects type and optional options");
             const type = this.emitRequiredStringArgument(args[0]!);
             const cancelable = this.eventInitCancelable(args[1]);
+            const optionSpecs: SequencedCallArg[] = [];
+            if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+            }
             return this.emitSequencedExpr(T_EVENT, [
                 { value: type, target: T_STRING, node: args[0]! },
+                ...optionSpecs,
                 ...this.ignoredArgumentSpecs(args, 2),
             ], ([eventType]) => `tsc_event_new(${eventType}, ${cancelable})`);
         }
