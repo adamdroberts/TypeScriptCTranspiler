@@ -1472,6 +1472,8 @@ const unused_regexp_descriptor_property_is_enumerable_call = Object.getOwnProper
 const unused_regexp_descriptor_writable_value_of_call = Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_writable_value_of/g, "lastIndex")!.writable!.valueOf();
 const unused_error_descriptor_enumerable_to_string_call = Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_enumerable_to_string"), "message")!.enumerable!.toString().length;
 const unused_error_descriptor_reflect_get_configurable_to_locale_string_call = Reflect.get(Object.getOwnPropertyDescriptor(new TypeError("dead_error_descriptor_reflect_get_configurable_to_locale_string"), "name")!, "configurable").toLocaleString().length;
+const unused_promise_resolve_regexp_descriptor_writable_call = Promise.resolve(Object.getOwnPropertyDescriptor(/dead_promise_resolve_regexp_descriptor_writable/g, "lastIndex")!.writable);
+const unused_promise_resolve_error_descriptor_reflect_get_enumerable_call = Promise.resolve(Reflect.get(Object.getOwnPropertyDescriptor(new Error("dead_promise_resolve_error_descriptor_reflect_get_enumerable"), "message")!, "enumerable"));
 const unused_error_descriptor_object_prototype_to_string_length_read = Object.prototype.toString.call(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_object_prototype_to_string_length_target"), "message")!).length + "dead_error_descriptor_object_prototype_to_string_length_read".length;
 const unused_regexp_descriptor_object_prototype_to_string_upper_call = (Object.prototype.toString.call(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_object_prototype_to_string_upper/g, "lastIndex")!).toUpperCase(), "dead_regexp_descriptor_object_prototype_to_string_upper_marker".length);
 const unused_error_descriptor_object_prototype_to_locale_string_length_read = Object.prototype.toLocaleString.call(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_object_prototype_to_locale_string_length_target"), "message")!).length + "dead_error_descriptor_object_prototype_to_locale_string_length_read".length;
@@ -2903,6 +2905,8 @@ Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_property_is_en
 Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_writable_value_of/g, "lastIndex")!.writable!.valueOf();
 Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_enumerable_to_string"), "message")!.enumerable!.toString().length;
 Reflect.get(Object.getOwnPropertyDescriptor(new TypeError("top_level_dead_error_descriptor_reflect_get_configurable_to_locale_string"), "name")!, "configurable").toLocaleString().length;
+Promise.resolve(Object.getOwnPropertyDescriptor(/top_level_dead_promise_resolve_regexp_descriptor_writable/g, "lastIndex")!.writable);
+Promise.resolve(Reflect.get(Object.getOwnPropertyDescriptor(new Error("top_level_dead_promise_resolve_error_descriptor_reflect_get_enumerable"), "message")!, "enumerable"));
 Object.prototype.toString.call(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_object_prototype_to_string_length_target"), "message")!).length + "top_level_dead_error_descriptor_object_prototype_to_string_length_read".length;
 (Object.prototype.toString.call(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_object_prototype_to_string_upper/g, "lastIndex")!).toUpperCase(), "top_level_dead_regexp_descriptor_object_prototype_to_string_upper_marker".length);
 Object.prototype.toLocaleString.call(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_object_prototype_to_locale_string_length_target"), "message")!).length + "top_level_dead_error_descriptor_object_prototype_to_locale_string_length_read".length;
@@ -4377,6 +4381,8 @@ function usedLocal(value: number): number {
     Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_writable_value_of/g, "lastIndex")!.writable!.valueOf();
     Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_enumerable_to_string"), "message")!.enumerable!.toString().length;
     Reflect.get(Object.getOwnPropertyDescriptor(new TypeError("local_dead_error_descriptor_reflect_get_configurable_to_locale_string"), "name")!, "configurable").toLocaleString().length;
+    Promise.resolve(Object.getOwnPropertyDescriptor(/local_dead_promise_resolve_regexp_descriptor_writable/g, "lastIndex")!.writable);
+    Promise.resolve(Reflect.get(Object.getOwnPropertyDescriptor(new Error("local_dead_promise_resolve_error_descriptor_reflect_get_enumerable"), "message")!, "enumerable"));
     Object.prototype.toString.call(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_object_prototype_to_string_length_target"), "message")!).length + "local_dead_error_descriptor_object_prototype_to_string_length_read".length;
     (Object.prototype.toString.call(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_object_prototype_to_string_upper/g, "lastIndex")!).toUpperCase(), "local_dead_regexp_descriptor_object_prototype_to_string_upper_marker".length);
     Object.prototype.toLocaleString.call(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_object_prototype_to_locale_string_length_target"), "message")!).length + "local_dead_error_descriptor_object_prototype_to_locale_string_length_read".length;
