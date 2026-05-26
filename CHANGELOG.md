@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Callable Proxy values now support direct and method spread calls through dynamic spread-argument lowering, preserving method receiver identity through the proxy `apply` trap. Test: `proxy_spread_call`.
 - Nullish callable Proxy `apply` / `construct` traps now have focused coverage for being treated as absent and forwarding to the function target. Test: `proxy_callable_nullish_traps_forward`.
 - Callable Proxy handler accessor trap values now have focused coverage for post-lookup `apply` / `construct` callable validation and nullish-result forwarding. Test: `proxy_callable_trap_accessor_validation`.
 - Callable Proxy handler accessor trap properties now have focused coverage for receiver-bound `apply` / `construct` lookup before trap dispatch. Test: `proxy_callable_trap_accessor_lookup`.
