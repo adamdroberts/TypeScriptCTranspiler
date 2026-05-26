@@ -1,3 +1,4 @@
 named: named import
+alias: alias import
 namespace: namespace import
 default: default import
