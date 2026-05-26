@@ -1854,16 +1854,16 @@ interface DnsLookupOptions {
 }
 interface DnsPromises {
     lookup(hostname: string): Promise<any>;
-    lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily): Promise<any>;
+    lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, ...ignored: any[]): Promise<any>;
 }
 interface DNS {
     readonly ADDRCONFIG: number;
     readonly V4MAPPED: number;
     readonly ALL: number;
     promises: DnsPromises;
-    lookup(hostname: string, callback: DnsLookupCallback): void;
-    lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupCallback): void;
-    lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupAllCallback): void;
+    lookup(hostname: string, callback: DnsLookupCallback, ...ignored: any[]): void;
+    lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupCallback, ...ignored: any[]): void;
+    lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupAllCallback, ...ignored: any[]): void;
 }
 declare const dns: DNS;
 declare module "dns" {
@@ -1871,9 +1871,9 @@ declare module "dns" {
     export const V4MAPPED: number;
     export const ALL: number;
     export const promises: DnsPromises;
-    export function lookup(hostname: string, callback: DnsLookupCallback): void;
-    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupCallback): void;
-    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupAllCallback): void;
+    export function lookup(hostname: string, callback: DnsLookupCallback, ...ignored: any[]): void;
+    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupCallback, ...ignored: any[]): void;
+    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupAllCallback, ...ignored: any[]): void;
     const defaultDns: DNS;
     export default defaultDns;
 }
@@ -1882,9 +1882,9 @@ declare module "node:dns" {
     export const V4MAPPED: number;
     export const ALL: number;
     export const promises: DnsPromises;
-    export function lookup(hostname: string, callback: DnsLookupCallback): void;
-    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupCallback): void;
-    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupAllCallback): void;
+    export function lookup(hostname: string, callback: DnsLookupCallback, ...ignored: any[]): void;
+    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupCallback, ...ignored: any[]): void;
+    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily, callback: DnsLookupAllCallback, ...ignored: any[]): void;
     const defaultDns: DNS;
     export default defaultDns;
 }

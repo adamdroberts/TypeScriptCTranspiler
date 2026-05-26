@@ -1,2 +1,4 @@
 namespace: true 127.0.0.1 4
 named: true 127.0.0.1 4
+namespace ignored: true 127.0.0.1 4 A
+named ignored: true 127.0.0.1 4 AB

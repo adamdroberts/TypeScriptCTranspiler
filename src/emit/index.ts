@@ -31758,13 +31758,19 @@ class Emitter {
 
     private emitDnsCall(call: ts.CallExpression, method: string): EmitResult {
         if (method !== "lookup") unsupported(call, `dns.${method}`);
-        if (call.arguments.length < 2 || call.arguments.length > 3) {
+        if (call.arguments.length < 2) {
             unsupported(call, "dns.lookup expects hostname, optional options, and callback");
         }
         const hostNode = call.arguments[0]!;
-        const optionsNode = call.arguments.length === 3 ? call.arguments[1]! : undefined;
+        const possibleCallbackNode = call.arguments[1]!;
+        const secondArgType = this.checker.getTypeAtLocation(possibleCallbackNode);
+        const callbackIndex = secondArgType.getCallSignatures().length > 0 ? 1 : 2;
+        if (callbackIndex >= call.arguments.length) {
+            unsupported(call, "dns.lookup expects hostname, optional options, and callback");
+        }
+        const optionsNode = callbackIndex === 2 ? call.arguments[1]! : undefined;
         const lookupOptions = this.dnsLookupOptions(optionsNode);
-        const callbackNode = call.arguments[call.arguments.length - 1]!;
+        const callbackNode = call.arguments[callbackIndex]!;
         const host = this.emitExpr(hostNode);
         const callback = this.emitExpr(callbackNode);
         const callbackType = this.prepareType(callback.ty);
@@ -31774,6 +31780,7 @@ class Emitter {
         return this.emitSequencedExpr(T_VOID, [
             { value: host, target: T_STRING, node: hostNode },
             { value: callback, target: callbackType, node: callbackNode },
+            ...this.ignoredArgumentSpecs(call.arguments, callbackIndex + 1),
         ], ([hostC, callbackC]) => {
             const result = this.freshTemp("_dns");
             const err: EmitResult = {
@@ -31935,7 +31942,7 @@ class Emitter {
 
     private emitDnsPromisesCall(call: ts.CallExpression, method: string): EmitResult {
         if (method !== "lookup") unsupported(call, `dns.promises.${method}`);
-        if (call.arguments.length < 1 || call.arguments.length > 2) {
+        if (call.arguments.length < 1) {
             unsupported(call, "dns.promises.lookup expects hostname and optional options");
         }
         const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
@@ -31945,6 +31952,7 @@ class Emitter {
         const host = this.emitExpr(hostNode);
         return this.emitSequencedExpr(mapped, [
             { value: host, target: T_STRING, node: hostNode },
+            ...this.ignoredArgumentSpecs(call.arguments, 2),
         ], ([hostC]) => {
             const result = this.freshTemp("_dns");
             const out = this.freshTemp("_dns_promise");
