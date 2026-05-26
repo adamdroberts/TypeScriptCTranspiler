@@ -4,8 +4,10 @@ const root = "/tmp/tsc2c-fs-cp-options";
 const src = path.join(root, "src.txt");
 const dest = path.join(root, "dest.txt");
 const preservedDest = path.join(root, "preserved.txt");
+const sideDest = path.join(root, "side.txt");
 const promiseDest = path.join(root, "promise-dest.txt");
 const promisePreservedDest = path.join(root, "promise-preserved.txt");
+const promiseSideDest = path.join(root, "promise-side.txt");
 const FORCE_FALSE = false;
 const FORCE_TRUE = true;
 const ERROR_ON_EXIST_TRUE = true;
@@ -16,6 +18,11 @@ const ERROR_OPTIONS = { force: FORCE_FALSE, errorOnExist: ERROR_ON_EXIST_TRUE };
 const OVERWRITE_OPTIONS = { force: FORCE_TRUE, errorOnExist: ERROR_ON_EXIST_TRUE };
 const PRESERVE_OPTIONS = { preserveTimestamps: PRESERVE_TIMESTAMPS_TRUE };
 const EXCL_OPTIONS = { force: true, mode: COPYFILE_EXCL };
+const events: string[] = [];
+
+function note(label: string): void {
+    events.push(label);
+}
 
 fs.rmSync(root, { recursive: true, force: true });
 fs.mkdirSync(root, { recursive: true });
@@ -47,6 +54,9 @@ try {
     console.log("sync mode excl:", err);
 }
 
+fs.cpSync(src, sideDest, void note("sync-options"));
+console.log("sync side:", fs.readFileSync(sideDest));
+
 nodefs.promises.cp(src, promiseDest, SKIP_OPTIONS).then((value: any): string => {
     console.log("promise force false:", fs.readFileSync(promiseDest));
     return "done";
@@ -66,5 +76,11 @@ nodefs.promises.cp(src, promiseDest, EXCL_OPTIONS).catch((reason: string): any =
     console.log("promise mode excl:", reason);
     return "done";
 });
+
+nodefs.promises.cp(src, promiseSideDest, void note("promise-options")).then((value: any): void => {
+    console.log("promise side:", fs.readFileSync(promiseSideDest));
+});
+
+console.log("events:", events.join("|"));
 
 fs.rmSync(root, { recursive: true, force: true });

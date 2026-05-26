@@ -36463,14 +36463,22 @@ class Emitter {
                 const options = this.emitFsCpOptions(args[2], "fs.cpSync");
                 const src = this.emitExpr(args[0]!);
                 const dest = this.emitExpr(args[1]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
+                    optionSpecs.push({ value: this.emitExpr(args[2]), target: T_VOID, node: args[2] });
+                }
                 return this.emitSequencedExpr(T_VOID, [
                     this.fsPathSpec(src, args[0]!, "fs.cpSync source"),
                     this.fsPathSpec(dest, args[1]!, "fs.cpSync destination"),
+                    ...optionSpecs,
                     options.mode,
                     ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
-                ], ([srcPath, destPath, mode]) =>
-                    `tsc_fs_cp_sync_opts(${srcPath!}, ${destPath!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}, ${mode!}, ${options.preserveTimestamps ? "true" : "false"})`,
-                );
+                ], (values) => {
+                    const srcPath = values[0]!;
+                    const destPath = values[1]!;
+                    const mode = values[2 + optionSpecs.length]!;
+                    return `tsc_fs_cp_sync_opts(${srcPath}, ${destPath}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}, ${mode}, ${options.preserveTimestamps ? "true" : "false"})`;
+                });
             }
             case "copyFileSync":
             case "renameSync": {
@@ -36556,8 +36564,9 @@ class Emitter {
     private emitFsCpOptions(options: ts.Expression | undefined, label: string): { recursive: boolean; force: boolean; errorOnExist: boolean; dereference: boolean; verbatimSymlinks: boolean; preserveTimestamps: boolean; mode: SequencedCallArg } {
         const out = { recursive: false, force: true, errorOnExist: false, dereference: false, verbatimSymlinks: false, preserveTimestamps: false };
         let mode: SequencedCallArg = { value: { c: "0.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
-        if (!options || this.isUndefinedExpression(options)) return { ...out, mode };
+        if (!options || this.isUndefinedLikeExpression(options)) return { ...out, mode };
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedLikeExpression(resolvedOptions)) return { ...out, mode };
         if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, `${label} options must be an object literal in this subset`);
         }
@@ -37440,14 +37449,22 @@ class Emitter {
                 const options = this.emitFsCpOptions(args[2], "fs.promises.cp");
                 const src = this.emitExpr(args[0]!);
                 const dest = this.emitExpr(args[1]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
+                    optionSpecs.push({ value: this.emitExpr(args[2]), target: T_VOID, node: args[2] });
+                }
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(src, args[0]!, "fs.promises.cp source"),
                     this.fsPathSpec(dest, args[1]!, "fs.promises.cp destination"),
+                    ...optionSpecs,
                     options.mode,
                     ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
-                ], ([srcPath, destPath, mode]) =>
-                    settle(`({ tsc_fs_cp_sync_opts(${srcPath!}, ${destPath!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}, ${mode!}, ${options.preserveTimestamps ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`),
-                );
+                ], (values) => {
+                    const srcPath = values[0]!;
+                    const destPath = values[1]!;
+                    const mode = values[2 + optionSpecs.length]!;
+                    return settle(`({ tsc_fs_cp_sync_opts(${srcPath}, ${destPath}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}, ${mode}, ${options.preserveTimestamps ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`);
+                });
             }
             case "copyFile":
             case "rename": {
