@@ -60,6 +60,7 @@ This is the next item that most directly expands what programs can be written ag
   - Generated-C DCE now carries exact own-key length proofs for Object/Reflect helper results over pure fresh built-in instances, including empty-key Date/Event-style objects and RegExp `lastIndex` metadata. Test: `generated_c_dce_const`.
   - Generated-C DCE now carries exact Error-family own-key length proofs for Object/Reflect helper results over pure fresh Error instances. Test: `generated_c_dce_const`.
   - Generated-C DCE now treats descriptor-result property reads over pure fresh Error-family own data properties as side-effect-free. Test: `generated_c_dce_const`.
+  - Generated-C DCE now treats `Reflect.get(descriptor, "value")` over statically present Error-family and RegExp data descriptor result objects as equivalent to direct descriptor `.value` reads. Test: `generated_c_dce_const`.
   - Generated-C DCE now treats string methods on pure fresh Error-family `name`/`message` descriptor values as side-effect-free. Test: `generated_c_dce_const`.
   - Generated-C DCE now treats descriptor-result property reads over pure fresh RegExp `lastIndex` own data properties as side-effect-free. Test: `generated_c_dce_const`.
   - Generated-C DCE now treats stringification of pure fresh RegExp `lastIndex` descriptor values as side-effect-free. Test: `generated_c_dce_const`.

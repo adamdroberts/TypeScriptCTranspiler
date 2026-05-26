@@ -1418,10 +1418,12 @@ const unused_error_reflect_own_keys_with_call = Reflect.ownKeys(new AggregateErr
 const unused_error_symbols_empty_map_call = Object.getOwnPropertySymbols(new TypeError("dead_error_symbols_empty_map")).map(() => Symbol("dead_error_symbols_empty_map_callback"));
 const unused_error_descriptor_value_upper_call = Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_value_upper_call"), "message")!.value.toUpperCase();
 const unused_error_descriptors_value_upper_call = Object.getOwnPropertyDescriptors(new TypeError("dead_error_descriptors_value_upper_call")).message.value.toUpperCase();
+const unused_error_descriptor_reflect_get_value_upper_call = Reflect.get(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_reflect_get_value_upper"), "message")!, "value").toUpperCase();
 const unused_regexp_descriptor_value_read = Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_value_read/g, "lastIndex")!.value;
 const unused_regexp_descriptors_value_read = Object.getOwnPropertyDescriptors(new RegExp("dead_regexp_descriptors_value_read", "g")).lastIndex.value;
 const unused_regexp_descriptor_value_to_string_call = Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_value_to_string_call/g, "lastIndex")!.value.toString().length;
 const unused_regexp_descriptors_value_to_string_call = Object.getOwnPropertyDescriptors(new RegExp("dead_regexp_descriptors_value_to_string_call", "g")).lastIndex.value.toLocaleString().length;
+const unused_regexp_descriptor_reflect_get_value_to_string_call = Reflect.get(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_reflect_get_value_to_string/g, "lastIndex")!, "value").toString().length;
 const unused_error_descriptors_keys_with_call = Object.keys(Object.getOwnPropertyDescriptors(new Error("dead_error_descriptors_keys_with"))).with(3, "dead_error_descriptors_keys_with_replacement");
 const unused_regexp_descriptors_values_with_call = Object.values(Object.getOwnPropertyDescriptors(/dead_regexp_descriptors_values_with/g)).with(0, { value: 1 });
 const unused_date_descriptors_own_keys_empty_map_call = Reflect.ownKeys(Object.getOwnPropertyDescriptors(new Date("2020-01-13T14:15:16Z"))).map(() => "dead_date_descriptors_own_keys_empty_map");
@@ -2838,10 +2840,12 @@ Reflect.ownKeys(new URIError("top_level_dead_error_reflect_own_keys_with")).with
 Object.getOwnPropertySymbols(new RangeError("top_level_dead_error_symbols_empty_map")).map(() => Symbol("top_level_dead_error_symbols_empty_map_callback"));
 Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_value_upper_call"), "message")!.value.toUpperCase();
 Object.getOwnPropertyDescriptors(new TypeError("top_level_dead_error_descriptors_value_upper_call")).message.value.toUpperCase();
+Reflect.get(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_reflect_get_value_upper"), "message")!, "value").toUpperCase();
 Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_value_read/g, "lastIndex")!.value;
 Object.getOwnPropertyDescriptors(new RegExp("top_level_dead_regexp_descriptors_value_read", "g")).lastIndex.value;
 Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_value_to_string_call/g, "lastIndex")!.value.toString().length;
 Object.getOwnPropertyDescriptors(new RegExp("top_level_dead_regexp_descriptors_value_to_string_call", "g")).lastIndex.value.toLocaleString().length;
+Reflect.get(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_reflect_get_value_to_string/g, "lastIndex")!, "value").toString().length;
 Object.keys(Object.getOwnPropertyDescriptors(new Error("top_level_dead_error_descriptors_keys_with"))).with(3, "top_level_dead_error_descriptors_keys_with_replacement");
 Object.values(Object.getOwnPropertyDescriptors(/top_level_dead_regexp_descriptors_values_with/g)).with(0, { value: 1 });
 Reflect.ownKeys(Object.getOwnPropertyDescriptors(new Date("2020-01-14T15:16:17Z"))).map(() => "top_level_dead_date_descriptors_own_keys_empty_map");
@@ -4301,10 +4305,12 @@ function usedLocal(value: number): number {
     Object.getOwnPropertySymbols(new EvalError("local_dead_error_symbols_empty_map")).map(() => Symbol("local_dead_error_symbols_empty_map_callback"));
     Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_value_upper_call"), "message")!.value.toUpperCase();
     Object.getOwnPropertyDescriptors(new TypeError("local_dead_error_descriptors_value_upper_call")).message.value.toUpperCase();
+    Reflect.get(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_reflect_get_value_upper"), "message")!, "value").toUpperCase();
     Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_value_read/g, "lastIndex")!.value;
     Object.getOwnPropertyDescriptors(new RegExp("local_dead_regexp_descriptors_value_read", "g")).lastIndex.value;
     Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_value_to_string_call/g, "lastIndex")!.value.toString().length;
     Object.getOwnPropertyDescriptors(new RegExp("local_dead_regexp_descriptors_value_to_string_call", "g")).lastIndex.value.toLocaleString().length;
+    Reflect.get(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_reflect_get_value_to_string/g, "lastIndex")!, "value").toString().length;
     Object.keys(Object.getOwnPropertyDescriptors(new Error("local_dead_error_descriptors_keys_with"))).with(3, "local_dead_error_descriptors_keys_with_replacement");
     Object.values(Object.getOwnPropertyDescriptors(/local_dead_regexp_descriptors_values_with/g)).with(0, { value: 1 });
     Reflect.ownKeys(Object.getOwnPropertyDescriptors(new Date("2020-01-15T16:17:18Z"))).map(() => "local_dead_date_descriptors_own_keys_empty_map");

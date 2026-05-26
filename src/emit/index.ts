@@ -7625,11 +7625,12 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (!ts.isPropertyAccessExpression(unwrapped) || unwrapped.name.text !== "value") {
+        const valueReceiver = this.sideEffectFreeDescriptorValueReceiver(unwrapped, seenConsts);
+        if (valueReceiver === null) {
             const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
             return !!init && this.isSideEffectFreeErrorDescriptorStringValueRead(init, seenConsts);
         }
-        const descriptorExpr = this.unwrapSideEffectFreeStaticExpression(unwrapped.expression);
+        const descriptorExpr = this.unwrapSideEffectFreeStaticExpression(valueReceiver);
         const targetDescriptorExpr = this.sideEffectFreeObjectTargetReturningOperand(
             descriptorExpr,
             seenConsts,
@@ -7654,16 +7655,38 @@ class Emitter {
             this.isSideEffectFreeFreshErrorOperand(access.target, seenConsts);
     }
 
+    private sideEffectFreeDescriptorValueReceiver(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): ts.Expression | null {
+        if (ts.isPropertyAccessExpression(expr) && expr.name.text === "value") {
+            return expr.expression;
+        }
+        if (
+            ts.isCallExpression(expr) &&
+            ts.isPropertyAccessExpression(expr.expression) &&
+            ts.isIdentifier(expr.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(expr.expression.expression, "Reflect") &&
+            expr.expression.name.text === "get" &&
+            expr.arguments.length === 2 &&
+            this.sideEffectFreeObjectPropertyReadKey(expr.arguments[1]!, seenConsts) === "value"
+        ) {
+            return expr.arguments[0]!;
+        }
+        return null;
+    }
+
     private isSideEffectFreeRegExpDescriptorNumberValueRead(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (!ts.isPropertyAccessExpression(unwrapped) || unwrapped.name.text !== "value") {
+        const valueReceiver = this.sideEffectFreeDescriptorValueReceiver(unwrapped, seenConsts);
+        if (valueReceiver === null) {
             const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
             return !!init && this.isSideEffectFreeRegExpDescriptorNumberValueRead(init, seenConsts);
         }
-        const descriptorExpr = this.unwrapSideEffectFreeStaticExpression(unwrapped.expression);
+        const descriptorExpr = this.unwrapSideEffectFreeStaticExpression(valueReceiver);
         const targetDescriptorExpr = this.sideEffectFreeObjectTargetReturningOperand(
             descriptorExpr,
             seenConsts,
