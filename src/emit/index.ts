@@ -12589,6 +12589,9 @@ class Emitter {
                     this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts);
             });
         }
+        if (this.isSideEffectFreeOwnDataPropertyDescriptorObjectOperand(unwrapped, seenConsts)) {
+            return true;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeDataPropertyDescriptor(init, seenConsts);
     }
