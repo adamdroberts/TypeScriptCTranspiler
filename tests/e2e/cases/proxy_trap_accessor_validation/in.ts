@@ -8,6 +8,11 @@ function report(label: string, run: any): void {
     }
 }
 
+function note(label: string, value: any): any {
+    events.push(label);
+    return value;
+}
+
 function badGetTrapGetter(this: any): any {
     events.push("badGet:" + String(this.marker));
     return 1 as any;
@@ -31,7 +36,7 @@ Object.defineProperty(badGetHandler, "get", {
 });
 const badGetProxy: any = new Proxy({ a: "A" }, badGetHandler);
 report("bad get", function(): any {
-    return Reflect.get(badGetProxy, "a");
+    return Reflect.get(badGetProxy, note("badGetKey", "a"), note("badGetReceiver", {}));
 });
 
 const undefinedGetHandler: any = { marker: "undefined" };
@@ -41,7 +46,7 @@ Object.defineProperty(undefinedGetHandler, "get", {
     configurable: true,
 });
 const undefinedGetProxy: any = new Proxy({ a: "A" }, undefinedGetHandler);
-console.log("undefined get:", Reflect.get(undefinedGetProxy, "a"));
+console.log("undefined get:", Reflect.get(undefinedGetProxy, note("undefinedGetKey", "a"), note("undefinedGetReceiver", {})));
 
 const nullOwnKeysTarget: any = { visible: "V" };
 Object.defineProperty(nullOwnKeysTarget, "hidden", {
