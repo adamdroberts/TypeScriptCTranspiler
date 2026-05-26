@@ -237,7 +237,7 @@ This is the next item that most directly expands what programs can be written ag
   - `Object.isSealed(proxy)` and `Object.isFrozen(proxy)` now drive proxy integrity traps after forwarded `Object.seal(proxy)` / `Object.freeze(proxy)` operations. Test: `proxy_integrity_state_checks`.
   - `Object.isSealed(proxy)` and `Object.isFrozen(proxy)` return `false` when proxy descriptor traps expose configurable or writable properties after extension prevention. Test: `proxy_integrity_state_false`.
   - Direct `new proxy(...)` construct traps and nested trapless proxy forwarding preserve the actual proxy `newTarget` identity. Test: `proxy_construct_new_target_identity`.
-  - Proxy object, apply, and construct traps receive the handler object as their `this` binding. Test: `proxy_trap_this_binding`.
+  - Proxy object, apply, and construct traps receive the handler object as their `this` binding, including traps inherited from the handler prototype. Tests: `proxy_trap_this_binding`, `proxy_inherited_traps`.
   - `Object.getOwnPropertyDescriptors(proxy)` drives proxy `ownKeys` and `getOwnPropertyDescriptor` traps. Test: `proxy_get_own_property_descriptors`.
   - `Object.assign(dynamicTarget, source)` throws through the catchable runtime exception path when target writes fail on non-writable properties, non-extensible object targets, and frozen/sealed/non-extensible dynamic array writes. Tests: `object_assign_set_failure`, `object_assign_dynamic_array_set_failure`.
   - `Object.assign(typedArrayTarget, source)` throws through the catchable runtime exception path when typed-array target writes fail on frozen targets or sealed/non-extensible growth. Test: `object_assign_typed_array_target`.
