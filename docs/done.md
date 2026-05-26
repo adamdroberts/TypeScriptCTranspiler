@@ -458,7 +458,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Callable Proxy values support dynamic `Function.prototype.call(...)` with spread arguments after the explicit `thisArg`, forwarding the normalized argument list through proxy `apply` traps. Test: `proxy_call_spread`
 - Callable Proxy values support dynamic `Function.prototype.call(...)` with omitted, explicit `undefined`, and explicit `null` receivers while forwarding an empty normalized argument list through proxy `apply` traps. Test: `proxy_call_empty_arguments_list`
 - Callable Proxy values support dynamic `Function.prototype.apply(...)` with array-like and spread-built argument lists forwarded as normalized arrays through proxy `apply` traps. Test: `proxy_apply_method_arguments_list`
-- Callable Proxy values support dynamic `Function.prototype.apply(...)` argument-list validation failures through catchable runtime exceptions while preserving valid array-like argument objects through proxy `apply` traps. Test: `proxy_apply_method_validation`
+- Callable Proxy values support dynamic `Function.prototype.apply(...)` argument-list validation failures through catchable runtime exceptions before proxy trap dispatch, while preserving ignored trailing-argument evaluation and valid array-like argument objects through proxy `apply` traps. Test: `proxy_apply_method_validation`
 - Callable Proxy values support dynamic `Function.prototype.apply(...)` with omitted, `null`, and `undefined` argument lists normalized to empty arrays while still evaluating ignored trailing arguments. Test: `proxy_apply_empty_arguments_list`
 - Proxy `apply` traps receive a normalized real argument array from array-like `Reflect.apply(...)` inputs and forward trap-mutated arguments into target calls. Test: `proxy_apply_arguments_list`
 - Proxy `construct` traps receive a normalized real argument array from array-like `Reflect.construct(...)` inputs and forward trap-mutated arguments into target construction. Test: `proxy_construct_arguments_list`
@@ -1785,7 +1785,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_call_spread` | callable Proxy values support Function.prototype.call with spread arguments |
 | `proxy_call_empty_arguments_list` | callable Proxy values support Function.prototype.call with empty argument lists |
 | `proxy_apply_method_arguments_list` | callable Proxy values support Function.prototype.apply with array-like and spread-built argument lists |
-| `proxy_apply_method_validation` | callable Proxy Function.prototype.apply method argument-list validation |
+| `proxy_apply_method_validation` | callable Proxy Function.prototype.apply method argument-list validation before trap dispatch |
 | `proxy_apply_empty_arguments_list` | callable Proxy values support Function.prototype.apply with omitted and nullish argument lists |
 | `proxy_callable_nullish_traps_forward` | nullish callable Proxy apply and construct traps forward to the function target |
 | `proxy_array_mutation_forward` | trapless array Proxy dynamic writes, Reflect.set, descriptor definitions, length updates, and deletes forward to the array target |
