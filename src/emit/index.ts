@@ -38139,6 +38139,15 @@ class Emitter {
         }
         if (name === "keys") {
             const ignored = this.ignoredArgumentSpecs(args, 1);
+            if (mapped.kind === "void") {
+                const value = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(T_STRING), [
+                    { value, target: T_VALUE, node: arg },
+                    ...ignored,
+                ], ([v]) =>
+                    `({ if (tsc_value_is_nullish(${v!})) tsc_throw_str(tsc_str_from_cstr("Object.keys target must not be null or undefined")); tsc_value_object_keys(${v!}); })`,
+                );
+            }
             if (mapped.kind === "value") {
                 const value = this.emitExpr(arg);
                 return this.emitSequencedExpr(arrayType(T_STRING), [{ value }, ...ignored], ([v]) =>
@@ -38220,6 +38229,15 @@ class Emitter {
         }
         if (name === "values") {
             const ignored = this.ignoredArgumentSpecs(args, 1);
+            if (mapped.kind === "void") {
+                const value = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(T_VALUE), [
+                    { value, target: T_VALUE, node: arg },
+                    ...ignored,
+                ], ([v]) =>
+                    `({ if (tsc_value_is_nullish(${v!})) tsc_throw_str(tsc_str_from_cstr("Object.values target must not be null or undefined")); tsc_value_object_values(${v!}); })`,
+                );
+            }
             if (mapped.kind === "value") {
                 const value = this.emitExpr(arg);
                 return this.emitSequencedExpr(arrayType(T_VALUE), [{ value }, ...ignored], ([v]) =>
@@ -38304,6 +38322,15 @@ class Emitter {
         }
         if (name === "entries") {
             const ignored = this.ignoredArgumentSpecs(args, 1);
+            if (mapped.kind === "void") {
+                const value = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(T_VALUE), [
+                    { value, target: T_VALUE, node: arg },
+                    ...ignored,
+                ], ([v]) =>
+                    `({ if (tsc_value_is_nullish(${v!})) tsc_throw_str(tsc_str_from_cstr("Object.entries target must not be null or undefined")); tsc_value_object_entries(${v!}); })`,
+                );
+            }
             if (nonStringPrimitiveObjectArg) {
                 const value = this.emitExpr(arg);
                 const resultType = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
@@ -38419,6 +38446,15 @@ class Emitter {
         if (name === "getOwnPropertyNames") {
             if (args.length < 1) unsupported(call, "Object.getOwnPropertyNames expects object");
             const ignored = this.ignoredArgumentSpecs(args, 1);
+            if (mapped.kind === "void") {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(T_STRING), [
+                    { value: obj, target: T_VALUE, node: arg },
+                    ...ignored,
+                ], ([o]) =>
+                    `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyNames target must not be null or undefined")); tsc_value_own_keys(${o!}); })`,
+                );
+            }
             if (nonStringPrimitiveObjectArg) {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }, ...ignored], ([o]) =>
@@ -38510,6 +38546,13 @@ class Emitter {
         if (name === "getOwnPropertySymbols") {
             if (args.length < 1) unsupported(call, "Object.getOwnPropertySymbols expects object");
             const ignored = this.ignoredArgumentSpecs(args, 1);
+            if (mapped.kind === "void") {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(T_SYMBOL), [
+                    { value: obj, target: T_VALUE, node: arg },
+                    ...ignored,
+                ], ([o]) => `tsc_value_get_own_property_symbols(${o})`);
+            }
             if (mapped.kind === "value") {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(arrayType(T_SYMBOL), [
@@ -38525,6 +38568,17 @@ class Emitter {
         if (name === "getOwnPropertyDescriptor") {
             if (args.length < 2) unsupported(call, "Object.getOwnPropertyDescriptor expects object and key");
             const ignored = this.ignoredArgumentSpecs(args, 2);
+            if (mapped.kind === "void") {
+                const obj = this.emitExpr(arg);
+                const key = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: obj, target: T_VALUE, node: arg },
+                    { value: key, target: T_STRING, node: args[1]! },
+                    ...ignored,
+                ], ([o, k]) =>
+                    `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyDescriptor target must not be null or undefined")); tsc_value_get_own_property_descriptor(${o!}, ${k!}); })`,
+                );
+            }
             if (nonStringPrimitiveObjectArg) {
                 const obj = this.emitExpr(arg);
                 const key = this.emitExpr(args[1]!);
@@ -38608,6 +38662,15 @@ class Emitter {
         if (name === "getOwnPropertyDescriptors") {
             if (args.length < 1) unsupported(call, "Object.getOwnPropertyDescriptors expects object");
             const ignored = this.ignoredArgumentSpecs(args, 1);
+            if (mapped.kind === "void") {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: obj, target: T_VALUE, node: arg },
+                    ...ignored,
+                ], ([o]) =>
+                    `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyDescriptors target must not be null or undefined")); tsc_value_get_own_property_descriptors(${o!}); })`,
+                );
+            }
             if (nonStringPrimitiveObjectArg) {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: arg }, ...ignored], ([o]) =>
@@ -38706,6 +38769,17 @@ class Emitter {
         if (name === "hasOwn") {
             if (args.length < 2) unsupported(call, "Object.hasOwn expects object and key");
             const ignored = this.ignoredArgumentSpecs(args, 2);
+            if (mapped.kind === "void") {
+                const obj = this.emitExpr(arg);
+                const key = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: obj, target: T_VALUE, node: arg },
+                    { value: key, target: T_STRING, node: args[1]! },
+                    ...ignored,
+                ], ([o, k]) =>
+                    `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.hasOwn target must not be null or undefined")); tsc_value_has_own_prop(${o!}, ${k!}); })`,
+                );
+            }
             if (nonStringPrimitiveObjectArg) {
                 const obj = this.emitExpr(arg);
                 const key = this.emitExpr(args[1]!);
