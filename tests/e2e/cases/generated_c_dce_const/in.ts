@@ -1433,6 +1433,9 @@ const unused_error_descriptor_keys_with_call = Object.keys(Object.getOwnProperty
 const unused_regexp_descriptor_reflect_own_keys_with_call = Reflect.ownKeys(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_reflect_own_keys_with/g, "lastIndex")!).with(3, "dead_regexp_descriptor_reflect_own_keys_with_replacement");
 const unused_error_descriptor_symbols_empty_map_call = Object.getOwnPropertySymbols(Object.getOwnPropertyDescriptor(new TypeError("dead_error_descriptor_symbols_empty_map"), "name")!).map(() => "dead_error_descriptor_symbols_empty_map_callback");
 const unused_error_descriptor_get_prototype_call = Object.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_get_prototype"), "message")!);
+const unused_error_descriptor_reflect_get_prototype_call = Reflect.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_reflect_get_prototype"), "message")!);
+const unused_error_descriptor_object_has_own_call = Object.hasOwn(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_object_has_own"), "message")!, "value");
+const unused_regexp_descriptor_reflect_has_call = Reflect.has(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_reflect_has/g, "lastIndex")!, "writable");
 const unused_error_descriptor_object_is_extensible_call = Object.isExtensible(Object.getOwnPropertyDescriptor(new Error("dead_error_descriptor_object_is_extensible"), "message")!);
 const unused_regexp_descriptor_object_is_sealed_call = Object.isSealed(Object.getOwnPropertyDescriptor(/dead_regexp_descriptor_object_is_sealed/g, "lastIndex")!);
 const unused_error_descriptor_object_is_frozen_call = Object.isFrozen(Object.getOwnPropertyDescriptor(new TypeError("dead_error_descriptor_object_is_frozen"), "name")!);
@@ -2855,6 +2858,9 @@ Object.keys(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_desc
 Reflect.ownKeys(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_reflect_own_keys_with/g, "lastIndex")!).with(3, "top_level_dead_regexp_descriptor_reflect_own_keys_with_replacement");
 Object.getOwnPropertySymbols(Object.getOwnPropertyDescriptor(new TypeError("top_level_dead_error_descriptor_symbols_empty_map"), "name")!).map(() => "top_level_dead_error_descriptor_symbols_empty_map_callback");
 Object.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_get_prototype"), "message")!);
+Reflect.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_reflect_get_prototype"), "message")!);
+Object.hasOwn(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_object_has_own"), "message")!, "value");
+Reflect.has(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_reflect_has/g, "lastIndex")!, "writable");
 Object.isExtensible(Object.getOwnPropertyDescriptor(new Error("top_level_dead_error_descriptor_object_is_extensible"), "message")!);
 Object.isSealed(Object.getOwnPropertyDescriptor(/top_level_dead_regexp_descriptor_object_is_sealed/g, "lastIndex")!);
 Object.isFrozen(Object.getOwnPropertyDescriptor(new TypeError("top_level_dead_error_descriptor_object_is_frozen"), "name")!);
@@ -4320,6 +4326,9 @@ function usedLocal(value: number): number {
     Reflect.ownKeys(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_reflect_own_keys_with/g, "lastIndex")!).with(3, "local_dead_regexp_descriptor_reflect_own_keys_with_replacement");
     Object.getOwnPropertySymbols(Object.getOwnPropertyDescriptor(new TypeError("local_dead_error_descriptor_symbols_empty_map"), "name")!).map(() => "local_dead_error_descriptor_symbols_empty_map_callback");
     Object.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_get_prototype"), "message")!);
+    Reflect.getPrototypeOf(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_reflect_get_prototype"), "message")!);
+    Object.hasOwn(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_object_has_own"), "message")!, "value");
+    Reflect.has(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_reflect_has/g, "lastIndex")!, "writable");
     Object.isExtensible(Object.getOwnPropertyDescriptor(new Error("local_dead_error_descriptor_object_is_extensible"), "message")!);
     Object.isSealed(Object.getOwnPropertyDescriptor(/local_dead_regexp_descriptor_object_is_sealed/g, "lastIndex")!);
     Object.isFrozen(Object.getOwnPropertyDescriptor(new TypeError("local_dead_error_descriptor_object_is_frozen"), "name")!);
