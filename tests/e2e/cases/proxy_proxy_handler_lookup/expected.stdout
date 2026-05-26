@@ -1,0 +1,3 @@
+get: A
+keys: a
+events: handlerGet:get:true|targetGet:a|handlerGet:ownKeys:true|targetOwnKeys|handlerGet:getOwnPropertyDescriptor:true|targetDesc:a|handlerGet:getOwnPropertyDescriptor:true|targetDesc:hidden
