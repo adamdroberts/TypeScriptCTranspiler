@@ -39083,10 +39083,10 @@ class Emitter {
                     return this.emitTypedArrayDefineProperty(arg, arrayObj, args[1]!, desc, true, ignored);
                 }
             }
-            if (mapped.kind !== "value" && mapped.kind !== "function" && mapped.kind !== "array" && mapped.kind !== "void") {
+            if (mapped.kind !== "value" && mapped.kind !== "function" && mapped.kind !== "array" && mapped.kind !== "void" && !primitiveObjectArg) {
                 unsupported(arg, "Object.defineProperty currently supports dynamic objects, arrays, and functions only");
             }
-            const requiresValueTarget = mapped.kind === "value" || mapped.kind === "void";
+            const requiresValueTarget = mapped.kind === "value" || mapped.kind === "void" || primitiveObjectArg;
             const key = this.emitExpr(args[1]!);
             if (!ts.isObjectLiteralExpression(args[2]!)) {
                 const descValue = this.emitExpr(args[2]!);
@@ -39108,7 +39108,7 @@ class Emitter {
             const objectDefineReturnType = mapped.kind === "function" ? mapped : T_VALUE;
             if (desc.kind === "accessor") {
                 const specs: SequencedCallArg[] = [
-                    { value: obj, target: mapped.kind === "void" ? T_VALUE : undefined, node: arg },
+                    { value: obj, target: requiresValueTarget ? T_VALUE : undefined, node: arg },
                     { value: key, target: T_STRING, node: args[1]! },
                 ];
                 const getterEnvPos = desc.getter?.env ? specs.length : -1;
@@ -39138,7 +39138,7 @@ class Emitter {
             return this.emitSequencedExpr(
                 objectDefineReturnType,
                 [
-                    { value: obj, target: mapped.kind === "void" ? T_VALUE : undefined, node: arg },
+                    { value: obj, target: requiresValueTarget ? T_VALUE : undefined, node: arg },
                     { value: key, target: T_STRING, node: args[1]! },
                     { value, target: T_VALUE, node: desc.value ?? args[2]! },
                     ...ignored,
@@ -39156,7 +39156,7 @@ class Emitter {
                     : { c: this.coerce(obj, mapped, arg), ty: mapped };
                 return this.emitTypedArrayDefineProperties(arg, arrayObj, args[1]!, ignored);
             }
-            if (mapped.kind !== "value" && mapped.kind !== "function" && mapped.kind !== "void") {
+            if (mapped.kind !== "value" && mapped.kind !== "function" && mapped.kind !== "void" && !primitiveObjectArg) {
                 unsupported(arg, "Object.defineProperties currently supports dynamic objects, arrays, and functions only");
             }
             const obj = this.emitExpr(arg);

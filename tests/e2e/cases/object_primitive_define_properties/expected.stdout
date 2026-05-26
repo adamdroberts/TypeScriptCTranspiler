@@ -1,0 +1,5 @@
+define number literal: Object.defineProperty failed
+define string runtime: Object.defineProperty failed
+defines boolean literal: Object.defineProperties failed
+defines string runtime: Object.defineProperties failed
+marks: nabcsdeqfgsh
