@@ -1499,6 +1499,12 @@ tsc_array_t* tsc_value_get_own_property_symbols(tsc_value_t v) {
     if (tsc_value_is_nullish(v)) {
         tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertySymbols target must not be null or undefined"));
     }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+        if (o && o->is_proxy) {
+            (void)tsc_value_own_keys(v);
+        }
+    }
     return tsc_array_new(sizeof(tsc_symbol_t*), 1);
 }
 

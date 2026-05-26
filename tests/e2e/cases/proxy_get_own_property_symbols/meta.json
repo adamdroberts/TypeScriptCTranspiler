@@ -1,0 +1,3 @@
+{
+  "description": "Object.getOwnPropertySymbols on Proxy drives ownKeys traps before returning the current empty symbol set"
+}
