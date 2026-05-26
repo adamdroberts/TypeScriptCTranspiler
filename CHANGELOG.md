@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Buffer.from(...)`, `Buffer.alloc(...)`, `Buffer.allocUnsafe(...)`, `Buffer.allocUnsafeSlow(...)`, and `Buffer.concat(...)` now evaluate and ignore trailing arguments after their supported operand slots. Test: `buffer_static_ignored_arguments`.
 - Supported Buffer instance helpers now evaluate and ignore trailing arguments after their consumed operands across slice/subarray, fill/write, numeric read/write, copy, search, compare, and own-property helper paths. Test: `buffer_instance_ignored_arguments`.
 - Materialized synchronous generator cursor methods now evaluate and ignore trailing arguments for `.next(value?, ...ignored)`, `.return(value?, ...ignored)`, and `.throw(error, ...ignored)`. Tests: `generator_next_argument`, `generator_return_value`, `generator_functions`.
 - `dns.lookup(...)` and immediate `dns.promises.lookup(...)` now evaluate and ignore trailing arguments after the callback or options slot. Tests: `dns_lookup`, `dns_promises_lookup`.

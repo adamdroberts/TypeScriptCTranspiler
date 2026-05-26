@@ -570,7 +570,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Supported `child_process.spawnSync(...)` whole `stdio` tuples and string, numeric, null, undefined, and side-effect-free `void` entries can use earlier static `const` aliases. Tests: `child_process_spawn_sync_stdio_pipe`, `child_process_spawn_sync_stdio_ignore`, `child_process_spawn_sync_stdio_inherit`, `child_process_spawn_sync_stdio_fd`, `child_process_spawn_sync_stdio_stdin`, `child_process_spawn_sync_stdio_aliases`
 
 ### `Buffer`
-- `Buffer.from(string[, "utf8" | "hex" | "base64"])`, `Buffer.from(number[])`, `Buffer.from(existingBuffer)`, `Buffer.alloc(size, fill?)`, `Buffer.allocUnsafe(size)`, `Buffer.allocUnsafeSlow(size)`, `Buffer.concat(list, totalLength?)`, `Buffer.isBuffer(value, ...ignored)`, with catchable validation failures for invalid encodings, bad hex/base64 input, and invalid sizes/lengths. Tests: `buffer`, `buffer_errors`
+- `Buffer.from(string[, "utf8" | "hex" | "base64"], ...ignored)`, `Buffer.from(number[], ...ignored)`, `Buffer.from(existingBuffer, ...ignored)`, `Buffer.alloc(size, fill?, ...ignored)`, `Buffer.allocUnsafe(size, ...ignored)`, `Buffer.allocUnsafeSlow(size, ...ignored)`, `Buffer.concat(list, totalLength?, ...ignored)`, `Buffer.isBuffer(value, ...ignored)`, with catchable validation failures for invalid encodings, bad hex/base64 input, and invalid sizes/lengths. Tests: `buffer`, `buffer_static_ignored_arguments`, `buffer_errors`
 - `Buffer.byteLength(value, encoding?, ...ignored)`, `Buffer.isEncoding(encoding, ...ignored)`, static `Buffer.compare(a, b, ...ignored)`, and instance `buf.compare(other, ...ignored)` are implemented for the supported UTF-8/hex/base64 Buffer subset, including `"utf-8"` aliases, explicit `undefined` or side-effect-free `void` default encoding, ignored trailing-argument evaluation, and catchable unsupported-encoding validation. Tests: `buffer_static_more`, `buffer_instance_ignored_arguments`, `buffer_errors`
 - Named and default imports from `"buffer"` / `"node:buffer"` route to the supported `Buffer` static helper subset. Test: `buffer_module_import`
 - `atob` / `btoa` imports from `"buffer"` / `"node:buffer"` route to the existing base64 helpers across named, namespace, and default import forms. Test: `buffer_base64_import`
@@ -1017,6 +1017,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `buffer_search` | Buffer numeric-byte indexOf/lastIndexOf/includes with offsets |
 | `buffer_search_more` | Buffer string and Buffer needle indexOf/lastIndexOf/includes |
 | `buffer_static_more` | Buffer.byteLength/isEncoding/compare static helpers |
+| `buffer_static_ignored_arguments` | Buffer static constructors/helpers evaluate and ignore trailing arguments |
 | `buffer_swap` | Buffer swap16/swap32/swap64 byte-order mutation |
 | `buffer_to_json` | Buffer.toJSON dynamic object shape |
 | `buffer_uint8_io` | Buffer readUInt8/writeUInt8 byte accessors |
