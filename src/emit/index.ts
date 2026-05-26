@@ -37925,6 +37925,7 @@ class Emitter {
             mapped.kind === "weakref" ||
             mapped.kind === "finregistry" ||
             mapped.kind === "promise" ||
+            mapped.kind === "eventemitter" ||
             mapped.kind === "event" ||
             mapped.kind === "eventtarget" ||
             mapped.kind === "date" ||
@@ -40691,6 +40692,7 @@ class Emitter {
                     mapped.kind === "weakref" ||
                     mapped.kind === "finregistry" ||
                     mapped.kind === "promise" ||
+                    mapped.kind === "eventemitter" ||
                     mapped.kind === "event" ||
                     mapped.kind === "eventtarget" ||
                     mapped.kind === "date" ||
@@ -40802,6 +40804,7 @@ class Emitter {
                     mapped.kind === "weakref" ||
                     mapped.kind === "finregistry" ||
                     mapped.kind === "promise" ||
+                    mapped.kind === "eventemitter" ||
                     mapped.kind === "event" ||
                     mapped.kind === "eventtarget" ||
                     mapped.kind === "date" ||
