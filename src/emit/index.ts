@@ -831,6 +831,7 @@ class Emitter {
                 this.isSideEffectFreeObjectPrototypeToStringCall(expr, seenConsts) ||
                 this.isSideEffectFreeObjectPrototypeToLocaleStringCall(expr, seenConsts) ||
                 this.isSideEffectFreeObjectPrototypeReadonlyCall(expr, seenConsts) ||
+                this.isSideEffectFreePrimitiveObjectValueOfCall(expr, seenConsts) ||
                 this.isSideEffectFreeStaticCall(expr, seenConsts) ||
                 this.isSideEffectFreeGlobalCall(expr, seenConsts);
         }
@@ -2718,6 +2719,9 @@ class Emitter {
             case "replaceAll":
             case "search":
                 if (this.isSideEffectFreeStringMethodCall(recv, method, call.arguments, seenConsts)) {
+                    return true;
+                }
+                if (this.isSideEffectFreePrimitiveObjectValueOfCall(call, seenConsts)) {
                     return true;
                 }
                 if (
@@ -7659,8 +7663,16 @@ class Emitter {
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
     ): ts.Expression | null {
-        if (ts.isPropertyAccessExpression(expr) && expr.name.text === "value") {
-            return expr.expression;
+        const access = this.sideEffectFreeDescriptorPropertyAccess(expr, seenConsts);
+        return access?.key === "value" ? access.receiver : null;
+    }
+
+    private sideEffectFreeDescriptorPropertyAccess(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): { receiver: ts.Expression; key: string } | null {
+        if (ts.isPropertyAccessExpression(expr)) {
+            return { receiver: expr.expression, key: expr.name.text };
         }
         if (
             ts.isCallExpression(expr) &&
@@ -7668,12 +7680,46 @@ class Emitter {
             ts.isIdentifier(expr.expression.expression) &&
             this.isUnshadowedGlobalIdentifier(expr.expression.expression, "Reflect") &&
             expr.expression.name.text === "get" &&
-            expr.arguments.length === 2 &&
-            this.sideEffectFreeObjectPropertyReadKey(expr.arguments[1]!, seenConsts) === "value"
+            expr.arguments.length === 2
         ) {
-            return expr.arguments[0]!;
+            const key = this.sideEffectFreeObjectPropertyReadKey(expr.arguments[1]!, seenConsts);
+            return key === null ? null : { receiver: expr.arguments[0]!, key };
         }
         return null;
+    }
+
+    private isSideEffectFreeDescriptorBooleanFlagRead(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        const access = this.sideEffectFreeDescriptorPropertyAccess(unwrapped, seenConsts);
+        if (access === null) {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+            return !!init && this.isSideEffectFreeDescriptorBooleanFlagRead(init, seenConsts);
+        }
+        if (
+            access.key !== "writable" &&
+            access.key !== "enumerable" &&
+            access.key !== "configurable"
+        ) {
+            return false;
+        }
+        const descriptorExpr = this.unwrapSideEffectFreeStaticExpression(access.receiver);
+        const targetDescriptorExpr = this.sideEffectFreeObjectTargetReturningOperand(
+            descriptorExpr,
+            seenConsts,
+        );
+        if (targetDescriptorExpr) {
+            return this.isSideEffectFreeDescriptorBooleanFlagRead(
+                ts.factory.createPropertyAccessExpression(targetDescriptorExpr, access.key),
+                new Set(seenConsts),
+            );
+        }
+        return this.isSideEffectFreeOwnDataPropertyDescriptorObjectOperand(
+            descriptorExpr,
+            seenConsts,
+        );
     }
 
     private isSideEffectFreeRegExpDescriptorNumberValueRead(
@@ -12440,6 +12486,9 @@ class Emitter {
         if (this.isSideEffectFreeRegExpDescriptorNumberValueRead(unwrapped, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeDescriptorBooleanFlagRead(unwrapped, seenConsts)) {
+            return true;
+        }
         if (
             ts.isPrefixUnaryExpression(unwrapped) &&
             (
@@ -12826,6 +12875,20 @@ class Emitter {
             this.isSideEffectFreeNonStringPrimitiveObjectOperand(unwrapped.expression.expression, seenConsts);
     }
 
+    private isSideEffectFreePrimitiveObjectValueOfCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (!ts.isCallExpression(unwrapped) || !ts.isPropertyAccessExpression(unwrapped.expression)) {
+            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+            return !!init && this.isSideEffectFreePrimitiveObjectValueOfCall(init, seenConsts);
+        }
+        return unwrapped.expression.name.text === "valueOf" &&
+            unwrapped.arguments.length === 0 &&
+            this.isSideEffectFreeNonStringPrimitiveObjectOperand(unwrapped.expression.expression, seenConsts);
+    }
+
     private isSideEffectFreeNonStringPrimitiveObjectOperand(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -12840,6 +12903,9 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeRegExpDescriptorNumberValueRead(unwrapped, seenConsts)) {
+            return true;
+        }
+        if (this.isSideEffectFreeDescriptorBooleanFlagRead(unwrapped, seenConsts)) {
             return true;
         }
         if (
