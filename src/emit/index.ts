@@ -31552,14 +31552,31 @@ class Emitter {
         const streamName = this.processStdioStreamReceiverName(
             this.unwrapSideEffectFreeStaticExpression(args[0]!),
         );
+        const returnsNullable = method === "isReadable" || method === "isWritable" || method === "isDestroyed";
         if (!streamName) {
-            unsupported(args[0]!, `stream.${method} currently supports process stdio streams`);
+            const arg = this.emitExpr(args[0]!);
+            const result = returnsNullable ? "tsc_value_null()" : "false";
+            return this.emitSequencedExpr(
+                returnsNullable ? T_VALUE : T_BOOLEAN,
+                [
+                    { value: arg, node: args[0]! },
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ],
+                () => result,
+            );
         }
         const result = method === "isReadable"
             ? streamName === "stdin"
             : method === "isWritable"
                 ? streamName !== "stdin"
                 : false;
+        if (returnsNullable) {
+            return this.emitSequencedExpr(
+                T_VALUE,
+                this.ignoredArgumentSpecs(args, 1),
+                () => `tsc_value_bool(${result ? "true" : "false"})`,
+            );
+        }
         return this.emitSequencedExpr(
             T_BOOLEAN,
             this.ignoredArgumentSpecs(args, 1),

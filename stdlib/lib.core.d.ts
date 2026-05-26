@@ -743,10 +743,10 @@ interface ProcessReadableStream {
     unpipe(destination?: ProcessWritableStream, ...ignored: any[]): void;
 }
 interface StreamModule {
-    isReadable(stream: any, ...ignored: any[]): boolean;
-    isWritable(stream: any, ...ignored: any[]): boolean;
+    isReadable(stream: any, ...ignored: any[]): boolean | null;
+    isWritable(stream: any, ...ignored: any[]): boolean | null;
     isErrored(stream: any, ...ignored: any[]): boolean;
-    isDestroyed(stream: any, ...ignored: any[]): boolean;
+    isDestroyed(stream: any, ...ignored: any[]): boolean | null;
     isDisturbed(stream: any, ...ignored: any[]): boolean;
 }
 interface Process {
@@ -793,19 +793,19 @@ interface Process {
 }
 declare const process: Process;
 declare module "stream" {
-    export function isReadable(stream: any, ...ignored: any[]): boolean;
-    export function isWritable(stream: any, ...ignored: any[]): boolean;
+    export function isReadable(stream: any, ...ignored: any[]): boolean | null;
+    export function isWritable(stream: any, ...ignored: any[]): boolean | null;
     export function isErrored(stream: any, ...ignored: any[]): boolean;
-    export function isDestroyed(stream: any, ...ignored: any[]): boolean;
+    export function isDestroyed(stream: any, ...ignored: any[]): boolean | null;
     export function isDisturbed(stream: any, ...ignored: any[]): boolean;
     const defaultStream: StreamModule;
     export default defaultStream;
 }
 declare module "node:stream" {
-    export function isReadable(stream: any, ...ignored: any[]): boolean;
-    export function isWritable(stream: any, ...ignored: any[]): boolean;
+    export function isReadable(stream: any, ...ignored: any[]): boolean | null;
+    export function isWritable(stream: any, ...ignored: any[]): boolean | null;
     export function isErrored(stream: any, ...ignored: any[]): boolean;
-    export function isDestroyed(stream: any, ...ignored: any[]): boolean;
+    export function isDestroyed(stream: any, ...ignored: any[]): boolean | null;
     export function isDisturbed(stream: any, ...ignored: any[]): boolean;
     const defaultStream: StreamModule;
     export default defaultStream;
