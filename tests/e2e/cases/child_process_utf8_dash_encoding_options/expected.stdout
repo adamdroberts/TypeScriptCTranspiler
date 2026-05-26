@@ -1,0 +1,3 @@
+exec: string exec-alias
+file: string file-alias
+spawn: string spawn-alias string 0
