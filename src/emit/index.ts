@@ -36131,17 +36131,28 @@ class Emitter {
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.writeFileSync data must be string or Buffer");
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
+                    optionSpecs.push({ value: this.emitExpr(args[2]), target: T_VOID, node: args[2] });
+                }
                 return this.emitSequencedExpr(T_VOID, [
                     this.fsPathSpec(p, args[0]!, "fs.writeFileSync path"),
                     { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
+                    ...optionSpecs,
                     { value: { c: options.append ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
                     { value: { c: options.exclusive ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
                     { value: { c: options.update ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
                     options.mode,
                     ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
-                ], ([path, data, append, exclusive, update, mode]) =>
-                    `({ ${this.emitFsWriteFileCall(path!, data!, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, append!, exclusive!, update!, mode!)}; })`,
-                );
+                ], (values) => {
+                    const [path, data] = values;
+                    const offset = optionSpecs.length;
+                    const append = values[2 + offset]!;
+                    const exclusive = values[3 + offset]!;
+                    const update = values[4 + offset]!;
+                    const mode = values[5 + offset]!;
+                    return `({ ${this.emitFsWriteFileCall(path!, data!, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, append, exclusive, update, mode)}; })`;
+                });
             }
             case "appendFileSync": {
                 if (args.length < 2) unsupported(call, "fs.appendFileSync needs path, data, and optional UTF-8/hex/base64 encoding/flag options");
@@ -36149,17 +36160,28 @@ class Emitter {
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.appendFileSync data must be string or Buffer");
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
+                    optionSpecs.push({ value: this.emitExpr(args[2]), target: T_VOID, node: args[2] });
+                }
                 return this.emitSequencedExpr(T_VOID, [
                     this.fsPathSpec(p, args[0]!, "fs.appendFileSync path"),
                     { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
+                    ...optionSpecs,
                     { value: { c: "true", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
                     { value: { c: options.exclusive ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
                     { value: { c: "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
                     options.mode,
                     ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
-                ], ([path, data, append, exclusive, update, mode]) =>
-                    `({ ${this.emitFsWriteFileCall(path!, data!, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, append!, exclusive!, update!, mode!)}; })`,
-                );
+                ], (values) => {
+                    const [path, data] = values;
+                    const offset = optionSpecs.length;
+                    const append = values[2 + offset]!;
+                    const exclusive = values[3 + offset]!;
+                    const update = values[4 + offset]!;
+                    const mode = values[5 + offset]!;
+                    return `({ ${this.emitFsWriteFileCall(path!, data!, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, append, exclusive, update, mode)}; })`;
+                });
             }
             case "existsSync": {
                 if (args.length < 1) unsupported(call, "fs.existsSync needs path");
@@ -36723,8 +36745,9 @@ class Emitter {
         const out = { append: false, exclusive: false, update: false };
         let encoding: "utf8" | "hex" | "base64" = "utf8";
         let mode: SequencedCallArg = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
-        if (!options || this.isUndefinedExpression(options)) return { ...out, encoding, mode };
+        if (!options || this.isUndefinedLikeExpression(options)) return { ...out, encoding, mode };
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedLikeExpression(resolvedOptions)) return { ...out, encoding, mode };
         const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" => {
             node = this.resolveSideEffectFreeEarlierConstExpression(node);
             if (this.isUndefinedExpression(node)) return "utf8";
@@ -36791,8 +36814,9 @@ class Emitter {
         const out = { exclusive: false };
         let encoding: "utf8" | "hex" | "base64" = "utf8";
         let mode: SequencedCallArg = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
-        if (!options || this.isUndefinedExpression(options)) return { ...out, encoding, mode };
+        if (!options || this.isUndefinedLikeExpression(options)) return { ...out, encoding, mode };
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedLikeExpression(resolvedOptions)) return { ...out, encoding, mode };
         const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" => {
             node = this.resolveSideEffectFreeEarlierConstExpression(node);
             if (this.isUndefinedExpression(node)) return "utf8";
@@ -37030,14 +37054,22 @@ class Emitter {
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.promises.writeFile data must be string or Buffer");
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
+                    optionSpecs.push({ value: this.emitExpr(args[2]), target: T_VOID, node: args[2] });
+                }
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.writeFile path"),
                     { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
+                    ...optionSpecs,
                     options.mode,
                     ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
-                ], ([path, data, mode]) =>
-                    settle(`({ ${this.emitFsWriteFileCall(path!, data!, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, options.append ? "true" : "false", options.exclusive ? "true" : "false", options.update ? "true" : "false", mode!)}; tsc_promise_resolve(tsc_value_undefined()); })`),
-                );
+                ], (values) => {
+                    const path = values[0]!;
+                    const data = values[1]!;
+                    const mode = values[2 + optionSpecs.length]!;
+                    return settle(`({ ${this.emitFsWriteFileCall(path, data, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, options.append ? "true" : "false", options.exclusive ? "true" : "false", options.update ? "true" : "false", mode)}; tsc_promise_resolve(tsc_value_undefined()); })`);
+                });
             }
             case "appendFile": {
                 if (args.length < 2) unsupported(call, "fs.promises.appendFile needs path, data, and optional UTF-8/hex/base64 encoding/flag options");
@@ -37045,14 +37077,22 @@ class Emitter {
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.promises.appendFile data must be string or Buffer");
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
+                    optionSpecs.push({ value: this.emitExpr(args[2]), target: T_VOID, node: args[2] });
+                }
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.appendFile path"),
                     { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
+                    ...optionSpecs,
                     options.mode,
                     ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
-                ], ([path, data, mode]) =>
-                    settle(`({ ${this.emitFsWriteFileCall(path!, data!, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, "true", options.exclusive ? "true" : "false", "false", mode!)}; tsc_promise_resolve(tsc_value_undefined()); })`),
-                );
+                ], (values) => {
+                    const path = values[0]!;
+                    const data = values[1]!;
+                    const mode = values[2 + optionSpecs.length]!;
+                    return settle(`({ ${this.emitFsWriteFileCall(path, data, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, "true", options.exclusive ? "true" : "false", "false", mode)}; tsc_promise_resolve(tsc_value_undefined()); })`);
+                });
             }
             case "readdir": {
                 if (args.length < 1) unsupported(call, "fs.promises.readdir needs path and optional UTF-8/hex/base64/buffer encoding or withFileTypes options");

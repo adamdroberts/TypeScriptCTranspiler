@@ -9,13 +9,17 @@ function mark(label: string): string {
     return label;
 }
 
-writeFileSync(syncFile, "sync", void 0, mark("write"));
-appendFileSync(syncFile, "+append", void 0, mark("append"));
+function note(label: string): void {
+    events.push(label);
+}
 
-fs.promises.writeFile(promiseFile, "promise", void 0, mark("pwrite"));
+writeFileSync(syncFile, "sync", void note("write-options"), mark("write"));
+appendFileSync(syncFile, "+append", void note("append-options"), mark("append"));
+
+fs.promises.writeFile(promiseFile, "promise", void note("pwrite-options"), mark("pwrite"));
 console.log("promise write:", fs.readFileSync(promiseFile).trim());
 
-fs.promises.appendFile(promiseFile, "+append", void 0, mark("pappend"));
+fs.promises.appendFile(promiseFile, "+append", void note("pappend-options"), mark("pappend"));
 console.log("promise append:", fs.readFileSync(promiseFile).trim());
 
 console.log("sync:", fs.readFileSync(syncFile).trim());

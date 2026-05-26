@@ -1,4 +1,4 @@
 promise write: promise
 promise append: promise+append
 sync: sync+append
-events: write|append|pwrite|pappend
+events: write-options|write|append-options|append|pwrite-options|pwrite|pappend-options|pappend
