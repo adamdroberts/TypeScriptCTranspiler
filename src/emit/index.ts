@@ -23433,6 +23433,11 @@ class Emitter {
             const condition = this.staticBooleanValue(unwrapped.condition, seenConsts);
             if (condition === true) return this.staticBooleanValue(unwrapped.whenTrue, seenConsts);
             if (condition === false) return this.staticBooleanValue(unwrapped.whenFalse, seenConsts);
+            if (this.isSideEffectFreeTopLevelConstInitializer(unwrapped.condition, seenConsts)) {
+                const whenTrue = this.staticBooleanValue(unwrapped.whenTrue, seenConsts);
+                const whenFalse = this.staticBooleanValue(unwrapped.whenFalse, seenConsts);
+                if (whenTrue !== null && whenTrue === whenFalse) return whenTrue;
+            }
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.staticBooleanValue(init, seenConsts) : null;
@@ -23491,6 +23496,11 @@ class Emitter {
             const condition = this.staticBooleanValue(unwrapped.condition, seenConsts);
             if (condition === true) return this.staticNullishState(unwrapped.whenTrue, seenConsts);
             if (condition === false) return this.staticNullishState(unwrapped.whenFalse, seenConsts);
+            if (this.isSideEffectFreeTopLevelConstInitializer(unwrapped.condition, seenConsts)) {
+                const whenTrue = this.staticNullishState(unwrapped.whenTrue, seenConsts);
+                const whenFalse = this.staticNullishState(unwrapped.whenFalse, seenConsts);
+                if (whenTrue !== null && whenTrue === whenFalse) return whenTrue;
+            }
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.staticNullishState(init, seenConsts) : null;
@@ -23746,6 +23756,11 @@ class Emitter {
             const condition = this.staticBooleanValue(unwrapped.condition, seenConsts);
             if (condition === true) return this.staticSwitchKey(unwrapped.whenTrue, seenConsts);
             if (condition === false) return this.staticSwitchKey(unwrapped.whenFalse, seenConsts);
+            if (this.isSideEffectFreeTopLevelConstInitializer(unwrapped.condition, seenConsts)) {
+                const whenTrue = this.staticSwitchKey(unwrapped.whenTrue, seenConsts);
+                const whenFalse = this.staticSwitchKey(unwrapped.whenFalse, seenConsts);
+                if (whenTrue && whenTrue === whenFalse) return whenTrue;
+            }
         }
         if (ts.isBinaryExpression(unwrapped)) {
             switch (unwrapped.operatorToken.kind) {

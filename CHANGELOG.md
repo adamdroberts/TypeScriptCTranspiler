@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE static boolean, nullish, and switch-key analysis now folds side-effect-free conditional expressions when both branches have the same static result. Test: `generated_c_dce_const`.
 - Generated-C DCE static switch-key selection now uses side-effect-free boolean expression proofs for boolean switch keys. Test: `generated_c_dce_const`.
 - Generated-C DCE static switch-key selection now follows side-effect-free nullish and comma expression trees, including absent descriptor keys. Test: `generated_c_dce_const`.
 - Generated-C DCE static nullish analysis now folds side-effect-free nullish, comma, and conditional expression trees for deeper fallback pruning. Test: `generated_c_dce_const`.

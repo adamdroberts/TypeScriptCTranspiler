@@ -4955,6 +4955,33 @@ function absentDescriptorBooleanSwitchDce(): number {
     }
 }
 
+function sameBranchConditionalDce(): string {
+    return (Object.keys({ local_dead_same_branch_boolean_condition: 1 }).length ? false : false)
+        ? "local_dead_same_branch_boolean_true"
+        : "kept_same_branch_boolean_false";
+}
+
+function sameBranchNullishDce(): string {
+    const value = (Object.keys({ local_dead_same_branch_nullish_condition: 1 }).length
+        ? "kept_same_branch_nullish"
+        : "kept_same_branch_nullish") as string | undefined;
+    return value ?? "local_dead_same_branch_nullish_fallback";
+}
+
+function sameBranchSwitchDce(): number {
+    const key = (Object.keys({ local_dead_same_branch_switch_condition: 1 }).length ? "b" : "b") as "a" | "b";
+    switch (key) {
+        case "a":
+            console.log("local_dead_same_branch_switch_a");
+            return 397;
+        case "b":
+            return 398;
+        default:
+            console.log("local_dead_same_branch_switch_default");
+            return 399;
+    }
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -5104,6 +5131,9 @@ console.log(
     staticSwitchDce(),
     absentDescriptorSwitchDce(),
     absentDescriptorBooleanSwitchDce(),
+    sameBranchConditionalDce(),
+    sameBranchNullishDce(),
+    sameBranchSwitchDce(),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),
