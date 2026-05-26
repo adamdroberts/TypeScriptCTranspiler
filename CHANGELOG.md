@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Array.fromAsync(...)` now evaluates and ignores trailing arguments after the optional `thisArg` across the undefined-mapper and mapper callback paths. Test: `array_from_async`.
 - CommonJS computed export names now reuse the finite static string resolver for bracket assignments and descriptor-based keys, so `exports[keys[0]]`, `module.exports[keyMap.name]`, and `Object.defineProperty(exports, keys[0], ...)` can become AOT named export metadata when the collection lookup has a single static string result. Tests: `node_modules_commonjs_computed_string_exports`, `node_modules_commonjs_define_property_computed_exports`.
 - Default-initialized parameters may now reference earlier parameters across top-level functions, constructors, instance methods, and static methods while still rejecting `this`, `arguments`, and same-or-later parameter references. Test: `default_parameters`.
 - `fs.readdirSync(...)` and immediate `fs.promises.readdir(...)` now accept `{ withFileTypes: true, encoding: "hex" | "base64" }`, returning bounded Dirent objects with encoded string `name` values. Test: `fs_readdir_dirent_encoded_options`.
