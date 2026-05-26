@@ -1,3 +1,4 @@
 direct: https://example.com/root/child?q=1 /root/child ?q=1
 default: https://example.com/other#frag /other #frag
+alias: https://example.com/root/child?alias=1 ?alias=1 true
 can: true true false
