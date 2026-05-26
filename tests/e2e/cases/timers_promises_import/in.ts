@@ -8,6 +8,9 @@ let namespaceDelay = "";
 let defaultImmediate = "";
 let optionDelay = "";
 let optionImmediate = "";
+let ignoredDelay = "";
+let ignoredImmediate = "";
+let ignoredOrder = "";
 
 const noSignal = undefined;
 const refDisabled = false;
@@ -42,8 +45,17 @@ timersPromises.setImmediate("option immediate", { ref: false }).then((value: str
     optionImmediate = value;
 });
 
+delay(0, "ignored delay", undefined, (ignoredOrder += "D", 1)).then((value: string): void => {
+    ignoredDelay = value;
+});
+
+timersPromises.setImmediate("ignored immediate", undefined, (ignoredOrder += "I", 2)).then((value: string): void => {
+    ignoredImmediate = value;
+});
+
 console.log("named delay:", namedDelay);
 console.log("named immediate:", namedImmediate);
 console.log("namespace delay:", namespaceDelay);
 console.log("default immediate:", defaultImmediate);
 console.log("options:", optionDelay, optionImmediate);
+console.log("ignored:", ignoredDelay, ignoredImmediate, ignoredOrder);

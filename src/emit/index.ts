@@ -32889,29 +32889,35 @@ class Emitter {
         if (mapped.kind !== "promise") unsupported(call, `timers/promises.${name} result must be Promise<T>`);
         switch (name) {
             case "setTimeout": {
-                if (call.arguments.length > 3) unsupported(call, "timers/promises.setTimeout expects delay, optional value, and optional options");
                 const delay = call.arguments[0];
                 if (delay && !this.isZeroDelayLiteral(delay)) {
                     unsupported(delay, "timers/promises.setTimeout in this subset requires an omitted delay or literal 0 delay");
                 }
                 const options = call.arguments[2];
                 this.validateTimersPromisesOptions(options, "timers/promises.setTimeout");
+                const ignored = this.ignoredArgumentSpecs(call.arguments, 3);
                 const valueNode = call.arguments[1];
-                if (!valueNode) return { c: "tsc_promise_resolve(tsc_value_undefined())", ty: mapped };
+                if (!valueNode) {
+                    return this.emitSequencedExpr(mapped, ignored, () => "tsc_promise_resolve(tsc_value_undefined())");
+                }
                 const value = this.emitExpr(valueNode);
                 return this.emitSequencedExpr(mapped, [
                     { value, node: valueNode },
+                    ...ignored,
                 ], ([resolved]) => this.promiseResolveResult({ c: resolved!, ty: value.ty }, valueNode));
             }
             case "setImmediate": {
-                if (call.arguments.length > 2) unsupported(call, "timers/promises.setImmediate expects optional value and optional options");
                 const options = call.arguments[1];
                 this.validateTimersPromisesOptions(options, "timers/promises.setImmediate");
+                const ignored = this.ignoredArgumentSpecs(call.arguments, 2);
                 const valueNode = call.arguments[0];
-                if (!valueNode) return { c: "tsc_promise_resolve(tsc_value_undefined())", ty: mapped };
+                if (!valueNode) {
+                    return this.emitSequencedExpr(mapped, ignored, () => "tsc_promise_resolve(tsc_value_undefined())");
+                }
                 const value = this.emitExpr(valueNode);
                 return this.emitSequencedExpr(mapped, [
                     { value, node: valueNode },
+                    ...ignored,
                 ], ([resolved]) => this.promiseResolveResult({ c: resolved!, ty: value.ty }, valueNode));
             }
         }
@@ -32923,18 +32929,24 @@ class Emitter {
         if (mapped.kind !== "promise") unsupported(call, `timers/promises.scheduler.${name} result must be Promise<T>`);
         switch (name) {
             case "wait": {
-                if (call.arguments.length > 2) unsupported(call, "timers/promises.scheduler.wait expects optional delay and options");
                 const delay = call.arguments[0];
                 if (delay && !this.isZeroDelayLiteral(delay)) {
                     unsupported(delay, "timers/promises.scheduler.wait in this subset requires an omitted delay or literal 0 delay");
                 }
                 const options = call.arguments[1];
                 this.validateTimersPromisesOptions(options, "timers/promises.scheduler.wait");
-                return { c: "tsc_promise_resolve(tsc_value_undefined())", ty: mapped };
+                return this.emitSequencedExpr(
+                    mapped,
+                    this.ignoredArgumentSpecs(call.arguments, 2),
+                    () => "tsc_promise_resolve(tsc_value_undefined())",
+                );
             }
             case "yield": {
-                if (call.arguments.length > 0) unsupported(call, "timers/promises.scheduler.yield expects no arguments");
-                return { c: "tsc_promise_resolve(tsc_value_undefined())", ty: mapped };
+                return this.emitSequencedExpr(
+                    mapped,
+                    this.ignoredArgumentSpecs(call.arguments, 0),
+                    () => "tsc_promise_resolve(tsc_value_undefined())",
+                );
             }
         }
         unsupported(call, `timers/promises.scheduler.${name}`);

@@ -5,6 +5,9 @@ let namedWait = "pending";
 let defaultYield = "pending";
 let namespaceWait = "pending";
 let optionWait = "pending";
+let ignoredWait = "pending";
+let ignoredYield = "pending";
+let ignoredOrder = "";
 
 const noSignal = undefined;
 const refDisabled = false;
@@ -28,4 +31,13 @@ timersPromises.scheduler.wait(void 0, schedulerVoidOptions).then((_value: any): 
     optionWait = "settled";
 });
 
+scheduler.wait(0, undefined, (ignoredOrder += "W", 1)).then((_value: any): void => {
+    ignoredWait = "settled";
+});
+
+timersPromises.scheduler.yield((ignoredOrder += "Y", 2)).then((_value: any): void => {
+    ignoredYield = "settled";
+});
+
 console.log("scheduler:", namedWait, defaultYield, namespaceWait, optionWait);
+console.log("ignored:", ignoredWait, ignoredYield, ignoredOrder);

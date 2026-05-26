@@ -932,8 +932,8 @@ interface TimersModule {
     clearImmediate: ClearImmediateFunction;
 }
 interface TimersPromisesModule {
-    setTimeout<T = void>(delay?: number, value?: T, options?: TimersPromisesOptions): Promise<T>;
-    setImmediate<T = void>(value?: T, options?: TimersPromisesOptions): Promise<T>;
+    setTimeout<T = void>(delay?: number, value?: T, options?: TimersPromisesOptions, ...ignored: any[]): Promise<T>;
+    setImmediate<T = void>(value?: T, options?: TimersPromisesOptions, ...ignored: any[]): Promise<T>;
     scheduler: TimersPromisesScheduler;
 }
 interface TimersPromisesOptions {
@@ -941,8 +941,8 @@ interface TimersPromisesOptions {
     signal?: undefined;
 }
 interface TimersPromisesScheduler {
-    wait(delay?: number, options?: TimersPromisesOptions): Promise<void>;
-    yield(): Promise<void>;
+    wait(delay?: number, options?: TimersPromisesOptions, ...ignored: any[]): Promise<void>;
+    yield(...ignored: any[]): Promise<void>;
 }
 declare module "timers" {
     export const setTimeout: SetTimeoutFunction;
@@ -963,15 +963,15 @@ declare module "node:timers" {
     export default defaultTimers;
 }
 declare module "timers/promises" {
-    export function setTimeout<T = void>(delay?: number, value?: T, options?: TimersPromisesOptions): Promise<T>;
-    export function setImmediate<T = void>(value?: T, options?: TimersPromisesOptions): Promise<T>;
+    export function setTimeout<T = void>(delay?: number, value?: T, options?: TimersPromisesOptions, ...ignored: any[]): Promise<T>;
+    export function setImmediate<T = void>(value?: T, options?: TimersPromisesOptions, ...ignored: any[]): Promise<T>;
     export const scheduler: TimersPromisesScheduler;
     const defaultTimersPromises: TimersPromisesModule;
     export default defaultTimersPromises;
 }
 declare module "node:timers/promises" {
-    export function setTimeout<T = void>(delay?: number, value?: T, options?: TimersPromisesOptions): Promise<T>;
-    export function setImmediate<T = void>(value?: T, options?: TimersPromisesOptions): Promise<T>;
+    export function setTimeout<T = void>(delay?: number, value?: T, options?: TimersPromisesOptions, ...ignored: any[]): Promise<T>;
+    export function setImmediate<T = void>(value?: T, options?: TimersPromisesOptions, ...ignored: any[]): Promise<T>;
     export const scheduler: TimersPromisesScheduler;
     const defaultTimersPromises: TimersPromisesModule;
     export default defaultTimersPromises;

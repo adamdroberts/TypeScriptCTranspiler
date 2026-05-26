@@ -3,3 +3,4 @@ named immediate: named immediate
 namespace delay: namespace delay
 default immediate: default immediate
 options: option delay option immediate
+ignored: ignored delay ignored immediate DI
