@@ -3973,6 +3973,12 @@ class Emitter {
                     case ts.SyntaxKind.SlashToken: return left / right;
                     case ts.SyntaxKind.PercentToken: return left % right;
                     case ts.SyntaxKind.AsteriskAsteriskToken: return left ** right;
+                    case ts.SyntaxKind.AmpersandToken: return left & right;
+                    case ts.SyntaxKind.BarToken: return left | right;
+                    case ts.SyntaxKind.CaretToken: return left ^ right;
+                    case ts.SyntaxKind.LessThanLessThanToken: return left << right;
+                    case ts.SyntaxKind.GreaterThanGreaterThanToken: return left >> right;
+                    case ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken: return left >>> right;
                 }
             }
         }
@@ -3999,11 +4005,13 @@ class Emitter {
             ts.isPrefixUnaryExpression(unwrapped) &&
             (
                 unwrapped.operator === ts.SyntaxKind.PlusToken ||
-                unwrapped.operator === ts.SyntaxKind.MinusToken
+                unwrapped.operator === ts.SyntaxKind.MinusToken ||
+                unwrapped.operator === ts.SyntaxKind.TildeToken
             )
         ) {
             const value = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped.operand, seenConsts);
             if (value === null) return null;
+            if (unwrapped.operator === ts.SyntaxKind.TildeToken) return ~value;
             return unwrapped.operator === ts.SyntaxKind.MinusToken ? -value : value;
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);

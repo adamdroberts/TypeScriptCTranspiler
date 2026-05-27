@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE static numeric analysis now folds side-effect-free numeric bitwise expressions. Test: `generated_c_dce_const`.
 - Generated-C DCE static switch selection now folds side-effect-free computed string and numeric keys. Test: `generated_c_dce_const`.
 - Generated-C DCE static boolean analysis now folds side-effect-free computed numeric and string truthiness. Test: `generated_c_dce_const`.
 - Generated-C DCE static string analysis now folds side-effect-free string concatenation. Test: `generated_c_dce_const`.

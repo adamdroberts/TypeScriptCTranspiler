@@ -5068,6 +5068,13 @@ function computedSwitchKeyDce(): string {
     }
 }
 
+function numericBitwiseDce(): string {
+    const flags: number = (5 & 3) | (1 << 3);
+    return (flags === 9 && (8 >> 1) === 4 && (8 >>> 1) === 4 && (5 ^ 1) === 4 && ~-1 === 0)
+        ? "kept_numeric_bitwise"
+        : "local_dead_numeric_bitwise_false";
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -5229,6 +5236,7 @@ console.log(
     stringConcatDce(),
     computedTruthyFalsyDce(),
     computedSwitchKeyDce(),
+    numericBitwiseDce(),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),
