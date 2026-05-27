@@ -23470,7 +23470,7 @@ class Emitter {
         const numericValue = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped, seenConsts);
         if (numericValue !== null) return !Number.isNaN(numericValue) && numericValue !== 0;
         const bigintText = this.sideEffectFreeBigIntLiteralText(unwrapped, seenConsts);
-        if (bigintText !== null) return !/^-?0+n$/i.test(bigintText);
+        if (bigintText !== null) return this.bigIntTextValue(bigintText) !== 0n;
         const stringText = this.sideEffectFreeStringLiteralText(unwrapped, seenConsts);
         if (stringText !== null) return stringText.length > 0;
         if (
@@ -23603,7 +23603,7 @@ class Emitter {
         const number = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped, seenConsts);
         if (number !== null) return Number.isNaN(number) ? "number:NaN" : `number:${Object.is(number, -0) ? 0 : number}`;
         const bigint = this.sideEffectFreeBigIntLiteralText(unwrapped, seenConsts);
-        if (bigint !== null) return `bigint:${bigint}`;
+        if (bigint !== null) return `bigint:${this.bigIntTextValue(bigint)}n`;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.staticPrimitiveEqualityKey(init, seenConsts) : null;
     }
@@ -23687,7 +23687,11 @@ class Emitter {
     }
 
     private bigIntTextValue(text: string): bigint {
-        return BigInt(text.slice(0, -1));
+        const body = text.slice(0, -1);
+        if (body.startsWith("-0x") || body.startsWith("-0o") || body.startsWith("-0b")) {
+            return -BigInt(body.slice(1));
+        }
+        return BigInt(body);
     }
 
     private staticPrimitiveRelationalValue(
@@ -23716,6 +23720,19 @@ class Emitter {
                 case ts.SyntaxKind.LessThanEqualsToken: return leftString <= rightString;
                 case ts.SyntaxKind.GreaterThanToken: return leftString > rightString;
                 case ts.SyntaxKind.GreaterThanEqualsToken: return leftString >= rightString;
+            }
+        }
+
+        const leftBigInt = this.sideEffectFreeBigIntLiteralText(left, seenConsts);
+        const rightBigInt = this.sideEffectFreeBigIntLiteralText(right, seenConsts);
+        if (leftBigInt !== null && rightBigInt !== null) {
+            const leftValue = this.bigIntTextValue(leftBigInt);
+            const rightValue = this.bigIntTextValue(rightBigInt);
+            switch (op) {
+                case ts.SyntaxKind.LessThanToken: return leftValue < rightValue;
+                case ts.SyntaxKind.LessThanEqualsToken: return leftValue <= rightValue;
+                case ts.SyntaxKind.GreaterThanToken: return leftValue > rightValue;
+                case ts.SyntaxKind.GreaterThanEqualsToken: return leftValue >= rightValue;
             }
         }
 

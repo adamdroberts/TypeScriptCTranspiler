@@ -5112,6 +5112,16 @@ function primitiveBigIntExpressionDce(): string {
         : "local_dead_primitive_bigint_expression_false";
 }
 
+function primitiveBigIntRelationalDce(): string {
+    const negativeZero: bigint = -0n;
+    const hexZero: bigint = 0x0n;
+    const lowBigInt: bigint = 3n;
+    const highBigInt: bigint = 5n;
+    return (negativeZero === 0n && !hexZero && highBigInt > 4n && lowBigInt <= highBigInt && (0xfn - 10n) === 5n)
+        ? "kept_primitive_bigint_relational"
+        : "local_dead_primitive_bigint_relational_false";
+}
+
 function computedBooleanEqualityDce(): string {
     return (((2 + 2) > 3) === true && (("bool" + "ean") === "boolean") !== false)
         ? "kept_computed_boolean_equality"
@@ -5284,6 +5294,7 @@ console.log(
     primitiveBigIntEqualityDce(),
     primitiveBigIntTruthinessDce(),
     primitiveBigIntExpressionDce(),
+    primitiveBigIntRelationalDce(),
     computedBooleanEqualityDce(),
     branchExit(true),
     nestedBlockExit(),
