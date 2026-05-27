@@ -3968,6 +3968,11 @@ class Emitter {
                 if (left === "nullish") return this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped.right, seenConsts);
                 if (left === "nonNullish") return this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped.left, seenConsts);
             }
+            if (unwrapped.operatorToken.kind === ts.SyntaxKind.CommaToken) {
+                return this.isSideEffectFreeTopLevelConstInitializer(unwrapped.left, seenConsts)
+                    ? this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped.right, seenConsts)
+                    : null;
+            }
             const left = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped.left, seenConsts);
             const right = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped.right, seenConsts);
             if (left !== null && right !== null) {
@@ -3985,6 +3990,16 @@ class Emitter {
                     case ts.SyntaxKind.GreaterThanGreaterThanToken: return left >> right;
                     case ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken: return left >>> right;
                 }
+            }
+        }
+        if (ts.isConditionalExpression(unwrapped)) {
+            const condition = this.staticBooleanValue(unwrapped.condition, seenConsts);
+            if (condition === true) return this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped.whenTrue, seenConsts);
+            if (condition === false) return this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped.whenFalse, seenConsts);
+            if (this.isSideEffectFreeTopLevelConstInitializer(unwrapped.condition, seenConsts)) {
+                const whenTrue = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped.whenTrue, seenConsts);
+                const whenFalse = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped.whenFalse, seenConsts);
+                if (whenTrue !== null && Object.is(whenTrue, whenFalse)) return whenTrue;
             }
         }
         if (
@@ -12556,19 +12571,41 @@ class Emitter {
         }
         if (
             ts.isBinaryExpression(unwrapped) &&
-            unwrapped.operatorToken.kind === ts.SyntaxKind.PlusToken
+            (
+                unwrapped.operatorToken.kind === ts.SyntaxKind.PlusToken ||
+                unwrapped.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken ||
+                unwrapped.operatorToken.kind === ts.SyntaxKind.CommaToken
+            )
         ) {
-            const left = this.sideEffectFreeStringLiteralText(unwrapped.left, seenConsts);
-            const right = this.sideEffectFreeStringLiteralText(unwrapped.right, seenConsts);
-            if (left !== null && right !== null) return left + right;
+            switch (unwrapped.operatorToken.kind) {
+                case ts.SyntaxKind.PlusToken: {
+                    const left = this.sideEffectFreeStringLiteralText(unwrapped.left, seenConsts);
+                    const right = this.sideEffectFreeStringLiteralText(unwrapped.right, seenConsts);
+                    if (left !== null && right !== null) return left + right;
+                    break;
+                }
+                case ts.SyntaxKind.QuestionQuestionToken: {
+                    const left = this.staticNullishState(unwrapped.left, seenConsts);
+                    if (left === "nullish") return this.sideEffectFreeStringLiteralText(unwrapped.right, seenConsts);
+                    if (left === "nonNullish") return this.sideEffectFreeStringLiteralText(unwrapped.left, seenConsts);
+                    break;
+                }
+                case ts.SyntaxKind.CommaToken:
+                    if (this.isSideEffectFreeTopLevelConstInitializer(unwrapped.left, seenConsts)) {
+                        return this.sideEffectFreeStringLiteralText(unwrapped.right, seenConsts);
+                    }
+                    break;
+            }
         }
-        if (
-            ts.isBinaryExpression(unwrapped) &&
-            unwrapped.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
-        ) {
-            const left = this.staticNullishState(unwrapped.left, seenConsts);
-            if (left === "nullish") return this.sideEffectFreeStringLiteralText(unwrapped.right, seenConsts);
-            if (left === "nonNullish") return this.sideEffectFreeStringLiteralText(unwrapped.left, seenConsts);
+        if (ts.isConditionalExpression(unwrapped)) {
+            const condition = this.staticBooleanValue(unwrapped.condition, seenConsts);
+            if (condition === true) return this.sideEffectFreeStringLiteralText(unwrapped.whenTrue, seenConsts);
+            if (condition === false) return this.sideEffectFreeStringLiteralText(unwrapped.whenFalse, seenConsts);
+            if (this.isSideEffectFreeTopLevelConstInitializer(unwrapped.condition, seenConsts)) {
+                const whenTrue = this.sideEffectFreeStringLiteralText(unwrapped.whenTrue, seenConsts);
+                const whenFalse = this.sideEffectFreeStringLiteralText(unwrapped.whenFalse, seenConsts);
+                if (whenTrue !== null && whenTrue === whenFalse) return whenTrue;
+            }
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeStringLiteralText(init, seenConsts) : null;
@@ -23774,6 +23811,30 @@ class Emitter {
             const left = this.staticNullishState(unwrapped.left, seenConsts);
             if (left === "nullish") return this.sideEffectFreeBigIntLiteralText(unwrapped.right, seenConsts);
             if (left === "nonNullish") return this.sideEffectFreeBigIntLiteralText(unwrapped.left, seenConsts);
+        }
+        if (
+            ts.isBinaryExpression(unwrapped) &&
+            unwrapped.operatorToken.kind === ts.SyntaxKind.CommaToken
+        ) {
+            return this.isSideEffectFreeTopLevelConstInitializer(unwrapped.left, seenConsts)
+                ? this.sideEffectFreeBigIntLiteralText(unwrapped.right, seenConsts)
+                : null;
+        }
+        if (ts.isConditionalExpression(unwrapped)) {
+            const condition = this.staticBooleanValue(unwrapped.condition, seenConsts);
+            if (condition === true) return this.sideEffectFreeBigIntLiteralText(unwrapped.whenTrue, seenConsts);
+            if (condition === false) return this.sideEffectFreeBigIntLiteralText(unwrapped.whenFalse, seenConsts);
+            if (this.isSideEffectFreeTopLevelConstInitializer(unwrapped.condition, seenConsts)) {
+                const whenTrue = this.sideEffectFreeBigIntLiteralText(unwrapped.whenTrue, seenConsts);
+                const whenFalse = this.sideEffectFreeBigIntLiteralText(unwrapped.whenFalse, seenConsts);
+                if (
+                    whenTrue !== null &&
+                    whenFalse !== null &&
+                    this.bigIntTextValue(whenTrue) === this.bigIntTextValue(whenFalse)
+                ) {
+                    return whenTrue;
+                }
+            }
         }
         if (
             ts.isPrefixUnaryExpression(unwrapped) &&

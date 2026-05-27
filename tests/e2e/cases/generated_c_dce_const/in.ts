@@ -5017,6 +5017,20 @@ function primitiveBigIntLooseEqualityDce(): string {
         : "local_dead_primitive_bigint_loose_equality_false";
 }
 
+function primitiveConditionalCommaDce(): string {
+    const sameString = Object.keys({ local_dead_primitive_same_branch_condition: 1 }).length ? "same" : "same";
+    const selectedNumber = true ? 5 : 6;
+    const selectedBigInt = false ? 7n : 5n;
+    return ((false ? "local_dead_primitive_conditional_string_false" : "conditional") === "conditional" &&
+        sameString === "same" &&
+        // @ts-ignore: intentional pure comma expression for generated-C DCE coverage.
+        (0, 2 + 3) === selectedNumber &&
+        // @ts-ignore: intentional pure comma expression for generated-C DCE coverage.
+        (0, 2n + 3n) === selectedBigInt)
+        ? "kept_primitive_conditional_comma"
+        : "local_dead_primitive_conditional_comma_false";
+}
+
 function primitiveRelationalDce(): string {
     const lowNumber: number = 3;
     const highNumber: number = 4;
@@ -5326,6 +5340,7 @@ console.log(
     primitiveEqualityDce(),
     primitiveLooseEqualityDce(),
     primitiveBigIntLooseEqualityDce(),
+    primitiveConditionalCommaDce(),
     primitiveRelationalDce(),
     typeofEqualityDce(),
     lengthComparisonDce(),
