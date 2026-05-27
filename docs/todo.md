@@ -96,6 +96,7 @@ This is the next item that most directly expands what programs can be written ag
   - Generated-C DCE static primitive equality now folds `typeof` over side-effect-free literal and const operands. Test: `generated_c_dce_const`.
   - Generated-C DCE static numeric analysis now folds `.length` reads on side-effect-free string and array operands. Test: `generated_c_dce_const`.
   - Generated-C DCE static numeric analysis now folds side-effect-free numeric arithmetic expressions. Test: `generated_c_dce_const`.
+  - Generated-C DCE static string analysis now folds side-effect-free string concatenation. Test: `generated_c_dce_const`.
   - Generated-C DCE coverage now includes inherited `toString()`, `toLocaleString()`, and `valueOf()` calls on statically present data descriptor result objects. Test: `generated_c_dce_const`.
   - Generated-C DCE now treats `Object.prototype.toLocaleString.call(...)` on statically present data descriptor result objects as side-effect-free. Test: `generated_c_dce_const`.
   - Generated-C DCE now treats inherited `hasOwnProperty(...)` and `propertyIsEnumerable(...)` calls on statically present data descriptor result objects as side-effect-free. Test: `generated_c_dce_const`.

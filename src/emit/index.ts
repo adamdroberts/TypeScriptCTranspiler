@@ -12532,6 +12532,14 @@ class Emitter {
         if (ts.isTypeOfExpression(unwrapped)) {
             return this.sideEffectFreeTypeofString(unwrapped.expression, seenConsts);
         }
+        if (
+            ts.isBinaryExpression(unwrapped) &&
+            unwrapped.operatorToken.kind === ts.SyntaxKind.PlusToken
+        ) {
+            const left = this.sideEffectFreeStringLiteralText(unwrapped.left, seenConsts);
+            const right = this.sideEffectFreeStringLiteralText(unwrapped.right, seenConsts);
+            if (left !== null && right !== null) return left + right;
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeStringLiteralText(init, seenConsts) : null;
     }

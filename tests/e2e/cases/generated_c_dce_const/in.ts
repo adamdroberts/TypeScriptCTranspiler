@@ -5031,6 +5031,13 @@ function numericArithmeticDce(): string {
         : "local_dead_numeric_arithmetic_false";
 }
 
+function stringConcatDce(): string {
+    const suffix: string = "cat";
+    return ("con" + suffix === "concat" && "aa" + "b" < "aac")
+        ? "kept_string_concat"
+        : "local_dead_string_concat_false";
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -5189,6 +5196,7 @@ console.log(
     typeofEqualityDce(),
     lengthComparisonDce(),
     numericArithmeticDce(),
+    stringConcatDce(),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),
