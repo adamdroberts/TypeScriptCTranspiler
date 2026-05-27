@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE static primitive equality now folds side-effect-free boolean-typed logical expression operands. Test: `generated_c_dce_const`.
 - Generated-C DCE static string analysis now folds side-effect-free template literals with primitive substitutions. Test: `generated_c_dce_const`.
 - Generated-C DCE static BigInt analysis now folds side-effect-free BigInt relational comparisons and normalizes static BigInt equality keys. Test: `generated_c_dce_const`.
 - Generated-C DCE static BigInt analysis now folds side-effect-free BigInt arithmetic expression operands. Test: `generated_c_dce_const`.

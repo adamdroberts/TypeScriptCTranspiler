@@ -23663,6 +23663,13 @@ class Emitter {
                     return this.staticBooleanValue(unwrapped, seenConsts);
             }
         }
+        try {
+            if (this.prepareType(mapType(unwrapped, this.checker)).kind === "boolean") {
+                return this.staticBooleanValue(unwrapped, seenConsts);
+            }
+        } catch {
+            // Keep primitive equality folding conservative for expressions mapType cannot lower.
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreePrimitiveBooleanValue(init, seenConsts) : null;
     }

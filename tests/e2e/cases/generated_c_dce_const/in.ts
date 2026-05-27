@@ -5138,6 +5138,14 @@ function computedBooleanEqualityDce(): string {
         : "local_dead_computed_boolean_equality_false";
 }
 
+function computedBooleanLogicalEqualityDce(): string {
+    const left = (2 + 2) > 3;
+    const right = ("bo" + "ol") === "bool";
+    return ((left && right) === true && (false || left) !== false)
+        ? "kept_computed_boolean_logical_equality"
+        : "local_dead_computed_boolean_logical_equality_false";
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -5307,6 +5315,7 @@ console.log(
     primitiveBigIntExpressionDce(),
     primitiveBigIntRelationalDce(),
     computedBooleanEqualityDce(),
+    computedBooleanLogicalEqualityDce(),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),
