@@ -5103,6 +5103,12 @@ function primitiveBigIntTruthinessDce(): string {
         : "local_dead_primitive_bigint_truthiness_false";
 }
 
+function computedBooleanEqualityDce(): string {
+    return (((2 + 2) > 3) === true && (("bool" + "ean") === "boolean") !== false)
+        ? "kept_computed_boolean_equality"
+        : "local_dead_computed_boolean_equality_false";
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -5268,6 +5274,7 @@ console.log(
     computedNullishDce(),
     primitiveBigIntEqualityDce(),
     primitiveBigIntTruthinessDce(),
+    computedBooleanEqualityDce(),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),

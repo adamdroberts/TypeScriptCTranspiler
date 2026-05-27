@@ -103,6 +103,7 @@ This is the next item that most directly expands what programs can be written ag
   - Generated-C DCE static nullish analysis now treats side-effect-free computed numeric and string operands as non-nullish. Test: `generated_c_dce_const`.
   - Generated-C DCE static primitive equality now folds side-effect-free BigInt literal comparisons. Test: `generated_c_dce_const`.
   - Generated-C DCE static boolean and nullish analysis now folds side-effect-free signed BigInt literal operands. Test: `generated_c_dce_const`.
+  - Generated-C DCE static primitive equality now folds side-effect-free computed boolean-expression operands. Test: `generated_c_dce_const`.
   - Generated-C DCE coverage now includes inherited `toString()`, `toLocaleString()`, and `valueOf()` calls on statically present data descriptor result objects. Test: `generated_c_dce_const`.
   - Generated-C DCE now treats `Object.prototype.toLocaleString.call(...)` on statically present data descriptor result objects as side-effect-free. Test: `generated_c_dce_const`.
   - Generated-C DCE now treats inherited `hasOwnProperty(...)` and `propertyIsEnumerable(...)` calls on statically present data descriptor result objects as side-effect-free. Test: `generated_c_dce_const`.

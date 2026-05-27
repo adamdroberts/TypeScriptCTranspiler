@@ -23596,6 +23596,8 @@ class Emitter {
         if (this.isSideEffectFreeUndefinedValue(unwrapped, seenConsts)) return "undefined";
         const bool = this.sideEffectFreeBooleanLiteralValue(unwrapped, seenConsts);
         if (bool !== null) return `boolean:${bool}`;
+        const computedBool = this.sideEffectFreePrimitiveBooleanValue(unwrapped, seenConsts);
+        if (computedBool !== null) return `boolean:${computedBool}`;
         const text = this.sideEffectFreeStringLiteralText(unwrapped, seenConsts);
         if (text !== null) return `string:${text}`;
         const number = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped, seenConsts);
@@ -23604,6 +23606,37 @@ class Emitter {
         if (bigint !== null) return `bigint:${bigint}`;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.staticPrimitiveEqualityKey(init, seenConsts) : null;
+    }
+
+    private sideEffectFreePrimitiveBooleanValue(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (unwrapped.kind === ts.SyntaxKind.TrueKeyword) return true;
+        if (unwrapped.kind === ts.SyntaxKind.FalseKeyword) return false;
+        if (
+            ts.isPrefixUnaryExpression(unwrapped) &&
+            unwrapped.operator === ts.SyntaxKind.ExclamationToken
+        ) {
+            const value = this.staticBooleanValue(unwrapped.operand, seenConsts);
+            return value === null ? null : !value;
+        }
+        if (ts.isBinaryExpression(unwrapped)) {
+            switch (unwrapped.operatorToken.kind) {
+                case ts.SyntaxKind.EqualsEqualsEqualsToken:
+                case ts.SyntaxKind.ExclamationEqualsEqualsToken:
+                case ts.SyntaxKind.EqualsEqualsToken:
+                case ts.SyntaxKind.ExclamationEqualsToken:
+                case ts.SyntaxKind.LessThanToken:
+                case ts.SyntaxKind.LessThanEqualsToken:
+                case ts.SyntaxKind.GreaterThanToken:
+                case ts.SyntaxKind.GreaterThanEqualsToken:
+                    return this.staticBooleanValue(unwrapped, seenConsts);
+            }
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreePrimitiveBooleanValue(init, seenConsts) : null;
     }
 
     private sideEffectFreeBigIntLiteralText(
