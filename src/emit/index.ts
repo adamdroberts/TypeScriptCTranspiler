@@ -23609,12 +23609,48 @@ class Emitter {
         if (leftKey === "number:NaN" || rightKey === "number:NaN") return false;
         if (leftKey === rightKey) return true;
         if (loose) {
-            return (
+            if (
                 (leftKey === "null" && rightKey === "undefined") ||
                 (leftKey === "undefined" && rightKey === "null")
-            );
+            ) {
+                return true;
+            }
+            const looseValue = this.staticLoosePrimitiveEqualityValue(leftKey, rightKey);
+            if (looseValue !== null) return looseValue;
+        }
+        return loose ? null : false;
+    }
+
+    private staticLoosePrimitiveEqualityValue(leftKey: string, rightKey: string): boolean | null {
+        if (leftKey === rightKey) return true;
+        const leftBooleanNumber = this.booleanPrimitiveEqualityNumberKey(leftKey);
+        if (leftBooleanNumber) return this.staticLoosePrimitiveEqualityValue(leftBooleanNumber, rightKey);
+        const rightBooleanNumber = this.booleanPrimitiveEqualityNumberKey(rightKey);
+        if (rightBooleanNumber) return this.staticLoosePrimitiveEqualityValue(leftKey, rightBooleanNumber);
+        if (leftKey === "null" || leftKey === "undefined" || rightKey === "null" || rightKey === "undefined") {
+            return false;
+        }
+        if (leftKey.startsWith("bigint:") || rightKey.startsWith("bigint:")) return null;
+        if (leftKey.startsWith("string:") && rightKey.startsWith("number:")) {
+            return this.staticStringNumberLooseEquality(leftKey.slice("string:".length), rightKey);
+        }
+        if (leftKey.startsWith("number:") && rightKey.startsWith("string:")) {
+            return this.staticStringNumberLooseEquality(rightKey.slice("string:".length), leftKey);
         }
         return false;
+    }
+
+    private booleanPrimitiveEqualityNumberKey(key: string): string | null {
+        if (key === "boolean:true") return "number:1";
+        if (key === "boolean:false") return "number:0";
+        return null;
+    }
+
+    private staticStringNumberLooseEquality(text: string, numberKey: string): boolean {
+        if (numberKey === "number:NaN") return false;
+        const left = Number(text);
+        const right = Number(numberKey.slice("number:".length));
+        return !Number.isNaN(left) && !Number.isNaN(right) && left === right;
     }
 
     private staticPrimitiveEqualityKey(

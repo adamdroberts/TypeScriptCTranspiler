@@ -4997,6 +4997,16 @@ function primitiveEqualityDce(): string {
         : "local_dead_primitive_equality_false";
 }
 
+function primitiveLooseEqualityDce(): string {
+    return (("5" as string | number) == (5 as string | number) &&
+        (false as boolean | number) == (0 as boolean | number) &&
+        (true as boolean | number) == (1 as boolean | number) &&
+        ("nope" as string | number) != (0 as string | number) &&
+        (null as null | number) != (0 as null | number))
+        ? "kept_primitive_loose_equality"
+        : "local_dead_primitive_loose_equality_false";
+}
+
 function primitiveRelationalDce(): string {
     const lowNumber: number = 3;
     const highNumber: number = 4;
@@ -5304,6 +5314,7 @@ console.log(
     sameBranchSwitchDce(),
     absentDescriptorEqualityDce(),
     primitiveEqualityDce(),
+    primitiveLooseEqualityDce(),
     primitiveRelationalDce(),
     typeofEqualityDce(),
     lengthComparisonDce(),

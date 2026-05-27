@@ -92,6 +92,7 @@ This is the next item that most directly expands what programs can be written ag
   - Generated-C DCE static boolean, nullish, and switch-key analysis now folds side-effect-free conditional expressions when both branches have the same static result. Test: `generated_c_dce_const`.
   - Generated-C DCE now emits a single branch for used ternary expressions whose side-effect-free condition selects identical static primitive branch values. Test: `generated_c_dce_const`.
   - Generated-C DCE static boolean analysis now folds side-effect-free primitive equality checks, including absent descriptor comparisons against `undefined`. Test: `generated_c_dce_const`.
+  - Generated-C DCE static primitive equality now folds side-effect-free loose equality across string, number, boolean, and nullish operands. Test: `generated_c_dce_const`.
   - Generated-C DCE static boolean analysis now folds side-effect-free numeric and string relational comparisons. Test: `generated_c_dce_const`.
   - Generated-C DCE static primitive equality now folds `typeof` over side-effect-free literal and const operands. Test: `generated_c_dce_const`.
   - Generated-C DCE static `typeof` analysis now folds side-effect-free computed primitive operands. Test: `generated_c_dce_const`.

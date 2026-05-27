@@ -984,6 +984,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Generated-C DCE static boolean, nullish, and switch-key analysis folds side-effect-free conditional expressions when both branches have the same static result. Test: `generated_c_dce_const`
 - Generated-C DCE emits a single branch for used ternary expressions whose side-effect-free condition selects identical static primitive branch values. Test: `generated_c_dce_const`
 - Generated-C DCE static boolean analysis folds side-effect-free primitive equality checks, including absent descriptor comparisons against `undefined`. Test: `generated_c_dce_const`
+- Generated-C DCE static primitive equality folds side-effect-free loose equality across string, number, boolean, and nullish operands. Test: `generated_c_dce_const`
 - Generated-C DCE static boolean analysis folds side-effect-free numeric and string relational comparisons. Test: `generated_c_dce_const`
 - Generated-C DCE static primitive equality folds `typeof` over side-effect-free literal and const operands. Test: `generated_c_dce_const`
 - Generated-C DCE static `typeof` analysis folds side-effect-free computed primitive operands. Test: `generated_c_dce_const`
