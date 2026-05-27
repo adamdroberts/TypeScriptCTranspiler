@@ -4022,6 +4022,17 @@ class Emitter {
             return Number.isFinite(value) ? value : null;
         }
         if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            unwrapped.expression.text === "Number" &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Number") &&
+            this.callIgnoredArgumentsAreSideEffectFree(unwrapped.arguments, 1, seenConsts)
+        ) {
+            return unwrapped.arguments.length === 0
+                ? 0
+                : this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[0]!, seenConsts);
+        }
+        if (
             ts.isPrefixUnaryExpression(unwrapped) &&
             (
                 unwrapped.operator === ts.SyntaxKind.PlusToken ||
@@ -12557,6 +12568,17 @@ class Emitter {
         if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
             return unwrapped.text;
         }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            unwrapped.expression.text === "String" &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "String") &&
+            this.callIgnoredArgumentsAreSideEffectFree(unwrapped.arguments, 1, seenConsts)
+        ) {
+            return unwrapped.arguments.length === 0
+                ? ""
+                : this.sideEffectFreeTemplateSubstitutionText(unwrapped.arguments[0]!, seenConsts);
+        }
         if (ts.isTypeOfExpression(unwrapped)) {
             return this.sideEffectFreeTypeofString(unwrapped.expression, seenConsts);
         }
@@ -12630,6 +12652,16 @@ class Emitter {
         return init ? this.sideEffectFreeTemplateSubstitutionText(init, seenConsts) : null;
     }
 
+    private callIgnoredArgumentsAreSideEffectFree(
+        args: ts.NodeArray<ts.Expression>,
+        start: number,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return args.slice(start).every((arg) =>
+            this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+        );
+    }
+
     private sideEffectFreeTypeofString(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -12676,6 +12708,17 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): number | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            unwrapped.expression.text === "Number" &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Number") &&
+            this.callIgnoredArgumentsAreSideEffectFree(unwrapped.arguments, 1, seenConsts)
+        ) {
+            return unwrapped.arguments.length === 0
+                ? 0
+                : this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[0]!, seenConsts);
+        }
         switch (unwrapped.kind) {
             case ts.SyntaxKind.TrueKeyword:
                 return 1;
@@ -23541,6 +23584,14 @@ class Emitter {
         const stringText = this.sideEffectFreeStringLiteralText(unwrapped, seenConsts);
         if (stringText !== null) return stringText.length > 0;
         if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            unwrapped.expression.text === "Boolean" &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Boolean")
+        ) {
+            return this.sideEffectFreePrimitiveBooleanValue(unwrapped, seenConsts);
+        }
+        if (
             ts.isRegularExpressionLiteral(unwrapped) ||
             ts.isArrowFunction(unwrapped) ||
             ts.isFunctionExpression(unwrapped)
@@ -23743,6 +23794,16 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): boolean | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            unwrapped.expression.text === "Boolean" &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Boolean") &&
+            this.callIgnoredArgumentsAreSideEffectFree(unwrapped.arguments, 1, seenConsts)
+        ) {
+            if (unwrapped.arguments.length === 0) return false;
+            return this.staticBooleanValue(unwrapped.arguments[0]!, seenConsts);
+        }
         if (unwrapped.kind === ts.SyntaxKind.TrueKeyword) return true;
         if (unwrapped.kind === ts.SyntaxKind.FalseKeyword) return false;
         if (
@@ -23781,6 +23842,17 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): string | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            unwrapped.expression.text === "BigInt" &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "BigInt") &&
+            this.callIgnoredArgumentsAreSideEffectFree(unwrapped.arguments, 1, seenConsts)
+        ) {
+            return unwrapped.arguments.length === 0
+                ? null
+                : this.sideEffectFreeBigIntCoercionText(unwrapped.arguments[0]!, seenConsts);
+        }
         if (ts.isBigIntLiteral(unwrapped)) return unwrapped.text.toLowerCase();
         if (ts.isBinaryExpression(unwrapped)) {
             const left = this.sideEffectFreeBigIntLiteralText(unwrapped.left, seenConsts);
@@ -23853,6 +23925,31 @@ class Emitter {
             return -BigInt(body.slice(1));
         }
         return BigInt(body);
+    }
+
+    private sideEffectFreeBigIntCoercionText(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): string | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (unwrapped.kind === ts.SyntaxKind.TrueKeyword) return "1n";
+        if (unwrapped.kind === ts.SyntaxKind.FalseKeyword) return "0n";
+        const text = this.sideEffectFreeBigIntLiteralText(unwrapped, seenConsts);
+        if (text !== null) return `${this.bigIntTextValue(text)}n`;
+        const number = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped, seenConsts);
+        if (number !== null) {
+            return Number.isFinite(number) && Number.isInteger(number) ? `${BigInt(number)}n` : null;
+        }
+        const stringText = this.sideEffectFreeStringLiteralText(unwrapped, seenConsts);
+        if (stringText !== null) {
+            try {
+                return `${BigInt(stringText)}n`;
+            } catch {
+                return null;
+            }
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeBigIntCoercionText(init, seenConsts) : null;
     }
 
     private staticPrimitiveRelationalValue(

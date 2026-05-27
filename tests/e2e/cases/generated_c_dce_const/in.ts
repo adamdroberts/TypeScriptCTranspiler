@@ -5031,6 +5031,18 @@ function primitiveConditionalCommaDce(): string {
         : "local_dead_primitive_conditional_comma_false";
 }
 
+function primitiveCallableConstructorDce(): string {
+    return (String(2 + 3, "local_dead_constructor_string_ignored") === "5" &&
+        Number("5", "local_dead_constructor_number_ignored") === 5 &&
+        Number(true) === 1 &&
+        Boolean("truthy", "local_dead_constructor_boolean_ignored") === true &&
+        !Boolean(0, "local_dead_constructor_boolean_zero_ignored") &&
+        BigInt("0x10", "local_dead_constructor_bigint_ignored") === 16n &&
+        BigInt(false) === 0n)
+        ? "kept_primitive_callable_constructor"
+        : "local_dead_primitive_callable_constructor_false";
+}
+
 function primitiveRelationalDce(): string {
     const lowNumber: number = 3;
     const highNumber: number = 4;
@@ -5341,6 +5353,7 @@ console.log(
     primitiveLooseEqualityDce(),
     primitiveBigIntLooseEqualityDce(),
     primitiveConditionalCommaDce(),
+    primitiveCallableConstructorDce(),
     primitiveRelationalDce(),
     typeofEqualityDce(),
     lengthComparisonDce(),
