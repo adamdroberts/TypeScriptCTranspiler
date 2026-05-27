@@ -3962,6 +3962,20 @@ class Emitter {
             const arrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped.expression, seenConsts);
             if (arrayLength !== null) return arrayLength;
         }
+        if (ts.isBinaryExpression(unwrapped)) {
+            const left = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped.left, seenConsts);
+            const right = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped.right, seenConsts);
+            if (left !== null && right !== null) {
+                switch (unwrapped.operatorToken.kind) {
+                    case ts.SyntaxKind.PlusToken: return left + right;
+                    case ts.SyntaxKind.MinusToken: return left - right;
+                    case ts.SyntaxKind.AsteriskToken: return left * right;
+                    case ts.SyntaxKind.SlashToken: return left / right;
+                    case ts.SyntaxKind.PercentToken: return left % right;
+                    case ts.SyntaxKind.AsteriskAsteriskToken: return left ** right;
+                }
+            }
+        }
         if (
             ts.isIdentifier(unwrapped) &&
             (

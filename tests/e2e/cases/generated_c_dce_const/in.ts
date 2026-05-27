@@ -5024,6 +5024,13 @@ function lengthComparisonDce(): string {
         : "local_dead_length_comparison_false";
 }
 
+function numericArithmeticDce(): string {
+    const foldedNumber: number = (2 + 3) * 4;
+    return (foldedNumber === 20 && (10 / 2) <= 5 && (7 % 3) === 1 && (2 ** 3) > 7)
+        ? "kept_numeric_arithmetic"
+        : "local_dead_numeric_arithmetic_false";
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -5181,6 +5188,7 @@ console.log(
     primitiveRelationalDce(),
     typeofEqualityDce(),
     lengthComparisonDce(),
+    numericArithmeticDce(),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),
