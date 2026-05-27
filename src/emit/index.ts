@@ -23915,6 +23915,10 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         const direct = this.switchCaseKey(unwrapped);
         if (direct) return direct;
+        const text = this.sideEffectFreeStringLiteralText(unwrapped, seenConsts);
+        if (text !== null) return `s:${text}`;
+        const number = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped, seenConsts);
+        if (number !== null && !Number.isNaN(number)) return `n:${Object.is(number, -0) ? 0 : number}`;
         try {
             if (this.prepareType(mapType(unwrapped, this.checker)).kind === "boolean") {
                 const bool = this.staticBooleanValue(unwrapped, seenConsts);

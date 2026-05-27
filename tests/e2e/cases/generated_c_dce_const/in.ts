@@ -5048,6 +5048,26 @@ function computedTruthyFalsyDce(): string {
         : "local_dead_computed_truthy_falsy_false";
 }
 
+function computedSwitchKeyDce(): string {
+    const stringKey = ("sw" + "itch") as "switch" | "other";
+    const numberKey = (2 + 3) as 5 | 6;
+    switch (stringKey) {
+        case "other":
+            return "local_dead_computed_switch_string_other";
+        case "switch":
+            switch (numberKey) {
+                case 6:
+                    return "local_dead_computed_switch_number_six";
+                case 5:
+                    return "kept_computed_switch_key";
+                default:
+                    return "local_dead_computed_switch_number_default";
+            }
+        default:
+            return "local_dead_computed_switch_string_default";
+    }
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -5208,6 +5228,7 @@ console.log(
     numericArithmeticDce(),
     stringConcatDce(),
     computedTruthyFalsyDce(),
+    computedSwitchKeyDce(),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),
