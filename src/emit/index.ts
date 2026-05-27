@@ -23446,11 +23446,11 @@ class Emitter {
         ) {
             return false;
         }
-        if (ts.isNumericLiteral(unwrapped)) return Number(unwrapped.text) !== 0;
+        const numericValue = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped, seenConsts);
+        if (numericValue !== null) return !Number.isNaN(numericValue) && numericValue !== 0;
         if (ts.isBigIntLiteral(unwrapped)) return !/^0+n$/i.test(unwrapped.text);
-        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
-            return unwrapped.text.length > 0;
-        }
+        const stringText = this.sideEffectFreeStringLiteralText(unwrapped, seenConsts);
+        if (stringText !== null) return stringText.length > 0;
         if (
             ts.isRegularExpressionLiteral(unwrapped) ||
             ts.isArrowFunction(unwrapped) ||

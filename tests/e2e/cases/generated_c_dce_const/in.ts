@@ -5038,6 +5038,16 @@ function stringConcatDce(): string {
         : "local_dead_string_concat_false";
 }
 
+function computedTruthyFalsyDce(): string {
+    const localText: string = "truth";
+    const localArray: number[] = [1];
+    const truthy = (1 + 1) && (localText + "y") && localArray.length;
+    const falsy = (1 - 1) || ("" + "") || ([] as number[]).length;
+    return truthy && !falsy
+        ? "kept_computed_truthy_falsy"
+        : "local_dead_computed_truthy_falsy_false";
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -5197,6 +5207,7 @@ console.log(
     lengthComparisonDce(),
     numericArithmeticDce(),
     stringConcatDce(),
+    computedTruthyFalsyDce(),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),
