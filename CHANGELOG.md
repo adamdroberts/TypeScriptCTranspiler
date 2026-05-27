@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE static numeric analysis now folds `.length` reads on side-effect-free string and array operands. Test: `generated_c_dce_const`.
 - Generated-C DCE static primitive equality now folds `typeof` over side-effect-free literal and const operands. Test: `generated_c_dce_const`.
 - Generated-C DCE static boolean analysis now folds side-effect-free numeric and string relational comparisons. Test: `generated_c_dce_const`.
 - Generated-C DCE static boolean analysis now folds side-effect-free primitive equality checks, including absent descriptor comparisons against `undefined`. Test: `generated_c_dce_const`.

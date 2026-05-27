@@ -3954,6 +3954,15 @@ class Emitter {
     ): number | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (
+            ts.isPropertyAccessExpression(unwrapped) &&
+            unwrapped.name.text === "length"
+        ) {
+            const stringText = this.sideEffectFreeStringLiteralText(unwrapped.expression, seenConsts);
+            if (stringText !== null) return stringText.length;
+            const arrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped.expression, seenConsts);
+            if (arrayLength !== null) return arrayLength;
+        }
+        if (
             ts.isIdentifier(unwrapped) &&
             (
                 (

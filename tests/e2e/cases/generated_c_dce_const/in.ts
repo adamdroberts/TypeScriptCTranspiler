@@ -5016,6 +5016,14 @@ function typeofEqualityDce(): string {
         : "local_dead_typeof_equality_false";
 }
 
+function lengthComparisonDce(): string {
+    const localText: string = "static";
+    const localArray: number[] = [1, 2, 3];
+    return (localText.length === 6 && localArray.length >= 3 && ["x", "y"].length < 3)
+        ? "kept_length_comparison"
+        : "local_dead_length_comparison_false";
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -5172,6 +5180,7 @@ console.log(
     primitiveEqualityDce(),
     primitiveRelationalDce(),
     typeofEqualityDce(),
+    lengthComparisonDce(),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),
