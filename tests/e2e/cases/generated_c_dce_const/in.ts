@@ -4997,6 +4997,14 @@ function primitiveEqualityDce(): string {
         : "local_dead_primitive_equality_false";
 }
 
+function primitiveRelationalDce(): string {
+    const lowNumber: number = 3;
+    const highNumber: number = 4;
+    return (lowNumber < highNumber && "alpha" <= "beta" && highNumber >= lowNumber)
+        ? "kept_primitive_relational"
+        : "local_dead_primitive_relational_false";
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -5151,6 +5159,7 @@ console.log(
     sameBranchSwitchDce(),
     absentDescriptorEqualityDce(),
     primitiveEqualityDce(),
+    primitiveRelationalDce(),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),

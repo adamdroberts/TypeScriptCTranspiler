@@ -23424,6 +23424,16 @@ class Emitter {
                     }
                     return null;
                 }
+                case ts.SyntaxKind.LessThanToken:
+                case ts.SyntaxKind.LessThanEqualsToken:
+                case ts.SyntaxKind.GreaterThanToken:
+                case ts.SyntaxKind.GreaterThanEqualsToken:
+                    return this.staticPrimitiveRelationalValue(
+                        unwrapped.left,
+                        unwrapped.right,
+                        unwrapped.operatorToken.kind,
+                        seenConsts,
+                    );
                 case ts.SyntaxKind.AmpersandAmpersandToken: {
                     const left = this.staticBooleanValue(unwrapped.left, seenConsts);
                     if (left === false) return false;
@@ -23497,6 +23507,38 @@ class Emitter {
         if (number !== null) return Number.isNaN(number) ? "number:NaN" : `number:${Object.is(number, -0) ? 0 : number}`;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.staticPrimitiveEqualityKey(init, seenConsts) : null;
+    }
+
+    private staticPrimitiveRelationalValue(
+        left: ts.Expression,
+        right: ts.Expression,
+        op: ts.SyntaxKind,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean | null {
+        const leftNumber = this.sideEffectFreeNumericLiteralSameValueZeroValue(left, seenConsts);
+        const rightNumber = this.sideEffectFreeNumericLiteralSameValueZeroValue(right, seenConsts);
+        if (leftNumber !== null && rightNumber !== null) {
+            if (Number.isNaN(leftNumber) || Number.isNaN(rightNumber)) return false;
+            switch (op) {
+                case ts.SyntaxKind.LessThanToken: return leftNumber < rightNumber;
+                case ts.SyntaxKind.LessThanEqualsToken: return leftNumber <= rightNumber;
+                case ts.SyntaxKind.GreaterThanToken: return leftNumber > rightNumber;
+                case ts.SyntaxKind.GreaterThanEqualsToken: return leftNumber >= rightNumber;
+            }
+        }
+
+        const leftString = this.sideEffectFreeStringLiteralText(left, seenConsts);
+        const rightString = this.sideEffectFreeStringLiteralText(right, seenConsts);
+        if (leftString !== null && rightString !== null) {
+            switch (op) {
+                case ts.SyntaxKind.LessThanToken: return leftString < rightString;
+                case ts.SyntaxKind.LessThanEqualsToken: return leftString <= rightString;
+                case ts.SyntaxKind.GreaterThanToken: return leftString > rightString;
+                case ts.SyntaxKind.GreaterThanEqualsToken: return leftString >= rightString;
+            }
+        }
+
+        return null;
     }
 
     private staticNullishState(
