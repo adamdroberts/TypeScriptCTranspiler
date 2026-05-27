@@ -23599,8 +23599,27 @@ class Emitter {
         if (text !== null) return `string:${text}`;
         const number = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped, seenConsts);
         if (number !== null) return Number.isNaN(number) ? "number:NaN" : `number:${Object.is(number, -0) ? 0 : number}`;
+        const bigint = this.sideEffectFreeBigIntLiteralText(unwrapped, seenConsts);
+        if (bigint !== null) return `bigint:${bigint}`;
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.staticPrimitiveEqualityKey(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeBigIntLiteralText(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): string | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isBigIntLiteral(unwrapped)) return unwrapped.text.toLowerCase();
+        if (
+            ts.isPrefixUnaryExpression(unwrapped) &&
+            unwrapped.operator === ts.SyntaxKind.MinusToken &&
+            ts.isBigIntLiteral(unwrapped.operand)
+        ) {
+            return `-${unwrapped.operand.text.toLowerCase()}`;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeBigIntLiteralText(init, seenConsts) : null;
     }
 
     private staticPrimitiveRelationalValue(

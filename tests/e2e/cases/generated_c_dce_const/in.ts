@@ -5085,6 +5085,15 @@ function computedNullishDce(): string {
         : "local_dead_computed_nullish_false";
 }
 
+function primitiveBigIntEqualityDce(): string {
+    const leftBigInt: bigint = 10n;
+    const negativeLeft: bigint = -2n;
+    const negativeRight: bigint = -3n;
+    return (leftBigInt === 10n && negativeLeft !== negativeRight)
+        ? "kept_primitive_bigint_equality"
+        : "local_dead_primitive_bigint_equality_false";
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -5248,6 +5257,7 @@ console.log(
     computedSwitchKeyDce(),
     numericBitwiseDce(),
     computedNullishDce(),
+    primitiveBigIntEqualityDce(),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),
