@@ -5038,6 +5038,16 @@ function stringConcatDce(): string {
         : "local_dead_string_concat_false";
 }
 
+function templateLiteralDce(): string {
+    const prefix: string = "template";
+    const count: number = 2 + 3;
+    const zeroBigInt: bigint = 0x0n;
+    const flag = ("bo" + "ol") === "bool";
+    return (`${prefix}:${count}:${zeroBigInt}:${flag}:${null}:${undefined}` === "template:5:0:true:null:undefined")
+        ? "kept_template_literal"
+        : "local_dead_template_literal_false";
+}
+
 function computedTruthyFalsyDce(): string {
     const localText: string = "truth";
     const localArray: number[] = [1];
@@ -5287,6 +5297,7 @@ console.log(
     lengthComparisonDce(),
     numericArithmeticDce(),
     stringConcatDce(),
+    templateLiteralDce(),
     computedTruthyFalsyDce(),
     computedSwitchKeyDce(),
     numericBitwiseDce(),

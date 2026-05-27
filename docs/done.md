@@ -989,6 +989,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Generated-C DCE static numeric analysis folds `.length` reads on side-effect-free string and array operands. Test: `generated_c_dce_const`
 - Generated-C DCE static numeric analysis folds side-effect-free numeric arithmetic expressions. Test: `generated_c_dce_const`
 - Generated-C DCE static string analysis folds side-effect-free string concatenation. Test: `generated_c_dce_const`
+- Generated-C DCE static string analysis folds side-effect-free template literals with primitive substitutions. Test: `generated_c_dce_const`
 - Generated-C DCE static boolean analysis folds side-effect-free computed numeric and string truthiness. Test: `generated_c_dce_const`
 - Generated-C DCE static switch selection folds side-effect-free computed string and numeric keys. Test: `generated_c_dce_const`
 - Generated-C DCE static numeric analysis folds side-effect-free numeric bitwise expressions. Test: `generated_c_dce_const`

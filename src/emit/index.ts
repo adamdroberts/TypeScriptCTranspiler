@@ -12545,6 +12545,15 @@ class Emitter {
         if (ts.isTypeOfExpression(unwrapped)) {
             return this.sideEffectFreeTypeofString(unwrapped.expression, seenConsts);
         }
+        if (ts.isTemplateExpression(unwrapped)) {
+            let out = unwrapped.head.text;
+            for (const span of unwrapped.templateSpans) {
+                const value = this.sideEffectFreeTemplateSubstitutionText(span.expression, seenConsts);
+                if (value === null) return null;
+                out += value + span.literal.text;
+            }
+            return out;
+        }
         if (
             ts.isBinaryExpression(unwrapped) &&
             unwrapped.operatorToken.kind === ts.SyntaxKind.PlusToken
@@ -12563,6 +12572,25 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeStringLiteralText(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeTemplateSubstitutionText(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): string | null {
+        const stringText = this.sideEffectFreeStringLiteralText(expr, seenConsts);
+        if (stringText !== null) return stringText;
+        const numericValue = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr, seenConsts);
+        if (numericValue !== null) return String(Object.is(numericValue, -0) ? 0 : numericValue);
+        const bigintText = this.sideEffectFreeBigIntLiteralText(expr, seenConsts);
+        if (bigintText !== null) return String(this.bigIntTextValue(bigintText));
+        const bool = this.sideEffectFreePrimitiveBooleanValue(expr, seenConsts);
+        if (bool !== null) return bool ? "true" : "false";
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (unwrapped.kind === ts.SyntaxKind.NullKeyword) return "null";
+        if (this.isSideEffectFreeUndefinedValue(unwrapped, seenConsts)) return "undefined";
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeTemplateSubstitutionText(init, seenConsts) : null;
     }
 
     private sideEffectFreeTypeofString(
