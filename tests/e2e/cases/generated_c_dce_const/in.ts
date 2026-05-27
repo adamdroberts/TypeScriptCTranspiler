@@ -5094,6 +5094,15 @@ function primitiveBigIntEqualityDce(): string {
         : "local_dead_primitive_bigint_equality_false";
 }
 
+function primitiveBigIntTruthinessDce(): string {
+    const maybeBigInt: bigint | null = -4n;
+    const truthyBigInt: bigint = -4n;
+    const zeroBigInt: bigint = 0n;
+    return (truthyBigInt && !zeroBigInt && (maybeBigInt ?? 9n) === -4n)
+        ? "kept_primitive_bigint_truthiness"
+        : "local_dead_primitive_bigint_truthiness_false";
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -5258,6 +5267,7 @@ console.log(
     numericBitwiseDce(),
     computedNullishDce(),
     primitiveBigIntEqualityDce(),
+    primitiveBigIntTruthinessDce(),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),

@@ -23469,7 +23469,8 @@ class Emitter {
         }
         const numericValue = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped, seenConsts);
         if (numericValue !== null) return !Number.isNaN(numericValue) && numericValue !== 0;
-        if (ts.isBigIntLiteral(unwrapped)) return !/^0+n$/i.test(unwrapped.text);
+        const bigintText = this.sideEffectFreeBigIntLiteralText(unwrapped, seenConsts);
+        if (bigintText !== null) return !/^-?0+n$/i.test(bigintText);
         const stringText = this.sideEffectFreeStringLiteralText(unwrapped, seenConsts);
         if (stringText !== null) return stringText.length > 0;
         if (
@@ -23612,6 +23613,14 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (ts.isBigIntLiteral(unwrapped)) return unwrapped.text.toLowerCase();
         if (
+            ts.isBinaryExpression(unwrapped) &&
+            unwrapped.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
+        ) {
+            const left = this.staticNullishState(unwrapped.left, seenConsts);
+            if (left === "nullish") return this.sideEffectFreeBigIntLiteralText(unwrapped.right, seenConsts);
+            if (left === "nonNullish") return this.sideEffectFreeBigIntLiteralText(unwrapped.left, seenConsts);
+        }
+        if (
             ts.isPrefixUnaryExpression(unwrapped) &&
             unwrapped.operator === ts.SyntaxKind.MinusToken &&
             ts.isBigIntLiteral(unwrapped.operand)
@@ -23668,11 +23677,13 @@ class Emitter {
         if (
             unwrapped.kind === ts.SyntaxKind.TrueKeyword ||
             unwrapped.kind === ts.SyntaxKind.FalseKeyword ||
-            ts.isBigIntLiteral(unwrapped) ||
             ts.isRegularExpressionLiteral(unwrapped) ||
             ts.isArrowFunction(unwrapped) ||
             ts.isFunctionExpression(unwrapped)
         ) {
+            return "nonNullish";
+        }
+        if (this.sideEffectFreeBigIntLiteralText(unwrapped, seenConsts) !== null) {
             return "nonNullish";
         }
         if (this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped, seenConsts) !== null) {
