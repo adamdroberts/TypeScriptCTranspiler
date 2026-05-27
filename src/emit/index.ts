@@ -12506,8 +12506,50 @@ class Emitter {
         if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
             return unwrapped.text;
         }
+        if (ts.isTypeOfExpression(unwrapped)) {
+            return this.sideEffectFreeTypeofString(unwrapped.expression, seenConsts);
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeStringLiteralText(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeTypeofString(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): string | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.isSideEffectFreeUndefinedValue(unwrapped, seenConsts)) return "undefined";
+        if (unwrapped.kind === ts.SyntaxKind.NullKeyword) return "object";
+        if (unwrapped.kind === ts.SyntaxKind.TrueKeyword || unwrapped.kind === ts.SyntaxKind.FalseKeyword) return "boolean";
+        if (
+            ts.isNumericLiteral(unwrapped) ||
+            (
+                ts.isIdentifier(unwrapped) &&
+                (
+                    unwrapped.text === "NaN" ||
+                    unwrapped.text === "Infinity"
+                ) &&
+                this.isUnshadowedGlobalIdentifier(unwrapped, unwrapped.text)
+            )
+        ) {
+            return "number";
+        }
+        if (ts.isBigIntLiteral(unwrapped)) return "bigint";
+        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) return "string";
+        if (ts.isArrowFunction(unwrapped) || ts.isFunctionExpression(unwrapped)) return "function";
+        if (ts.isClassExpression(unwrapped) && this.classExpressionHasNoDefinitionSideEffects(unwrapped)) return "function";
+        if (
+            (
+                ts.isArrayLiteralExpression(unwrapped) ||
+                ts.isObjectLiteralExpression(unwrapped) ||
+                ts.isRegularExpressionLiteral(unwrapped)
+            ) &&
+            this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts)
+        ) {
+            return "object";
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeTypeofString(init, seenConsts) : null;
     }
 
     private sideEffectFreePrimitiveNumberValue(

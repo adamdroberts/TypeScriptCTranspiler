@@ -5005,6 +5005,17 @@ function primitiveRelationalDce(): string {
         : "local_dead_primitive_relational_false";
 }
 
+function typeofEqualityDce(): string {
+    const localText: string = "static_typeof";
+    return (typeof localText === "string" &&
+        typeof 7 === "number" &&
+        typeof (() => 1) === "function" &&
+        typeof null === "object" &&
+        typeof undefined === "undefined")
+        ? "kept_typeof_equality"
+        : "local_dead_typeof_equality_false";
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -5160,6 +5171,7 @@ console.log(
     absentDescriptorEqualityDce(),
     primitiveEqualityDce(),
     primitiveRelationalDce(),
+    typeofEqualityDce(),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),
