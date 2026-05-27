@@ -23645,6 +23645,28 @@ class Emitter {
     ): string | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (ts.isBigIntLiteral(unwrapped)) return unwrapped.text.toLowerCase();
+        if (ts.isBinaryExpression(unwrapped)) {
+            const left = this.sideEffectFreeBigIntLiteralText(unwrapped.left, seenConsts);
+            const right = this.sideEffectFreeBigIntLiteralText(unwrapped.right, seenConsts);
+            if (left !== null && right !== null) {
+                const leftValue = this.bigIntTextValue(left);
+                const rightValue = this.bigIntTextValue(right);
+                switch (unwrapped.operatorToken.kind) {
+                    case ts.SyntaxKind.PlusToken: return `${leftValue + rightValue}n`;
+                    case ts.SyntaxKind.MinusToken: return `${leftValue - rightValue}n`;
+                    case ts.SyntaxKind.AsteriskToken: return `${leftValue * rightValue}n`;
+                    case ts.SyntaxKind.SlashToken:
+                        if (rightValue === 0n) return null;
+                        return `${leftValue / rightValue}n`;
+                    case ts.SyntaxKind.PercentToken:
+                        if (rightValue === 0n) return null;
+                        return `${leftValue % rightValue}n`;
+                    case ts.SyntaxKind.AsteriskAsteriskToken:
+                        if (rightValue < 0n) return null;
+                        return `${leftValue ** rightValue}n`;
+                }
+            }
+        }
         if (
             ts.isBinaryExpression(unwrapped) &&
             unwrapped.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
@@ -23662,6 +23684,10 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeBigIntLiteralText(init, seenConsts) : null;
+    }
+
+    private bigIntTextValue(text: string): bigint {
+        return BigInt(text.slice(0, -1));
     }
 
     private staticPrimitiveRelationalValue(

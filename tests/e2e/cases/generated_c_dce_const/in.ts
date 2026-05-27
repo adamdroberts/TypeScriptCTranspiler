@@ -5103,6 +5103,15 @@ function primitiveBigIntTruthinessDce(): string {
         : "local_dead_primitive_bigint_truthiness_false";
 }
 
+function primitiveBigIntExpressionDce(): string {
+    const mixedBigInt: bigint = (2n + 3n) * 4n;
+    const modBigInt: bigint = 21n % 5n;
+    const powBigInt: bigint = 2n ** 3n;
+    return (mixedBigInt === 20n && modBigInt === 1n && powBigInt === 8n && (21n / 5n) === 4n)
+        ? "kept_primitive_bigint_expression"
+        : "local_dead_primitive_bigint_expression_false";
+}
+
 function computedBooleanEqualityDce(): string {
     return (((2 + 2) > 3) === true && (("bool" + "ean") === "boolean") !== false)
         ? "kept_computed_boolean_equality"
@@ -5274,6 +5283,7 @@ console.log(
     computedNullishDce(),
     primitiveBigIntEqualityDce(),
     primitiveBigIntTruthinessDce(),
+    primitiveBigIntExpressionDce(),
     computedBooleanEqualityDce(),
     branchExit(true),
     nestedBlockExit(),
