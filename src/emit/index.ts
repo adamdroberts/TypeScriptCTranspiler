@@ -23630,6 +23630,18 @@ class Emitter {
         if (leftKey === "null" || leftKey === "undefined" || rightKey === "null" || rightKey === "undefined") {
             return false;
         }
+        if (leftKey.startsWith("bigint:") && rightKey.startsWith("number:")) {
+            return this.staticBigIntNumberLooseEquality(leftKey, rightKey);
+        }
+        if (leftKey.startsWith("number:") && rightKey.startsWith("bigint:")) {
+            return this.staticBigIntNumberLooseEquality(rightKey, leftKey);
+        }
+        if (leftKey.startsWith("bigint:") && rightKey.startsWith("string:")) {
+            return this.staticBigIntStringLooseEquality(leftKey, rightKey.slice("string:".length));
+        }
+        if (leftKey.startsWith("string:") && rightKey.startsWith("bigint:")) {
+            return this.staticBigIntStringLooseEquality(rightKey, leftKey.slice("string:".length));
+        }
         if (leftKey.startsWith("bigint:") || rightKey.startsWith("bigint:")) return null;
         if (leftKey.startsWith("string:") && rightKey.startsWith("number:")) {
             return this.staticStringNumberLooseEquality(leftKey.slice("string:".length), rightKey);
@@ -23651,6 +23663,21 @@ class Emitter {
         const left = Number(text);
         const right = Number(numberKey.slice("number:".length));
         return !Number.isNaN(left) && !Number.isNaN(right) && left === right;
+    }
+
+    private staticBigIntNumberLooseEquality(bigintKey: string, numberKey: string): boolean {
+        if (numberKey === "number:NaN") return false;
+        const numberValue = Number(numberKey.slice("number:".length));
+        if (!Number.isFinite(numberValue) || !Number.isInteger(numberValue)) return false;
+        return this.bigIntTextValue(bigintKey.slice("bigint:".length)) === BigInt(numberValue);
+    }
+
+    private staticBigIntStringLooseEquality(bigintKey: string, text: string): boolean {
+        try {
+            return this.bigIntTextValue(bigintKey.slice("bigint:".length)) === BigInt(text);
+        } catch {
+            return false;
+        }
     }
 
     private staticPrimitiveEqualityKey(

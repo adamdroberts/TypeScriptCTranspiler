@@ -5007,6 +5007,16 @@ function primitiveLooseEqualityDce(): string {
         : "local_dead_primitive_loose_equality_false";
 }
 
+function primitiveBigIntLooseEqualityDce(): string {
+    return ((5n as bigint | number) == (5 as bigint | number) &&
+        (0n as bigint | boolean) == (false as bigint | boolean) &&
+        (16n as bigint | string) == ("0x10" as bigint | string) &&
+        (2n as bigint | string) != ("nope" as bigint | string) &&
+        (1n as bigint | number) != (1.5 as bigint | number))
+        ? "kept_primitive_bigint_loose_equality"
+        : "local_dead_primitive_bigint_loose_equality_false";
+}
+
 function primitiveRelationalDce(): string {
     const lowNumber: number = 3;
     const highNumber: number = 4;
@@ -5315,6 +5325,7 @@ console.log(
     absentDescriptorEqualityDce(),
     primitiveEqualityDce(),
     primitiveLooseEqualityDce(),
+    primitiveBigIntLooseEqualityDce(),
     primitiveRelationalDce(),
     typeofEqualityDce(),
     lengthComparisonDce(),
