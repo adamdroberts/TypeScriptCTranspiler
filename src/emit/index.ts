@@ -3963,6 +3963,11 @@ class Emitter {
             if (arrayLength !== null) return arrayLength;
         }
         if (ts.isBinaryExpression(unwrapped)) {
+            if (unwrapped.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
+                const left = this.staticNullishState(unwrapped.left, seenConsts);
+                if (left === "nullish") return this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped.right, seenConsts);
+                if (left === "nonNullish") return this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped.left, seenConsts);
+            }
             const left = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped.left, seenConsts);
             const right = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped.right, seenConsts);
             if (left !== null && right !== null) {
@@ -12547,6 +12552,14 @@ class Emitter {
             const left = this.sideEffectFreeStringLiteralText(unwrapped.left, seenConsts);
             const right = this.sideEffectFreeStringLiteralText(unwrapped.right, seenConsts);
             if (left !== null && right !== null) return left + right;
+        }
+        if (
+            ts.isBinaryExpression(unwrapped) &&
+            unwrapped.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
+        ) {
+            const left = this.staticNullishState(unwrapped.left, seenConsts);
+            if (left === "nullish") return this.sideEffectFreeStringLiteralText(unwrapped.right, seenConsts);
+            if (left === "nonNullish") return this.sideEffectFreeStringLiteralText(unwrapped.left, seenConsts);
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeStringLiteralText(init, seenConsts) : null;
@@ -23636,14 +23649,17 @@ class Emitter {
         if (
             unwrapped.kind === ts.SyntaxKind.TrueKeyword ||
             unwrapped.kind === ts.SyntaxKind.FalseKeyword ||
-            ts.isNumericLiteral(unwrapped) ||
             ts.isBigIntLiteral(unwrapped) ||
-            ts.isStringLiteral(unwrapped) ||
-            ts.isNoSubstitutionTemplateLiteral(unwrapped) ||
             ts.isRegularExpressionLiteral(unwrapped) ||
             ts.isArrowFunction(unwrapped) ||
             ts.isFunctionExpression(unwrapped)
         ) {
+            return "nonNullish";
+        }
+        if (this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped, seenConsts) !== null) {
+            return "nonNullish";
+        }
+        if (this.sideEffectFreeStringLiteralText(unwrapped, seenConsts) !== null) {
             return "nonNullish";
         }
         if (ts.isClassExpression(unwrapped) && this.classExpressionHasNoDefinitionSideEffects(unwrapped)) {

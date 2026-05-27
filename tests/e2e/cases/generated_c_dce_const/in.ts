@@ -5075,6 +5075,16 @@ function numericBitwiseDce(): string {
         : "local_dead_numeric_bitwise_false";
 }
 
+function computedNullishDce(): string {
+    const textSource: string | undefined = "ke" + "pt";
+    const numberSource: number | null = 1 + 2;
+    const selectedText = textSource ?? "local_dead_computed_nullish_fallback";
+    const selectedNumber = numberSource ?? 99;
+    return selectedText === "kept" && selectedNumber === 3
+        ? "kept_computed_nullish"
+        : "local_dead_computed_nullish_false";
+}
+
 function branchExit(value: boolean): number {
     const branch_only_dead = "dead";
     if (value) {
@@ -5237,6 +5247,7 @@ console.log(
     computedTruthyFalsyDce(),
     computedSwitchKeyDce(),
     numericBitwiseDce(),
+    computedNullishDce(),
     branchExit(true),
     nestedBlockExit(),
     tryExit(false),
