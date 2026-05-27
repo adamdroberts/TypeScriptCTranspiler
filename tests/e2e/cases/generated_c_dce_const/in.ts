@@ -5011,7 +5011,11 @@ function typeofEqualityDce(): string {
         typeof 7 === "number" &&
         typeof (() => 1) === "function" &&
         typeof null === "object" &&
-        typeof undefined === "undefined")
+        typeof undefined === "undefined" &&
+        typeof (2 + 3) === "number" &&
+        typeof (2n + 3n) === "bigint" &&
+        typeof ("type" + "of") === "string" &&
+        typeof ((2 + 2) > 3) === "boolean")
         ? "kept_typeof_equality"
         : "local_dead_typeof_equality_false";
 }

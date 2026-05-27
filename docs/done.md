@@ -986,6 +986,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Generated-C DCE static boolean analysis folds side-effect-free primitive equality checks, including absent descriptor comparisons against `undefined`. Test: `generated_c_dce_const`
 - Generated-C DCE static boolean analysis folds side-effect-free numeric and string relational comparisons. Test: `generated_c_dce_const`
 - Generated-C DCE static primitive equality folds `typeof` over side-effect-free literal and const operands. Test: `generated_c_dce_const`
+- Generated-C DCE static `typeof` analysis folds side-effect-free computed primitive operands. Test: `generated_c_dce_const`
 - Generated-C DCE static numeric analysis folds `.length` reads on side-effect-free string and array operands. Test: `generated_c_dce_const`
 - Generated-C DCE static numeric analysis folds side-effect-free numeric arithmetic expressions. Test: `generated_c_dce_const`
 - Generated-C DCE static string analysis folds side-effect-free string concatenation. Test: `generated_c_dce_const`

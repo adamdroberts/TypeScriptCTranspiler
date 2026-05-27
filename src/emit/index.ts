@@ -12600,7 +12600,8 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (this.isSideEffectFreeUndefinedValue(unwrapped, seenConsts)) return "undefined";
         if (unwrapped.kind === ts.SyntaxKind.NullKeyword) return "object";
-        if (unwrapped.kind === ts.SyntaxKind.TrueKeyword || unwrapped.kind === ts.SyntaxKind.FalseKeyword) return "boolean";
+        const bool = this.sideEffectFreePrimitiveBooleanValue(unwrapped, seenConsts);
+        if (bool !== null) return "boolean";
         if (
             ts.isNumericLiteral(unwrapped) ||
             (
@@ -12614,8 +12615,9 @@ class Emitter {
         ) {
             return "number";
         }
-        if (ts.isBigIntLiteral(unwrapped)) return "bigint";
-        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) return "string";
+        if (this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped, seenConsts) !== null) return "number";
+        if (this.sideEffectFreeBigIntLiteralText(unwrapped, seenConsts) !== null) return "bigint";
+        if (this.sideEffectFreeStringLiteralText(unwrapped, seenConsts) !== null) return "string";
         if (ts.isArrowFunction(unwrapped) || ts.isFunctionExpression(unwrapped)) return "function";
         if (ts.isClassExpression(unwrapped) && this.classExpressionHasNoDefinitionSideEffects(unwrapped)) return "function";
         if (
