@@ -5098,6 +5098,13 @@ function templateLiteralDce(): string {
         : "local_dead_template_literal_false";
 }
 
+function stringStaticCallDce(): string {
+    return (String.fromCharCode(Number("65", "local_dead_string_static_char_ignored"), 66) === "AB" &&
+        String.fromCodePoint(Number("67", "local_dead_string_static_code_point_ignored"), 68) === "CD")
+        ? "kept_string_static_call"
+        : "local_dead_string_static_call_false";
+}
+
 function computedTruthyFalsyDce(): string {
     const localText: string = "truth";
     const localArray: number[] = [1];
@@ -5360,6 +5367,7 @@ console.log(
     numericArithmeticDce(),
     stringConcatDce(),
     templateLiteralDce(),
+    stringStaticCallDce(),
     computedTruthyFalsyDce(),
     computedSwitchKeyDce(),
     numericBitwiseDce(),

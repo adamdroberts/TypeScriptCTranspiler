@@ -12579,6 +12579,8 @@ class Emitter {
                 ? ""
                 : this.sideEffectFreeTemplateSubstitutionText(unwrapped.arguments[0]!, seenConsts);
         }
+        const staticStringCallText = this.sideEffectFreeStringStaticCallText(unwrapped, seenConsts);
+        if (staticStringCallText !== null) return staticStringCallText;
         if (ts.isTypeOfExpression(unwrapped)) {
             return this.sideEffectFreeTypeofString(unwrapped.expression, seenConsts);
         }
@@ -12631,6 +12633,39 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeStringLiteralText(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeStringStaticCallText(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): string | null {
+        if (
+            !ts.isCallExpression(expr) ||
+            !ts.isPropertyAccessExpression(expr.expression) ||
+            !ts.isIdentifier(expr.expression.expression) ||
+            !this.isUnshadowedGlobalIdentifier(expr.expression.expression, "String")
+        ) {
+            return null;
+        }
+        const method = expr.expression.name.text;
+        if (method !== "fromCharCode" && method !== "fromCodePoint") return null;
+        const values: number[] = [];
+        for (const arg of expr.arguments) {
+            const value = this.sideEffectFreePrimitiveNumberValue(arg, seenConsts);
+            if (value === null) return null;
+            values.push(value);
+        }
+        if (method === "fromCodePoint") {
+            if (!values.every((value) => Number.isInteger(value) && value >= 0 && value <= 0x10ffff)) {
+                return null;
+            }
+            return String.fromCodePoint(...values);
+        }
+        return String.fromCharCode(...values.map((value) => {
+            if (!Number.isFinite(value) || Number.isNaN(value)) return 0;
+            const truncated = Math.trunc(value);
+            return ((truncated % 0x10000) + 0x10000) % 0x10000;
+        }));
     }
 
     private sideEffectFreeTemplateSubstitutionText(
