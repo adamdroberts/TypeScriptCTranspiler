@@ -3,3 +3,4 @@ dist
 .DS_Store
 manual-tests/benchmarks/build/
 manual-tests/benchmarks/results.json
+.antigravitycli/
