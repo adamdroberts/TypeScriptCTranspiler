@@ -5105,6 +5105,17 @@ function stringStaticCallDce(): string {
         : "local_dead_string_static_call_false";
 }
 
+function stringInstanceCaseFoldingDce(): string {
+    const mixed = "aBcDeF";
+    const upper = mixed.toUpperCase();
+    const lower = mixed.toLowerCase();
+    return (upper === "ABCDEF" && lower === "abcdef" &&
+        "XYZ".toLowerCase() === "xyz" && "xyz".toUpperCase() === "XYZ" &&
+        ("lOCAl_dEAd_sTrInG_cAsE_igNoReD".toUpperCase() === "LOCAL_DEAD_STRING_CASE_IGNORED" ? "kept_string_instance_case_folding" : "local_dead_string_instance_case_folding_false") === "kept_string_instance_case_folding")
+        ? "kept_string_instance_case_folding"
+        : "local_dead_string_instance_case_folding_false";
+}
+
 function computedTruthyFalsyDce(): string {
     const localText: string = "truth";
     const localArray: number[] = [1];
@@ -5368,6 +5379,7 @@ console.log(
     stringConcatDce(),
     templateLiteralDce(),
     stringStaticCallDce(),
+    stringInstanceCaseFoldingDce(),
     computedTruthyFalsyDce(),
     computedSwitchKeyDce(),
     numericBitwiseDce(),

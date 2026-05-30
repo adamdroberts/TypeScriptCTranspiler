@@ -12581,6 +12581,8 @@ class Emitter {
         }
         const staticStringCallText = this.sideEffectFreeStringStaticCallText(unwrapped, seenConsts);
         if (staticStringCallText !== null) return staticStringCallText;
+        const instanceStringCallText = this.sideEffectFreeStringInstanceCallText(unwrapped, seenConsts);
+        if (instanceStringCallText !== null) return instanceStringCallText;
         if (ts.isTypeOfExpression(unwrapped)) {
             return this.sideEffectFreeTypeofString(unwrapped.expression, seenConsts);
         }
@@ -12666,6 +12668,24 @@ class Emitter {
             const truncated = Math.trunc(value);
             return ((truncated % 0x10000) + 0x10000) % 0x10000;
         }));
+    }
+
+    private sideEffectFreeStringInstanceCallText(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): string | null {
+        if (
+            !ts.isCallExpression(expr) ||
+            !ts.isPropertyAccessExpression(expr.expression) ||
+            expr.arguments.length !== 0
+        ) {
+            return null;
+        }
+        const method = expr.expression.name.text;
+        if (method !== "toUpperCase" && method !== "toLowerCase") return null;
+        const recvText = this.sideEffectFreeStringLiteralText(expr.expression.expression, seenConsts);
+        if (recvText === null || !/^[\x00-\x7F]*$/.test(recvText)) return null;
+        return method === "toUpperCase" ? recvText.toUpperCase() : recvText.toLowerCase();
     }
 
     private sideEffectFreeTemplateSubstitutionText(
