@@ -22456,6 +22456,22 @@ class Emitter {
             }
             if (ts.isReturnStatement(stmt)) {
                 if (i !== fn.body.statements.length - 1) return false;
+                const yieldExpr = this.simpleLazyYieldExpression(stmt);
+                if (yieldExpr) {
+                    if (yieldExpr.asteriskToken) return false;
+                    let hasOtherYield = false;
+                    const checkYield = (node: ts.Node) => {
+                        if (ts.isYieldExpression(node) && node !== yieldExpr) {
+                            hasOtherYield = true;
+                            return;
+                        }
+                        ts.forEachChild(node, checkYield);
+                    };
+                    ts.forEachChild(stmt, checkYield);
+                    if (hasOtherYield) return false;
+                    continue;
+                }
+                if (this.nodeContainsYield(stmt)) return false;
                 continue;
             }
             return false;
@@ -22484,7 +22500,29 @@ class Emitter {
             }
             return decl.initializer;
         }
+        if (ts.isReturnStatement(stmt)) {
+            return stmt.expression && ts.isYieldExpression(stmt.expression) ? stmt.expression : null;
+        }
         return null;
+    }
+
+    private simpleLazyYieldNeedsResume(stmt: ts.Statement): boolean {
+        if (ts.isExpressionStatement(stmt)) {
+            const expr = stmt.expression;
+            return ts.isBinaryExpression(expr) &&
+                expr.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                ts.isYieldExpression(expr.right);
+        }
+        if (ts.isVariableStatement(stmt)) {
+            if (stmt.declarationList.declarations.length !== 1) return false;
+            const decl = stmt.declarationList.declarations[0]!;
+            return ts.isIdentifier(decl.name) &&
+                !!decl.initializer &&
+                ts.isYieldExpression(decl.initializer);
+        }
+        return ts.isReturnStatement(stmt) &&
+            !!stmt.expression &&
+            ts.isYieldExpression(stmt.expression);
     }
 
     private nodeContainsYield(node: ts.Node): boolean {
@@ -22593,6 +22631,12 @@ class Emitter {
         }
         if (currentStatements.length > 0) {
             states.push(currentStatements);
+        } else if (states.length > 0) {
+            const lastState = states[states.length - 1]!;
+            const lastStmt = lastState[lastState.length - 1];
+            if (lastStmt && this.simpleLazyYieldNeedsResume(lastStmt)) {
+                states.push([]);
+            }
         }
         this.protos.line(`static void ${lazyNextFuncName}(tsc_array_t* a, int* state, void* env, tsc_value_t next_arg, bool* done);`);
         const nextBuf = new CBuf();
@@ -22748,6 +22792,12 @@ class Emitter {
                 buf.line(`${target} = ${this.coerce(resumeValue, targetType, decl.initializer)};`);
                 return;
             }
+        }
+        if (ts.isReturnStatement(stmt) && stmt.expression && ts.isYieldExpression(stmt.expression)) {
+            buf.line(`a->iter_return = ${nextArg};`);
+            buf.line("a->iter_has_return = true;");
+            buf.line("a->iter_return_consumed = false;");
+            return;
         }
     }
 

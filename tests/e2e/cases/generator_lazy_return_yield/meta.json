@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators return the value sent into a final suspended yield"
+}
