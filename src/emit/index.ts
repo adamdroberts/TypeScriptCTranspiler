@@ -13079,6 +13079,38 @@ class Emitter {
                 return Math.sign(arg);
             }
         }
+        if (method === "round") {
+            if (expr.arguments.length < 1) return null;
+            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
+            if (arg === null) return null;
+            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
+                return Math.round(arg);
+            }
+        }
+        if (method === "sqrt") {
+            if (expr.arguments.length < 1) return null;
+            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
+            if (arg === null) return null;
+            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
+                return Math.sqrt(arg);
+            }
+        }
+        if (method === "cbrt") {
+            if (expr.arguments.length < 1) return null;
+            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
+            if (arg === null) return null;
+            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
+                return Math.cbrt(arg);
+            }
+        }
+        if (method === "clz32") {
+            if (expr.arguments.length < 1) return null;
+            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
+            if (arg === null) return null;
+            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
+                return Math.clz32(arg);
+            }
+        }
         return null;
     }
 
