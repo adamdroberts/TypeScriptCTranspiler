@@ -1251,6 +1251,18 @@ interface FSDirent {
     isFIFO(...ignored: any[]): boolean;
     isSocket(...ignored: any[]): boolean;
 }
+interface FSStatFsOptions {
+    bigint?: false;
+}
+interface FSStatFs {
+    readonly bsize: number;
+    readonly frsize: number;
+    readonly blocks: number;
+    readonly bfree: number;
+    readonly bavail: number;
+    readonly files: number;
+    readonly ffree: number;
+}
 interface FSStatsOptions {
     bigint?: false;
     throwIfNoEntry?: boolean;
@@ -1390,6 +1402,7 @@ interface FS {
     statSync(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): FSStats;
     lstatSync(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): FSStats | undefined;
     lstatSync(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): FSStats;
+    statfsSync(path: FSPathLike, options?: FSStatFsOptions, ...ignored: any[]): FSStatFs;
     realpathSync(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Buffer;
     realpathSync(path: FSPathLike, options?: FSPathResultEncodingOption, ...ignored: any[]): string;
     readlinkSync(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Buffer;
@@ -1473,6 +1486,7 @@ declare module "fs" {
     export function statSync(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): FSStats;
     export function lstatSync(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): FSStats | undefined;
     export function lstatSync(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): FSStats;
+    export function statfsSync(path: FSPathLike, options?: FSStatFsOptions, ...ignored: any[]): FSStatFs;
     export function realpathSync(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Buffer;
     export function realpathSync(path: FSPathLike, options?: FSPathResultEncodingOption, ...ignored: any[]): string;
     export function readlinkSync(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Buffer;
@@ -1523,6 +1537,7 @@ declare module "node:fs" {
     export function statSync(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): FSStats;
     export function lstatSync(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): FSStats | undefined;
     export function lstatSync(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): FSStats;
+    export function statfsSync(path: FSPathLike, options?: FSStatFsOptions, ...ignored: any[]): FSStatFs;
     export function realpathSync(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Buffer;
     export function realpathSync(path: FSPathLike, options?: FSPathResultEncodingOption, ...ignored: any[]): string;
     export function readlinkSync(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Buffer;

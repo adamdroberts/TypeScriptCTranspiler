@@ -27944,6 +27944,7 @@ class Emitter {
             "readdirSync",
             "statSync",
             "lstatSync",
+            "statfsSync",
             "realpathSync",
             "readlinkSync",
             "symlinkSync",
@@ -39199,6 +39200,20 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => `${options.throwIfNoEntry ? "tsc_fs_stat_sync" : "tsc_fs_stat_sync_no_throw"}(${path!})`);
             }
+            case "statfsSync": {
+                if (args.length < 1) unsupported(call, "fs.statfsSync needs path and optional { bigint: false } options");
+                this.validateFsStatFsOptions(args[1], "fs.statfsSync");
+                const p = this.emitExpr(args[0]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
+                return this.emitSequencedExpr(T_VALUE, [
+                    this.fsPathSpec(p, args[0]!, "fs.statfsSync path"),
+                    ...optionSpecs,
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
+                ], ([path]) => `tsc_fs_statfs_sync(${path!})`);
+            }
             case "lstatSync": {
                 if (args.length < 1) unsupported(call, "fs.lstatSync needs path and optional { bigint: false, throwIfNoEntry } options");
                 const options = this.validateFsStatsOptions(args[1], "fs.lstatSync");
@@ -40255,6 +40270,34 @@ class Emitter {
         }
         if (withFileTypes && encoding === "buffer") unsupported(options, `${label} does not support combining withFileTypes and buffer encoding yet`);
         return { withFileTypes, recursive, encoding };
+    }
+
+    private validateFsStatFsOptions(options: ts.Expression | undefined, label: string): void {
+        if (!options) return;
+        if (this.isUndefinedLikeExpression(options)) return;
+        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedLikeExpression(resolvedOptions)) return;
+        if (!ts.isObjectLiteralExpression(resolvedOptions)) {
+            unsupported(options, `${label} options must be an object literal in this subset`);
+        }
+        for (const prop of resolvedOptions.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, `${label} options only support bigint property assignments`);
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (key === "bigint") {
+                const bigintNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+                if (this.isUndefinedExpression(bigintNode)) {
+                    continue;
+                }
+                const bigint = this.fsBooleanOptionValue(bigintNode);
+                if (bigint !== false) {
+                    unsupported(prop.initializer, `${label} only supports bigint: false in this subset`);
+                }
+                continue;
+            }
+            unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+        }
     }
 
     private validateFsStatsOptions(options: ts.Expression | undefined, label: string): { throwIfNoEntry: boolean } {

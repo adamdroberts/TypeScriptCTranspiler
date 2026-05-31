@@ -1,4 +1,5 @@
 #include "tsc_internal.h"
+#include <sys/statvfs.h>
 
 /* ---------------- crypto ---------------- */
 
@@ -2734,6 +2735,26 @@ tsc_fs_stats_t* tsc_fs_stat_sync_no_throw(const tsc_str_t* path) {
     tsc_fs_stats_t* out = (tsc_fs_stats_t*)TSC_GC_MALLOC(sizeof(tsc_fs_stats_t));
     fs_stats_fill(out, &st);
     return out;
+}
+
+tsc_value_t tsc_fs_statfs_sync(const tsc_str_t* path) {
+    char* p = cstr_dup(path);
+    struct statvfs st;
+    int r = statvfs(p, &st);
+    free(p);
+    if (r != 0) {
+        tsc_throw_str(tsc_str_from_cstr("fs.statfsSync: could not statfs path"));
+        return tsc_value_undefined();
+    }
+    tsc_object_t* out = tsc_object_new();
+    tsc_object_set(out, tsc_str_from_lit("bsize", 5), tsc_value_num((double)st.f_bsize));
+    tsc_object_set(out, tsc_str_from_lit("frsize", 6), tsc_value_num((double)st.f_frsize));
+    tsc_object_set(out, tsc_str_from_lit("blocks", 6), tsc_value_num((double)st.f_blocks));
+    tsc_object_set(out, tsc_str_from_lit("bfree", 5), tsc_value_num((double)st.f_bfree));
+    tsc_object_set(out, tsc_str_from_lit("bavail", 6), tsc_value_num((double)st.f_bavail));
+    tsc_object_set(out, tsc_str_from_lit("files", 5), tsc_value_num((double)st.f_files));
+    tsc_object_set(out, tsc_str_from_lit("ffree", 5), tsc_value_num((double)st.f_ffree));
+    return tsc_value_object(out);
 }
 
 tsc_fs_stats_t* tsc_fs_lstat_sync(const tsc_str_t* path) {
