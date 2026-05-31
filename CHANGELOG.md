@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Implemented immediate-settled callback and promise forms of `dns.resolve4` and `dns.promises.resolve4` using host resolver behavior for resolving IPv4 addresses. Test: `dns_resolve4`.
 - `process.stdin.readableHighWaterMark` and `process.stdout.writableHighWaterMark` / `process.stderr.writableHighWaterMark` now expose standard stream metadata properties in the bounded process stdio stream subset. Test: `process_stdio_high_water_mark`.
 - Generated-C DCE static numeric analysis now folds side-effect-free standard mathematical calls including `Math.abs(...)`, `Math.floor(...)`, `Math.ceil(...)`, `Math.trunc(...)`, `Math.min(...)`, `Math.max(...)`, and `Math.sign(...)` with primitive inputs and pure ignored arguments. Test: `generated_c_dce_const`.
 - Generated-C DCE static numeric analysis now folds side-effect-free numeric parser calls including `Number.parseInt(...)`, `Number.parseFloat(...)`, global `parseInt(...)`, and global `parseFloat(...)` with primitive string/number inputs and pure ignored arguments. Test: `generated_c_dce_const`.

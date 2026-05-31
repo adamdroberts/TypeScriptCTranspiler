@@ -27460,8 +27460,14 @@ class Emitter {
         if (this.isNamedImportFrom(calleeId, ["dns", "node:dns"], "lookup")) {
             return this.emitDnsCall(call, "lookup");
         }
+        if (this.isNamedImportFrom(calleeId, ["dns", "node:dns"], "resolve4")) {
+            return this.emitDnsCall(call, "resolve4");
+        }
         if (this.isNamedImportFrom(calleeId, ["dns/promises", "node:dns/promises"], "lookup")) {
             return this.emitDnsPromisesCall(call, "lookup");
+        }
+        if (this.isNamedImportFrom(calleeId, ["dns/promises", "node:dns/promises"], "resolve4")) {
+            return this.emitDnsPromisesCall(call, "resolve4");
         }
         if (this.isNamedImportFrom(calleeId, ["process", "node:process"], "nextTick")) {
             return this.emitProcessNextTickCall(call);
@@ -33646,25 +33652,24 @@ class Emitter {
     }
 
     private emitDnsCall(call: ts.CallExpression, method: string): EmitResult {
-        if (method !== "lookup") unsupported(call, `dns.${method}`);
+        if (method !== "lookup" && method !== "resolve4") unsupported(call, `dns.${method}`);
         if (call.arguments.length < 2) {
-            unsupported(call, "dns.lookup expects hostname, optional options, and callback");
+            unsupported(call, `dns.${method} expects hostname, optional options, and callback`);
         }
         const hostNode = call.arguments[0]!;
         const possibleCallbackNode = call.arguments[1]!;
         const secondArgType = this.checker.getTypeAtLocation(possibleCallbackNode);
         const callbackIndex = secondArgType.getCallSignatures().length > 0 ? 1 : 2;
         if (callbackIndex >= call.arguments.length) {
-            unsupported(call, "dns.lookup expects hostname, optional options, and callback");
+            unsupported(call, `dns.${method} expects hostname, optional options, and callback`);
         }
         const optionsNode = callbackIndex === 2 ? call.arguments[1]! : undefined;
-        const lookupOptions = this.dnsLookupOptions(optionsNode);
         const callbackNode = call.arguments[callbackIndex]!;
         const host = this.emitExpr(hostNode);
         const callback = this.emitExpr(callbackNode);
         const callbackType = this.prepareType(callback.ty);
         if (callbackType.kind !== "function" || !callbackType.ret) {
-            unsupported(callbackNode, "dns.lookup callback must be a function");
+            unsupported(callbackNode, `dns.${method} callback must be a function`);
         }
         const evaluateDefaultOptions = !!optionsNode && this.shouldEvaluateDnsDefaultOptions(optionsNode);
         const specs: SequencedCallArg[] = [{ value: host, target: T_STRING, node: hostNode }];
@@ -33683,6 +33688,15 @@ class Emitter {
                 c: `${result}.error ? tsc_value_string(${result}.error) : tsc_value_null()`,
                 ty: T_VALUE,
             };
+            if (method === "resolve4") {
+                const addresses: EmitResult = {
+                    c: `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`,
+                    ty: arrayType(T_STRING),
+                };
+                const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, addresses], callbackNode);
+                return `({ tsc_dns_resolve4_result_t ${result} = tsc_dns_resolve4(${hostC}); (void)${callbackCall}; })`;
+            }
+            const lookupOptions = this.dnsLookupOptions(optionsNode);
             if (lookupOptions.all) {
                 const addresses: EmitResult = {
                     c: `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`,
@@ -33847,15 +33861,14 @@ class Emitter {
     }
 
     private emitDnsPromisesCall(call: ts.CallExpression, method: string): EmitResult {
-        if (method !== "lookup") unsupported(call, `dns.promises.${method}`);
+        if (method !== "lookup" && method !== "resolve4") unsupported(call, `dns.promises.${method}`);
         if (call.arguments.length < 1) {
-            unsupported(call, "dns.promises.lookup expects hostname and optional options");
+            unsupported(call, `dns.promises.${method} expects hostname and optional options`);
         }
         const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
-        if (mapped.kind !== "promise") unsupported(call, "dns.promises.lookup result must be Promise<T>");
+        if (mapped.kind !== "promise") unsupported(call, `dns.promises.${method} result must be Promise<T>`);
         const hostNode = call.arguments[0]!;
         const optionsNode = call.arguments[1];
-        const lookupOptions = this.dnsLookupOptions(optionsNode);
         const host = this.emitExpr(hostNode);
         const specs: SequencedCallArg[] = [{ value: host, target: T_STRING, node: hostNode }];
         if (optionsNode && this.shouldEvaluateDnsDefaultOptions(optionsNode)) {
@@ -33865,6 +33878,16 @@ class Emitter {
         return this.emitSequencedExpr(mapped, specs, ([hostC]) => {
             const result = this.freshTemp("_dns");
             const out = this.freshTemp("_dns_promise");
+            if (method === "resolve4") {
+                const addresses = `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`;
+                return `({ ` +
+                    `tsc_dns_resolve4_result_t ${result} = tsc_dns_resolve4(${hostC}); ` +
+                    `tsc_promise_t* ${out}; ` +
+                    `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
+                    `${out} = tsc_promise_resolve(tsc_value_array(${addresses})); } ` +
+                    `${out}; })`;
+            }
+            const lookupOptions = this.dnsLookupOptions(optionsNode);
             if (lookupOptions.all) {
                 const addresses = `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`;
                 return `({ ` +
