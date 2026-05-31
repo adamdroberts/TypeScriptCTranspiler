@@ -1674,6 +1674,7 @@ interface Crypto {
     randomBytes(size: number, ...ignored: any[]): Buffer;
     randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
     timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
+    pbkdf2Sync(password: string | Buffer, salt: string | Buffer, iterations: number, keylen: number, digest: CryptoHashAlgorithm, ...ignored: any[]): Buffer;
 }
 declare const crypto: Crypto;
 declare module "crypto" {
@@ -1682,6 +1683,7 @@ declare module "crypto" {
     export function randomBytes(size: number, ...ignored: any[]): Buffer;
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
     export function timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
+    export function pbkdf2Sync(password: string | Buffer, salt: string | Buffer, iterations: number, keylen: number, digest: CryptoHashAlgorithm, ...ignored: any[]): Buffer;
     const defaultCrypto: Crypto;
     export default defaultCrypto;
 }
@@ -1691,6 +1693,7 @@ declare module "node:crypto" {
     export function randomBytes(size: number, ...ignored: any[]): Buffer;
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
     export function timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
+    export function pbkdf2Sync(password: string | Buffer, salt: string | Buffer, iterations: number, keylen: number, digest: CryptoHashAlgorithm, ...ignored: any[]): Buffer;
     const defaultCrypto: Crypto;
     export default defaultCrypto;
 }
