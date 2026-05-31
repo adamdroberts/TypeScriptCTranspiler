@@ -1559,6 +1559,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_return_yield` | lazy generators return the value sent into a final suspended yield |
 | `generator_lazy_yield_expression` | lazy generators resume single suspended yield expressions |
 | `generator_lazy_yield_conditional` | lazy generators resume single suspended yield conditional expressions |
+| `generator_lazy_yield_logical` | lazy generators resume single suspended yield logical and nullish expressions |
 | `generator_lazy_yield_unary` | lazy generators resume single suspended yield unary/prefix/typeof/void expressions |
 | `generator_lazy_yield_array_literal` | lazy generators resume single suspended yield inside array literal expressions |
 | `generator_lazy_object_literal` | lazy generators resume single suspended yield inside object literal property values |

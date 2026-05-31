@@ -23275,6 +23275,51 @@ class Emitter {
         if (op === ts.SyntaxKind.CommaToken) {
             return this.emitSequencedExpr(right.ty, [{ value: left }], () => right.c);
         }
+        if (op === ts.SyntaxKind.AmpersandAmpersandToken) {
+            if (left.ty.kind === "value" || right.ty.kind === "value") {
+                const rc = this.coerce(right, T_VALUE, bin.right);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [{ value: left, target: T_VALUE, node: bin.left }],
+                    ([lv]) => `(tsc_value_is_truthy(${lv}) ? ${rc} : ${lv})`,
+                );
+            }
+            const lb = this.truthyExprFromEmitResult(left, bin.left);
+            const rb = this.truthyExprFromEmitResult(right, bin.right);
+            return { c: `(${lb} && ${rb})`, ty: T_BOOLEAN };
+        }
+        if (op === ts.SyntaxKind.BarBarToken) {
+            if (left.ty.kind === "value" || right.ty.kind === "value") {
+                const rc = this.coerce(right, T_VALUE, bin.right);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [{ value: left, target: T_VALUE, node: bin.left }],
+                    ([lv]) => `(tsc_value_is_truthy(${lv}) ? ${lv} : ${rc})`,
+                );
+            }
+            const lb = this.truthyExprFromEmitResult(left, bin.left);
+            const rb = this.truthyExprFromEmitResult(right, bin.right);
+            return { c: `(${lb} || ${rb})`, ty: T_BOOLEAN };
+        }
+        if (op === ts.SyntaxKind.QuestionQuestionToken) {
+            if (left.ty.kind === "value" || right.ty.kind === "value") {
+                const rc = this.coerce(right, T_VALUE, bin.right);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [{ value: left, target: T_VALUE, node: bin.left }],
+                    ([lv]) => `(tsc_value_is_nullish(${lv}) ? ${rc} : ${lv})`,
+                );
+            }
+            if (isPointerKind(left.ty)) {
+                const tv = this.freshTemp("_nc");
+                const rc = this.coerce(right, left.ty, bin.right);
+                return {
+                    c: `({ ${left.ty.c} ${tv} = ${left.c}; ${tv} != NULL ? ${tv} : ${rc}; })`,
+                    ty: left.ty,
+                };
+            }
+            return left;
+        }
         if (op === ts.SyntaxKind.PlusToken) {
             if (left.ty.kind === "value" || right.ty.kind === "value") {
                 return this.emitDynamicBinary("tsc_value_add", T_VALUE, bin, left, right);
@@ -23315,7 +23360,7 @@ class Emitter {
                         : "/";
             return { c: op === ts.SyntaxKind.SlashToken ? `(((double)(${left.c})) / ((double)(${right.c})))` : `(${left.c} ${cop} ${right.c})`, ty: T_NUMBER };
         }
-        unsupported(bin, `lazy generator suspended yield binary operator ${ts.SyntaxKind[op]}`);
+        unsupported(bin, `lazy generator suspended yield binary/logical operator ${ts.SyntaxKind[op]}`);
     }
 
     private fnSignature(fd: ts.FunctionDeclaration): {
