@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `URLSearchParams` now supports value-aware `has(name, value?)` and `delete(name, value?)` overloads to check and delete by matching name-value pair, preserving one-argument behavior and evaluating ignored extra arguments. Test: `url_search_params_value_delete_has`.
 - Bounded `querystring.escape(string)` and `unescape(string)` helpers are supported across named, default, and namespace imports from `"querystring"` and `"node:querystring"`, with escape percent-encoding spaces to `%20` and `+` to `%2B`, and unescape preserving raw `+` characters. Test: `querystring_escape_unescape`.
 - Implemented immediate-settled callback and promise forms of `dns.resolve6` and `dns.promises.resolve6` using host resolver behavior to resolve IPv6 addresses, supporting named, default, and namespace imports from `"dns"`, `"node:dns"`, `"dns/promises"`, and `"node:dns/promises"`. Test: `dns_resolve6`.
 - `Buffer.from(...)`, `Buffer.toString(...)`, `Buffer.byteLength(...)`, `Buffer.isEncoding(...)`, and Buffer write paths now support bounded `"latin1"`, `"binary"`, and `"ascii"` encoding aliases alongside the existing UTF-8, hex, and base64 subset. Test: `buffer_latin1_ascii_encoding`.

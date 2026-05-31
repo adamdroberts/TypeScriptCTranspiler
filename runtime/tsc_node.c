@@ -1311,10 +1311,11 @@ tsc_url_search_params_t* tsc_url_search_params_new(const tsc_str_t* init) {
     return params;
 }
 
-void tsc_url_search_params_delete(tsc_url_search_params_t* params, const tsc_str_t* name) {
+void tsc_url_search_params_delete(tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value) {
     size_t w = 0;
     for (size_t i = 0; i < params->len; i++) {
-        if (!tsc_str_eq(params->items[i].name, name)) {
+        bool match = tsc_str_eq(params->items[i].name, name) && (!value || tsc_str_eq(params->items[i].value, value));
+        if (!match) {
             params->items[w++] = params->items[i];
         }
     }
@@ -1328,8 +1329,13 @@ tsc_str_t* tsc_url_search_params_get(const tsc_url_search_params_t* params, cons
     return NULL;
 }
 
-bool tsc_url_search_params_has(const tsc_url_search_params_t* params, const tsc_str_t* name) {
-    return tsc_url_search_params_get(params, name) != NULL;
+bool tsc_url_search_params_has(const tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value) {
+    for (size_t i = 0; i < params->len; i++) {
+        if (tsc_str_eq(params->items[i].name, name) && (!value || tsc_str_eq(params->items[i].value, value))) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void tsc_url_search_params_set(tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value) {
