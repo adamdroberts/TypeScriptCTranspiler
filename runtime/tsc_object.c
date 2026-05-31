@@ -691,6 +691,7 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
         size_t idx = (size_t)found;
         tsc_object_prop_t* p = &o->props[idx];
         if (!p->configurable) {
+            if (p->accessor) return false;
             if (has_configurable && configurable) return false;
             if (has_enumerable && enumerable != p->enumerable) return false;
             if (has_writable && writable && !p->writable) return false;

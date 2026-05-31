@@ -52,3 +52,19 @@ console.log(
     }),
     obj.x,
 );
+
+console.log(
+    "accessor to data:",
+    Reflect.defineProperty(obj, "x", {
+        value: 7,
+    }),
+    obj.x,
+);
+
+console.log(
+    "accessor to undefined data:",
+    Reflect.defineProperty(obj, "x", {
+        value: undefined,
+    }),
+    obj.x,
+);
