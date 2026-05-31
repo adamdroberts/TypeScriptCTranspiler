@@ -32967,6 +32967,7 @@ class Emitter {
                     unsupported(call, "Promise.all result must be Promise<T[]>");
                 }
                 const elem = this.prepareType(resultArray.elem);
+                const isDynamic = source.ty.elem!.kind === "value";
                 return this.emitSequencedExpr(mapped, [
                     { value: source, node: call.arguments[0]! },
                     ...this.ignoredArgumentSpecs(call.arguments, 1),
@@ -32978,12 +32979,15 @@ class Emitter {
                     const item = this.freshTemp("_promise_item");
                     const value = this.freshTemp("_promise_value");
                     const pushed = this.coerce(this.promiseFulfilledValue(elem, item), elem, call);
+                    const itemValue = isDynamic
+                        ? `tsc_promise_resolve_thenable(TSC_ARR(tsc_value_t, _src, ${i}))`
+                        : `TSC_ARR(tsc_promise_t*, _src, ${i})`;
                     return (
                         `({ tsc_array_t* const _src = ${src}; ` +
                         `tsc_array_t* ${out} = tsc_array_new(sizeof(${elem.c}), _src->len); ` +
                         `tsc_promise_t* ${result} = NULL; bool ${pending} = false; ` +
                         `for (size_t ${i} = 0; ${i} < _src->len; ${i}++) { ` +
-                        `tsc_promise_t* const ${item} = TSC_ARR(tsc_promise_t*, _src, ${i}); ` +
+                        `tsc_promise_t* const ${item} = ${itemValue}; ` +
                         `if (tsc_promise_is_rejected(${item})) { ${result} = tsc_promise_reject(tsc_promise_reason(${item})); break; } ` +
                         `if (tsc_promise_is_pending(${item})) { ${pending} = true; continue; } ` +
                         `${elem.c} ${value} = ${pushed}; tsc_array_push_raw(${out}, &${value}); } ` +
@@ -32994,6 +32998,7 @@ class Emitter {
             case "race": {
                 if (call.arguments.length < 1) unsupported(call, "Promise.race expects 1 arg");
                 const source = this.emitPromiseArrayArg(call, "Promise.race");
+                const isDynamic = source.ty.elem!.kind === "value";
                 return this.emitSequencedExpr(mapped, [
                     { value: source, node: call.arguments[0]! },
                     ...this.ignoredArgumentSpecs(call.arguments, 1),
@@ -33001,10 +33006,13 @@ class Emitter {
                     const result = this.freshTemp("_promise_result");
                     const i = this.freshTemp("_i");
                     const item = this.freshTemp("_promise_item");
+                    const itemValue = isDynamic
+                        ? `tsc_promise_resolve_thenable(TSC_ARR(tsc_value_t, _src, ${i}))`
+                        : `TSC_ARR(tsc_promise_t*, _src, ${i})`;
                     return (
                         `({ tsc_array_t* const _src = ${src}; tsc_promise_t* ${result} = NULL; ` +
                         `for (size_t ${i} = 0; ${i} < _src->len; ${i}++) { ` +
-                        `tsc_promise_t* const ${item} = TSC_ARR(tsc_promise_t*, _src, ${i}); ` +
+                        `tsc_promise_t* const ${item} = ${itemValue}; ` +
                         `if (tsc_promise_is_pending(${item})) continue; ` +
                         `${result} = tsc_promise_is_rejected(${item}) ? tsc_promise_reject(tsc_promise_reason(${item})) : ${this.promiseResolveStoredValue(mapped.elem, item)}; break; } ` +
                         `if (!${result}) { ${result} = tsc_promise_pending(); } ` +
@@ -33015,6 +33023,7 @@ class Emitter {
             case "any": {
                 if (call.arguments.length < 1) unsupported(call, "Promise.any expects 1 arg");
                 const source = this.emitPromiseArrayArg(call, "Promise.any");
+                const isDynamic = source.ty.elem!.kind === "value";
                 return this.emitSequencedExpr(mapped, [
                     { value: source, node: call.arguments[0]! },
                     ...this.ignoredArgumentSpecs(call.arguments, 1),
@@ -33026,11 +33035,14 @@ class Emitter {
                     const i = this.freshTemp("_i");
                     const item = this.freshTemp("_promise_item");
                     const aggregate = this.freshTemp("_aggregate");
+                    const itemValue = isDynamic
+                        ? `tsc_promise_resolve_thenable(TSC_ARR(tsc_value_t, _src, ${i}))`
+                        : `TSC_ARR(tsc_promise_t*, _src, ${i})`;
                     return (
                         `({ tsc_array_t* const _src = ${src}; tsc_promise_t* ${result} = NULL; ` +
                         `tsc_array_t* ${errors} = tsc_array_new(sizeof(tsc_value_t), _src->len); bool ${pending} = false; ` +
                         `for (size_t ${i} = 0; ${i} < _src->len; ${i}++) { ` +
-                        `tsc_promise_t* const ${item} = TSC_ARR(tsc_promise_t*, _src, ${i}); ` +
+                        `tsc_promise_t* const ${item} = ${itemValue}; ` +
                         `if (tsc_promise_is_fulfilled(${item})) { ${result} = ${this.promiseResolveStoredValue(mapped.elem, item)}; break; } ` +
                         `if (tsc_promise_is_pending(${item})) { ${pending} = true; continue; } ` +
                         `tsc_value_t ${reason} = tsc_promise_reason(${item}); tsc_array_push_raw(${errors}, &${reason}); } ` +
@@ -33048,6 +33060,7 @@ class Emitter {
             case "allSettled": {
                 if (call.arguments.length < 1) unsupported(call, "Promise.allSettled expects 1 arg");
                 const source = this.emitPromiseArrayArg(call, "Promise.allSettled");
+                const isDynamic = source.ty.elem!.kind === "value";
                 const resultArray = mapped.elem;
                 if (!resultArray || resultArray.kind !== "array") {
                     unsupported(call, "Promise.allSettled result must be Promise<any[]>");
@@ -33062,12 +33075,15 @@ class Emitter {
                     const obj = this.freshTemp("_settled");
                     const boxed = this.freshTemp("_settled_value");
                     const pending = this.freshTemp("_promise_pending");
+                    const itemValue = isDynamic
+                        ? `tsc_promise_resolve_thenable(TSC_ARR(tsc_value_t, _src, ${i}))`
+                        : `TSC_ARR(tsc_promise_t*, _src, ${i})`;
                     return (
                         `({ tsc_array_t* const _src = ${src}; ` +
                         `tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), _src->len); ` +
                         `bool ${pending} = false; ` +
                         `for (size_t ${i} = 0; ${i} < _src->len; ${i}++) { ` +
-                        `tsc_promise_t* const ${item} = TSC_ARR(tsc_promise_t*, _src, ${i}); ` +
+                        `tsc_promise_t* const ${item} = ${itemValue}; ` +
                         `if (tsc_promise_is_pending(${item})) { ${pending} = true; continue; } ` +
                         `tsc_object_t* ${obj} = tsc_object_new(); ` +
                         `if (tsc_promise_is_fulfilled(${item})) { ` +
@@ -33102,9 +33118,9 @@ class Emitter {
         if (
             (source.ty.kind !== "array" && source.ty.kind !== "set") ||
             !source.ty.elem ||
-            source.ty.elem.kind !== "promise"
+            (source.ty.elem.kind !== "promise" && source.ty.elem.kind !== "value")
         ) {
-            unsupported(arg, `${label} expects Promise<T>[] or Set<Promise<T>>`);
+            unsupported(arg, `${label} expects Promise<T>[]/any[] or Set<Promise<T>>/Set<any>`);
         }
         if (source.ty.kind === "set") {
             return {
@@ -46743,8 +46759,11 @@ class Emitter {
                 case "class":
                     return `((${target.c})tsc_value_as_class(${r.c}))`;
                 case "promise":
-                    return `tsc_value_as_promise(${r.c})`;
+                    return `tsc_promise_resolve_thenable(${r.c})`;
             }
+        }
+        if (target.kind === "promise") {
+            return `tsc_promise_resolve_thenable(${this.coerce(r, T_VALUE, node)})`;
         }
         if (target.kind === "value") {
             switch (r.ty.kind) {

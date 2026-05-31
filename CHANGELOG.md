@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Promise combinators now AOT-assimilate dynamic array and Set elements, allowing mixed `any` values, thenables, and Promises in `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`. Test: `promise_combinators_dynamic`.
 - CommonJS package source analysis now statically resolves computed named-export keys from BigInt literals and BigInt constants. Test: `node_modules_commonjs_static_computed_bigint`.
 - Runtime code compilation now supports 0-argument `Function()`, `new Function()`, and `eval(undefined)` calls without enabling unsafe eval, allowing empty function bodies and default undefined eval values to be statically compiled AOT. Test: `runtime_function_zero_args`.
 - Implemented immediate-settled boxing/unboxing for Promises coerced to/from dynamic values (`any`), allowing dynamic thenables to recursively assimilate settled dynamic nested Promise instances at runtime. Test: `promise_thenable_any`.
