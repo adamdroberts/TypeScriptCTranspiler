@@ -1,0 +1,14 @@
+set trap called for: x value: 1
+set trap success: done
+construct undefined: 42
+getPrototypeOf string: Reflect.getPrototypeOf target must be an object
+isExtensible string: Reflect.isExtensible target must be an object
+preventExtensions string: Reflect.preventExtensions target must be an object
+ownKeys string: Reflect.ownKeys target must be an object
+getOwnPropertyDescriptor string: Reflect.getOwnPropertyDescriptor target must be an object
+get string: Reflect.get target must be an object
+set string: Reflect.set target must be an object
+has string: Reflect.has target must be an object
+defineProperty string: Reflect.defineProperty target must be an object
+deleteProperty string: Reflect.deleteProperty target must be an object
+setPrototypeOf string: Reflect.setPrototypeOf target must be an object
