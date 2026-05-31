@@ -151,6 +151,11 @@ tsc_str_t* tsc_str_replace(const tsc_str_t* s, const tsc_str_t* search, const ts
 tsc_str_t* tsc_str_replace_all(const tsc_str_t* s, const tsc_str_t* search, const tsc_str_t* repl);
 
 struct tsc_buffer; /* fwd */
+struct tsc_map;
+struct tsc_set;
+struct tsc_date;
+struct tsc_regexp;
+struct tsc_error;
 struct tsc_array* tsc_str_split(const tsc_str_t* s, const tsc_str_t* sep);
 struct tsc_array* tsc_str_split_limit(const tsc_str_t* s, const tsc_str_t* sep, uint32_t limit);
 struct tsc_array* tsc_str_split_limit_num(const tsc_str_t* s, const tsc_str_t* sep, double limit);
@@ -578,6 +583,19 @@ tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v);
 tsc_str_t* tsc_value_typeof(tsc_value_t v);
 tsc_str_t* tsc_value_json_stringify(tsc_value_t v);
 tsc_value_t tsc_structured_clone(tsc_value_t value);
+tsc_value_t tsc_value_date(struct tsc_date* d);
+tsc_value_t tsc_value_regexp(struct tsc_regexp* r);
+tsc_value_t tsc_value_map(struct tsc_map* m);
+tsc_value_t tsc_value_set(struct tsc_set* s);
+tsc_value_t tsc_value_error(struct tsc_error* e);
+tsc_value_t tsc_value_buffer(struct tsc_buffer* b);
+bool tsc_util_types_is_date(tsc_value_t v);
+bool tsc_util_types_is_regexp(tsc_value_t v);
+bool tsc_util_types_is_native_error(tsc_value_t v);
+bool tsc_util_types_is_promise(tsc_value_t v);
+bool tsc_util_types_is_map(tsc_value_t v);
+bool tsc_util_types_is_set(tsc_value_t v);
+bool tsc_util_types_is_typed_array(tsc_value_t v);
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args);
 tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args);
 tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t args, tsc_value_t new_target);

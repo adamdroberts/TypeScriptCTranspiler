@@ -10,6 +10,12 @@ tsc_object_t* tsc_object_new(void) {
     o->is_proxy = false;
     o->proxy_revoked = false;
     o->is_promise = false;
+    o->is_date = false;
+    o->is_regexp = false;
+    o->is_map = false;
+    o->is_set = false;
+    o->is_error = false;
+    o->is_typed_array = false;
     o->shape_version = 1;
     o->proxy_target = tsc_value_undefined();
     o->proxy_handler = tsc_value_undefined();

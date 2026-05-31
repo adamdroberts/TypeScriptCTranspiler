@@ -538,6 +538,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 
 ### `util`
 - `util.format(format?, ...args)` implements a bounded Node format helper. It supports `%s` (coerced to string), `%d` / `%i` (coerced to number and formatted as integer), `%f` (coerced to number and formatted as float), `%j` (coerced to JSON string), and `%%` (literal percent). It also appends extra unconsumed arguments separated by spaces. It supports default, namespace, named, and aliased named imports from `"util"` and `"node:util"`. Test: `util_format_basic`
+- `util.types` contains bounded type predicate helpers: `isDate(object)`, `isRegExp(object)`, `isNativeError(object)`, `isPromise(object)`, `isMap(object)`, `isSet(object)`, and `isTypedArray(object)`, with dynamic runtime type checking and static AOT compilation support. It supports default, namespace, named, and aliased named imports of `types` from `"util"` and `"node:util"`. Test: `util_types_basic`
 
 ### `os`
 - `os.platform(...ignored)` / `type(...ignored)` / `release(...ignored)` / `version(...ignored)` / `endianness(...ignored)` / `machine(...ignored)` / `arch(...ignored)` / `hostname(...ignored)` / `tmpdir(...ignored)` / `homedir(...ignored)` / `cpus(...ignored)` / `availableParallelism(...ignored)` / `totalmem(...ignored)` / `freemem(...ignored)` / `uptime(...ignored)` / `loadavg(...ignored)` / `userInfo({ encoding: "utf8" | "utf-8" | undefined | void }?, ...ignored)` / `networkInterfaces(...ignored)`, `os.EOL`, `os.devNull`, and compile-time `os.constants.signals`, with default, namespace, and named imports from `"os"` / `"node:os"` for the supported subset. `os.userInfo(...)` accepts earlier static `const` aliases for supported UTF-8 option objects and `encoding` option values, and whole-option `void` defaults preserve side-effectful evaluation before ignored trailing arguments. `networkInterfaces()` returns a dynamic object keyed by interface name, each value an array of dynamic address records with address, family, internal, cidr, netmask, and mac when available. `os.constants.signals` exposes a bounded POSIX/Linux numeric signal subset for common signal names.
@@ -1377,6 +1378,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `os_user_info_undefined_options` | os.userInfo treats explicit undefined options and encoding properties as defaults |
 | `os_constants_signals` | os.constants.signals stable POSIX/Linux numeric signal subset |
 | `util_format_basic` | bounded util.format placeholder formatting, leftover arguments, and import styles |
+| `util_types_basic` | bounded util.types type predicate helpers (isDate, isRegExp, etc.) and import styles |
 | `path_constants` | path sep and delimiter constants for global, named import, and namespace import forms |
 | `path_basename_suffix` | path.basename optional suffix for global, namespace, named, and posix forms |
 | `path_import` | path named and namespace imports from node:path/path |

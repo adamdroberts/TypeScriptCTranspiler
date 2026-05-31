@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Added `util.types` module under `"util"` and `"node:util"` imports, providing bounded type predicate helpers `isDate`, `isRegExp`, `isNativeError`, `isPromise`, `isMap`, `isSet`, and `isTypedArray` with dynamic runtime checking and static AOT compilation support. Test: `util_types_basic`.
 - `crypto.scryptSync(password, salt, keylen, options?, ...ignored)` computes scrypt derivative keys returning a Buffer, supporting password/salt as string or Buffer, numeric keylen, default parameters, option fields N/cost, r/blockSize, p/parallelization, maxmem, and catchable parameter validation failures. Test: `crypto_scrypt_sync`.
 - Supported `crypto.randomFillSync(buffer[, offset[, size]], ...ignored)` for filling a Buffer with random bytes using OpenSSL `RAND_bytes`, mutating and returning the same Buffer, with support for offset/size range boundary validations and ignored trailing arguments across global crypto and named, namespace, and default imports from `"crypto"` / `"node:crypto"`. Test: `crypto_random_fill_sync`.
 - `URLSearchParams` now supports value-aware `has(name, value?)` and `delete(name, value?)` overloads to check and delete by matching name-value pair, preserving one-argument behavior and evaluating ignored extra arguments. Test: `url_search_params_value_delete_has`.

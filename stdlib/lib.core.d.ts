@@ -2313,16 +2313,29 @@ interface TextDecoderConstructor {
 }
 declare var TextDecoder: TextDecoderConstructor;
 
+interface UtilTypes {
+    isDate(object: any): object is Date;
+    isRegExp(object: any): object is RegExp;
+    isNativeError(object: any): object is Error;
+    isPromise(object: any): object is Promise<any>;
+    isMap(object: any): object is Map<any, any>;
+    isSet(object: any): object is Set<any>;
+    isTypedArray(object: any): boolean;
+}
+
 interface UtilModule {
     format(format?: any, ...args: any[]): string;
+    types: UtilTypes;
 }
 declare module "util" {
     export function format(format?: any, ...args: any[]): string;
+    export const types: UtilTypes;
     const defaultUtil: UtilModule;
     export default defaultUtil;
 }
 declare module "node:util" {
     export function format(format?: any, ...args: any[]): string;
+    export const types: UtilTypes;
     const defaultUtil: UtilModule;
     export default defaultUtil;
 }
