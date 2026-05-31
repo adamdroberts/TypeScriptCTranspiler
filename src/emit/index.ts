@@ -4021,6 +4021,61 @@ class Emitter {
             const value = Number(unwrapped.text);
             return Number.isFinite(value) ? value : null;
         }
+        if (ts.isCallExpression(unwrapped)) {
+            let isParseCall = false;
+            let which: "parseInt" | "parseFloat" | undefined = undefined;
+            if (ts.isIdentifier(unwrapped.expression)) {
+                const name = unwrapped.expression.text;
+                if ((name === "parseInt" || name === "parseFloat") && this.isUnshadowedGlobalIdentifier(unwrapped.expression, name)) {
+                    isParseCall = true;
+                    which = name;
+                }
+            } else if (ts.isPropertyAccessExpression(unwrapped.expression)) {
+                const recv = unwrapped.expression.expression;
+                const method = unwrapped.expression.name.text;
+                if (
+                    ts.isIdentifier(recv) &&
+                    this.isUnshadowedGlobalIdentifier(recv, "Number") &&
+                    (method === "parseInt" || method === "parseFloat")
+                ) {
+                    isParseCall = true;
+                    which = method;
+                }
+            }
+            if (isParseCall && which && unwrapped.arguments.length >= 1) {
+                const arg0 = unwrapped.arguments[0]!;
+                let inputStr: string | null = null;
+                const strVal = this.sideEffectFreeStringLiteralText(arg0, seenConsts);
+                if (strVal !== null) {
+                    inputStr = strVal;
+                } else {
+                    const numVal = this.sideEffectFreeNumericLiteralSameValueZeroValue(arg0, seenConsts);
+                    if (numVal !== null) {
+                        inputStr = String(numVal);
+                    }
+                }
+                if (inputStr !== null) {
+                    if (which === "parseInt") {
+                        let radixVal: number | undefined = undefined;
+                        if (unwrapped.arguments.length >= 2) {
+                            const parsedRadix = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped.arguments[1]!, seenConsts);
+                            if (parsedRadix !== null) {
+                                radixVal = parsedRadix;
+                            } else {
+                                return null;
+                            }
+                        }
+                        if (this.callIgnoredArgumentsAreSideEffectFree(unwrapped.arguments, 2, seenConsts)) {
+                            return Number.parseInt(inputStr, radixVal);
+                        }
+                    } else {
+                        if (this.callIgnoredArgumentsAreSideEffectFree(unwrapped.arguments, 1, seenConsts)) {
+                            return Number.parseFloat(inputStr);
+                        }
+                    }
+                }
+            }
+        }
         if (
             ts.isCallExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&

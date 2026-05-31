@@ -5411,6 +5411,23 @@ function observedMutatingLengthProofs(): string {
     return reverseSource[0] + " " + sortSource[0] + " " + fillSource[0] + " " + copySource[0];
 }
 
+function numericParserDce(): string {
+    const parse_int_global_dead = parseInt("123", 10) === 123 ? "kept_parse_int_global_branch" : (console.log("dead_parse_int_global_branch"), "dead_parse_int_global_branch");
+    const parse_int_number_dead = Number.parseInt("456", 10) === 456 ? "kept_parse_int_number_branch" : (console.log("dead_parse_int_number_branch"), "dead_parse_int_number_branch");
+    const parse_float_global_dead = parseFloat("7.89") === 7.89 ? "kept_parse_float_global_branch" : (console.log("dead_parse_float_global_branch"), "dead_parse_float_global_branch");
+    const parse_float_number_dead = Number.parseFloat("0.12") === 0.12 ? "kept_parse_float_number_branch" : (console.log("dead_parse_float_number_branch"), "dead_parse_float_number_branch");
+
+    // Pure ignored arguments & nested values
+    const parse_int_radix_defaults = parseInt("10") === 10 ? "kept_parse_int_radix_defaults" : (console.log("dead_parse_int_radix_defaults"), "dead_parse_int_radix_defaults");
+    const parse_int_hex = Number.parseInt("0xff", 16) === 255 ? "kept_parse_int_hex" : (console.log("dead_parse_int_hex"), "dead_parse_int_hex");
+    const parse_int_ignored_args = parseInt("12", 10, "ignored_arg") === 12 ? "kept_parse_int_ignored_args" : (console.log("dead_parse_int_ignored_args"), "dead_parse_int_ignored_args");
+
+    // Test that side-effect-free numeric input works as well
+    const parse_int_numeric_input = parseInt(123 as any, 10) === 123 ? "kept_parse_int_numeric_input" : (console.log("dead_parse_int_numeric_input"), "dead_parse_int_numeric_input");
+
+    return parse_int_global_dead + " " + parse_int_number_dead + " " + parse_float_global_dead + " " + parse_float_number_dead + " " + parse_int_radix_defaults + " " + parse_int_hex + " " + parse_int_ignored_args + " " + parse_int_numeric_input;
+}
+
 console.log(
     usedLocal(used_count),
     constantBranch(used_count),
@@ -5466,5 +5483,6 @@ console.log(
     doExit(false),
     observedMutatingCollectionSources(),
     observedMutatingLengthProofs(),
+    numericParserDce(),
     DceNamespace.kept,
 );
