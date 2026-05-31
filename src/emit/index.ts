@@ -22430,6 +22430,22 @@ class Emitter {
                 if (hasNestedYield) return false;
                 continue;
             }
+            if (ts.isVariableStatement(stmt)) {
+                for (const decl of stmt.declarationList.declarations) {
+                    if (!ts.isIdentifier(decl.name)) return false;
+                    let hasYield = false;
+                    const checkYield = (node: ts.Node) => {
+                        if (ts.isYieldExpression(node)) {
+                            hasYield = true;
+                            return;
+                        }
+                        ts.forEachChild(node, checkYield);
+                    };
+                    if (decl.initializer) ts.forEachChild(decl.initializer, checkYield);
+                    if (hasYield) return false;
+                }
+                continue;
+            }
             if (ts.isReturnStatement(stmt)) {
                 if (i !== fn.body.statements.length - 1) return false;
                 continue;
@@ -22468,7 +22484,36 @@ class Emitter {
                 type: this.prepareType(mapType(param, this.checker)),
             };
         });
-        const needsEnv = runtimeParamInfos.length > 0 || !!implicitThisParam;
+        const localVarInfos: Array<{
+            declaration: ts.VariableDeclaration;
+            symbol: ts.Symbol;
+            name: string;
+            field: string;
+            type: CType;
+        }> = [];
+        if (fn.body && ts.isBlock(fn.body)) {
+            for (const stmt of fn.body.statements) {
+                if (!ts.isVariableStatement(stmt)) continue;
+                for (const decl of stmt.declarationList.declarations) {
+                    if (!ts.isIdentifier(decl.name)) unsupported(decl, "lazy generator locals must be identifiers");
+                    const symbol = this.symbolForIdentifier(decl.name);
+                    if (!symbol) unsupported(decl.name, "could not resolve lazy generator local symbol");
+                    let type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
+                    if (type.c === "double" && this.intSymbols.has(symbol)) {
+                        type = T_NUMBER_INT;
+                    }
+                    const index = localVarInfos.length;
+                    localVarInfos.push({
+                        declaration: decl,
+                        symbol,
+                        name: mangleIdent(decl.name.text),
+                        field: `local_${index}_${mangleIdent(decl.name.text)}`,
+                        type,
+                    });
+                }
+            }
+        }
+        const needsEnv = runtimeParamInfos.length > 0 || localVarInfos.length > 0 || !!implicitThisParam;
         const envType = needsEnv ? `_gen_lazy_env_${baseName}_${this.freshTemp("")}` : null;
         const thisField = implicitThisParam ? "this_arg" : null;
         if (envType) {
@@ -22477,6 +22522,9 @@ class Emitter {
                 this.structDecls.line(`${implicitThisParam.ty.c} ${thisField};`);
             }
             for (const info of runtimeParamInfos) {
+                this.structDecls.line(`${info.type.c} ${info.field};`);
+            }
+            for (const info of localVarInfos) {
                 this.structDecls.line(`${info.type.c} ${info.field};`);
             }
             this.structDecls.close(`${envType};`);
@@ -22515,6 +22563,12 @@ class Emitter {
                 lazyThisParam = { c: `${envLocal}->${thisField}`, ty: lazyThisParam.ty };
             }
             for (const info of runtimeParamInfos) {
+                envBindings.set(info.symbol, {
+                    type: info.type,
+                    ptr: `&${envLocal}->${info.field}`,
+                });
+            }
+            for (const info of localVarInfos) {
                 envBindings.set(info.symbol, {
                     type: info.type,
                     ptr: `&${envLocal}->${info.field}`,
@@ -22597,6 +22651,9 @@ class Emitter {
             }
             for (const info of runtimeParamInfos) {
                 buf.line(`${envVar}->${info.field} = ${info.name};`);
+            }
+            for (const info of localVarInfos) {
+                buf.line(`${envVar}->${info.field} = ${this.zeroValue(info.type)};`);
             }
             buf.line(`${arrayVar}->env = ${envVar};`);
         }
@@ -23391,6 +23448,19 @@ class Emitter {
             }
             if (!this.shouldEmitLocalVariable(d)) continue;
             const sym = this.symbolForIdentifier(d.name);
+            const envBinding = this.closureEnvBindingForSymbol(sym);
+            if (envBinding) {
+                if (d.initializer) {
+                    const value = this.emitExpr(d.initializer);
+                    const coerced = envBinding.type.c === "int64_t" && value.ty.kind === "number"
+                        ? `((int64_t)(${value.c}))`
+                        : this.coerce(value, envBinding.type, d.initializer);
+                    buf.line(`*${envBinding.ptr} = ${coerced};`);
+                } else {
+                    buf.line(`*${envBinding.ptr} = ${this.zeroValue(envBinding.type)};`);
+                }
+                continue;
+            }
             const stackObject = this.nonEscapingLocalObjectLiteral(d);
             if (stackObject) {
                 const storage = this.freshTemp(`_${name}_stack`);
