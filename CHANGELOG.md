@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Extended the narrow lazy generator lowering to preserve function parameters and `this` receivers through the generator environment, so sequential generator functions and methods still defer body execution until `.next()` while reading their original invocation state. Test: `generator_lazy_params`.
 - Added a narrow lazy lowering for parameterless sequential synchronous generators with ordinary `yield` statements, so bodies execute on `.next()` instead of construction and array consumers materialize the remaining values on demand. Test: `generator_lazy`.
 - Implemented microtask-scheduled Promise callback dispatch for `.then(...)`, `.catch(...)`, and `.finally(...)` with full chaining support for pending promises. Verified that Promise microtasks correctly run through the before-exit microtask queue relative to `process.nextTick`, `queueMicrotask`, zero-delay timers, and `setImmediate`. Test: `promise_microtask_then`.
 - Supported variable-byte-length integer read and write Buffer methods (`readUIntLE`, `readUIntBE`, `readIntLE`, `readIntBE`, `writeUIntLE`, `writeUIntBE`, `writeIntLE`, `writeIntBE`) with Node-like range validations and error messages, and preserved ignored trailing argument evaluation. Test: `buffer_varint_io`.
