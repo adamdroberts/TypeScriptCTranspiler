@@ -1,0 +1,23 @@
+arr next 1: 10
+arr next 2: 20
+arr next 3: 30
+arr next 4 done: true
+str next 1: a
+str next 2: b
+str next 3: c
+str next 4 done: true
+set next 1: x
+set next 2: y
+set next 3 done: true
+map next 1 key: a val: 1
+map next 2 key: b val: 2
+map next 3 done: true
+gen next 1: 1
+gen next 2: 2
+gen next 3 done: true
+custom next 1: 5
+custom next 2: 6
+custom next 3 done: true
+self next 1: 8
+self next 2: 9
+self next 3 done: true

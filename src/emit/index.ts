@@ -27245,6 +27245,63 @@ class Emitter {
         if (ts.isPropertyAccessExpression(call.expression)) {
             return this.emitMethodCall(call, call.expression);
         }
+        if (ts.isElementAccessExpression(call.expression)) {
+            const argument = call.expression.argumentExpression;
+            if (argument && this.isSymbolIteratorExpression(argument)) {
+                const recv = this.emitExpr(call.expression.expression);
+                if (recv.ty.kind === "array") {
+                    return this.emitSequencedExpr(
+                        recv.ty,
+                        [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
+                        ([arr]) => arr!,
+                    );
+                } else if (recv.ty.kind === "string") {
+                    return this.emitSequencedExpr(
+                        arrayType(T_STRING),
+                        [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
+                        ([str]) => `tsc_str_chars(${str!})`,
+                    );
+                } else if (recv.ty.kind === "set") {
+                    return this.emitSequencedExpr(
+                        arrayType(recv.ty.elem!),
+                        [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
+                        ([set]) => `tsc_set_values(${set!})`,
+                    );
+                } else if (recv.ty.kind === "map") {
+                    return this.emitSequencedExpr(
+                        arrayType(entryType(recv.ty.elem!, recv.ty.key!)),
+                        [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
+                        ([map]) => this.mapEntriesArrayExpr(call, map!, recv.ty, "[Symbol.iterator]").c,
+                    );
+                } else if (recv.ty.kind === "class") {
+                    const cd = this.classDeclForExpression(call.expression.expression);
+                    if (cd) {
+                        const found = this.findSymbolIteratorMethod(cd);
+                        if (found) {
+                            const { owner, method } = found;
+                            const sig = this.checker.getSignatureFromDeclaration(method);
+                            if (sig) {
+                                const ret = mapTsType(method, sig.getReturnType(), this.checker);
+                                return this.emitSequencedCall(
+                                    `${owner.name!.text}___tsc_iterator`,
+                                    ret,
+                                    [
+                                        {
+                                            value: recv,
+                                            pass: (tmp) => owner.name!.text === recv.ty.className
+                                                ? tmp
+                                                : `((${owner.name!.text}_t*)${tmp})`,
+                                        },
+                                        ...this.ignoredArgumentSpecs(call.arguments, 0),
+                                    ],
+                                );
+                            }
+                        }
+                    }
+                }
+                unsupported(call.expression, `[Symbol.iterator]() call on type ${recv.ty.kind}`);
+            }
+        }
         if (!ts.isIdentifier(call.expression)) {
             const requireExportsDecl = this.requireCallModuleExportsDeclaration(call.expression);
             if (requireExportsDecl) {

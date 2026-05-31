@@ -1,0 +1,3 @@
+{
+  "description": "manual Symbol.iterator calls on array, string, Set, Map, custom iterable, custom iterator, and generator"
+}
