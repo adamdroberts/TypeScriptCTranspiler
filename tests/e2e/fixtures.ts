@@ -584,6 +584,12 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-computed-keys-as-const-package": cjsPackage("tsc2c-cjs-computed-keys-as-const-package", {
         "index.js": 'exports.__esModule = true;\nconst keys = { first: { name: "value" } };\nexports[keys.first.name] = function() { return "it-works"; };\n',
     }),
+    "tsc2c-cjs-conditional-whole-object-exports": cjsPackage("tsc2c-cjs-conditional-whole-object-exports", {
+        "index.js": 'const isProd = true;\nmodule.exports = isProd ? { label: "conditional-prod", count: 88 } : { label: "conditional-dev", count: 12 };\n',
+    }),
+    "tsc2c-cjs-computed-conditional-exports": cjsPackage("tsc2c-cjs-computed-conditional-exports", {
+        "index.js": 'const isProd = true;\nconst labelKey = isProd ? "label" : "devLabel";\nexports[labelKey] = "computed-conditional";\n',
+    }),
     "tsc2c-cjs-define-properties-exports": cjsPackage("tsc2c-cjs-define-properties-exports", {
         "index.js": 'exports.__esModule = true;\nObject.defineProperties(exports, {\n  default: { value: function greet(name) { return "hello " + name; }, enumerable: true },\n  label: { value: "define-properties", enumerable: true },\n  count: { value: 45, enumerable: true }\n});\n',
     }),
