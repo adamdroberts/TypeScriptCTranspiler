@@ -3962,6 +3962,8 @@ class Emitter {
             const arrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(unwrapped.expression, seenConsts);
             if (arrayLength !== null) return arrayLength;
         }
+        const stringNumericCall = this.sideEffectFreeStringNumericCallValue(unwrapped, seenConsts);
+        if (stringNumericCall !== null) return stringNumericCall;
         if (ts.isBinaryExpression(unwrapped)) {
             if (unwrapped.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
                 const left = this.staticNullishState(unwrapped.left, seenConsts);
@@ -12672,6 +12674,8 @@ class Emitter {
         if (staticStringCallText !== null) return staticStringCallText;
         const instanceStringCallText = this.sideEffectFreeStringInstanceCallText(unwrapped, seenConsts);
         if (instanceStringCallText !== null) return instanceStringCallText;
+        const elementStringText = this.sideEffectFreeStringElementAccessText(unwrapped, seenConsts);
+        if (elementStringText !== null) return elementStringText;
         const repeatPadCallText = this.sideEffectFreeStringRepeatPadCallText(unwrapped, seenConsts);
         if (repeatPadCallText !== null) return repeatPadCallText;
         if (ts.isTypeOfExpression(unwrapped)) {
@@ -12860,21 +12864,207 @@ class Emitter {
     ): string | null {
         if (
             !ts.isCallExpression(expr) ||
-            !ts.isPropertyAccessExpression(expr.expression) ||
-            expr.arguments.length !== 0
+            !ts.isPropertyAccessExpression(expr.expression)
         ) {
             return null;
         }
         const method = expr.expression.name.text;
         const isCaseFolding = method === "toUpperCase" || method === "toLowerCase";
         const isTrim = method === "trim" || method === "trimStart" || method === "trimEnd" || method === "trimLeft" || method === "trimRight";
-        if (!isCaseFolding && !isTrim) return null;
+        const isCopy =
+            method === "charAt" ||
+            method === "at" ||
+            method === "slice" ||
+            method === "substring" ||
+            method === "substr" ||
+            method === "concat";
+        if (!isCaseFolding && !isTrim && !isCopy) return null;
         const recvText = this.sideEffectFreeStringLiteralText(expr.expression.expression, seenConsts);
-        if (recvText === null || !/^[\x00-\x7F]*$/.test(recvText)) return null;
+        if (recvText === null) return null;
+        if ((isCaseFolding || isTrim) && !/^[\x00-\x7F]*$/.test(recvText)) return null;
         if (isCaseFolding) {
+            if (expr.arguments.length !== 0) return null;
             return method === "toUpperCase" ? recvText.toUpperCase() : recvText.toLowerCase();
         }
-        return this.sideEffectFreeStringTrimCallText(method, recvText);
+        if (isTrim) {
+            if (expr.arguments.length !== 0) return null;
+            return this.sideEffectFreeStringTrimCallText(method, recvText);
+        }
+        return this.sideEffectFreeStringCopyCallText(method, recvText, expr.arguments, seenConsts);
+    }
+
+    private sideEffectFreeStringElementAccessText(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): string | null {
+        if (!ts.isElementAccessExpression(expr) || !expr.argumentExpression) return null;
+        const recvText = this.sideEffectFreeStringLiteralText(expr.expression, seenConsts);
+        if (recvText === null) return null;
+        const rawIndex = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.argumentExpression, seenConsts);
+        if (rawIndex === null || !Number.isFinite(rawIndex) || !Number.isInteger(rawIndex) || rawIndex < 0) {
+            return null;
+        }
+        if (rawIndex >= recvText.length) return null;
+        return recvText.charAt(rawIndex);
+    }
+
+    private sideEffectFreeStringIntegerArgument(
+        expr: ts.Expression | undefined,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        if (!expr) return null;
+        const value = this.sideEffectFreePrimitiveNumberValue(expr, seenConsts);
+        if (value === null || !Number.isFinite(value)) return null;
+        return Math.trunc(value);
+    }
+
+    private sideEffectFreeStringCopyCallText(
+        method: string,
+        recvText: string,
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): string | null {
+        if (method === "charAt") {
+            if (!this.callIgnoredArgumentsAreSideEffectFree(args, 1, seenConsts)) return null;
+            const index = args.length === 0 ? 0 : this.sideEffectFreeStringIntegerArgument(args[0], seenConsts);
+            if (index === null) return null;
+            return recvText.charAt(index);
+        }
+        if (method === "at") {
+            if (args.length < 1 || !this.callIgnoredArgumentsAreSideEffectFree(args, 1, seenConsts)) return null;
+            const rawIndex = this.sideEffectFreeStringIntegerArgument(args[0], seenConsts);
+            if (rawIndex === null) return null;
+            const index = rawIndex < 0 ? recvText.length + rawIndex : rawIndex;
+            return index >= 0 && index < recvText.length ? recvText.charAt(index) : null;
+        }
+        if (method === "slice") {
+            if (!this.callIgnoredArgumentsAreSideEffectFree(args, 2, seenConsts)) return null;
+            const start = args.length === 0 ? 0 : this.sideEffectFreeStringIntegerArgument(args[0], seenConsts);
+            if (start === null) return null;
+            const end = args.length < 2 || this.isUndefinedExpression(args[1]!)
+                ? undefined
+                : this.sideEffectFreeStringIntegerArgument(args[1], seenConsts);
+            if (end === null) return null;
+            return recvText.slice(start, end);
+        }
+        if (method === "substring") {
+            if (!this.callIgnoredArgumentsAreSideEffectFree(args, 2, seenConsts)) return null;
+            const start = args.length === 0 ? 0 : this.sideEffectFreeStringIntegerArgument(args[0], seenConsts);
+            if (start === null) return null;
+            const end = args.length < 2 || this.isUndefinedExpression(args[1]!)
+                ? undefined
+                : this.sideEffectFreeStringIntegerArgument(args[1], seenConsts);
+            if (end === null) return null;
+            return recvText.substring(start, end);
+        }
+        if (method === "substr") {
+            if (!this.callIgnoredArgumentsAreSideEffectFree(args, 2, seenConsts)) return null;
+            const start = args.length === 0 ? 0 : this.sideEffectFreeStringIntegerArgument(args[0], seenConsts);
+            if (start === null) return null;
+            const length = args.length < 2 || this.isUndefinedExpression(args[1]!)
+                ? undefined
+                : this.sideEffectFreeStringIntegerArgument(args[1], seenConsts);
+            if (length === null) return null;
+            return recvText.substr(start, length);
+        }
+        if (method === "concat") {
+            const pieces = [recvText];
+            for (const arg of args) {
+                const text = this.sideEffectFreeTemplateSubstitutionText(arg, seenConsts);
+                if (text === null) return null;
+                pieces.push(text);
+            }
+            const out = pieces.join("");
+            return out.length <= 4096 ? out : null;
+        }
+        return null;
+    }
+
+    private sideEffectFreeStringNumericCallValue(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        if (
+            !ts.isCallExpression(expr) ||
+            !ts.isPropertyAccessExpression(expr.expression)
+        ) {
+            return null;
+        }
+        const method = expr.expression.name.text;
+        if (
+            method !== "charCodeAt" &&
+            method !== "codePointAt" &&
+            method !== "indexOf" &&
+            method !== "lastIndexOf"
+        ) {
+            return null;
+        }
+        const recvText = this.sideEffectFreeStringLiteralText(expr.expression.expression, seenConsts);
+        if (recvText === null) return null;
+
+        if (method === "charCodeAt") {
+            if (!this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) return null;
+            const index = expr.arguments.length === 0
+                ? 0
+                : this.sideEffectFreeStringIntegerArgument(expr.arguments[0], seenConsts);
+            if (index === null) return null;
+            return recvText.charCodeAt(index);
+        }
+        if (method === "codePointAt") {
+            if (expr.arguments.length < 1 || !this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) return null;
+            const index = this.sideEffectFreeStringIntegerArgument(expr.arguments[0], seenConsts);
+            if (index === null || index < 0 || index >= recvText.length) return null;
+            const value = recvText.codePointAt(index);
+            return value === undefined ? null : value;
+        }
+        if (expr.arguments.length < 1 || !this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 2, seenConsts)) {
+            return null;
+        }
+        const needle = this.sideEffectFreeTemplateSubstitutionText(expr.arguments[0]!, seenConsts);
+        if (needle === null) return null;
+        const position = expr.arguments.length < 2 || this.isUndefinedExpression(expr.arguments[1]!)
+            ? undefined
+            : this.sideEffectFreeStringIntegerArgument(expr.arguments[1], seenConsts);
+        if (position === null) return null;
+        return method === "indexOf"
+            ? recvText.indexOf(needle, position)
+            : recvText.lastIndexOf(needle, position);
+    }
+
+    private sideEffectFreeStringBooleanCallValue(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean | null {
+        if (
+            !ts.isCallExpression(expr) ||
+            !ts.isPropertyAccessExpression(expr.expression)
+        ) {
+            return null;
+        }
+        const method = expr.expression.name.text;
+        if (method !== "includes" && method !== "startsWith" && method !== "endsWith") {
+            return null;
+        }
+        if (expr.arguments.length < 1 || !this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 2, seenConsts)) {
+            return null;
+        }
+        const recvText = this.sideEffectFreeStringLiteralText(expr.expression.expression, seenConsts);
+        const needle = this.sideEffectFreeTemplateSubstitutionText(expr.arguments[0]!, seenConsts);
+        if (recvText === null || needle === null) return null;
+        const position = expr.arguments.length < 2 || this.isUndefinedExpression(expr.arguments[1]!)
+            ? undefined
+            : this.sideEffectFreeStringIntegerArgument(expr.arguments[1], seenConsts);
+        if (position === null) return null;
+        switch (method) {
+            case "includes":
+                return recvText.includes(needle, position);
+            case "startsWith":
+                return recvText.startsWith(needle, position);
+            case "endsWith":
+                return recvText.endsWith(needle, position);
+            default:
+                return null;
+        }
     }
 
     private sideEffectFreeStringTrimCallText(
@@ -24039,6 +24229,10 @@ class Emitter {
         ) {
             return false;
         }
+        if (ts.isCallExpression(unwrapped)) {
+            const primitiveBool = this.sideEffectFreePrimitiveBooleanValue(unwrapped, seenConsts);
+            if (primitiveBool !== null) return primitiveBool;
+        }
         const numericValue = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped, seenConsts);
         if (numericValue !== null) return !Number.isNaN(numericValue) && numericValue !== 0;
         const bigintText = this.sideEffectFreeBigIntLiteralText(unwrapped, seenConsts);
@@ -24256,6 +24450,8 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): boolean | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        const stringBool = this.sideEffectFreeStringBooleanCallValue(unwrapped, seenConsts);
+        if (stringBool !== null) return stringBool;
         if (
             ts.isCallExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
