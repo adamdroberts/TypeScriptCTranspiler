@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Basic escape analysis now stack-allocates non-escaping typed array literals through same-block assignment alias chains such as `alias = values; second = alias; second.push(...)`. Test: `array_literal_stack_alloc_alias_assignment_direct`.
 - Generated-C DCE static `typeof` analysis now folds side-effect-free conditional, logical `&&`/`||`, and nullish `??` expression trees when the resulting operand type is statically known. Test: `generated_c_dce_const`.
 - CommonJS package metadata now recognizes top-level zero-argument local factory functions that return static object literals in whole-value `module.exports = makeApi()` assignments. Test: `node_modules_commonjs_module_exports_local_factory_object`.
 - CommonJS package metadata now recognizes zero-argument IIFEs that return static object literals in whole-value `module.exports = ...` assignments. Test: `node_modules_commonjs_module_exports_iife_object`.
