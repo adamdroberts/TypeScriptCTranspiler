@@ -27866,7 +27866,7 @@ class Emitter {
         if (streamNamed) {
             return this.emitStreamCall(call, streamNamed);
         }
-        const cryptoNamed = ["createHash", "createHmac", "randomBytes", "randomUUID", "timingSafeEqual"]
+        const cryptoNamed = ["createHash", "createHmac", "randomBytes", "randomUUID", "timingSafeEqual", "pbkdf2Sync"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["crypto", "node:crypto"], exported));
         if (cryptoNamed) {
             return this.emitCryptoCall(call, cryptoNamed);
@@ -40620,7 +40620,46 @@ class Emitter {
                 ([left, right]) => `tsc_crypto_timing_safe_equal(${left}, ${right})`,
             );
         }
-        unsupported(call, `crypto.${name} (supported: createHash, createHmac, randomBytes, randomUUID, timingSafeEqual)`);
+        if (name === "pbkdf2Sync") {
+            if (call.arguments.length < 5)
+                unsupported(call, "crypto.pbkdf2Sync expects 5 args: password, salt, iterations, keylen, digest");
+            const password = this.emitExpr(call.arguments[0]!);
+            const salt = this.emitExpr(call.arguments[1]!);
+            const iterations = this.emitExpr(call.arguments[2]!);
+            const keylen = this.emitExpr(call.arguments[3]!);
+            const digest = this.emitExpr(call.arguments[4]!);
+
+            requireNumber(call.arguments[2]!, iterations.ty);
+            requireNumber(call.arguments[3]!, keylen.ty);
+
+            const passIsStr = password.ty.kind === "string";
+            const passIsBuf = password.ty.kind === "buffer";
+            if (!passIsStr && !passIsBuf) {
+                unsupported(call.arguments[0]!, "crypto.pbkdf2Sync password must be a string or Buffer");
+            }
+            const saltIsStr = salt.ty.kind === "string";
+            const saltIsBuf = salt.ty.kind === "buffer";
+            if (!saltIsStr && !saltIsBuf) {
+                unsupported(call.arguments[1]!, "crypto.pbkdf2Sync salt must be a string or Buffer");
+            }
+
+            const suffix = (passIsStr ? "s" : "b") + (saltIsStr ? "s" : "b");
+            const cFn = `tsc_crypto_pbkdf2_sync_${suffix}`;
+
+            return this.emitSequencedExpr(
+                T_BUFFER,
+                [
+                    { value: password, target: passIsStr ? T_STRING : T_BUFFER, node: call.arguments[0]! },
+                    { value: salt, target: saltIsStr ? T_STRING : T_BUFFER, node: call.arguments[1]! },
+                    { value: iterations, target: T_NUMBER, node: call.arguments[2]! },
+                    { value: keylen, target: T_NUMBER, node: call.arguments[3]! },
+                    { value: digest, target: T_STRING, node: call.arguments[4]! },
+                    ...this.ignoredArgumentSpecs(call.arguments, 5),
+                ],
+                ([p, s, i, k, d]) => `${cFn}(${p}, ${s}, ${i}, ${k}, ${d})`
+            );
+        }
+        unsupported(call, `crypto.${name} (supported: createHash, createHmac, randomBytes, randomUUID, timingSafeEqual, pbkdf2Sync)`);
     }
 
     private validateCryptoRandomUUIDOptions(options: ts.Expression, label: string): void {

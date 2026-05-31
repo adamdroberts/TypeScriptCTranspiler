@@ -1,0 +1,10 @@
+sha256 ss: 632c2812e46d4604102ba7618e9d6d7d2f8128f6266b4a03264d2a0460b7dcb3
+sha1 sb: 6e88be8bad7eae9d9e10aa061224034fed48d03f
+sha512 bs: afe6c5530785b6cc6b1c6453384731bd5ee432ee549fd42fb6695779ad8a1c5bf59de69c48f774efc4007d5298f9033c0241d5ab69305e7b64eceeb8d834cfec
+sha256 bb: 632c2812e46d4604102ba7618e9d6d7d
+named import: true
+namespace import: true
+ignored args: true 42
+error: crypto.pbkdf2Sync: iterations must be a positive finite number
+error: crypto.pbkdf2Sync: keylen must be a non-negative finite number
+error: crypto.pbkdf2Sync: only sha1, sha256, and sha512 are supported

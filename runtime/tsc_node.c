@@ -224,6 +224,76 @@ bool tsc_crypto_timing_safe_equal(const tsc_buffer_t* a, const tsc_buffer_t* b) 
     return diff == 0;
 }
 
+tsc_buffer_t* tsc_crypto_pbkdf2_sync_impl(const void* password_data, size_t password_len, const void* salt_data, size_t salt_len, double iterations, double keylen, const tsc_str_t* digest) {
+    if (isnan(iterations) || isinf(iterations) || iterations <= 0) {
+        tsc_throw_str(tsc_str_from_cstr("crypto.pbkdf2Sync: iterations must be a positive finite number"));
+    }
+    if (isnan(keylen) || isinf(keylen) || keylen < 0) {
+        tsc_throw_str(tsc_str_from_cstr("crypto.pbkdf2Sync: keylen must be a non-negative finite number"));
+    }
+
+    const EVP_MD* md = NULL;
+    if (str_lit_eq(digest, "sha1")) {
+        md = EVP_sha1();
+    } else if (str_lit_eq(digest, "sha256")) {
+        md = EVP_sha256();
+    } else if (str_lit_eq(digest, "sha512")) {
+        md = EVP_sha512();
+    } else {
+        tsc_throw_str(tsc_str_from_cstr("crypto.pbkdf2Sync: only sha1, sha256, and sha512 are supported"));
+    }
+
+    tsc_buffer_t* out = tsc_buffer_alloc(keylen, 0.0);
+    if (out->len == 0) {
+        return out;
+    }
+
+    int res = PKCS5_PBKDF2_HMAC(
+        (const char*)password_data, (int)password_len,
+        (const unsigned char*)salt_data, (int)salt_len,
+        (int)iterations, md, (int)out->len, out->data
+    );
+
+    if (res != 1) {
+        tsc_throw_str(tsc_str_from_cstr("crypto.pbkdf2Sync: PKCS5_PBKDF2_HMAC failed"));
+    }
+
+    return out;
+}
+
+tsc_buffer_t* tsc_crypto_pbkdf2_sync_ss(const tsc_str_t* password, const tsc_str_t* salt, double iterations, double keylen, const tsc_str_t* digest) {
+    const void* p_data = password ? (const void*)password->data : "";
+    size_t p_len = password ? password->len : 0;
+    const void* s_data = salt ? (const void*)salt->data : "";
+    size_t s_len = salt ? salt->len : 0;
+    return tsc_crypto_pbkdf2_sync_impl(p_data, p_len, s_data, s_len, iterations, keylen, digest);
+}
+
+tsc_buffer_t* tsc_crypto_pbkdf2_sync_sb(const tsc_str_t* password, const tsc_buffer_t* salt, double iterations, double keylen, const tsc_str_t* digest) {
+    const void* p_data = password ? (const void*)password->data : "";
+    size_t p_len = password ? password->len : 0;
+    const void* s_data = salt ? (const void*)salt->data : NULL;
+    size_t s_len = salt ? salt->len : 0;
+    return tsc_crypto_pbkdf2_sync_impl(p_data, p_len, s_data, s_len, iterations, keylen, digest);
+}
+
+tsc_buffer_t* tsc_crypto_pbkdf2_sync_bs(const tsc_buffer_t* password, const tsc_str_t* salt, double iterations, double keylen, const tsc_str_t* digest) {
+    const void* p_data = password ? (const void*)password->data : NULL;
+    size_t p_len = password ? password->len : 0;
+    const void* s_data = salt ? (const void*)salt->data : "";
+    size_t s_len = salt ? salt->len : 0;
+    return tsc_crypto_pbkdf2_sync_impl(p_data, p_len, s_data, s_len, iterations, keylen, digest);
+}
+
+tsc_buffer_t* tsc_crypto_pbkdf2_sync_bb(const tsc_buffer_t* password, const tsc_buffer_t* salt, double iterations, double keylen, const tsc_str_t* digest) {
+    const void* p_data = password ? (const void*)password->data : NULL;
+    size_t p_len = password ? password->len : 0;
+    const void* s_data = salt ? (const void*)salt->data : NULL;
+    size_t s_len = salt ? salt->len : 0;
+    return tsc_crypto_pbkdf2_sync_impl(p_data, p_len, s_data, s_len, iterations, keylen, digest);
+}
+
+
 void hash_update_bytes(tsc_hash_t* h, const void* data, size_t len) {
     if (h->finalized) return;
     if (len == 0) return;
