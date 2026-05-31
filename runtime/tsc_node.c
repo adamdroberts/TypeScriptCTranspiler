@@ -225,6 +225,48 @@ tsc_str_t* tsc_crypto_random_uuid(void) {
     return out;
 }
 
+tsc_buffer_t* tsc_crypto_random_fill_sync(tsc_buffer_t* buffer, double offset, double size, bool offset_is_null, bool size_is_null) {
+    if (!buffer) {
+        tsc_throw_str(tsc_str_from_cstr("crypto.randomFillSync: buffer is null"));
+        return NULL;
+    }
+    size_t off = 0;
+    if (!offset_is_null) {
+        if (isnan(offset) || isinf(offset) || offset < 0) {
+            tsc_throw_str(tsc_str_from_cstr("crypto.randomFillSync: offset must be a non-negative finite number"));
+            return NULL;
+        }
+        off = (size_t)offset;
+        if (off > buffer->len) {
+            tsc_throw_str(tsc_str_from_cstr("crypto.randomFillSync: offset is out of bounds"));
+            return NULL;
+        }
+    }
+    size_t len = buffer->len - off;
+    if (!size_is_null) {
+        if (isnan(size) || isinf(size) || size < 0) {
+            tsc_throw_str(tsc_str_from_cstr("crypto.randomFillSync: size must be a non-negative finite number"));
+            return NULL;
+        }
+        len = (size_t)size;
+        if (off + len > buffer->len) {
+            tsc_throw_str(tsc_str_from_cstr("crypto.randomFillSync: offset + size is out of bounds"));
+            return NULL;
+        }
+    }
+    if (len == 0) {
+        return buffer;
+    }
+    uint8_t* ptr = buffer->data + off;
+    if (RAND_bytes(ptr, (int)len) != 1) {
+        for (size_t i = 0; i < len; i++) {
+            ptr[i] = (uint8_t)(rand() & 0xff);
+        }
+    }
+    return buffer;
+}
+
+
 bool tsc_crypto_timing_safe_equal(const tsc_buffer_t* a, const tsc_buffer_t* b) {
     if (!a || !b || a->len != b->len) {
         tsc_throw_str(tsc_str_from_cstr("crypto.timingSafeEqual: inputs must have the same byte length"));
@@ -1379,10 +1421,11 @@ tsc_url_search_params_t* tsc_url_search_params_new(const tsc_str_t* init) {
     return params;
 }
 
-void tsc_url_search_params_delete(tsc_url_search_params_t* params, const tsc_str_t* name) {
+void tsc_url_search_params_delete(tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value) {
     size_t w = 0;
     for (size_t i = 0; i < params->len; i++) {
-        if (!tsc_str_eq(params->items[i].name, name)) {
+        bool match = tsc_str_eq(params->items[i].name, name) && (!value || tsc_str_eq(params->items[i].value, value));
+        if (!match) {
             params->items[w++] = params->items[i];
         }
     }
@@ -1396,8 +1439,13 @@ tsc_str_t* tsc_url_search_params_get(const tsc_url_search_params_t* params, cons
     return NULL;
 }
 
-bool tsc_url_search_params_has(const tsc_url_search_params_t* params, const tsc_str_t* name) {
-    return tsc_url_search_params_get(params, name) != NULL;
+bool tsc_url_search_params_has(const tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value) {
+    for (size_t i = 0; i < params->len; i++) {
+        if (tsc_str_eq(params->items[i].name, name) && (!value || tsc_str_eq(params->items[i].value, value))) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void tsc_url_search_params_set(tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value) {
@@ -1674,6 +1722,46 @@ tsc_dns_resolve4_result_t tsc_dns_resolve4(tsc_str_t* hostname) {
     freeaddrinfo(result);
     if (out.addresses->len == 0) {
         out.error = tsc_str_from_lit("dns.resolve4: no address found", 30);
+    }
+    return out;
+}
+
+tsc_dns_resolve6_result_t tsc_dns_resolve6(tsc_str_t* hostname) {
+    tsc_dns_resolve6_result_t out;
+    out.error = NULL;
+    out.addresses = NULL;
+    if (!hostname) {
+        out.error = tsc_str_from_lit("dns.resolve6: hostname required", 31);
+        return out;
+    }
+    char* host = cstr_dup(hostname);
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET6;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = 0;
+    struct addrinfo* result = NULL;
+    int rc = getaddrinfo(host, NULL, &hints, &result);
+    free(host);
+    if (rc != 0) {
+        out.error = tsc_str_from_cstr(gai_strerror(rc));
+        return out;
+    }
+    out.addresses = tsc_array_new(sizeof(tsc_str_t*), 4);
+    char buf[INET6_ADDRSTRLEN];
+    for (struct addrinfo* cur = result; cur; cur = cur->ai_next) {
+        void* src = NULL;
+        if (cur->ai_family == AF_INET6) {
+            src = &((struct sockaddr_in6*)cur->ai_addr)->sin6_addr;
+        }
+        if (src && inet_ntop(cur->ai_family, src, buf, sizeof(buf))) {
+            tsc_str_t* s = tsc_str_from_cstr(buf);
+            tsc_array_push_raw(out.addresses, &s);
+        }
+    }
+    freeaddrinfo(result);
+    if (out.addresses->len == 0) {
+        out.error = tsc_str_from_lit("dns.resolve6: no address found", 30);
     }
     return out;
 }
@@ -5278,6 +5366,34 @@ static tsc_str_t* querystring_escape(const tsc_str_t* input) {
     out->len = j;
     w[j] = '\0';
     return out;
+}
+
+tsc_str_t* tsc_querystring_escape(const tsc_str_t* str) {
+    return querystring_escape(str);
+}
+
+static tsc_str_t* querystring_unescape(const tsc_str_t* input) {
+    if (!input) return tsc_str_from_lit("", 0);
+    tsc_str_t* out = str_alloc(input->len);
+    char* w = (char*)out->data;
+    size_t j = 0;
+    for (size_t i = 0; i < input->len; i++) {
+        if (input->data[i] == '%' && i + 2 < input->len && url_hex_value(input->data[i + 1]) >= 0 && url_hex_value(input->data[i + 2]) >= 0) {
+            int hi = url_hex_value(input->data[i + 1]);
+            int lo = url_hex_value(input->data[i + 2]);
+            w[j++] = (char)((hi << 4) | lo);
+            i += 2;
+        } else {
+            w[j++] = input->data[i];
+        }
+    }
+    out->len = j;
+    w[j] = '\0';
+    return out;
+}
+
+tsc_str_t* tsc_querystring_unescape(const tsc_str_t* str) {
+    return querystring_unescape(str);
 }
 
 tsc_value_t tsc_querystring_parse(const tsc_str_t* str, tsc_value_t sep_val, tsc_value_t eq_val, tsc_value_t options_val) {
