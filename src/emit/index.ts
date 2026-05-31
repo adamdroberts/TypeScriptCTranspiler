@@ -20149,8 +20149,11 @@ class Emitter {
                 if (
                     ts.isVariableDeclaration(parent) &&
                     parent.initializer === n &&
-                    this.nonEscapingObjectAliasUsesAreSafe(parent)
+                    this.nonEscapingObjectAliasUsesAreSafe(parent, new Set([sym]))
                 ) {
+                    return;
+                }
+                if (this.nonEscapingObjectAssignmentAliasUseIsSafe(n, scope, new Set([sym]))) {
                     return;
                 }
                 if (
@@ -20166,7 +20169,7 @@ class Emitter {
                 if (
                     ts.isCallExpression(parent) &&
                     this.nonEscapingObjectPrototypeValueOfCallArgument(parent, n) &&
-                    this.nonEscapingObjectValueOfResultUseIsSafe(parent)
+                    this.nonEscapingObjectValueOfResultUseIsSafe(parent, scope, new Set([sym]))
                 ) {
                     return;
                 }
@@ -20212,8 +20215,11 @@ class Emitter {
                 if (
                     ts.isVariableDeclaration(parent) &&
                     parent.initializer === n &&
-                    this.nonEscapingObjectAliasUsesAreSafe(parent)
+                    this.nonEscapingObjectAliasUsesAreSafe(parent, new Set([sym]))
                 ) {
+                    return;
+                }
+                if (this.nonEscapingObjectAssignmentAliasUseIsSafe(n, scope, new Set([sym]))) {
                     return;
                 }
                 if (
@@ -20229,7 +20235,7 @@ class Emitter {
                 if (
                     ts.isCallExpression(parent) &&
                     this.nonEscapingObjectPrototypeValueOfCallArgument(parent, n) &&
-                    this.nonEscapingObjectValueOfResultUseIsSafe(parent)
+                    this.nonEscapingObjectValueOfResultUseIsSafe(parent, scope, new Set([sym]))
                 ) {
                     return;
                 }
@@ -20242,20 +20248,28 @@ class Emitter {
         return escapes ? null : { cls: mapped.className, init, targetType };
     }
 
-    private nonEscapingObjectAliasUsesAreSafe(d: ts.VariableDeclaration): boolean {
+    private nonEscapingObjectAliasUsesAreSafe(
+        d: ts.VariableDeclaration,
+        visitedSymbols = new Set<ts.Symbol>(),
+    ): boolean {
         if (!ts.isIdentifier(d.name)) return false;
         const sym = this.symbolForIdentifier(d.name);
         if (!sym) return false;
+        if (visitedSymbols.has(sym)) return false;
+        visitedSymbols.add(sym);
         const stmt = d.parent.parent;
         const scope = stmt?.parent;
-        if (!scope || !ts.isBlock(scope)) return false;
+        if (!scope || !ts.isBlock(scope)) {
+            visitedSymbols.delete(sym);
+            return false;
+        }
         let safe = true;
         const visit = (n: ts.Node): void => {
             if (!safe) return;
             if (n !== scope && ts.isFunctionLike(n)) return;
             if (ts.isIdentifier(n) && this.checker.getSymbolAtLocation(n) === sym) {
                 if (n === d.name) return;
-                if (!this.nonEscapingObjectAliasUseIsSafe(n)) {
+                if (!this.nonEscapingObjectAliasUseIsSafe(n, scope, visitedSymbols)) {
                     safe = false;
                     return;
                 }
@@ -20263,16 +20277,24 @@ class Emitter {
             ts.forEachChild(n, visit);
         };
         visit(scope);
+        visitedSymbols.delete(sym);
         return safe;
     }
 
-    private nonEscapingObjectAliasUseIsSafe(n: ts.Identifier): boolean {
+    private nonEscapingObjectAliasUseIsSafe(
+        n: ts.Identifier,
+        scope: ts.Block,
+        visitedSymbols: Set<ts.Symbol>,
+    ): boolean {
         const parent = n.parent;
         if (
             ts.isVariableDeclaration(parent) &&
             parent.initializer === n &&
-            this.nonEscapingObjectAliasUsesAreSafe(parent)
+            this.nonEscapingObjectAliasUsesAreSafe(parent, visitedSymbols)
         ) {
+            return true;
+        }
+        if (this.nonEscapingObjectAssignmentAliasUseIsSafe(n, scope, visitedSymbols)) {
             return true;
         }
         if (ts.isPropertyAccessExpression(parent) && parent.expression === n) {
@@ -20290,7 +20312,46 @@ class Emitter {
         }
         return ts.isCallExpression(parent) &&
             this.nonEscapingObjectPrototypeValueOfCallArgument(parent, n) &&
-            this.nonEscapingObjectValueOfResultUseIsSafe(parent);
+            this.nonEscapingObjectValueOfResultUseIsSafe(parent, scope, visitedSymbols);
+    }
+
+    private nonEscapingObjectAssignmentAliasUseIsSafe(
+        n: ts.Identifier,
+        scope: ts.Block,
+        visitedSymbols: Set<ts.Symbol>,
+    ): boolean {
+        const parent = n.parent;
+        if (
+            !ts.isBinaryExpression(parent) ||
+            parent.operatorToken.kind !== ts.SyntaxKind.EqualsToken
+        ) {
+            return false;
+        }
+        if (parent.right === n && ts.isIdentifier(parent.left)) {
+            const aliasDecl = this.nonEscapingObjectSameBlockAliasDeclaration(parent.left, scope);
+            return !!aliasDecl && this.nonEscapingObjectAliasUsesAreSafe(aliasDecl, visitedSymbols);
+        }
+        if (parent.left === n && ts.isIdentifier(parent.right)) {
+            const source = this.checker.getSymbolAtLocation(parent.right);
+            return !!source && visitedSymbols.has(source);
+        }
+        return false;
+    }
+
+    private nonEscapingObjectSameBlockAliasDeclaration(
+        alias: ts.Identifier,
+        scope: ts.Block,
+    ): ts.VariableDeclaration | null {
+        const aliasSym = this.checker.getSymbolAtLocation(alias);
+        const aliasDecl = aliasSym?.valueDeclaration;
+        if (
+            aliasDecl &&
+            ts.isVariableDeclaration(aliasDecl) &&
+            aliasDecl.parent.parent?.parent === scope
+        ) {
+            return aliasDecl;
+        }
+        return null;
     }
 
     private nonEscapingObjectSafeCallArgument(call: ts.CallExpression, arg: ts.Expression): boolean {
@@ -20371,14 +20432,28 @@ class Emitter {
         );
     }
 
-    private nonEscapingObjectValueOfResultUseIsSafe(expr: ts.Expression): boolean {
+    private nonEscapingObjectValueOfResultUseIsSafe(
+        expr: ts.Expression,
+        scope?: ts.Block,
+        visitedSymbols = new Set<ts.Symbol>(),
+    ): boolean {
         const parent = expr.parent;
         if (
             ts.isVariableDeclaration(parent) &&
             parent.initializer === expr &&
-            this.nonEscapingObjectAliasUsesAreSafe(parent)
+            this.nonEscapingObjectAliasUsesAreSafe(parent, visitedSymbols)
         ) {
             return true;
+        }
+        if (
+            ts.isBinaryExpression(parent) &&
+            parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            parent.right === expr &&
+            ts.isIdentifier(parent.left) &&
+            scope
+        ) {
+            const aliasDecl = this.nonEscapingObjectSameBlockAliasDeclaration(parent.left, scope);
+            return !!aliasDecl && this.nonEscapingObjectAliasUsesAreSafe(aliasDecl, visitedSymbols);
         }
         if (ts.isPropertyAccessExpression(parent) && parent.expression === expr) {
             return true;
