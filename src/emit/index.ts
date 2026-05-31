@@ -23842,7 +23842,22 @@ class Emitter {
         if (ts.isObjectLiteralExpression(expr)) {
             return this.emitSimpleLazyResumeObjectLiteral(expr, nextArg);
         }
-        unsupported(expr, "lazy generator suspended yield expression currently supports direct, parenthesized, unary, typeof, void, binary, conditional, array literal, and object literal expressions");
+        if (ts.isPropertyAccessExpression(expr)) {
+            const recv = this.singleYieldExpressionInExpression(expr.expression)
+                ? this.emitSimpleLazyResumeExpression(expr.expression, nextArg)
+                : this.emitExpr(expr.expression);
+            return this.emitPropertyAccess(expr, recv);
+        }
+        if (ts.isElementAccessExpression(expr)) {
+            const recv = this.singleYieldExpressionInExpression(expr.expression)
+                ? this.emitSimpleLazyResumeExpression(expr.expression, nextArg)
+                : this.emitExpr(expr.expression);
+            const arg = this.singleYieldExpressionInExpression(expr.argumentExpression)
+                ? this.emitSimpleLazyResumeExpression(expr.argumentExpression, nextArg)
+                : this.emitExpr(expr.argumentExpression);
+            return this.emitElementAccess(expr, recv, arg);
+        }
+        unsupported(expr, "lazy generator suspended yield expression currently supports direct, parenthesized, unary, typeof, void, binary, conditional, array literal, object literal, property access, and element access expressions");
     }
 
     private emitSimpleLazyResumeArrayLiteral(al: ts.ArrayLiteralExpression, nextArg: string): EmitResult {
@@ -50217,7 +50232,7 @@ class Emitter {
         );
     }
 
-    private emitPropertyAccess(pa: ts.PropertyAccessExpression): EmitResult {
+    private emitPropertyAccess(pa: ts.PropertyAccessExpression, precomputedReceiver?: EmitResult): EmitResult {
         const enumValue = this.enumConstantValue(pa);
         if (typeof enumValue === "number") {
             return { c: enumValue.toString(), ty: T_NUMBER };
@@ -50507,7 +50522,7 @@ class Emitter {
                 }
             }
         }
-        const recv = this.emitExpr(pa.expression);
+        const recv = precomputedReceiver ?? this.emitExpr(pa.expression);
         const isOpt = !!pa.questionDotToken;
         if (recv.ty.kind === "string" && pa.name.text === "length") {
             return { c: `tsc_str_length(${recv.c})`, ty: T_NUMBER };
@@ -50800,16 +50815,20 @@ class Emitter {
         unsupported(expr, "only numeric enum initializers are supported");
     }
 
-    private emitElementAccess(ea: ts.ElementAccessExpression): EmitResult {
+    private emitElementAccess(
+        ea: ts.ElementAccessExpression,
+        precomputedReceiver?: EmitResult,
+        precomputedArgument?: EmitResult,
+    ): EmitResult {
         if (this.isProcessEnvObject(ea.expression)) {
-            const key = this.emitExpr(ea.argumentExpression);
+            const key = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
             return this.emitSequencedCall("tsc_process_env_get", T_STRING, [
                 { value: key, target: T_STRING, node: ea.argumentExpression },
             ]);
         }
-        const recv = this.emitExpr(ea.expression);
+        const recv = precomputedReceiver ?? this.emitExpr(ea.expression);
         if (recv.ty.kind === "array") {
-            const idx = this.emitExpr(ea.argumentExpression);
+            const idx = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
             requireNumber(ea.argumentExpression, idx.ty);
             const et = recv.ty.elem!;
             return {
@@ -50840,17 +50859,17 @@ class Emitter {
             unsupported(ea.argumentExpression, "Object.entries tuple index must be 0 or 1");
         }
         if (recv.ty.kind === "string") {
-            const idx = this.emitExpr(ea.argumentExpression);
+            const idx = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
             requireNumber(ea.argumentExpression, idx.ty);
             return { c: `tsc_str_char_at(${recv.c}, ${idx.c})`, ty: T_STRING };
         }
         if (recv.ty.kind === "buffer") {
-            const idx = this.emitExpr(ea.argumentExpression);
+            const idx = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
             requireNumber(ea.argumentExpression, idx.ty);
             return { c: `tsc_buffer_get(${recv.c}, ${idx.c})`, ty: T_NUMBER };
         }
         if (recv.ty.kind === "value") {
-            const idx = this.emitExpr(ea.argumentExpression);
+            const idx = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
             if (idx.ty.kind === "number") {
                 return { c: `tsc_value_get_index(${recv.c}, ${idx.c})`, ty: T_VALUE };
             }
