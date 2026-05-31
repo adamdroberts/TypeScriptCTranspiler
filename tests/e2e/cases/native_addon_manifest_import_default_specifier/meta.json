@@ -1,0 +1,3 @@
+{
+  "description": "manifest-backed native-addon import { default as value } uses the embedded Node bridge addon object"
+}
