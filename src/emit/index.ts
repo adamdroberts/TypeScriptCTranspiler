@@ -22832,6 +22832,68 @@ class Emitter {
             const inner = this.emitSimpleLazyResumeExpression(expr.expression, nextArg);
             return { c: `(${inner.c})`, ty: inner.ty };
         }
+        if (ts.isPrefixUnaryExpression(expr)) {
+            const inner = this.emitSimpleLazyResumeExpression(expr.operand, nextArg);
+            const op = expr.operator;
+            if (op === ts.SyntaxKind.ExclamationToken) {
+                return { c: `(!${this.truthyExprFromEmitResult(inner, expr.operand)})`, ty: T_BOOLEAN };
+            }
+            if (op === ts.SyntaxKind.MinusToken) {
+                if (inner.ty.kind === "value") {
+                    return { c: `tsc_value_neg(${inner.c})`, ty: T_VALUE };
+                }
+                if (inner.ty.kind === "bigint") {
+                    return { c: `tsc_bigint_neg(${inner.c})`, ty: T_BIGINT };
+                }
+                requireNumber(expr, inner.ty);
+                return { c: `(-${inner.c})`, ty: T_NUMBER };
+            }
+            if (op === ts.SyntaxKind.PlusToken) {
+                if (inner.ty.kind === "value") {
+                    return { c: `tsc_value_pos(${inner.c})`, ty: T_VALUE };
+                }
+                requireNumber(expr, inner.ty);
+                return { c: `(+${inner.c})`, ty: T_NUMBER };
+            }
+            if (op === ts.SyntaxKind.TildeToken) {
+                if (inner.ty.kind === "value") {
+                    return { c: `tsc_value_bit_not(${inner.c})`, ty: T_VALUE };
+                }
+                requireNumber(expr, inner.ty);
+                return { c: `((double)(~(int32_t)(${inner.c})))`, ty: T_NUMBER };
+            }
+            unsupported(expr, `lazy generator suspended yield prefix operator ${ts.SyntaxKind[op]}`);
+        }
+        if (ts.isTypeOfExpression(expr)) {
+            const inner = this.emitSimpleLazyResumeExpression(expr.expression, nextArg);
+            const result = this.typeofName(expr.expression, inner.ty);
+            const nullishResult = this.nullishTypeofName(expr.expression);
+            if (inner.ty.kind === "value") {
+                return { c: `tsc_value_typeof(${inner.c})`, ty: T_STRING };
+            }
+            if (nullishResult && isPointerKind(inner.ty) && nullishResult !== result) {
+                const tv = this.freshTemp("_typeof");
+                return {
+                    c:
+                        `({ ${inner.ty.c} ${tv} = ${inner.c}; ` +
+                        `${tv} != NULL ? ${this.stringLit(result)} : ${this.stringLit(nullishResult)}; })`,
+                    ty: T_STRING,
+                };
+            }
+            return {
+                c:
+                    `({ (void)(${inner.c}); ` +
+                    `${this.stringLit(result)}; })`,
+                ty: T_STRING,
+            };
+        }
+        if (ts.isVoidExpression(expr)) {
+            const inner = this.emitSimpleLazyResumeExpression(expr.expression, nextArg);
+            return {
+                c: `({ (void)(${inner.c}); NULL; })`,
+                ty: T_VOID,
+            };
+        }
         if (ts.isBinaryExpression(expr)) {
             const left = this.singleYieldExpressionInExpression(expr.left)
                 ? this.emitSimpleLazyResumeExpression(expr.left, nextArg)
