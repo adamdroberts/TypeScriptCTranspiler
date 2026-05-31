@@ -28015,12 +28015,12 @@ class Emitter {
         if (utilNamed) {
             return this.emitUtilCall(call, utilNamed);
         }
-        const dnsNamed = ["lookup", "resolve4", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
+        const dnsNamed = ["lookup", "resolve4", "resolve6", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["dns", "node:dns"], exported));
         if (dnsNamed) {
             return this.emitDnsCall(call, dnsNamed);
         }
-        const dnsPromisesNamed = ["lookup", "resolve4", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
+        const dnsPromisesNamed = ["lookup", "resolve4", "resolve6", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["dns/promises", "node:dns/promises"], exported));
         if (dnsPromisesNamed) {
             return this.emitDnsPromisesCall(call, dnsPromisesNamed);
@@ -34291,6 +34291,7 @@ class Emitter {
         if (
             method !== "lookup" &&
             method !== "resolve4" &&
+            method !== "resolve6" &&
             method !== "lookupService" &&
             method !== "getDefaultResultOrder" &&
             method !== "setDefaultResultOrder"
@@ -34398,6 +34399,14 @@ class Emitter {
                 };
                 const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, addresses], callbackNode);
                 return `({ tsc_dns_resolve4_result_t ${result} = tsc_dns_resolve4(${hostC}); (void)${callbackCall}; })`;
+            }
+            if (method === "resolve6") {
+                const addresses: EmitResult = {
+                    c: `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`,
+                    ty: arrayType(T_STRING),
+                };
+                const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, addresses], callbackNode);
+                return `({ tsc_dns_resolve6_result_t ${result} = tsc_dns_resolve6(${hostC}); (void)${callbackCall}; })`;
             }
             const lookupOptions = this.dnsLookupOptions(optionsNode);
             if (lookupOptions.all) {
@@ -34567,6 +34576,7 @@ class Emitter {
         if (
             method !== "lookup" &&
             method !== "resolve4" &&
+            method !== "resolve6" &&
             method !== "lookupService" &&
             method !== "getDefaultResultOrder" &&
             method !== "setDefaultResultOrder"
@@ -34638,6 +34648,15 @@ class Emitter {
                 const addresses = `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`;
                 return `({ ` +
                     `tsc_dns_resolve4_result_t ${result} = tsc_dns_resolve4(${hostC}); ` +
+                    `tsc_promise_t* ${out}; ` +
+                    `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
+                    `${out} = tsc_promise_resolve(tsc_value_array(${addresses})); } ` +
+                    `${out}; })`;
+            }
+            if (method === "resolve6") {
+                const addresses = `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`;
+                return `({ ` +
+                    `tsc_dns_resolve6_result_t ${result} = tsc_dns_resolve6(${hostC}); ` +
                     `tsc_promise_t* ${out}; ` +
                     `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
                     `${out} = tsc_promise_resolve(tsc_value_array(${addresses})); } ` +

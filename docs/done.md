@@ -566,6 +566,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Direct named, aliased named, namespace, and default imports from `"dns/promises"` / `"node:dns/promises"` route to the same immediate `dns.promises.lookup` subset. Test: `dns_promises_subpath_import`
 - Aliased named imports for DNS hint constants such as `V4MAPPED as hint` lower correctly in expressions and DNS lookup options. Test: `dns_lookup_hints`
 - `dns.resolve4(hostname[, options], callback)` and `dns.promises.resolve4(hostname[, options])` are implemented as immediate subsets using host resolver behavior to resolve IPv4 address records, returning/passing a simple `string[]` array. Ignored trailing arguments and side-effectful options/defaults are evaluated. Named, aliased named, default, namespace, and subpath imports from `"dns"`, `"node:dns"`, `"dns/promises"`, and `"node:dns/promises"` are supported. Test: `dns_resolve4`
+- `dns.resolve6(hostname[, options], callback)` and `dns.promises.resolve6(hostname[, options])` are implemented as immediate subsets using host resolver behavior to resolve IPv6 address records, returning/passing a simple `string[]` array. Ignored trailing arguments and side-effectful options/defaults are evaluated. Named, aliased named, default, namespace, and subpath imports from `"dns"`, `"node:dns"`, `"dns/promises"`, and `"node:dns/promises"` are supported. Test: `dns_resolve6`
 - `dns.lookupService(address, port, callback)` and `dns.promises.lookupService(address, port)` are implemented as immediate subsets using `getnameinfo` host resolver behavior to resolve an IP address and port to a hostname and service name, returning/passing a fulfilled object `{ hostname, service }` or callback arguments `(err, hostname, service)`. Ignored trailing arguments are evaluated. Named, aliased named, default, namespace, and subpath imports from `"dns"`, `"node:dns"`, `"dns/promises"`, and `"node:dns/promises"` are supported. Test: `dns_lookup_service`
 - `dns.getDefaultResultOrder(...ignored)` / `dns.setDefaultResultOrder(order, ...ignored)` and the matching `dns.promises` / `"dns/promises"` helpers maintain a process-local bounded default result order of `"verbatim"`, `"ipv4first"`, or `"ipv6first"`, validating invalid orders and preserving ignored argument evaluation across named, default, namespace, and subpath imports. Test: `dns_default_result_order`
 
@@ -1273,6 +1274,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dns_promises_lookup` | immediate dns.promises.lookup fulfilled result objects with ignored extras |
 | `dns_promises_subpath_import` | direct dns/promises named, namespace, and default imports |
 | `dns_resolve4` | callback and promise forms of dns.resolve4 and dns.promises.resolve4 |
+| `dns_resolve6` | callback and promise forms of dns.resolve6 and dns.promises.resolve6 |
 | `dns_lookup_service` | callback and promise forms of dns.lookupService and dns.promises.lookupService |
 | `dns_default_result_order` | dns getDefaultResultOrder and setDefaultResultOrder for dns and dns/promises import styles |
 | `enums` | numeric enum constants |

@@ -1610,6 +1610,46 @@ tsc_dns_resolve4_result_t tsc_dns_resolve4(tsc_str_t* hostname) {
     return out;
 }
 
+tsc_dns_resolve6_result_t tsc_dns_resolve6(tsc_str_t* hostname) {
+    tsc_dns_resolve6_result_t out;
+    out.error = NULL;
+    out.addresses = NULL;
+    if (!hostname) {
+        out.error = tsc_str_from_lit("dns.resolve6: hostname required", 31);
+        return out;
+    }
+    char* host = cstr_dup(hostname);
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET6;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = 0;
+    struct addrinfo* result = NULL;
+    int rc = getaddrinfo(host, NULL, &hints, &result);
+    free(host);
+    if (rc != 0) {
+        out.error = tsc_str_from_cstr(gai_strerror(rc));
+        return out;
+    }
+    out.addresses = tsc_array_new(sizeof(tsc_str_t*), 4);
+    char buf[INET6_ADDRSTRLEN];
+    for (struct addrinfo* cur = result; cur; cur = cur->ai_next) {
+        void* src = NULL;
+        if (cur->ai_family == AF_INET6) {
+            src = &((struct sockaddr_in6*)cur->ai_addr)->sin6_addr;
+        }
+        if (src && inet_ntop(cur->ai_family, src, buf, sizeof(buf))) {
+            tsc_str_t* s = tsc_str_from_cstr(buf);
+            tsc_array_push_raw(out.addresses, &s);
+        }
+    }
+    freeaddrinfo(result);
+    if (out.addresses->len == 0) {
+        out.error = tsc_str_from_lit("dns.resolve6: no address found", 30);
+    }
+    return out;
+}
+
 tsc_dns_lookup_service_result_t tsc_dns_lookup_service(tsc_str_t* address, double port) {
     tsc_dns_lookup_service_result_t out;
     out.error = NULL;
