@@ -707,6 +707,7 @@ tsc_promise_t* tsc_promise_reject(tsc_value_t reason);
 tsc_promise_t* tsc_promise_pending(void);
 tsc_promise_t* tsc_promise_adopt(tsc_promise_t* promise);
 void tsc_promise_fulfill_in_place(tsc_promise_t* p, tsc_value_t value);
+void tsc_promise_fulfill_in_place_ptr(tsc_promise_t* p, void* ptr_result);
 void tsc_promise_reject_in_place(tsc_promise_t* p, tsc_value_t reason);
 void tsc_promise_adopt_into(tsc_promise_t* dest, tsc_promise_t* source);
 void tsc_promise_add_callback(tsc_promise_t* p, void (*fn)(void*), void* env);
