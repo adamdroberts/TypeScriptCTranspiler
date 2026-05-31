@@ -803,6 +803,12 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-object-default-package": cjsPackage("tsc2c-cjs-object-default-package", {
         "index.js": 'module.exports = { label: "object-default", count: 7 };\n',
     }),
+    "tsc2c-cjs-module-iife-object-arrow": cjsPackage("tsc2c-cjs-module-iife-object-arrow", {
+        "index.js": 'module.exports = (() => ({\n  label: "iife-arrow",\n  count: 123,\n  double: (value) => value * 2,\n  default: "iife-arrow-default"\n}))();\n',
+    }),
+    "tsc2c-cjs-module-iife-object-function": cjsPackage("tsc2c-cjs-module-iife-object-function", {
+        "index.js": 'module.exports = (function () {\n  return {\n    label: "iife-function",\n    count: 124,\n    triple(value) { return value * 3; },\n    default: "iife-function-default"\n  };\n})();\n',
+    }),
     "tsc2c-cjs-module-object-identifier": cjsPackage("tsc2c-cjs-module-object-identifier", {
         "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "identifier-default",\n  greet: function greet(name) { return "identifier " + name; },\n  label: local.label,\n  count: 72,\n  double: local.double,\n  enabled: true\n};\nmodule.exports = api;\n',
         "local.js": 'exports.label = "object-identifier";\nexports.double = function double(value) { return value * 2; };\n',
