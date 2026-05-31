@@ -12583,6 +12583,8 @@ class Emitter {
         if (staticStringCallText !== null) return staticStringCallText;
         const instanceStringCallText = this.sideEffectFreeStringInstanceCallText(unwrapped, seenConsts);
         if (instanceStringCallText !== null) return instanceStringCallText;
+        const repeatPadCallText = this.sideEffectFreeStringRepeatPadCallText(unwrapped, seenConsts);
+        if (repeatPadCallText !== null) return repeatPadCallText;
         if (ts.isTypeOfExpression(unwrapped)) {
             return this.sideEffectFreeTypeofString(unwrapped.expression, seenConsts);
         }
@@ -12804,6 +12806,50 @@ class Emitter {
         }
     }
 
+    private sideEffectFreeStringRepeatPadCallText(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): string | null {
+        if (
+            !ts.isCallExpression(expr) ||
+            !ts.isPropertyAccessExpression(expr.expression)
+        ) {
+            return null;
+        }
+        const method = expr.expression.name.text;
+        if (method !== "repeat" && method !== "padStart" && method !== "padEnd") {
+            return null;
+        }
+        const recvText = this.sideEffectFreeStringLiteralText(expr.expression.expression, seenConsts);
+        if (recvText === null || !/^[\x00-\x7F]*$/.test(recvText)) return null;
+
+        if (method === "repeat") {
+            if (expr.arguments.length < 1) return null;
+            if (!this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) return null;
+            const count = this.sideEffectFreePrimitiveNumberValue(expr.arguments[0]!, seenConsts);
+            if (count === null || !Number.isFinite(count) || count < 0 || count > Number.MAX_SAFE_INTEGER) return null;
+            const countTrunc = Math.trunc(count);
+            if (countTrunc * Math.max(1, recvText.length * 4) > 4096) return null;
+            return recvText.repeat(countTrunc);
+        }
+
+        // padStart and padEnd
+        if (expr.arguments.length < 1) return null;
+        if (!this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 2, seenConsts)) return null;
+        const target = this.sideEffectFreePrimitiveNumberValue(expr.arguments[0]!, seenConsts);
+        if (target === null || !Number.isFinite(target) || target < 0 || target > Number.MAX_SAFE_INTEGER) return null;
+        const targetTrunc = Math.trunc(target);
+        if (targetTrunc > 4096) return null;
+
+        let padText = " ";
+        if (expr.arguments.length >= 2 && !this.isUndefinedExpression(expr.arguments[1]!)) {
+            const val = this.sideEffectFreeStringLiteralText(expr.arguments[1]!, seenConsts);
+            if (val === null || !/^[\x00-\x7F]*$/.test(val)) return null;
+            padText = val;
+        }
+
+        return method === "padStart" ? recvText.padStart(targetTrunc, padText) : recvText.padEnd(targetTrunc, padText);
+    }
 
     private sideEffectFreeTemplateSubstitutionText(
         expr: ts.Expression,

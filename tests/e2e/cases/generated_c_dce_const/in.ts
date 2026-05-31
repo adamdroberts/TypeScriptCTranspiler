@@ -692,6 +692,9 @@ const unused_promise_resolve_buffer_to_string_length_read = Promise.resolve(Buff
 const unused_promise_resolve_buffer_to_string_upper_call = Promise.resolve((Buffer.from("dead_promise_resolve_buffer_to_string_upper_call").toString(unused_utf8).toUpperCase(), "dead_promise_resolve_buffer_to_string_upper_call_marker"));
 const unused_promise_resolve_buffer_to_locale_string_index_read = Promise.resolve((Buffer.from("dead_promise_resolve_buffer_to_locale_string_index_read").toLocaleString()[0], "dead_promise_resolve_buffer_to_locale_string_index_read_marker"));
 const unused_promise_resolve_string_method_call = Promise.resolve("dead_promise_resolve_string_method".toUpperCase());
+const unused_promise_resolve_string_repeat_call = Promise.resolve("dead_promise_resolve_string_repeat".repeat(3));
+const unused_promise_resolve_string_pad_start_call = Promise.resolve("dead_promise_resolve_string_pad_start".padStart(40));
+const unused_promise_resolve_string_pad_end_call = Promise.resolve("dead_promise_resolve_string_pad_end".padEnd(40, "z"));
 const unused_promise_resolve_string_search_call = Promise.resolve("dead_promise_resolve_string_search".search("resolve"));
 const unused_promise_resolve_regexp_test_call = Promise.resolve(/dead_promise_resolve_regexp_test/.test("dead_promise_resolve_regexp_test"));
 const unused_promise_resolve_regexp_string_call = Promise.resolve(/dead_promise_resolve_regexp_string/.toString());
@@ -5137,6 +5140,44 @@ function stringInstanceTrimDce(): string {
         : "local_dead_string_instance_trim_false";
 }
 
+function stringInstanceRepeatPadDce(): string {
+    const base = "abc";
+    const rep3 = base.repeat(3);
+    const repTrunc = base.repeat(2.7);
+    const pad1 = base.padStart(6);
+    const pad2 = base.padStart(7, "xyz");
+    const pad3 = base.padStart(8, "xy");
+    const pad4 = base.padEnd(6);
+    const pad5 = base.padEnd(7, "xyz");
+    const pad6 = base.padEnd(8, "xy");
+    const padShortStart = base.padStart(2, "xyz");
+    const padShortEnd = base.padEnd(2, "xyz");
+
+    const check1 = rep3 === "abcabcabc";
+    const check2 = repTrunc === "abcabc";
+    const check3 = pad1 === "   abc";
+    const check4 = pad2 === "xyzxabc";
+    const check5 = pad3 === "xyxyxabc";
+    const check6 = pad4 === "abc   ";
+    const check7 = pad5 === "abcxyzx";
+    const check8 = pad6 === "abcxyxyx";
+    const check9 = padShortStart === "abc" && padShortEnd === "abc";
+
+    const bigRepeat = base.repeat(2000);
+    const bigPadStart = base.padStart(5000, "x");
+    const nonAsciiPad = base.padStart(6, "ä");
+    const nonAsciiRecv = "äbc".repeat(2);
+
+    if (bigRepeat.length !== 6000 || bigPadStart.length !== 5000 || nonAsciiPad.length !== 6 || nonAsciiRecv.length !== 6) {
+        return "kept_string_instance_repeat_pad";
+    }
+
+    return (check1 && check2 && check3 && check4 && check5 && check6 && check7 && check8 && check9 &&
+        ("local_dead_repeat_pad_ignored".repeat(0) === "" ? "kept_string_instance_repeat_pad" : "local_dead_string_instance_repeat_pad_false") === "kept_string_instance_repeat_pad")
+        ? "kept_string_instance_repeat_pad"
+        : "local_dead_string_instance_repeat_pad_false";
+}
+
 function computedTruthyFalsyDce(): string {
     const localText: string = "truth";
     const localArray: number[] = [1];
@@ -5402,6 +5443,7 @@ console.log(
     stringStaticCallDce(),
     stringInstanceCaseFoldingDce(),
     stringInstanceTrimDce(),
+    stringInstanceRepeatPadDce(),
     computedTruthyFalsyDce(),
     computedSwitchKeyDce(),
     numericBitwiseDce(),
