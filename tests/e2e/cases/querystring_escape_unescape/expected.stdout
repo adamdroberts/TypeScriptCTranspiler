@@ -1,0 +1,23 @@
+--- 1. Named, Namespace, and Default Imports ---
+Namespace escape 1: hello%20world%2Bnodejs
+Namespace unescape 1: hello world+nodejs
+Namespace escape 2: hello%20world%2Bnodejs
+Namespace unescape 2: hello world+nodejs
+Default escape: hello%20world%2Bnodejs
+Default unescape: hello world+nodejs
+Named escape 1: hello%20world%2Bnodejs
+Named unescape 1: hello world+nodejs
+Named escape 2: hello%20world%2Bnodejs
+Named unescape 2: hello world+nodejs
+--- 2. Plus and Percent Behavior ---
+escaped a+b: a%2Bb
+unescaped escapedPlus: a+b
+escaped a b: a%20b
+unescaped escapedSpace: a b
+unescaped a+b (raw): a+b
+unescaped a%20b (percent): a b
+unescaped a%2Bb (percent): a+b
+--- 3. Ignored Trailing Arguments ---
+escaped hello: hello
+unescaped hello: hello
+side effects: EU

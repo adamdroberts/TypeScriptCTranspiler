@@ -288,12 +288,17 @@ struct tsc_array* tsc_str_split_regex_limit_num(const tsc_str_t* s, const tsc_re
 typedef struct tsc_hash tsc_hash_t;
 tsc_hash_t* tsc_crypto_create_hash(const tsc_str_t* algorithm);
 struct tsc_buffer* tsc_crypto_random_bytes(double size);
+struct tsc_buffer* tsc_crypto_random_fill_sync(struct tsc_buffer* buffer, double offset, double size, bool offset_is_null, bool size_is_null);
 tsc_str_t* tsc_crypto_random_uuid(void);
 bool tsc_crypto_timing_safe_equal(const struct tsc_buffer* a, const struct tsc_buffer* b);
 struct tsc_buffer* tsc_crypto_pbkdf2_sync_ss(const tsc_str_t* password, const tsc_str_t* salt, double iterations, double keylen, const tsc_str_t* digest);
 struct tsc_buffer* tsc_crypto_pbkdf2_sync_sb(const tsc_str_t* password, const struct tsc_buffer* salt, double iterations, double keylen, const tsc_str_t* digest);
 struct tsc_buffer* tsc_crypto_pbkdf2_sync_bs(const struct tsc_buffer* password, const tsc_str_t* salt, double iterations, double keylen, const tsc_str_t* digest);
 struct tsc_buffer* tsc_crypto_pbkdf2_sync_bb(const struct tsc_buffer* password, const struct tsc_buffer* salt, double iterations, double keylen, const tsc_str_t* digest);
+struct tsc_buffer* tsc_crypto_scrypt_sync_ss(const tsc_str_t* password, const tsc_str_t* salt, double keylen, double N, double r, double p, double maxmem);
+struct tsc_buffer* tsc_crypto_scrypt_sync_sb(const tsc_str_t* password, const struct tsc_buffer* salt, double keylen, double N, double r, double p, double maxmem);
+struct tsc_buffer* tsc_crypto_scrypt_sync_bs(const struct tsc_buffer* password, const tsc_str_t* salt, double keylen, double N, double r, double p, double maxmem);
+struct tsc_buffer* tsc_crypto_scrypt_sync_bb(const struct tsc_buffer* password, const struct tsc_buffer* salt, double keylen, double N, double r, double p, double maxmem);
 struct tsc_array* tsc_crypto_get_hashes(void);
 tsc_hash_t* tsc_hash_update(tsc_hash_t* h, const tsc_str_t* data);
 tsc_hash_t* tsc_hash_update_buffer(tsc_hash_t* h, const struct tsc_buffer* data);
@@ -341,9 +346,9 @@ tsc_str_t* tsc_url_file_url_to_path(const tsc_str_t* input);
 tsc_url_t* tsc_url_path_to_file_url(const tsc_str_t* path);
 tsc_url_search_params_t* tsc_url_search_params_new(const tsc_str_t* init);
 void tsc_url_search_params_append(tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value);
-void tsc_url_search_params_delete(tsc_url_search_params_t* params, const tsc_str_t* name);
+void tsc_url_search_params_delete(tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value);
 tsc_str_t* tsc_url_search_params_get(const tsc_url_search_params_t* params, const tsc_str_t* name);
-bool tsc_url_search_params_has(const tsc_url_search_params_t* params, const tsc_str_t* name);
+bool tsc_url_search_params_has(const tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value);
 void tsc_url_search_params_set(tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value);
 tsc_str_t* tsc_url_search_params_to_string(const tsc_url_search_params_t* params);
 struct tsc_array* tsc_url_search_params_keys(const tsc_url_search_params_t* params);
@@ -355,6 +360,8 @@ void tsc_url_search_params_sort(tsc_url_search_params_t* params);
 /* ------------- Querystring ------------- */
 tsc_value_t tsc_querystring_parse(const tsc_str_t* str, tsc_value_t sep_val, tsc_value_t eq_val, tsc_value_t options_val);
 tsc_str_t* tsc_querystring_stringify(tsc_value_t obj_val, tsc_value_t sep_val, tsc_value_t eq_val, tsc_value_t options_val);
+tsc_str_t* tsc_querystring_escape(const tsc_str_t* str);
+tsc_str_t* tsc_querystring_unescape(const tsc_str_t* str);
 
 /* ------------- Date ------------- */
 typedef struct tsc_date {
@@ -538,6 +545,7 @@ typedef struct tsc_fs_dirent tsc_fs_dirent_t;
 typedef struct tsc_dns_lookup_result tsc_dns_lookup_result_t;
 typedef struct tsc_dns_lookup_all_result tsc_dns_lookup_all_result_t;
 typedef struct tsc_dns_resolve4_result tsc_dns_resolve4_result_t;
+typedef struct tsc_dns_resolve6_result tsc_dns_resolve6_result_t;
 typedef struct tsc_dns_lookup_service_result tsc_dns_lookup_service_result_t;
 typedef tsc_value_t (*tsc_accessor_getter_t)(void* env, tsc_value_t receiver);
 typedef bool (*tsc_accessor_setter_t)(void* env, tsc_value_t receiver, tsc_value_t value);
@@ -734,6 +742,10 @@ struct tsc_dns_resolve4_result {
     tsc_str_t* error;
     tsc_array_t* addresses;
 };
+struct tsc_dns_resolve6_result {
+    tsc_str_t* error;
+    tsc_array_t* addresses;
+};
 struct tsc_dns_lookup_service_result {
     tsc_str_t* error;
     tsc_str_t* hostname;
@@ -742,6 +754,7 @@ struct tsc_dns_lookup_service_result {
 tsc_dns_lookup_result_t tsc_dns_lookup(tsc_str_t* hostname, double family, double hints);
 tsc_dns_lookup_all_result_t tsc_dns_lookup_all(tsc_str_t* hostname, double family, double hints);
 tsc_dns_resolve4_result_t tsc_dns_resolve4(tsc_str_t* hostname);
+tsc_dns_resolve6_result_t tsc_dns_resolve6(tsc_str_t* hostname);
 tsc_dns_lookup_service_result_t tsc_dns_lookup_service(tsc_str_t* address, double port);
 tsc_str_t* tsc_dns_get_default_result_order(void);
 void tsc_dns_set_default_result_order(tsc_str_t* order);
