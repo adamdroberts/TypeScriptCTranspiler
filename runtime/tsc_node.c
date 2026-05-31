@@ -965,6 +965,164 @@ tsc_url_t* tsc_url_path_to_file_url(const tsc_str_t* path) {
     return tsc_url_new(tsc_str_concat(tsc_str_from_lit("file://", 7), encoded));
 }
 
+static tsc_str_t* url_query_decode_range(const char* data, size_t start, size_t end) {
+    tsc_str_t* out = str_alloc(end - start);
+    char* w = (char*)out->data;
+    size_t j = 0;
+    for (size_t i = start; i < end; i++) {
+        if (data[i] == '+') {
+            w[j++] = ' ';
+        } else if (data[i] == '%' && i + 2 < end && url_hex_value(data[i + 1]) >= 0 && url_hex_value(data[i + 2]) >= 0) {
+            int hi = url_hex_value(data[i + 1]);
+            int lo = url_hex_value(data[i + 2]);
+            w[j++] = (char)((hi << 4) | lo);
+            i += 2;
+        } else {
+            w[j++] = data[i];
+        }
+    }
+    out->len = j;
+    ((char*)out->data)[j] = '\0';
+    return out;
+}
+
+static bool url_query_encode_byte(unsigned char ch) {
+    if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')) return false;
+    return !(ch == '*' || ch == '-' || ch == '.' || ch == '_');
+}
+
+static tsc_str_t* url_query_encode(const tsc_str_t* input) {
+    size_t out_len = 0;
+    for (size_t i = 0; i < input->len; i++) {
+        unsigned char ch = (unsigned char)input->data[i];
+        out_len += ch == ' ' ? 1 : (url_query_encode_byte(ch) ? 3 : 1);
+    }
+    tsc_str_t* out = str_alloc(out_len);
+    char* w = (char*)out->data;
+    size_t j = 0;
+    static const char hex[] = "0123456789ABCDEF";
+    for (size_t i = 0; i < input->len; i++) {
+        unsigned char ch = (unsigned char)input->data[i];
+        if (ch == ' ') {
+            w[j++] = '+';
+        } else if (url_query_encode_byte(ch)) {
+            w[j++] = '%';
+            w[j++] = hex[ch >> 4];
+            w[j++] = hex[ch & 15];
+        } else {
+            w[j++] = (char)ch;
+        }
+    }
+    return out;
+}
+
+static void tsc_url_search_params_reserve(tsc_url_search_params_t* params, size_t need) {
+    if (params->cap >= need) return;
+    size_t next = params->cap ? params->cap * 2 : 4;
+    while (next < need) next *= 2;
+    params->items = (tsc_url_search_param_t*)TSC_GC_REALLOC(params->items, next * sizeof(tsc_url_search_param_t));
+    params->cap = next;
+}
+
+void tsc_url_search_params_append(tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value) {
+    tsc_url_search_params_reserve(params, params->len + 1);
+    params->items[params->len].name = (tsc_str_t*)name;
+    params->items[params->len].value = (tsc_str_t*)value;
+    params->len++;
+}
+
+tsc_url_search_params_t* tsc_url_search_params_new(const tsc_str_t* init) {
+    tsc_url_search_params_t* params = (tsc_url_search_params_t*)TSC_GC_MALLOC(sizeof(tsc_url_search_params_t));
+    params->items = NULL;
+    params->len = 0;
+    params->cap = 0;
+    if (!init || init->len == 0) return params;
+    const char* d = init->data;
+    size_t n = init->len;
+    size_t start = (n > 0 && d[0] == '?') ? 1 : 0;
+    while (start <= n) {
+        size_t amp = find_byte(d, start, n, '&');
+        size_t end = amp == (size_t)-1 ? n : amp;
+        if (end > start) {
+            size_t eq = find_byte(d, start, end, '=');
+            size_t name_end = eq == (size_t)-1 ? end : eq;
+            size_t value_start = eq == (size_t)-1 ? end : eq + 1;
+            tsc_url_search_params_append(
+                params,
+                url_query_decode_range(d, start, name_end),
+                url_query_decode_range(d, value_start, end)
+            );
+        }
+        if (amp == (size_t)-1) break;
+        start = amp + 1;
+    }
+    return params;
+}
+
+void tsc_url_search_params_delete(tsc_url_search_params_t* params, const tsc_str_t* name) {
+    size_t w = 0;
+    for (size_t i = 0; i < params->len; i++) {
+        if (!tsc_str_eq(params->items[i].name, name)) {
+            params->items[w++] = params->items[i];
+        }
+    }
+    params->len = w;
+}
+
+tsc_str_t* tsc_url_search_params_get(const tsc_url_search_params_t* params, const tsc_str_t* name) {
+    for (size_t i = 0; i < params->len; i++) {
+        if (tsc_str_eq(params->items[i].name, name)) return params->items[i].value;
+    }
+    return NULL;
+}
+
+bool tsc_url_search_params_has(const tsc_url_search_params_t* params, const tsc_str_t* name) {
+    return tsc_url_search_params_get(params, name) != NULL;
+}
+
+void tsc_url_search_params_set(tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value) {
+    bool found = false;
+    size_t w = 0;
+    for (size_t i = 0; i < params->len; i++) {
+        if (tsc_str_eq(params->items[i].name, name)) {
+            if (!found) {
+                params->items[w].name = (tsc_str_t*)name;
+                params->items[w].value = (tsc_str_t*)value;
+                w++;
+                found = true;
+            }
+        } else {
+            params->items[w++] = params->items[i];
+        }
+    }
+    params->len = w;
+    if (!found) tsc_url_search_params_append(params, name, value);
+}
+
+tsc_str_t* tsc_url_search_params_to_string(const tsc_url_search_params_t* params) {
+    if (!params || params->len == 0) return tsc_str_from_lit("", 0);
+    tsc_str_t** names = (tsc_str_t**)TSC_GC_MALLOC(sizeof(tsc_str_t*) * params->len);
+    tsc_str_t** values = (tsc_str_t**)TSC_GC_MALLOC(sizeof(tsc_str_t*) * params->len);
+    size_t total = params->len > 0 ? params->len - 1 : 0;
+    for (size_t i = 0; i < params->len; i++) {
+        names[i] = url_query_encode(params->items[i].name);
+        values[i] = url_query_encode(params->items[i].value);
+        total += names[i]->len + 1 + values[i]->len;
+    }
+    tsc_str_t* out = str_alloc(total);
+    char* w = (char*)out->data;
+    size_t j = 0;
+    for (size_t i = 0; i < params->len; i++) {
+        if (i > 0) w[j++] = '&';
+        memcpy(w + j, names[i]->data, names[i]->len);
+        j += names[i]->len;
+        w[j++] = '=';
+        memcpy(w + j, values[i]->data, values[i]->len);
+        j += values[i]->len;
+    }
+    return out;
+}
+
 int tsc_dns_lookup_ai_flags(double hints) {
     if (isnan(hints) || isinf(hints)) return 0;
     int flags = (int)hints;

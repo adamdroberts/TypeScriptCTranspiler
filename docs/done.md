@@ -590,6 +590,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `URL.canParse(input, base?, ...ignored)` checks whether the supported absolute or base-resolved URL subset can be constructed without throwing, treats explicit `undefined` base as omitted, and evaluates ignored trailing arguments. Tests: `url_can_parse`, `url_base`
 - Named, aliased named, and default imports from `"url"` / `"node:url"` route to the supported `URL` constructor and `URL.canParse(...)` helpers. Test: `url_module_import`
 - `url.fileURLToPath(...)` and `url.pathToFileURL(...)` from named, aliased named, namespace, and default `"url"` / `"node:url"` imports support bounded POSIX file URL/path conversion, including percent decoding and encoding for filesystem path separators, and evaluate and ignore trailing arguments. Test: `url_file_path_helpers`
+- `URLSearchParams` supports string construction, `"url"` / `"node:url"` named/default constructor imports, URL `.searchParams` reads, and basic `get(name)`, `has(name)`, `set(name, value)`, `append(name, value)`, `delete(name)`, `toString()`, `toLocaleString()`, and `valueOf()` behavior with ignored trailing-argument evaluation. Test: `url_search_params`
 - URL instances expose `.toString(...ignored)`, `.toJSON(...ignored)`, `.toLocaleString(...ignored)`, `.valueOf(...ignored)`, typed `Reflect.get` / `Reflect.has` for bounded prototype-style string fields, and empty own-property results through `Object.keys`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, `Reflect.ownKeys`, and `Reflect.getOwnPropertyDescriptor`. Test: `url_object_methods`
 
 ### `Math`
@@ -2188,6 +2189,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `url_constructor_ignored_arguments` | URL constructor evaluates and ignores trailing arguments |
 | `url_file_path_helpers` | node:url fileURLToPath and pathToFileURL helpers |
 | `url_module_import` | node:url imports route to the supported URL constructor and canParse helpers |
+| `url_search_params` | URLSearchParams string construction, URL searchParams reads, and basic mutation/stringification methods |
 | `url_errors` | URL constructor/base/file-path validation failures are catchable |
 | `url_object_methods` | URL toString/toJSON/toLocaleString/valueOf and object helper coverage |
 | `url_parse` | URL parsing fields |

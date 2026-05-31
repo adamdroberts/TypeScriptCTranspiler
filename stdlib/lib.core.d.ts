@@ -2090,6 +2090,7 @@ interface URL {
     readonly port: string;
     readonly pathname: string;
     readonly search: string;
+    readonly searchParams: URLSearchParams;
     readonly hash: string;
     readonly origin: string;
     toJSON(...ignored: any[]): string;
@@ -2102,14 +2103,30 @@ interface URLConstructor {
     canParse(input: string, base?: string, ...ignored: any[]): boolean;
 }
 declare var URL: URLConstructor;
+interface URLSearchParams {
+    append(name: string, value: string, ...ignored: any[]): void;
+    delete(name: string, ...ignored: any[]): void;
+    get(name: string, ...ignored: any[]): string | null;
+    has(name: string, ...ignored: any[]): boolean;
+    set(name: string, value: string, ...ignored: any[]): void;
+    toString(...ignored: any[]): string;
+    toLocaleString(...ignored: any[]): string;
+    valueOf(...ignored: any[]): URLSearchParams;
+}
+interface URLSearchParamsConstructor {
+    new (init?: string, ...ignored: any[]): URLSearchParams;
+}
+declare var URLSearchParams: URLSearchParamsConstructor;
 type URLPathLike = string | URL;
 interface UrlModule {
     URL: URLConstructor;
+    URLSearchParams: URLSearchParamsConstructor;
     fileURLToPath(url: URLPathLike, ...ignored: any[]): string;
     pathToFileURL(path: string, ...ignored: any[]): URL;
 }
 declare module "url" {
     export const URL: URLConstructor;
+    export const URLSearchParams: URLSearchParamsConstructor;
     export function fileURLToPath(url: URLPathLike, ...ignored: any[]): string;
     export function pathToFileURL(path: string, ...ignored: any[]): URL;
     const defaultUrl: UrlModule;
@@ -2117,6 +2134,7 @@ declare module "url" {
 }
 declare module "node:url" {
     export const URL: URLConstructor;
+    export const URLSearchParams: URLSearchParamsConstructor;
     export function fileURLToPath(url: URLPathLike, ...ignored: any[]): string;
     export function pathToFileURL(path: string, ...ignored: any[]): URL;
     const defaultUrl: UrlModule;
