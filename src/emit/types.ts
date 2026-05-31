@@ -29,6 +29,8 @@ export type CTypeKind =
     | "date"
     | "error"
     | "buffer"
+    | "textencoder"
+    | "textdecoder"
     | "fsstats"
     | "fsdirent"
     | "function"
@@ -126,6 +128,8 @@ export const T_URL_SEARCH_PARAMS: CType = { kind: "urlsearchparams", c: "tsc_url
 export const T_DATE: CType = { kind: "date", c: "tsc_date_t*" };
 export const T_ERROR: CType = { kind: "error", c: "tsc_error_t*" };
 export const T_BUFFER: CType = { kind: "buffer", c: "tsc_buffer_t*" };
+export const T_TEXT_ENCODER: CType = { kind: "textencoder", c: "tsc_text_encoder_t*" };
+export const T_TEXT_DECODER: CType = { kind: "textdecoder", c: "tsc_text_decoder_t*" };
 export const T_FS_STATS: CType = { kind: "fsstats", c: "tsc_fs_stats_t*" };
 export const T_FS_DIRENT: CType = { kind: "fsdirent", c: "tsc_fs_dirent_t*" };
 export const T_VALUE: CType = { kind: "value", c: "tsc_value_t" };
@@ -437,6 +441,8 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
             sym?.getName() === "AggregateError"
         ) return T_ERROR;
         if (sym?.getName() === "Buffer") return T_BUFFER;
+        if (sym?.getName() === "TextEncoder") return T_TEXT_ENCODER;
+        if (sym?.getName() === "TextDecoder") return T_TEXT_DECODER;
         if (sym?.getName() === "FSStats") return T_FS_STATS;
         if (sym?.getName() === "FSDirent") return T_FS_DIRENT;
         if (sym?.getName() === "TemplateStringsArray") return arrayType(T_STRING);
