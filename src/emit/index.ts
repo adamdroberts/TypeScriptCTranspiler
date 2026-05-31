@@ -23032,6 +23032,11 @@ class Emitter {
                 this.isValidLazyGeneratorStatement(stmt.statement);
         }
 
+        if (ts.isDoStatement(stmt)) {
+            return !this.nodeContainsYield(stmt.expression) &&
+                this.isValidLazyGeneratorStatement(stmt.statement);
+        }
+
         if (ts.isForStatement(stmt)) {
             if (stmt.initializer) {
                 if (ts.isVariableDeclarationList(stmt.initializer)) {
@@ -23470,6 +23475,18 @@ class Emitter {
                 this.activeLazyGeneratorBreakTargets.pop();
             }
             buf.close();
+            return;
+        }
+
+        if (ts.isDoStatement(stmt)) {
+            buf.open("do");
+            this.activeLazyGeneratorBreakTargets.push("loop");
+            try {
+                this.emitLazyGeneratorStmt(buf, stmt.statement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            } finally {
+                this.activeLazyGeneratorBreakTargets.pop();
+            }
+            buf.close(` while (${this.emitBoolExpr(stmt.expression)});`);
             return;
         }
 
