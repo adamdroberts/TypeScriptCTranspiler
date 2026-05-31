@@ -11,8 +11,8 @@ console.log("read:", params.get("a"), params.get("b"), params.has("c"), params.t
 
 params.set("a", "final value", mark("set"));
 params.append("c", "x/y", mark("append"));
-params.delete("b", mark("delete"));
-console.log("mutated:", params.get("a", mark("get")), params.has("b", mark("has")), params.toString(mark("string")));
+params.delete("b", undefined, mark("delete"));
+console.log("mutated:", params.get("a", mark("get")), params.has("b", undefined, mark("has")), params.toString(mark("string")));
 
 const url = new URL("https://example.com/path?x=1&y=two");
 console.log("url:", url.searchParams.get("x"), url.searchParams.toString());
