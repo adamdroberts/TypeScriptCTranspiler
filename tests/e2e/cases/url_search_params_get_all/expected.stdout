@@ -1,0 +1,6 @@
+allA length: 3
+allA elements: 1,3,4
+allB elements: two words
+allX length: 0
+module allX elements: first & second
+seen: ctor,ignored_arg

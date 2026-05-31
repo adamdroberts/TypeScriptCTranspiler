@@ -42,3 +42,31 @@ dns.lookup("127.0.0.1", void markDefaultOption("C"), (err: any, address: string,
 dns.promises.lookup("127.0.0.1", void markDefaultOption("P"), markDefaultOption("I")).then((result: any): void => {
     console.log("undefined promise options:", result.address, result.family, defaultOptionTrace);
 });
+
+dns.lookup("127.0.0.1", null, (err: any, address: string, family: number): void => {
+    console.log("null callback options:", err === null, address, family);
+});
+
+dns.promises.lookup("127.0.0.1", null).then((result: any): void => {
+    console.log("null promise options:", result.address, result.family);
+});
+
+const family = 4 as const;
+dns.lookup("127.0.0.1", { family }, (err: any, address: string, family: number): void => {
+    console.log("shorthand callback options:", err === null, address, family);
+});
+
+dns.promises.lookup("127.0.0.1", { family }).then((result: any): void => {
+    console.log("shorthand promise options:", result.address, result.family);
+});
+
+const all = false as const;
+const shorthandConstOpts = { family, all } as const;
+dns.lookup("127.0.0.1", shorthandConstOpts, (err: any, address: string, family: number): void => {
+    console.log("shorthand const alias options:", err === null, address, family);
+});
+
+const nullOpts = null;
+dns.promises.lookup("127.0.0.1", nullOpts).then((result: any): void => {
+    console.log("null alias promise options:", result.address, result.family);
+});
