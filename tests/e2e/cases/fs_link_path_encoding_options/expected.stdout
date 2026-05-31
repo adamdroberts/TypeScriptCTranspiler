@@ -1,9 +1,18 @@
 sync: true true
 sync buffer: true true true
 sync null: false true true
+sync null object: false true true
+sync undefined object: true true
+sync default object: true true
 promise realpath: true
 promise readlink: true
 promise realpath buffer: true true
 promise readlink buffer: true true
 promise realpath null: false true
 promise readlink null: false true
+promise realpath null object: false true
+promise readlink null object: false true
+promise realpath undefined object: true
+promise readlink undefined object: true
+promise realpath default object: true
+promise readlink default object: true
