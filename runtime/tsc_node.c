@@ -18,8 +18,10 @@ tsc_hash_t* tsc_crypto_create_hash(const tsc_str_t* algorithm) {
         md = EVP_sha256();
     } else if (str_lit_eq(algorithm, "sha512")) {
         md = EVP_sha512();
+    } else if (str_lit_eq(algorithm, "md5")) {
+        md = EVP_md5();
     } else {
-        tsc_throw_str(tsc_str_from_cstr("crypto.createHash: only sha1, sha256, and sha512 are supported"));
+        tsc_throw_str(tsc_str_from_cstr("crypto.createHash: only md5, sha1, sha256, and sha512 are supported"));
     }
 
     tsc_hash_t* h = (tsc_hash_t*)TSC_GC_MALLOC(sizeof(tsc_hash_t));
@@ -58,8 +60,10 @@ tsc_hmac_t* tsc_crypto_create_hmac_str(const tsc_str_t* algorithm, const tsc_str
         md = EVP_sha256();
     } else if (str_lit_eq(algorithm, "sha512")) {
         md = EVP_sha512();
+    } else if (str_lit_eq(algorithm, "md5")) {
+        md = EVP_md5();
     } else {
-        tsc_throw_str(tsc_str_from_cstr("crypto.createHmac: only sha1, sha256, and sha512 are supported"));
+        tsc_throw_str(tsc_str_from_cstr("crypto.createHmac: only md5, sha1, sha256, and sha512 are supported"));
     }
 
     tsc_hmac_t* h = (tsc_hmac_t*)TSC_GC_MALLOC(sizeof(tsc_hmac_t));
@@ -91,8 +95,10 @@ tsc_hmac_t* tsc_crypto_create_hmac_buffer(const tsc_str_t* algorithm, const tsc_
         md = EVP_sha256();
     } else if (str_lit_eq(algorithm, "sha512")) {
         md = EVP_sha512();
+    } else if (str_lit_eq(algorithm, "md5")) {
+        md = EVP_md5();
     } else {
-        tsc_throw_str(tsc_str_from_cstr("crypto.createHmac: only sha1, sha256, and sha512 are supported"));
+        tsc_throw_str(tsc_str_from_cstr("crypto.createHmac: only md5, sha1, sha256, and sha512 are supported"));
     }
 
     tsc_hmac_t* h = (tsc_hmac_t*)TSC_GC_MALLOC(sizeof(tsc_hmac_t));

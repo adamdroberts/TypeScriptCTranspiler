@@ -1653,7 +1653,7 @@ declare module "node:path/posix" {
     export default defaultPath;
 }
 
-type CryptoHashAlgorithm = "sha1" | "sha256" | "sha512";
+type CryptoHashAlgorithm = "md5" | "sha1" | "sha256" | "sha512";
 interface CryptoRandomUUIDOptions {
     disableEntropyCache?: boolean;
 }
