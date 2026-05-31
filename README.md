@@ -43,14 +43,14 @@ Substantial working subset, verified by **822 passing end-to-end tests** includi
 - **Phase 14 remainder** — broader CommonJS wrapper semantics, dual CJS/ESM interop edge cases, broader untyped JavaScript package patterns, and additional AOT require/export metadata shapes. Dependency init stays eager through the AOT module graph by design.
 - **Decorators** — broader replacement edge cases beyond the covered computed-name, proxy-backed, and erased-generic constructor forms.
 
-See `~/.claude/plans/make-a-typescript-to-floating-comet.md` for the full 15-phase plan, and [`docs/todo.md`](docs/todo.md) for the line-item remaining work with effort estimates.
+See `~/.claude/plans/make-a-typescript-to-floating-comet.md` for the full 15-phase plan, and [`docs/todo.md`](docs/todo.md) for the active remaining work.
 
 ## Documentation
 
 Full docs live in [`docs/`](docs/). Fast routing:
 
 - [`docs/done.md`](docs/done.md) — every implemented feature with test pointers (~1,000 lines)
-- [`docs/todo.md`](docs/todo.md) — every remaining item with effort estimates
+- [`docs/todo.md`](docs/todo.md) — active remaining implementation work
 - [`docs/architecture.md`](docs/architecture.md) — pipeline + Mermaid diagrams
 - [`docs/cli.md`](docs/cli.md) — CLI flags, exit codes, env vars
 - [`docs/runtime-reference.md`](docs/runtime-reference.md) — every `tsc_*` C symbol
@@ -395,4 +395,4 @@ The plan file at `~/.claude/plans/make-a-typescript-to-floating-comet.md` sequen
 5. **Phase 11–13 polish** — libuv-backed async fs scheduling, full `stream`, `http`/`https` (OpenSSL), `net` sockets, async `child_process` lifecycle, `worker_threads`.
 6. **Decorator polish** — remaining replacement edge cases after the current standard decorator, proxy-backed decorator, and AOT constructor replacement coverage.
 
-Each phase remainder is roughly weeks of work. [`docs/todo.md`](docs/todo.md) breaks every item down with effort estimates and dependency ordering.
+[`docs/todo.md`](docs/todo.md) tracks the active remaining items in dependency order.
