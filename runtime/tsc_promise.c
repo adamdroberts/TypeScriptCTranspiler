@@ -133,6 +133,12 @@ static tsc_value_t promise_thenable_reject(void* env, tsc_value_t this_arg, tsc_
     return tsc_value_undefined();
 }
 
+static bool is_ecma_object(tsc_value_t v) {
+    if (!value_is_box(v)) return false;
+    tsc_value_tag_t tag = value_tag(v);
+    return tag == TSC_VALUE_TAG_OBJECT || tag == TSC_VALUE_TAG_ARRAY || tag == TSC_VALUE_TAG_FUNCTION;
+}
+
 static tsc_promise_t* tsc_promise_resolve_thenable_seen(tsc_value_t value, tsc_array_t* seen) {
     tsc_promise_t* volatile out = NULL;
     tsc_promise_thenable_state_t* volatile state = NULL;
@@ -146,6 +152,10 @@ static tsc_promise_t* tsc_promise_resolve_thenable_seen(tsc_value_t value, tsc_a
         if (promise_seen_contains(seen, value)) {
             tsc_try_pop();
             return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("TypeError: Promise resolution cycle")));
+        }
+        if (!is_ecma_object(value)) {
+            tsc_try_pop();
+            return tsc_promise_resolve(value);
         }
         tsc_value_t then = tsc_value_get_prop(value, tsc_str_from_lit("then", 4));
         if (tsc_value_is_nullish(then) || !tsc_value_is_callable(then)) {

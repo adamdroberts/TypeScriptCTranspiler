@@ -1493,7 +1493,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `promise_returned_thenable_throw_after_settle` | returned dynamic thenables that throw after settlement preserve the first settlement |
 | `promise_settled` | settled Promise.resolve/reject with synchronous then/catch/finally chaining and array/Set combinators |
 | `promise_thenable_assimilation` | immediate dynamic thenable assimilation through Promise.resolve and callbacks |
-| `promise_thenable_getter_edges` | Promise.resolve handles throwing and non-callable dynamic then getters |
+| `promise_thenable_getter_edges` | Promise.resolve handles primitive passthrough plus throwing and non-callable dynamic then getters |
 | `promise_thenable_inherited_then` | Promise.resolve assimilates inherited dynamic then methods and getters |
 | `promise_thenable_recursive` | immediate dynamic thenables recursively assimilate settled nested thenables |
 | `promise_thenable_resolver_call_apply` | dynamic thenable resolve and reject functions work through call/apply |

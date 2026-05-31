@@ -28,6 +28,12 @@ Promise.resolve(nonCallableGetter)
         return value;
     });
 
+Promise.resolve(42)
+    .then((value: number) => {
+        console.log("primitive:", value);
+        return value;
+    });
+
 Promise.resolve("callback")
     .then((_value: string) => throwingGetter)
     .catch((reason: any) => {

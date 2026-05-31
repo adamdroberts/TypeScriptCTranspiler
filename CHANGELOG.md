@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic Promise thenable assimilation now fulfills primitive values directly before probing for a `then` property, while preserving throwing and non-callable getter behavior for objects. Test: `promise_thenable_getter_edges`.
 - Immediate `fs.promises.stat(...)` and `fs.promises.lstat(...)` now honor `{ throwIfNoEntry: false }` by resolving to `undefined` for missing paths, matching the already-supported sync option path. Tests: `fs_stat_options`, `fs_promises_stat_access_ignored_arguments`.
 - Manifest-backed native-addon `import { default as value } from "./addon.node"` bindings now lower to the embedded Node bridge addon object, matching default imports instead of reading a `default` property. Test: `native_addon_manifest_import_default_specifier`.
 - Extended the narrow lazy generator lowering to resume a single suspended `yield` inside property and element access expressions for variable initializers, assignment RHS values, and return expressions. Test: `generator_lazy_yield_access`.
