@@ -46,4 +46,19 @@ Promise.resolve(first)
         return "handled";
     });
 
+const saved: any = {};
+let pendingSelfPromise: Promise<any> = Promise.resolve("placeholder");
+const pendingSelf: any = {};
+pendingSelf.then = function(resolve: any): void {
+    events.push("pending-self");
+    saved.resolve = resolve;
+};
+
+pendingSelfPromise = Promise.resolve(pendingSelf);
+saved.resolve(pendingSelfPromise);
+pendingSelfPromise.catch((reason: any) => {
+    console.log("pending-self:", reason);
+    return "handled";
+});
+
 console.log("events:", events.join("|"));
