@@ -1,0 +1,14 @@
+constants.priority.PRIORITY_LOW: 19
+constants.priority.PRIORITY_BELOW_NORMAL: 10
+constants.priority.PRIORITY_NORMAL: 0
+constants.priority.PRIORITY_ABOVE_NORMAL: -7
+constants.priority.PRIORITY_HIGH: -14
+constants.priority.PRIORITY_HIGHEST: -20
+nodeOs.constants.priority.PRIORITY_LOW: 19
+Initial priority is a number: true
+Priority after setPriority(10): 10
+Priority after setPriority(0, 15): 15
+getPriority direct import: true
+setPriority direct import: true
+Priority after setPriority(0, 19): 19
+sideEffects count: 2

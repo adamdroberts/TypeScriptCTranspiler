@@ -12309,6 +12309,19 @@ class Emitter {
         }
     }
 
+    private osPriorityConstantValue(name: string): string | null {
+        switch (name) {
+            case "PRIORITY_LOW": return "19.0";
+            case "PRIORITY_BELOW_NORMAL": return "10.0";
+            case "PRIORITY_NORMAL": return "0.0";
+            case "PRIORITY_ABOVE_NORMAL": return "-7.0";
+            case "PRIORITY_HIGH": return "-14.0";
+            case "PRIORITY_HIGHEST": return "-20.0";
+            default:
+                return null;
+        }
+    }
+
     private isSideEffectFreeBuiltinModuleConstantRead(expr: ts.Expression): boolean {
         if (!ts.isPropertyAccessExpression(expr)) return false;
         const name = expr.name.text;
@@ -12327,6 +12340,27 @@ class Emitter {
             if (
                 ts.isPropertyAccessExpression(expr.expression) &&
                 expr.expression.name.text === "signals" &&
+                ts.isIdentifier(expr.expression.expression) &&
+                this.isNamedImportFrom(expr.expression.expression, ["os", "node:os"], "constants")
+            ) {
+                return true;
+            }
+        }
+        const osPriority = this.osPriorityConstantValue(name);
+        if (osPriority !== null) {
+            if (
+                ts.isPropertyAccessExpression(expr.expression) &&
+                expr.expression.name.text === "priority" &&
+                ts.isPropertyAccessExpression(expr.expression.expression) &&
+                expr.expression.expression.name.text === "constants" &&
+                ts.isIdentifier(expr.expression.expression.expression) &&
+                this.isOsModuleIdentifier(expr.expression.expression.expression)
+            ) {
+                return true;
+            }
+            if (
+                ts.isPropertyAccessExpression(expr.expression) &&
+                expr.expression.name.text === "priority" &&
                 ts.isIdentifier(expr.expression.expression) &&
                 this.isNamedImportFrom(expr.expression.expression, ["os", "node:os"], "constants")
             ) {
@@ -28074,7 +28108,7 @@ class Emitter {
         if (childProcessNamed) {
             return this.emitChildProcessCall(call, childProcessNamed);
         }
-        const osNamed = ["platform", "type", "release", "version", "endianness", "machine", "arch", "hostname", "tmpdir", "homedir", "cpus", "availableParallelism", "totalmem", "freemem", "uptime", "loadavg", "userInfo", "networkInterfaces"]
+        const osNamed = ["platform", "type", "release", "version", "endianness", "machine", "arch", "hostname", "tmpdir", "homedir", "cpus", "availableParallelism", "totalmem", "freemem", "uptime", "loadavg", "userInfo", "networkInterfaces", "getPriority", "setPriority"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["os", "node:os"], exported));
         if (osNamed) {
             return this.emitOsCall(call, osNamed);
@@ -42486,6 +42520,53 @@ class Emitter {
             case "networkInterfaces": {
                 return ret(T_VALUE, `tsc_os_network_interfaces()`);
             }
+            case "getPriority": {
+                const pidArg = call.arguments[0];
+                const specs: SequencedCallArg[] = [];
+                if (pidArg && !this.isUndefinedExpression(pidArg)) {
+                    specs.push({ value: this.emitExpr(pidArg), target: T_NUMBER, node: pidArg });
+                } else {
+                    if (pidArg && this.shouldEvaluateSideEffectfulVoidDefault(pidArg)) {
+                        specs.push({ value: this.emitExpr(pidArg), target: T_VOID, node: pidArg });
+                    }
+                    specs.push({ value: { c: "0.0", ty: T_NUMBER }, target: T_NUMBER, node: call });
+                }
+                specs.push(...this.ignoredArgumentSpecs(call.arguments, 1));
+                return this.emitSequencedExpr(
+                    T_NUMBER,
+                    specs,
+                    (values) => `tsc_os_get_priority(${values[0]})`,
+                );
+            }
+            case "setPriority": {
+                const specs: SequencedCallArg[] = [];
+                if (call.arguments.length === 1) {
+                    const priorityArg = call.arguments[0]!;
+                    specs.push({ value: { c: "0.0", ty: T_NUMBER }, target: T_NUMBER, node: call });
+                    specs.push({ value: this.emitExpr(priorityArg), target: T_NUMBER, node: priorityArg });
+                    specs.push(...this.ignoredArgumentSpecs(call.arguments, 1));
+                } else if (call.arguments.length >= 2) {
+                    const pidArg = call.arguments[0]!;
+                    const priorityArg = call.arguments[1]!;
+                    if (this.isUndefinedExpression(pidArg)) {
+                        if (this.shouldEvaluateSideEffectfulVoidDefault(pidArg)) {
+                            specs.push({ value: this.emitExpr(pidArg), target: T_VOID, node: pidArg });
+                        }
+                        specs.push({ value: { c: "0.0", ty: T_NUMBER }, target: T_NUMBER, node: call });
+                    } else {
+                        specs.push({ value: this.emitExpr(pidArg), target: T_NUMBER, node: pidArg });
+                    }
+                    specs.push({ value: this.emitExpr(priorityArg), target: T_NUMBER, node: priorityArg });
+                    specs.push(...this.ignoredArgumentSpecs(call.arguments, 2));
+                } else {
+                    unsupported(call, "os.setPriority requires at least 1 argument");
+                }
+                return this.emitSequencedExpr(
+                    T_VOID,
+                    specs,
+                    (values) => `tsc_os_set_priority(${values[0]}, ${values[1]})`,
+                );
+            }
         }
         unsupported(call, `os.${name}`);
     }
@@ -47635,6 +47716,28 @@ class Emitter {
             this.isNamedImportFrom(pa.expression.expression, ["os", "node:os"], "constants")
         ) {
             return { c: osSignal, ty: T_NUMBER };
+        }
+
+        const osPriority = this.osPriorityConstantValue(pa.name.text);
+        if (
+            osPriority !== null &&
+            ts.isPropertyAccessExpression(pa.expression) &&
+            pa.expression.name.text === "priority" &&
+            ts.isPropertyAccessExpression(pa.expression.expression) &&
+            pa.expression.expression.name.text === "constants" &&
+            ts.isIdentifier(pa.expression.expression.expression) &&
+            this.isOsModuleIdentifier(pa.expression.expression.expression)
+        ) {
+            return { c: osPriority, ty: T_NUMBER };
+        }
+        if (
+            osPriority !== null &&
+            ts.isPropertyAccessExpression(pa.expression) &&
+            pa.expression.name.text === "priority" &&
+            ts.isIdentifier(pa.expression.expression) &&
+            this.isNamedImportFrom(pa.expression.expression, ["os", "node:os"], "constants")
+        ) {
+            return { c: osPriority, ty: T_NUMBER };
         }
 
         if (ts.isIdentifier(pa.expression) && this.isDnsModuleIdentifier(pa.expression)) {
