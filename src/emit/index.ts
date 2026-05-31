@@ -27659,6 +27659,16 @@ class Emitter {
         if (name === "Function") {
             return this.emitUnsafeFunctionConstructor(call);
         }
+        if (name === "structuredClone") {
+            if (call.arguments.length < 1) unsupported(call, "structuredClone expects at least 1 arg");
+            const arg = call.arguments[0]!;
+            const value = this.emitExpr(arg);
+            const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
+            return this.emitSequencedExpr(T_VALUE, [
+                { value, target: T_VALUE, node: arg },
+                ...ignored,
+            ], ([input]) => `tsc_structured_clone(${input})`);
+        }
         if (name === "parseInt" || name === "parseFloat") {
             return this.emitParseNumber(call, name);
         }

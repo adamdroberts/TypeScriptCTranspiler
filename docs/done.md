@@ -672,6 +672,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `Map`, `Set`, `WeakMap`, `WeakSet`, `WeakRef`, and `FinalizationRegistry` instances expose empty own-property and read-only integrity results through `Object.keys`, `Object.values`, `Object.entries`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, `Object.isExtensible(...)`, `Object.isSealed(...)`, `Object.isFrozen(...)`, `Reflect.ownKeys`, `Reflect.getOwnPropertyDescriptor`, and `Reflect.isExtensible(...)`, while preserving receiver/key evaluation. Test: `collection_object_methods`
 - Global `parseInt` / `parseFloat` / `isNaN` / `isFinite` → mapped to runtime or C math builtins, with global `parseInt` sharing the JS-style radix inference path, `parseInt`/`parseFloat` evaluating ignored extra arguments, and global numeric predicates coercing non-number inputs while evaluating ignored extra arguments.
 - Global `btoa(value, ...ignored)` and `atob(value, ...ignored)` perform byte-string base64 encode/decode through the same runtime codec used by Buffer, evaluating ignored extra arguments after the input string. Test: `base64_globals`
+- Global `structuredClone(value, ...ignored)` performs deep copy of dynamic primitives, arrays, and plain objects while evaluating and ignoring trailing arguments, maintaining an object-identity map to handle circular references, and clearly rejecting unsupported types (functions, class instances, custom prototypes, accessors, and proxies) through catchable TypeError exceptions. Test: `structured_clone_dynamic`
 
 ---
 
@@ -1757,6 +1758,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `switch` | number + string switch with fall-through |
 | `switch_exhaustive` | exhaustive finite-domain switch over literal unions and booleans |
 | `switch_exhaustive_missing` | expected diagnostic for a missing finite-domain switch case |
+| `structured_clone_dynamic` | structuredClone deep cloning of dynamic primitives, arrays, plain objects, circular references, and error paths |
 | `symbols` | Symbol values, global registry, well-known symbols, typeof |
 | `symbol_bigint_object_methods` | Symbol/BigInt toLocaleString and valueOf object methods |
 | `tagged_templates` | tagged template calls with cooked string segments |

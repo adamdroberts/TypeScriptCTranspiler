@@ -2656,3 +2656,88 @@ tsc_value_t tsc_value_method_pad_end(tsc_value_t recv, tsc_value_t target, tsc_v
     }
     return tsc_value_undefined();
 }
+
+static tsc_value_t tsc_structured_clone_internal(tsc_value_t v, tsc_map_t* seen) {
+    if (!value_is_box(v)) {
+        return v;
+    }
+
+    tsc_value_tag_t tag = value_tag(v);
+    if (tag == TSC_VALUE_TAG_UNDEFINED || tag == TSC_VALUE_TAG_NULL ||
+        tag == TSC_VALUE_TAG_FALSE || tag == TSC_VALUE_TAG_TRUE) {
+        return v;
+    }
+
+    if (tag == TSC_VALUE_TAG_STRING) {
+        return v;
+    }
+
+    if (tag == TSC_VALUE_TAG_FUNCTION) {
+        tsc_throw_str(tsc_str_from_cstr("TypeError: structuredClone: Functions cannot be cloned"));
+        return tsc_value_undefined();
+    }
+
+    tsc_value_t already_cloned;
+    if (tsc_map_get_raw(seen, &v, &already_cloned)) {
+        return already_cloned;
+    }
+
+    if (tag == TSC_VALUE_TAG_ARRAY) {
+        tsc_array_t* src_arr = (tsc_array_t*)value_ptr(v);
+        tsc_array_t* dst_arr = tsc_array_new(sizeof(tsc_value_t), src_arr->len);
+        tsc_value_t cloned_val = tsc_value_array(dst_arr);
+
+        tsc_map_set_raw(seen, &v, &cloned_val);
+
+        dst_arr->len = src_arr->len;
+        for (size_t i = 0; i < src_arr->len; i++) {
+            tsc_value_t elem = TSC_ARR(tsc_value_t, src_arr, i);
+            TSC_ARR(tsc_value_t, dst_arr, i) = tsc_structured_clone_internal(elem, seen);
+        }
+        return cloned_val;
+    }
+
+    if (tag == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* src_obj = (tsc_object_t*)value_ptr(v);
+        if (src_obj->is_proxy) {
+            tsc_throw_str(tsc_str_from_cstr("TypeError: structuredClone: Proxies cannot be cloned"));
+            return tsc_value_undefined();
+        }
+        if (src_obj->is_promise) {
+            tsc_throw_str(tsc_str_from_cstr("TypeError: structuredClone: Promises cannot be cloned"));
+            return tsc_value_undefined();
+        }
+        if (src_obj->class_ptr != NULL) {
+            tsc_throw_str(tsc_str_from_cstr("TypeError: structuredClone: Custom classes, Dates, Maps, Sets, or Buffers cannot be cloned"));
+            return tsc_value_undefined();
+        }
+        if (!tsc_value_is_nullish(src_obj->prototype)) {
+            tsc_throw_str(tsc_str_from_cstr("TypeError: structuredClone: Objects with custom prototypes cannot be cloned"));
+            return tsc_value_undefined();
+        }
+
+        tsc_object_t* dst_obj = tsc_object_new();
+        tsc_value_t cloned_val = tsc_value_object(dst_obj);
+
+        tsc_map_set_raw(seen, &v, &cloned_val);
+
+        for (size_t i = 0; i < src_obj->len; i++) {
+            tsc_object_prop_t* p = &src_obj->props[i];
+            if (p->accessor) {
+                tsc_throw_str(tsc_str_from_cstr("TypeError: structuredClone: Accessors cannot be cloned"));
+                return tsc_value_undefined();
+            }
+            tsc_value_t cloned_prop_val = tsc_structured_clone_internal(p->value, seen);
+            tsc_object_define(dst_obj, p->key, cloned_prop_val, p->writable, p->enumerable, p->configurable);
+        }
+        return cloned_val;
+    }
+
+    tsc_throw_str(tsc_str_from_cstr("TypeError: structuredClone: Unsupported type"));
+    return tsc_value_undefined();
+}
+
+tsc_value_t tsc_structured_clone(tsc_value_t value) {
+    tsc_map_t* seen = tsc_map_new(sizeof(tsc_value_t), sizeof(tsc_value_t), TSC_KEY_VALUE, 8);
+    return tsc_structured_clone_internal(value, seen);
+}

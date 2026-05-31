@@ -1,0 +1,47 @@
+=== Primitives ===
+undefined: true
+null: true
+true: true
+false: true
+number: true
+string: true
+
+=== Simple Arrays ===
+array unequal: true
+array length: 3
+array[0]: 1
+array[1]: two
+array[2] unequal: true
+array[2].three: 3
+
+=== Plain Objects ===
+obj unequal: true
+obj.a: 10
+obj.b: hello
+obj.c unequal: true
+obj.c.nested: true
+obj.c.val: null
+
+=== Circular Objects and Arrays ===
+cyclicObj unequal: true
+cyclicObj.name: cycle
+cyclicObj.self === cyclicObj: true
+cyclicArr unequal: true
+cyclicArr[0]: 100
+cyclicArr[1] === cyclicArr: true
+
+=== Duplicate References ===
+dupObj.a unequal inner: true
+dupObj.a === dupObj.b: true
+
+=== Ignored Arguments ===
+ignored evaluated: 7
+ignored clone ok: true
+
+=== Rejection / Error Handling ===
+Function clone:
+Caught expected error: TypeError: structuredClone: Functions cannot be cloned
+Proxy clone:
+Caught expected error: TypeError: structuredClone: Proxies cannot be cloned
+Class instance / custom prototype clone:
+Caught expected error: TypeError: structuredClone: Custom classes, Dates, Maps, Sets, or Buffers cannot be cloned
