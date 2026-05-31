@@ -18875,6 +18875,19 @@ class Emitter {
             this.isDefaultImportFrom(id, ["net", "node:net"]);
     }
 
+    private isSocketAddressConstructor(expr: ts.Expression): boolean {
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        if (
+            ts.isPropertyAccessExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isNetModuleIdentifier(unwrapped.expression) &&
+            unwrapped.name.text === "SocketAddress"
+        ) {
+            return true;
+        }
+        return ts.isIdentifier(unwrapped) && this.isNamedImportFrom(unwrapped, ["net", "node:net"], "SocketAddress");
+    }
+
     private isCryptoModuleIdentifier(id: ts.Identifier): boolean {
         return id.text === "crypto" ||
             this.isNamespaceImportFrom(id, ["crypto", "node:crypto"]) ||
@@ -29543,6 +29556,19 @@ class Emitter {
     ): EmitResult {
         const memberName = pa.name.text;
         const recvExpr = pa.expression;
+
+        if (this.isSocketAddressConstructor(recvExpr) && memberName === "parse") {
+            if (call.arguments.length < 1) unsupported(call, "SocketAddress.parse expects one argument");
+            const input = this.emitExpr(call.arguments[0]!);
+            return this.emitSequencedExpr(
+                T_VALUE,
+                [
+                    { value: input, target: T_STRING, node: call.arguments[0]! },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ],
+                ([inputC]) => `tsc_net_socket_address_parse(${inputC})`,
+            );
+        }
 
         if (
             memberName === "isFile" ||
@@ -46619,6 +46645,25 @@ class Emitter {
                 T_EVENT_EMITTER,
                 this.ignoredArgumentSpecs(n.arguments ?? [], 0),
                 () => "tsc_event_emitter_new()",
+            );
+        }
+        if (this.isSocketAddressConstructor(n.expression)) {
+            const args = n.arguments ?? [];
+            if (args.length === 0) {
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [],
+                    () => "tsc_net_socket_address_new(tsc_value_undefined())",
+                );
+            }
+            const options = this.emitExpr(args[0]!);
+            return this.emitSequencedExpr(
+                T_VALUE,
+                [
+                    { value: options, target: T_VALUE, node: args[0]! },
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ],
+                ([optionsC]) => `tsc_net_socket_address_new(${optionsC})`,
             );
         }
         if (this.isUrlConstructorExpression(n.expression)) {

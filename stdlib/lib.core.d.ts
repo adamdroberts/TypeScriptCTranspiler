@@ -1998,16 +1998,36 @@ declare module "node:dns/promises" {
     export default defaultDnsPromises;
 }
 
+interface SocketAddressInitOptions {
+    address?: string;
+    family?: "ipv4" | "ipv6";
+    flowlabel?: number;
+    port?: number;
+}
+interface SocketAddress {
+    readonly address: string;
+    readonly family: "ipv4" | "ipv6";
+    readonly flowlabel: number;
+    readonly port: number;
+}
+interface SocketAddressConstructor {
+    new(options?: SocketAddressInitOptions): SocketAddress;
+    parse(input: string): SocketAddress | undefined;
+}
+declare var SocketAddress: SocketAddressConstructor;
+
 interface Net {
     isIP(input: string, ...ignored: any[]): number;
     isIPv4(input: string, ...ignored: any[]): boolean;
     isIPv6(input: string, ...ignored: any[]): boolean;
+    SocketAddress: SocketAddressConstructor;
 }
 declare const net: Net;
 declare module "net" {
     export function isIP(input: string, ...ignored: any[]): number;
     export function isIPv4(input: string, ...ignored: any[]): boolean;
     export function isIPv6(input: string, ...ignored: any[]): boolean;
+    export const SocketAddress: SocketAddressConstructor;
     const defaultNet: Net;
     export default defaultNet;
 }
@@ -2015,6 +2035,7 @@ declare module "node:net" {
     export function isIP(input: string, ...ignored: any[]): number;
     export function isIPv4(input: string, ...ignored: any[]): boolean;
     export function isIPv6(input: string, ...ignored: any[]): boolean;
+    export const SocketAddress: SocketAddressConstructor;
     const defaultNet: Net;
     export default defaultNet;
 }

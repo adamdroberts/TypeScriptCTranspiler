@@ -1667,6 +1667,179 @@ double tsc_net_is_ip(tsc_str_t* input) {
     return 0.0;
 }
 
+tsc_value_t tsc_net_socket_address_new(tsc_value_t options) {
+    tsc_object_t* obj = tsc_object_new();
+
+    tsc_str_t* address = NULL;
+    tsc_str_t* family = tsc_str_from_lit("ipv4", 4);
+    double port = 0.0;
+    double flowlabel = 0.0;
+
+    if (!tsc_value_is_nullish(options)) {
+        tsc_value_t fam_val = tsc_value_get_prop(options, tsc_str_from_lit("family", 6));
+        if (!tsc_value_is_undefined(fam_val)) {
+            tsc_str_t* f_str = tsc_value_to_string(fam_val);
+            if (f_str && (strcmp(f_str->data, "ipv6") == 0 || strcmp(f_str->data, "IPv6") == 0 || strcmp(f_str->data, "IPV6") == 0)) {
+                family = tsc_str_from_lit("ipv6", 4);
+            } else {
+                family = tsc_str_from_lit("ipv4", 4);
+            }
+        }
+
+        tsc_value_t addr_val = tsc_value_get_prop(options, tsc_str_from_lit("address", 7));
+        if (!tsc_value_is_undefined(addr_val)) {
+            address = tsc_value_to_string(addr_val);
+        }
+
+        tsc_value_t port_val = tsc_value_get_prop(options, tsc_str_from_lit("port", 4));
+        if (!tsc_value_is_undefined(port_val)) {
+            port = tsc_value_as_num(port_val);
+            if (isnan(port) || port < 0.0 || port > 65535.0) {
+                tsc_throw_str(tsc_str_from_cstr("RangeError: Port should be >= 0 and < 65536"));
+                return tsc_value_undefined();
+            }
+        }
+
+        tsc_value_t flow_val = tsc_value_get_prop(options, tsc_str_from_lit("flowlabel", 9));
+        if (!tsc_value_is_undefined(flow_val)) {
+            flowlabel = tsc_value_as_num(flow_val);
+            if (isnan(flowlabel) || flowlabel < 0.0 || flowlabel > 4294967295.0) {
+                tsc_throw_str(tsc_str_from_cstr("RangeError: flowlabel should be >= 0 and < 4294967296"));
+                return tsc_value_undefined();
+            }
+        }
+    }
+
+    if (!address) {
+        if (strcmp(family->data, "ipv6") == 0) {
+            address = tsc_str_from_lit("::", 2);
+        } else {
+            address = tsc_str_from_lit("127.0.0.1", 9);
+        }
+    }
+
+    tsc_object_set(obj, tsc_str_from_lit("address", 7), tsc_value_string(address));
+    tsc_object_set(obj, tsc_str_from_lit("family", 6), tsc_value_string(family));
+    tsc_object_set(obj, tsc_str_from_lit("port", 4), tsc_value_num(port));
+    tsc_object_set(obj, tsc_str_from_lit("flowlabel", 9), tsc_value_num(flowlabel));
+
+    return tsc_value_object(obj);
+}
+
+tsc_value_t tsc_net_socket_address_parse(tsc_str_t* input) {
+    if (!input || input->len == 0) {
+        return tsc_value_undefined();
+    }
+
+    char* cstr = cstr_dup(input);
+    int len = (int)input->len;
+
+    char* address_buf = malloc(len + 1);
+    int address_len = 0;
+    double port = 0.0;
+    tsc_str_t* family = NULL;
+
+    bool parsed = false;
+
+    if (cstr[0] == '[') {
+        char* end_bracket = strchr(cstr, ']');
+        if (end_bracket) {
+            int ip_len = (int)(end_bracket - (cstr + 1));
+            if (ip_len > 0) {
+                memcpy(address_buf, cstr + 1, ip_len);
+                address_buf[ip_len] = '\0';
+
+                char* after = end_bracket + 1;
+                if (*after == '\0') {
+                    port = 0.0;
+                    parsed = true;
+                } else if (*after == ':') {
+                    char* endptr;
+                    double p = strtod(after + 1, &endptr);
+                    if (endptr != after + 1 && *endptr == '\0' && p >= 0.0 && p <= 65535.0) {
+                        port = p;
+                        parsed = true;
+                    }
+                }
+            }
+        }
+
+        if (parsed) {
+            struct in6_addr addr6;
+            if (inet_pton(AF_INET6, address_buf, &addr6) == 1) {
+                family = tsc_str_from_lit("ipv6", 4);
+                address_len = (int)strlen(address_buf);
+            } else {
+                parsed = false;
+            }
+        }
+    } else {
+        int colon_count = 0;
+        char* p = cstr;
+        while (*p) {
+            if (*p == ':') colon_count++;
+            p++;
+        }
+
+        if (colon_count >= 2) {
+            strcpy(address_buf, cstr);
+            struct in6_addr addr6;
+            if (inet_pton(AF_INET6, address_buf, &addr6) == 1) {
+                family = tsc_str_from_lit("ipv6", 4);
+                port = 0.0;
+                parsed = true;
+            }
+        } else if (colon_count == 1) {
+            char* colon = strchr(cstr, ':');
+            int ip_len = (int)(colon - cstr);
+            if (ip_len > 0) {
+                memcpy(address_buf, cstr, ip_len);
+                address_buf[ip_len] = '\0';
+
+                char* endptr;
+                double p_val = strtod(colon + 1, &endptr);
+                if (endptr != colon + 1 && *endptr == '\0' && p_val >= 0.0 && p_val <= 65535.0) {
+                    struct in_addr addr4;
+                    if (inet_pton(AF_INET, address_buf, &addr4) == 1) {
+                        family = tsc_str_from_lit("ipv4", 4);
+                        port = p_val;
+                        parsed = true;
+                    }
+                }
+            }
+        } else {
+            strcpy(address_buf, cstr);
+            struct in_addr addr4;
+            struct in6_addr addr6;
+            if (inet_pton(AF_INET, address_buf, &addr4) == 1) {
+                family = tsc_str_from_lit("ipv4", 4);
+                port = 0.0;
+                parsed = true;
+            } else if (inet_pton(AF_INET6, address_buf, &addr6) == 1) {
+                family = tsc_str_from_lit("ipv6", 4);
+                port = 0.0;
+                parsed = true;
+            }
+        }
+    }
+
+    free(cstr);
+
+    if (!parsed) {
+        free(address_buf);
+        return tsc_value_undefined();
+    }
+
+    tsc_object_t* obj = tsc_object_new();
+    tsc_object_set(obj, tsc_str_from_lit("address", 7), tsc_value_string(tsc_str_from_cstr(address_buf)));
+    tsc_object_set(obj, tsc_str_from_lit("family", 6), tsc_value_string(family));
+    tsc_object_set(obj, tsc_str_from_lit("port", 4), tsc_value_num(port));
+    tsc_object_set(obj, tsc_str_from_lit("flowlabel", 9), tsc_value_num(0.0));
+
+    free(address_buf);
+    return tsc_value_object(obj);
+}
+
 double tsc_event_emitter_get_default_max_listeners(void) {
     return g_event_emitter_default_max_listeners;
 }
