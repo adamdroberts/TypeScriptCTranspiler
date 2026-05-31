@@ -15918,6 +15918,24 @@ class Emitter {
             const init = decl?.initializer;
             if (init && ts.isObjectLiteralExpression(init)) return this.commonJsObjectAssignExportObjectEntries(init);
         }
+        if (ts.isConditionalExpression(cur)) {
+            const cond = this.staticBooleanValue(cur.condition);
+            if (cond === true) return this.commonJsObjectAssignExportSourceEntries(cur.whenTrue);
+            if (cond === false) return this.commonJsObjectAssignExportSourceEntries(cur.whenFalse);
+            return null;
+        }
+        if (ts.isBinaryExpression(cur) && cur.operatorToken.kind === ts.SyntaxKind.BarBarToken) {
+            const leftTruthy = this.staticBooleanValue(cur.left);
+            if (leftTruthy === true) return this.commonJsObjectAssignExportSourceEntries(cur.left);
+            if (leftTruthy === false) return this.commonJsObjectAssignExportSourceEntries(cur.right);
+            return null;
+        }
+        if (ts.isBinaryExpression(cur) && cur.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
+            const leftNullish = this.staticNullishState(cur.left);
+            if (leftNullish === "nonNullish") return this.commonJsObjectAssignExportSourceEntries(cur.left);
+            if (leftNullish === "nullish") return this.commonJsObjectAssignExportSourceEntries(cur.right);
+            return null;
+        }
         return null;
     }
 
@@ -17198,10 +17216,20 @@ class Emitter {
             return;
         }
         if (
+            ts.isBinaryExpression(cur) &&
+            (cur.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+             cur.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)
+        ) {
+            this.validateCommonJsModuleExportsValueAssignment(cur.left);
+            this.validateCommonJsModuleExportsValueAssignment(cur.right);
+            return;
+        }
+        if (
             !ts.isFunctionExpression(cur) &&
             !ts.isArrowFunction(cur) &&
             !ts.isIdentifier(cur) &&
             !ts.isArrayLiteralExpression(cur) &&
+            !ts.isObjectLiteralExpression(cur) &&
             !this.requireCallModuleExportsDeclaration(cur) &&
             !(ts.isCallExpression(cur) && this.commonJsRequireSpreadMemberDeclarations(cur)) &&
             !(ts.isPropertyAccessExpression(cur) && this.requireModuleMemberDeclaration(cur)) &&
@@ -44984,6 +45012,12 @@ class Emitter {
     private staticComputedStringExpression(expr: ts.Expression): string | null {
         let cur = expr;
         while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isConditionalExpression(cur)) {
+            const cond = this.staticBooleanValue(cur.condition);
+            if (cond === true) return this.staticComputedStringExpression(cur.whenTrue);
+            if (cond === false) return this.staticComputedStringExpression(cur.whenFalse);
+            return null;
+        }
         if (ts.isAsExpression(cur) || ts.isTypeAssertionExpression(cur) || ts.isSatisfiesExpression(cur)) {
             return this.staticComputedStringExpression(cur.expression);
         }
