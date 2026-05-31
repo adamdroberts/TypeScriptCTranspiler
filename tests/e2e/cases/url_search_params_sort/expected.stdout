@@ -1,0 +1,10 @@
+before: z=9&a=1&b=two&a=3
+after: a=1&a=3&b=two&z=9
+keys: a,a,b,z
+values: 1,3,two,9
+entry: a = 1
+entry: a = 3
+entry: b = two
+entry: z = 9
+stable duplicates: a=first&a=second&b=1&b=2
+seen: ignored_arg

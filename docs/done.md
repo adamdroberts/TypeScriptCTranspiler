@@ -599,6 +599,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `url.fileURLToPath(...)` and `url.pathToFileURL(...)` from named, aliased named, namespace, and default `"url"` / `"node:url"` imports support bounded POSIX file URL/path conversion, including percent decoding and encoding for filesystem path separators, and evaluate and ignore trailing arguments. Test: `url_file_path_helpers`
 - `URLSearchParams` supports string construction, `"url"` / `"node:url"` named/default constructor imports, URL `.searchParams` reads, and basic `get(name)`, `has(name)`, `set(name, value)`, `append(name, value)`, `delete(name)`, `toString()`, `toLocaleString()`, and `valueOf()` behavior with ignored trailing-argument evaluation. Test: `url_search_params`
 - `URLSearchParams` supports bounded `keys()`, `values()`, `entries()`, `[Symbol.iterator]()`, direct for-of `[key, value]` destructuring, and `forEach(callback, thisArg?, ...ignored)` iteration helpers with ignored trailing-argument evaluation. Test: `url_search_params_iterators`
+- `URLSearchParams` supports `sort(...ignored)` in stable name-order semantics preserving duplicate value order for equal names, returning `void`. Test: `url_search_params_sort`
 - URL instances expose `.toString(...ignored)`, `.toJSON(...ignored)`, `.toLocaleString(...ignored)`, `.valueOf(...ignored)`, typed `Reflect.get` / `Reflect.has` for bounded prototype-style string fields, and empty own-property results through `Object.keys`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, `Reflect.ownKeys`, and `Reflect.getOwnPropertyDescriptor`. Test: `url_object_methods`
 
 ### `Math`
@@ -2206,6 +2207,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `url_file_path_helpers` | node:url fileURLToPath and pathToFileURL helpers |
 | `url_module_import` | node:url imports route to the supported URL constructor and canParse helpers |
 | `url_search_params` | URLSearchParams string construction, URL searchParams reads, and basic mutation/stringification methods |
+| `url_search_params_sort` | URLSearchParams sort method with stable name-order semantics |
 | `url_errors` | URL constructor/base/file-path validation failures are catchable |
 | `url_object_methods` | URL toString/toJSON/toLocaleString/valueOf and object helper coverage |
 | `url_parse` | URL parsing fields |

@@ -35879,6 +35879,13 @@ class Emitter {
                     [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
                     ([params]) => params,
                 );
+            case "sort":
+                return this.emitSequencedExpr(
+                    T_VOID,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([params]) => `tsc_url_search_params_sort(${params!})`,
+                );
+
             case "keys":
                 return this.emitSequencedExpr(
                     arrayType(T_STRING),
