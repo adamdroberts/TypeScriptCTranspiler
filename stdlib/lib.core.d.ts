@@ -1643,6 +1643,7 @@ interface Path {
     readonly sep: string;
     readonly delimiter: string;
     readonly posix: Path;
+    readonly win32: Path;
     join(...parts: string[]): string;
     resolve(...parts: string[]): string;
     normalize(p: string, ...ignored: any[]): string;
@@ -1661,6 +1662,7 @@ declare module "path" {
     export const sep: string;
     export const delimiter: string;
     export const posix: Path;
+    export const win32: Path;
     export function join(...parts: string[]): string;
     export function resolve(...parts: string[]): string;
     export function normalize(p: string, ...ignored: any[]): string;
@@ -1680,6 +1682,7 @@ declare module "node:path" {
     export const sep: string;
     export const delimiter: string;
     export const posix: Path;
+    export const win32: Path;
     export function join(...parts: string[]): string;
     export function resolve(...parts: string[]): string;
     export function normalize(p: string, ...ignored: any[]): string;
@@ -1714,6 +1717,42 @@ declare module "path/posix" {
     export default defaultPath;
 }
 declare module "node:path/posix" {
+    export const sep: string;
+    export const delimiter: string;
+    export function join(...parts: string[]): string;
+    export function resolve(...parts: string[]): string;
+    export function normalize(p: string, ...ignored: any[]): string;
+    export function isAbsolute(p: string, ...ignored: any[]): boolean;
+    export function relative(from: string, to: string, ...ignored: any[]): string;
+    export function toNamespacedPath(p: string, ...ignored: any[]): string;
+    export function matchesGlob(p: string, pattern: string, ...ignored: any[]): boolean;
+    export function basename(p: string, suffix?: string, ...ignored: any[]): string;
+    export function dirname(p: string, ...ignored: any[]): string;
+    export function extname(p: string, ...ignored: any[]): string;
+    export function parse(p: string, ...ignored: any[]): any;
+    export function format(pathObject: any, ...ignored: any[]): string;
+    const defaultPath: Path;
+    export default defaultPath;
+}
+declare module "path/win32" {
+    export const sep: string;
+    export const delimiter: string;
+    export function join(...parts: string[]): string;
+    export function resolve(...parts: string[]): string;
+    export function normalize(p: string, ...ignored: any[]): string;
+    export function isAbsolute(p: string, ...ignored: any[]): boolean;
+    export function relative(from: string, to: string, ...ignored: any[]): string;
+    export function toNamespacedPath(p: string, ...ignored: any[]): string;
+    export function matchesGlob(p: string, pattern: string, ...ignored: any[]): boolean;
+    export function basename(p: string, suffix?: string, ...ignored: any[]): string;
+    export function dirname(p: string, ...ignored: any[]): string;
+    export function extname(p: string, ...ignored: any[]): string;
+    export function parse(p: string, ...ignored: any[]): any;
+    export function format(pathObject: any, ...ignored: any[]): string;
+    const defaultPath: Path;
+    export default defaultPath;
+}
+declare module "node:path/win32" {
     export const sep: string;
     export const delimiter: string;
     export function join(...parts: string[]): string;
