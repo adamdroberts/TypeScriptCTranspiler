@@ -96,6 +96,7 @@ interface AsyncFunctionContext {
 
 type GenericCallableDeclaration = ts.FunctionDeclaration | ts.MethodDeclaration;
 type ClosureLikeDeclaration = ts.ArrowFunction | ts.FunctionExpression | ts.MethodDeclaration;
+type LiftableFunctionDeclaration = ts.ArrowFunction | ts.FunctionExpression;
 type CommonJsExportAccess = ts.PropertyAccessExpression | ts.ElementAccessExpression;
 type CommonJsObjectAssignExportEntry =
     | ts.PropertyAssignment
@@ -620,7 +621,7 @@ class Emitter {
     }
 
     private shouldEmitLiftedArrow(
-        info: { name: ts.Identifier; fn: ts.ArrowFunction | ts.FunctionExpression },
+        info: { name: ts.Identifier; fn: LiftableFunctionDeclaration },
     ): boolean {
         const decl = ts.isVariableDeclaration(info.name.parent) ? info.name.parent : null;
         return !decl ||
@@ -20705,7 +20706,11 @@ class Emitter {
                     `static inline ${ret.c} ${name}_${methodName}(${params.length ? params.join(", ") : "void"})`,
                 );
                 const isAsync = this.isAsyncDeclaration(m);
+                const isGenerator = this.isGeneratorDeclaration(m);
                 const mappedRet = this.prepareType(ret);
+                if (isAsync && isGenerator) {
+                    unsupported(m, "async generator methods require Phase 6 async lowering");
+                }
                 if (isAsync) {
                     this.validateImmediateAsyncFunction(m);
                     if (mappedRet.kind !== "promise") {
@@ -20713,15 +20718,30 @@ class Emitter {
                     }
                 }
                 if (!isStatic(m)) this.currentClass = name;
-                this.returnStack.push(mappedRet);
-                if (isAsync) this.asyncFunctionStack.push({ promiseType: mappedRet });
-                try {
-                    this.emitStmtList(this.defs, m.body.statements);
-                    if (isAsync) this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
-                } finally {
-                    if (isAsync) this.asyncFunctionStack.pop();
-                    this.returnStack.pop();
-                    this.currentClass = null;
+                if (isGenerator) {
+                    try {
+                        this.emitGeneratorFunctionLikeBody(
+                            this.defs,
+                            m,
+                            mappedRet,
+                            m.parameters,
+                            this.capturedCellsFor(m),
+                            null,
+                        );
+                    } finally {
+                        this.currentClass = null;
+                    }
+                } else {
+                    this.returnStack.push(mappedRet);
+                    if (isAsync) this.asyncFunctionStack.push({ promiseType: mappedRet });
+                    try {
+                        this.emitStmtList(this.defs, m.body.statements);
+                        if (isAsync) this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
+                    } finally {
+                        if (isAsync) this.asyncFunctionStack.pop();
+                        this.returnStack.pop();
+                        this.currentClass = null;
+                    }
                 }
                 this.defs.close();
                 this.defs.line();
@@ -22132,37 +22152,58 @@ class Emitter {
         if (fd.body) visit(fd.body);
     }
 
+    private isGeneratorDeclaration(node: ts.Node): boolean {
+        return !!(node as { asteriskToken?: ts.AsteriskToken }).asteriskToken;
+    }
+
     private emitGeneratorFunctionBody(fd: ts.FunctionDeclaration): void {
-        if (fd.modifiers?.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)) {
+        if (this.isAsyncDeclaration(fd)) {
             unsupported(fd, "async generator functions require Phase 6 async lowering");
         }
         const { signature, returnType, thisType } = this.fnSignature(fd);
-        if (returnType.kind !== "array" || !returnType.elem) {
-            unsupported(fd, "generator functions must return Iterator<T> or IterableIterator<T>");
-        }
         const capturedCells = this.capturedCellsFor(fd);
-        const arrayVar = this.freshTemp("_gen");
         this.defs.open(signature);
-        this.returnStack.push(returnType);
-        this.cellScopes.push(capturedCells);
-        this.generatorStack.push({ arrayVar, elemType: returnType.elem });
-        if (thisType) {
-            this.functionThisStack.push({ c: "__tsc_this", ty: thisType });
+        this.emitGeneratorFunctionLikeBody(
+            this.defs,
+            fd,
+            returnType,
+            fd.parameters,
+            capturedCells,
+            thisType ? { c: "__tsc_this", ty: thisType } : null,
+        );
+        this.defs.close();
+        this.defs.line();
+    }
+
+    private emitGeneratorFunctionLikeBody(
+        buf: CBuf,
+        fn: ts.FunctionLikeDeclaration,
+        returnType: CType,
+        runtimeParams: readonly ts.ParameterDeclaration[],
+        capturedCells: Map<ts.Symbol, CaptureCell>,
+        thisParam: EmitResult | null,
+    ): void {
+        const ret = this.prepareType(returnType);
+        if (ret.kind !== "array" || !ret.elem) {
+            unsupported(fn, "generator functions must return Iterator<T> or IterableIterator<T>");
         }
-        this.defs.line(`tsc_array_t* ${arrayVar} = tsc_array_new(sizeof(${returnType.elem.c}), 4);`);
-        this.emitCapturedParameterCells(this.defs, fd.parameters, capturedCells);
+        const arrayVar = this.freshTemp("_gen");
+        this.returnStack.push(ret);
+        this.cellScopes.push(capturedCells);
+        this.generatorStack.push({ arrayVar, elemType: ret.elem });
+        if (thisParam) this.functionThisStack.push(thisParam);
+        buf.line(`tsc_array_t* ${arrayVar} = tsc_array_new(sizeof(${ret.elem.c}), 4);`);
+        this.emitCapturedParameterCells(buf, runtimeParams, capturedCells);
         try {
-            if (!fd.body) unsupported(fd, "function without body");
-            this.emitStmtList(this.defs, fd.body.statements);
-            this.defs.line(`return ${arrayVar};`);
+            if (!fn.body || !ts.isBlock(fn.body)) unsupported(fn, "generator function requires a block body");
+            this.emitStmtList(buf, fn.body.statements);
+            buf.line(`return ${arrayVar};`);
         } finally {
-            if (thisType) this.functionThisStack.pop();
+            if (thisParam) this.functionThisStack.pop();
             this.generatorStack.pop();
             this.cellScopes.pop();
             this.returnStack.pop();
         }
-        this.defs.close();
-        this.defs.line();
     }
 
     private fnSignature(fd: ts.FunctionDeclaration): {
@@ -28739,44 +28780,62 @@ class Emitter {
 
         const capturedCells = this.capturedCellsFor(fn);
         const isAsync = this.isAsyncDeclaration(fn);
+        const isGenerator = this.isGeneratorDeclaration(fn);
+        if (isAsync && isGenerator) {
+            unsupported(fn, "async generator function values require Phase 6 async lowering");
+        }
         if (isAsync) {
             this.validateImmediateAsyncFunction(fn);
             if (ret.kind !== "promise") {
                 unsupported(fn, "async function values must return Promise<T>");
             }
         }
-        this.returnStack.push(ret);
-        if (isAsync) this.asyncFunctionStack.push({ promiseType: ret });
-        this.cellScopes.push(capturedCells);
         this.closureEnvScopes.push(envBindings);
-        if (type.thisParam) {
-            this.functionThisStack.push({ c: "__tsc_this", ty: type.thisParam });
-        }
-        this.emitCapturedParameterCells(body, runtimeParams, capturedCells);
         try {
-            const fnBody = fn.body;
-            if (!fnBody) unsupported(fn, "closure implementation requires a body");
-            if (ts.isBlock(fnBody)) {
-                for (const s of fnBody.statements) this.emitStmt(body, s);
-                if (isAsync) body.line("return tsc_promise_resolve(tsc_value_undefined());");
+            if (isGenerator) {
+                this.emitGeneratorFunctionLikeBody(
+                    body,
+                    fn,
+                    ret,
+                    runtimeParams,
+                    capturedCells,
+                    type.thisParam ? { c: "__tsc_this", ty: type.thisParam } : null,
+                );
             } else {
-                const r = this.emitExpr(fnBody);
-                if (isAsync) {
-                    if (r.ty.kind === "promise") body.line(`return tsc_promise_adopt(${r.c});`);
-                    else body.line(`return ${this.promiseResolveResult(r, fnBody)};`);
-                } else if (ret.kind === "void") {
-                    body.line(`(void)(${r.c});`);
-                    body.line("return;");
-                } else {
-                    body.line(`return ${this.coerce(r, ret, fnBody)};`);
+                this.returnStack.push(ret);
+                if (isAsync) this.asyncFunctionStack.push({ promiseType: ret });
+                this.cellScopes.push(capturedCells);
+                if (type.thisParam) {
+                    this.functionThisStack.push({ c: "__tsc_this", ty: type.thisParam });
+                }
+                this.emitCapturedParameterCells(body, runtimeParams, capturedCells);
+                try {
+                    const fnBody = fn.body;
+                    if (!fnBody) unsupported(fn, "closure implementation requires a body");
+                    if (ts.isBlock(fnBody)) {
+                        for (const s of fnBody.statements) this.emitStmt(body, s);
+                        if (isAsync) body.line("return tsc_promise_resolve(tsc_value_undefined());");
+                    } else {
+                        const r = this.emitExpr(fnBody);
+                        if (isAsync) {
+                            if (r.ty.kind === "promise") body.line(`return tsc_promise_adopt(${r.c});`);
+                            else body.line(`return ${this.promiseResolveResult(r, fnBody)};`);
+                        } else if (ret.kind === "void") {
+                            body.line(`(void)(${r.c});`);
+                            body.line("return;");
+                        } else {
+                            body.line(`return ${this.coerce(r, ret, fnBody)};`);
+                        }
+                    }
+                } finally {
+                    if (type.thisParam) this.functionThisStack.pop();
+                    this.cellScopes.pop();
+                    if (isAsync) this.asyncFunctionStack.pop();
+                    this.returnStack.pop();
                 }
             }
         } finally {
-            if (type.thisParam) this.functionThisStack.pop();
             this.closureEnvScopes.pop();
-            this.cellScopes.pop();
-            if (isAsync) this.asyncFunctionStack.pop();
-            this.returnStack.pop();
         }
         body.close();
         body.line();
@@ -37135,7 +37194,7 @@ class Emitter {
     /** Is this a module-scope `const/let name = arrowFn;` worth lifting to a static C function? */
     private getLiftableArrow(
         stmt: ts.Statement,
-    ): { name: ts.Identifier; fn: ts.ArrowFunction | ts.FunctionExpression } | null {
+    ): { name: ts.Identifier; fn: LiftableFunctionDeclaration } | null {
         if (!ts.isVariableStatement(stmt)) return null;
         const decls = stmt.declarationList.declarations;
         if (decls.length !== 1) return null;
@@ -37148,7 +37207,7 @@ class Emitter {
     }
 
     private emitLiftedArrowPrototype(
-        info: { name: ts.Identifier; fn: ts.ArrowFunction | ts.FunctionExpression },
+        info: { name: ts.Identifier; fn: LiftableFunctionDeclaration },
     ): void {
         const sig = this.checker.getSignatureFromDeclaration(info.fn);
         if (!sig) unsupported(info.fn, "could not resolve lifted arrow signature");
@@ -37163,7 +37222,7 @@ class Emitter {
     }
 
     private emitLiftedArrowBody(
-        info: { name: ts.Identifier; fn: ts.ArrowFunction | ts.FunctionExpression },
+        info: { name: ts.Identifier; fn: LiftableFunctionDeclaration },
     ): void {
         const sig = this.checker.getSignatureFromDeclaration(info.fn);
         if (!sig) unsupported(info.fn, "could not resolve lifted arrow signature");
@@ -37176,12 +37235,29 @@ class Emitter {
             `${ret.c} ${name}(${allParams.length ? allParams.join(", ") : "void"})`,
         );
         const isAsync = this.isAsyncDeclaration(info.fn);
+        const isGenerator = this.isGeneratorDeclaration(info.fn);
         const mappedRet = this.prepareType(ret);
+        if (isAsync && isGenerator) {
+            unsupported(info.fn, "async generator lifted function values require Phase 6 async lowering");
+        }
         if (isAsync) {
             this.validateImmediateAsyncFunction(info.fn);
             if (mappedRet.kind !== "promise") {
                 unsupported(info.fn, "async lifted function values must return Promise<T>");
             }
+        }
+        if (isGenerator) {
+            this.emitGeneratorFunctionLikeBody(
+                this.defs,
+                info.fn,
+                mappedRet,
+                info.fn.parameters,
+                this.capturedCellsFor(info.fn),
+                thisType ? { c: "__tsc_this", ty: thisType } : null,
+            );
+            this.defs.close();
+            this.defs.line();
+            return;
         }
         this.returnStack.push(mappedRet);
         if (isAsync) this.asyncFunctionStack.push({ promiseType: mappedRet });
@@ -46578,6 +46654,10 @@ class Emitter {
                 const name = this.staticPropertyName(prop.name);
                 if (!name) return false;
                 seen.add(name);
+            } else if (ts.isMethodDeclaration(prop)) {
+                const name = this.staticPropertyName(prop.name);
+                if (!name) return false;
+                seen.add(name);
             } else if (ts.isShorthandPropertyAssignment(prop)) {
                 seen.add(prop.name.text);
             } else {
@@ -46599,7 +46679,7 @@ class Emitter {
             const pieces: string[] = [`tsc_object_t* ${obj} = tsc_object_new()`];
             for (const prop of ol.properties) {
                 let fieldName: string;
-                let expr: ts.Expression;
+                let expr: ts.Expression | ts.MethodDeclaration;
                 if (ts.isSpreadAssignment(prop)) {
                     const value = this.emitExpr(prop.expression);
                     pieces.push(
@@ -46616,10 +46696,19 @@ class Emitter {
                 } else if (ts.isShorthandPropertyAssignment(prop)) {
                     fieldName = prop.name.text;
                     expr = prop.name;
+                } else if (ts.isMethodDeclaration(prop)) {
+                    const staticName = this.staticPropertyName(prop.name);
+                    if (!staticName) {
+                        unsupported(prop.name, "dynamic object method key must be a string/number literal");
+                    }
+                    fieldName = staticName;
+                    expr = prop;
                 } else {
                     unsupported(prop, `object literal property kind ${ts.SyntaxKind[prop.kind]}`);
                 }
-                const value = this.emitExpr(expr);
+                const value = ts.isMethodDeclaration(expr)
+                    ? this.emitClosureExpression(expr)
+                    : this.emitExpr(expr);
                 pieces.push(
                     `tsc_object_set(${obj}, tsc_str_from_lit("${escapeCString(fieldName)}", ${utf8ByteLen(fieldName)}), ${this.coerce(value, T_VALUE, expr)})`,
                 );
@@ -46674,6 +46763,19 @@ class Emitter {
                 const fieldType = this.objectFieldType(ol, targetType, prop.name.text, prop.name);
                 pieces.push(
                     `${tmp}->${mangleIdent(prop.name.text)} = ${this.coerce(val, fieldType, prop.name)}`,
+                );
+            } else if (ts.isMethodDeclaration(prop)) {
+                const fieldName = this.staticPropertyName(prop.name);
+                if (!fieldName) {
+                    unsupported(
+                        prop.name,
+                        "computed method name must resolve to a string or number literal",
+                    );
+                }
+                const val = this.emitClosureExpression(prop);
+                const fieldType = this.objectFieldType(ol, targetType, fieldName, prop.name);
+                pieces.push(
+                    `${tmp}->${mangleIdent(fieldName)} = ${this.coerce(val, fieldType, prop)}`,
                 );
             } else if (ts.isSpreadAssignment(prop)) {
                 const sourceTsType = this.expressionDeclaredOrCurrentType(prop.expression);
@@ -46976,7 +47078,7 @@ class Emitter {
                         const idx = this.freshTemp("_idx");
                         const elem = this.freshTemp("_elem");
                         const boxed = this.coerce({ c: elem, ty: r.ty.elem }, T_VALUE, node);
-                        return `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(tsc_value_t), ${tmpIn}->len ? ${tmpIn}->len : 1); for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { ${r.ty.elem.c} ${elem} = TSC_ARR(${r.ty.elem.c}, ${tmpIn}, ${idx}); tsc_value_t _boxed = ${boxed}; tsc_array_push_raw(${tmpOut}, &_boxed); } tsc_value_array(${tmpOut}); })`;
+                        return `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(tsc_value_t), ${tmpIn}->len ? ${tmpIn}->len : 1); for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { ${r.ty.elem.c} ${elem} = TSC_ARR(${r.ty.elem.c}, ${tmpIn}, ${idx}); tsc_value_t _boxed = ${boxed}; tsc_array_push_raw(${tmpOut}, &_boxed); } ${tmpOut}->iter_pos = ${tmpIn}->iter_pos; ${tmpOut}->iter_has_return = ${tmpIn}->iter_has_return; ${tmpOut}->iter_return_consumed = ${tmpIn}->iter_return_consumed; ${tmpOut}->iter_return = ${tmpIn}->iter_return; tsc_value_array(${tmpOut}); })`;
                     }
                     return `tsc_value_array(${r.c})`;
                 }

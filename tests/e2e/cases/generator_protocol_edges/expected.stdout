@@ -1,0 +1,6 @@
+class: class-a class-b true class-done
+object: object-a true ended true undefined
+fn: fn-one true fn-done
+throw: boom
+return first: close-one
+return: true forced true undefined
