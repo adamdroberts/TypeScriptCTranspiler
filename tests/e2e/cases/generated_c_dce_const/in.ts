@@ -5460,9 +5460,16 @@ function mathStaticFoldingDce(): string {
     let dynamic_num = 5;
     const math_sign_dynamic = Math.sign(dynamic_num) === 1 ? "kept_math_sign_dynamic" : (console.log("dead_math_sign_dynamic_branch"), "dead_math_sign_dynamic_branch");
 
+    // Math.round, Math.sqrt, Math.cbrt, Math.clz32 static folding tests
+    const math_round_dead = Math.round(10.5) === 11 ? "kept_math_round_branch" : (console.log("dead_math_round_branch"), "dead_math_round_branch");
+    const math_sqrt_dead = Math.sqrt(16) === 4 ? "kept_math_sqrt_branch" : (console.log("dead_math_sqrt_branch"), "dead_math_sqrt_branch");
+    const math_cbrt_dead = Math.cbrt(27) === 3 ? "kept_math_cbrt_branch" : (console.log("dead_math_cbrt_branch"), "dead_math_cbrt_branch");
+    const math_clz32_dead = Math.clz32(1) === 31 ? "kept_math_clz32_branch" : (console.log("dead_math_clz32_branch"), "dead_math_clz32_branch");
+
     return math_abs_dead + " " + math_floor_dead + " " + math_ceil_dead + " " + math_trunc_dead + " " + math_min_dead + " " + math_max_dead + " " + math_abs_ignored_args + " " +
         math_sign_pos_dead + " " + math_sign_neg_dead + " " + math_sign_ignored_args + " " +
-        math_sign_zero_dynamic + " " + math_sign_nan_dynamic + " " + math_sign_inf_dynamic + " " + math_sign_dynamic;
+        math_sign_zero_dynamic + " " + math_sign_nan_dynamic + " " + math_sign_inf_dynamic + " " + math_sign_dynamic + " " +
+        math_round_dead + " " + math_sqrt_dead + " " + math_cbrt_dead + " " + math_clz32_dead;
 }
 
 
