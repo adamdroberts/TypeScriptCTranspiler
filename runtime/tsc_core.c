@@ -221,6 +221,25 @@ tsc_array_t* tsc_process_exec_argv(void) {
     return tsc_array_new(sizeof(tsc_str_t*), 1);
 }
 
+static tsc_set_t* cached_allowed_flags = NULL;
+tsc_set_t* tsc_process_allowed_node_environment_flags(void) {
+    if (!cached_allowed_flags) {
+        tsc_set_t* s = tsc_set_new(sizeof(tsc_str_t*), TSC_KEY_STR, 5);
+        tsc_str_t* f1 = tsc_str_from_lit("--inspect", 9);
+        tsc_set_add_raw(s, &f1);
+        tsc_str_t* f2 = tsc_str_from_lit("--inspect-brk", 13);
+        tsc_set_add_raw(s, &f2);
+        tsc_str_t* f3 = tsc_str_from_lit("--require", 9);
+        tsc_set_add_raw(s, &f3);
+        tsc_str_t* f4 = tsc_str_from_lit("--loader", 8);
+        tsc_set_add_raw(s, &f4);
+        tsc_str_t* f5 = tsc_str_from_lit("--enable-source-maps", 20);
+        tsc_set_add_raw(s, &f5);
+        cached_allowed_flags = s;
+    }
+    return cached_allowed_flags;
+}
+
 tsc_str_t* tsc_process_version(void) {
     return tsc_str_from_lit("v0.0.0-tsc2c", 12);
 }

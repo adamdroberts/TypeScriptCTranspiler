@@ -1,0 +1,29 @@
+--- 1. Global URLSearchParams Tests ---
+size: 5 toString: a=1&b=2&a=3&a=1&c=4
+has a: true
+has d: false
+has a=1: true
+has a=3: true
+has a=5: false
+has b=2: true
+has b=3: false
+has a=1 ignored: true
+has a=5 ignored: false
+delete a=1
+size: 3 toString: b=2&a=3&c=4
+delete nonexistent with extra
+size: 3 toString: b=2&a=3&c=4
+delete b=3 (non-matching value)
+size: 3 toString: b=2&a=3&c=4
+delete b=2
+size: 2 toString: a=3&c=4
+delete remaining a
+size: 1 toString: c=4
+--- 2. imported NodeURLSearchParams Tests ---
+size: 4 toString: x=10&y=20&x=10&x=30
+has x=10: true
+has x=40: false
+delete x=10
+size: 2 toString: y=20&x=30
+delete x
+size: 1 toString: y=20

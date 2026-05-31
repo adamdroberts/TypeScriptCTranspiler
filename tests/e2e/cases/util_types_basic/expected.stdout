@@ -1,0 +1,47 @@
+--- Testing via util.types (default import) ---
+isDate: true isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: true isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: true isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: true isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: true isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: true isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: true
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+--- Testing via nodeUtil.types (namespace import) ---
+isDate: true isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: true isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: true isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: true isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: true isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: true isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: true
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+--- Testing via types (named import) ---
+isDate: true isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: true isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: true isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: true isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: true isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: true isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: true
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+isDate: false isRegExp: false isNativeError: false isPromise: false isMap: false isSet: false isTypedArray: false
+--- Statically typed checks ---
+util.types.isDate(date): true
+util.types.isRegExp(regexp): true
+util.types.isNativeError(error): true
+util.types.isPromise(promise): true
+util.types.isMap(map): true
+util.types.isSet(set): true
+util.types.isTypedArray(buffer): true
