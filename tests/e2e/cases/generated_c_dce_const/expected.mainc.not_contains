@@ -6091,3 +6091,10 @@ dead_parse_int_radix_defaults
 dead_parse_int_hex
 dead_parse_int_ignored_args
 dead_parse_int_numeric_input
+dead_math_abs_branch
+dead_math_floor_branch
+dead_math_ceil_branch
+dead_math_trunc_branch
+dead_math_min_branch
+dead_math_max_branch
+dead_math_abs_ignored_args

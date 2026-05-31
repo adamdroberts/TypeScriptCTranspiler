@@ -5437,6 +5437,20 @@ function numericParserDce(): string {
     return parse_int_global_dead + " " + parse_int_number_dead + " " + parse_float_global_dead + " " + parse_float_number_dead + " " + parse_int_radix_defaults + " " + parse_int_hex + " " + parse_int_ignored_args + " " + parse_int_numeric_input;
 }
 
+function mathStaticFoldingDce(): string {
+    const math_abs_dead = Math.abs(-10) === 10 ? "kept_math_abs_branch" : (console.log("dead_math_abs_branch"), "dead_math_abs_branch");
+    const math_floor_dead = Math.floor(10.7) === 10 ? "kept_math_floor_branch" : (console.log("dead_math_floor_branch"), "dead_math_floor_branch");
+    const math_ceil_dead = Math.ceil(10.2) === 11 ? "kept_math_ceil_branch" : (console.log("dead_math_ceil_branch"), "dead_math_ceil_branch");
+    const math_trunc_dead = Math.trunc(-10.7) === -10 ? "kept_math_trunc_branch" : (console.log("dead_math_trunc_branch"), "dead_math_trunc_branch");
+    const math_min_dead = Math.min(5, 3, 9) === 3 ? "kept_math_min_branch" : (console.log("dead_math_min_branch"), "dead_math_min_branch");
+    const math_max_dead = Math.max(5, 3, 9) === 9 ? "kept_math_max_branch" : (console.log("dead_math_max_branch"), "dead_math_max_branch");
+
+    // Ignored/extra arguments side-effect-free checks
+    const math_abs_ignored_args = Math.abs(-5, "ignored_arg" as any) === 5 ? "kept_math_abs_ignored_args" : (console.log("dead_math_abs_ignored_args"), "dead_math_abs_ignored_args");
+
+    return math_abs_dead + " " + math_floor_dead + " " + math_ceil_dead + " " + math_trunc_dead + " " + math_min_dead + " " + math_max_dead + " " + math_abs_ignored_args;
+}
+
 console.log(
     usedLocal(used_count),
     constantBranch(used_count),
@@ -5494,5 +5508,6 @@ console.log(
     observedMutatingCollectionSources(),
     observedMutatingLengthProofs(),
     numericParserDce(),
+    mathStaticFoldingDce(),
     DceNamespace.kept,
 );

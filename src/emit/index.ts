@@ -4022,6 +4022,10 @@ class Emitter {
             return Number.isFinite(value) ? value : null;
         }
         if (ts.isCallExpression(unwrapped)) {
+            if (ts.isPropertyAccessExpression(unwrapped.expression)) {
+                const val = this.sideEffectFreeMathCallValue(unwrapped, seenConsts);
+                if (val !== null) return val;
+            }
             let isParseCall = false;
             let which: "parseInt" | "parseFloat" | undefined = undefined;
             if (ts.isIdentifier(unwrapped.expression)) {
@@ -13004,11 +13008,80 @@ class Emitter {
         return init ? this.sideEffectFreeTypeofString(init, seenConsts) : null;
     }
 
+    private sideEffectFreeMathCallValue(
+        expr: ts.CallExpression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        if (!ts.isPropertyAccessExpression(expr.expression)) return null;
+        const recv = expr.expression.expression;
+        const method = expr.expression.name.text;
+        if (!ts.isIdentifier(recv) || !this.isUnshadowedGlobalIdentifier(recv, "Math")) return null;
+
+        if (method === "abs") {
+            if (expr.arguments.length < 1) return null;
+            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
+            if (arg === null) return null;
+            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
+                return Math.abs(arg);
+            }
+        }
+        if (method === "floor") {
+            if (expr.arguments.length < 1) return null;
+            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
+            if (arg === null) return null;
+            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
+                return Math.floor(arg);
+            }
+        }
+        if (method === "ceil") {
+            if (expr.arguments.length < 1) return null;
+            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
+            if (arg === null) return null;
+            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
+                return Math.ceil(arg);
+            }
+        }
+        if (method === "trunc") {
+            if (expr.arguments.length < 1) return null;
+            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
+            if (arg === null) return null;
+            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
+                return Math.trunc(arg);
+            }
+        }
+        if (method === "min") {
+            const args: number[] = [];
+            for (const argExpr of expr.arguments) {
+                const argVal = this.sideEffectFreeNumericLiteralSameValueZeroValue(argExpr, seenConsts);
+                if (argVal === null) return null;
+                args.push(argVal);
+            }
+            return Math.min(...args);
+        }
+        if (method === "max") {
+            const args: number[] = [];
+            for (const argExpr of expr.arguments) {
+                const argVal = this.sideEffectFreeNumericLiteralSameValueZeroValue(argExpr, seenConsts);
+                if (argVal === null) return null;
+                args.push(argVal);
+            }
+            return Math.max(...args);
+        }
+        return null;
+    }
+
     private sideEffectFreePrimitiveNumberValue(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
     ): number | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression)
+        ) {
+            const val = this.sideEffectFreeMathCallValue(unwrapped, seenConsts);
+            if (val !== null) return val;
+        }
         if (
             ts.isCallExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
@@ -13084,6 +13157,20 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression)
+        ) {
+            const recv = unwrapped.expression.expression;
+            const method = unwrapped.expression.name.text;
+            if (
+                ts.isIdentifier(recv) &&
+                this.isUnshadowedGlobalIdentifier(recv, "Math") &&
+                (method === "abs" || method === "floor" || method === "ceil" || method === "trunc" || method === "min" || method === "max")
+            ) {
+                return unwrapped.arguments.every((arg) => this.isSideEffectFreePrimitiveNumberCoercion(arg, seenConsts));
+            }
+        }
         switch (unwrapped.kind) {
             case ts.SyntaxKind.TrueKeyword:
             case ts.SyntaxKind.FalseKeyword:
