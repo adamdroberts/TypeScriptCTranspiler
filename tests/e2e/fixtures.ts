@@ -566,6 +566,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-named-package": cjsPackage("tsc2c-cjs-named-package", {
         "index.js": 'exports.label = "cjs";\nexports.add = function add(left, right) { return left + right; };\n',
     }),
+    "tsc2c-cjs-mixed-interop-default": cjsPackage("tsc2c-cjs-mixed-interop-default", {
+        "index.js": 'exports.label = "mixed-interop";\nexports.add = function add(left, right) { return left + right; };\n',
+    }),
     "tsc2c-cjs-bracket-exports-package": cjsPackage("tsc2c-cjs-bracket-exports-package", {
         "index.js": 'exports["label"] = "bracket-cjs";\nexports["add"] = function add(left, right) { return left + right; };\n',
     }),
