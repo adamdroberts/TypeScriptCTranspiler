@@ -41014,6 +41014,9 @@ class Emitter {
             if (!Number.isFinite(val)) return null;
             return Object.is(val, -0) ? "0" : String(val);
         }
+        if (ts.isBigIntLiteral(cur)) {
+            return formatBigIntLiteral(cur.text);
+        }
         if (cur.kind === ts.SyntaxKind.TrueKeyword) return "true";
         if (cur.kind === ts.SyntaxKind.FalseKeyword) return "false";
         if (cur.kind === ts.SyntaxKind.NullKeyword) return "null";
@@ -41039,6 +41042,12 @@ class Emitter {
             if (!Number.isFinite(val)) return null;
             return Object.is(val, -0) ? "0" : String(val);
         }
+        if (ty.flags & ts.TypeFlags.BigIntLiteral) {
+            const val = (ty as any).value;
+            if (val) {
+                return (val.negative ? "-" : "") + val.base10Value;
+            }
+        }
         if (ty.flags & ts.TypeFlags.BooleanLiteral) {
             const intrinsicName = (ty as any).intrinsicName;
             if (intrinsicName === "true" || intrinsicName === "false") {
@@ -41062,6 +41071,9 @@ class Emitter {
             if (!Number.isFinite(val)) return null;
             return Object.is(val, -0) ? "0" : String(val);
         }
+        if (ts.isBigIntLiteral(cur)) {
+            return formatBigIntLiteral(cur.text);
+        }
         if (cur.kind === ts.SyntaxKind.TrueKeyword) return "true";
         if (cur.kind === ts.SyntaxKind.FalseKeyword) return "false";
         if (cur.kind === ts.SyntaxKind.NullKeyword) return "null";
@@ -41075,6 +41087,9 @@ class Emitter {
         ) {
             const val = this.staticComputedStringExpression(cur.operand);
             if (val === null) return null;
+            if (ts.isBigIntLiteral(cur.operand)) {
+                return `-${val}`;
+            }
             const num = -Number(val);
             return Number.isFinite(num) ? String(num) : null;
         }
@@ -41108,6 +41123,12 @@ class Emitter {
             const val = ty.value;
             if (!Number.isFinite(val)) return null;
             return Object.is(val, -0) ? "0" : String(val);
+        }
+        if (ty.flags & ts.TypeFlags.BigIntLiteral) {
+            const val = (ty as any).value;
+            if (val) {
+                return (val.negative ? "-" : "") + val.base10Value;
+            }
         }
         if (ty.flags & ts.TypeFlags.BooleanLiteral) {
             const intrinsicName = (ty as any).intrinsicName;

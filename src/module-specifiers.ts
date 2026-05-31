@@ -51,6 +51,9 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (!Number.isFinite(val)) return [];
             return [Object.is(val, -0) ? "0" : String(val)];
         }
+        if (ts.isBigIntLiteral(node)) {
+            return [node.text.replace(/n$/i, "").toLowerCase()];
+        }
         if (node.kind === ts.SyntaxKind.TrueKeyword) return ["true"];
         if (node.kind === ts.SyntaxKind.FalseKeyword) return ["false"];
         if (node.kind === ts.SyntaxKind.NullKeyword) return ["null"];
@@ -63,6 +66,9 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         ) {
             const vals = resolve(node.operand);
             if (vals.length !== 1) return [];
+            if (ts.isBigIntLiteral(node.operand)) {
+                return [`-${vals[0]}`];
+            }
             const num = -Number(vals[0]);
             return Number.isFinite(num) ? [String(num)] : [];
         }
@@ -443,8 +449,25 @@ function stringLiteralUnionTypeTexts(
     if (ts.isTemplateLiteralTypeNode(typeNode)) {
         return templateLiteralTypeTexts(typeNode, seenAliases);
     }
-    if (ts.isLiteralTypeNode(typeNode) && ts.isStringLiteral(typeNode.literal)) {
-        return [typeNode.literal.text];
+    if (typeNode.kind === ts.SyntaxKind.NullKeyword) return ["null"];
+    if (typeNode.kind === ts.SyntaxKind.UndefinedKeyword) return ["undefined"];
+    if (ts.isLiteralTypeNode(typeNode)) {
+        const literal = typeNode.literal;
+        if (ts.isStringLiteral(literal) || ts.isNumericLiteral(literal)) return [literal.text];
+        if (ts.isBigIntLiteral(literal)) return [literal.text.replace(/n$/i, "")];
+        if (literal.kind === ts.SyntaxKind.NullKeyword) return ["null"];
+        if (literal.kind === ts.SyntaxKind.TrueKeyword) return ["true"];
+        if (literal.kind === ts.SyntaxKind.FalseKeyword) return ["false"];
+        if (ts.isPrefixUnaryExpression(literal) && ts.isNumericLiteral(literal.operand)) {
+            if (literal.operator === ts.SyntaxKind.MinusToken) return [`-${literal.operand.text}`];
+            if (literal.operator === ts.SyntaxKind.PlusToken) return [literal.operand.text];
+        }
+        if (ts.isPrefixUnaryExpression(literal) && ts.isBigIntLiteral(literal.operand)) {
+            const formatted = literal.operand.text.replace(/n$/i, "");
+            if (literal.operator === ts.SyntaxKind.MinusToken) return [`-${formatted}`];
+            if (literal.operator === ts.SyntaxKind.PlusToken) return [formatted];
+        }
+        return [];
     }
     if (!ts.isUnionTypeNode(typeNode)) return [];
     const values: string[] = [];

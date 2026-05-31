@@ -627,6 +627,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-null-undefined-exports": cjsPackage("tsc2c-cjs-null-undefined-exports", {
         "index.js": 'exports.__esModule = true;\nconst keyMap = { empty: null, alias: undefined };\nconst keys = [null, undefined];\nexports[null] = "nil";\nexports[undefined] = "none";\nexports[keyMap.empty] = "nil-map";\nexports[keyMap.alias] = "none-map";\nexports[keys[0]] = "nil-arr";\nexports[keys[1]] = "none-arr";\n',
     }),
+    "tsc2c-cjs-bigint-exports": cjsPackage("tsc2c-cjs-bigint-exports", {
+        "index.js": 'exports.__esModule = true;\nconst ten = 10n;\nconst negTwo = -2n;\nexports[10n] = "ten-bigint";\nexports[-2n] = "negative-two-bigint";\nexports[ten] = "ten-bigint-var";\nexports[negTwo] = "negative-two-bigint-var";\n',
+    }),
     "tsc2c-cjs-define-properties-from-entries-object-entries": cjsPackage("tsc2c-cjs-define-properties-from-entries-object-entries", {
         "index.js": 'exports.__esModule = true;\nconst defaultKey = "def" + "ault";\nconst labelSuffix = "bel";\nconst descriptors = {\n  [defaultKey]: { value: function greet(name) { return "object-entries " + name; }, enumerable: true },\n  ["la" + labelSuffix]: { value: "define-properties-object-entries", enumerable: true },\n  count: { value: 83, enumerable: true },\n  double: { value: function double(value) { return value * 4; }, enumerable: true }\n};\nconst entries = Object.entries(descriptors);\nObject.defineProperties(module.exports, Object.fromEntries(entries));\n',
     }),
