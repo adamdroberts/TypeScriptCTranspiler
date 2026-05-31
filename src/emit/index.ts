@@ -11913,6 +11913,7 @@ class Emitter {
             case "title":
             case "argv0":
             case "execPath":
+            case "allowedNodeEnvironmentFlags":
                 return true;
             default:
                 return false;
@@ -30758,6 +30759,8 @@ class Emitter {
                 return { c: `tsc_process_exec_argv()`, ty: arrayType(T_STRING) };
             case "version":
                 return { c: `tsc_process_version()`, ty: T_STRING };
+            case "allowedNodeEnvironmentFlags":
+                return { c: `tsc_process_allowed_node_environment_flags()`, ty: setType(T_STRING) };
             case "versions":
                 return { c: `tsc_process_versions()`, ty: T_VALUE };
             case "release":

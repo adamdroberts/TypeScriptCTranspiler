@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `process.allowedNodeEnvironmentFlags` is supported as a bounded read-only `Set<string>` containing a deterministic small list of common Node flags (`--inspect`, `--inspect-brk`, `--require`, `--loader`, `--enable-source-maps`), supporting global process and named, namespace, and default imports from `"process"` / `"node:process"`. Test: `process_allowed_node_environment_flags`.
 - `Buffer.from(...)`, `Buffer.toString(...)`, `Buffer.byteLength(...)`, `Buffer.isEncoding(...)`, and Buffer write paths now support bounded `"latin1"`, `"binary"`, and `"ascii"` encoding aliases alongside the existing UTF-8, hex, and base64 subset. Test: `buffer_latin1_ascii_encoding`.
 - Extended `Buffer.prototype.compare` to support optional target and source range bounds (`targetStart?`, `targetEnd?`, `sourceStart?`, `sourceEnd?`) with Node-like range validations and error messages. Test: `buffer_compare_ranges`.
 - Add compile-time `os.constants.signals` object subset supporting named, default, and namespace imports from `"os"` / `"node:os"`, mapping common POSIX signals SIGHUP, SIGINT, SIGQUIT, SIGILL, SIGTRAP, SIGABRT, SIGBUS, SIGFPE, SIGKILL, SIGUSR1, SIGSEGV, SIGUSR2, SIGPIPE, SIGALRM, SIGTERM to stable POSIX/Linux numeric constants. Test: `os_constants_signals`.

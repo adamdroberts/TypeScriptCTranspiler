@@ -1,0 +1,15 @@
+global size: 5
+global has --require: true
+global has --inspect: true
+global has --invalid: false
+named size: 5
+named has --loader: true
+namespace size: 5
+namespace has --inspect-brk: true
+default size: 5
+default has --enable-source-maps: true
+has --inspect: true
+has --inspect-brk: true
+has --require: true
+has --loader: true
+has --enable-source-maps: true
