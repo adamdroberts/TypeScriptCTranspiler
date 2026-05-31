@@ -347,6 +347,74 @@ tsc_buffer_t* tsc_crypto_pbkdf2_sync_bb(const tsc_buffer_t* password, const tsc_
     return tsc_crypto_pbkdf2_sync_impl(p_data, p_len, s_data, s_len, iterations, keylen, digest);
 }
 
+tsc_buffer_t* tsc_crypto_scrypt_sync_impl(const void* password_data, size_t password_len, const void* salt_data, size_t salt_len, double keylen, double N, double r, double p, double maxmem) {
+    if (isnan(keylen) || isinf(keylen) || keylen < 0) {
+        tsc_throw_str(tsc_str_from_cstr("crypto.scryptSync: keylen must be a non-negative finite number"));
+    }
+    if (isnan(N) || isinf(N) || N <= 1 || ((uint64_t)N & ((uint64_t)N - 1)) != 0) {
+        tsc_throw_str(tsc_str_from_cstr("crypto.scryptSync: N must be a power of two greater than 1"));
+    }
+    if (isnan(r) || isinf(r) || r <= 0) {
+        tsc_throw_str(tsc_str_from_cstr("crypto.scryptSync: r must be a positive finite number"));
+    }
+    if (isnan(p) || isinf(p) || p <= 0) {
+        tsc_throw_str(tsc_str_from_cstr("crypto.scryptSync: p must be a positive finite number"));
+    }
+    if (isnan(maxmem) || isinf(maxmem) || maxmem <= 0) {
+        tsc_throw_str(tsc_str_from_cstr("crypto.scryptSync: maxmem must be a positive finite number"));
+    }
+
+    tsc_buffer_t* out = tsc_buffer_alloc(keylen, 0.0);
+    if (out->len == 0) {
+        return out;
+    }
+
+    int res = EVP_PBE_scrypt(
+        (const char*)password_data, password_len,
+        (const unsigned char*)salt_data, salt_len,
+        (uint64_t)N, (uint64_t)r, (uint64_t)p, (uint64_t)maxmem,
+        out->data, (size_t)out->len
+    );
+
+    if (res != 1) {
+        tsc_throw_str(tsc_str_from_cstr("crypto.scryptSync: EVP_PBE_scrypt failed"));
+    }
+
+    return out;
+}
+
+tsc_buffer_t* tsc_crypto_scrypt_sync_ss(const tsc_str_t* password, const tsc_str_t* salt, double keylen, double N, double r, double p, double maxmem) {
+    const void* p_data = password ? (const void*)password->data : "";
+    size_t p_len = password ? password->len : 0;
+    const void* s_data = salt ? (const void*)salt->data : "";
+    size_t s_len = salt ? salt->len : 0;
+    return tsc_crypto_scrypt_sync_impl(p_data, p_len, s_data, s_len, keylen, N, r, p, maxmem);
+}
+
+tsc_buffer_t* tsc_crypto_scrypt_sync_sb(const tsc_str_t* password, const tsc_buffer_t* salt, double keylen, double N, double r, double p, double maxmem) {
+    const void* p_data = password ? (const void*)password->data : "";
+    size_t p_len = password ? password->len : 0;
+    const void* s_data = salt ? (const void*)salt->data : NULL;
+    size_t s_len = salt ? salt->len : 0;
+    return tsc_crypto_scrypt_sync_impl(p_data, p_len, s_data, s_len, keylen, N, r, p, maxmem);
+}
+
+tsc_buffer_t* tsc_crypto_scrypt_sync_bs(const tsc_buffer_t* password, const tsc_str_t* salt, double keylen, double N, double r, double p, double maxmem) {
+    const void* p_data = password ? (const void*)password->data : NULL;
+    size_t p_len = password ? password->len : 0;
+    const void* s_data = salt ? (const void*)salt->data : "";
+    size_t s_len = salt ? salt->len : 0;
+    return tsc_crypto_scrypt_sync_impl(p_data, p_len, s_data, s_len, keylen, N, r, p, maxmem);
+}
+
+tsc_buffer_t* tsc_crypto_scrypt_sync_bb(const tsc_buffer_t* password, const tsc_buffer_t* salt, double keylen, double N, double r, double p, double maxmem) {
+    const void* p_data = password ? (const void*)password->data : NULL;
+    size_t p_len = password ? password->len : 0;
+    const void* s_data = salt ? (const void*)salt->data : NULL;
+    size_t s_len = salt ? salt->len : 0;
+    return tsc_crypto_scrypt_sync_impl(p_data, p_len, s_data, s_len, keylen, N, r, p, maxmem);
+}
+
 tsc_array_t* tsc_crypto_get_hashes(void) {
     tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), 6);
     tsc_str_t* s1 = tsc_str_from_cstr("md5");

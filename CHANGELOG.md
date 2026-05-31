@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `crypto.scryptSync(password, salt, keylen, options?, ...ignored)` computes scrypt derivative keys returning a Buffer, supporting password/salt as string or Buffer, numeric keylen, default parameters, option fields N/cost, r/blockSize, p/parallelization, maxmem, and catchable parameter validation failures. Test: `crypto_scrypt_sync`.
 - Supported `crypto.randomFillSync(buffer[, offset[, size]], ...ignored)` for filling a Buffer with random bytes using OpenSSL `RAND_bytes`, mutating and returning the same Buffer, with support for offset/size range boundary validations and ignored trailing arguments across global crypto and named, namespace, and default imports from `"crypto"` / `"node:crypto"`. Test: `crypto_random_fill_sync`.
 - `URLSearchParams` now supports value-aware `has(name, value?)` and `delete(name, value?)` overloads to check and delete by matching name-value pair, preserving one-argument behavior and evaluating ignored extra arguments. Test: `url_search_params_value_delete_has`.
 - Bounded `querystring.escape(string)` and `unescape(string)` helpers are supported across named, default, and namespace imports from `"querystring"` and `"node:querystring"`, with escape percent-encoding spaces to `%20` and `+` to `%2B`, and unescape preserving raw `+` characters. Test: `querystring_escape_unescape`.

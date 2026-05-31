@@ -1,0 +1,12 @@
+scrypt ss default: 745731af4484f323968969eda289aeee005b5903ac561e64a5aca121797bf773
+scrypt sb custom: 16dbc8906763c7f048977a68f9d305f7710e068ca2cd95dab372125bb3f19608
+scrypt bs custom: 9a21c83909cfe77a8498e9096031eb149bb5e41352fa656017c1d379a3da767f8e3b6bb4173f7c69ac0b41f7fb2532f6a7cab93eba200b8cda698b7c02de1df3
+scrypt bb custom: 3cf2ff249f6592a84fc509f6799edfbd
+named import: true
+namespace import: true
+ignored args: true 42
+error: crypto.scryptSync: keylen must be a non-negative finite number
+error: crypto.scryptSync: N must be a power of two greater than 1
+error: crypto.scryptSync: r must be a positive finite number
+error: crypto.scryptSync: p must be a positive finite number
+error: crypto.scryptSync: maxmem must be a positive finite number
