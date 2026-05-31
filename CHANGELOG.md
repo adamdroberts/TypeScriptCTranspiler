@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Added immediate-settled `fs.promises.statfs(path[, options])` support across `fs.promises`, `"fs/promises"`, and `"node:fs/promises"` using the existing POSIX statfs runtime subset. Test: `fs_promises_statfs`.
 - Object and Reflect `setPrototypeOf` now reject array and function prototype cycles instead of allowing cyclic prototype chains. Test: `object_prototype_cycles`.
 - Implemented global hidden classes / shape trees to share property cache validation across dynamic objects of the same shape, improving inline cache hits at property get and set sites. Tests: `dynamic_polymorphic_cache`.
 - Implemented a bounded event-loop-backed `setImmediate(callback, ...args)` model that processes callbacks exactly once per check phase of the event loop, yielding nested scheduling to the next iteration to preserve proper timer and microtask phase ordering. Test: `nested_set_immediate`.

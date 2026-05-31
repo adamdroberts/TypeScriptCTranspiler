@@ -29656,6 +29656,7 @@ class Emitter {
             "writeFile",
             "appendFile",
             "readdir",
+            "statfs",
             "stat",
             "lstat",
             "realpath",
@@ -42598,6 +42599,20 @@ class Emitter {
                     }
                     return settle(`tsc_promise_resolve(tsc_value_array(${value}))`);
                 });
+            }
+            case "statfs": {
+                if (args.length < 1) unsupported(call, "fs.promises.statfs needs path and optional { bigint: false } options");
+                this.validateFsStatFsOptions(args[1], "fs.promises.statfs");
+                const p = this.emitExpr(args[0]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
+                return this.emitSequencedExpr(mapped, [
+                    this.fsPathSpec(p, args[0]!, "fs.promises.statfs path"),
+                    ...optionSpecs,
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
+                ], ([path]) => settle(`tsc_promise_resolve(tsc_fs_statfs_sync(${path!}))`));
             }
             case "stat": {
                 if (args.length < 1) unsupported(call, "fs.promises.stat needs path and optional { bigint: false, throwIfNoEntry } options");

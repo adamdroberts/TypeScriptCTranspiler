@@ -1,0 +1,3 @@
+{
+  "description": "fs.promises.statfs immediate-settled POSIX filesystem stats"
+}
