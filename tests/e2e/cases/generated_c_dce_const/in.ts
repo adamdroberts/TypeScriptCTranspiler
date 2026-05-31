@@ -5510,6 +5510,25 @@ function staticSwitchExitDce(): number {
     return static_switch_after_exit;
 }
 
+function stringInstanceMethodsDce(): string {
+    const text = "alpha-beta";
+    if (text.charAt(0) !== "a") return "local_dead_string_char_at_unreached";
+    if (text.at(6) !== "b") return "local_dead_string_at_unreached";
+    if (text[1] !== "l") return "local_dead_string_index_unreached";
+    if (text.slice(0, 5) !== "alpha") return "local_dead_string_slice_unreached";
+    if (text.substring(6, 10) !== "beta") return "local_dead_string_substring_unreached";
+    if (text.substr(6, 4) !== "beta") return "local_dead_string_substr_unreached";
+    if ("a".concat("b", 3 as any, true as any) !== "ab3true") return "local_dead_string_concat_unreached";
+    if ("hello".charCodeAt(1) !== 101) return "local_dead_string_char_code_at_unreached";
+    if ("hello".codePointAt(1) !== 101) return "local_dead_string_code_point_at_unreached";
+    if (text.indexOf("beta") !== 6) return "local_dead_string_index_of_unreached";
+    if (text.lastIndexOf("a") !== 9) return "local_dead_string_last_index_of_unreached";
+    if (!text.includes("ha-b")) return "local_dead_string_includes_unreached";
+    if (!text.startsWith("alpha")) return "local_dead_string_starts_with_unreached";
+    if (!text.endsWith("beta")) return "local_dead_string_ends_with_unreached";
+    return "kept_string_instance_methods_all";
+}
+
 
 console.log(
     usedLocal(used_count),
@@ -5544,6 +5563,7 @@ console.log(
     stringInstanceCaseFoldingDce(),
     stringInstanceTrimDce(),
     stringInstanceRepeatPadDce(),
+    stringInstanceMethodsDce(),
     uriStaticFoldingDce(),
     computedTruthyFalsyDce(),
     computedSwitchKeyDce(),

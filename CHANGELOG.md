@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE static string analysis now folds side-effect-free string index access and `.charAt(...)`, `.at(...)`, `.slice(...)`, `.substring(...)`, `.substr(...)`, `.concat(...)`, `.charCodeAt(...)`, `.codePointAt(...)`, `.indexOf(...)`, `.lastIndexOf(...)`, `.includes(...)`, `.startsWith(...)`, and `.endsWith(...)` calls. Test: `generated_c_dce_const`.
 - `Reflect.construct` now applies `newTarget.prototype` for dynamic function construction, including Proxy `get` trap and revoked Proxy behavior during prototype lookup. Test: `proxy_construct_new_target_prototype`.
 - `fs.realpath` / `fs.readlink` / `fs.mkdtemp` coverage now verifies direct literal `{ encoding: null }`, `{ encoding: undefined }`, and `{}` options for sync and immediate-promise string result paths. Tests: `fs_link_path_encoding_options`, `fs_mkdtemp_encoding_options`.
 - Promise combinators now AOT-assimilate dynamic array and Set elements, allowing mixed `any` values, thenables, and Promises in `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`. Test: `promise_combinators_dynamic`.
