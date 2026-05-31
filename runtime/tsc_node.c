@@ -14,14 +14,18 @@ tsc_hash_t* tsc_crypto_create_hash(const tsc_str_t* algorithm) {
     const EVP_MD* md = NULL;
     if (str_lit_eq(algorithm, "sha1")) {
         md = EVP_sha1();
+    } else if (str_lit_eq(algorithm, "sha224")) {
+        md = EVP_sha224();
     } else if (str_lit_eq(algorithm, "sha256")) {
         md = EVP_sha256();
+    } else if (str_lit_eq(algorithm, "sha384")) {
+        md = EVP_sha384();
     } else if (str_lit_eq(algorithm, "sha512")) {
         md = EVP_sha512();
     } else if (str_lit_eq(algorithm, "md5")) {
         md = EVP_md5();
     } else {
-        tsc_throw_str(tsc_str_from_cstr("crypto.createHash: only md5, sha1, sha256, and sha512 are supported"));
+        tsc_throw_str(tsc_str_from_cstr("crypto.createHash: only md5, sha1, sha224, sha256, sha384, and sha512 are supported"));
     }
 
     tsc_hash_t* h = (tsc_hash_t*)TSC_GC_MALLOC(sizeof(tsc_hash_t));
@@ -56,14 +60,18 @@ tsc_hmac_t* tsc_crypto_create_hmac_str(const tsc_str_t* algorithm, const tsc_str
     const EVP_MD* md = NULL;
     if (str_lit_eq(algorithm, "sha1")) {
         md = EVP_sha1();
+    } else if (str_lit_eq(algorithm, "sha224")) {
+        md = EVP_sha224();
     } else if (str_lit_eq(algorithm, "sha256")) {
         md = EVP_sha256();
+    } else if (str_lit_eq(algorithm, "sha384")) {
+        md = EVP_sha384();
     } else if (str_lit_eq(algorithm, "sha512")) {
         md = EVP_sha512();
     } else if (str_lit_eq(algorithm, "md5")) {
         md = EVP_md5();
     } else {
-        tsc_throw_str(tsc_str_from_cstr("crypto.createHmac: only md5, sha1, sha256, and sha512 are supported"));
+        tsc_throw_str(tsc_str_from_cstr("crypto.createHmac: only md5, sha1, sha224, sha256, sha384, and sha512 are supported"));
     }
 
     tsc_hmac_t* h = (tsc_hmac_t*)TSC_GC_MALLOC(sizeof(tsc_hmac_t));
@@ -91,14 +99,18 @@ tsc_hmac_t* tsc_crypto_create_hmac_buffer(const tsc_str_t* algorithm, const tsc_
     const EVP_MD* md = NULL;
     if (str_lit_eq(algorithm, "sha1")) {
         md = EVP_sha1();
+    } else if (str_lit_eq(algorithm, "sha224")) {
+        md = EVP_sha224();
     } else if (str_lit_eq(algorithm, "sha256")) {
         md = EVP_sha256();
+    } else if (str_lit_eq(algorithm, "sha384")) {
+        md = EVP_sha384();
     } else if (str_lit_eq(algorithm, "sha512")) {
         md = EVP_sha512();
     } else if (str_lit_eq(algorithm, "md5")) {
         md = EVP_md5();
     } else {
-        tsc_throw_str(tsc_str_from_cstr("crypto.createHmac: only md5, sha1, sha256, and sha512 are supported"));
+        tsc_throw_str(tsc_str_from_cstr("crypto.createHmac: only md5, sha1, sha224, sha256, sha384, and sha512 are supported"));
     }
 
     tsc_hmac_t* h = (tsc_hmac_t*)TSC_GC_MALLOC(sizeof(tsc_hmac_t));
@@ -294,15 +306,19 @@ tsc_buffer_t* tsc_crypto_pbkdf2_sync_bb(const tsc_buffer_t* password, const tsc_
 }
 
 tsc_array_t* tsc_crypto_get_hashes(void) {
-    tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), 4);
+    tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), 6);
     tsc_str_t* s1 = tsc_str_from_cstr("md5");
     tsc_array_push_raw(a, &s1);
     tsc_str_t* s2 = tsc_str_from_cstr("sha1");
     tsc_array_push_raw(a, &s2);
-    tsc_str_t* s3 = tsc_str_from_cstr("sha256");
+    tsc_str_t* s3 = tsc_str_from_cstr("sha224");
     tsc_array_push_raw(a, &s3);
-    tsc_str_t* s4 = tsc_str_from_cstr("sha512");
+    tsc_str_t* s4 = tsc_str_from_cstr("sha256");
     tsc_array_push_raw(a, &s4);
+    tsc_str_t* s5 = tsc_str_from_cstr("sha384");
+    tsc_array_push_raw(a, &s5);
+    tsc_str_t* s6 = tsc_str_from_cstr("sha512");
+    tsc_array_push_raw(a, &s6);
     return a;
 }
 

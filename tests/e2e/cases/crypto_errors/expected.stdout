@@ -1,4 +1,4 @@
-createHash: crypto.createHash: only md5, sha1, sha256, and sha512 are supported
+createHash: crypto.createHash: only md5, sha1, sha224, sha256, sha384, and sha512 are supported
 randomBytes: crypto.randomBytes size must be a non-negative finite number
 digest: Hash.digest: only hex and base64 encodings are supported
 valid: a9993e36 0
