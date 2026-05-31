@@ -1584,6 +1584,65 @@ tsc_dns_resolve4_result_t tsc_dns_resolve4(tsc_str_t* hostname) {
     return out;
 }
 
+tsc_dns_lookup_service_result_t tsc_dns_lookup_service(tsc_str_t* address, double port) {
+    tsc_dns_lookup_service_result_t out;
+    out.error = NULL;
+    out.hostname = NULL;
+    out.service = NULL;
+    if (!address) {
+        out.error = tsc_str_from_lit("dns.lookupService: address required", 35);
+        return out;
+    }
+    int p = (int)port;
+    if (p < 0 || p > 65535) {
+        out.error = tsc_str_from_lit("dns.lookupService: invalid port", 31);
+        return out;
+    }
+    char* ip_str = cstr_dup(address);
+    struct in_addr in4_addr;
+    struct in6_addr in6_addr;
+    struct sockaddr* sa_ptr = NULL;
+    socklen_t sa_len = 0;
+    struct sockaddr_in sa4;
+    struct sockaddr_in6 sa6;
+
+    if (inet_pton(AF_INET, ip_str, &in4_addr) == 1) {
+        memset(&sa4, 0, sizeof(sa4));
+        sa4.sin_family = AF_INET;
+        sa4.sin_port = htons((uint16_t)p);
+        sa4.sin_addr = in4_addr;
+        sa_ptr = (struct sockaddr*)&sa4;
+        sa_len = sizeof(sa4);
+    } else if (inet_pton(AF_INET6, ip_str, &in6_addr) == 1) {
+        memset(&sa6, 0, sizeof(sa6));
+        sa6.sin6_family = AF_INET6;
+        sa6.sin6_port = htons((uint16_t)p);
+        sa6.sin6_addr = in6_addr;
+        sa_ptr = (struct sockaddr*)&sa6;
+        sa_len = sizeof(sa6);
+    }
+
+    if (!sa_ptr) {
+        free(ip_str);
+        out.error = tsc_str_from_lit("dns.lookupService: invalid IP address", 37);
+        return out;
+    }
+
+    char host[NI_MAXHOST];
+    char serv[NI_MAXSERV];
+    int rc = getnameinfo(sa_ptr, sa_len, host, sizeof(host), serv, sizeof(serv), 0);
+    free(ip_str);
+
+    if (rc != 0) {
+        out.error = tsc_str_from_cstr(gai_strerror(rc));
+        return out;
+    }
+
+    out.hostname = tsc_str_from_cstr(host);
+    out.service = tsc_str_from_cstr(serv);
+    return out;
+}
+
 bool tsc_net_is_ipv4(tsc_str_t* input) {
     if (!input) return false;
     char* cstr = cstr_dup(input);

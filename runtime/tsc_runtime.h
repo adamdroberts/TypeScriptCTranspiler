@@ -533,6 +533,7 @@ typedef struct tsc_fs_dirent tsc_fs_dirent_t;
 typedef struct tsc_dns_lookup_result tsc_dns_lookup_result_t;
 typedef struct tsc_dns_lookup_all_result tsc_dns_lookup_all_result_t;
 typedef struct tsc_dns_resolve4_result tsc_dns_resolve4_result_t;
+typedef struct tsc_dns_lookup_service_result tsc_dns_lookup_service_result_t;
 typedef tsc_value_t (*tsc_accessor_getter_t)(void* env, tsc_value_t receiver);
 typedef bool (*tsc_accessor_setter_t)(void* env, tsc_value_t receiver, tsc_value_t value);
 typedef tsc_value_t (*tsc_generic_function_t)(void* env, tsc_value_t this_arg, tsc_array_t* args);
@@ -715,9 +716,15 @@ struct tsc_dns_resolve4_result {
     tsc_str_t* error;
     tsc_array_t* addresses;
 };
+struct tsc_dns_lookup_service_result {
+    tsc_str_t* error;
+    tsc_str_t* hostname;
+    tsc_str_t* service;
+};
 tsc_dns_lookup_result_t tsc_dns_lookup(tsc_str_t* hostname, double family, double hints);
 tsc_dns_lookup_all_result_t tsc_dns_lookup_all(tsc_str_t* hostname, double family, double hints);
 tsc_dns_resolve4_result_t tsc_dns_resolve4(tsc_str_t* hostname);
+tsc_dns_lookup_service_result_t tsc_dns_lookup_service(tsc_str_t* address, double port);
 double tsc_net_is_ip(tsc_str_t* input);
 bool tsc_net_is_ipv4(tsc_str_t* input);
 bool tsc_net_is_ipv6(tsc_str_t* input);

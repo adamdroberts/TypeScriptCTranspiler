@@ -1924,6 +1924,7 @@ type DnsLookupCallback = (err: any, address: string, family: number) => void;
 type DnsLookupAllCallback = (err: any, addresses: any[]) => void;
 type DnsLookupFamily = 0 | 4 | 6;
 type DnsResolveCallback = (err: any, addresses: string[]) => void;
+type DnsLookupServiceCallback = (err: any, hostname: string, service: string) => void;
 interface DnsResolveOptions {
     ttl?: boolean;
 }
@@ -1939,6 +1940,7 @@ interface DnsPromises {
     lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined, ...ignored: any[]): Promise<any>;
     resolve4(hostname: string): Promise<string[]>;
     resolve4(hostname: string, options: DnsResolveOptions | undefined, ...ignored: any[]): Promise<string[]>;
+    lookupService(address: string, port: number): Promise<{ hostname: string; service: string }>;
 }
 interface DNS {
     readonly ADDRCONFIG: number;
@@ -1950,6 +1952,7 @@ interface DNS {
     lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined, callback: DnsLookupAllCallback, ...ignored: any[]): void;
     resolve4(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     resolve4(hostname: string, options: DnsResolveOptions | undefined, callback: DnsResolveCallback, ...ignored: any[]): void;
+    lookupService(address: string, port: number, callback: DnsLookupServiceCallback, ...ignored: any[]): void;
 }
 declare const dns: DNS;
 declare module "dns" {
@@ -1962,6 +1965,7 @@ declare module "dns" {
     export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined, callback: DnsLookupAllCallback, ...ignored: any[]): void;
     export function resolve4(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolve4(hostname: string, options: DnsResolveOptions | undefined, callback: DnsResolveCallback, ...ignored: any[]): void;
+    export function lookupService(address: string, port: number, callback: DnsLookupServiceCallback, ...ignored: any[]): void;
     const defaultDns: DNS;
     export default defaultDns;
 }
@@ -1975,18 +1979,21 @@ declare module "node:dns" {
     export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined, callback: DnsLookupAllCallback, ...ignored: any[]): void;
     export function resolve4(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolve4(hostname: string, options: DnsResolveOptions | undefined, callback: DnsResolveCallback, ...ignored: any[]): void;
+    export function lookupService(address: string, port: number, callback: DnsLookupServiceCallback, ...ignored: any[]): void;
     const defaultDns: DNS;
     export default defaultDns;
 }
 declare module "dns/promises" {
     export const lookup: DnsPromises["lookup"];
     export const resolve4: DnsPromises["resolve4"];
+    export const lookupService: DnsPromises["lookupService"];
     const defaultDnsPromises: DnsPromises;
     export default defaultDnsPromises;
 }
 declare module "node:dns/promises" {
     export const lookup: DnsPromises["lookup"];
     export const resolve4: DnsPromises["resolve4"];
+    export const lookupService: DnsPromises["lookupService"];
     const defaultDnsPromises: DnsPromises;
     export default defaultDnsPromises;
 }
