@@ -915,6 +915,14 @@ declare function setTimeout<A, B, C, D, E>(callback: (this: any, arg1: A, arg2: 
 declare function setTimeout<A, B, C, D, E, F>(callback: (this: any, arg1: A, arg2: B, arg3: C, arg4: D, arg5: E, arg6: F) => void, delay: number, arg1: A, arg2: B, arg3: C, arg4: D, arg5: E, arg6: F): number;
 declare function setTimeout(callback: (this: any, ...args: any[]) => void, delay?: number, ...args: any[]): number;
 declare function clearTimeout(handle?: number, ...ignored: any[]): void;
+declare function setInterval(callback: (this: any) => void, delay?: number): number;
+declare function setInterval<A>(callback: (this: any, arg: A) => void, delay: number, arg: A): number;
+declare function setInterval<A, B>(callback: (this: any, arg1: A, arg2: B) => void, delay: number, arg1: A, arg2: B): number;
+declare function setInterval<A, B, C>(callback: (this: any, arg1: A, arg2: B, arg3: C) => void, delay: number, arg1: A, arg2: B, arg3: C): number;
+declare function setInterval<A, B, C, D>(callback: (this: any, arg1: A, arg2: B, arg3: C, arg4: D) => void, delay: number, arg1: A, arg2: B, arg3: C, arg4: D): number;
+declare function setInterval<A, B, C, D, E>(callback: (this: any, arg1: A, arg2: B, arg3: C, arg4: D, arg5: E) => void, delay: number, arg1: A, arg2: B, arg3: C, arg4: D, arg5: E): number;
+declare function setInterval<A, B, C, D, E, F>(callback: (this: any, arg1: A, arg2: B, arg3: C, arg4: D, arg5: E, arg6: F) => void, delay: number, arg1: A, arg2: B, arg3: C, arg4: D, arg5: E, arg6: F): number;
+declare function setInterval(callback: (this: any, ...args: any[]) => void, delay?: number, ...args: any[]): number;
 declare function clearInterval(handle?: number, ...ignored: any[]): void;
 declare function setImmediate(callback: (this: any) => void): number;
 declare function setImmediate<A>(callback: (this: any, arg: A) => void, arg: A): number;
@@ -927,12 +935,14 @@ declare function setImmediate(callback: (this: any, ...args: any[]) => void, ...
 declare function clearImmediate(handle?: number, ...ignored: any[]): void;
 type SetTimeoutFunction = typeof setTimeout;
 type ClearTimeoutFunction = typeof clearTimeout;
+type SetIntervalFunction = typeof setInterval;
 type ClearIntervalFunction = typeof clearInterval;
 type SetImmediateFunction = typeof setImmediate;
 type ClearImmediateFunction = typeof clearImmediate;
 interface TimersModule {
     setTimeout: SetTimeoutFunction;
     clearTimeout: ClearTimeoutFunction;
+    setInterval: SetIntervalFunction;
     clearInterval: ClearIntervalFunction;
     setImmediate: SetImmediateFunction;
     clearImmediate: ClearImmediateFunction;
@@ -953,6 +963,7 @@ interface TimersPromisesScheduler {
 declare module "timers" {
     export const setTimeout: SetTimeoutFunction;
     export const clearTimeout: ClearTimeoutFunction;
+    export const setInterval: SetIntervalFunction;
     export const clearInterval: ClearIntervalFunction;
     export const setImmediate: SetImmediateFunction;
     export const clearImmediate: ClearImmediateFunction;
@@ -962,6 +973,7 @@ declare module "timers" {
 declare module "node:timers" {
     export const setTimeout: SetTimeoutFunction;
     export const clearTimeout: ClearTimeoutFunction;
+    export const setInterval: SetIntervalFunction;
     export const clearInterval: ClearIntervalFunction;
     export const setImmediate: SetImmediateFunction;
     export const clearImmediate: ClearImmediateFunction;
