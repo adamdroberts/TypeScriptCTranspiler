@@ -18,6 +18,13 @@ typedef struct tsc_array {
     bool frozen;
     tsc_value_t prototype;
     size_t iter_pos;
+    bool iter_has_return;
+    bool iter_return_consumed;
+    tsc_value_t iter_return;
+    bool is_lazy_generator;
+    int state;
+    void* env;
+    void (*lazy_next)(struct tsc_array* a, int* state, void* env, tsc_value_t next_arg, bool* done);
     void* data;
 } tsc_array_t;
 typedef struct tsc_object tsc_object_t;
@@ -103,6 +110,10 @@ struct NodeFunctionEnv {
     v8::Global<v8::Function> fn;
 };
 
+struct AotFunctionEnv {
+    tsc_value_t fn;
+};
+
 constexpr uint64_t TSC_VALUE_BOX_MASK = UINT64_C(0x7ffc000000000000);
 constexpr uint64_t TSC_VALUE_PAYLOAD_MASK = UINT64_C(0x0000ffffffffffff);
 
@@ -148,6 +159,11 @@ v8::Local<v8::String> stringToV8(v8::Isolate* isolate, tsc_str_t* value) {
     return out;
 }
 
+tsc_value_t fromV8(v8::Isolate* isolate, v8::Local<v8::Value> value);
+v8::Local<v8::Value> toV8(v8::Isolate* isolate, v8::Local<v8::Context> context, tsc_value_t value);
+tsc_value_t callNodeFunction(void* rawEnv, tsc_value_t thisArg, tsc_array_t* args);
+void aotFunctionCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
+
 v8::Local<v8::Value> toV8(v8::Isolate* isolate, v8::Local<v8::Context> context, tsc_value_t value) {
     if (!valueIsBox(value)) {
         double number;
@@ -176,7 +192,15 @@ v8::Local<v8::Value> toV8(v8::Isolate* isolate, v8::Local<v8::Context> context, 
             }
             return out.As<v8::Value>();
         }
-        case TSC_VALUE_TAG_FUNCTION:
+        case TSC_VALUE_TAG_FUNCTION: {
+            AotFunctionEnv* env = new AotFunctionEnv{ value };
+            v8::Local<v8::External> data = v8::External::New(isolate, env);
+            v8::Local<v8::Function> fn;
+            if (v8::Function::New(context, aotFunctionCallback, data).ToLocal(&fn)) {
+                return fn.As<v8::Value>();
+            }
+            return v8::Undefined(isolate).As<v8::Value>();
+        }
         case TSC_VALUE_TAG_OBJECT:
             return stringToV8(isolate, tsc_value_to_string(value)).As<v8::Value>();
     }
@@ -220,6 +244,11 @@ tsc_value_t fromV8(v8::Isolate* isolate, v8::Local<v8::Value> value) {
         v8::Maybe<double> number = value->NumberValue(context);
         if (number.IsJust()) return tsc_value_num(number.FromJust());
     }
+    if (value->IsFunction()) {
+        NodeFunctionEnv* env = new NodeFunctionEnv();
+        env->fn.Reset(isolate, v8::Local<v8::Function>::Cast(value));
+        return tsc_value_function_generic(callNodeFunction, env);
+    }
     if (value->IsObject()) {
         v8::Local<v8::Object> object;
         if (value->ToObject(context).ToLocal(&object)) {
@@ -245,6 +274,40 @@ tsc_value_t fromV8(v8::Isolate* isolate, v8::Local<v8::Value> value) {
         return tsc_value_string(tsc_str_from_cstr(*utf8));
     }
     return tsc_value_undefined();
+}
+
+void aotFunctionCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    v8::Isolate* isolate = info.GetIsolate();
+    v8::HandleScope handleScope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+    AotFunctionEnv* env = static_cast<AotFunctionEnv*>(v8::Local<v8::External>::Cast(info.Data())->Value());
+    size_t argc = static_cast<size_t>(info.Length());
+    std::vector<tsc_value_t> argsData(argc);
+    for (size_t i = 0; i < argc; i++) {
+        argsData[i] = fromV8(isolate, info[static_cast<int>(i)]);
+    }
+
+    tsc_array_t args = {};
+    args.len = argc;
+    args.cap = argc;
+    args.es = sizeof(tsc_value_t);
+    args.extensible = true;
+    args.sealed = false;
+    args.frozen = false;
+    args.prototype = tsc_value_undefined();
+    args.iter_pos = 0;
+    args.iter_has_return = false;
+    args.iter_return_consumed = false;
+    args.iter_return = tsc_value_undefined();
+    args.is_lazy_generator = false;
+    args.state = -1;
+    args.env = nullptr;
+    args.lazy_next = nullptr;
+    args.data = argc > 0 ? argsData.data() : nullptr;
+
+    tsc_value_t result = tsc_value_apply_function(env->fn, tsc_value_undefined(), tsc_value_array(&args));
+    info.GetReturnValue().Set(toV8(isolate, context, result));
 }
 
 NodeEmbedState* ensureState() {

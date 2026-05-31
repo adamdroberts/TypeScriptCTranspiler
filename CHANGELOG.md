@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Embedded Node native-addon bridge conversion now preserves function-valued properties in both directions, so addon-exported callbacks can be invoked from compiled code and compiled AOT function values can be passed back into V8. Test: `native_addon_manifest_function_export`.
 - Extended the narrow lazy generator lowering to support nested `switch` statements and nested block-local `break` statements without breaking the enclosing C state-machine switch. Tests: `generator_lazy_switch_nested`, `generator_lazy_switch_nested_switch`.
 - Added a bounded wall-clock `timers/promises.setTimeout(delay, value?, options?)` path for nonzero numeric delays, including dynamic delay expressions and delayed Promise fulfillment. Test: `timers_promises_delay`.
 - Added a bounded wall-clock `setInterval(callback, delay, ...args)` runtime path for nonzero numeric delays, including delayed rescheduling and `clearInterval` cancellation. Test: `set_interval_delay`.
