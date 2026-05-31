@@ -5,3 +5,6 @@ dead_dce_new_object_static
 dead_dce_new_string_static
 987654321
 dead_dce_new_boolean_static
+dead_dce_callable_object_static
+dead_dce_callable_error_static
+dead_dce_callable_type_error_static
