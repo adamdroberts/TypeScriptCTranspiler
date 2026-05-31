@@ -1,0 +1,7 @@
+initial: verbatim
+named: ipv4first ipv4first
+default: ipv6first ipv6first
+promises named: verbatim verbatim
+promises default: ipv4first
+invalid: dns.setDefaultResultOrder: invalid order
+final: ipv4first g0|s4|ng|d6|pg|psv|pd4|pdg|bad|

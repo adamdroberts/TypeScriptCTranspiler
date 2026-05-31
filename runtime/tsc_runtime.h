@@ -725,6 +725,8 @@ tsc_dns_lookup_result_t tsc_dns_lookup(tsc_str_t* hostname, double family, doubl
 tsc_dns_lookup_all_result_t tsc_dns_lookup_all(tsc_str_t* hostname, double family, double hints);
 tsc_dns_resolve4_result_t tsc_dns_resolve4(tsc_str_t* hostname);
 tsc_dns_lookup_service_result_t tsc_dns_lookup_service(tsc_str_t* address, double port);
+tsc_str_t* tsc_dns_get_default_result_order(void);
+void tsc_dns_set_default_result_order(tsc_str_t* order);
 double tsc_net_is_ip(tsc_str_t* input);
 bool tsc_net_is_ipv4(tsc_str_t* input);
 bool tsc_net_is_ipv6(tsc_str_t* input);

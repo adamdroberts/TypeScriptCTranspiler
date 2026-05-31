@@ -28015,23 +28015,15 @@ class Emitter {
         if (utilNamed) {
             return this.emitUtilCall(call, utilNamed);
         }
-        if (this.isNamedImportFrom(calleeId, ["dns", "node:dns"], "lookup")) {
-            return this.emitDnsCall(call, "lookup");
+        const dnsNamed = ["lookup", "resolve4", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
+            .find((exported) => this.isNamedImportFrom(calleeId, ["dns", "node:dns"], exported));
+        if (dnsNamed) {
+            return this.emitDnsCall(call, dnsNamed);
         }
-        if (this.isNamedImportFrom(calleeId, ["dns", "node:dns"], "resolve4")) {
-            return this.emitDnsCall(call, "resolve4");
-        }
-        if (this.isNamedImportFrom(calleeId, ["dns", "node:dns"], "lookupService")) {
-            return this.emitDnsCall(call, "lookupService");
-        }
-        if (this.isNamedImportFrom(calleeId, ["dns/promises", "node:dns/promises"], "lookup")) {
-            return this.emitDnsPromisesCall(call, "lookup");
-        }
-        if (this.isNamedImportFrom(calleeId, ["dns/promises", "node:dns/promises"], "resolve4")) {
-            return this.emitDnsPromisesCall(call, "resolve4");
-        }
-        if (this.isNamedImportFrom(calleeId, ["dns/promises", "node:dns/promises"], "lookupService")) {
-            return this.emitDnsPromisesCall(call, "lookupService");
+        const dnsPromisesNamed = ["lookup", "resolve4", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
+            .find((exported) => this.isNamedImportFrom(calleeId, ["dns/promises", "node:dns/promises"], exported));
+        if (dnsPromisesNamed) {
+            return this.emitDnsPromisesCall(call, dnsPromisesNamed);
         }
         if (this.isNamedImportFrom(calleeId, ["process", "node:process"], "nextTick")) {
             return this.emitProcessNextTickCall(call);
@@ -34296,7 +34288,33 @@ class Emitter {
     }
 
     private emitDnsCall(call: ts.CallExpression, method: string): EmitResult {
-        if (method !== "lookup" && method !== "resolve4" && method !== "lookupService") unsupported(call, `dns.${method}`);
+        if (
+            method !== "lookup" &&
+            method !== "resolve4" &&
+            method !== "lookupService" &&
+            method !== "getDefaultResultOrder" &&
+            method !== "setDefaultResultOrder"
+        ) unsupported(call, `dns.${method}`);
+        if (method === "getDefaultResultOrder") {
+            return this.emitSequencedExpr(
+                T_STRING,
+                this.ignoredArgumentSpecs(call.arguments, 0),
+                () => "tsc_dns_get_default_result_order()",
+            );
+        }
+        if (method === "setDefaultResultOrder") {
+            if (call.arguments.length < 1) unsupported(call, "dns.setDefaultResultOrder expects order");
+            const orderNode = call.arguments[0]!;
+            const order = this.emitExpr(orderNode);
+            return this.emitSequencedExpr(
+                T_VOID,
+                [
+                    { value: order, target: T_STRING, node: orderNode },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ],
+                ([orderC]) => `tsc_dns_set_default_result_order(${orderC})`,
+            );
+        }
         if (method === "lookupService") {
             if (call.arguments.length < 3) {
                 unsupported(call, `dns.lookupService expects address, port, and callback`);
@@ -34546,7 +34564,33 @@ class Emitter {
     }
 
     private emitDnsPromisesCall(call: ts.CallExpression, method: string): EmitResult {
-        if (method !== "lookup" && method !== "resolve4" && method !== "lookupService") unsupported(call, `dns.promises.${method}`);
+        if (
+            method !== "lookup" &&
+            method !== "resolve4" &&
+            method !== "lookupService" &&
+            method !== "getDefaultResultOrder" &&
+            method !== "setDefaultResultOrder"
+        ) unsupported(call, `dns.promises.${method}`);
+        if (method === "getDefaultResultOrder") {
+            return this.emitSequencedExpr(
+                T_STRING,
+                this.ignoredArgumentSpecs(call.arguments, 0),
+                () => "tsc_dns_get_default_result_order()",
+            );
+        }
+        if (method === "setDefaultResultOrder") {
+            if (call.arguments.length < 1) unsupported(call, "dns.promises.setDefaultResultOrder expects order");
+            const orderNode = call.arguments[0]!;
+            const order = this.emitExpr(orderNode);
+            return this.emitSequencedExpr(
+                T_VOID,
+                [
+                    { value: order, target: T_STRING, node: orderNode },
+                    ...this.ignoredArgumentSpecs(call.arguments, 1),
+                ],
+                ([orderC]) => `tsc_dns_set_default_result_order(${orderC})`,
+            );
+        }
         const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
         if (mapped.kind !== "promise") unsupported(call, `dns.promises.${method} result must be Promise<T>`);
         if (method === "lookupService") {

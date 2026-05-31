@@ -1434,6 +1434,32 @@ int tsc_dns_lookup_ai_flags(double hints) {
     return out;
 }
 
+static const char* tsc_dns_default_result_order = "verbatim";
+
+tsc_str_t* tsc_dns_get_default_result_order(void) {
+    return tsc_str_from_cstr(tsc_dns_default_result_order);
+}
+
+void tsc_dns_set_default_result_order(tsc_str_t* order) {
+    if (!order) {
+        tsc_throw_str(tsc_str_from_cstr("dns.setDefaultResultOrder: order required"));
+        return;
+    }
+    if (tsc_str_eq(order, tsc_str_from_lit("verbatim", 8))) {
+        tsc_dns_default_result_order = "verbatim";
+        return;
+    }
+    if (tsc_str_eq(order, tsc_str_from_lit("ipv4first", 9))) {
+        tsc_dns_default_result_order = "ipv4first";
+        return;
+    }
+    if (tsc_str_eq(order, tsc_str_from_lit("ipv6first", 9))) {
+        tsc_dns_default_result_order = "ipv6first";
+        return;
+    }
+    tsc_throw_str(tsc_str_from_cstr("dns.setDefaultResultOrder: invalid order"));
+}
+
 tsc_dns_lookup_result_t tsc_dns_lookup(tsc_str_t* hostname, double family, double hints_value) {
     tsc_dns_lookup_result_t out;
     out.error = NULL;
