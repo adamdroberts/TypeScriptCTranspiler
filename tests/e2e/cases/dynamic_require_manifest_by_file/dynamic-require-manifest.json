@@ -1,0 +1,6 @@
+{
+  "requires": {
+    "loader_a.ts": ["./allow_a"],
+    "nested/loader_b.ts": ["../allow_b"]
+  }
+}

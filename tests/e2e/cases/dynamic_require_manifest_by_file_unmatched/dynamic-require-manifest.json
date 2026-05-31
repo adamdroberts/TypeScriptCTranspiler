@@ -1,0 +1,5 @@
+{
+  "requires": {
+    "other.ts": ["./allow_a"]
+  }
+}

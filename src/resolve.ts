@@ -7,6 +7,7 @@ import {
 } from "./module-specifiers";
 import {
     dynamicRequireManifestHasEntries,
+    dynamicRequireSpecifiersForFile,
     type DynamicRequireManifest,
 } from "./dynamic-require";
 import { resolveCommonJsRequireModuleName } from "./commonjs-resolve";
@@ -96,7 +97,7 @@ export function buildModuleGraph(
                 const m = stmt.moduleSpecifier;
                 if (m && ts.isStringLiteral(m)) importSpecs.push(m.text);
             }
-            requireSpecs.push(...staticRequireSpecifiers(stmt, requireAliases, moduleAliases, options_.dynamicRequires));
+            requireSpecs.push(...staticRequireSpecifiers(stmt, requireAliases, moduleAliases, options_.dynamicRequires, info.sf.fileName));
             for (const spec of importSpecs) {
                 const resolved = ts.resolveModuleName(
                     spec,
@@ -164,6 +165,7 @@ function staticRequireSpecifiers(
     requireAliases: Set<string>,
     moduleAliases: Set<string>,
     dynamicRequires: DynamicRequireManifest | undefined,
+    fileName: string,
 ): string[] {
     const specs: string[] = [];
     const visit = (node: ts.Node): void => {
@@ -172,7 +174,7 @@ function staticRequireSpecifiers(
             if (nodeSpecs.length > 0) {
                 specs.push(...nodeSpecs);
             } else if (dynamicRequires && dynamicRequireManifestHasEntries(dynamicRequires)) {
-                specs.push(...dynamicRequires.specifiers);
+                specs.push(...dynamicRequireSpecifiersForFile(dynamicRequires, fileName));
             }
         }
         ts.forEachChild(node, visit);

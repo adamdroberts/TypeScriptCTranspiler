@@ -18,6 +18,7 @@ import {
 } from "./native-addons";
 import {
     dynamicRequireManifestHasEntries,
+    dynamicRequireSpecifiersForFile,
     loadDynamicRequireManifest,
     type DynamicRequireManifest,
 } from "./dynamic-require";
@@ -222,7 +223,15 @@ function permanentLimitDiagnostics(
                         if (literalSpecs.length > 0) {
                             addNativeAddonDiagnostics(node, literalSpecs, sf.fileName, opts, diagnostics);
                         } else if (opts.dynamicRequires && dynamicRequireManifestHasEntries(opts.dynamicRequires)) {
-                            addNativeAddonDiagnostics(node, opts.dynamicRequires.specifiers, sf.fileName, opts, diagnostics);
+                            const specifiers = dynamicRequireSpecifiersForFile(opts.dynamicRequires, sf.fileName);
+                            if (specifiers.length > 0) {
+                                addNativeAddonDiagnostics(node, specifiers, sf.fileName, opts, diagnostics);
+                            } else {
+                                diagnostics.push({
+                                    node,
+                                    message: DYNAMIC_REQUIRE_AOT_MESSAGE,
+                                });
+                            }
                         } else {
                             diagnostics.push({
                                 node,
@@ -236,7 +245,15 @@ function permanentLimitDiagnostics(
                     if (literalSpecs.length > 0) {
                         addNativeAddonDiagnostics(node, literalSpecs, sf.fileName, opts, diagnostics);
                     } else if (opts.dynamicRequires && dynamicRequireManifestHasEntries(opts.dynamicRequires)) {
-                        addNativeAddonDiagnostics(node, opts.dynamicRequires.specifiers, sf.fileName, opts, diagnostics);
+                        const specifiers = dynamicRequireSpecifiersForFile(opts.dynamicRequires, sf.fileName);
+                        if (specifiers.length > 0) {
+                            addNativeAddonDiagnostics(node, specifiers, sf.fileName, opts, diagnostics);
+                        } else {
+                            diagnostics.push({
+                                node,
+                                message: DYNAMIC_REQUIRE_AOT_MESSAGE,
+                            });
+                        }
                     } else {
                         diagnostics.push({
                             node,

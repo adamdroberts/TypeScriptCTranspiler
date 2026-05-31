@@ -1,0 +1,4 @@
+by-file allow a init
+by-file allow b init
+by-file first: allow-a
+by-file second: allow-b
