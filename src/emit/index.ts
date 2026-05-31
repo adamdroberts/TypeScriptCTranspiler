@@ -40939,6 +40939,10 @@ class Emitter {
         }
         if (cur.kind === ts.SyntaxKind.TrueKeyword) return "true";
         if (cur.kind === ts.SyntaxKind.FalseKeyword) return "false";
+        if (cur.kind === ts.SyntaxKind.NullKeyword) return "null";
+        if (ts.isIdentifier(cur) && cur.text === "undefined") return "undefined";
+        if (cur.kind === ts.SyntaxKind.UndefinedKeyword) return "undefined";
+        if (ts.isVoidExpression(cur)) return "undefined";
 
         const staticString = this.staticComputedStringExpression(cur);
         if (staticString !== null) return staticString;
@@ -40964,6 +40968,8 @@ class Emitter {
                 return intrinsicName;
             }
         }
+        if (ty.flags & ts.TypeFlags.Null) return "null";
+        if (ty.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Void)) return "undefined";
         return null;
     }
 
@@ -40981,6 +40987,10 @@ class Emitter {
         }
         if (cur.kind === ts.SyntaxKind.TrueKeyword) return "true";
         if (cur.kind === ts.SyntaxKind.FalseKeyword) return "false";
+        if (cur.kind === ts.SyntaxKind.NullKeyword) return "null";
+        if (ts.isIdentifier(cur) && cur.text === "undefined") return "undefined";
+        if (cur.kind === ts.SyntaxKind.UndefinedKeyword) return "undefined";
+        if (ts.isVoidExpression(cur)) return "undefined";
 
         if (
             ts.isPrefixUnaryExpression(cur) &&
@@ -41028,6 +41038,8 @@ class Emitter {
                 return intrinsicName;
             }
         }
+        if (ty.flags & ts.TypeFlags.Null) return "null";
+        if (ty.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Void)) return "undefined";
         return null;
     }
 

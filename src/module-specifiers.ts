@@ -46,6 +46,26 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
             return [node.text];
         }
+        if (ts.isNumericLiteral(node)) {
+            const val = Number(node.text);
+            if (!Number.isFinite(val)) return [];
+            return [Object.is(val, -0) ? "0" : String(val)];
+        }
+        if (node.kind === ts.SyntaxKind.TrueKeyword) return ["true"];
+        if (node.kind === ts.SyntaxKind.FalseKeyword) return ["false"];
+        if (node.kind === ts.SyntaxKind.NullKeyword) return ["null"];
+        if (ts.isIdentifier(node) && node.text === "undefined") return ["undefined"];
+        if (node.kind === ts.SyntaxKind.UndefinedKeyword) return ["undefined"];
+        if (ts.isVoidExpression(node)) return ["undefined"];
+        if (
+            ts.isPrefixUnaryExpression(node) &&
+            node.operator === ts.SyntaxKind.MinusToken
+        ) {
+            const vals = resolve(node.operand);
+            if (vals.length !== 1) return [];
+            const num = -Number(vals[0]);
+            return Number.isFinite(num) ? [String(num)] : [];
+        }
         if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
             const left = resolve(node.left);
             const right = resolve(node.right);
