@@ -2341,6 +2341,7 @@ interface URLSearchParams {
     append(name: string, value: string, ...ignored: any[]): void;
     delete(name: string, value?: string, ...ignored: any[]): void;
     get(name: string, ...ignored: any[]): string | null;
+    getAll(name: string, ...ignored: any[]): string[];
     has(name: string, value?: string, ...ignored: any[]): boolean;
     set(name: string, value: string, ...ignored: any[]): void;
     toString(...ignored: any[]): string;

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `URLSearchParams` now supports the `getAll(name)` method, returning an array of string values matching the given parameter name in stable order (or an empty array if not found), evaluating ignored extra arguments and supporting both global and `node:url` instances. Test: `url_search_params_get_all`.
 - Extended CommonJS static named-export analysis to recursively resolve nested property and element accesses on constant object and array literals (e.g. `const keys = { first: { name: "value" } }; exports[keys.first.name] = ...`), enabling compilation of nested static computed export-key patterns. Test: `node_modules_commonjs_computed_keys_as_const`.
 - Supported `null` options as well as shorthand property assignments (e.g. `{ family }`) in object literal options and their resolved const aliases for AOT compilation of `dns.lookup` and `dns.promises.lookup` without libuv scheduling. Test: `dns_lookup_option_forms`.
 - Implemented a zero-delay `setInterval(callback, 0, ...args)` / `clearInterval(handle)` before-exit subset compatible with the existing zero-delay scheduler, including typed callback args and cancellation. Test: `set_interval_zero`.
