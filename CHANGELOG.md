@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `buffer.transcode(source, fromEnc, toEnc, ...ignored)` is supported for transcoding between UTF-8, hex, and base64 encodings, across named, aliased named, default, and namespace imports from `"buffer"` / `"node:buffer"`. Test: `buffer_transcode`.
 - `URLSearchParams` now supports string construction, `"url"` / `"node:url"` named/default constructor imports, URL `.searchParams` reads, and basic `get` / `has` / `set` / `append` / `delete` / stringification methods. Test: `url_search_params`.
 - Materialized synchronous generators now cover class generator methods, dynamic object-literal generator methods, and lifted generator function expressions through the existing `.next()` / `.return()` / `.throw()` protocol subset. Test: `generator_protocol_edges`.
 - Generated-C DCE static string analysis now folds side-effect-free string index access and `.charAt(...)`, `.at(...)`, `.slice(...)`, `.substring(...)`, `.substr(...)`, `.concat(...)`, `.charCodeAt(...)`, `.codePointAt(...)`, `.indexOf(...)`, `.lastIndexOf(...)`, `.includes(...)`, `.startsWith(...)`, and `.endsWith(...)` calls. Test: `generated_c_dce_const`.
