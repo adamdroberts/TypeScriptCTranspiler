@@ -551,6 +551,12 @@ typedef struct {
     const tsc_object_t* object;
     uint64_t shape_version;
     size_t index;
+} tsc_cache_entry_t;
+
+#define TSC_POLYMORPHIC_CACHE_SIZE 4
+
+typedef struct {
+    tsc_cache_entry_t entries[TSC_POLYMORPHIC_CACHE_SIZE];
 } tsc_prop_cache_t;
 typedef struct tsc_promise tsc_promise_t;
 typedef struct tsc_event_emitter tsc_event_emitter_t;
