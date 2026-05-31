@@ -1475,6 +1475,13 @@ uint32_t uint_from_double(double value) {
     return (uint32_t)value;
 }
 
+uint64_t uint64_from_double(double value) {
+    if (isnan(value) || isinf(value)) return 0;
+    if (value >= 18446744073709551615.0) return 0xffffffffffffffffULL;
+    if (value <= -9223372036854775808.0) return 0x8000000000000000ULL;
+    return (uint64_t)(int64_t)value;
+}
+
 double tsc_buffer_read_uint16_le(const tsc_buffer_t* b, double offset) {
     size_t i = buffer_checked_offset(b, offset, 2, "Buffer.readUInt16LE offset out of range");
     return (double)((uint16_t)b->data[i] | ((uint16_t)b->data[i + 1] << 8));
@@ -1710,6 +1717,114 @@ double tsc_buffer_write_double_be(tsc_buffer_t* b, double value, double offset) 
         b->data[i + j] = (uint8_t)((bits >> (8 * (7 - j))) & 0xffu);
     }
     return (double)(i + 8);
+}
+
+double tsc_buffer_read_uint_le(const tsc_buffer_t* b, double offset, double byte_len) {
+    if (isnan(byte_len) || isinf(byte_len) || byte_len < 1.0 || byte_len > 6.0 || floor(byte_len) != byte_len) {
+        tsc_throw_str(tsc_str_from_cstr("Buffer.readUIntLE byteLength must be between 1 and 6"));
+    }
+    size_t len = (size_t)byte_len;
+    size_t i = buffer_checked_offset(b, offset, len, "Buffer.readUIntLE offset out of range");
+    uint64_t val = 0;
+    for (size_t j = 0; j < len; j++) {
+        val |= ((uint64_t)b->data[i + j]) << (j * 8);
+    }
+    return (double)val;
+}
+
+double tsc_buffer_read_uint_be(const tsc_buffer_t* b, double offset, double byte_len) {
+    if (isnan(byte_len) || isinf(byte_len) || byte_len < 1.0 || byte_len > 6.0 || floor(byte_len) != byte_len) {
+        tsc_throw_str(tsc_str_from_cstr("Buffer.readUIntBE byteLength must be between 1 and 6"));
+    }
+    size_t len = (size_t)byte_len;
+    size_t i = buffer_checked_offset(b, offset, len, "Buffer.readUIntBE offset out of range");
+    uint64_t val = 0;
+    for (size_t j = 0; j < len; j++) {
+        val = (val << 8) | (uint64_t)b->data[i + j];
+    }
+    return (double)val;
+}
+
+double tsc_buffer_read_int_le(const tsc_buffer_t* b, double offset, double byte_len) {
+    if (isnan(byte_len) || isinf(byte_len) || byte_len < 1.0 || byte_len > 6.0 || floor(byte_len) != byte_len) {
+        tsc_throw_str(tsc_str_from_cstr("Buffer.readIntLE byteLength must be between 1 and 6"));
+    }
+    size_t len = (size_t)byte_len;
+    size_t i = buffer_checked_offset(b, offset, len, "Buffer.readIntLE offset out of range");
+    uint64_t val = 0;
+    for (size_t j = 0; j < len; j++) {
+        val |= ((uint64_t)b->data[i + j]) << (j * 8);
+    }
+    size_t shift = 64 - (len * 8);
+    int64_t sval = (int64_t)(val << shift) >> shift;
+    return (double)sval;
+}
+
+double tsc_buffer_read_int_be(const tsc_buffer_t* b, double offset, double byte_len) {
+    if (isnan(byte_len) || isinf(byte_len) || byte_len < 1.0 || byte_len > 6.0 || floor(byte_len) != byte_len) {
+        tsc_throw_str(tsc_str_from_cstr("Buffer.readIntBE byteLength must be between 1 and 6"));
+    }
+    size_t len = (size_t)byte_len;
+    size_t i = buffer_checked_offset(b, offset, len, "Buffer.readIntBE offset out of range");
+    uint64_t val = 0;
+    for (size_t j = 0; j < len; j++) {
+        val = (val << 8) | (uint64_t)b->data[i + j];
+    }
+    size_t shift = 64 - (len * 8);
+    int64_t sval = (int64_t)(val << shift) >> shift;
+    return (double)sval;
+}
+
+double tsc_buffer_write_uint_le(tsc_buffer_t* b, double value, double offset, double byte_len) {
+    if (isnan(byte_len) || isinf(byte_len) || byte_len < 1.0 || byte_len > 6.0 || floor(byte_len) != byte_len) {
+        tsc_throw_str(tsc_str_from_cstr("Buffer.writeUIntLE byteLength must be between 1 and 6"));
+    }
+    size_t len = (size_t)byte_len;
+    size_t i = buffer_checked_offset(b, offset, len, "Buffer.writeUIntLE offset out of range");
+    uint64_t n = uint64_from_double(value);
+    for (size_t j = 0; j < len; j++) {
+        b->data[i + j] = (uint8_t)((n >> (j * 8)) & 0xffu);
+    }
+    return (double)(i + len);
+}
+
+double tsc_buffer_write_uint_be(tsc_buffer_t* b, double value, double offset, double byte_len) {
+    if (isnan(byte_len) || isinf(byte_len) || byte_len < 1.0 || byte_len > 6.0 || floor(byte_len) != byte_len) {
+        tsc_throw_str(tsc_str_from_cstr("Buffer.writeUIntBE byteLength must be between 1 and 6"));
+    }
+    size_t len = (size_t)byte_len;
+    size_t i = buffer_checked_offset(b, offset, len, "Buffer.writeUIntBE offset out of range");
+    uint64_t n = uint64_from_double(value);
+    for (size_t j = 0; j < len; j++) {
+        b->data[i + len - 1 - j] = (uint8_t)((n >> (j * 8)) & 0xffu);
+    }
+    return (double)(i + len);
+}
+
+double tsc_buffer_write_int_le(tsc_buffer_t* b, double value, double offset, double byte_len) {
+    if (isnan(byte_len) || isinf(byte_len) || byte_len < 1.0 || byte_len > 6.0 || floor(byte_len) != byte_len) {
+        tsc_throw_str(tsc_str_from_cstr("Buffer.writeIntLE byteLength must be between 1 and 6"));
+    }
+    size_t len = (size_t)byte_len;
+    size_t i = buffer_checked_offset(b, offset, len, "Buffer.writeIntLE offset out of range");
+    uint64_t n = uint64_from_double(value);
+    for (size_t j = 0; j < len; j++) {
+        b->data[i + j] = (uint8_t)((n >> (j * 8)) & 0xffu);
+    }
+    return (double)(i + len);
+}
+
+double tsc_buffer_write_int_be(tsc_buffer_t* b, double value, double offset, double byte_len) {
+    if (isnan(byte_len) || isinf(byte_len) || byte_len < 1.0 || byte_len > 6.0 || floor(byte_len) != byte_len) {
+        tsc_throw_str(tsc_str_from_cstr("Buffer.writeIntBE byteLength must be between 1 and 6"));
+    }
+    size_t len = (size_t)byte_len;
+    size_t i = buffer_checked_offset(b, offset, len, "Buffer.writeIntBE offset out of range");
+    uint64_t n = uint64_from_double(value);
+    for (size_t j = 0; j < len; j++) {
+        b->data[i + len - 1 - j] = (uint8_t)((n >> (j * 8)) & 0xffu);
+    }
+    return (double)(i + len);
 }
 
 tsc_buffer_t* tsc_buffer_swap(tsc_buffer_t* b, size_t width) {

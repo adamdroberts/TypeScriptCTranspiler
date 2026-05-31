@@ -1,0 +1,11 @@
+writeUIntLE(6): 123456789abc
+writeUIntLE(3): 123456
+writeUIntBE(6): 123456789abc
+writeUIntBE(3): 123456
+writeIntLE(6): -123456789abc
+writeIntLE(1): -128
+writeIntBE(6): -123456789abc
+writeIntBE(1): -128
+readUIntLE(7) error caught
+readUIntLE(5, 6) offset error caught
+writeUIntLE(0) error caught
