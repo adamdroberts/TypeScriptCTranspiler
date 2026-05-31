@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Extended the narrow lazy generator lowering to keep matched `switch` cases active across fallthrough until `break`, including suspended `.next(value)` assignments in fallthrough case bodies. Test: `generator_lazy_switch_fallthrough`.
 - Extended the narrow lazy generator lowering to resume across simple `switch` cases with suspended `.next(value)` assignments in case/default bodies. Test: `generator_lazy_switch`.
 - Extended the narrow lazy generator lowering to resume across simple counted `for` loops with suspended `.next(value)` assignments in the loop body. Test: `generator_lazy_for`.
 - Extended the narrow lazy generator lowering to resume across simple `while` loops with suspended `.next(value)` assignments in the loop body. Test: `generator_lazy_while`.
