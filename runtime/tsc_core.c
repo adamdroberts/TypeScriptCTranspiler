@@ -785,7 +785,7 @@ double tsc_set_timeout(tsc_timeout_fn_t fn, void* env, double delay) {
     return id;
 }
 
-double tsc_set_interval(tsc_timeout_fn_t fn, void* env) {
+double tsc_set_interval(tsc_timeout_fn_t fn, void* env, double delay) {
     if (!fn) return 0.0;
     if (g_timeout_len == g_timeout_cap) {
         size_t next = g_timeout_cap ? g_timeout_cap * 2 : 8;
@@ -795,7 +795,8 @@ double tsc_set_interval(tsc_timeout_fn_t fn, void* env) {
         g_timeout_cap = next;
     }
     double id = g_next_timer_id++;
-    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, true, 0.0, tsc_now_ms() };
+    double delay_ms = tsc_timer_delay_ms(delay);
+    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, true, delay_ms, tsc_now_ms() + delay_ms };
     return id;
 }
 
@@ -824,7 +825,7 @@ void tsc_drain_timeouts(void) {
                     g_timeout_queue = entries;
                     g_timeout_cap = next;
                 }
-                g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ entry.fn, entry.env, entry.id, false, true, 0.0, tsc_now_ms() };
+                g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ entry.fn, entry.env, entry.id, false, true, entry.delay_ms, tsc_now_ms() + entry.delay_ms };
             }
             g_timeout_queue[idx - 1].canceled = true;
         }

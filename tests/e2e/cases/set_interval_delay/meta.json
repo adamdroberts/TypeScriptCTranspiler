@@ -1,0 +1,3 @@
+{
+  "description": "nonzero-delay setInterval callbacks wait between runtime timer callbacks and can be canceled"
+}

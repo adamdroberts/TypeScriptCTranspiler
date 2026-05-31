@@ -1016,7 +1016,7 @@ double tsc_set_immediate(tsc_immediate_fn_t fn, void* env);
 void tsc_clear_immediate(double id);
 void tsc_drain_immediates(void);
 double tsc_set_timeout(tsc_timeout_fn_t fn, void* env, double delay);
-double tsc_set_interval(tsc_timeout_fn_t fn, void* env);
+double tsc_set_interval(tsc_timeout_fn_t fn, void* env, double delay);
 void tsc_clear_timeout(double id);
 void tsc_drain_timeouts(void);
 void tsc_run_event_loop(void);
