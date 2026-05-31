@@ -1440,6 +1440,24 @@ tsc_str_t* tsc_url_search_params_get(const tsc_url_search_params_t* params, cons
     return NULL;
 }
 
+tsc_array_t* tsc_url_search_params_get_all(const tsc_url_search_params_t* params, const tsc_str_t* name) {
+    size_t count = 0;
+    for (size_t i = 0; i < params->len; i++) {
+        if (tsc_str_eq(params->items[i].name, name)) {
+            count++;
+        }
+    }
+    tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), count ? count : 1);
+    size_t w = 0;
+    for (size_t i = 0; i < params->len; i++) {
+        if (tsc_str_eq(params->items[i].name, name)) {
+            ((tsc_str_t**)a->data)[w++] = params->items[i].value;
+        }
+    }
+    a->len = count;
+    return a;
+}
+
 bool tsc_url_search_params_has(const tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value) {
     for (size_t i = 0; i < params->len; i++) {
         if (tsc_str_eq(params->items[i].name, name) && (!value || tsc_str_eq(params->items[i].value, value))) {

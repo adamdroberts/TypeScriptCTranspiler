@@ -36215,6 +36215,14 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(args, 1),
                 ], ([params, name]) => `tsc_url_search_params_get(${params}, ${name})`);
             }
+            case "getAll": {
+                if (args.length < 1) unsupported(call, "URLSearchParams.getAll expects name");
+                return this.emitSequencedExpr(arrayType(T_STRING), [
+                    { value: recv },
+                    { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ], ([params, name]) => `tsc_url_search_params_get_all(${params}, ${name})`);
+            }
             case "has": {
                 if (args.length < 1) unsupported(call, "URLSearchParams.has expects name");
                 const hasValue = args.length >= 2;
