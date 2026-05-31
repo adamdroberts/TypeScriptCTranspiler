@@ -1,0 +1,23 @@
+sep: \\
+delimiter: ;
+join1: C:\alpha\gamma
+join2: alpha\beta
+resolve: C:\a\c
+normalize1: C:\foo\baz
+normalize2: foo\baz
+isAbsolute1: true
+isAbsolute2: true
+isAbsolute3: false
+relative1: ..\c
+relative2: D:\a\c
+relative3: c
+namespaced: C:\foo\bar
+basename1: bar.txt
+basename2: bar
+dirname: C:\foo
+extname: .txt
+parsed: C:\ C:\foo bar.txt .txt bar
+format: C:\foo\bar.txt
+glob1: true
+glob2: true
+glob3: false

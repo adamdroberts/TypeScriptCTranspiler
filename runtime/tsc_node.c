@@ -3860,6 +3860,443 @@ tsc_str_t* tsc_path_dirname(const tsc_str_t* p) {
     return r;
 }
 
+static bool is_slash(char c) {
+    return c == '/' || c == '\\';
+}
+
+static bool is_drive_letter(char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+static size_t get_win32_root_len(const char* data, size_t len) {
+    if (len == 0) return 0;
+    if (len >= 2 && is_slash(data[0]) && is_slash(data[1])) {
+        size_t i = 2;
+        while (i < len && !is_slash(data[i])) i++;
+        if (i < len) {
+            i++;
+            while (i < len && !is_slash(data[i])) i++;
+            if (i < len) {
+                return i + 1;
+            }
+            return i;
+        }
+        return len;
+    }
+    if (len >= 2 && data[1] == ':' && is_drive_letter(data[0])) {
+        if (len >= 3 && is_slash(data[2])) {
+            return 3;
+        }
+        return 2;
+    }
+    if (is_slash(data[0])) {
+        return 1;
+    }
+    return 0;
+}
+
+bool tsc_path_win32_is_absolute(const tsc_str_t* p) {
+    if (!p || p->len == 0) return false;
+    if (is_slash(p->data[0])) return true;
+    if (p->len >= 2 && p->data[1] == ':' && is_drive_letter(p->data[0])) {
+        if (p->len == 2 || is_slash(p->data[2])) return true;
+    }
+    return false;
+}
+
+tsc_str_t* tsc_path_win32_normalize(const tsc_str_t* p) {
+    if (!p || p->len == 0) return tsc_str_from_lit(".", 1);
+    size_t root_len = get_win32_root_len((const char*)p->data, p->len);
+
+    char buf[4096];
+    size_t pos = 0;
+
+    for (size_t i = 0; i < root_len; i++) {
+        buf[pos++] = is_slash(p->data[i]) ? '\\' : p->data[i];
+    }
+
+    bool root_is_abs = (root_len > 0 && buf[root_len - 1] == '\\');
+
+    size_t starts[256];
+    size_t lens[256];
+    bool parents[256];
+    size_t top = 0;
+
+    bool trailing_slash = p->len > 0 && is_slash(p->data[p->len - 1]);
+    bool last_normal = false;
+
+    for (size_t i = root_len; i <= p->len;) {
+        while (i < p->len && is_slash(p->data[i])) i++;
+        size_t start = i;
+        while (i < p->len && !is_slash(p->data[i])) i++;
+        size_t len = i - start;
+        if (len == 0) break;
+        if (len == 1 && p->data[start] == '.') {
+            last_normal = false;
+            continue;
+        }
+        if (len == 2 && p->data[start] == '.' && p->data[start + 1] == '.') {
+            if (top > 0 && !parents[top - 1]) {
+                top--;
+            } else if (!root_is_abs) {
+                starts[top] = top > 0 ? starts[top - 1] + lens[top - 1] + 1 : 0;
+                lens[top] = 2;
+                parents[top] = true;
+                top++;
+            }
+            last_normal = false;
+            continue;
+        }
+        if (top >= 256) break;
+        starts[top] = start;
+        lens[top] = len;
+        parents[top] = false;
+        top++;
+        last_normal = true;
+    }
+
+    for (size_t i = 0; i < top; i++) {
+        if (pos > root_len) {
+            if (pos + 1 >= sizeof buf) break;
+            buf[pos++] = '\\';
+        }
+        if (pos + lens[i] >= sizeof buf) break;
+        memcpy(buf + pos, p->data + starts[i], lens[i]);
+        pos += lens[i];
+    }
+
+    if (pos == 0) {
+        buf[pos++] = '.';
+    }
+    if (trailing_slash && last_normal && !(root_is_abs && pos == root_len)) {
+        if (pos + 1 < sizeof buf && buf[pos - 1] != '\\') {
+            buf[pos++] = '\\';
+        }
+    }
+    tsc_str_t* r = str_alloc(pos);
+    memcpy((char*)r->data, buf, pos);
+    return r;
+}
+
+static tsc_str_t* path_win32_join_impl(size_t n, va_list ap, bool resolve) {
+    char buf[8192];
+    size_t pos = 0;
+    if (resolve) {
+        char cwd[PATH_MAX];
+        if (getcwd(cwd, sizeof cwd)) {
+            size_t l = strlen(cwd);
+            if (l < sizeof buf) {
+                for (size_t i = 0; i < l; i++) {
+                    buf[pos++] = is_slash(cwd[i]) ? '\\' : cwd[i];
+                }
+            }
+        }
+    }
+    for (size_t i = 0; i < n; i++) {
+        tsc_str_t* s = va_arg(ap, tsc_str_t*);
+        if (!s || s->len == 0) continue;
+
+        bool s_abs = tsc_path_win32_is_absolute(s);
+        if (resolve && s_abs) {
+            pos = 0;
+        }
+
+        if (pos > 0 && buf[pos - 1] != '\\' && (!s_abs || !resolve)) {
+            if (pos + 1 >= sizeof buf) break;
+            buf[pos++] = '\\';
+        }
+
+        for (size_t j = 0; j < s->len; j++) {
+            if (pos >= sizeof buf - 1) break;
+            buf[pos++] = is_slash(s->data[j]) ? '\\' : s->data[j];
+        }
+    }
+
+    tsc_str_t* temp = str_alloc(pos);
+    memcpy((char*)temp->data, buf, pos);
+    return tsc_path_win32_normalize(temp);
+}
+
+tsc_str_t* tsc_path_win32_join(size_t n, ...) {
+    va_list ap; va_start(ap, n);
+    tsc_str_t* r = path_win32_join_impl(n, ap, false);
+    va_end(ap);
+    return r;
+}
+
+tsc_str_t* tsc_path_win32_resolve(size_t n, ...) {
+    va_list ap; va_start(ap, n);
+    tsc_str_t* r = path_win32_join_impl(n, ap, true);
+    va_end(ap);
+    return r;
+}
+
+tsc_str_t* tsc_path_win32_basename(const tsc_str_t* p) {
+    if (!p || p->len == 0) return tsc_str_from_lit("", 0);
+    size_t root_len = get_win32_root_len((const char*)p->data, p->len);
+    if (p->len == root_len) {
+        if (root_len > 0 && p->data[root_len - 1] != ':' && p->data[root_len - 1] != '/' && p->data[root_len - 1] != '\\') {
+            if (p->len >= 2 && is_slash(p->data[0]) && is_slash(p->data[1])) {
+                return tsc_str_from_lit("", 0);
+            }
+        }
+        if (root_len >= 2 && p->data[1] == ':' && is_drive_letter(p->data[0])) {
+            if (root_len == 2) {
+                tsc_str_t* r = str_alloc(2);
+                memcpy((char*)r->data, p->data, 2);
+                return r;
+            }
+        }
+        return tsc_str_from_lit("", 0);
+    }
+    size_t end = p->len;
+    while (end > root_len && is_slash(p->data[end - 1])) end--;
+    size_t start = end;
+    while (start > root_len && !is_slash(p->data[start - 1])) start--;
+    tsc_str_t* r = str_alloc(end - start);
+    memcpy((char*)r->data, p->data + start, end - start);
+    return r;
+}
+
+tsc_str_t* tsc_path_win32_basename_suffix(const tsc_str_t* p, const tsc_str_t* suffix) {
+    tsc_str_t* base = tsc_path_win32_basename(p);
+    if (!suffix || suffix->len == 0 || suffix->len > base->len) return base;
+    size_t start = base->len - suffix->len;
+    if (memcmp(base->data + start, suffix->data, suffix->len) != 0) return base;
+    tsc_str_t* r = str_alloc(start);
+    memcpy((char*)r->data, base->data, start);
+    return r;
+}
+
+tsc_str_t* tsc_path_win32_dirname(const tsc_str_t* p) {
+    if (!p || p->len == 0) return tsc_str_from_lit(".", 1);
+    size_t root_len = get_win32_root_len((const char*)p->data, p->len);
+    if (p->len <= root_len) {
+        tsc_str_t* r = str_alloc(p->len);
+        memcpy((char*)r->data, p->data, p->len);
+        return r;
+    }
+    size_t end = p->len;
+    while (end > root_len && is_slash(p->data[end - 1])) end--;
+    size_t slash = end;
+    while (slash > root_len && !is_slash(p->data[slash - 1])) slash--;
+    if (slash == root_len) {
+        if (root_len > 0) {
+            tsc_str_t* r = str_alloc(root_len);
+            memcpy((char*)r->data, p->data, root_len);
+            return r;
+        }
+        return tsc_str_from_lit(".", 1);
+    }
+    size_t dir_end = slash - 1;
+    while (dir_end > root_len && is_slash(p->data[dir_end - 1])) dir_end--;
+    tsc_str_t* r = str_alloc(dir_end);
+    memcpy((char*)r->data, p->data, dir_end);
+    return r;
+}
+
+tsc_str_t* tsc_path_win32_extname(const tsc_str_t* p) {
+    if (!p || p->len == 0) return tsc_str_from_lit("", 0);
+    for (size_t i = p->len; i > 0; i--) {
+        char c = p->data[i - 1];
+        if (is_slash(c) || c == ':') break;
+        if (c == '.') {
+            if (i == 1 || is_slash(p->data[i - 2]) || p->data[i - 2] == ':') return tsc_str_from_lit("", 0);
+            tsc_str_t* r = str_alloc(p->len - (i - 1));
+            memcpy((char*)r->data, p->data + (i - 1), p->len - (i - 1));
+            return r;
+        }
+    }
+    return tsc_str_from_lit("", 0);
+}
+
+tsc_value_t tsc_path_win32_parse(const tsc_str_t* p) {
+    tsc_object_t* out = tsc_object_new();
+    if (!p) p = tsc_str_from_lit("", 0);
+    size_t root_len = get_win32_root_len((const char*)p->data, p->len);
+    tsc_str_t* root = path_str_slice(p, 0, root_len);
+    for (size_t i = 0; i < root->len; i++) {
+        if (is_slash(root->data[i])) ((char*)root->data)[i] = '\\';
+    }
+    tsc_str_t* dir = tsc_path_win32_dirname(p);
+    if (str_lit_eq(dir, ".") && !tsc_path_win32_is_absolute(p)) dir = tsc_str_from_lit("", 0);
+    for (size_t i = 0; i < dir->len; i++) {
+        if (is_slash(dir->data[i])) ((char*)dir->data)[i] = '\\';
+    }
+    tsc_str_t* base = tsc_path_win32_basename(p);
+    tsc_str_t* ext = tsc_path_win32_extname(base);
+    size_t name_len = base->len >= ext->len ? base->len - ext->len : base->len;
+    tsc_str_t* name = path_str_slice(base, 0, name_len);
+    tsc_object_set(out, tsc_str_from_lit("root", 4), tsc_value_string(root));
+    tsc_object_set(out, tsc_str_from_lit("dir", 3), tsc_value_string(dir));
+    tsc_object_set(out, tsc_str_from_lit("base", 4), tsc_value_string(base));
+    tsc_object_set(out, tsc_str_from_lit("ext", 3), tsc_value_string(ext));
+    tsc_object_set(out, tsc_str_from_lit("name", 4), tsc_value_string(name));
+    return tsc_value_object(out);
+}
+
+tsc_str_t* tsc_path_win32_format(tsc_value_t path_object) {
+    tsc_str_t* root = path_get_string_prop(path_object, "root", 4);
+    tsc_str_t* dir = path_get_string_prop(path_object, "dir", 3);
+    tsc_str_t* base = path_get_string_prop(path_object, "base", 4);
+    if (!base) {
+        tsc_str_t* name = path_get_string_prop(path_object, "name", 4);
+        tsc_str_t* ext = path_get_string_prop(path_object, "ext", 3);
+        if (!name) name = tsc_str_from_lit("", 0);
+        if (!ext) ext = tsc_str_from_lit("", 0);
+        base = tsc_str_concat(name, ext);
+    }
+    if (!root) root = tsc_str_from_lit("", 0);
+    if (!dir) dir = tsc_str_from_lit("", 0);
+    if (dir->len > 0) {
+        if (base->len == 0) return dir;
+        if (dir->data[dir->len - 1] == '\\' || dir->data[dir->len - 1] == '/') return tsc_str_concat(dir, base);
+        return tsc_str_concat_n(3, dir, tsc_str_from_lit("\\", 1), base);
+    }
+    if (root->len > 0) {
+        if (base->len == 0) return root;
+        if (root->data[root->len - 1] == '\\' || root->data[root->len - 1] == '/') return tsc_str_concat(root, base);
+        return tsc_str_concat_n(3, root, tsc_str_from_lit("\\", 1), base);
+    }
+    return base;
+}
+
+static bool path_win32_eq_ci(const char* a, size_t a_len, const char* b, size_t b_len) {
+    if (a_len != b_len) return false;
+    for (size_t i = 0; i < a_len; i++) {
+        char ca = a[i];
+        char cb = b[i];
+        if (ca >= 'A' && ca <= 'Z') ca = ca - 'A' + 'a';
+        if (cb >= 'A' && cb <= 'Z') cb = cb - 'A' + 'a';
+        if (ca == '/') ca = '\\';
+        if (cb == '/') cb = '\\';
+        if (ca != cb) return false;
+    }
+    return true;
+}
+
+static size_t path_win32_split_components_after(const tsc_str_t* p, size_t offset, size_t starts[256], size_t lens[256]) {
+    size_t count = 0;
+    for (size_t i = offset; i < p->len && count < 256;) {
+        while (i < p->len && (p->data[i] == '/' || p->data[i] == '\\')) i++;
+        size_t start = i;
+        while (i < p->len && !(p->data[i] == '/' || p->data[i] == '\\')) i++;
+        size_t len = i - start;
+        if (len == 0) break;
+        if (len == 1 && p->data[start] == '.') continue;
+        starts[count] = start;
+        lens[count] = len;
+        count++;
+    }
+    return count;
+}
+
+tsc_str_t* tsc_path_win32_relative(const tsc_str_t* from, const tsc_str_t* to) {
+    tsc_str_t* from_norm = tsc_path_win32_normalize(from);
+    tsc_str_t* to_norm = tsc_path_win32_normalize(to);
+    if (path_win32_eq_ci((const char*)from_norm->data, from_norm->len, (const char*)to_norm->data, to_norm->len)) {
+        return tsc_str_from_lit("", 0);
+    }
+    size_t from_root_len = get_win32_root_len((const char*)from_norm->data, from_norm->len);
+    size_t to_root_len = get_win32_root_len((const char*)to_norm->data, to_norm->len);
+    if (!path_win32_eq_ci((const char*)from_norm->data, from_root_len, (const char*)to_norm->data, to_root_len)) {
+        return to_norm;
+    }
+
+    size_t from_starts[256], from_lens[256], to_starts[256], to_lens[256];
+    size_t from_count = path_win32_split_components_after(from_norm, from_root_len, from_starts, from_lens);
+    size_t to_count = path_win32_split_components_after(to_norm, to_root_len, to_starts, to_lens);
+    size_t common = 0;
+    while (
+        common < from_count &&
+        common < to_count &&
+        from_lens[common] == to_lens[common] &&
+        path_win32_eq_ci((const char*)(from_norm->data + from_starts[common]), from_lens[common], (const char*)(to_norm->data + to_starts[common]), to_lens[common])
+    ) {
+        common++;
+    }
+
+    char buf[4096];
+    size_t pos = 0;
+    for (size_t i = common; i < from_count; i++) {
+        if (pos > 0) {
+            if (pos + 1 >= sizeof buf) break;
+            buf[pos++] = '\\';
+        }
+        if (pos + 2 >= sizeof buf) break;
+        memcpy(buf + pos, "..", 2);
+        pos += 2;
+    }
+    for (size_t i = common; i < to_count; i++) {
+        if (pos > 0) {
+            if (pos + 1 >= sizeof buf) break;
+            buf[pos++] = '\\';
+        }
+        if (pos + to_lens[i] >= sizeof buf) break;
+        memcpy(buf + pos, to_norm->data + to_starts[i], to_lens[i]);
+        pos += to_lens[i];
+    }
+    tsc_str_t* r = str_alloc(pos);
+    memcpy((char*)r->data, buf, pos);
+    return r;
+}
+
+static bool glob_win32_match_inner(const char* path, size_t path_len, const char* pattern, size_t pattern_len) {
+    size_t i = 0, j = 0;
+    while (i < path_len && j < pattern_len) {
+        if (pattern[j] == '*') {
+            while (j < pattern_len && pattern[j] == '*') {
+                j++;
+            }
+            if (j == pattern_len) {
+                for (size_t k = i; k < path_len; k++) {
+                    if (path[k] == '/' || path[k] == '\\') return false;
+                }
+                return true;
+            }
+            for (size_t k = i; k <= path_len; k++) {
+                if (k > i && (path[k - 1] == '/' || path[k - 1] == '\\')) {
+                    break;
+                }
+                if (glob_win32_match_inner(path + k, path_len - k, pattern + j, pattern_len - j)) {
+                    return true;
+                }
+            }
+            return false;
+        } else if (pattern[j] == '?') {
+            if (path[i] == '/' || path[i] == '\\') {
+                return false;
+            }
+            i++;
+            j++;
+        } else {
+            char cp = path[i];
+            char cpat = pattern[j];
+            if (cp >= 'A' && cp <= 'Z') cp = cp - 'A' + 'a';
+            if (cpat >= 'A' && cpat <= 'Z') cpat = cpat - 'A' + 'a';
+            if (cp == '/') cp = '\\';
+            if (cpat == '/') cpat = '\\';
+            if (cp != cpat) {
+                return false;
+            }
+            i++;
+            j++;
+        }
+    }
+    if (i == path_len && j == pattern_len) {
+        return true;
+    }
+    while (j < pattern_len && pattern[j] == '*') {
+        j++;
+    }
+    return i == path_len && j == pattern_len;
+}
+
+bool tsc_path_win32_matches_glob(const tsc_str_t* path, const tsc_str_t* pattern) {
+    if (!path || !pattern) return false;
+    return glob_win32_match_inner(path->data, path->len, pattern->data, pattern->len);
+}
+
 /* ---------------- os ---------------- */
 
 tsc_str_t* tsc_os_platform(void) {

@@ -1090,6 +1090,19 @@ tsc_str_t* tsc_path_extname(const tsc_str_t* p);
 tsc_value_t tsc_path_parse(const tsc_str_t* p);
 tsc_str_t* tsc_path_format(tsc_value_t path_object);
 
+tsc_str_t* tsc_path_win32_join(size_t n, ...);
+tsc_str_t* tsc_path_win32_resolve(size_t n, ...);
+tsc_str_t* tsc_path_win32_normalize(const tsc_str_t* p);
+bool tsc_path_win32_is_absolute(const tsc_str_t* p);
+tsc_str_t* tsc_path_win32_basename(const tsc_str_t* p);
+tsc_str_t* tsc_path_win32_basename_suffix(const tsc_str_t* p, const tsc_str_t* suffix);
+tsc_str_t* tsc_path_win32_dirname(const tsc_str_t* p);
+tsc_str_t* tsc_path_win32_extname(const tsc_str_t* p);
+tsc_value_t tsc_path_win32_parse(const tsc_str_t* p);
+tsc_str_t* tsc_path_win32_format(tsc_value_t path_object);
+tsc_str_t* tsc_path_win32_relative(const tsc_str_t* from, const tsc_str_t* to);
+bool tsc_path_win32_matches_glob(const tsc_str_t* path, const tsc_str_t* pattern);
+
 /* ------------- exceptions ------------- */
 typedef struct tsc_try_frame {
     jmp_buf jb;

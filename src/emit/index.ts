@@ -12216,8 +12216,8 @@ class Emitter {
     }
 
     private isSideEffectFreeBuiltinStringConstantIdentifier(expr: ts.Identifier): boolean {
-        return this.isNamedImportFrom(expr, ["path", "node:path"], "sep") ||
-            this.isNamedImportFrom(expr, ["path", "node:path"], "delimiter") ||
+        return this.isNamedImportFrom(expr, ["path", "node:path", "path/posix", "node:path/posix", "path/win32", "node:path/win32"], "sep") ||
+            this.isNamedImportFrom(expr, ["path", "node:path", "path/posix", "node:path/posix", "path/win32", "node:path/win32"], "delimiter") ||
             this.isNamedImportFrom(expr, ["os", "node:os"], "EOL") ||
             this.isNamedImportFrom(expr, ["os", "node:os"], "devNull");
     }
@@ -12238,7 +12238,7 @@ class Emitter {
             this.isSideEffectFreeBuiltinModuleConstantRead(unwrapped)
         ) {
             const name = unwrapped.name.text;
-            if (this.isPathPosixReceiver(unwrapped.expression) && (name === "sep" || name === "delimiter")) {
+            if ((this.isPathPosixReceiver(unwrapped.expression) || this.isPathWin32Receiver(unwrapped.expression)) && (name === "sep" || name === "delimiter")) {
                 return true;
             }
             if (
@@ -12356,7 +12356,7 @@ class Emitter {
         ) {
             return true;
         }
-        if (this.isPathPosixReceiver(expr.expression) && (name === "sep" || name === "delimiter")) {
+        if ((this.isPathPosixReceiver(expr.expression) || this.isPathWin32Receiver(expr.expression)) && (name === "sep" || name === "delimiter")) {
             return true;
         }
         if (
@@ -18808,6 +18808,15 @@ class Emitter {
     }
 
     private isPathModuleIdentifier(id: ts.Identifier): boolean {
+        return this.isPathPosixModuleIdentifier(id) || this.isPathWin32ModuleIdentifier(id);
+    }
+
+    private isPathWin32ModuleIdentifier(id: ts.Identifier): boolean {
+        return this.isNamespaceImportFrom(id, ["path/win32", "node:path/win32"]) ||
+            this.isDefaultImportFrom(id, ["path/win32", "node:path/win32"]);
+    }
+
+    private isPathPosixModuleIdentifier(id: ts.Identifier): boolean {
         return id.text === "path" ||
             this.isNamespaceImportFrom(id, ["path", "node:path", "path/posix", "node:path/posix"]) ||
             this.isDefaultImportFrom(id, ["path", "node:path", "path/posix", "node:path/posix"]);
@@ -18822,7 +18831,29 @@ class Emitter {
         ) {
             return true;
         }
-        return ts.isIdentifier(expr) && this.isNamedImportFrom(expr, ["path", "node:path"], "posix");
+        if (ts.isIdentifier(expr)) {
+            return this.isNamedImportFrom(expr, ["path", "node:path"], "posix") ||
+                this.isNamespaceImportFrom(expr, ["path/posix", "node:path/posix"]) ||
+                this.isDefaultImportFrom(expr, ["path/posix", "node:path/posix"]);
+        }
+        return false;
+    }
+
+    private isPathWin32Receiver(expr: ts.Expression): boolean {
+        if (
+            ts.isPropertyAccessExpression(expr) &&
+            expr.name.text === "win32" &&
+            ts.isIdentifier(expr.expression) &&
+            this.isPathModuleIdentifier(expr.expression)
+        ) {
+            return true;
+        }
+        if (ts.isIdentifier(expr)) {
+            return this.isNamedImportFrom(expr, ["path", "node:path"], "win32") ||
+                this.isNamespaceImportFrom(expr, ["path/win32", "node:path/win32"]) ||
+                this.isDefaultImportFrom(expr, ["path/win32", "node:path/win32"]);
+        }
+        return false;
     }
 
     private isOsModuleIdentifier(id: ts.Identifier): boolean {
@@ -25323,11 +25354,23 @@ class Emitter {
             if (expr.text === "__dirname") {
                 return { c: this.stringLit(path.dirname(expr.getSourceFile().fileName)), ty: T_STRING };
             }
-            if (this.isNamedImportFrom(expr, ["path", "node:path"], "sep")) {
+            if (
+                this.isNamedImportFrom(expr, ["path", "node:path"], "sep") ||
+                this.isNamedImportFrom(expr, ["path/posix", "node:path/posix"], "sep")
+            ) {
                 return { c: this.stringLit("/"), ty: T_STRING };
             }
-            if (this.isNamedImportFrom(expr, ["path", "node:path"], "delimiter")) {
+            if (
+                this.isNamedImportFrom(expr, ["path", "node:path"], "delimiter") ||
+                this.isNamedImportFrom(expr, ["path/posix", "node:path/posix"], "delimiter")
+            ) {
                 return { c: this.stringLit(":"), ty: T_STRING };
+            }
+            if (this.isNamedImportFrom(expr, ["path/win32", "node:path/win32"], "sep")) {
+                return { c: this.stringLit("\\"), ty: T_STRING };
+            }
+            if (this.isNamedImportFrom(expr, ["path/win32", "node:path/win32"], "delimiter")) {
+                return { c: this.stringLit(";"), ty: T_STRING };
             }
             if (this.isNamedImportFrom(expr, ["events", "node:events"], "defaultMaxListeners")) {
                 return { c: "tsc_event_emitter_get_default_max_listeners()", ty: T_NUMBER };
@@ -28008,7 +28051,12 @@ class Emitter {
         const pathNamed = ["join", "resolve", "normalize", "isAbsolute", "relative", "toNamespacedPath", "basename", "dirname", "extname", "parse", "format", "matchesGlob"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["path", "node:path", "path/posix", "node:path/posix"], exported));
         if (pathNamed) {
-            return this.emitPathCall(call, pathNamed);
+            return this.emitPathCall(call, pathNamed, false);
+        }
+        const pathWin32Named = ["join", "resolve", "normalize", "isAbsolute", "relative", "toNamespacedPath", "basename", "dirname", "extname", "parse", "format", "matchesGlob"]
+            .find((exported) => this.isNamedImportFrom(calleeId, ["path/win32", "node:path/win32"], exported));
+        if (pathWin32Named) {
+            return this.emitPathCall(call, pathWin32Named, true);
         }
         const utilNamed = ["format"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["util", "node:util"], exported));
@@ -29656,11 +29704,16 @@ class Emitter {
         }
 
         if (ts.isIdentifier(recvExpr) && this.isPathModuleIdentifier(recvExpr)) {
-            return this.emitPathCall(call, memberName);
+            const isWin32 = this.isPathWin32ModuleIdentifier(recvExpr);
+            return this.emitPathCall(call, memberName, isWin32);
         }
 
         if (this.isPathPosixReceiver(recvExpr)) {
-            return this.emitPathCall(call, memberName);
+            return this.emitPathCall(call, memberName, false);
+        }
+
+        if (this.isPathWin32Receiver(recvExpr)) {
+            return this.emitPathCall(call, memberName, true);
         }
 
         if (this.isDnsPromisesReceiver(recvExpr)) {
@@ -40775,7 +40828,7 @@ class Emitter {
         return `({ tsc_promise_t* ${out}; tsc_try_frame_t ${eh}; tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { ${out} = ${successExpr}; tsc_try_pop(); } else { ${out} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } ${out}; })`;
     }
 
-    private emitPathCall(call: ts.CallExpression, name: string): EmitResult {
+    private emitPathCall(call: ts.CallExpression, name: string, isWin32 = false): EmitResult {
         const args = call.arguments;
         const stringSpecs = () => args.map((a) => {
             const r = this.emitExpr(a);
@@ -40791,42 +40844,44 @@ class Emitter {
         switch (name) {
             case "join":
             case "resolve": {
-                const fn = name === "join" ? "tsc_path_join" : "tsc_path_resolve";
+                const fn = isWin32
+                    ? (name === "join" ? "tsc_path_win32_join" : "tsc_path_win32_resolve")
+                    : (name === "join" ? "tsc_path_join" : "tsc_path_resolve");
                 return this.emitSequencedCall(fn, T_STRING, stringSpecs(), [args.length.toString()]);
             }
             case "normalize":
                 if (args.length < 1) unsupported(call, "path.normalize expects at least 1 arg");
-                return this.emitSequencedExpr(T_STRING, fixedStringSpecs(1), ([path]) => `tsc_path_normalize(${path})`);
+                return this.emitSequencedExpr(T_STRING, fixedStringSpecs(1), ([path]) => isWin32 ? `tsc_path_win32_normalize(${path})` : `tsc_path_normalize(${path})`);
             case "isAbsolute":
                 if (args.length < 1) unsupported(call, "path.isAbsolute expects at least 1 arg");
-                return this.emitSequencedExpr(T_BOOLEAN, fixedStringSpecs(1), ([path]) => `tsc_path_is_absolute(${path})`);
+                return this.emitSequencedExpr(T_BOOLEAN, fixedStringSpecs(1), ([path]) => isWin32 ? `tsc_path_win32_is_absolute(${path})` : `tsc_path_is_absolute(${path})`);
             case "relative":
                 if (args.length < 2) unsupported(call, "path.relative expects at least 2 args");
-                return this.emitSequencedExpr(T_STRING, fixedStringSpecs(2), ([from, to]) => `tsc_path_relative(${from}, ${to})`);
+                return this.emitSequencedExpr(T_STRING, fixedStringSpecs(2), ([from, to]) => isWin32 ? `tsc_path_win32_relative(${from}, ${to})` : `tsc_path_relative(${from}, ${to})`);
             case "matchesGlob":
                 if (args.length < 2) unsupported(call, "path.matchesGlob expects at least 2 args");
-                return this.emitSequencedExpr(T_BOOLEAN, fixedStringSpecs(2), ([path, pattern]) => `tsc_path_matches_glob(${path}, ${pattern})`);
+                return this.emitSequencedExpr(T_BOOLEAN, fixedStringSpecs(2), ([path, pattern]) => isWin32 ? `tsc_path_win32_matches_glob(${path}, ${pattern})` : `tsc_path_matches_glob(${path}, ${pattern})`);
             case "toNamespacedPath":
                 if (args.length < 1) unsupported(call, "path.toNamespacedPath expects at least 1 arg");
-                return this.emitSequencedExpr(T_STRING, fixedStringSpecs(1), ([path]) => path);
+                return this.emitSequencedExpr(T_STRING, fixedStringSpecs(1), ([path]) => isWin32 ? `tsc_path_win32_resolve(1, ${path})` : path);
             case "basename":
                 if (args.length < 1) unsupported(call, "path.basename expects at least 1 arg");
                 return this.emitSequencedExpr(
                     T_STRING,
                     fixedStringSpecs(args.length >= 2 ? 2 : 1),
                     ([path, suffix]) => suffix
-                        ? `tsc_path_basename_suffix(${path}, ${suffix})`
-                        : `tsc_path_basename(${path})`,
+                        ? (isWin32 ? `tsc_path_win32_basename_suffix(${path}, ${suffix})` : `tsc_path_basename_suffix(${path}, ${suffix})`)
+                        : (isWin32 ? `tsc_path_win32_basename(${path})` : `tsc_path_basename(${path})`),
                 );
             case "dirname":
                 if (args.length < 1) unsupported(call, "path.dirname expects at least 1 arg");
-                return this.emitSequencedExpr(T_STRING, fixedStringSpecs(1), ([path]) => `tsc_path_dirname(${path})`);
+                return this.emitSequencedExpr(T_STRING, fixedStringSpecs(1), ([path]) => isWin32 ? `tsc_path_win32_dirname(${path})` : `tsc_path_dirname(${path})`);
             case "extname":
                 if (args.length < 1) unsupported(call, "path.extname expects at least 1 arg");
-                return this.emitSequencedExpr(T_STRING, fixedStringSpecs(1), ([path]) => `tsc_path_extname(${path})`);
+                return this.emitSequencedExpr(T_STRING, fixedStringSpecs(1), ([path]) => isWin32 ? `tsc_path_win32_extname(${path})` : `tsc_path_extname(${path})`);
             case "parse":
                 if (args.length < 1) unsupported(call, "path.parse expects at least 1 arg");
-                return this.emitSequencedExpr(T_VALUE, fixedStringSpecs(1), ([path]) => `tsc_path_parse(${path})`);
+                return this.emitSequencedExpr(T_VALUE, fixedStringSpecs(1), ([path]) => isWin32 ? `tsc_path_win32_parse(${path})` : `tsc_path_parse(${path})`);
             case "format": {
                 if (args.length < 1) unsupported(call, "path.format expects at least 1 arg");
                 const value = this.emitExpr(args[0]!);
@@ -40836,7 +40891,7 @@ class Emitter {
                         { value, target: T_VALUE, node: args[0]! },
                         ...this.ignoredArgumentSpecs(args, 1),
                     ],
-                    ([pathObject]) => `tsc_path_format(${pathObject})`,
+                    ([pathObject]) => isWin32 ? `tsc_path_win32_format(${pathObject})` : `tsc_path_format(${pathObject})`,
                 );
             }
         }
@@ -47410,6 +47465,14 @@ class Emitter {
             switch (name) {
                 case "sep": return { c: this.stringLit("/"), ty: T_STRING };
                 case "delimiter": return { c: this.stringLit(":"), ty: T_STRING };
+            }
+        }
+
+        if (this.isPathWin32Receiver(pa.expression)) {
+            const name = pa.name.text;
+            switch (name) {
+                case "sep": return { c: this.stringLit("\\\\"), ty: T_STRING };
+                case "delimiter": return { c: this.stringLit(";"), ty: T_STRING };
             }
         }
 
