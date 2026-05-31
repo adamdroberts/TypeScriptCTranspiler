@@ -1,0 +1,9 @@
+Init
+R1: false 1
+R2: false 2
+R3: false 3
+R4: false 4
+R5: false 5
+R6: false 6
+R7: true 70,80,90
+Events: start | typed: 10,20,30 | untyped: a,b,c | entry: key:val | spread: 100,200,250,300 | assigned: 40,50,60
