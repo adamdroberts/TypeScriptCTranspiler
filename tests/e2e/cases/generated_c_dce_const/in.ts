@@ -5473,6 +5473,44 @@ function mathStaticFoldingDce(): string {
 }
 
 
+function whileInfiniteExitDce(): number {
+    while (true) {}
+    const while_infinite_after_exit = 1001;
+    console.log("dead_while_infinite_after_exit", while_infinite_after_exit);
+    return while_infinite_after_exit;
+}
+
+function forInfiniteExitDce(): number {
+    for (;;) {}
+    const for_infinite_after_exit = 1002;
+    console.log("dead_for_infinite_after_exit", for_infinite_after_exit);
+    return for_infinite_after_exit;
+}
+
+function doInfiniteExitDce(): number {
+    do {
+        console.log("kept_do_infinite_body");
+    } while (true);
+    const do_infinite_after_exit = 1003;
+    console.log("dead_do_infinite_after_exit", do_infinite_after_exit);
+    return do_infinite_after_exit;
+}
+
+function staticSwitchExitDce(): number {
+    const key = "always_exits" as "always_exits" | "other";
+    switch (key) {
+        case "always_exits":
+            return 1004;
+        case "other":
+            console.log("dead_static_switch_other_branch");
+            break;
+    }
+    const static_switch_after_exit = 1005;
+    console.log("dead_static_switch_after_exit", static_switch_after_exit);
+    return static_switch_after_exit;
+}
+
+
 console.log(
     usedLocal(used_count),
     constantBranch(used_count),
@@ -5531,5 +5569,9 @@ console.log(
     observedMutatingLengthProofs(),
     numericParserDce(),
     mathStaticFoldingDce(),
+    whileInfiniteExitDce !== undefined,
+    forInfiniteExitDce !== undefined,
+    doInfiniteExitDce !== undefined,
+    staticSwitchExitDce(),
     DceNamespace.kept,
 );

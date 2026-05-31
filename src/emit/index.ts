@@ -23916,24 +23916,26 @@ class Emitter {
                 this.statementListAlwaysExits(stmt.catchClause.block.statements);
         }
         if (ts.isSwitchStatement(stmt)) {
+            const selected = this.staticSwitchSelectedStatements(stmt);
+            if (selected) {
+                return !!selected.statements && this.statementListAlwaysExits(selected.statements);
+            }
             return this.switchStatementAlwaysExits(stmt);
         }
         if (ts.isWhileStatement(stmt)) {
             return this.isTrueExpression(stmt.expression) &&
-                !this.statementContainsBreak(stmt.statement) &&
-                this.statementAlwaysExits(stmt.statement);
+                !this.statementContainsBreak(stmt.statement);
         }
         if (ts.isForStatement(stmt)) {
             if (stmt.condition && this.staticBooleanValue(stmt.condition) === false) {
                 return false;
             }
             return (!stmt.condition || this.isTrueExpression(stmt.condition)) &&
-                !this.statementContainsBreak(stmt.statement) &&
-                this.statementAlwaysExits(stmt.statement);
+                !this.statementContainsBreak(stmt.statement);
         }
         if (ts.isDoStatement(stmt)) {
             return !this.statementContainsBreak(stmt.statement) &&
-                this.statementAlwaysExits(stmt.statement);
+                (this.statementAlwaysExits(stmt.statement) || this.isTrueExpression(stmt.expression));
         }
         return false;
     }
