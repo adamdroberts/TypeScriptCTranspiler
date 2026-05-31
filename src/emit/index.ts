@@ -27900,6 +27900,9 @@ class Emitter {
             "renameSync",
             "openSync",
             "closeSync",
+            "fsyncSync",
+            "fdatasyncSync",
+            "ftruncateSync",
             "readSync",
             "writeSync",
         ].find((exported) => this.isNamedImportFrom(calleeId, ["fs", "node:fs"], exported));
@@ -39323,6 +39326,51 @@ class Emitter {
                 ];
 
                 return this.emitSequencedExpr(T_VOID, specs, ([fd]) => `tsc_fs_close_sync(${fd!})`);
+            }
+            case "fsyncSync": {
+                if (args.length < 1) unsupported(call, "fs.fsyncSync needs a file descriptor");
+                const fdExpr = this.emitExpr(args[0]!);
+                if (fdExpr.ty.kind !== "number") unsupported(args[0]!, "fs.fsyncSync file descriptor must be a number");
+
+                const specs: SequencedCallArg[] = [
+                    { value: fdExpr, target: T_NUMBER, node: args[0]! },
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ];
+
+                return this.emitSequencedExpr(T_VOID, specs, ([fd]) => `tsc_fs_fsync_sync(${fd!})`);
+            }
+            case "fdatasyncSync": {
+                if (args.length < 1) unsupported(call, "fs.fdatasyncSync needs a file descriptor");
+                const fdExpr = this.emitExpr(args[0]!);
+                if (fdExpr.ty.kind !== "number") unsupported(args[0]!, "fs.fdatasyncSync file descriptor must be a number");
+
+                const specs: SequencedCallArg[] = [
+                    { value: fdExpr, target: T_NUMBER, node: args[0]! },
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ];
+
+                return this.emitSequencedExpr(T_VOID, specs, ([fd]) => `tsc_fs_fdatasync_sync(${fd!})`);
+            }
+            case "ftruncateSync": {
+                if (args.length < 1) unsupported(call, "fs.ftruncateSync needs a file descriptor and optional length");
+                const fdExpr = this.emitExpr(args[0]!);
+                if (fdExpr.ty.kind !== "number") unsupported(args[0]!, "fs.ftruncateSync file descriptor must be a number");
+
+                const lenArg = args[1] ? this.staticOptionValue(args[1]) : undefined;
+                const len = lenArg && !this.isUndefinedExpression(lenArg) ? this.emitExpr(lenArg) : undefined;
+                const specs: SequencedCallArg[] = [
+                    { value: fdExpr, target: T_NUMBER, node: args[0]! },
+                    {
+                        value: len ?? { c: "0.0", ty: T_NUMBER },
+                        target: T_NUMBER,
+                        node: args[1] ?? call,
+                    },
+                ];
+                specs.push(...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1));
+
+                return this.emitSequencedExpr(T_VOID, specs, ([fd, length]) =>
+                    `tsc_fs_ftruncate_sync(${fd!}, ${length!})`,
+                );
             }
             case "readSync": {
                 if (args.length < 2) unsupported(call, "fs.readSync needs fd and buffer");
