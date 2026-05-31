@@ -2353,7 +2353,10 @@ class Emitter {
                         !args[1] ||
                         this.isSideEffectFreeUndefinedValue(args[1], seenConsts) ||
                         this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "utf8" ||
-                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "utf-8"
+                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "utf-8" ||
+                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "latin1" ||
+                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "binary" ||
+                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "ascii"
                     ) &&
                     ignoredAfter(args[1] ? 2 : 1);
             default:
@@ -2379,7 +2382,10 @@ class Emitter {
                         !args[1] ||
                         this.isSideEffectFreeUndefinedValue(args[1], seenConsts) ||
                         this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "utf8" ||
-                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "utf-8"
+                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "utf-8" ||
+                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "latin1" ||
+                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "binary" ||
+                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "ascii"
                     );
             case "alloc":
                 return args.length >= 1 &&

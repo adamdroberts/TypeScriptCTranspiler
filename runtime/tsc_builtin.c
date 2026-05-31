@@ -892,6 +892,84 @@ bool buffer_encoding_is_base64(const tsc_str_t* encoding) {
     return str_lit_eq(encoding, "base64");
 }
 
+bool buffer_encoding_is_latin1(const tsc_str_t* encoding) {
+    return encoding && (str_lit_eq(encoding, "latin1") || str_lit_eq(encoding, "binary"));
+}
+
+bool buffer_encoding_is_ascii(const tsc_str_t* encoding) {
+    return encoding && str_lit_eq(encoding, "ascii");
+}
+
+size_t tsc_str_utf16_len(const tsc_str_t* s) {
+    size_t count = 0;
+    size_t pos = 0;
+    while (pos < s->len) {
+        uint32_t cp = 0xfffd;
+        size_t adv = 1;
+        decode_utf8_at(s, pos, &cp, &adv);
+        if (cp > 0xffff) {
+            count += 2;
+        } else {
+            count += 1;
+        }
+        pos += adv;
+    }
+    return count;
+}
+
+tsc_buffer_t* buffer_from_latin1_ascii(const tsc_str_t* input, bool is_ascii) {
+    size_t len = tsc_str_utf16_len(input);
+    tsc_buffer_t* b = buffer_alloc_len(len);
+    size_t pos = 0;
+    size_t out_idx = 0;
+    uint8_t mask = is_ascii ? 0x7f : 0xff;
+    while (pos < input->len) {
+        uint32_t cp = 0xfffd;
+        size_t adv = 1;
+        decode_utf8_at(input, pos, &cp, &adv);
+        if (cp > 0xffff) {
+            uint32_t shifted = cp - 0x10000u;
+            uint16_t hi = (uint16_t)(0xd800u + (shifted >> 10));
+            uint16_t lo = (uint16_t)(0xdc00u + (shifted & 0x3ffu));
+            b->data[out_idx++] = (uint8_t)(hi & mask);
+            b->data[out_idx++] = (uint8_t)(lo & mask);
+        } else {
+            b->data[out_idx++] = (uint8_t)(cp & mask);
+        }
+        pos += adv;
+    }
+    return b;
+}
+
+tsc_str_t* string_to_latin1(const uint8_t* data, size_t len) {
+    size_t utf8_len = 0;
+    for (size_t i = 0; i < len; i++) {
+        utf8_len += (data[i] < 0x80) ? 1 : 2;
+    }
+    tsc_str_t* out = str_alloc(utf8_len);
+    char* p = (char*)out->data;
+    size_t pos = 0;
+    for (size_t i = 0; i < len; i++) {
+        uint8_t b = data[i];
+        if (b < 0x80) {
+            p[pos++] = (char)b;
+        } else {
+            p[pos++] = (char)(0xc0 | (b >> 6));
+            p[pos++] = (char)(0x80 | (b & 0x3f));
+        }
+    }
+    return out;
+}
+
+tsc_str_t* string_to_ascii(const uint8_t* data, size_t len) {
+    tsc_str_t* out = str_alloc(len);
+    char* p = (char*)out->data;
+    for (size_t i = 0; i < len; i++) {
+        p[i] = (char)(data[i] & 0x7f);
+    }
+    return out;
+}
+
 size_t buffer_index(double raw, size_t len) {
     int64_t i = (int64_t)raw;
     if (i < 0) i = (int64_t)len + i;
@@ -978,7 +1056,13 @@ tsc_buffer_t* tsc_buffer_from_str(const tsc_str_t* input, const tsc_str_t* encod
     if (buffer_encoding_is_base64(encoding)) {
         return buffer_from_base64(input);
     }
-    tsc_throw_str(tsc_str_from_cstr("Buffer.from: only utf8, hex, and base64 encodings are supported"));
+    if (buffer_encoding_is_latin1(encoding)) {
+        return buffer_from_latin1_ascii(input, false);
+    }
+    if (buffer_encoding_is_ascii(encoding)) {
+        return buffer_from_latin1_ascii(input, false);
+    }
+    tsc_throw_str(tsc_str_from_cstr("Buffer.from: only utf8, hex, base64, latin1, ascii, and binary encodings are supported"));
     return NULL;
 }
 
@@ -1063,7 +1147,13 @@ tsc_str_t* tsc_buffer_to_string(const tsc_buffer_t* b, const tsc_str_t* encoding
     if (buffer_encoding_is_base64(encoding)) {
         return str_from_base64_bytes(b->data, b->len);
     }
-    tsc_throw_str(tsc_str_from_cstr("Buffer.toString: only utf8, hex, and base64 encodings are supported"));
+    if (buffer_encoding_is_latin1(encoding)) {
+        return string_to_latin1(b->data, b->len);
+    }
+    if (buffer_encoding_is_ascii(encoding)) {
+        return string_to_ascii(b->data, b->len);
+    }
+    tsc_throw_str(tsc_str_from_cstr("Buffer.toString: only utf8, hex, base64, latin1, ascii, and binary encodings are supported"));
     return NULL;
 }
 
@@ -1238,12 +1328,13 @@ double tsc_buffer_byte_length_str(const tsc_str_t* input, const tsc_str_t* encod
     if (buffer_encoding_is_utf8(encoding)) return (double)input->len;
     if (str_lit_eq(encoding, "hex")) return floor((double)input->len / 2.0);
     if (buffer_encoding_is_base64(encoding)) return (double)buffer_from_base64(input)->len;
-    tsc_throw_str(tsc_str_from_cstr("Buffer.byteLength: only utf8, hex, and base64 encodings are supported"));
+    if (buffer_encoding_is_latin1(encoding) || buffer_encoding_is_ascii(encoding)) return (double)tsc_str_utf16_len(input);
+    tsc_throw_str(tsc_str_from_cstr("Buffer.byteLength: only utf8, hex, base64, latin1, ascii, and binary encodings are supported"));
     return 0.0;
 }
 
 bool tsc_buffer_is_encoding(const tsc_str_t* encoding) {
-    return buffer_encoding_is_utf8(encoding) || str_lit_eq(encoding, "hex") || buffer_encoding_is_base64(encoding);
+    return buffer_encoding_is_utf8(encoding) || str_lit_eq(encoding, "hex") || buffer_encoding_is_base64(encoding) || buffer_encoding_is_latin1(encoding) || buffer_encoding_is_ascii(encoding);
 }
 
 tsc_buffer_t* tsc_buffer_transcode(const tsc_buffer_t* source, const tsc_str_t* from_enc, const tsc_str_t* to_enc) {

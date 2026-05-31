@@ -1,0 +1,21 @@
+isEncoding latin1: true
+isEncoding binary: true
+isEncoding ascii: true
+byteLength ascii strAscii: 12
+byteLength latin1 strAscii: 12
+byteLength binary strAscii: 12
+byteLength ascii strLatin1: 7
+byteLength latin1 strLatin1: 7
+byteLength binary strLatin1: 7
+byteLength ascii strUnicode: 10
+byteLength latin1 strUnicode: 10
+byteLength binary strUnicode: 10
+from ascii hex: 68e96c6c6f20ff
+from latin1 hex: 68e96c6c6f20ff
+from binary hex: 68e96c6c6f20ff
+from unicode ascii hex: 68e96c6c6f2000203d00
+from unicode latin1 hex: 68e96c6c6f2000203d00
+toString ascii: Hello C) 
+toString latin1: Hello Ã© ÿ
+toString binary: Hello Ã© ÿ
+write latin1 hex: 68e96c6c6f20ff00000000000000000000000000

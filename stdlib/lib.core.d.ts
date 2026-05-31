@@ -1713,7 +1713,7 @@ declare module "node:crypto" {
     export default defaultCrypto;
 }
 
-type BufferEncoding = "utf8" | "utf-8" | "hex" | "base64";
+type BufferEncoding = "utf8" | "utf-8" | "hex" | "base64" | "latin1" | "binary" | "ascii";
 interface Buffer {
     readonly length: number;
     toLocaleString(...ignored: any[]): string;
