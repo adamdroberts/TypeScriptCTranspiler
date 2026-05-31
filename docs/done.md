@@ -1553,6 +1553,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `function_value_spread` | spread calls through first-class function values |
 | `generator_functions` | synchronous function* materialized Iterator/IterableIterator lowering with yield, bounded yield*, next, return, and throw |
 | `generator_lazy` | narrow lazy lowering for sequential generators with on-demand next/materialization |
+| `generator_lazy_for` | lazy generators resume across simple counted for-loop suspension points |
 | `generator_lazy_if_else` | lazy generators resume across simple if/else control flow |
 | `generator_lazy_params` | lazy generator environments preserve parameters and this receivers |
 | `generator_lazy_locals` | lazy generator environments preserve simple locals across suspension points |

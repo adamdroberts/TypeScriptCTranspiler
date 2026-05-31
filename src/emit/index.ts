@@ -22438,6 +22438,23 @@ class Emitter {
                 this.isValidLazyGeneratorStatement(stmt.statement);
         }
 
+        if (ts.isForStatement(stmt)) {
+            if (stmt.initializer) {
+                if (ts.isVariableDeclarationList(stmt.initializer)) {
+                    for (const decl of stmt.initializer.declarations) {
+                        if (!ts.isIdentifier(decl.name) || this.nodeContainsYield(decl)) {
+                            return false;
+                        }
+                    }
+                } else if (this.nodeContainsYield(stmt.initializer)) {
+                    return false;
+                }
+            }
+            if (stmt.condition && this.nodeContainsYield(stmt.condition)) return false;
+            if (stmt.incrementor && this.nodeContainsYield(stmt.incrementor)) return false;
+            return this.isValidLazyGeneratorStatement(stmt.statement);
+        }
+
         if (ts.isExpressionStatement(stmt) || ts.isVariableStatement(stmt) || ts.isReturnStatement(stmt)) {
             if (ts.isVariableStatement(stmt)) {
                 for (const decl of stmt.declarationList.declarations) {
@@ -22630,6 +22647,35 @@ class Emitter {
         buf.close();
     }
 
+    private emitLazyGeneratorForInitializer(
+        buf: CBuf,
+        initializer: ts.ForInitializer | undefined,
+    ): void {
+        if (!initializer) return;
+        if (!ts.isVariableDeclarationList(initializer)) {
+            const expr = this.emitExpr(initializer);
+            buf.line(`(void)(${expr.c});`);
+            return;
+        }
+        for (const decl of initializer.declarations) {
+            if (!ts.isIdentifier(decl.name)) unsupported(decl, "lazy generator for-init locals must be identifiers");
+            const sym = this.symbolForIdentifier(decl.name);
+            const envBinding = this.closureEnvBindingForSymbol(sym);
+            const targetType = envBinding?.type ??
+                this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
+            const target = envBinding ? `*${envBinding.ptr}` : this.identifierName(decl.name);
+            if (decl.initializer) {
+                const value = this.emitExpr(decl.initializer);
+                const coerced = targetType.c === "int64_t" && value.ty.kind === "number"
+                    ? `((int64_t)(${value.c}))`
+                    : this.coerce(value, targetType, decl.initializer);
+                buf.line(`${target} = ${coerced};`);
+            } else {
+                buf.line(`${target} = ${this.zeroValue(targetType)};`);
+            }
+        }
+    }
+
     private emitLazyGeneratorStmt(
         buf: CBuf,
         stmt: ts.Statement,
@@ -22667,6 +22713,21 @@ class Emitter {
             if (this.staticBooleanValue(stmt.expression) === false) return;
             buf.open(`while (${this.emitBoolExpr(stmt.expression)})`);
             this.emitLazyGeneratorStmt(buf, stmt.statement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            buf.close();
+            return;
+        }
+
+        if (ts.isForStatement(stmt)) {
+            buf.open("");
+            this.emitLazyGeneratorForInitializer(buf, stmt.initializer);
+            const cond = stmt.condition ? this.emitBoolExpr(stmt.condition) : "true";
+            buf.open(`while (${cond})`);
+            this.emitLazyGeneratorStmt(buf, stmt.statement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            if (stmt.incrementor) {
+                const inc = this.emitExpr(stmt.incrementor);
+                buf.line(`(void)(${inc.c});`);
+            }
+            buf.close();
             buf.close();
             return;
         }
