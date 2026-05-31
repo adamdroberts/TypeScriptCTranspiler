@@ -377,6 +377,39 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
     return tsc_value_undefined();
 }
 
+static tsc_object_prop_t* prop_cache_lookup(tsc_prop_cache_t* cache, tsc_object_t* object, const tsc_str_t* key) {
+    if (!cache) return NULL;
+    for (size_t i = 0; i < TSC_POLYMORPHIC_CACHE_SIZE; i++) {
+        tsc_cache_entry_t* entry = &cache->entries[i];
+        if (
+            entry->object == object &&
+            entry->shape_version == object->shape_version &&
+            entry->index < object->len &&
+            tsc_str_eq(object->props[entry->index].key, key)
+        ) {
+            if (i > 0) {
+                tsc_cache_entry_t hit = *entry;
+                for (size_t j = i; j > 0; j--) {
+                    cache->entries[j] = cache->entries[j - 1];
+                }
+                cache->entries[0] = hit;
+            }
+            return &object->props[cache->entries[0].index];
+        }
+    }
+    return NULL;
+}
+
+static void prop_cache_store(tsc_prop_cache_t* cache, const tsc_object_t* object, size_t index) {
+    if (!cache) return;
+    for (size_t j = TSC_POLYMORPHIC_CACHE_SIZE - 1; j > 0; j--) {
+        cache->entries[j] = cache->entries[j - 1];
+    }
+    cache->entries[0].object = object;
+    cache->entries[0].shape_version = object->shape_version;
+    cache->entries[0].index = index;
+}
+
 tsc_value_t tsc_value_get_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_cache_t* cache) {
     if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) {
         return tsc_value_get_prop(v, key);
@@ -387,23 +420,17 @@ tsc_value_t tsc_value_get_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_p
         tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_MISS);
         return tsc_object_get(o, key);
     }
-    if (
-        cache->object == o &&
-        cache->shape_version == o->shape_version &&
-        cache->index < o->len &&
-        tsc_str_eq(o->props[cache->index].key, key)
-    ) {
+    tsc_object_prop_t* cached = prop_cache_lookup(cache, o, key);
+    if (cached) {
         tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_HIT);
-        const tsc_object_prop_t* prop = &o->props[cache->index];
+        const tsc_object_prop_t* prop = cached;
         if (prop->accessor) return prop->getter ? prop->getter(prop->getter_env, v) : tsc_value_undefined();
         return prop->value;
     }
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_MISS);
     ssize_t idx = object_find(o, key);
     if (idx >= 0) {
-        cache->object = o;
-        cache->shape_version = o->shape_version;
-        cache->index = (size_t)idx;
+        prop_cache_store(cache, o, (size_t)idx);
         const tsc_object_prop_t* prop = &o->props[(size_t)idx];
         if (prop->accessor) return prop->getter ? prop->getter(prop->getter_env, v) : tsc_value_undefined();
         return prop->value;
@@ -439,23 +466,17 @@ tsc_value_t tsc_value_get_prop_receiver_cached(tsc_value_t v, const tsc_str_t* k
         tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_MISS);
         return tsc_object_get_receiver(o, key, receiver);
     }
-    if (
-        cache->object == o &&
-        cache->shape_version == o->shape_version &&
-        cache->index < o->len &&
-        tsc_str_eq(o->props[cache->index].key, key)
-    ) {
+    tsc_object_prop_t* cached = prop_cache_lookup(cache, o, key);
+    if (cached) {
         tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_HIT);
-        const tsc_object_prop_t* prop = &o->props[cache->index];
+        const tsc_object_prop_t* prop = cached;
         if (prop->accessor) return prop->getter ? prop->getter(prop->getter_env, receiver) : tsc_value_undefined();
         return prop->value;
     }
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_MISS);
     ssize_t idx = object_find(o, key);
     if (idx >= 0) {
-        cache->object = o;
-        cache->shape_version = o->shape_version;
-        cache->index = (size_t)idx;
+        prop_cache_store(cache, o, (size_t)idx);
         const tsc_object_prop_t* prop = &o->props[(size_t)idx];
         if (prop->accessor) return prop->getter ? prop->getter(prop->getter_env, receiver) : tsc_value_undefined();
         return prop->value;
@@ -1100,14 +1121,10 @@ bool tsc_value_set_prop_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value,
         tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_MISS);
         return tsc_object_set(o, key, value);
     }
-    if (
-        cache->object == o &&
-        cache->shape_version == o->shape_version &&
-        cache->index < o->len &&
-        tsc_str_eq(o->props[cache->index].key, key)
-    ) {
+    tsc_object_prop_t* cached = prop_cache_lookup(cache, o, key);
+    if (cached) {
         tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_HIT);
-        tsc_object_prop_t* prop = &o->props[cache->index];
+        tsc_object_prop_t* prop = cached;
         if (prop->accessor) return prop->setter ? prop->setter(prop->setter_env, v, value) : false;
         if (!prop->writable) return false;
         prop->value = value;
@@ -1117,9 +1134,7 @@ bool tsc_value_set_prop_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value,
     bool ok = tsc_object_set(o, key, value);
     ssize_t idx = object_find(o, key);
     if (idx >= 0) {
-        cache->object = o;
-        cache->shape_version = o->shape_version;
-        cache->index = (size_t)idx;
+        prop_cache_store(cache, o, (size_t)idx);
     }
     return ok;
 }
@@ -1145,14 +1160,10 @@ bool tsc_value_set_prop_receiver_cached(tsc_value_t v, tsc_str_t* key, tsc_value
         tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_MISS);
         return tsc_object_set_receiver(o, key, value, receiver);
     }
-    if (
-        cache->object == o &&
-        cache->shape_version == o->shape_version &&
-        cache->index < o->len &&
-        tsc_str_eq(o->props[cache->index].key, key)
-    ) {
+    tsc_object_prop_t* cached = prop_cache_lookup(cache, o, key);
+    if (cached) {
         tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_HIT);
-        tsc_object_prop_t* prop = &o->props[cache->index];
+        tsc_object_prop_t* prop = cached;
         if (prop->accessor) return prop->setter ? prop->setter(prop->setter_env, receiver, value) : false;
         if (!prop->writable) return false;
         return value_set_receiver_own_data(receiver, key, value);
@@ -1161,9 +1172,7 @@ bool tsc_value_set_prop_receiver_cached(tsc_value_t v, tsc_str_t* key, tsc_value
     bool ok = tsc_object_set_receiver(o, key, value, receiver);
     ssize_t idx = object_find(o, key);
     if (idx >= 0) {
-        cache->object = o;
-        cache->shape_version = o->shape_version;
-        cache->index = (size_t)idx;
+        prop_cache_store(cache, o, (size_t)idx);
     }
     return ok;
 }

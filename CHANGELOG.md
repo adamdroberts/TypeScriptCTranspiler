@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic property cache sites now keep a four-entry MRU cache of shape-validated receiver/index entries, avoiding avoidable misses when one property access alternates across a small set of hot objects. Test: `dynamic_polymorphic_cache`.
 - Added a bounded `process.nextTick` recursion starvation guard that throws a catchable runtime error after 1000 nested nextTick schedules. Test: `process_next_tick_starvation`.
 - Extended `Object.prototype.isPrototypeOf.call(...)` across array and function prototype chains, and made `Object.getOwnPropertyDescriptors(...)` return empty descriptor objects for primitive non-nullish targets while preserving nullish rejection. Test: `object_prototype_is_prototype_of_arrays_functions`.
 - Embedded Node native-addon bridge conversion now preserves function-valued properties in both directions, so addon-exported callbacks can be invoked from compiled code and compiled AOT function values can be passed back into V8. Test: `native_addon_manifest_function_export`.
