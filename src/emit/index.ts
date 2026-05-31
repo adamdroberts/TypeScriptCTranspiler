@@ -17321,8 +17321,12 @@ class Emitter {
         exportLefts: CommonJsExportAccess[];
     } | null {
         const assignment = this.commonJsModuleExportsValueAssignmentChain(stmt);
-        if (!assignment || !ts.isObjectLiteralExpression(assignment.right)) return null;
-        for (const prop of assignment.right.properties) {
+        if (!assignment) return null;
+        const right = ts.isObjectLiteralExpression(assignment.right)
+            ? assignment.right
+            : this.commonJsIifeReturnedObjectLiteral(assignment.right);
+        if (!right) return null;
+        for (const prop of right.properties) {
             if (ts.isSpreadAssignment(prop) && this.isCommonJsModuleExportsSpreadValue(prop.expression)) continue;
             if (ts.isShorthandPropertyAssignment(prop)) continue;
             if (ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.initializer)) continue;
@@ -17347,7 +17351,44 @@ class Emitter {
             if (ts.isGetAccessorDeclaration(prop) && this.commonJsObjectAssignGetterReturnExpression(prop)) continue;
             unsupported(prop, "CommonJS module.exports object currently supports declared identifier, function-valued, arrow-function-valued, static require values, and static literal-value exports only");
         }
-        return { left: assignment.left, right: assignment.right, exportLefts: assignment.exportLefts };
+        return { left: assignment.left, right, exportLefts: assignment.exportLefts };
+    }
+
+    private commonJsIifeReturnedObjectLiteral(expr: ts.Expression): ts.ObjectLiteralExpression | null {
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isCallExpression(cur) || cur.arguments.length !== 0) return null;
+        let callee: ts.Expression = cur.expression;
+        while (ts.isParenthesizedExpression(callee)) callee = callee.expression;
+        if (!ts.isArrowFunction(callee) && !ts.isFunctionExpression(callee)) return null;
+        if (callee.parameters.length !== 0) return null;
+        const containsThis = (node: ts.Node): boolean => {
+            if (node.kind === ts.SyntaxKind.ThisKeyword) return true;
+            if (
+                node !== callee &&
+                (ts.isFunctionExpression(node) ||
+                    ts.isFunctionDeclaration(node) ||
+                    ts.isArrowFunction(node) ||
+                    ts.isMethodDeclaration(node) ||
+                    ts.isGetAccessorDeclaration(node) ||
+                    ts.isSetAccessorDeclaration(node))
+            ) {
+                return false;
+            }
+            return !!ts.forEachChild(node, containsThis);
+        };
+        if (containsThis(callee.body)) return null;
+        if (!ts.isBlock(callee.body)) {
+            let body = callee.body;
+            while (ts.isParenthesizedExpression(body)) body = body.expression;
+            return ts.isObjectLiteralExpression(body) ? body : null;
+        }
+        if (callee.body.statements.length !== 1) return null;
+        const stmt = callee.body.statements[0]!;
+        if (!ts.isReturnStatement(stmt) || !stmt.expression) return null;
+        let returned = stmt.expression;
+        while (ts.isParenthesizedExpression(returned)) returned = returned.expression;
+        return ts.isObjectLiteralExpression(returned) ? returned : null;
     }
 
     private commonJsModuleExportsObjectAssignmentEntries(
@@ -17392,12 +17433,34 @@ class Emitter {
         }
         const object = node.parent;
         if (!object || !ts.isObjectLiteralExpression(object)) return false;
-        const expr = object.parent;
-        return ts.isBinaryExpression(expr) &&
-            expr.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-            expr.right === object &&
-            ts.isPropertyAccessExpression(expr.left) &&
-            this.isModuleExportsAccess(expr.left);
+        let cur: ts.Node = object;
+        while (cur.parent) {
+            const parent = cur.parent;
+            if (
+                ts.isBinaryExpression(parent) &&
+                parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                ts.isPropertyAccessExpression(parent.left) &&
+                this.isModuleExportsAccess(parent.left)
+            ) {
+                const right = ts.isObjectLiteralExpression(parent.right)
+                    ? parent.right
+                    : this.commonJsIifeReturnedObjectLiteral(parent.right);
+                return right === object;
+            }
+            if (
+                ts.isParenthesizedExpression(parent) ||
+                ts.isReturnStatement(parent) ||
+                ts.isBlock(parent) ||
+                ts.isArrowFunction(parent) ||
+                ts.isFunctionExpression(parent) ||
+                ts.isCallExpression(parent)
+            ) {
+                cur = parent;
+                continue;
+            }
+            break;
+        }
+        return false;
     }
 
     private commonJsObjectExportValueDeclaration(node: ts.Node): ts.Declaration | null {
