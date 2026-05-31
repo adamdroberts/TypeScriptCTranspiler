@@ -1666,6 +1666,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_commonjs_function_scope_module_alias` | function-scoped CommonJS module aliases for static require and wrapper metadata |
 | `node_modules_commonjs_module_exports_arrow` | narrow CommonJS package arrow-function-valued `module.exports` default |
 | `node_modules_commonjs_module_exports_array` | narrow CommonJS package array-valued `module.exports` default reads |
+| `node_modules_commonjs_module_exports_conditional` | narrow CommonJS package conditional whole-value `module.exports` default over AOT require branches |
 | `node_modules_commonjs_module_exports_function` | narrow CommonJS package function-valued `module.exports` default import |
 | `node_modules_commonjs_module_exports_identifier` | narrow CommonJS package identifier-valued `module.exports` default import and require call |
 | `node_modules_commonjs_module_exports_object` | narrow CommonJS package object-literal `module.exports` identifier exports |
