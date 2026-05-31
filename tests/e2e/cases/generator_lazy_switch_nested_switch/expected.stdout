@@ -1,0 +1,9 @@
+alpha one false yield-alpha-one
+alpha one true total-5
+start:alpha:one|alpha-one-before|alpha-one-after:5|done:5
+alpha two false yield-alpha-two
+alpha two true total-11
+start:alpha:two|alpha-two-before|alpha-two-after:11|done:11
+beta one false yield-default
+beta one true total-19
+start:beta:one|default-before|default-after:19|done:19
