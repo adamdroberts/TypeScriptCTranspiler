@@ -1,7 +1,7 @@
+pending callbacks: 0 <none>
 race later: later
 race reject: bad
-race recovered: handled
 race set later: set-later
 race set reject: set-bad
+race recovered: handled
 race set recovered: set-handled
-pending callbacks: 0 

@@ -1,11 +1,11 @@
 then before throw: start
-then caught: then boom
-then recovered: after then
 catch before throw: first
-catch caught: catch boom
-catch recovered: after catch
-finally fulfilled caught: finally boom
-finally fulfilled recovered: after finally fulfilled
-finally rejected caught: finally replace
 finally keep
+then caught: then boom
+catch caught: catch boom
+finally fulfilled caught: finally boom
+finally rejected caught: finally replace
 finally kept reason: keep
+then recovered: after then
+catch recovered: after catch
+finally fulfilled recovered: after finally fulfilled

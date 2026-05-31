@@ -124,6 +124,7 @@ struct tsc_object {
     bool is_error;
     bool is_typed_array;
     uint64_t shape_version;
+    uint64_t object_id;
     tsc_value_t proxy_target;
     tsc_value_t proxy_handler;
     tsc_value_t prototype;
@@ -136,10 +137,18 @@ typedef enum {
     TSC_PROMISE_REJECTED,
 } tsc_promise_state_t;
 
+typedef struct {
+    void (*fn)(void*);
+    void* env;
+} tsc_promise_callback_t;
+
 struct tsc_promise {
     tsc_promise_state_t state;
     tsc_value_t result;
     void* ptr_result;
+    tsc_promise_callback_t* callbacks;
+    size_t callbacks_len;
+    size_t callbacks_cap;
 };
 
 typedef struct tsc_event_listener {
@@ -193,6 +202,7 @@ typedef struct tsc_event_once_promise_env {
 
 extern tsc_function_identity_t* g_function_identities;
 extern double g_event_emitter_default_max_listeners;
+extern bool g_shape_diagnostics_enabled;
 
 typedef enum {
     TSC_DYNAMIC_STAT_GET_PROP,
@@ -452,6 +462,7 @@ double buffer_index_of_bytes(const tsc_buffer_t* b, const uint8_t* needle, size_
 double buffer_last_index_of_bytes(const tsc_buffer_t* b, const uint8_t* needle, size_t needle_len, double offset);
 size_t buffer_checked_offset(const tsc_buffer_t* b, double offset, size_t width, const char* label);
 uint32_t uint_from_double(double value);
+uint64_t uint64_from_double(double value);
 double double_from_float_bits(uint32_t bits);
 uint32_t float_bits_from_double(double value);
 double double_from_bits(uint64_t bits);

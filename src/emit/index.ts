@@ -232,6 +232,8 @@ class Emitter {
     private accessorAdapters = new Map<string, string>();
     private promiseResolveAdapters = new Map<string, string>();
     private promiseRejectAdapters = new Map<string, string>();
+    private promiseThenAdapters = new Map<string, string>();
+    private promiseFinallyAdapters = new Map<string, string>();
     private promiseExecutorEnvDeclared = false;
     private commonJsExportGlobals = new Set<string>();
     private requireDestructureTypes = new Map<ts.Symbol, CType>();
@@ -1009,9 +1011,14 @@ class Emitter {
                 if (ts.isSpreadAssignment(prop)) {
                     return this.isSideEffectFreeObjectSpreadOperand(prop.expression, seenConsts);
                 }
-                if (!ts.isPropertyAssignment(prop)) return false;
-                if (!this.objectLiteralPropertyNameHasNoDefinitionSideEffects(prop.name, seenConsts)) return false;
-                return this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts);
+                if (ts.isPropertyAssignment(prop)) {
+                    if (!this.objectLiteralPropertyNameHasNoDefinitionSideEffects(prop.name, seenConsts)) return false;
+                    return this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts);
+                }
+                if (ts.isShorthandPropertyAssignment(prop)) {
+                    return this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts);
+                }
+                return false;
             });
         }
         return false;
@@ -14189,8 +14196,7 @@ class Emitter {
         for (const modId of this.graph.topoOrder) {
             out.line(`    mod_init_${modId}();`);
         }
-        out.line("    tsc_process_drain_next_ticks();");
-        out.line("    tsc_drain_microtasks();");
+        out.line("    tsc_drain_microtasks_and_next_ticks();");
         out.line("    tsc_drain_timeouts();");
         out.line("    tsc_drain_immediates();");
         out.line("    return 0;");
@@ -28147,6 +28153,9 @@ class Emitter {
         if (name === "setTimeout") {
             return this.emitSetTimeoutCall(call);
         }
+        if (name === "setInterval") {
+            return this.emitSetIntervalCall(call);
+        }
         if (name === "clearTimeout" || name === "clearInterval") {
             return this.emitClearTimerCall(call, "tsc_clear_timeout");
         }
@@ -28164,12 +28173,12 @@ class Emitter {
         if (bufferTranscodeNamed) {
             return this.emitBufferTranscodeCall(call);
         }
-        const timersNamed = ["setTimeout", "clearTimeout", "clearInterval", "setImmediate", "clearImmediate"]
+        const timersNamed = ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "setImmediate", "clearImmediate"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["timers", "node:timers"], exported));
         if (timersNamed) {
             return this.emitTimersCall(call, timersNamed);
         }
-        const eventsNamed = ["listenerCount", "getEventListeners", "once", "setMaxListeners", "getMaxListeners"]
+        const eventsNamed = ["listenerCount", "getEventListeners", "once", "on", "setMaxListeners", "getMaxListeners"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["events", "node:events"], exported));
         if (eventsNamed) {
             return this.emitEventsStaticCall(call, eventsNamed);
@@ -29893,7 +29902,7 @@ class Emitter {
         }
 
         if (ts.isIdentifier(recvExpr) && this.isEventsModuleIdentifier(recvExpr)) {
-            if (memberName === "listenerCount" || memberName === "getEventListeners" || memberName === "once" || memberName === "setMaxListeners" || memberName === "getMaxListeners") {
+            if (memberName === "listenerCount" || memberName === "getEventListeners" || memberName === "once" || memberName === "on" || memberName === "setMaxListeners" || memberName === "getMaxListeners") {
                 return this.emitEventsStaticCall(call, memberName);
             }
             unsupported(call, `events.${memberName}`);
@@ -31788,7 +31797,8 @@ class Emitter {
                 { value: argList, node: call },
             ], ([target, list]) => {
                 const fn = this.freshTemp("_dyn_call_fn");
-                return `({ tsc_value_t ${fn} = tsc_value_get_prop(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)})); tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${list})); })`;
+                const cache = this.freshTemp("_prop_cache");
+                return `({ static tsc_prop_cache_t ${cache}; tsc_value_t ${fn} = tsc_value_get_prop_cached(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}), &${cache}); tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${list})); })`;
             });
         }
         for (const arg of args) {
@@ -31797,7 +31807,9 @@ class Emitter {
         return this.emitSequencedExpr(T_VALUE, specs, ([target, ...values]) => {
             const av = this.freshTemp("_dyn_call_args");
             const fn = this.freshTemp("_dyn_call_fn");
+            const cache = this.freshTemp("_prop_cache");
             const pieces = [
+                `static tsc_prop_cache_t ${cache}`,
                 `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${values.length || 1})`,
             ];
             for (const value of values) {
@@ -31805,7 +31817,7 @@ class Emitter {
                 pieces.push(`tsc_value_t ${tmp} = ${value}`);
                 pieces.push(`tsc_array_push_raw(${av}, &${tmp})`);
             }
-            pieces.push(`tsc_value_t ${fn} = tsc_value_get_prop(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}))`);
+            pieces.push(`tsc_value_t ${fn} = tsc_value_get_prop_cached(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}), &${cache})`);
             pieces.push(`tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${av}))`);
             return `({ ${pieces.join("; ")}; })`;
         });
@@ -33945,6 +33957,197 @@ class Emitter {
         return name;
     }
 
+    private ensurePromiseThenAdapter(
+        call: ts.CallExpression,
+        recvType: CType,
+        fulfilledType: CType | null,
+        rejectedType: CType | null,
+        mappedType: CType,
+        node: ts.Expression,
+    ): string {
+        const key = `then:${this.typeKey(recvType)}:${fulfilledType ? this.typeKey(fulfilledType) : "null"}:${rejectedType ? this.typeKey(rejectedType) : "null"}:${this.typeKey(mappedType)}`;
+        const existing = this.promiseThenAdapters.get(key);
+        if (existing) return existing;
+
+        const name = `tsc_promise_then_callback_${this.promiseThenAdapters.size}`;
+        this.promiseThenAdapters.set(key, name);
+
+        const envType = `${name}_env_t`;
+        const preparedFulfilled = fulfilledType ? this.prepareType(fulfilledType) : null;
+        const preparedRejected = rejectedType ? this.prepareType(rejectedType) : null;
+
+        // Emit Struct Definition
+        this.structDecls.open(`typedef struct ${envType}`);
+        this.structDecls.line("tsc_promise_t* receiver;");
+        this.structDecls.line("tsc_promise_t* result_promise;");
+        if (preparedFulfilled) {
+            this.structDecls.line(`${preparedFulfilled.c} onFulfilled;`);
+        }
+        if (preparedRejected) {
+            this.structDecls.line(`${preparedRejected.c} onRejected;`);
+        }
+        this.structDecls.close(` ${envType};`);
+        this.structDecls.line();
+
+        // Emit Prototype
+        this.protos.line(`void ${name}(void* env);`);
+
+        // Emit Function Body
+        const buf = new CBuf();
+        buf.open(`void ${name}(void* env)`);
+        buf.line(`${envType}* state = (${envType}*)env;`);
+        buf.line("tsc_promise_t* _p = state->receiver;");
+        buf.line("tsc_promise_t* _ret = state->result_promise;");
+
+        buf.open("if (tsc_promise_is_fulfilled(_p))");
+        if (preparedFulfilled && fulfilledType) {
+            const callResult = this.promiseCallbackCall(call, fulfilledType, "state->onFulfilled", [this.promiseFulfilledValue(recvType.elem, "_p")], node);
+            const ret = this.prepareType(fulfilledType.ret!);
+            const resPromise = this.freshTemp("_res_p");
+            const eh = this.freshTemp("_eh");
+            buf.line(`tsc_promise_t* ${resPromise};`);
+            buf.line(`tsc_try_frame_t ${eh};`);
+            buf.line(`tsc_try_push(&${eh});`);
+            buf.open(`if (setjmp(${eh}.jb) == 0)`);
+            if (ret.kind === "void" || ret.kind === "never") {
+                buf.line(`${callResult};`);
+                buf.line("tsc_try_pop();");
+                buf.line(`${resPromise} = tsc_promise_resolve(tsc_value_undefined());`);
+            } else {
+                const valueTmp = this.freshTemp("_val");
+                buf.line(`${ret.c} ${valueTmp} = ${callResult};`);
+                buf.line("tsc_try_pop();");
+                buf.line(`${resPromise} = ${this.promiseResolveResult({ c: valueTmp, ty: ret }, node)};`);
+            }
+            buf.close();
+            buf.open("else");
+            buf.line("tsc_try_pop();");
+            buf.line(`${resPromise} = tsc_promise_reject(tsc_value_string(tsc_current_error()));`);
+            buf.close();
+            buf.line(`tsc_promise_adopt_into(_ret, ${resPromise});`);
+        } else {
+            buf.line(`tsc_promise_adopt_into(_ret, ${this.promiseResolveStoredValue(recvType.elem, "_p")});`);
+        }
+        buf.close(); // end of if fulfilled
+
+        buf.open("else if (tsc_promise_is_rejected(_p))");
+        if (preparedRejected && rejectedType) {
+            const callResult = this.promiseCallbackCall(call, rejectedType, "state->onRejected", [{ c: "tsc_promise_reason(_p)", ty: T_VALUE }], node);
+            const ret = this.prepareType(rejectedType.ret!);
+            const resPromise = this.freshTemp("_res_p");
+            const eh = this.freshTemp("_eh");
+            buf.line(`tsc_promise_t* ${resPromise};`);
+            buf.line(`tsc_try_frame_t ${eh};`);
+            buf.line(`tsc_try_push(&${eh});`);
+            buf.open(`if (setjmp(${eh}.jb) == 0)`);
+            if (ret.kind === "void" || ret.kind === "never") {
+                buf.line(`${callResult};`);
+                buf.line("tsc_try_pop();");
+                buf.line(`${resPromise} = tsc_promise_resolve(tsc_value_undefined());`);
+            } else {
+                const valueTmp = this.freshTemp("_val");
+                buf.line(`${ret.c} ${valueTmp} = ${callResult};`);
+                buf.line("tsc_try_pop();");
+                buf.line(`${resPromise} = ${this.promiseResolveResult({ c: valueTmp, ty: ret }, node)};`);
+            }
+            buf.close();
+            buf.open("else");
+            buf.line("tsc_try_pop();");
+            buf.line(`${resPromise} = tsc_promise_reject(tsc_value_string(tsc_current_error()));`);
+            buf.close();
+            buf.line(`tsc_promise_adopt_into(_ret, ${resPromise});`);
+        } else {
+            buf.line("tsc_promise_adopt_into(_ret, _p);");
+        }
+        buf.close(); // end of else if rejected
+
+        buf.close(); // end of function
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
+    private ensurePromiseFinallyAdapter(
+        call: ts.CallExpression,
+        recvType: CType,
+        cbType: CType | null,
+        mappedType: CType,
+        node: ts.Expression,
+    ): string {
+        const key = `finally:${this.typeKey(recvType)}:${cbType ? this.typeKey(cbType) : "null"}:${this.typeKey(mappedType)}`;
+        const existing = this.promiseFinallyAdapters.get(key);
+        if (existing) return existing;
+
+        const name = `tsc_promise_finally_callback_${this.promiseFinallyAdapters.size}`;
+        this.promiseFinallyAdapters.set(key, name);
+
+        const envType = `${name}_env_t`;
+        const preparedCb = cbType ? this.prepareType(cbType) : null;
+
+        // Struct
+        this.structDecls.open(`typedef struct ${envType}`);
+        this.structDecls.line("tsc_promise_t* receiver;");
+        this.structDecls.line("tsc_promise_t* result_promise;");
+        if (preparedCb) {
+            this.structDecls.line(`${preparedCb.c} cb;`);
+        }
+        this.structDecls.close(` ${envType};`);
+        this.structDecls.line();
+
+        // Proto
+        this.protos.line(`void ${name}(void* env);`);
+
+        // Function
+        const buf = new CBuf();
+        buf.open(`void ${name}(void* env)`);
+        buf.line(`${envType}* state = (${envType}*)env;`);
+        buf.line("tsc_promise_t* _p = state->receiver;");
+        buf.line("tsc_promise_t* _ret = state->result_promise;");
+
+        const resPromise = this.freshTemp("_res_p");
+        buf.line(`tsc_promise_t* ${resPromise};`);
+
+        if (preparedCb && cbType) {
+            const callStmt = this.promiseCallbackCall(call, cbType, "state->cb", [], node);
+            const cbRet = preparedCb.kind === "function" && preparedCb.ret ? this.prepareType(preparedCb.ret) : null;
+            const eh = this.freshTemp("_eh");
+            buf.line(`tsc_try_frame_t ${eh};`);
+            buf.line(`tsc_try_push(&${eh});`);
+            buf.open(`if (setjmp(${eh}.jb) == 0)`);
+            if (cbRet?.kind === "promise") {
+                const finalPromise = this.freshTemp("_promise_finally_return");
+                buf.line(`tsc_promise_t* const ${finalPromise} = ${callStmt};`);
+                buf.line("tsc_try_pop();");
+                buf.open(`if (tsc_promise_is_rejected(${finalPromise}))`);
+                buf.line(`${resPromise} = tsc_promise_reject(tsc_promise_reason(${finalPromise}));`);
+                buf.close();
+                buf.open(`else if (tsc_promise_is_pending(${finalPromise}))`);
+                buf.line(`${resPromise} = tsc_promise_pending();`);
+                buf.close();
+                buf.open("else");
+                buf.line(`${resPromise} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recvType.elem, "_p")};`);
+                buf.close();
+            } else {
+                buf.line(`${callStmt};`);
+                buf.line("tsc_try_pop();");
+                buf.line(`${resPromise} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recvType.elem, "_p")};`);
+            }
+            buf.close();
+            buf.open("else");
+            buf.line("tsc_try_pop();");
+            buf.line(`${resPromise} = tsc_promise_reject(tsc_value_string(tsc_current_error()));`);
+            buf.close();
+        } else {
+            buf.line(`${resPromise} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recvType.elem, "_p")};`);
+        }
+        buf.line(`tsc_promise_adopt_into(_ret, ${resPromise});`);
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+
+        return name;
+    }
+
     private emitPromiseMethod(
         call: ts.CallExpression,
         recv: EmitResult,
@@ -33983,13 +34186,41 @@ class Emitter {
                     const promise = vals[0]!;
                     const onFulfilled = fulfilled ? vals[1]! : null;
                     const onRejected = rejected ? vals[fulfilled ? 2 : 1] : undefined;
-                    const okValue = fulfilled && onFulfilled
-                        ? this.promiseCallbackResolve(call, fulfilled.ty, onFulfilled, this.promiseFulfilledValue(recv.ty.elem, promise), args[0]!)
-                        : this.promiseResolveStoredValue(recv.ty.elem, promise);
-                    const errValue = rejected && onRejected
-                        ? this.promiseCallbackResolve(call, rejected.ty, onRejected, { c: `tsc_promise_reason(${promise})`, ty: T_VALUE }, args[1]!)
-                        : `tsc_promise_reject(tsc_promise_reason(${promise}))`;
-                    return `({ tsc_promise_t* const _p = ${promise}; tsc_promise_is_fulfilled(_p) ? ${okValue} : (tsc_promise_is_rejected(_p) ? ${errValue} : tsc_promise_pending()); })`;
+
+                    const adapter = this.ensurePromiseThenAdapter(
+                        call,
+                        recv.ty,
+                        fulfilled ? fulfilled.ty : null,
+                        rejected ? rejected.ty : null,
+                        mapped,
+                        call,
+                    );
+                    const envType = `${adapter}_env_t`;
+                    const env = this.freshTemp("_then_env");
+                    const retPromise = this.freshTemp("_then_ret");
+
+                    const assignments: string[] = [];
+                    assignments.push(`${env}->receiver = _p;`);
+                    assignments.push(`${env}->result_promise = ${retPromise};`);
+                    if (fulfilled && onFulfilled) {
+                        assignments.push(`${env}->onFulfilled = ${onFulfilled};`);
+                    }
+                    if (rejected && onRejected) {
+                        assignments.push(`${env}->onRejected = ${onRejected};`);
+                    }
+
+                    return `({ tsc_promise_t* const _p = ${promise}; ` +
+                        `tsc_promise_t* const ${retPromise} = tsc_promise_pending(); ` +
+                        `if (tsc_promise_is_pending(_p)) { ` +
+                            `${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
+                            `${assignments.join(" ")} ` +
+                            `tsc_promise_add_callback(_p, ${adapter}, ${env}); ` +
+                        `} else { ` +
+                            `${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
+                            `${assignments.join(" ")} ` +
+                            `tsc_queue_microtask(${adapter}, ${env}); ` +
+                        `} ` +
+                        `${retPromise}; })`;
                 });
             }
             case "catch": {
@@ -34005,10 +34236,38 @@ class Emitter {
                 return this.emitSequencedExpr(mapped, specs, (vals) => {
                     const promise = vals[0]!;
                     const onRejected = rejected ? vals[1]! : null;
-                    const errValue = rejected && onRejected
-                        ? this.promiseCallbackResolve(call, rejected.ty, onRejected, { c: `tsc_promise_reason(${promise})`, ty: T_VALUE }, handler!)
-                        : `tsc_promise_reject(tsc_promise_reason(${promise}))`;
-                    return `({ tsc_promise_t* const _p = ${promise}; tsc_promise_is_rejected(_p) ? ${errValue} : (tsc_promise_is_fulfilled(_p) ? ${this.promiseResolveStoredValue(recv.ty.elem, "_p")} : tsc_promise_pending()); })`;
+
+                    const adapter = this.ensurePromiseThenAdapter(
+                        call,
+                        recv.ty,
+                        null,
+                        rejected ? rejected.ty : null,
+                        mapped,
+                        call,
+                    );
+                    const envType = `${adapter}_env_t`;
+                    const env = this.freshTemp("_catch_env");
+                    const retPromise = this.freshTemp("_catch_ret");
+
+                    const assignments: string[] = [];
+                    assignments.push(`${env}->receiver = _p;`);
+                    assignments.push(`${env}->result_promise = ${retPromise};`);
+                    if (rejected && onRejected) {
+                        assignments.push(`${env}->onRejected = ${onRejected};`);
+                    }
+
+                    return `({ tsc_promise_t* const _p = ${promise}; ` +
+                        `tsc_promise_t* const ${retPromise} = tsc_promise_pending(); ` +
+                        `if (tsc_promise_is_pending(_p)) { ` +
+                            `${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
+                            `${assignments.join(" ")} ` +
+                            `tsc_promise_add_callback(_p, ${adapter}, ${env}); ` +
+                        `} else { ` +
+                            `${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
+                            `${assignments.join(" ")} ` +
+                            `tsc_queue_microtask(${adapter}, ${env}); ` +
+                        `} ` +
+                        `${retPromise}; })`;
                 });
             }
             case "finally": {
@@ -34024,19 +34283,37 @@ class Emitter {
                 return this.emitSequencedExpr(mapped, specs, (vals) => {
                     const promise = vals[0]!;
                     const fn = cb ? vals[1]! : null;
-                    const result = this.freshTemp("_promise_finally");
+
+                    const adapter = this.ensurePromiseFinallyAdapter(
+                        call,
+                        recv.ty,
+                        cb ? cb.ty : null,
+                        mapped,
+                        call,
+                    );
+                    const envType = `${adapter}_env_t`;
+                    const env = this.freshTemp("_finally_env");
+                    const retPromise = this.freshTemp("_finally_ret");
+
+                    const assignments: string[] = [];
+                    assignments.push(`${env}->receiver = _p;`);
+                    assignments.push(`${env}->result_promise = ${retPromise};`);
                     if (cb && fn) {
-                        const eh = this.freshTemp("_promise_finally_eh");
-                        const callStmt = this.promiseCallbackCall(call, cb.ty, fn, [], handler!);
-                        const cbType = this.prepareType(cb.ty);
-                        const cbRet = cbType.kind === "function" && cbType.ret ? this.prepareType(cbType.ret) : null;
-                        if (cbRet?.kind === "promise") {
-                            const finalPromise = this.freshTemp("_promise_finally_return");
-                            return `({ tsc_promise_t* const _p = ${promise}; tsc_promise_t* ${result}; if (tsc_promise_is_pending(_p)) { ${result} = tsc_promise_pending(); } else { tsc_try_frame_t ${eh}; tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { tsc_promise_t* const ${finalPromise} = ${callStmt}; tsc_try_pop(); if (tsc_promise_is_rejected(${finalPromise})) { ${result} = tsc_promise_reject(tsc_promise_reason(${finalPromise})); } else if (tsc_promise_is_pending(${finalPromise})) { ${result} = tsc_promise_pending(); } else { ${result} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recv.ty.elem, "_p")}; } } else { ${result} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } } ${result}; })`;
-                        }
-                        return `({ tsc_promise_t* const _p = ${promise}; tsc_promise_t* ${result}; if (tsc_promise_is_pending(_p)) { ${result} = tsc_promise_pending(); } else { tsc_try_frame_t ${eh}; tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { ${callStmt}; tsc_try_pop(); ${result} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recv.ty.elem, "_p")}; } else { ${result} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } } ${result}; })`;
+                        assignments.push(`${env}->cb = ${fn};`);
                     }
-                    return `({ tsc_promise_t* const _p = ${promise}; tsc_promise_t* ${result}; if (tsc_promise_is_pending(_p)) { ${result} = tsc_promise_pending(); } else { ${result} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recv.ty.elem, "_p")}; } ${result}; })`;
+
+                    return `({ tsc_promise_t* const _p = ${promise}; ` +
+                        `tsc_promise_t* const ${retPromise} = tsc_promise_pending(); ` +
+                        `if (tsc_promise_is_pending(_p)) { ` +
+                            `${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
+                            `${assignments.join(" ")} ` +
+                            `tsc_promise_add_callback(_p, ${adapter}, ${env}); ` +
+                        `} else { ` +
+                            `${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
+                            `${assignments.join(" ")} ` +
+                            `tsc_queue_microtask(${adapter}, ${env}); ` +
+                        `} ` +
+                        `${retPromise}; })`;
                 });
             }
         }
@@ -34458,6 +34735,9 @@ class Emitter {
                 specs.push(...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2));
                 return this.emitSequencedExpr(mapped, specs, ([ee, event]) => `tsc_event_emitter_once_promise(${ee}, ${event})`);
             }
+            case "on": {
+                unsupported(call, "events.on async iterator helper requires async iterator lowering");
+            }
             case "setMaxListeners": {
                 if (args.length < 2) unsupported(call, "events.setMaxListeners expects count and at least one emitter");
                 const count = this.emitExpr(args[0]!);
@@ -34767,9 +35047,9 @@ class Emitter {
 
     private dnsLookupOptions(options: ts.Expression | undefined): { family: number; all: boolean; hints: number } {
         const out = { family: 0, all: false, hints: 0 };
-        if (!options || this.isUndefinedLikeExpression(options)) return out;
+        if (!options || this.isUndefinedLikeExpression(options) || this.isNullExpression(options)) return out;
         options = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (this.isUndefinedLikeExpression(options)) return out;
+        if (this.isUndefinedLikeExpression(options) || this.isNullExpression(options)) return out;
         const numericFamily = this.dnsLookupNumberValue(options);
         if (numericFamily !== null) {
             out.family = numericFamily;
@@ -34782,44 +35062,50 @@ class Emitter {
             unsupported(options, "dns.lookup options must be a numeric family or object literal in this subset");
         }
         for (const prop of options.properties) {
-            if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, "dns.lookup options only support property assignments");
+            let key: string | null = null;
+            let valueNode: ts.Expression | undefined;
+            if (ts.isPropertyAssignment(prop)) {
+                key = this.staticPropertyName(prop.name);
+                valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+            } else if (ts.isShorthandPropertyAssignment(prop)) {
+                key = prop.name.text;
+                valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.name);
+            } else {
+                unsupported(prop, "dns.lookup options only support property assignments and shorthand property assignments");
             }
-            const key = this.staticPropertyName(prop.name);
             if (key !== "family" && key !== "all" && key !== "verbatim" && key !== "order" && key !== "hints") {
                 unsupported(prop.name, `dns.lookup unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
-            const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
             if (this.isUndefinedExpression(valueNode)) {
                 continue;
             }
             if (key === "family") {
                 const family = this.dnsLookupNumberValue(valueNode);
                 if (family === null) {
-                    unsupported(prop.initializer, "dns.lookup family must be numeric literal 0, 4, or 6 in this subset");
+                    unsupported(valueNode, "dns.lookup family must be numeric literal 0, 4, or 6 in this subset");
                 }
                 out.family = family;
                 if (out.family !== 0 && out.family !== 4 && out.family !== 6) {
-                    unsupported(prop.initializer, "dns.lookup family must be 0, 4, or 6 in this subset");
+                    unsupported(valueNode, "dns.lookup family must be 0, 4, or 6 in this subset");
                 }
             } else if (key === "all") {
                 const all = this.dnsLookupBooleanValue(valueNode);
                 if (all === null) {
-                    unsupported(prop.initializer, "dns.lookup all must be a boolean literal in this subset");
+                    unsupported(valueNode, "dns.lookup all must be a boolean literal in this subset");
                 }
                 out.all = all;
             } else if (key === "verbatim") {
                 const verbatim = this.dnsLookupBooleanValue(valueNode);
                 if (verbatim === null) {
-                    unsupported(prop.initializer, "dns.lookup verbatim must be a boolean literal in this subset");
+                    unsupported(valueNode, "dns.lookup verbatim must be a boolean literal in this subset");
                 }
             } else if (key === "order") {
                 const order = this.dnsLookupStringValue(valueNode);
                 if (order === null) {
-                    unsupported(prop.initializer, "dns.lookup order must be a string literal in this subset");
+                    unsupported(valueNode, "dns.lookup order must be a string literal in this subset");
                 }
                 if (order !== "verbatim" && order !== "ipv4first" && order !== "ipv6first") {
-                    unsupported(prop.initializer, "dns.lookup order must be verbatim, ipv4first, or ipv6first");
+                    unsupported(valueNode, "dns.lookup order must be verbatim, ipv4first, or ipv6first");
                 }
             } else if (key === "hints") {
                 out.hints = this.dnsLookupHintValue(valueNode);
@@ -36005,10 +36291,50 @@ class Emitter {
         });
     }
 
+    private emitSetIntervalCall(call: ts.CallExpression): EmitResult {
+        if (call.arguments.length < 1) unsupported(call, "setInterval expects a callback and optional literal 0 delay");
+        const callbackNode = call.arguments[0]!;
+        const callback = this.emitExpr(callbackNode);
+        if (call.arguments.length >= 2 && !this.isZeroDelayLiteral(call.arguments[1]!)) {
+            unsupported(call.arguments[1]!, "setInterval in this subset requires an omitted delay or literal 0 delay");
+        }
+        const delayNode = call.arguments[1];
+        const delayValue = delayNode && this.shouldEvaluateSideEffectfulVoidDefault(delayNode)
+            ? this.emitExpr(delayNode)
+            : undefined;
+        const argNodes = call.arguments.length >= 2
+            ? Array.from(call.arguments.slice(2))
+            : [];
+        const argValues = argNodes.map((arg) => this.emitExpr(arg));
+        const adapter = this.ensureTimeoutAdapter(callbackNode, callback.ty, argValues.map((arg) => arg.ty));
+        const prepared = this.prepareType(callback.ty);
+        const params = prepared.kind === "function" ? prepared.params ?? [] : [];
+        return this.emitSequencedExpr(T_NUMBER, [
+            { value: callback, target: callback.ty, node: callbackNode },
+            ...(delayNode && delayValue
+                ? [{ value: delayValue, target: T_VOID, node: delayNode }]
+                : []),
+            ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
+        ], ([fn, ...values]) => {
+            const args = delayValue ? values.slice(1) : values;
+            const envType = `${adapter}_env_t`;
+            const env = this.freshTemp("_interval_env");
+            const pieces = [
+                `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
+                `${env}->fn = ${fn}`,
+            ];
+            args.forEach((arg, i) => pieces.push(`${env}->arg${i} = ${arg}`));
+            pieces.push(`tsc_set_interval(${adapter}, ${env})`);
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
     private emitTimersCall(call: ts.CallExpression, name: string): EmitResult {
         switch (name) {
             case "setTimeout":
                 return this.emitSetTimeoutCall(call);
+            case "setInterval":
+                return this.emitSetIntervalCall(call);
             case "setImmediate":
                 return this.emitSetImmediateCall(call);
             case "clearTimeout":
@@ -36370,6 +36696,14 @@ class Emitter {
                     { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
                     ...this.ignoredArgumentSpecs(args, 1),
                 ], ([params, name]) => `tsc_url_search_params_get(${params}, ${name})`);
+            }
+            case "getAll": {
+                if (args.length < 1) unsupported(call, "URLSearchParams.getAll expects name");
+                return this.emitSequencedExpr(arrayType(T_STRING), [
+                    { value: recv },
+                    { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ], ([params, name]) => `tsc_url_search_params_get_all(${params}, ${name})`);
             }
             case "has": {
                 if (args.length < 1) unsupported(call, "URLSearchParams.has expects name");
@@ -42147,6 +42481,59 @@ class Emitter {
                 }[method]!;
                 return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
                     `${fn}(${vals[0]}, ${vals[1]}, ${hasOffset ? vals[2]! : "0"})`,
+                );
+            }
+            case "readIntLE":
+            case "readUIntLE":
+            case "readIntBE":
+            case "readUIntBE": {
+                if (args.length < 2) unsupported(call, `Buffer.${method} expects offset and byteLength`);
+                const offset = this.emitExpr(args[0]!);
+                requireNumber(args[0]!, offset.ty);
+                const byteLength = this.emitExpr(args[1]!);
+                requireNumber(args[1]!, byteLength.ty);
+                const specs: SequencedCallArg[] = [
+                    { value: recv },
+                    { value: offset, target: T_NUMBER, node: args[0]! },
+                    { value: byteLength, target: T_NUMBER, node: args[1]! },
+                ];
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
+                const fn = {
+                    readIntLE: "tsc_buffer_read_int_le",
+                    readUIntLE: "tsc_buffer_read_uint_le",
+                    readIntBE: "tsc_buffer_read_int_be",
+                    readUIntBE: "tsc_buffer_read_uint_be",
+                }[method]!;
+                return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
+                    `${fn}(${vals[0]}, ${vals[1]}, ${vals[2]})`,
+                );
+            }
+            case "writeIntLE":
+            case "writeUIntLE":
+            case "writeIntBE":
+            case "writeUIntBE": {
+                if (args.length < 3) unsupported(call, `Buffer.${method} expects value, offset, and byteLength`);
+                const value = this.emitExpr(args[0]!);
+                requireNumber(args[0]!, value.ty);
+                const offset = this.emitExpr(args[1]!);
+                requireNumber(args[1]!, offset.ty);
+                const byteLength = this.emitExpr(args[2]!);
+                requireNumber(args[2]!, byteLength.ty);
+                const specs: SequencedCallArg[] = [
+                    { value: recv },
+                    { value, target: T_NUMBER, node: args[0]! },
+                    { value: offset, target: T_NUMBER, node: args[1]! },
+                    { value: byteLength, target: T_NUMBER, node: args[2]! },
+                ];
+                specs.push(...this.ignoredArgumentSpecs(args, 3));
+                const fn = {
+                    writeIntLE: "tsc_buffer_write_int_le",
+                    writeUIntLE: "tsc_buffer_write_uint_le",
+                    writeIntBE: "tsc_buffer_write_int_be",
+                    writeUIntBE: "tsc_buffer_write_uint_be",
+                }[method]!;
+                return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
+                    `${fn}(${vals[0]}, ${vals[1]}, ${vals[2]}, ${vals[3]})`,
                 );
             }
             case "swap16":

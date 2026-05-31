@@ -1,4 +1,4 @@
-self: TypeError: Promise resolved with itself
-outer: TypeError: Promise resolved with itself
-cycle: TypeError: Promise resolution cycle
 events: self|outer|first|second
+self: TypeError: Promise resolved with itself
+cycle: TypeError: Promise resolution cycle
+outer: TypeError: Promise resolved with itself

@@ -1,5 +1,5 @@
-omitted: ready
-fulfilled: ready!
-handled: boom
-after: recovered
 pending: [object Promise] false
+handled: boom
+omitted: ready
+after: recovered
+fulfilled: ready!

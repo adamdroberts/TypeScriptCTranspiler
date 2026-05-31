@@ -1,6 +1,5 @@
-fulfilled: 10
-recovered: 7
-then reject: bad!
+events: <none>
+ignored: abcdelmfgnohipqjkrs
 all: 3,4
 all set: 11,12
 race: first
@@ -9,5 +8,6 @@ any: kept
 any set: set-kept
 settled: fulfilled 9 rejected nope
 settled set: fulfilled 13 rejected set-nope
-events: then:2|finally|catch:boom
-ignored: abcdelmfgnohipqjkrs
+recovered: 7
+then reject: bad!
+fulfilled: 10

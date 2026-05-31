@@ -5,6 +5,9 @@ tsc_promise_t* tsc_promise_resolve(tsc_value_t value) {
     p->state = TSC_PROMISE_FULFILLED;
     p->result = value;
     p->ptr_result = NULL;
+    p->callbacks = NULL;
+    p->callbacks_len = 0;
+    p->callbacks_cap = 0;
     return p;
 }
 
@@ -13,6 +16,9 @@ tsc_promise_t* tsc_promise_resolve_fs_stats(tsc_fs_stats_t* value) {
     p->state = TSC_PROMISE_FULFILLED;
     p->result = tsc_value_undefined();
     p->ptr_result = value;
+    p->callbacks = NULL;
+    p->callbacks_len = 0;
+    p->callbacks_cap = 0;
     return p;
 }
 
@@ -21,6 +27,9 @@ tsc_promise_t* tsc_promise_resolve_buffer(tsc_buffer_t* value) {
     p->state = TSC_PROMISE_FULFILLED;
     p->result = tsc_value_undefined();
     p->ptr_result = value;
+    p->callbacks = NULL;
+    p->callbacks_len = 0;
+    p->callbacks_cap = 0;
     return p;
 }
 
@@ -29,6 +38,9 @@ tsc_promise_t* tsc_promise_resolve_array(tsc_array_t* value) {
     p->state = TSC_PROMISE_FULFILLED;
     p->result = tsc_value_undefined();
     p->ptr_result = value;
+    p->callbacks = NULL;
+    p->callbacks_len = 0;
+    p->callbacks_cap = 0;
     return p;
 }
 
@@ -49,13 +61,45 @@ static bool promise_seen_contains(tsc_array_t* seen, tsc_value_t value) {
     return false;
 }
 
-static void promise_adopt_into(tsc_promise_t* dest, tsc_promise_t* source) {
+void tsc_promise_trigger_callbacks(tsc_promise_t* p) {
+    if (!p || !p->callbacks) return;
+    for (size_t i = 0; i < p->callbacks_len; i++) {
+        tsc_queue_microtask(p->callbacks[i].fn, p->callbacks[i].env);
+    }
+    p->callbacks = NULL;
+    p->callbacks_len = 0;
+    p->callbacks_cap = 0;
+}
+
+void tsc_promise_add_callback(tsc_promise_t* p, void (*fn)(void*), void* env) {
+    if (!p || !fn) return;
+    if (p->callbacks_len == p->callbacks_cap) {
+        size_t next = p->callbacks_cap ? p->callbacks_cap * 2 : 4;
+        tsc_promise_callback_t* entries = (tsc_promise_callback_t*)TSC_GC_REALLOC(p->callbacks, next * sizeof(tsc_promise_callback_t));
+        if (!entries) tsc_panic("tsc_promise_add_callback: out of memory");
+        p->callbacks = entries;
+        p->callbacks_cap = next;
+    }
+    p->callbacks[p->callbacks_len++] = (tsc_promise_callback_t){ fn, env };
+}
+
+void tsc_promise_adopt_into(tsc_promise_t* dest, tsc_promise_t* source) {
     if (!dest || dest->state != TSC_PROMISE_PENDING || !source) return;
     if (tsc_promise_is_fulfilled(source)) {
-        tsc_promise_fulfill_in_place(dest, tsc_promise_value(source));
+        dest->state = TSC_PROMISE_FULFILLED;
+        dest->result = source->result;
+        dest->ptr_result = source->ptr_result;
+        tsc_promise_trigger_callbacks(dest);
     } else if (tsc_promise_is_rejected(source)) {
-        tsc_promise_reject_in_place(dest, tsc_promise_reason(source));
+        dest->state = TSC_PROMISE_REJECTED;
+        dest->result = source->result;
+        dest->ptr_result = source->ptr_result;
+        tsc_promise_trigger_callbacks(dest);
     }
+}
+
+static void promise_adopt_into(tsc_promise_t* dest, tsc_promise_t* source) {
+    tsc_promise_adopt_into(dest, source);
 }
 
 static tsc_value_t promise_thenable_resolve(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -167,6 +211,9 @@ tsc_promise_t* tsc_promise_reject(tsc_value_t reason) {
     p->state = TSC_PROMISE_REJECTED;
     p->result = reason;
     p->ptr_result = NULL;
+    p->callbacks = NULL;
+    p->callbacks_len = 0;
+    p->callbacks_cap = 0;
     return p;
 }
 
@@ -175,6 +222,9 @@ tsc_promise_t* tsc_promise_pending(void) {
     p->state = TSC_PROMISE_PENDING;
     p->result = tsc_value_undefined();
     p->ptr_result = NULL;
+    p->callbacks = NULL;
+    p->callbacks_len = 0;
+    p->callbacks_cap = 0;
     return p;
 }
 
@@ -187,6 +237,7 @@ void tsc_promise_fulfill_in_place(tsc_promise_t* p, tsc_value_t value) {
     p->state = TSC_PROMISE_FULFILLED;
     p->result = value;
     p->ptr_result = NULL;
+    tsc_promise_trigger_callbacks(p);
 }
 
 void tsc_promise_reject_in_place(tsc_promise_t* p, tsc_value_t reason) {
@@ -194,6 +245,7 @@ void tsc_promise_reject_in_place(tsc_promise_t* p, tsc_value_t reason) {
     p->state = TSC_PROMISE_REJECTED;
     p->result = reason;
     p->ptr_result = NULL;
+    tsc_promise_trigger_callbacks(p);
 }
 
 bool tsc_promise_is_fulfilled(const tsc_promise_t* p) {
