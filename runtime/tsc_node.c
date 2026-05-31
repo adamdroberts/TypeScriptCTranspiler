@@ -1396,6 +1396,7 @@ tsc_value_t value_accessor_getter_identity(tsc_accessor_getter_t getter, void* e
     entry->length = 0.0;
     entry->name = tsc_str_from_lit("", 0);
     entry->prototype = tsc_function_default_prototype();
+    entry->func_prototype = tsc_value_undefined();
     entry->code.getter = getter;
     entry->env = env;
     entry->next = g_function_identities;
@@ -1419,6 +1420,7 @@ tsc_value_t value_accessor_setter_identity(tsc_accessor_setter_t setter, void* e
     entry->length = 0.0;
     entry->name = tsc_str_from_lit("", 0);
     entry->prototype = tsc_function_default_prototype();
+    entry->func_prototype = tsc_value_undefined();
     entry->code.setter = setter;
     entry->env = env;
     entry->next = g_function_identities;

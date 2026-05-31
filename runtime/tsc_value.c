@@ -111,6 +111,7 @@ tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* en
     id->length = length;
     id->name = name;
     id->prototype = tsc_function_default_prototype();
+    id->func_prototype = tsc_value_undefined();
     id->code.generic = fn;
     id->env = env;
     id->next = g_function_identities;
@@ -214,6 +215,10 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
             }
             tsc_array_t* list = value_to_argument_list(args, "Reflect.construct argumentsList must be an array or array-like object");
             tsc_value_t receiver = tsc_value_object(tsc_object_new());
+            tsc_value_t new_target_proto = tsc_value_get_prop(new_target, tsc_str_from_lit("prototype", 9));
+            if (value_is_valid_prototype(new_target_proto)) {
+                (void)tsc_value_set_prototype_of(receiver, new_target_proto);
+            }
             tsc_value_t result = ident->code.generic(ident->env, receiver, list);
             if (
                 value_is_box(result) &&
@@ -306,6 +311,16 @@ static tsc_value_t tsc_value_generator_throw(void* env, tsc_value_t this_arg, ts
     return tsc_value_undefined();
 }
 
+static tsc_value_t tsc_function_own_prototype(tsc_function_identity_t* ident, tsc_value_t fn) {
+    if (!ident) return tsc_value_undefined();
+    if (tsc_value_is_undefined(ident->func_prototype)) {
+        tsc_object_t* proto = tsc_object_new();
+        tsc_object_set(proto, tsc_str_from_lit("constructor", 11), fn);
+        ident->func_prototype = tsc_value_object(proto);
+    }
+    return ident->func_prototype;
+}
+
 tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_GET_PROP);
     if (!value_is_box(v)) return tsc_value_undefined();
@@ -316,6 +331,7 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
         if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER && str_lit_eq(key, "listener")) {
             return value_event_listener_identity(ident->code.event_raw_identity.identity);
         }
+        if (str_lit_eq(key, "prototype")) return tsc_function_own_prototype(ident, v);
         if (str_lit_eq(key, "__proto__")) return ident->prototype;
         return tsc_value_undefined();
     }
@@ -1044,9 +1060,16 @@ bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
         size_t idx = 0;
         if (tsc_str_array_index(key, &idx)) return tsc_value_set_index(v, (double)idx, value);
     }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION && str_lit_eq(key, "__proto__")) {
-        if (!value_is_valid_prototype(value)) return true;
-        return tsc_value_set_prototype_of(v, value);
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+        tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(v);
+        if (str_lit_eq(key, "prototype")) {
+            fn->func_prototype = value;
+            return true;
+        }
+        if (str_lit_eq(key, "__proto__")) {
+            if (!value_is_valid_prototype(value)) return true;
+            return tsc_value_set_prototype_of(v, value);
+        }
     }
     return false;
 }

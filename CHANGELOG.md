@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `Reflect.construct` now applies `newTarget.prototype` for dynamic function construction, including Proxy `get` trap and revoked Proxy behavior during prototype lookup. Test: `proxy_construct_new_target_prototype`.
 - `fs.realpath` / `fs.readlink` / `fs.mkdtemp` coverage now verifies direct literal `{ encoding: null }`, `{ encoding: undefined }`, and `{}` options for sync and immediate-promise string result paths. Tests: `fs_link_path_encoding_options`, `fs_mkdtemp_encoding_options`.
 - Promise combinators now AOT-assimilate dynamic array and Set elements, allowing mixed `any` values, thenables, and Promises in `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`. Test: `promise_combinators_dynamic`.
 - CommonJS package source analysis now statically resolves computed named-export keys from BigInt literals and BigInt constants. Test: `node_modules_commonjs_static_computed_bigint`.

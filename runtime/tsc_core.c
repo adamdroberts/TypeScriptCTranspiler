@@ -30,6 +30,7 @@ tsc_value_t value_event_listener_identity(void* identity) {
     entry->length = 0.0;
     entry->name = tsc_str_from_lit("", 0);
     entry->prototype = tsc_function_default_prototype();
+    entry->func_prototype = tsc_value_undefined();
     entry->code.event_identity = identity;
     entry->env = NULL;
     entry->next = g_function_identities;
@@ -57,6 +58,7 @@ tsc_value_t value_event_raw_listener_identity(void* identity, uint64_t order, bo
     entry->length = 0.0;
     entry->name = tsc_str_from_lit("", 0);
     entry->prototype = tsc_function_default_prototype();
+    entry->func_prototype = tsc_value_undefined();
     entry->code.event_raw_identity.identity = identity;
     entry->code.event_raw_identity.order = order;
     entry->env = NULL;

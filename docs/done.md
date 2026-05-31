@@ -464,6 +464,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Callable Proxy values support dynamic `Function.prototype.apply(...)` with omitted, `null`, and `undefined` argument lists normalized to empty arrays while still evaluating ignored trailing arguments. Test: `proxy_apply_empty_arguments_list`
 - Proxy `apply` traps receive a normalized real argument array from array-like `Reflect.apply(...)` inputs and forward trap-mutated arguments into target calls. Test: `proxy_apply_arguments_list`
 - Proxy `construct` traps receive a normalized real argument array from array-like `Reflect.construct(...)` inputs and forward trap-mutated arguments into target construction. Test: `proxy_construct_arguments_list`
+- Dynamic `Reflect.construct(target, args, newTarget)` applies valid object/array/function `newTarget.prototype` values to the initialized receiver before the target constructor runs, and Proxy `newTarget` values dispatch the `get` trap or throw on revoked proxies during prototype lookup. Test: `proxy_construct_new_target_prototype`
 - Revoked object `Proxy` values throw through object-operation paths including set, has, delete, own-key, descriptor, prototype, extensibility, seal, and freeze helpers. Test: `proxy_revocable_object_ops`
 - Revoked object `Proxy` values throw through `Reflect.*` helper paths including get, set, has, deleteProperty, ownKeys, descriptor, prototype, and extensibility helpers. Test: `proxy_revocable_reflect_ops`
 - `Proxy.revocable(...)` revoke functions are idempotent and receiver-independent across direct, `call`, and `apply` invocation forms while preserving revoked-proxy errors after revocation. Test: `proxy_revocable_revoke_function`
@@ -1923,6 +1924,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_nested_callable_identity` | nested callable Proxy typeof/string/JSON/apply/construct identity |
 | `proxy_construct_forward` | trapless constructable Proxy values forward dynamic construction to function targets |
 | `proxy_construct_new_target` | Proxy construct traps receive the normalized newTarget identity |
+| `proxy_construct_new_target_prototype` | Reflect.construct applies newTarget.prototype and observes Proxy get/revocation prototype lookup |
 | `proxy_apply_arguments_list` | Proxy apply traps receive normalized real argument arrays from array-like Reflect.apply inputs |
 | `proxy_construct_arguments_list` | Proxy construct traps receive normalized real argument arrays from array-like Reflect.construct inputs |
 | `proxy_constructor_validation` | Proxy constructor validates target and handler object operands after argument evaluation |
