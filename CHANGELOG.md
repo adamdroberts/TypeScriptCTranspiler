@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Supported `null` options as well as shorthand property assignments (e.g. `{ family }`) in object literal options and their resolved const aliases for AOT compilation of `dns.lookup` and `dns.promises.lookup` without libuv scheduling. Test: `dns_lookup_option_forms`.
 - Implemented a zero-delay `setInterval(callback, 0, ...args)` / `clearInterval(handle)` before-exit subset compatible with the existing zero-delay scheduler, including typed callback args and cancellation. Test: `set_interval_zero`.
 - Custom dynamic method calls now emit shape-validated static inline cache slots via `tsc_value_get_prop_cached` to accelerate dynamic method lookup. Test: `dynamic_runtime_stats`.
 - Added a bounded `path.win32` / `"path/win32"` subset covering constants, join/resolve/normalize, absolute checks, relative paths, basename/dirname/extname, parse/format, toNamespacedPath, and matchesGlob across named, namespace, and subpath imports. Test: `path_win32`.
