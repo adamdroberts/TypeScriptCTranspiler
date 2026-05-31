@@ -25,6 +25,10 @@ tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap) {
     a->iter_has_return = false;
     a->iter_return_consumed = false;
     a->iter_return = tsc_value_undefined();
+    a->is_lazy_generator = false;
+    a->state = 0;
+    a->env = NULL;
+    a->lazy_next = NULL;
     a->data = initial_cap ? TSC_GC_MALLOC(initial_cap * elem_size) : NULL;
     return a;
 }
@@ -42,6 +46,10 @@ tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap) {
     a->iter_has_return = false;
     a->iter_return_consumed = false;
     a->iter_return = tsc_value_undefined();
+    a->is_lazy_generator = false;
+    a->state = 0;
+    a->env = NULL;
+    a->lazy_next = NULL;
     a->data = initial_cap ? TSC_GC_MALLOC_ATOMIC(initial_cap * elem_size) : NULL;
     return a;
 }
@@ -260,6 +268,20 @@ tsc_array_t* tsc_array_flat_once(const tsc_array_t* outer, size_t elem_size) {
     return dst;
 }
 
-double tsc_array_length(const tsc_array_t* a) { return (double)a->len; }
+double tsc_array_length(const tsc_array_t* a) {
+    tsc_array_materialize_all((tsc_array_t*)a);
+    return (double)a->len;
+}
 
 void tsc_array_oob(const tsc_array_t* a, double i) { (void)a; (void)i; }
+
+void tsc_array_materialize_all(tsc_array_t* a) {
+    if (a && a->is_lazy_generator && a->lazy_next) {
+        while (true) {
+            bool done = false;
+            a->lazy_next(a, &a->state, a->env, &done);
+            if (done) break;
+        }
+        a->is_lazy_generator = false;
+    }
+}

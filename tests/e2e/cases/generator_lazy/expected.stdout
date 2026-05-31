@@ -1,0 +1,27 @@
+--- 1. Verification of Lazy Initialization ---
+Generator G1 initialized without executing body
+--- 2. Stepping through next() ---
+G1 - starting generator
+Step 1 done: false value: 10
+G1 - yielded 10
+Step 2 done: false value: 20
+--- 3. Materializing the rest with an array method (map) ---
+G1 - yielded 20
+G1 - yielded 30
+Mapped results: 20, 40, 60
+--- 4. Checking completed state and return value ---
+Step 3 done: false value: 30
+--- 5. for-of loop materialization ---
+G2 initialized
+G2 - starting generator
+G2 - yielded 10
+G2 - yielded 20
+G2 - yielded 30
+Loop values: 10, 20, 30
+--- 6. Dynamic next() call ---
+G3 - starting generator
+G3 - yielded 10
+G3 - yielded 20
+G3 - yielded 30
+G3 initialized
+Dyn step 1 done: false value: 10

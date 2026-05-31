@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Added a narrow lazy lowering for parameterless sequential synchronous generators with ordinary `yield` statements, so bodies execute on `.next()` instead of construction and array consumers materialize the remaining values on demand. Test: `generator_lazy`.
 - Implemented microtask-scheduled Promise callback dispatch for `.then(...)`, `.catch(...)`, and `.finally(...)` with full chaining support for pending promises. Verified that Promise microtasks correctly run through the before-exit microtask queue relative to `process.nextTick`, `queueMicrotask`, zero-delay timers, and `setImmediate`. Test: `promise_microtask_then`.
 - Supported variable-byte-length integer read and write Buffer methods (`readUIntLE`, `readUIntBE`, `readIntLE`, `readIntBE`, `writeUIntLE`, `writeUIntBE`, `writeIntLE`, `writeIntBE`) with Node-like range validations and error messages, and preserved ignored trailing argument evaluation. Test: `buffer_varint_io`.
 - Added opt-in dynamic object shape diagnostics that print object shape creation, update, and transitions (add, modify, delete, prototype, preventExtensions, seal, freeze) to stderr under the environment variable `TSC_SHAPE_DIAGNOSTICS=1`. Test: `dynamic_shape_diagnostics`.
