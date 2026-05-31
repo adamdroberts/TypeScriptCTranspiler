@@ -1472,6 +1472,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `set_timeout_zero` | bounded zero-delay setTimeout callbacks drain before setImmediate |
 | `set_timeout_delay` | bounded nonzero-delay setTimeout callbacks wait for their runtime delay after zero-delay timers and immediates |
 | `set_immediate` | bounded setImmediate callbacks drain after nextTick, queueMicrotask, and zero-delay setTimeout before exit |
+| `set_interval_delay` | bounded nonzero-delay setInterval callbacks wait between runtime timer callbacks and can be canceled |
 | `timers_clear` | bounded setTimeout/setImmediate handles can be cleared before the before-exit drain, including clearInterval timeout-handle aliases |
 | `timers_module_import` | timers/node:timers imports route to bounded timeout and immediate scheduler helpers |
 | `timers_promises_import` | timers/promises imports expose immediate settled timeout/immediate promises with ignored extras |

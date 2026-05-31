@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Added a bounded wall-clock `setInterval(callback, delay, ...args)` runtime path for nonzero numeric delays, including delayed rescheduling and `clearInterval` cancellation. Test: `set_interval_delay`.
 - Added a bounded wall-clock `setTimeout(callback, delay, ...args)` runtime path for nonzero numeric delays while preserving the existing zero-delay timer and `setImmediate` queue ordering. Test: `set_timeout_delay`.
 - Added a unified runtime event-loop drain that preserves `process.nextTick`, Promise microtask, zero-delay timeout, and `setImmediate` ordering across nested scheduling. Test: `process_next_tick_event_loop`.
 - First-class global `eval` and `Function` value references now require the gated `--unsafe-eval` path and lower to embedded Node bridge generic wrappers when explicitly enabled. Tests: `runtime_eval_value_unknown`, `runtime_eval_value_unsafe`, `runtime_function_value_unknown`, `runtime_function_value_unsafe`.
