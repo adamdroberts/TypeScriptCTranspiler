@@ -4204,6 +4204,38 @@ tsc_value_t tsc_os_network_interfaces(void) {
     return tsc_value_object(out);
 }
 
+double tsc_os_get_priority(double pid_double) {
+    id_t pid = (id_t)pid_double;
+    errno = 0;
+    int priority = getpriority(PRIO_PROCESS, pid);
+    if (priority == -1 && errno != 0) {
+        tsc_throw_str(tsc_str_from_cstr("os.getPriority: failed to get priority"));
+    }
+    return (double)priority;
+}
+
+void tsc_os_set_priority(double pid_double, double priority_double) {
+    id_t pid = (id_t)pid_double;
+    int priority = (int)priority_double;
+    if (priority < -20 || priority > 19) {
+        tsc_throw_str(tsc_str_from_cstr("os.setPriority: priority must be between -20 and 19"));
+    }
+    int res = setpriority(PRIO_PROCESS, pid, priority);
+    if (res == -1) {
+        tsc_throw_str(tsc_str_from_cstr("os.setPriority: failed to set priority"));
+    }
+}
+
+double getPriority(double pid, tsc_array_t* ignore) {
+    (void)ignore;
+    return tsc_os_get_priority(pid);
+}
+
+void setPriority(double pid, double priority, tsc_array_t* ignore) {
+    (void)ignore;
+    tsc_os_set_priority(pid, priority);
+}
+
 double tsc_date_now(void) {
     struct timespec ts;
     if (clock_gettime(CLOCK_REALTIME, &ts) == 0) {

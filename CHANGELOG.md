@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Implemented POSIX-backed `os.getPriority(pid?)` and `os.setPriority(pidOrPriority, priority?)` plus process scheduling priority constants `os.constants.priority` supporting named, default, and namespace imports from `"os"` / `"node:os"`, including argument evaluation side-effects preservation. Test: `os_priority`.
 - `Buffer.from(...)`, `Buffer.toString(...)`, `Buffer.byteLength(...)`, `Buffer.isEncoding(...)`, and Buffer write paths now support bounded `"latin1"`, `"binary"`, and `"ascii"` encoding aliases alongside the existing UTF-8, hex, and base64 subset. Test: `buffer_latin1_ascii_encoding`.
 - Extended `Buffer.prototype.compare` to support optional target and source range bounds (`targetStart?`, `targetEnd?`, `sourceStart?`, `sourceEnd?`) with Node-like range validations and error messages. Test: `buffer_compare_ranges`.
 - Add compile-time `os.constants.signals` object subset supporting named, default, and namespace imports from `"os"` / `"node:os"`, mapping common POSIX signals SIGHUP, SIGINT, SIGQUIT, SIGILL, SIGTRAP, SIGABRT, SIGBUS, SIGFPE, SIGKILL, SIGUSR1, SIGSEGV, SIGUSR2, SIGPIPE, SIGALRM, SIGTERM to stable POSIX/Linux numeric constants. Test: `os_constants_signals`.

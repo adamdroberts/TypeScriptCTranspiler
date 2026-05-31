@@ -1053,8 +1053,17 @@ interface OSSignals {
     readonly SIGALRM: number;
     readonly SIGTERM: number;
 }
+interface OSPriority {
+    readonly PRIORITY_LOW: number;
+    readonly PRIORITY_BELOW_NORMAL: number;
+    readonly PRIORITY_NORMAL: number;
+    readonly PRIORITY_ABOVE_NORMAL: number;
+    readonly PRIORITY_HIGH: number;
+    readonly PRIORITY_HIGHEST: number;
+}
 interface OSConstants {
     readonly signals: OSSignals;
+    readonly priority: OSPriority;
 }
 interface OS {
     readonly EOL: string;
@@ -1078,6 +1087,8 @@ interface OS {
     loadavg(...ignored: any[]): number[];
     userInfo(options?: OSUserInfoOptions, ...ignored: any[]): any;
     networkInterfaces(...ignored: any[]): any;
+    getPriority(pid?: number, ...ignored: any[]): number;
+    setPriority(pidOrPriority: number, priority?: number, ...ignored: any[]): void;
 }
 interface OSUserInfoOptions {
     encoding?: FSEncoding;
@@ -1105,6 +1116,8 @@ declare module "os" {
     export function loadavg(...ignored: any[]): number[];
     export function userInfo(options?: OSUserInfoOptions, ...ignored: any[]): any;
     export function networkInterfaces(...ignored: any[]): any;
+    export function getPriority(pid?: number, ...ignored: any[]): number;
+    export function setPriority(pidOrPriority: number, priority?: number, ...ignored: any[]): void;
     const defaultOs: OS;
     export default defaultOs;
 }
@@ -1130,6 +1143,8 @@ declare module "node:os" {
     export function loadavg(...ignored: any[]): number[];
     export function userInfo(options?: OSUserInfoOptions, ...ignored: any[]): any;
     export function networkInterfaces(...ignored: any[]): any;
+    export function getPriority(pid?: number, ...ignored: any[]): number;
+    export function setPriority(pidOrPriority: number, priority?: number, ...ignored: any[]): void;
     const defaultOs: OS;
     export default defaultOs;
 }
