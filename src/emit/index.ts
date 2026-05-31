@@ -26784,7 +26784,8 @@ class Emitter {
                 this.sideEffectFreeStringLiteralText(unwrappedArg, seenConsts) !== null ||
                 this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrappedArg, seenConsts) !== null ||
                 this.sideEffectFreeBigIntLiteralText(unwrappedArg, seenConsts) !== null ||
-                this.sideEffectFreePrimitiveBooleanValue(unwrappedArg, seenConsts) !== null
+                this.sideEffectFreePrimitiveBooleanValue(unwrappedArg, seenConsts) !== null ||
+                this.isSideEffectFreeFreshNonArrayBuiltinOperand(unwrappedArg, seenConsts)
             ) {
                 return false;
             }
@@ -26830,6 +26831,26 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreePrimitiveBooleanValue(init, seenConsts) : null;
+    }
+
+    private isSideEffectFreeFreshNonArrayBuiltinOperand(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        return this.isSideEffectFreeFreshRegExpOperand(expr, seenConsts) ||
+            this.isSideEffectFreeFreshErrorOperand(expr, seenConsts) ||
+            this.isSideEffectFreeFreshDateOperand(expr, seenConsts) ||
+            this.isSideEffectFreeFreshURLOperand(expr, seenConsts) ||
+            this.isSideEffectFreeFreshMapOperand(expr, seenConsts) ||
+            this.isSideEffectFreeFreshSetOperand(expr, seenConsts) ||
+            this.isSideEffectFreeFreshWeakMapOperand(expr, seenConsts) ||
+            this.isSideEffectFreeFreshWeakSetOperand(expr, seenConsts) ||
+            this.isSideEffectFreeFreshWeakRefOperand(expr, seenConsts) ||
+            this.isSideEffectFreeFreshFinRegistryOperand(expr, seenConsts) ||
+            this.isSideEffectFreeFreshBufferOperand(expr, seenConsts) ||
+            this.isSideEffectFreeFreshEventOperand(expr, seenConsts) ||
+            this.isSideEffectFreeFreshEventTargetOperand(expr, seenConsts) ||
+            this.isSideEffectFreeFreshEventEmitterOperand(expr, seenConsts);
     }
 
     private sideEffectFreeBigIntLiteralText(
