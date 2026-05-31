@@ -1,0 +1,13 @@
+empty size: 0
+initial size: 3
+node initial size: 2
+after append size: 4
+after append duplicate size: 5
+after set existing size: 5
+after set duplicate size: 3
+after set new size: 4
+after delete nonexistent size: 4
+after delete size: 3
+after sort size: 3
+url searchParams size: 2
+saved searchParams size after append: 3

@@ -2151,6 +2151,7 @@ interface URLConstructor {
 }
 declare var URL: URLConstructor;
 interface URLSearchParams {
+    readonly size: number;
     append(name: string, value: string, ...ignored: any[]): void;
     delete(name: string, ...ignored: any[]): void;
     get(name: string, ...ignored: any[]): string | null;
