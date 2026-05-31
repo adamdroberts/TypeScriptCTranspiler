@@ -809,6 +809,12 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-iife-object-function": cjsPackage("tsc2c-cjs-module-iife-object-function", {
         "index.js": 'module.exports = (function () {\n  return {\n    label: "iife-function",\n    count: 124,\n    triple(value) { return value * 3; },\n    default: "iife-function-default"\n  };\n})();\n',
     }),
+    "tsc2c-cjs-module-local-factory-object": cjsPackage("tsc2c-cjs-module-local-factory-object", {
+        "index.js": 'const label = "factory-object";\nfunction makeApi() {\n  return {\n    default: "factory-default",\n    label,\n    count: 125,\n    double(value) { return value * 2; },\n    enabled: true\n  };\n}\nmodule.exports = makeApi();\n',
+    }),
+    "tsc2c-cjs-module-local-factory-parenthesized-object": cjsPackage("tsc2c-cjs-module-local-factory-parenthesized-object", {
+        "index.js": 'function createApi() {\n  return ({\n    default: "factory-paren-default",\n    label: "factory-paren",\n    count: 126,\n    triple: (value) => value * 3\n  });\n}\nmodule.exports = createApi();\n',
+    }),
     "tsc2c-cjs-module-object-identifier": cjsPackage("tsc2c-cjs-module-object-identifier", {
         "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "identifier-default",\n  greet: function greet(name) { return "identifier " + name; },\n  label: local.label,\n  count: 72,\n  double: local.double,\n  enabled: true\n};\nmodule.exports = api;\n',
         "local.js": 'exports.label = "object-identifier";\nexports.double = function double(value) { return value * 2; };\n',
