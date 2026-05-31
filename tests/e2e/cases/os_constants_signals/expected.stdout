@@ -1,0 +1,9 @@
+os.constants.signals.SIGHUP: 1
+os.constants.signals.SIGINT: 2
+os.constants.signals.SIGTERM: 15
+os.constants.signals.SIGKILL: 9
+os.constants.signals.SIGUSR1: 10
+os.constants.signals.SIGUSR2: 12
+nodeOs.constants.signals.SIGHUP: 1
+osConstants.signals.SIGINT: 2
+nodeOsConstants.signals.SIGTERM: 15

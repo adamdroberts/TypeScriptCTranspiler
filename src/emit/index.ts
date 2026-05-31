@@ -12285,9 +12285,52 @@ class Emitter {
         }
     }
 
+    private osSignalConstantValue(name: string): string | null {
+        switch (name) {
+            case "SIGHUP": return "1.0";
+            case "SIGINT": return "2.0";
+            case "SIGQUIT": return "3.0";
+            case "SIGILL": return "4.0";
+            case "SIGTRAP": return "5.0";
+            case "SIGABRT": return "6.0";
+            case "SIGBUS": return "7.0";
+            case "SIGFPE": return "8.0";
+            case "SIGKILL": return "9.0";
+            case "SIGUSR1": return "10.0";
+            case "SIGSEGV": return "11.0";
+            case "SIGUSR2": return "12.0";
+            case "SIGPIPE": return "13.0";
+            case "SIGALRM": return "14.0";
+            case "SIGTERM": return "15.0";
+            default:
+                return null;
+        }
+    }
+
     private isSideEffectFreeBuiltinModuleConstantRead(expr: ts.Expression): boolean {
         if (!ts.isPropertyAccessExpression(expr)) return false;
         const name = expr.name.text;
+        const osSignal = this.osSignalConstantValue(name);
+        if (osSignal !== null) {
+            if (
+                ts.isPropertyAccessExpression(expr.expression) &&
+                expr.expression.name.text === "signals" &&
+                ts.isPropertyAccessExpression(expr.expression.expression) &&
+                expr.expression.expression.name.text === "constants" &&
+                ts.isIdentifier(expr.expression.expression.expression) &&
+                this.isOsModuleIdentifier(expr.expression.expression.expression)
+            ) {
+                return true;
+            }
+            if (
+                ts.isPropertyAccessExpression(expr.expression) &&
+                expr.expression.name.text === "signals" &&
+                ts.isIdentifier(expr.expression.expression) &&
+                this.isNamedImportFrom(expr.expression.expression, ["os", "node:os"], "constants")
+            ) {
+                return true;
+            }
+        }
         if (
             this.fsNumericConstantValue(name) !== null &&
             ts.isPropertyAccessExpression(expr.expression) &&
@@ -47103,6 +47146,28 @@ class Emitter {
             this.isNamedImportFrom(pa.expression, ["fs", "node:fs"], "constants")
         ) {
             return { c: fsConst, ty: T_NUMBER };
+        }
+
+        const osSignal = this.osSignalConstantValue(pa.name.text);
+        if (
+            osSignal !== null &&
+            ts.isPropertyAccessExpression(pa.expression) &&
+            pa.expression.name.text === "signals" &&
+            ts.isPropertyAccessExpression(pa.expression.expression) &&
+            pa.expression.expression.name.text === "constants" &&
+            ts.isIdentifier(pa.expression.expression.expression) &&
+            this.isOsModuleIdentifier(pa.expression.expression.expression)
+        ) {
+            return { c: osSignal, ty: T_NUMBER };
+        }
+        if (
+            osSignal !== null &&
+            ts.isPropertyAccessExpression(pa.expression) &&
+            pa.expression.name.text === "signals" &&
+            ts.isIdentifier(pa.expression.expression) &&
+            this.isNamedImportFrom(pa.expression.expression, ["os", "node:os"], "constants")
+        ) {
+            return { c: osSignal, ty: T_NUMBER };
         }
 
         if (ts.isIdentifier(pa.expression) && this.isDnsModuleIdentifier(pa.expression)) {

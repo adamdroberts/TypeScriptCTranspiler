@@ -1036,9 +1036,30 @@ interface JSON {
 }
 declare const JSON: JSON;
 
+interface OSSignals {
+    readonly SIGHUP: number;
+    readonly SIGINT: number;
+    readonly SIGQUIT: number;
+    readonly SIGILL: number;
+    readonly SIGTRAP: number;
+    readonly SIGABRT: number;
+    readonly SIGBUS: number;
+    readonly SIGFPE: number;
+    readonly SIGKILL: number;
+    readonly SIGUSR1: number;
+    readonly SIGSEGV: number;
+    readonly SIGUSR2: number;
+    readonly SIGPIPE: number;
+    readonly SIGALRM: number;
+    readonly SIGTERM: number;
+}
+interface OSConstants {
+    readonly signals: OSSignals;
+}
 interface OS {
     readonly EOL: string;
     readonly devNull: string;
+    readonly constants: OSConstants;
     platform(...ignored: any[]): string;
     type(...ignored: any[]): string;
     release(...ignored: any[]): string;
@@ -1065,6 +1086,7 @@ declare const os: OS;
 declare module "os" {
     export const EOL: string;
     export const devNull: string;
+    export const constants: OSConstants;
     export function platform(...ignored: any[]): string;
     export function type(...ignored: any[]): string;
     export function release(...ignored: any[]): string;
@@ -1089,6 +1111,7 @@ declare module "os" {
 declare module "node:os" {
     export const EOL: string;
     export const devNull: string;
+    export const constants: OSConstants;
     export function platform(...ignored: any[]): string;
     export function type(...ignored: any[]): string;
     export function release(...ignored: any[]): string;
