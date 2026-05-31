@@ -46712,6 +46712,8 @@ class Emitter {
                 }
                 case "class":
                     return `((${target.c})tsc_value_as_class(${r.c}))`;
+                case "promise":
+                    return `tsc_value_as_promise(${r.c})`;
             }
         }
         if (target.kind === "value") {
@@ -46766,6 +46768,8 @@ class Emitter {
                     return `tsc_value_function_generic_named(${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${r.c}, ${(r.ty.params ?? []).length}.0, ${this.functionValueNameLiteral(node)})`;
                 case "class":
                     return this.classValueBoxExpression(r, node);
+                case "promise":
+                    return `tsc_value_promise(${r.c})`;
                 case "void":
                     if (ts.isExpression(node) && this.isNullExpression(node)) return `tsc_value_null()`;
                     if (ts.isExpression(node) && this.isUndefinedLikeExpression(node)) return `tsc_value_undefined()`;

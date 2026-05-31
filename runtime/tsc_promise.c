@@ -92,6 +92,10 @@ static tsc_promise_t* tsc_promise_resolve_thenable_seen(tsc_value_t value, tsc_a
     tsc_try_frame_t eh;
     tsc_try_push(&eh);
     if (setjmp(eh.jb) == 0) {
+        if (tsc_value_is_promise(value)) {
+            tsc_try_pop();
+            return tsc_promise_adopt(tsc_value_as_promise(value));
+        }
         if (promise_seen_contains(seen, value)) {
             tsc_try_pop();
             return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("TypeError: Promise resolution cycle")));
@@ -132,6 +136,30 @@ static tsc_promise_t* tsc_promise_resolve_thenable_seen(tsc_value_t value, tsc_a
 
 tsc_promise_t* tsc_promise_resolve_thenable(tsc_value_t value) {
     return tsc_promise_resolve_thenable_seen(value, NULL);
+}
+
+tsc_value_t tsc_value_promise(tsc_promise_t* p) {
+    if (!p) return tsc_value_null();
+    tsc_object_t* o = tsc_object_new_class(p);
+    o->is_promise = true;
+    return tsc_value_object(o);
+}
+
+bool tsc_value_is_promise(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+        return o->is_promise;
+    }
+    return false;
+}
+
+tsc_promise_t* tsc_value_as_promise(tsc_value_t v) {
+    if (tsc_value_is_promise(v)) {
+        tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+        return (tsc_promise_t*)o->class_ptr;
+    }
+    tsc_panic("value is not a promise instance");
+    return NULL;
 }
 
 tsc_promise_t* tsc_promise_reject(tsc_value_t reason) {
