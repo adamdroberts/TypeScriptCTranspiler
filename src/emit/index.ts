@@ -22486,24 +22486,44 @@ class Emitter {
             if (
                 ts.isBinaryExpression(expr) &&
                 expr.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-                ts.isYieldExpression(expr.right)
+                this.singleYieldExpressionInExpression(expr.right)
             ) {
-                return expr.right;
+                return this.singleYieldExpressionInExpression(expr.right);
             }
             return null;
         }
         if (ts.isVariableStatement(stmt)) {
             if (stmt.declarationList.declarations.length !== 1) return null;
             const decl = stmt.declarationList.declarations[0]!;
-            if (!ts.isIdentifier(decl.name) || !decl.initializer || !ts.isYieldExpression(decl.initializer)) {
+            if (!ts.isIdentifier(decl.name) || !decl.initializer) {
                 return null;
             }
-            return decl.initializer;
+            return this.singleYieldExpressionInExpression(decl.initializer);
         }
         if (ts.isReturnStatement(stmt)) {
-            return stmt.expression && ts.isYieldExpression(stmt.expression) ? stmt.expression : null;
+            return stmt.expression ? this.singleYieldExpressionInExpression(stmt.expression) : null;
         }
         return null;
+    }
+
+    private singleYieldExpressionInExpression(expr: ts.Expression): ts.YieldExpression | null {
+        let found: ts.YieldExpression | null = null;
+        let multiple = false;
+        const visit = (node: ts.Node) => {
+            if (multiple) return;
+            if (ts.isYieldExpression(node)) {
+                if (found) {
+                    multiple = true;
+                    return;
+                }
+                found = node;
+                return;
+            }
+            if (node !== expr && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+            ts.forEachChild(node, visit);
+        };
+        visit(expr);
+        return multiple ? null : found;
     }
 
     private simpleLazyYieldNeedsResume(stmt: ts.Statement): boolean {
@@ -22511,18 +22531,18 @@ class Emitter {
             const expr = stmt.expression;
             return ts.isBinaryExpression(expr) &&
                 expr.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-                ts.isYieldExpression(expr.right);
+                !!this.singleYieldExpressionInExpression(expr.right);
         }
         if (ts.isVariableStatement(stmt)) {
             if (stmt.declarationList.declarations.length !== 1) return false;
             const decl = stmt.declarationList.declarations[0]!;
             return ts.isIdentifier(decl.name) &&
                 !!decl.initializer &&
-                ts.isYieldExpression(decl.initializer);
+                !!this.singleYieldExpressionInExpression(decl.initializer);
         }
         return ts.isReturnStatement(stmt) &&
             !!stmt.expression &&
-            ts.isYieldExpression(stmt.expression);
+            !!this.singleYieldExpressionInExpression(stmt.expression);
     }
 
     private nodeContainsYield(node: ts.Node): boolean {
@@ -22769,11 +22789,12 @@ class Emitter {
             if (
                 ts.isBinaryExpression(expr) &&
                 expr.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-                ts.isYieldExpression(expr.right)
+                this.singleYieldExpressionInExpression(expr.right)
             ) {
                 const lhs = this.emitLvalue(expr.left);
                 const lhsType = this.storageType(expr.left);
-                buf.line(`${lhs} = ${this.coerce(resumeValue, lhsType, expr.right)};`);
+                const value = this.emitSimpleLazyResumeExpression(expr.right, nextArg);
+                buf.line(`${lhs} = ${this.coerce(value, lhsType, expr.right)};`);
                 return;
             }
         }
@@ -22783,22 +22804,96 @@ class Emitter {
                 decl &&
                 ts.isIdentifier(decl.name) &&
                 decl.initializer &&
-                ts.isYieldExpression(decl.initializer)
+                this.singleYieldExpressionInExpression(decl.initializer)
             ) {
                 const sym = this.symbolForIdentifier(decl.name);
                 const envBinding = this.closureEnvBindingForSymbol(sym);
                 const targetType = envBinding?.type ?? this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
                 const target = envBinding ? `*${envBinding.ptr}` : this.identifierName(decl.name);
-                buf.line(`${target} = ${this.coerce(resumeValue, targetType, decl.initializer)};`);
+                const value = this.emitSimpleLazyResumeExpression(decl.initializer, nextArg);
+                buf.line(`${target} = ${this.coerce(value, targetType, decl.initializer)};`);
                 return;
             }
         }
-        if (ts.isReturnStatement(stmt) && stmt.expression && ts.isYieldExpression(stmt.expression)) {
-            buf.line(`a->iter_return = ${nextArg};`);
+        if (ts.isReturnStatement(stmt) && stmt.expression && this.singleYieldExpressionInExpression(stmt.expression)) {
+            const value = this.emitSimpleLazyResumeExpression(stmt.expression, nextArg);
+            buf.line(`a->iter_return = ${this.coerce(value, T_VALUE, stmt.expression)};`);
             buf.line("a->iter_has_return = true;");
             buf.line("a->iter_return_consumed = false;");
             return;
         }
+    }
+
+    private emitSimpleLazyResumeExpression(expr: ts.Expression, nextArg: string): EmitResult {
+        if (ts.isYieldExpression(expr)) {
+            return { c: nextArg, ty: T_VALUE };
+        }
+        if (ts.isParenthesizedExpression(expr)) {
+            const inner = this.emitSimpleLazyResumeExpression(expr.expression, nextArg);
+            return { c: `(${inner.c})`, ty: inner.ty };
+        }
+        if (ts.isBinaryExpression(expr)) {
+            const left = this.singleYieldExpressionInExpression(expr.left)
+                ? this.emitSimpleLazyResumeExpression(expr.left, nextArg)
+                : this.emitExpr(expr.left);
+            const right = this.singleYieldExpressionInExpression(expr.right)
+                ? this.emitSimpleLazyResumeExpression(expr.right, nextArg)
+                : this.emitExpr(expr.right);
+            return this.emitSimpleLazyResumeBinary(expr, left, right);
+        }
+        unsupported(expr, "lazy generator suspended yield expression currently supports direct, parenthesized, and binary expressions");
+    }
+
+    private emitSimpleLazyResumeBinary(
+        bin: ts.BinaryExpression,
+        left: EmitResult,
+        right: EmitResult,
+    ): EmitResult {
+        const op = bin.operatorToken.kind;
+        if (op === ts.SyntaxKind.CommaToken) {
+            return this.emitSequencedExpr(right.ty, [{ value: left }], () => right.c);
+        }
+        if (op === ts.SyntaxKind.PlusToken) {
+            if (left.ty.kind === "value" || right.ty.kind === "value") {
+                return this.emitDynamicBinary("tsc_value_add", T_VALUE, bin, left, right);
+            }
+            if (left.ty.kind === "string" || right.ty.kind === "string") {
+                const ls = this.coerceToString(left, bin.left);
+                const rs = this.coerceToString(right, bin.right);
+                return { c: `tsc_str_concat(${ls}, ${rs})`, ty: T_STRING };
+            }
+            if (left.ty.kind === "bigint" && right.ty.kind === "bigint") {
+                return { c: `tsc_bigint_add(${left.c}, ${right.c})`, ty: T_BIGINT };
+            }
+            requireNumber(bin, left.ty);
+            requireNumber(bin, right.ty);
+            return { c: `(${left.c} + ${right.c})`, ty: T_NUMBER };
+        }
+        if (
+            op === ts.SyntaxKind.MinusToken ||
+            op === ts.SyntaxKind.AsteriskToken ||
+            op === ts.SyntaxKind.SlashToken
+        ) {
+            if (left.ty.kind === "value" || right.ty.kind === "value") {
+                const fn =
+                    op === ts.SyntaxKind.MinusToken
+                        ? "tsc_value_sub"
+                        : op === ts.SyntaxKind.AsteriskToken
+                            ? "tsc_value_mul"
+                            : "tsc_value_div";
+                return this.emitDynamicBinary(fn, T_VALUE, bin, left, right);
+            }
+            requireNumber(bin, left.ty);
+            requireNumber(bin, right.ty);
+            const cop =
+                op === ts.SyntaxKind.MinusToken
+                    ? "-"
+                    : op === ts.SyntaxKind.AsteriskToken
+                        ? "*"
+                        : "/";
+            return { c: op === ts.SyntaxKind.SlashToken ? `(((double)(${left.c})) / ((double)(${right.c})))` : `(${left.c} ${cop} ${right.c})`, ty: T_NUMBER };
+        }
+        unsupported(bin, `lazy generator suspended yield binary operator ${ts.SyntaxKind[op]}`);
     }
 
     private fnSignature(fd: ts.FunctionDeclaration): {
