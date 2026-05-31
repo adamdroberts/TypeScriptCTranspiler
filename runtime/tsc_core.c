@@ -884,12 +884,13 @@ static void tsc_sleep_ms(double delay_ms) {
 void tsc_run_event_loop(void) {
     while (g_next_tick_len > 0 || g_microtask_len > 0 || g_timeout_len > 0 || g_immediate_len > 0) {
         tsc_drain_microtasks_and_next_ticks();
-        while (tsc_has_ready_timeout()) {
+        if (tsc_has_ready_timeout()) {
             tsc_drain_timeouts();
             tsc_drain_microtasks_and_next_ticks();
         }
         if (g_immediate_len > 0) {
             tsc_drain_immediates();
+            tsc_drain_microtasks_and_next_ticks();
         }
         if (g_next_tick_len == 0 && g_microtask_len == 0 && g_immediate_len == 0 && g_timeout_len > 0) {
             tsc_sleep_ms(tsc_next_timeout_delay_ms());
