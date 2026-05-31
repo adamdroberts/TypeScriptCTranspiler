@@ -1347,6 +1347,9 @@ interface FS {
     appendFileSync(path: FSPathLike, data: string | Buffer, options?: FSAppendFileEncodingOptions, ...ignored: any[]): void;
     openSync(path: FSPathLike, flags?: string | number, mode?: number, ...ignored: any[]): number;
     closeSync(fd: number, ...ignored: any[]): void;
+    fsyncSync(fd: number, ...ignored: any[]): void;
+    fdatasyncSync(fd: number, ...ignored: any[]): void;
+    ftruncateSync(fd: number, len?: number, ...ignored: any[]): void;
     readSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
     writeSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
     writeSync(fd: number, string: string, position?: number | null, encoding?: string | null, ...ignored: any[]): number;
@@ -1425,6 +1428,9 @@ declare module "fs" {
     export function appendFileSync(path: FSPathLike, data: string | Buffer, options?: FSAppendFileEncodingOptions, ...ignored: any[]): void;
     export function openSync(path: FSPathLike, flags?: string | number, mode?: number, ...ignored: any[]): number;
     export function closeSync(fd: number, ...ignored: any[]): void;
+    export function fsyncSync(fd: number, ...ignored: any[]): void;
+    export function fdatasyncSync(fd: number, ...ignored: any[]): void;
+    export function ftruncateSync(fd: number, len?: number, ...ignored: any[]): void;
     export function readSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
     export function writeSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
     export function writeSync(fd: number, string: string, position?: number | null, encoding?: string | null, ...ignored: any[]): number;
@@ -1470,6 +1476,9 @@ declare module "node:fs" {
     export function appendFileSync(path: FSPathLike, data: string | Buffer, options?: FSAppendFileEncodingOptions, ...ignored: any[]): void;
     export function openSync(path: FSPathLike, flags?: string | number, mode?: number, ...ignored: any[]): number;
     export function closeSync(fd: number, ...ignored: any[]): void;
+    export function fsyncSync(fd: number, ...ignored: any[]): void;
+    export function fdatasyncSync(fd: number, ...ignored: any[]): void;
+    export function ftruncateSync(fd: number, len?: number, ...ignored: any[]): void;
     export function readSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
     export function writeSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
     export function writeSync(fd: number, string: string, position?: number | null, encoding?: string | null, ...ignored: any[]): number;

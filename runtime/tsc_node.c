@@ -4728,3 +4728,34 @@ tsc_str_t* tsc_querystring_stringify(tsc_value_t obj_val, tsc_value_t sep_val, t
     w[offset] = '\0';
     return out;
 }
+
+void tsc_fs_fsync_sync(double fd) {
+    int fd_int = (int)fd;
+    int r = fsync(fd_int);
+    if (r != 0) {
+        char err_msg[256];
+        snprintf(err_msg, sizeof(err_msg), "fs.fsyncSync: fsync failed, %s", strerror(errno));
+        tsc_throw_str(tsc_str_from_cstr(err_msg));
+    }
+}
+
+void tsc_fs_fdatasync_sync(double fd) {
+    int fd_int = (int)fd;
+    int r = fdatasync(fd_int);
+    if (r != 0) {
+        char err_msg[256];
+        snprintf(err_msg, sizeof(err_msg), "fs.fdatasyncSync: fdatasync failed, %s", strerror(errno));
+        tsc_throw_str(tsc_str_from_cstr(err_msg));
+    }
+}
+
+void tsc_fs_ftruncate_sync(double fd, double len) {
+    int fd_int = (int)fd;
+    off_t length = (off_t)len;
+    int r = ftruncate(fd_int, length);
+    if (r != 0) {
+        char err_msg[256];
+        snprintf(err_msg, sizeof(err_msg), "fs.ftruncateSync: ftruncate failed, %s", strerror(errno));
+        tsc_throw_str(tsc_str_from_cstr(err_msg));
+    }
+}

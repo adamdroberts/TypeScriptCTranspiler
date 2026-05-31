@@ -1,0 +1,14 @@
+--- Test 1: Write and truncate using default import / alias ---
+Read after truncate 10: 10 0123456789
+Read after truncate default: 0
+--- Test 2: fsync/fdatasync success using named / default imports ---
+fsyncSync succeeded
+fdatasyncSync succeeded
+--- Test 3: Invalid fd errors ---
+Caught invalid fd fsyncSync error
+Caught invalid fd fdatasyncSync error
+Caught invalid fd ftruncateSync error
+--- Test 4: Ignored arg evaluation ---
+fsyncSync ignored arg side effect: 1
+fdatasyncSync ignored arg side effect: 2
+ftruncateSync ignored arg side effect: 3
