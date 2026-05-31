@@ -27,12 +27,20 @@ fs.promises.lstat(filePath, STAT_OPTIONS).then((promiseStat) => {
     console.log("promise lstat:", promiseStat.isFile(), typeof promiseStat.size, promiseStat.size);
 });
 
-fs.promises.stat(path.join(root, "missing-promise.txt"), MISSING_OPTIONS).then((missing) => {
-    console.log("promise missing stat:", missing === undefined);
-});
+fs.promises.stat(path.join(root, "missing-promise.txt"), MISSING_OPTIONS)
+    .then((missing) => {
+        console.log("promise missing stat:", missing === undefined);
+    })
+    .catch((err: string) => {
+        console.log("promise missing stat rejected:", err.indexOf("could not stat path") !== -1);
+    });
 
-fs.promises.lstat(path.join(root, "missing-promise-link"), MISSING_LSTAT_OPTIONS).then((missing) => {
-    console.log("promise missing lstat:", missing === undefined);
-});
+fs.promises.lstat(path.join(root, "missing-promise-link"), MISSING_LSTAT_OPTIONS)
+    .then((missing) => {
+        console.log("promise missing lstat:", missing === undefined);
+    })
+    .catch((err: string) => {
+        console.log("promise missing lstat rejected:", err.indexOf("could not stat path") !== -1);
+    });
 
 fs.rmSync(root, { recursive: true, force: true });

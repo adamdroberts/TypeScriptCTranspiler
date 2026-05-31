@@ -1384,9 +1384,7 @@ interface FSPromises {
     readdir(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Promise<Buffer[]>;
     readdir(path: FSPathLike, options: FSReaddirDirentOptions, ...ignored: any[]): Promise<FSDirent[]>;
     readdir(path: FSPathLike, options?: FSReaddirStringOptions, ...ignored: any[]): Promise<string[]>;
-    stat(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): Promise<FSStats | undefined>;
     stat(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): Promise<FSStats>;
-    lstat(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): Promise<FSStats | undefined>;
     lstat(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): Promise<FSStats>;
     realpath(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Promise<Buffer>;
     realpath(path: FSPathLike, options?: FSPathResultEncodingOption, ...ignored: any[]): Promise<string>;
