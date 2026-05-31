@@ -1046,8 +1046,8 @@ interface Math {
 declare const Math: Math;
 
 interface JSON {
-    stringify(value: unknown): string;
-    parse(text: string): unknown;
+    stringify(value: unknown, replacer?: any, space?: any): string;
+    parse(text: string, reviver?: any): unknown;
 }
 declare const JSON: JSON;
 

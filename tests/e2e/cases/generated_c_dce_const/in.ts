@@ -5529,6 +5529,24 @@ function stringInstanceMethodsDce(): string {
     return "kept_string_instance_methods_all";
 }
 
+function jsonDceTest(): string {
+    // 1-arg JSON.parse
+    const dead_json_parse_1 = JSON.parse('{"ok":true}');
+    // 2-arg JSON.parse with ignored non-callable reviver
+    const dead_json_parse_2 = JSON.parse('{"value":100}', null);
+
+    // 2-arg JSON.stringify with replacer array
+    const dead_json_stringify_2 = JSON.stringify({ a: 1, b: 2 }, ["a"]);
+    // 3-arg JSON.stringify with replacer array and space number
+    const dead_json_stringify_3_space_num = JSON.stringify({ a: 1 }, ["a"], 2);
+    // 3-arg JSON.stringify with null replacer and space string
+    const dead_json_stringify_3_space_str = JSON.stringify({ a: 1 }, null, "  ");
+    // 3-arg JSON.stringify with null replacer and space
+    const dead_json_stringify_3_null_replacer = JSON.stringify({ a: 1 }, null, 4);
+
+    return "kept_json_dce_marker";
+}
+
 
 console.log(
     usedLocal(used_count),
@@ -5564,6 +5582,7 @@ console.log(
     stringInstanceTrimDce(),
     stringInstanceRepeatPadDce(),
     stringInstanceMethodsDce(),
+    jsonDceTest(),
     uriStaticFoldingDce(),
     computedTruthyFalsyDce(),
     computedSwitchKeyDce(),

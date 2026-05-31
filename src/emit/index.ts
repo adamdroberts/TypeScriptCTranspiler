@@ -1646,6 +1646,9 @@ class Emitter {
         if (this.isSideEffectFreeJsonStringifyCall(call, seenConsts)) {
             return true;
         }
+        if (this.isSideEffectFreeJsonParseCall(call, seenConsts)) {
+            return true;
+        }
         if (
             ts.isIdentifier(recv) &&
             method === "groupBy" &&
@@ -12591,12 +12594,105 @@ class Emitter {
             unwrapped.expression.name.text === "stringify" &&
             ts.isIdentifier(unwrapped.expression.expression) &&
             this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "JSON") &&
-            unwrapped.arguments.length === 1
+            unwrapped.arguments.length >= 1 &&
+            unwrapped.arguments.length <= 3
         ) {
-            return this.isSideEffectFreeJsonStringifyOperand(unwrapped.arguments[0]!, seenConsts);
+            if (!this.isSideEffectFreeJsonStringifyOperand(unwrapped.arguments[0]!, seenConsts)) {
+                return false;
+            }
+            if (unwrapped.arguments.length >= 2) {
+                if (!this.isSideEffectFreeJsonStringifyReplacer(unwrapped.arguments[1]!, seenConsts)) {
+                    return false;
+                }
+            }
+            if (unwrapped.arguments.length >= 3) {
+                if (!this.isSideEffectFreeJsonStringifySpace(unwrapped.arguments[2]!, seenConsts)) {
+                    return false;
+                }
+            }
+            return true;
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeJsonStringifyCall(init, seenConsts);
+    }
+
+    private isSideEffectFreeJsonStringifyReplacer(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        switch (unwrapped.kind) {
+            case ts.SyntaxKind.NullKeyword:
+            case ts.SyntaxKind.UndefinedKeyword:
+                return true;
+        }
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            return unwrapped.elements.every((element) =>
+                !ts.isOmittedExpression(element) &&
+                !ts.isSpreadElement(element) &&
+                (
+                    ts.isStringLiteral(element) ||
+                    ts.isNumericLiteral(element) ||
+                    ts.isNoSubstitutionTemplateLiteral(element)
+                )
+            );
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeJsonStringifyReplacer(init, seenConsts);
+    }
+
+    private isSideEffectFreeJsonStringifySpace(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        switch (unwrapped.kind) {
+            case ts.SyntaxKind.NullKeyword:
+            case ts.SyntaxKind.UndefinedKeyword:
+                return true;
+        }
+        if (
+            ts.isStringLiteral(unwrapped) ||
+            ts.isNumericLiteral(unwrapped) ||
+            ts.isNoSubstitutionTemplateLiteral(unwrapped)
+        ) {
+            return true;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeJsonStringifySpace(init, seenConsts);
+    }
+
+    private isSideEffectFreeJsonParseCall(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            unwrapped.expression.name.text === "parse" &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "JSON") &&
+            unwrapped.arguments.length >= 1 &&
+            unwrapped.arguments.length <= 2
+        ) {
+            if (!this.isSideEffectFreeStringOperand(unwrapped.arguments[0]!, seenConsts)) {
+                return false;
+            }
+            if (unwrapped.arguments.length === 2) {
+                const reviver = unwrapped.arguments[1]!;
+                const unwrappedReviver = this.unwrapSideEffectFreeStaticExpression(reviver);
+                if (
+                    unwrappedReviver.kind !== ts.SyntaxKind.NullKeyword &&
+                    unwrappedReviver.kind !== ts.SyntaxKind.UndefinedKeyword
+                ) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return !!init && this.isSideEffectFreeJsonParseCall(init, seenConsts);
     }
 
     private isSideEffectFreeJsonStringifyOperand(
