@@ -5100,7 +5100,11 @@ function templateLiteralDce(): string {
 
 function stringStaticCallDce(): string {
     return (String.fromCharCode(Number("65", "local_dead_string_static_char_ignored"), 66) === "AB" &&
-        String.fromCodePoint(Number("67", "local_dead_string_static_code_point_ignored"), 68) === "CD")
+        String.fromCodePoint(Number("67", "local_dead_string_static_code_point_ignored"), 68) === "CD" &&
+        RegExp.escape("a-b", "local_dead_regexp_escape_ignored") === "\\x61\\x2db" &&
+        RegExp.escape("foo") === "\\x66oo" &&
+        RegExp.escape("^$") === "\\^\\$" &&
+        RegExp.escape("") === "")
         ? "kept_string_static_call"
         : "local_dead_string_static_call_false";
 }
