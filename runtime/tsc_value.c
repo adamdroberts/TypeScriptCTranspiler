@@ -133,7 +133,10 @@ bool tsc_value_is_callable(tsc_value_t v) {
 
 static bool value_is_constructable_function(tsc_value_t v) {
     if (!value_is_box(v)) return false;
-    if (value_tag(v) == TSC_VALUE_TAG_FUNCTION) return true;
+    if (value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+        tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(v);
+        return ident && ident->kind == TSC_FUNCTION_IDENTITY_GENERIC;
+    }
     if (value_tag(v) != TSC_VALUE_TAG_OBJECT) return false;
     tsc_object_t* o = (tsc_object_t*)value_ptr(v);
     return o && o->is_proxy && value_is_constructable_function(o->proxy_target);
