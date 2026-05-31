@@ -1551,6 +1551,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_commonjs_exports_alias` | narrow CommonJS package static top-level `exports` / `module.exports` wrapper aliases |
 | `node_modules_commonjs_computed_exports` | narrow CommonJS package statically computed bracket export assignments |
 | `node_modules_commonjs_computed_string_exports` | narrow CommonJS package string-concatenated/template-literal and static string collection lookup computed bracket export assignments |
+| `node_modules_commonjs_computed_numeric_boolean_exports` | narrow CommonJS package computed bracket export assignments with numeric and boolean constants |
 | `node_modules_commonjs_static_computed_numeric_boolean` | narrow CommonJS package static computed bracket export assignments using numeric and boolean keys |
 | `node_modules_commonjs_object_assign_require_exports` | narrow CommonJS package `Object.assign(exports, require("./local.js"))` re-export mutation |
 | `node_modules_commonjs_object_assign_exports` | narrow CommonJS package `Object.assign(exports/module.exports, object)` data/default export mutation |

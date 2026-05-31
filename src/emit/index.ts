@@ -40983,6 +40983,15 @@ class Emitter {
         if (cur.kind === ts.SyntaxKind.FalseKeyword) return "false";
 
         if (
+            ts.isPrefixUnaryExpression(cur) &&
+            cur.operator === ts.SyntaxKind.MinusToken
+        ) {
+            const val = this.staticComputedStringExpression(cur.operand);
+            if (val === null) return null;
+            const num = -Number(val);
+            return Number.isFinite(num) ? String(num) : null;
+        }
+        if (
             ts.isBinaryExpression(cur) &&
             cur.operatorToken.kind === ts.SyntaxKind.PlusToken
         ) {
