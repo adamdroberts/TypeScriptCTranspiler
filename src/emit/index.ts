@@ -22400,95 +22400,65 @@ class Emitter {
             if (param.initializer || param.dotDotDotToken) return false;
         }
 
-        for (let i = 0; i < fn.body.statements.length; i++) {
-            const stmt = fn.body.statements[i]!;
-            if (ts.isEmptyStatement(stmt)) continue;
-            let hasNestedFunctionOrClass = false;
-            const checkNestedScopes = (node: ts.Node) => {
-                if (node !== stmt && (ts.isFunctionLike(node) || ts.isClassLike(node))) {
-                    hasNestedFunctionOrClass = true;
-                    return;
-                }
-                ts.forEachChild(node, checkNestedScopes);
-            };
-            ts.forEachChild(stmt, checkNestedScopes);
-            if (hasNestedFunctionOrClass) return false;
-            if (ts.isExpressionStatement(stmt)) {
-                const yieldExpr = this.simpleLazyYieldExpression(stmt);
-                if (yieldExpr) {
-                    if (yieldExpr.asteriskToken) {
-                        if (!yieldExpr.expression || !this.isSimpleLazyYieldStarSource(yieldExpr.expression)) {
-                            return false;
-                        }
-                    }
-                    let hasOtherYield = false;
-                    const checkYield = (node: ts.Node) => {
-                        if (ts.isYieldExpression(node) && node !== yieldExpr) {
-                            hasOtherYield = true;
-                            return;
-                        }
-                        ts.forEachChild(node, checkYield);
-                    };
-                    ts.forEachChild(stmt, checkYield);
-                    if (hasOtherYield) return false;
-                    continue;
-                }
-                if (this.nodeContainsYield(stmt)) return false;
-                continue;
+        for (const stmt of fn.body.statements) {
+            if (!this.isValidLazyGeneratorStatement(stmt)) return false;
+        }
+        return true;
+    }
+
+    private isValidLazyGeneratorStatement(stmt: ts.Statement): boolean {
+        if (ts.isEmptyStatement(stmt)) return true;
+
+        let hasNestedFunctionOrClass = false;
+        const checkNestedScopes = (node: ts.Node) => {
+            if (node !== stmt && (ts.isFunctionLike(node) || ts.isClassLike(node))) {
+                hasNestedFunctionOrClass = true;
+                return;
             }
+            ts.forEachChild(node, checkNestedScopes);
+        };
+        ts.forEachChild(stmt, checkNestedScopes);
+        if (hasNestedFunctionOrClass) return false;
+
+        if (ts.isBlock(stmt)) {
+            for (const child of stmt.statements) {
+                if (!this.isValidLazyGeneratorStatement(child)) return false;
+            }
+            return true;
+        }
+
+        if (ts.isIfStatement(stmt)) {
+            if (this.nodeContainsYield(stmt.expression)) return false;
+            if (!this.isValidLazyGeneratorStatement(stmt.thenStatement)) return false;
+            return !stmt.elseStatement || this.isValidLazyGeneratorStatement(stmt.elseStatement);
+        }
+
+        if (ts.isExpressionStatement(stmt) || ts.isVariableStatement(stmt) || ts.isReturnStatement(stmt)) {
             if (ts.isVariableStatement(stmt)) {
-                const yieldExpr = this.simpleLazyYieldExpression(stmt);
-                if (yieldExpr) {
-                    if (yieldExpr.asteriskToken) {
-                        if (!yieldExpr.expression || !this.isSimpleLazyYieldStarSource(yieldExpr.expression)) {
-                            return false;
-                        }
-                    }
-                    let hasOtherYield = false;
-                    const checkYield = (node: ts.Node) => {
-                        if (ts.isYieldExpression(node) && node !== yieldExpr) {
-                            hasOtherYield = true;
-                            return;
-                        }
-                        ts.forEachChild(node, checkYield);
-                    };
-                    ts.forEachChild(stmt, checkYield);
-                    if (hasOtherYield) return false;
-                    continue;
-                }
                 for (const decl of stmt.declarationList.declarations) {
                     if (!ts.isIdentifier(decl.name)) return false;
                 }
-                if (this.nodeContainsYield(stmt)) return false;
-                continue;
             }
-            if (ts.isReturnStatement(stmt)) {
-                if (i !== fn.body.statements.length - 1) return false;
-                const yieldExpr = this.simpleLazyYieldExpression(stmt);
-                if (yieldExpr) {
-                    if (yieldExpr.asteriskToken) {
-                        if (!yieldExpr.expression || !this.isSimpleLazyYieldStarSource(yieldExpr.expression)) {
-                            return false;
-                        }
-                    }
-                    let hasOtherYield = false;
-                    const checkYield = (node: ts.Node) => {
-                        if (ts.isYieldExpression(node) && node !== yieldExpr) {
-                            hasOtherYield = true;
-                            return;
-                        }
-                        ts.forEachChild(node, checkYield);
-                    };
-                    ts.forEachChild(stmt, checkYield);
-                    if (hasOtherYield) return false;
-                    continue;
+            const yieldExpr = this.simpleLazyYieldExpression(stmt);
+            if (yieldExpr) {
+                if (yieldExpr.asteriskToken && (!yieldExpr.expression || !this.isSimpleLazyYieldStarSource(yieldExpr.expression))) {
+                    return false;
                 }
-                if (this.nodeContainsYield(stmt)) return false;
-                continue;
+                let hasOtherYield = false;
+                const checkYield = (node: ts.Node) => {
+                    if (ts.isYieldExpression(node) && node !== yieldExpr) {
+                        hasOtherYield = true;
+                        return;
+                    }
+                    ts.forEachChild(node, checkYield);
+                };
+                ts.forEachChild(stmt, checkYield);
+                return !hasOtherYield;
             }
-            return false;
+            return !this.nodeContainsYield(stmt);
         }
-        return true;
+
+        return false;
     }
 
     private isSimpleLazyYieldStarSource(expr: ts.Expression): boolean {
@@ -22579,6 +22549,166 @@ class Emitter {
         return found;
     }
 
+    private countSimpleLazyYieldStars(node: ts.Node): number {
+        let count = 0;
+        const visit = (cur: ts.Node) => {
+            if (ts.isExpressionStatement(cur) || ts.isVariableStatement(cur) || ts.isReturnStatement(cur)) {
+                const yieldExpr = this.simpleLazyYieldExpression(cur);
+                if (yieldExpr?.asteriskToken) {
+                    count++;
+                    return;
+                }
+            }
+            if (cur !== node && (ts.isFunctionLike(cur) || ts.isClassLike(cur))) return;
+            ts.forEachChild(cur, visit);
+        };
+        ts.forEachChild(node, visit);
+        return count;
+    }
+
+    private emitLazyGeneratorYieldStar(
+        buf: CBuf,
+        yieldExpr: ts.YieldExpression,
+        elemType: CType,
+        envLocalName: string,
+        slot: number,
+        nextState: number,
+    ): void {
+        if (!yieldExpr.expression) unsupported(yieldExpr, "yield* without a value");
+        buf.open(`if (${envLocalName}->yield_star_arr_${slot} == NULL)`);
+        const source = this.emitExpr(yieldExpr.expression);
+        let arrayExpr: string;
+        let sourceElemType: CType;
+        if (source.ty.kind === "array" && source.ty.elem) {
+            arrayExpr = source.c;
+            sourceElemType = source.ty.elem;
+        } else if (source.ty.kind === "set" && source.ty.elem) {
+            arrayExpr = `tsc_set_values(${source.c})`;
+            sourceElemType = source.ty.elem;
+        } else if (source.ty.kind === "string") {
+            arrayExpr = `tsc_str_chars(${source.c})`;
+            sourceElemType = T_STRING;
+        } else if (source.ty.kind === "class") {
+            const custom = this.emitCustomIterableArray(yieldExpr.expression, source) ??
+                this.emitCustomIteratorArray(yieldExpr.expression, source);
+            if (!custom) {
+                unsupported(
+                    yieldExpr.expression,
+                    "yield* over a class currently needs [Symbol.iterator]() returning a typed array-backed IterableIterator<T> or class iterator object",
+                );
+            }
+            arrayExpr = custom.c;
+            sourceElemType = custom.ty.elem!;
+        } else {
+            unsupported(yieldExpr.expression, "yield* currently supports arrays, strings, sets, and custom iterables");
+        }
+        buf.line(`${envLocalName}->yield_star_arr_${slot} = ${arrayExpr};`);
+        buf.line(`${envLocalName}->yield_star_idx_${slot} = 0;`);
+        buf.close();
+
+        buf.open(`if (${envLocalName}->yield_star_idx_${slot} < ${envLocalName}->yield_star_arr_${slot}->len)`);
+        const current = {
+            c: `TSC_ARR(${sourceElemType.c}, ${envLocalName}->yield_star_arr_${slot}, ${envLocalName}->yield_star_idx_${slot})`,
+            ty: sourceElemType,
+        };
+        const tmp = this.freshTemp("_yield");
+        buf.line(`${elemType.c} ${tmp} = ${this.coerce(current, elemType, yieldExpr.expression)};`);
+        buf.line(`tsc_array_push_raw(a, &${tmp});`);
+        buf.line(`${envLocalName}->yield_star_idx_${slot}++;`);
+        buf.line("*done = false;");
+        buf.line("return;");
+        buf.close();
+        buf.open("else");
+        buf.line(`${envLocalName}->yield_star_arr_${slot} = NULL;`);
+        buf.line(`*state = ${nextState};`);
+        buf.line("continue;");
+        buf.close();
+    }
+
+    private emitLazyGeneratorStmt(
+        buf: CBuf,
+        stmt: ts.Statement,
+        nextStateId: () => number,
+        nextYieldStarSlot: () => number,
+        elemType: CType,
+        envLocalName: string,
+    ): void {
+        if (ts.isEmptyStatement(stmt)) return;
+
+        if (ts.isBlock(stmt)) {
+            buf.open("");
+            for (const child of stmt.statements) {
+                this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            }
+            buf.close();
+            return;
+        }
+
+        if (ts.isIfStatement(stmt)) {
+            const cond = this.emitExpr(stmt.expression);
+            const condC = this.truthyExprFromEmitResult(cond, stmt.expression);
+            buf.open(`if (${condC})`);
+            this.emitLazyGeneratorStmt(buf, stmt.thenStatement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            if (stmt.elseStatement) {
+                buf.close();
+                buf.open("else");
+                this.emitLazyGeneratorStmt(buf, stmt.elseStatement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            }
+            buf.close();
+            return;
+        }
+
+        const yieldExpr = this.simpleLazyYieldExpression(stmt);
+        if (yieldExpr) {
+            if (yieldExpr.asteriskToken) {
+                const yieldState = nextStateId();
+                const nextState = nextStateId();
+                const slot = nextYieldStarSlot();
+                buf.line(`*state = ${yieldState};`);
+                buf.line(`case ${yieldState}:;`);
+                this.emitLazyGeneratorYieldStar(buf, yieldExpr, elemType, envLocalName, slot, nextState);
+                buf.line(`case ${nextState}:;`);
+            } else {
+                const nextState = nextStateId();
+                const value = yieldExpr.expression
+                    ? this.emitExpr(yieldExpr.expression)
+                    : { c: "NULL", ty: T_VOID };
+                const valueNode = yieldExpr.expression ?? yieldExpr;
+                const tmp = this.freshTemp("_yield");
+                buf.line(`${elemType.c} ${tmp} = ${this.coerce(value, elemType, valueNode)};`);
+                buf.line(`tsc_array_push_raw(a, &${tmp});`);
+                buf.line(`*state = ${nextState};`);
+                buf.line("*done = false;");
+                buf.line("return;");
+                buf.line(`case ${nextState}:;`);
+            }
+            if (this.simpleLazyYieldNeedsResume(stmt)) {
+                this.emitSimpleLazyYieldResume(buf, stmt, "next_arg");
+            }
+            if (ts.isReturnStatement(stmt)) {
+                buf.line("*state = -1;");
+                buf.line("*done = true;");
+                buf.line("return;");
+            }
+            return;
+        }
+
+        if (ts.isReturnStatement(stmt)) {
+            if (stmt.expression) {
+                const expr = this.emitExpr(stmt.expression);
+                buf.line(`a->iter_return = ${this.coerce(expr, T_VALUE, stmt.expression)};`);
+                buf.line("a->iter_has_return = true;");
+                buf.line("a->iter_return_consumed = false;");
+            }
+            buf.line("*state = -1;");
+            buf.line("*done = true;");
+            buf.line("return;");
+            return;
+        }
+
+        this.emitStmt(buf, stmt);
+    }
+
     private emitSimpleLazyGeneratorLike(
         buf: CBuf,
         fn: ts.FunctionLikeDeclaration,
@@ -22616,56 +22746,33 @@ class Emitter {
             type: CType;
         }> = [];
         if (fn.body && ts.isBlock(fn.body)) {
-            for (const stmt of fn.body.statements) {
-                if (!ts.isVariableStatement(stmt)) continue;
-                for (const decl of stmt.declarationList.declarations) {
-                    if (!ts.isIdentifier(decl.name)) unsupported(decl, "lazy generator locals must be identifiers");
-                    const symbol = this.symbolForIdentifier(decl.name);
-                    if (!symbol) unsupported(decl.name, "could not resolve lazy generator local symbol");
-                    let type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
+            const collectVars = (node: ts.Node) => {
+                if (ts.isVariableDeclaration(node)) {
+                    if (!ts.isIdentifier(node.name)) unsupported(node, "lazy generator locals must be identifiers");
+                    const symbol = this.symbolForIdentifier(node.name);
+                    if (!symbol) unsupported(node.name, "could not resolve lazy generator local symbol");
+                    let type = this.variableStorageType(this.prepareType(mapType(node, this.checker)));
                     if (type.c === "double" && this.intSymbols.has(symbol)) {
                         type = T_NUMBER_INT;
                     }
                     const index = localVarInfos.length;
                     localVarInfos.push({
-                        declaration: decl,
+                        declaration: node,
                         symbol,
-                        name: mangleIdent(decl.name.text),
-                        field: `local_${index}_${mangleIdent(decl.name.text)}`,
+                        name: mangleIdent(node.name.text),
+                        field: `local_${index}_${mangleIdent(node.name.text)}`,
                         type,
                     });
                 }
-            }
-        }
-        const states: ts.Statement[][] = [];
-        let currentStatements: ts.Statement[] = [];
-        if (fn.body && ts.isBlock(fn.body)) {
-            for (const stmt of fn.body.statements) {
-                if (ts.isEmptyStatement(stmt)) continue;
-                if (this.simpleLazyYieldExpression(stmt)) {
-                    currentStatements.push(stmt);
-                    states.push(currentStatements);
-                    currentStatements = [];
-                } else {
-                    currentStatements.push(stmt);
-                }
-            }
-        }
-        if (currentStatements.length > 0) {
-            states.push(currentStatements);
-        } else if (states.length > 0) {
-            const lastState = states[states.length - 1]!;
-            const lastStmt = lastState[lastState.length - 1];
-            if (lastStmt && this.simpleLazyYieldNeedsResume(lastStmt)) {
-                states.push([]);
-            }
+                if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+                ts.forEachChild(node, collectVars);
+            };
+            ts.forEachChild(fn.body, collectVars);
         }
 
-        const hasYieldStar = states.some((state) => {
-            const last = state[state.length - 1];
-            const yieldExpr = last ? this.simpleLazyYieldExpression(last) : null;
-            return yieldExpr !== null && !!yieldExpr.asteriskToken;
-        });
+        if (!fn.body || !ts.isBlock(fn.body)) unsupported(fn, "lazy generator function requires a block body");
+        const yieldStarCount = this.countSimpleLazyYieldStars(fn.body);
+        const hasYieldStar = yieldStarCount > 0;
         const needsEnv = runtimeParamInfos.length > 0 ||
             localVarInfos.length > 0 ||
             !!implicitThisParam ||
@@ -22684,14 +22791,9 @@ class Emitter {
                 this.structDecls.line(`${info.type.c} ${info.field};`);
             }
             if (hasYieldStar) {
-                for (let i = 0; i < states.length; i++) {
-                    const state = states[i]!;
-                    const last = state[state.length - 1];
-                    const yieldExpr = last ? this.simpleLazyYieldExpression(last) : null;
-                    if (yieldExpr && yieldExpr.asteriskToken) {
-                        this.structDecls.line(`tsc_array_t* yield_star_arr_${i};`);
-                        this.structDecls.line(`size_t yield_star_idx_${i};`);
-                    }
+                for (let i = 0; i < yieldStarCount; i++) {
+                    this.structDecls.line(`tsc_array_t* yield_star_arr_${i};`);
+                    this.structDecls.line(`size_t yield_star_idx_${i};`);
                 }
             }
             this.structDecls.close(`${envType};`);
@@ -22735,110 +22837,26 @@ class Emitter {
         try {
             nextBuf.open("while (true)");
             nextBuf.open("switch (*state)");
-            for (let i = 0; i < states.length; i++) {
-                const state = states[i]!;
-                nextBuf.open(`case ${i}:`);
-                if (i > 0) {
-                    const previousState = states[i - 1]!;
-                    const previousLast = previousState[previousState.length - 1];
-                    if (previousLast) {
-                        this.emitSimpleLazyYieldResume(nextBuf, previousLast, "next_arg");
-                    }
+            nextBuf.line("case 0:;");
+            let stateId = 0;
+            let yieldStarSlot = 0;
+            const nextStateId = () => {
+                stateId++;
+                return stateId;
+            };
+            const nextYieldStarSlot = () => {
+                const slot = yieldStarSlot;
+                yieldStarSlot++;
+                return slot;
+            };
+            if (fn.body && ts.isBlock(fn.body)) {
+                for (const stmt of fn.body.statements) {
+                    this.emitLazyGeneratorStmt(nextBuf, stmt, nextStateId, nextYieldStarSlot, elemType, envLocalName);
                 }
-
-                const lastStmt = state[state.length - 1];
-                const yieldExpr = lastStmt ? this.simpleLazyYieldExpression(lastStmt) : null;
-                if (yieldExpr) {
-                    if (yieldExpr.asteriskToken) {
-                        nextBuf.open(`if (${envLocalName}->yield_star_arr_${i} == NULL)`);
-                        const otherStmts = state.slice(0, -1);
-                        for (const s of otherStmts) {
-                            this.emitStmt(nextBuf, s);
-                        }
-                        if (!yieldExpr.expression) unsupported(yieldExpr, "yield* without a value");
-                        const source = this.emitExpr(yieldExpr.expression);
-                        let arrayExpr: string;
-                        let sourceElemType: CType;
-                        if (source.ty.kind === "array" && source.ty.elem) {
-                            arrayExpr = source.c;
-                            sourceElemType = source.ty.elem;
-                        } else if (source.ty.kind === "set" && source.ty.elem) {
-                            arrayExpr = `tsc_set_values(${source.c})`;
-                            sourceElemType = source.ty.elem;
-                        } else if (source.ty.kind === "string") {
-                            arrayExpr = `tsc_str_chars(${source.c})`;
-                            sourceElemType = T_STRING;
-                        } else if (source.ty.kind === "class") {
-                            const custom = this.emitCustomIterableArray(yieldExpr.expression, source) ??
-                                this.emitCustomIteratorArray(yieldExpr.expression, source);
-                            if (!custom) {
-                                unsupported(
-                                    yieldExpr.expression,
-                                    "yield* over a class currently needs [Symbol.iterator]() returning a typed array-backed IterableIterator<T> or class iterator object",
-                                );
-                            }
-                            arrayExpr = custom.c;
-                            sourceElemType = custom.ty.elem!;
-                        } else {
-                            unsupported(yieldExpr.expression, "yield* currently supports arrays, strings, sets, and custom iterables");
-                        }
-                        nextBuf.line(`${envLocalName}->yield_star_arr_${i} = ${arrayExpr};`);
-                        nextBuf.line(`${envLocalName}->yield_star_idx_${i} = 0;`);
-                        nextBuf.close();
-
-                        nextBuf.open(`if (${envLocalName}->yield_star_idx_${i} < ${envLocalName}->yield_star_arr_${i}->len)`);
-                        const current = {
-                            c: `TSC_ARR(${sourceElemType.c}, ${envLocalName}->yield_star_arr_${i}, ${envLocalName}->yield_star_idx_${i})`,
-                            ty: sourceElemType,
-                        };
-                        const tmp = this.freshTemp("_yield");
-                        nextBuf.line(`${elemType.c} ${tmp} = ${this.coerce(current, elemType, yieldExpr.expression)};`);
-                        nextBuf.line(`tsc_array_push_raw(a, &${tmp});`);
-                        nextBuf.line(`${envLocalName}->yield_star_idx_${i}++;`);
-                        nextBuf.line("*done = false;");
-                        nextBuf.line("return;");
-                        nextBuf.close();
-                        nextBuf.open("else");
-                        nextBuf.line(`*state = ${i + 1};`);
-                        nextBuf.line("continue;");
-                        nextBuf.close();
-                    } else {
-                        const otherStmts = state.slice(0, -1);
-                        for (const s of otherStmts) {
-                            this.emitStmt(nextBuf, s);
-                        }
-
-                        const value = yieldExpr.expression
-                            ? this.emitExpr(yieldExpr.expression)
-                            : { c: "NULL", ty: T_VOID };
-                        const valueNode = yieldExpr.expression ?? yieldExpr;
-                        const tmp = this.freshTemp("_yield");
-                        nextBuf.line(`${elemType.c} ${tmp} = ${this.coerce(value, elemType, valueNode)};`);
-                        nextBuf.line(`tsc_array_push_raw(a, &${tmp});`);
-
-                        nextBuf.line(`*state = ${i + 1};`);
-                        nextBuf.line("*done = false;");
-                        nextBuf.line("return;");
-                    }
-                } else {
-                    for (const s of state) {
-                        if (ts.isReturnStatement(s)) {
-                            if (s.expression) {
-                                const expr = this.emitExpr(s.expression);
-                                nextBuf.line(`a->iter_return = ${this.coerce(expr, T_VALUE, s.expression)};`);
-                                nextBuf.line(`a->iter_has_return = true;`);
-                                nextBuf.line(`a->iter_return_consumed = false;`);
-                            }
-                            continue;
-                        }
-                        this.emitStmt(nextBuf, s);
-                    }
-                    nextBuf.line(`*state = -1;`);
-                    nextBuf.line(`*done = true;`);
-                    nextBuf.line("return;");
-                }
-                nextBuf.close();
             }
+            nextBuf.line("*state = -1;");
+            nextBuf.line("*done = true;");
+            nextBuf.line("return;");
             nextBuf.open("default:");
             nextBuf.line("*done = true;");
             nextBuf.line("return;");
@@ -22872,14 +22890,9 @@ class Emitter {
                 buf.line(`${envVar}->${info.field} = ${this.zeroValue(info.type)};`);
             }
             if (hasYieldStar) {
-                for (let i = 0; i < states.length; i++) {
-                    const state = states[i]!;
-                    const last = state[state.length - 1];
-                    const yieldExpr = last ? this.simpleLazyYieldExpression(last) : null;
-                    if (yieldExpr && yieldExpr.asteriskToken) {
-                        buf.line(`${envVar}->yield_star_arr_${i} = NULL;`);
-                        buf.line(`${envVar}->yield_star_idx_${i} = 0;`);
-                    }
+                for (let i = 0; i < yieldStarCount; i++) {
+                    buf.line(`${envVar}->yield_star_arr_${i} = NULL;`);
+                    buf.line(`${envVar}->yield_star_idx_${i} = 0;`);
                 }
             }
             buf.line(`${arrayVar}->env = ${envVar};`);
