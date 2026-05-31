@@ -1246,6 +1246,39 @@ bool tsc_buffer_is_encoding(const tsc_str_t* encoding) {
     return buffer_encoding_is_utf8(encoding) || str_lit_eq(encoding, "hex") || buffer_encoding_is_base64(encoding);
 }
 
+tsc_buffer_t* tsc_buffer_transcode(const tsc_buffer_t* source, const tsc_str_t* from_enc, const tsc_str_t* to_enc) {
+    if (!source) {
+        tsc_throw_str(tsc_str_from_cstr("buffer.transcode: source must not be null"));
+    }
+
+    tsc_buffer_t* raw_buf = NULL;
+    if (buffer_encoding_is_utf8(from_enc)) {
+        raw_buf = tsc_buffer_from_buffer(source);
+    } else if (str_lit_eq(from_enc, "hex")) {
+        tsc_str_t* str = tsc_buffer_to_string(source, tsc_str_from_lit("utf8", 4));
+        raw_buf = tsc_buffer_from_str(str, tsc_str_from_lit("hex", 3));
+    } else if (buffer_encoding_is_base64(from_enc)) {
+        tsc_str_t* str = tsc_buffer_to_string(source, tsc_str_from_lit("utf8", 4));
+        raw_buf = tsc_buffer_from_str(str, tsc_str_from_lit("base64", 6));
+    } else {
+        tsc_throw_str(tsc_str_from_cstr("buffer.transcode: unsupported fromEnc"));
+    }
+
+    tsc_buffer_t* result = NULL;
+    if (buffer_encoding_is_utf8(to_enc)) {
+        result = raw_buf;
+    } else if (str_lit_eq(to_enc, "hex")) {
+        tsc_str_t* str = tsc_buffer_to_string(raw_buf, tsc_str_from_lit("hex", 3));
+        result = tsc_buffer_from_str(str, tsc_str_from_lit("utf8", 4));
+    } else if (buffer_encoding_is_base64(to_enc)) {
+        tsc_str_t* str = tsc_buffer_to_string(raw_buf, tsc_str_from_lit("base64", 6));
+        result = tsc_buffer_from_str(str, tsc_str_from_lit("utf8", 4));
+    } else {
+        tsc_throw_str(tsc_str_from_cstr("buffer.transcode: unsupported toEnc"));
+    }
+
+    return result;
+}
 double tsc_buffer_length(const tsc_buffer_t* b) { return (double)b->len; }
 
 double tsc_buffer_get(const tsc_buffer_t* b, double idx) {

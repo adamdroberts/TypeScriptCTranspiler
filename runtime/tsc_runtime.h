@@ -376,6 +376,7 @@ typedef struct tsc_buffer {
     uint8_t* data;
 } tsc_buffer_t;
 tsc_buffer_t* tsc_buffer_from_str(const tsc_str_t* input, const tsc_str_t* encoding);
+tsc_buffer_t* tsc_buffer_transcode(const tsc_buffer_t* source, const tsc_str_t* from_enc, const tsc_str_t* to_enc);
 tsc_buffer_t* tsc_buffer_from_array(const struct tsc_array* input);
 tsc_buffer_t* tsc_buffer_from_buffer(const tsc_buffer_t* input);
 tsc_buffer_t* tsc_buffer_alloc(double size, double fill);

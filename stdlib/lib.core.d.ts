@@ -1737,11 +1737,13 @@ interface BufferModule {
     Buffer: BufferConstructor;
     atob(value: string, ...ignored: any[]): string;
     btoa(value: string, ...ignored: any[]): string;
+    transcode(source: Buffer, fromEnc: string, toEnc: string, ...ignored: any[]): Buffer;
 }
 declare module "buffer" {
     export const Buffer: BufferConstructor;
     export function atob(value: string, ...ignored: any[]): string;
     export function btoa(value: string, ...ignored: any[]): string;
+    export function transcode(source: Buffer, fromEnc: string, toEnc: string, ...ignored: any[]): Buffer;
     const defaultBuffer: BufferModule;
     export default defaultBuffer;
 }
@@ -1749,6 +1751,7 @@ declare module "node:buffer" {
     export const Buffer: BufferConstructor;
     export function atob(value: string, ...ignored: any[]): string;
     export function btoa(value: string, ...ignored: any[]): string;
+    export function transcode(source: Buffer, fromEnc: string, toEnc: string, ...ignored: any[]): Buffer;
     const defaultBuffer: BufferModule;
     export default defaultBuffer;
 }
