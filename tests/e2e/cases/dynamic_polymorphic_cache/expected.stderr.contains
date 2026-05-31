@@ -1,4 +1,4 @@
 tsc dynamic stats: get_prop=10
 object_shape_updates=2
-prop_cache_hits=8
-prop_cache_misses=2
+prop_cache_hits=9
+prop_cache_misses=1

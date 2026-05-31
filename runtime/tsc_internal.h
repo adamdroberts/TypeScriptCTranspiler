@@ -109,6 +109,15 @@ typedef struct tsc_function_identity {
 
 
 
+struct tsc_shape {
+    uint64_t shape_id;
+    tsc_shape_t* parent;
+    const tsc_str_t* transition_key;
+    tsc_shape_t** transitions;
+    size_t transitions_len;
+    size_t transitions_cap;
+};
+
 struct tsc_object {
     size_t len;
     size_t cap;
@@ -124,12 +133,18 @@ struct tsc_object {
     bool is_error;
     bool is_typed_array;
     uint64_t shape_version;
+    tsc_shape_t* shape;
     uint64_t object_id;
     tsc_value_t proxy_target;
     tsc_value_t proxy_handler;
     tsc_value_t prototype;
     tsc_object_prop_t* props;
 };
+
+tsc_shape_t* tsc_shape_new_unique(void);
+tsc_shape_t* tsc_shape_new(tsc_shape_t* parent, const tsc_str_t* key);
+void tsc_shape_add_transition(tsc_shape_t* parent, tsc_shape_t* child);
+tsc_shape_t* tsc_shape_get_root(void);
 
 typedef enum {
     TSC_PROMISE_PENDING,

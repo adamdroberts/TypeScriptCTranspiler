@@ -382,8 +382,8 @@ static tsc_object_prop_t* prop_cache_lookup(tsc_prop_cache_t* cache, tsc_object_
     for (size_t i = 0; i < TSC_POLYMORPHIC_CACHE_SIZE; i++) {
         tsc_cache_entry_t* entry = &cache->entries[i];
         if (
-            entry->object == object &&
-            entry->shape_version == object->shape_version &&
+            entry->shape &&
+            entry->shape == object->shape &&
             entry->index < object->len &&
             tsc_str_eq(object->props[entry->index].key, key)
         ) {
@@ -401,12 +401,11 @@ static tsc_object_prop_t* prop_cache_lookup(tsc_prop_cache_t* cache, tsc_object_
 }
 
 static void prop_cache_store(tsc_prop_cache_t* cache, const tsc_object_t* object, size_t index) {
-    if (!cache) return;
+    if (!cache || !object->shape) return;
     for (size_t j = TSC_POLYMORPHIC_CACHE_SIZE - 1; j > 0; j--) {
         cache->entries[j] = cache->entries[j - 1];
     }
-    cache->entries[0].object = object;
-    cache->entries[0].shape_version = object->shape_version;
+    cache->entries[0].shape = object->shape;
     cache->entries[0].index = index;
 }
 

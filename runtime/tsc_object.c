@@ -1,5 +1,51 @@
 #include "tsc_internal.h"
 
+static tsc_shape_t* g_root_shape = NULL;
+static uint64_t g_shape_id_counter = 0;
+
+tsc_shape_t* tsc_shape_new_unique(void) {
+    tsc_shape_t* s = (tsc_shape_t*)TSC_GC_MALLOC(sizeof(tsc_shape_t));
+    s->shape_id = ++g_shape_id_counter;
+    s->parent = NULL;
+    s->transition_key = NULL;
+    s->transitions = NULL;
+    s->transitions_len = 0;
+    s->transitions_cap = 0;
+    return s;
+}
+
+tsc_shape_t* tsc_shape_new(tsc_shape_t* parent, const tsc_str_t* key) {
+    tsc_shape_t* s = (tsc_shape_t*)TSC_GC_MALLOC(sizeof(tsc_shape_t));
+    s->shape_id = ++g_shape_id_counter;
+    s->parent = parent;
+    s->transition_key = key;
+    s->transitions = NULL;
+    s->transitions_len = 0;
+    s->transitions_cap = 0;
+    return s;
+}
+
+void tsc_shape_add_transition(tsc_shape_t* parent, tsc_shape_t* child) {
+    if (!parent) return;
+    if (parent->transitions_len >= parent->transitions_cap) {
+        size_t next_cap = parent->transitions_cap ? parent->transitions_cap * 2 : 4;
+        tsc_shape_t** next_trans = (tsc_shape_t**)TSC_GC_MALLOC(sizeof(tsc_shape_t*) * next_cap);
+        if (parent->transitions && parent->transitions_len > 0) {
+            memcpy(next_trans, parent->transitions, sizeof(tsc_shape_t*) * parent->transitions_len);
+        }
+        parent->transitions = next_trans;
+        parent->transitions_cap = next_cap;
+    }
+    parent->transitions[parent->transitions_len++] = child;
+}
+
+tsc_shape_t* tsc_shape_get_root(void) {
+    if (!g_root_shape) {
+        g_root_shape = tsc_shape_new_unique();
+    }
+    return g_root_shape;
+}
+
 static uint64_t g_object_id_counter = 0;
 
 static void print_shape_keys(const tsc_object_t* o, const tsc_str_t* skip_key, const tsc_str_t* add_key) {
@@ -42,6 +88,7 @@ tsc_object_t* tsc_object_new(void) {
     o->is_error = false;
     o->is_typed_array = false;
     o->shape_version = 1;
+    o->shape = tsc_shape_get_root();
     o->object_id = ++g_object_id_counter;
     o->proxy_target = tsc_value_undefined();
     o->proxy_handler = tsc_value_undefined();
@@ -87,6 +134,26 @@ static void object_shape_changed(tsc_object_t* o, const char* action, const tsc_
     }
     o->shape_version++;
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_OBJECT_SHAPE_UPDATE);
+
+    if (strcmp(action, "add") == 0) {
+        if (!o->shape) {
+            o->shape = tsc_shape_get_root();
+        }
+        tsc_shape_t* next_shape = NULL;
+        for (size_t i = 0; i < o->shape->transitions_len; i++) {
+            if (tsc_str_eq(o->shape->transitions[i]->transition_key, key)) {
+                next_shape = o->shape->transitions[i];
+                break;
+            }
+        }
+        if (!next_shape) {
+            next_shape = tsc_shape_new(o->shape, key);
+            tsc_shape_add_transition(o->shape, next_shape);
+        }
+        o->shape = next_shape;
+    } else {
+        o->shape = tsc_shape_new_unique();
+    }
 }
 
 void object_reserve(tsc_object_t* o, size_t cap) {

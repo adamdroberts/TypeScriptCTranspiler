@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Implemented global hidden classes / shape trees to share property cache validation across dynamic objects of the same shape, improving inline cache hits at property get and set sites. Tests: `dynamic_polymorphic_cache`.
 - Dynamic property cache sites now keep a four-entry MRU cache of shape-validated receiver/index entries, avoiding avoidable misses when one property access alternates across a small set of hot objects. Test: `dynamic_polymorphic_cache`.
 - Added a bounded `process.nextTick` recursion starvation guard that throws a catchable runtime error after 1000 nested nextTick schedules. Test: `process_next_tick_starvation`.
 - Extended `Object.prototype.isPrototypeOf.call(...)` across array and function prototype chains, and made `Object.getOwnPropertyDescriptors(...)` return empty descriptor objects for primitive non-nullish targets while preserving nullish rejection. Test: `object_prototype_is_prototype_of_arrays_functions`.
