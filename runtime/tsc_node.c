@@ -1271,6 +1271,35 @@ tsc_str_t* tsc_url_search_params_to_string(const tsc_url_search_params_t* params
     return out;
 }
 
+tsc_array_t* tsc_url_search_params_keys(const tsc_url_search_params_t* params) {
+    tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), params->len ? params->len : 1);
+    for (size_t i = 0; i < params->len; i++) {
+        ((tsc_str_t**)a->data)[i] = params->items[i].name;
+    }
+    a->len = params->len;
+    return a;
+}
+
+tsc_array_t* tsc_url_search_params_values(const tsc_url_search_params_t* params) {
+    tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), params->len ? params->len : 1);
+    for (size_t i = 0; i < params->len; i++) {
+        ((tsc_str_t**)a->data)[i] = params->items[i].value;
+    }
+    a->len = params->len;
+    return a;
+}
+
+tsc_array_t* tsc_url_search_params_entries(const tsc_url_search_params_t* params) {
+    tsc_array_t* a = tsc_array_new(sizeof(tsc_object_entry_t), params->len ? params->len : 1);
+    tsc_object_entry_t* entries = (tsc_object_entry_t*)a->data;
+    for (size_t i = 0; i < params->len; i++) {
+        entries[i].key = params->items[i].name;
+        entries[i].ptr = (void*)params->items[i].value;
+    }
+    a->len = params->len;
+    return a;
+}
+
 int tsc_dns_lookup_ai_flags(double hints) {
     if (isnan(hints) || isinf(hints)) return 0;
     int flags = (int)hints;

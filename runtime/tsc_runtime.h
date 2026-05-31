@@ -336,6 +336,9 @@ tsc_str_t* tsc_url_search_params_get(const tsc_url_search_params_t* params, cons
 bool tsc_url_search_params_has(const tsc_url_search_params_t* params, const tsc_str_t* name);
 void tsc_url_search_params_set(tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value);
 tsc_str_t* tsc_url_search_params_to_string(const tsc_url_search_params_t* params);
+struct tsc_array* tsc_url_search_params_keys(const tsc_url_search_params_t* params);
+struct tsc_array* tsc_url_search_params_values(const tsc_url_search_params_t* params);
+struct tsc_array* tsc_url_search_params_entries(const tsc_url_search_params_t* params);
 
 /* ------------- Date ------------- */
 typedef struct tsc_date {

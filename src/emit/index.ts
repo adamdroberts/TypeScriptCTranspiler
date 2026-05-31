@@ -23567,6 +23567,10 @@ class Emitter {
             this.emitMapForOf(buf, fos, iter);
             return;
         }
+        if (iter.ty.kind === "urlsearchparams") {
+            this.emitUrlSearchParamsForOf(buf, fos, iter);
+            return;
+        }
 
         let arrayExpr = iter.c;
         let elemType = iter.ty.elem;
@@ -24072,6 +24076,64 @@ class Emitter {
         buf.line(
             `${valueType.c}${qual} ${valueName} = ${this.objectEntryValue(entryVar, valueType)};`,
         );
+        this.emitStmtInBlock(buf, fos.statement);
+        buf.close();
+        buf.close();
+    }
+
+    private emitUrlSearchParamsForOf(
+        buf: CBuf,
+        fos: ts.ForOfStatement,
+        iter: EmitResult,
+    ): void {
+        const paramsVar = this.freshTemp("_u");
+        const idxVar = this.freshTemp("_i");
+
+        let keyName: string | undefined;
+        let valueName: string | undefined;
+        let bindingIsConst = false;
+        if (ts.isVariableDeclarationList(fos.initializer)) {
+            bindingIsConst =
+                (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
+            const d = fos.initializer.declarations[0];
+            if (!d || !ts.isArrayBindingPattern(d.name)) {
+                unsupported(
+                    fos.initializer,
+                    "URLSearchParams for-of binding must destructure as [key, value]",
+                );
+            }
+            const [keyEl, valueEl] = d.name.elements;
+            if (
+                !keyEl ||
+                !valueEl ||
+                !ts.isBindingElement(keyEl) ||
+                !ts.isBindingElement(valueEl) ||
+                !ts.isIdentifier(keyEl.name) ||
+                !ts.isIdentifier(valueEl.name)
+            ) {
+                unsupported(
+                    d.name,
+                    "URLSearchParams for-of binding must be [keyIdentifier, valueIdentifier]",
+                );
+            }
+            keyName = mangleIdent(keyEl.name.text);
+            valueName = mangleIdent(valueEl.name.text);
+        } else {
+            unsupported(
+                fos.initializer,
+                "URLSearchParams for-of assignment must use a const/let [key, value] binding",
+            );
+        }
+
+        const qual = bindingIsConst ? " const" : "";
+
+        buf.open("");
+        buf.line(`tsc_url_search_params_t* const ${paramsVar} = ${iter.c};`);
+        buf.open(
+            `for (size_t ${idxVar} = 0; ${idxVar} < ${paramsVar}->len; ${idxVar}++)`,
+        );
+        buf.line(`tsc_str_t*${qual} ${keyName} = ${paramsVar}->items[${idxVar}].name;`);
+        buf.line(`tsc_str_t*${qual} ${valueName} = ${paramsVar}->items[${idxVar}].value;`);
         this.emitStmtInBlock(buf, fos.statement);
         buf.close();
         buf.close();
@@ -27595,6 +27657,12 @@ class Emitter {
                         arrayType(entryType(recv.ty.elem!, recv.ty.key!)),
                         [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
                         ([map]) => this.mapEntriesArrayExpr(call, map!, recv.ty, "[Symbol.iterator]").c,
+                    );
+                } else if (recv.ty.kind === "urlsearchparams") {
+                    return this.emitSequencedExpr(
+                        arrayType(entryType(T_STRING, T_STRING)),
+                        [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
+                        ([params]) => `tsc_url_search_params_entries(${params!})`,
                     );
                 } else if (recv.ty.kind === "class") {
                     const cd = this.classDeclForExpression(call.expression.expression);
@@ -35811,11 +35879,132 @@ class Emitter {
                     [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
                     ([params]) => params,
                 );
+            case "keys":
+                return this.emitSequencedExpr(
+                    arrayType(T_STRING),
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([params]) => `tsc_url_search_params_keys(${params!})`,
+                );
+            case "values":
+                return this.emitSequencedExpr(
+                    arrayType(T_STRING),
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([params]) => `tsc_url_search_params_values(${params!})`,
+                );
+            case "entries":
+                return this.emitSequencedExpr(
+                    arrayType(entryType(T_STRING, T_STRING)),
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([params]) => `tsc_url_search_params_entries(${params!})`,
+                );
+            case "forEach":
+                return this.emitUrlSearchParamsForEach(call, recv);
             case "hasOwnProperty":
             case "propertyIsEnumerable":
                 return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "URLSearchParams");
         }
         unsupported(call, `URLSearchParams method .${method}`);
+    }
+
+    private emitUrlSearchParamsForEach(call: ts.CallExpression, recv: EmitResult): EmitResult {
+        const args = call.arguments;
+        if (args.length < 1) unsupported(call, "URLSearchParams.forEach expects callback and optional thisArg");
+        const cb = args[0]!;
+        const specs: SequencedCallArg[] = [{ value: recv }];
+        if (args[1]) {
+            specs.push({ value: this.emitExpr(args[1]), target: T_VALUE, node: args[1] });
+        }
+        specs.push(...this.ignoredArgumentSpecs(args, 2));
+        return this.emitSequencedExpr(T_VOID, specs, ([params, thisArg]) => {
+            const callbackThisArg = thisArg ?? "tsc_value_undefined()";
+            const ut = this.freshTemp("_url_each");
+            const iv = this.freshTemp("_i");
+            const valueExpr = `${ut}->items[${iv}].value`;
+            const keyExpr = `${ut}->items[${iv}].name`;
+            const bindings: string[] = [];
+            let bodyC: string;
+            if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
+                const sig = this.checker.getSignatureFromDeclaration(cb);
+                if (!sig) unsupported(cb, "URLSearchParams.forEach callback must be callable");
+                const thisType = this.signatureThisType(sig, cb);
+                const bodyExpr = this.callbackReturnExpression(cb, "URLSearchParams.forEach");
+                const params = cb.parameters.filter((p) => !this.isThisParameter(p));
+                const valueParam = params[0];
+                const keyParam = params[1];
+                const parentParam = params[2];
+                if (valueParam && ts.isIdentifier(valueParam.name)) {
+                    bindings.push(`tsc_str_t* ${mangleIdent(valueParam.name.text)} = ${valueExpr};`);
+                }
+                if (keyParam && ts.isIdentifier(keyParam.name)) {
+                    bindings.push(`tsc_str_t* ${mangleIdent(keyParam.name.text)} = ${keyExpr};`);
+                }
+                if (parentParam && ts.isIdentifier(parentParam.name)) {
+                    bindings.push(`${recv.ty.c} ${mangleIdent(parentParam.name.text)} = ${ut};`);
+                }
+                if (thisType) {
+                    const coercedThisC = this.coerce({ c: callbackThisArg, ty: T_VALUE }, thisType, cb);
+                    this.functionThisStack.push({ c: coercedThisC, ty: thisType });
+                }
+                try {
+                    bodyC = this.emitExpr(bodyExpr).c;
+                } finally {
+                    if (thisType) this.functionThisStack.pop();
+                }
+            } else if (ts.isIdentifier(cb)) {
+                const cbType = this.checker.getTypeAtLocation(cb);
+                const sig = cbType.getCallSignatures()[0];
+                if (!sig) unsupported(cb, "URLSearchParams.forEach callback must be callable");
+                const sources: EmitResult[] = [
+                    { c: valueExpr, ty: T_STRING },
+                    { c: keyExpr, ty: T_STRING },
+                    { c: ut, ty: recv.ty },
+                ];
+                if (this.isDirectCallableIdentifier(cb)) {
+                    let fnName = this.identifierName(cb);
+                    const genericDecl = this.genericFunctionDeclaration(sig);
+                    const genericBindings = genericDecl
+                        ? this.genericBindingsForCallbackTypes(cb, genericDecl, [T_STRING, T_STRING, recv.ty], T_VOID)
+                        : null;
+                    if (genericDecl && genericBindings) {
+                        fnName = this.ensureGenericSpecialization(genericDecl, genericBindings);
+                    }
+                    const params = sig.getParameters();
+                    const callArgs = params.slice(0, 3).map((param, index) => {
+                        const decl = param.valueDeclaration ?? cb;
+                        const target = this.prepareType(genericBindings
+                            ? withTypeBindings(genericBindings, () =>
+                                mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
+                            )
+                            : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker));
+                        return this.coerce(sources[index]!, target, cb);
+                    });
+                    const thisType = this.directCallableThisType(cb);
+                    if (thisType) {
+                        callArgs.unshift(this.coerce({ c: callbackThisArg, ty: T_VALUE }, thisType, cb));
+                    }
+                    bodyC = `${fnName}(${callArgs.join(", ")})`;
+                } else {
+                    const fn = this.emitExpr(cb);
+                    if (fn.ty.kind !== "function" || !fn.ty.ret) {
+                        unsupported(cb, "URLSearchParams.forEach callback must be callable");
+                    }
+                    const fnv = this.freshTemp("_cb");
+                    bindings.push(`${fn.ty.c} ${fnv} = ${fn.c};`);
+                    const params = fn.ty.params ?? [];
+                    const callArgs = params.slice(0, 3).map((param, index) =>
+                        this.coerce(sources[index]!, param, cb),
+                    );
+                    bodyC = `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? [callbackThisArg] : []), ...callArgs].join(", ")})`;
+                }
+            } else {
+                unsupported(cb, "URLSearchParams.forEach callback must be an inline arrow/function expression or function reference");
+            }
+            return (
+                `({ tsc_url_search_params_t* const ${ut} = ${params}; ` +
+                `for (size_t ${iv} = 0; ${iv} < ${ut}->len; ${iv}++) ` +
+                `{ ${bindings.join(" ")} (void)(${bodyC}); } (void)0; })`
+            );
+        });
     }
 
     private urlPropertyFields(): string[] {

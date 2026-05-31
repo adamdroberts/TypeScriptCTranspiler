@@ -1,0 +1,19 @@
+keys: a,b,a
+values: 1,two,3
+entry: a -> 1
+entry: b -> two
+entry: a -> 3
+for-of: a = 1
+for-of: b = two
+for-of: a = 3
+forEach callback: a has value 1 parent length 13
+forEach callback: b has value two parent length 13
+forEach callback: a has value 3 parent length 13
+item: a = 1
+item: b = two
+item: a = 3
+manual iterator 1: a -> 1
+manual iterator 2: b -> two
+manual iterator 3: a -> 3
+manual iterator 4 done: true
+seen: keys,values,entries,forEach

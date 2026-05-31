@@ -2144,6 +2144,11 @@ interface URLSearchParams {
     toString(...ignored: any[]): string;
     toLocaleString(...ignored: any[]): string;
     valueOf(...ignored: any[]): URLSearchParams;
+    keys(...ignored: any[]): string[];
+    values(...ignored: any[]): string[];
+    entries(...ignored: any[]): ObjectEntry<string, string>[];
+    forEach(callback: (value: string, key: string, parent: URLSearchParams) => void, thisArg?: any, ...ignored: any[]): void;
+    [Symbol.iterator](): IterableIterator<[string, string]>;
 }
 interface URLSearchParamsConstructor {
     new (init?: string, ...ignored: any[]): URLSearchParams;
