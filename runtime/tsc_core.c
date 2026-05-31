@@ -132,6 +132,7 @@ typedef struct {
     void* env;
     double id;
     bool canceled;
+    bool is_interval;
 } tsc_timeout_entry_t;
 static tsc_timeout_entry_t* g_timeout_queue = NULL;
 static size_t g_timeout_len = 0;
@@ -741,7 +742,21 @@ double tsc_set_timeout(tsc_timeout_fn_t fn, void* env) {
         g_timeout_cap = next;
     }
     double id = g_next_timer_id++;
-    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false };
+    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, false };
+    return id;
+}
+
+double tsc_set_interval(tsc_timeout_fn_t fn, void* env) {
+    if (!fn) return 0.0;
+    if (g_timeout_len == g_timeout_cap) {
+        size_t next = g_timeout_cap ? g_timeout_cap * 2 : 8;
+        tsc_timeout_entry_t* entries = (tsc_timeout_entry_t*)TSC_GC_REALLOC(g_timeout_queue, next * sizeof(tsc_timeout_entry_t));
+        if (!entries) tsc_panic("setInterval: out of memory");
+        g_timeout_queue = entries;
+        g_timeout_cap = next;
+    }
+    double id = g_next_timer_id++;
+    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, true };
     return id;
 }
 
@@ -750,7 +765,6 @@ void tsc_clear_timeout(double id) {
     for (size_t i = 0; i < g_timeout_len; i++) {
         if (g_timeout_queue[i].id == id) {
             g_timeout_queue[i].canceled = true;
-            return;
         }
     }
 }
@@ -759,7 +773,19 @@ void tsc_drain_timeouts(void) {
     size_t idx = 0;
     while (idx < g_timeout_len) {
         tsc_timeout_entry_t entry = g_timeout_queue[idx++];
-        if (!entry.canceled && entry.fn) entry.fn(entry.env);
+        if (!entry.canceled && entry.fn) {
+            entry.fn(entry.env);
+            if (entry.is_interval && !g_timeout_queue[idx - 1].canceled) {
+                if (g_timeout_len == g_timeout_cap) {
+                    size_t next = g_timeout_cap ? g_timeout_cap * 2 : 8;
+                    tsc_timeout_entry_t* entries = (tsc_timeout_entry_t*)TSC_GC_REALLOC(g_timeout_queue, next * sizeof(tsc_timeout_entry_t));
+                    if (!entries) tsc_panic("setInterval reschedule: out of memory");
+                    g_timeout_queue = entries;
+                    g_timeout_cap = next;
+                }
+                g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ entry.fn, entry.env, entry.id, false, true };
+            }
+        }
         tsc_process_drain_next_ticks();
         tsc_drain_microtasks();
     }
