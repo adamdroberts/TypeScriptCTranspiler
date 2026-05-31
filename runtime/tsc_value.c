@@ -278,7 +278,8 @@ static tsc_value_t tsc_value_generator_next(void* env, tsc_value_t this_arg, tsc
     tsc_array_t* av = (tsc_array_t*)env;
     if (av->is_lazy_generator && av->iter_pos >= av->len && av->lazy_next) {
         bool done = false;
-        av->lazy_next(av, &av->state, av->env, &done);
+        tsc_value_t next_arg = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+        av->lazy_next(av, &av->state, av->env, next_arg, &done);
         if (done) {
             av->is_lazy_generator = false;
         }

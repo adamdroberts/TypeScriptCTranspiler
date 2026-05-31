@@ -279,7 +279,7 @@ void tsc_array_materialize_all(tsc_array_t* a) {
     if (a && a->is_lazy_generator && a->lazy_next) {
         while (true) {
             bool done = false;
-            a->lazy_next(a, &a->state, a->env, &done);
+            a->lazy_next(a, &a->state, a->env, tsc_value_undefined(), &done);
             if (done) break;
         }
         a->is_lazy_generator = false;
