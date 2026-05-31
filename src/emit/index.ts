@@ -43026,7 +43026,7 @@ class Emitter {
                 if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
                     optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
                 }
-                const fn = "tsc_fs_stat_sync";
+                const fn = options.throwIfNoEntry ? "tsc_fs_stat_sync" : "tsc_fs_stat_sync_no_throw";
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.stat path"),
                     ...optionSpecs,
@@ -43042,7 +43042,7 @@ class Emitter {
                 if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
                     optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
                 }
-                const fn = "tsc_fs_lstat_sync";
+                const fn = options.throwIfNoEntry ? "tsc_fs_lstat_sync" : "tsc_fs_lstat_sync_no_throw";
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.lstat path"),
                     ...optionSpecs,

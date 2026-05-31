@@ -2,5 +2,5 @@ sync: true true number 5
 missing sync: true true
 promise stat: true number 5
 promise lstat: true number 5
-promise missing stat rejected: true
-promise missing lstat rejected: true
+promise missing stat: true
+promise missing lstat: true
