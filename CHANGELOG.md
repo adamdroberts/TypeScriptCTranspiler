@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Extended the narrow lazy generator lowering to resume a single suspended `yield` inside prefix unary, typeof, and void expression trees for variable initializers, assignment RHS values, and return expressions. Test: `generator_lazy_yield_unary`.
 - Extended the narrow lazy generator lowering to resume a single suspended `yield` inside conditional expressions for variable initializers, assignment RHS values, and return expressions. Test: `generator_lazy_yield_conditional`.
 - Extended the narrow lazy generator lowering to resume a single suspended `yield` inside parenthesized and binary expression trees for variable initializers, assignment RHS values, and return expressions. Test: `generator_lazy_yield_expression`.
 - Extended the narrow lazy generator lowering so `return yield value` resumes with the value supplied by the following typed `.next(value)` call and exposes that value through the completed generator step. Test: `generator_lazy_return_yield`.

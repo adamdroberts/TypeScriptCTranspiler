@@ -1,0 +1,15 @@
+created
+start
+next1: {"done":false,"value":"first"}
+not: false
+next2: {"done":false,"value":"second"}
+pos: 42
+next3: {"done":false,"value":"third"}
+neg: -10
+next4: {"done":false,"value":"fourth"}
+tilde: -6
+next5: {"done":false,"value":"fifth"}
+typeof: string
+next6: {"done":false,"value":"sixth"}
+void: undefined
+next7: {"done":true,"value":"done"}
