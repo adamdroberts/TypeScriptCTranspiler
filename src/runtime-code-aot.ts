@@ -48,6 +48,7 @@ export function parseAotEvalConstant(source: string): AotRuntimeConstant | null 
 }
 
 export function parseAotFunctionBodyConstant(body: string): AotRuntimeConstant | null {
+    if (body.trim() === "") return { kind: "undefined" };
     const match = body.trim().match(/^return(?:\s+([\s\S]*?))?;?$/);
     if (!match) return null;
     const exprText = match[1]?.trim();

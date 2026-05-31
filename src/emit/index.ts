@@ -27981,7 +27981,9 @@ class Emitter {
     }
 
     private emitUnsafeEvalCall(call: ts.CallExpression): EmitResult {
-        if (call.arguments.length < 1) unsupported(call, "eval expects source text");
+        if (call.arguments.length < 1) {
+            return this.emitSequencedExpr(T_VALUE, [], () => "tsc_value_undefined()");
+        }
         const sourceNode = call.arguments[0]!;
         const staticSource = this.aotRuntimeCodeStaticString(sourceNode);
         if (staticSource !== null) {
@@ -28005,9 +28007,8 @@ class Emitter {
 
     private emitUnsafeFunctionConstructor(call: ts.CallExpression | ts.NewExpression): EmitResult {
         const args = call.arguments ?? [];
-        if (args.length < 1) unsupported(call, "Function constructor expects source text");
         const bodyNode = this.functionConstructorBodyArg(call);
-        const bodyText = bodyNode ? this.aotRuntimeCodeStaticString(bodyNode) : null;
+        const bodyText = bodyNode ? this.aotRuntimeCodeStaticString(bodyNode) : (args.length === 0 ? "" : null);
         if (bodyText !== null) {
             const constant = parseAotFunctionBodyConstant(bodyText);
             if (constant) return this.emitAotFunctionConstructor(call, constant);
@@ -28022,6 +28023,7 @@ class Emitter {
         if (args.length > 1) {
             unsupported(call, "unsafe Function bridge currently expects a single function body string");
         }
+        if (args.length < 1) unsupported(call, "Function constructor expects source text");
         if (!bodyNode) unsupported(call, "Function constructor expects source text");
         const body = this.emitExpr(bodyNode);
         const type = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Runtime code compilation now supports 0-argument `Function()`, `new Function()`, and `eval(undefined)` calls without enabling unsafe eval, allowing empty function bodies and default undefined eval values to be statically compiled AOT. Test: `runtime_function_zero_args`.
 - Implemented immediate-settled boxing/unboxing for Promises coerced to/from dynamic values (`any`), allowing dynamic thenables to recursively assimilate settled dynamic nested Promise instances at runtime. Test: `promise_thenable_any`.
 - CommonJS package source analysis now statically resolves computed named-export keys using numeric constants, boolean constants, negative numbers, and their binary/template string concatenations. Test: `node_modules_commonjs_computed_numeric_boolean_exports`.
 - Statically provable computed named-export keys for CommonJS modules now correctly canonicalize numeric and boolean static key expressions (e.g. `1.0` -> `"1"`, `1e2` -> `"100"`, `-0` -> `"0"`, and booleans -> `"true"`/`"false"`) under JavaScript property-key semantics. Test: `node_modules_commonjs_static_computed_numeric_boolean`.
