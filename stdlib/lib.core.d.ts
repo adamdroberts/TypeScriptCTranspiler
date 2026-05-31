@@ -1719,6 +1719,7 @@ interface Crypto {
     createHmac(algorithm: CryptoHashAlgorithm, key: string | Buffer, ...ignored: any[]): CryptoHmac;
     getHashes(...ignored: any[]): string[];
     randomBytes(size: number, ...ignored: any[]): Buffer;
+    randomFillSync(buffer: Buffer, offset?: number, size?: number, ...ignored: any[]): Buffer;
     randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
     timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
     pbkdf2Sync(password: string | Buffer, salt: string | Buffer, iterations: number, keylen: number, digest: CryptoHashAlgorithm, ...ignored: any[]): Buffer;
@@ -1729,6 +1730,7 @@ declare module "crypto" {
     export function createHmac(algorithm: CryptoHashAlgorithm, key: string | Buffer, ...ignored: any[]): CryptoHmac;
     export function getHashes(...ignored: any[]): string[];
     export function randomBytes(size: number, ...ignored: any[]): Buffer;
+    export function randomFillSync(buffer: Buffer, offset?: number, size?: number, ...ignored: any[]): Buffer;
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
     export function timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
     export function pbkdf2Sync(password: string | Buffer, salt: string | Buffer, iterations: number, keylen: number, digest: CryptoHashAlgorithm, ...ignored: any[]): Buffer;
@@ -1740,6 +1742,7 @@ declare module "node:crypto" {
     export function createHmac(algorithm: CryptoHashAlgorithm, key: string | Buffer, ...ignored: any[]): CryptoHmac;
     export function getHashes(...ignored: any[]): string[];
     export function randomBytes(size: number, ...ignored: any[]): Buffer;
+    export function randomFillSync(buffer: Buffer, offset?: number, size?: number, ...ignored: any[]): Buffer;
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
     export function timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
     export function pbkdf2Sync(password: string | Buffer, salt: string | Buffer, iterations: number, keylen: number, digest: CryptoHashAlgorithm, ...ignored: any[]): Buffer;

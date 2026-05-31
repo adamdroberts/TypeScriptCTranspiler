@@ -5,8 +5,10 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Supported `crypto.randomFillSync(buffer[, offset[, size]], ...ignored)` for filling a Buffer with random bytes using OpenSSL `RAND_bytes`, mutating and returning the same Buffer, with support for offset/size range boundary validations and ignored trailing arguments across global crypto and named, namespace, and default imports from `"crypto"` / `"node:crypto"`. Test: `crypto_random_fill_sync`.
 - `Buffer.from(...)`, `Buffer.toString(...)`, `Buffer.byteLength(...)`, `Buffer.isEncoding(...)`, and Buffer write paths now support bounded `"latin1"`, `"binary"`, and `"ascii"` encoding aliases alongside the existing UTF-8, hex, and base64 subset. Test: `buffer_latin1_ascii_encoding`.
 - Extended `Buffer.prototype.compare` to support optional target and source range bounds (`targetStart?`, `targetEnd?`, `sourceStart?`, `sourceEnd?`) with Node-like range validations and error messages. Test: `buffer_compare_ranges`.
+
 - Add compile-time `os.constants.signals` object subset supporting named, default, and namespace imports from `"os"` / `"node:os"`, mapping common POSIX signals SIGHUP, SIGINT, SIGQUIT, SIGILL, SIGTRAP, SIGABRT, SIGBUS, SIGFPE, SIGKILL, SIGUSR1, SIGSEGV, SIGUSR2, SIGPIPE, SIGALRM, SIGTERM to stable POSIX/Linux numeric constants. Test: `os_constants_signals`.
 - `dns.getDefaultResultOrder()` / `dns.setDefaultResultOrder(order)` and matching `dns.promises` / `"dns/promises"` helpers maintain a bounded process-local default result order across named, default, namespace, and subpath imports with validation and ignored-argument evaluation. Test: `dns_default_result_order`.
 - `path.matchesGlob(path, pattern, ...ignored)` and `path.posix.matchesGlob(...)` are supported for matching paths against a POSIX glob subset (with literal strings, `*`, and `?` supported within segments) across global, default, named, namespace, and posix/subpath imports. Test: `path_matches_glob`.

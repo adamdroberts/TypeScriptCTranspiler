@@ -27930,7 +27930,7 @@ class Emitter {
         if (streamNamed) {
             return this.emitStreamCall(call, streamNamed);
         }
-        const cryptoNamed = ["createHash", "createHmac", "randomBytes", "randomUUID", "timingSafeEqual", "pbkdf2Sync", "getHashes"]
+        const cryptoNamed = ["createHash", "createHmac", "randomBytes", "randomUUID", "timingSafeEqual", "pbkdf2Sync", "getHashes", "randomFillSync"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["crypto", "node:crypto"], exported));
         if (cryptoNamed) {
             return this.emitCryptoCall(call, cryptoNamed);
@@ -40967,6 +40967,37 @@ class Emitter {
                 ([p, s, i, k, d]) => `${cFn}(${p}, ${s}, ${i}, ${k}, ${d})`
             );
         }
+        if (name === "randomFillSync") {
+            if (call.arguments.length < 1)
+                unsupported(call, "crypto.randomFillSync expects at least 1 arg");
+            const buf = this.emitExpr(call.arguments[0]!);
+            if (buf.ty.kind !== "buffer") {
+                unsupported(call.arguments[0]!, "crypto.randomFillSync expects Buffer as first argument");
+            }
+            const specs: SequencedCallArg[] = [{ value: buf }];
+            const hasOffset = !!call.arguments[1] && !this.isUndefinedExpression(call.arguments[1]);
+            const hasSize = !!call.arguments[2] && !this.isUndefinedExpression(call.arguments[2]);
+            if (hasOffset) {
+                const offset = this.emitExpr(call.arguments[1]);
+                requireNumber(call.arguments[1], offset.ty);
+                specs.push({ value: offset, target: T_NUMBER, node: call.arguments[1] });
+            }
+            if (hasSize) {
+                const size = this.emitExpr(call.arguments[2]);
+                requireNumber(call.arguments[2], size.ty);
+                specs.push({ value: size, target: T_NUMBER, node: call.arguments[2] });
+            }
+            specs.push(...this.ignoredArgumentSpecs(call.arguments, 3));
+            return this.emitSequencedExpr(T_BUFFER, specs, (vals) => {
+                const b = vals[0]!;
+                let next = 1;
+                const offset = hasOffset ? vals[next++]! : "0.0";
+                const size = hasSize ? vals[next++]! : "0.0";
+                const offsetIsNull = hasOffset ? "false" : "true";
+                const sizeIsNull = hasSize ? "false" : "true";
+                return `tsc_crypto_random_fill_sync(${b}, ${offset}, ${size}, ${offsetIsNull}, ${sizeIsNull})`;
+            });
+        }
         if (name === "getHashes") {
             return this.emitSequencedExpr(
                 arrayType(T_STRING),
@@ -40974,7 +41005,7 @@ class Emitter {
                 () => "tsc_crypto_get_hashes()",
             );
         }
-        unsupported(call, `crypto.${name} (supported: createHash, createHmac, getHashes, randomBytes, randomUUID, timingSafeEqual, pbkdf2Sync)`);
+        unsupported(call, `crypto.${name} (supported: createHash, createHmac, getHashes, randomBytes, randomUUID, timingSafeEqual, pbkdf2Sync, randomFillSync)`);
     }
 
     private validateCryptoRandomUUIDOptions(options: ts.Expression, label: string): void {
