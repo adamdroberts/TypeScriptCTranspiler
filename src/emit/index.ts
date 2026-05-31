@@ -19028,6 +19028,21 @@ class Emitter {
         return ts.isIdentifier(expr) && this.isNamedImportFrom(expr, ["fs", "node:fs"], "promises");
     }
 
+    private isUtilTypesReceiver(expr: ts.Expression): boolean {
+        if (ts.isIdentifier(expr) && this.isNamedImportFrom(expr, ["util", "node:util"], "types")) {
+            return true;
+        }
+        if (
+            ts.isPropertyAccessExpression(expr) &&
+            expr.name.text === "types" &&
+            ts.isIdentifier(expr.expression) &&
+            this.isUtilModuleIdentifier(expr.expression)
+        ) {
+            return true;
+        }
+        return false;
+    }
+
     private symbolForBindingName(name: ts.BindingName): ts.Symbol | undefined {
         return ts.isIdentifier(name) ? this.checker.getSymbolAtLocation(name) : undefined;
     }
@@ -29587,6 +29602,10 @@ class Emitter {
 
         if (this.isFsPromisesReceiver(recvExpr)) {
             return this.emitFsPromisesCall(call, memberName);
+        }
+
+        if (this.isUtilTypesReceiver(recvExpr)) {
+            return this.emitUtilTypesCall(call, memberName);
         }
 
         if (ts.isIdentifier(recvExpr) && this.isFsModuleIdentifier(recvExpr)) {
@@ -42420,6 +42439,49 @@ class Emitter {
         unsupported(call, `util.${name}`);
     }
 
+    private emitUtilTypesCall(call: ts.CallExpression, name: string): EmitResult {
+        const args = call.arguments;
+        if (args.length < 1) unsupported(call, `util.types.${name} expects 1 argument`);
+        const argNode = args[0]!;
+        const argVal = this.emitExpr(argNode);
+
+        let fnName = "";
+        switch (name) {
+            case "isDate":
+                fnName = "tsc_util_types_is_date";
+                break;
+            case "isRegExp":
+                fnName = "tsc_util_types_is_regexp";
+                break;
+            case "isNativeError":
+                fnName = "tsc_util_types_is_native_error";
+                break;
+            case "isPromise":
+                fnName = "tsc_util_types_is_promise";
+                break;
+            case "isMap":
+                fnName = "tsc_util_types_is_map";
+                break;
+            case "isSet":
+                fnName = "tsc_util_types_is_set";
+                break;
+            case "isTypedArray":
+                fnName = "tsc_util_types_is_typed_array";
+                break;
+            default:
+                unsupported(call, `util.types.${name}`);
+        }
+
+        return this.emitSequencedExpr(
+            T_BOOLEAN,
+            [
+                { value: argVal, target: T_VALUE, node: argNode },
+                ...this.ignoredArgumentSpecs(args, 1),
+            ],
+            ([valC]) => `${fnName}(${valC})`
+        );
+    }
+
     private objectProperties(tsType: ts.Type): ts.Symbol[] {
         const iface = this.interfaceDeclarationForType(tsType);
         if (iface) return this.interfacePropertySymbols(iface);
@@ -48448,6 +48510,18 @@ class Emitter {
                     return `tsc_value_function_generic_named(${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${r.c}, ${(r.ty.params ?? []).length}.0, ${this.functionValueNameLiteral(node)})`;
                 case "class":
                     return this.classValueBoxExpression(r, node);
+                case "date":
+                    return `tsc_value_date(${r.c})`;
+                case "regexp":
+                    return `tsc_value_regexp(${r.c})`;
+                case "map":
+                    return `tsc_value_map(${r.c})`;
+                case "set":
+                    return `tsc_value_set(${r.c})`;
+                case "error":
+                    return `tsc_value_error(${r.c})`;
+                case "buffer":
+                    return `tsc_value_buffer(${r.c})`;
                 case "promise":
                     return `tsc_value_promise(${r.c})`;
                 case "void":

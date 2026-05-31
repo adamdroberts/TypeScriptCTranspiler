@@ -2741,3 +2741,97 @@ tsc_value_t tsc_structured_clone(tsc_value_t value) {
     tsc_map_t* seen = tsc_map_new(sizeof(tsc_value_t), sizeof(tsc_value_t), TSC_KEY_VALUE, 8);
     return tsc_structured_clone_internal(value, seen);
 }
+
+tsc_value_t tsc_value_date(tsc_date_t* d) {
+    if (!d) return tsc_value_null();
+    tsc_object_t* o = tsc_object_new_class(d);
+    o->is_date = true;
+    return tsc_value_object(o);
+}
+
+tsc_value_t tsc_value_regexp(tsc_regexp_t* r) {
+    if (!r) return tsc_value_null();
+    tsc_object_t* o = tsc_object_new_class(r);
+    o->is_regexp = true;
+    return tsc_value_object(o);
+}
+
+tsc_value_t tsc_value_map(tsc_map_t* m) {
+    if (!m) return tsc_value_null();
+    tsc_object_t* o = tsc_object_new_class(m);
+    o->is_map = true;
+    return tsc_value_object(o);
+}
+
+tsc_value_t tsc_value_set(tsc_set_t* s) {
+    if (!s) return tsc_value_null();
+    tsc_object_t* o = tsc_object_new_class(s);
+    o->is_set = true;
+    return tsc_value_object(o);
+}
+
+tsc_value_t tsc_value_error(tsc_error_t* e) {
+    if (!e) return tsc_value_null();
+    tsc_object_t* o = tsc_object_new_class(e);
+    o->is_error = true;
+    return tsc_value_object(o);
+}
+
+tsc_value_t tsc_value_buffer(tsc_buffer_t* b) {
+    if (!b) return tsc_value_null();
+    tsc_object_t* o = tsc_object_new_class(b);
+    o->is_typed_array = true;
+    return tsc_value_object(o);
+}
+
+bool tsc_util_types_is_date(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+        return o->is_date;
+    }
+    return false;
+}
+
+bool tsc_util_types_is_regexp(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+        return o->is_regexp;
+    }
+    return false;
+}
+
+bool tsc_util_types_is_native_error(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+        return o->is_error;
+    }
+    return false;
+}
+
+bool tsc_util_types_is_promise(tsc_value_t v) {
+    return tsc_value_is_promise(v);
+}
+
+bool tsc_util_types_is_map(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+        return o->is_map;
+    }
+    return false;
+}
+
+bool tsc_util_types_is_set(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+        return o->is_set;
+    }
+    return false;
+}
+
+bool tsc_util_types_is_typed_array(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+        return o->is_typed_array;
+    }
+    return false;
+}
