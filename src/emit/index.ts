@@ -22841,7 +22841,48 @@ class Emitter {
                 : this.emitExpr(expr.right);
             return this.emitSimpleLazyResumeBinary(expr, left, right);
         }
-        unsupported(expr, "lazy generator suspended yield expression currently supports direct, parenthesized, and binary expressions");
+        if (ts.isConditionalExpression(expr)) {
+            const cond = this.singleYieldExpressionInExpression(expr.condition)
+                ? this.emitSimpleLazyResumeExpression(expr.condition, nextArg)
+                : this.emitExpr(expr.condition);
+            const whenTrue = this.singleYieldExpressionInExpression(expr.whenTrue)
+                ? this.emitSimpleLazyResumeExpression(expr.whenTrue, nextArg)
+                : this.emitExpr(expr.whenTrue);
+            const whenFalse = this.singleYieldExpressionInExpression(expr.whenFalse)
+                ? this.emitSimpleLazyResumeExpression(expr.whenFalse, nextArg)
+                : this.emitExpr(expr.whenFalse);
+            return this.emitSimpleLazyResumeConditional(expr, cond, whenTrue, whenFalse);
+        }
+        unsupported(expr, "lazy generator suspended yield expression currently supports direct, parenthesized, binary, and conditional expressions");
+    }
+
+    private truthyExprFromEmitResult(value: EmitResult, node: ts.Expression): string {
+        if (value.ty.kind === "value") return `tsc_value_is_truthy(${value.c})`;
+        if (value.ty.kind === "boolean") return value.c;
+        if (value.ty.kind === "number") return `(${value.c} != 0.0 && !isnan(${value.c}))`;
+        if (value.ty.kind === "string") return `(${value.c} != NULL && ${value.c}->len > 0)`;
+        if (isPointerKind(value.ty)) return `(${value.c} != NULL)`;
+        return this.coerce(value, T_BOOLEAN, node);
+    }
+
+    private emitSimpleLazyResumeConditional(
+        expr: ts.ConditionalExpression,
+        cond: EmitResult,
+        whenTrue: EmitResult,
+        whenFalse: EmitResult,
+    ): EmitResult {
+        const condC = this.truthyExprFromEmitResult(cond, expr.condition);
+        if (whenTrue.ty.kind !== whenFalse.ty.kind) {
+            const boxable: readonly CType["kind"][] = ["number", "boolean", "string", "array", "void", "value"];
+            if (boxable.includes(whenTrue.ty.kind) && boxable.includes(whenFalse.ty.kind)) {
+                return {
+                    c: `(${condC} ? ${this.coerce(whenTrue, T_VALUE, expr.whenTrue)} : ${this.coerce(whenFalse, T_VALUE, expr.whenFalse)})`,
+                    ty: T_VALUE,
+                };
+            }
+            unsupported(expr, `lazy generator conditional branches have different types (${whenTrue.ty.c} vs ${whenFalse.ty.c})`);
+        }
+        return { c: `(${condC} ? ${whenTrue.c} : ${whenFalse.c})`, ty: whenTrue.ty };
     }
 
     private emitSimpleLazyResumeBinary(
