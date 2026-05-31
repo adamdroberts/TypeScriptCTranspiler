@@ -2180,6 +2180,7 @@ class Emitter {
                     this.isSideEffectFreePathFormatObject(args[0]!, seenConsts) &&
                     ignoredAfter(1);
             case "relative":
+            case "matchesGlob":
                 return stringArg(0) && stringArg(1) && ignoredAfter(2);
             case "basename":
                 return stringArg(0) &&
@@ -2201,6 +2202,7 @@ class Emitter {
             "normalize",
             "isAbsolute",
             "relative",
+            "matchesGlob",
             "toNamespacedPath",
             "basename",
             "dirname",
@@ -27988,7 +27990,7 @@ class Emitter {
         if (fsPromisesNamed) {
             return this.emitFsPromisesCall(call, fsPromisesNamed);
         }
-        const pathNamed = ["join", "resolve", "normalize", "isAbsolute", "relative", "toNamespacedPath", "basename", "dirname", "extname", "parse", "format"]
+        const pathNamed = ["join", "resolve", "normalize", "isAbsolute", "relative", "toNamespacedPath", "basename", "dirname", "extname", "parse", "format", "matchesGlob"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["path", "node:path", "path/posix", "node:path/posix"], exported));
         if (pathNamed) {
             return this.emitPathCall(call, pathNamed);
@@ -40595,6 +40597,9 @@ class Emitter {
             case "relative":
                 if (args.length < 2) unsupported(call, "path.relative expects at least 2 args");
                 return this.emitSequencedExpr(T_STRING, fixedStringSpecs(2), ([from, to]) => `tsc_path_relative(${from}, ${to})`);
+            case "matchesGlob":
+                if (args.length < 2) unsupported(call, "path.matchesGlob expects at least 2 args");
+                return this.emitSequencedExpr(T_BOOLEAN, fixedStringSpecs(2), ([path, pattern]) => `tsc_path_matches_glob(${path}, ${pattern})`);
             case "toNamespacedPath":
                 if (args.length < 1) unsupported(call, "path.toNamespacedPath expects at least 1 arg");
                 return this.emitSequencedExpr(T_STRING, fixedStringSpecs(1), ([path]) => path);

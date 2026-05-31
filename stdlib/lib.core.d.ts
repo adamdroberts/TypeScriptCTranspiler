@@ -1610,6 +1610,7 @@ interface Path {
     isAbsolute(p: string, ...ignored: any[]): boolean;
     relative(from: string, to: string, ...ignored: any[]): string;
     toNamespacedPath(p: string, ...ignored: any[]): string;
+    matchesGlob(p: string, pattern: string, ...ignored: any[]): boolean;
     basename(p: string, suffix?: string, ...ignored: any[]): string;
     dirname(p: string, ...ignored: any[]): string;
     extname(p: string, ...ignored: any[]): string;
@@ -1627,6 +1628,7 @@ declare module "path" {
     export function isAbsolute(p: string, ...ignored: any[]): boolean;
     export function relative(from: string, to: string, ...ignored: any[]): string;
     export function toNamespacedPath(p: string, ...ignored: any[]): string;
+    export function matchesGlob(p: string, pattern: string, ...ignored: any[]): boolean;
     export function basename(p: string, suffix?: string, ...ignored: any[]): string;
     export function dirname(p: string, ...ignored: any[]): string;
     export function extname(p: string, ...ignored: any[]): string;
@@ -1645,6 +1647,7 @@ declare module "node:path" {
     export function isAbsolute(p: string, ...ignored: any[]): boolean;
     export function relative(from: string, to: string, ...ignored: any[]): string;
     export function toNamespacedPath(p: string, ...ignored: any[]): string;
+    export function matchesGlob(p: string, pattern: string, ...ignored: any[]): boolean;
     export function basename(p: string, suffix?: string, ...ignored: any[]): string;
     export function dirname(p: string, ...ignored: any[]): string;
     export function extname(p: string, ...ignored: any[]): string;
@@ -1662,6 +1665,7 @@ declare module "path/posix" {
     export function isAbsolute(p: string, ...ignored: any[]): boolean;
     export function relative(from: string, to: string, ...ignored: any[]): string;
     export function toNamespacedPath(p: string, ...ignored: any[]): string;
+    export function matchesGlob(p: string, pattern: string, ...ignored: any[]): boolean;
     export function basename(p: string, suffix?: string, ...ignored: any[]): string;
     export function dirname(p: string, ...ignored: any[]): string;
     export function extname(p: string, ...ignored: any[]): string;
@@ -1679,6 +1683,7 @@ declare module "node:path/posix" {
     export function isAbsolute(p: string, ...ignored: any[]): boolean;
     export function relative(from: string, to: string, ...ignored: any[]): string;
     export function toNamespacedPath(p: string, ...ignored: any[]): string;
+    export function matchesGlob(p: string, pattern: string, ...ignored: any[]): boolean;
     export function basename(p: string, suffix?: string, ...ignored: any[]): string;
     export function dirname(p: string, ...ignored: any[]): string;
     export function extname(p: string, ...ignored: any[]): string;

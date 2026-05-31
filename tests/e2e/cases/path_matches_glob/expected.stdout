@@ -1,0 +1,18 @@
+global exact: true
+global star: true
+global question: true
+nodePath exact: false
+nodePath star no-match: false
+named exact: true
+named star: true
+posix exact: true
+posix star complex: true
+posix star no-match: false
+subpath exact: true
+nodeSubpath exact: true
+star empty: true
+star empty 2: true
+question slash: false
+multi-star: true
+multi-star no-match: false
+ignored: 123

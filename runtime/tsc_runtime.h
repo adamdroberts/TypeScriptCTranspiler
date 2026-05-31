@@ -1068,6 +1068,7 @@ tsc_str_t* tsc_path_join(size_t n, ...);
 tsc_str_t* tsc_path_resolve(size_t n, ...);
 tsc_str_t* tsc_path_normalize(const tsc_str_t* p);
 bool tsc_path_is_absolute(const tsc_str_t* p);
+bool tsc_path_matches_glob(const tsc_str_t* path, const tsc_str_t* pattern);
 tsc_str_t* tsc_path_relative(const tsc_str_t* from, const tsc_str_t* to);
 tsc_str_t* tsc_path_basename(const tsc_str_t* p);
 tsc_str_t* tsc_path_basename_suffix(const tsc_str_t* p, const tsc_str_t* suffix);

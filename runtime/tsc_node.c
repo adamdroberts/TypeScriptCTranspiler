@@ -3518,6 +3518,56 @@ tsc_str_t* tsc_path_relative(const tsc_str_t* from, const tsc_str_t* to) {
     return r;
 }
 
+static bool glob_match_inner(const char* path, size_t path_len, const char* pattern, size_t pattern_len) {
+    size_t i = 0, j = 0;
+    while (i < path_len && j < pattern_len) {
+        if (pattern[j] == '*') {
+            while (j < pattern_len && pattern[j] == '*') {
+                j++;
+            }
+            if (j == pattern_len) {
+                for (size_t k = i; k < path_len; k++) {
+                    if (path[k] == '/') return false;
+                }
+                return true;
+            }
+            for (size_t k = i; k <= path_len; k++) {
+                if (k > i && path[k - 1] == '/') {
+                    break;
+                }
+                if (glob_match_inner(path + k, path_len - k, pattern + j, pattern_len - j)) {
+                    return true;
+                }
+            }
+            return false;
+        } else if (pattern[j] == '?') {
+            if (path[i] == '/') {
+                return false;
+            }
+            i++;
+            j++;
+        } else {
+            if (path[i] != pattern[j]) {
+                return false;
+            }
+            i++;
+            j++;
+        }
+    }
+    if (i == path_len && j == pattern_len) {
+        return true;
+    }
+    while (j < pattern_len && pattern[j] == '*') {
+        j++;
+    }
+    return i == path_len && j == pattern_len;
+}
+
+bool tsc_path_matches_glob(const tsc_str_t* path, const tsc_str_t* pattern) {
+    if (!path || !pattern) return false;
+    return glob_match_inner(path->data, path->len, pattern->data, pattern->len);
+}
+
 tsc_str_t* tsc_path_basename(const tsc_str_t* p) {
     if (p->len == 0) return tsc_str_from_lit("", 0);
     size_t end = p->len;
