@@ -1,0 +1,14 @@
+-- then/then --
+false yield-then
+false yield-nested-then
+true done-22
+start|then-1|after-then:15|then-2|end:22
+-- then/else --
+false yield-then
+false yield-nested-else
+true done-60
+start|then-1|after-then:30|else-2|end:60
+-- else --
+false yield-else
+true done-110
+start|else-1|end:110
