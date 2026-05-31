@@ -514,7 +514,7 @@ typedef struct tsc_array {
     bool is_lazy_generator;
     int state;
     void* env;
-    void (*lazy_next)(struct tsc_array* a, int* state, void* env, bool* done);
+    void (*lazy_next)(struct tsc_array* a, int* state, void* env, tsc_value_t next_arg, bool* done);
     void* data;
 } tsc_array_t;
 

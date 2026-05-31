@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Extended the narrow lazy generator lowering to receive `.next(value)` inputs into suspended `yield` assignments for simple `const x = yield value` and `x = yield value` forms, while still evaluating and ignoring the initial `.next(...)` value. Test: `generator_lazy_next_value`.
 - Extended the narrow lazy generator lowering to keep simple local `let`/`const` bindings in the generator environment, so initialized locals and mutations persist across `.next()` suspension points. Test: `generator_lazy_locals`.
 - Extended the narrow lazy generator lowering to preserve function parameters and `this` receivers through the generator environment, so sequential generator functions and methods still defer body execution until `.next()` while reading their original invocation state. Test: `generator_lazy_params`.
 - Added a narrow lazy lowering for parameterless sequential synchronous generators with ordinary `yield` statements, so bodies execute on `.next()` instead of construction and array consumers materialize the remaining values on demand. Test: `generator_lazy`.

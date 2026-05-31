@@ -22414,36 +22414,44 @@ class Emitter {
             ts.forEachChild(stmt, checkNestedScopes);
             if (hasNestedFunctionOrClass) return false;
             if (ts.isExpressionStatement(stmt)) {
-                if (ts.isYieldExpression(stmt.expression) && stmt.expression.asteriskToken) {
-                    return false;
-                }
-                let hasNestedYield = false;
-                const checkYield = (node: ts.Node) => {
-                    if (ts.isYieldExpression(node)) {
-                        if (node !== stmt.expression) {
-                            hasNestedYield = true;
-                        }
-                    }
-                    ts.forEachChild(node, checkYield);
-                };
-                ts.forEachChild(stmt, checkYield);
-                if (hasNestedYield) return false;
-                continue;
-            }
-            if (ts.isVariableStatement(stmt)) {
-                for (const decl of stmt.declarationList.declarations) {
-                    if (!ts.isIdentifier(decl.name)) return false;
-                    let hasYield = false;
+                const yieldExpr = this.simpleLazyYieldExpression(stmt);
+                if (yieldExpr) {
+                    if (yieldExpr.asteriskToken) return false;
+                    let hasOtherYield = false;
                     const checkYield = (node: ts.Node) => {
-                        if (ts.isYieldExpression(node)) {
-                            hasYield = true;
+                        if (ts.isYieldExpression(node) && node !== yieldExpr) {
+                            hasOtherYield = true;
                             return;
                         }
                         ts.forEachChild(node, checkYield);
                     };
-                    if (decl.initializer) ts.forEachChild(decl.initializer, checkYield);
-                    if (hasYield) return false;
+                    ts.forEachChild(stmt, checkYield);
+                    if (hasOtherYield) return false;
+                    continue;
                 }
+                if (this.nodeContainsYield(stmt)) return false;
+                continue;
+            }
+            if (ts.isVariableStatement(stmt)) {
+                const yieldExpr = this.simpleLazyYieldExpression(stmt);
+                if (yieldExpr) {
+                    if (yieldExpr.asteriskToken) return false;
+                    let hasOtherYield = false;
+                    const checkYield = (node: ts.Node) => {
+                        if (ts.isYieldExpression(node) && node !== yieldExpr) {
+                            hasOtherYield = true;
+                            return;
+                        }
+                        ts.forEachChild(node, checkYield);
+                    };
+                    ts.forEachChild(stmt, checkYield);
+                    if (hasOtherYield) return false;
+                    continue;
+                }
+                for (const decl of stmt.declarationList.declarations) {
+                    if (!ts.isIdentifier(decl.name)) return false;
+                }
+                if (this.nodeContainsYield(stmt)) return false;
                 continue;
             }
             if (ts.isReturnStatement(stmt)) {
@@ -22453,6 +22461,44 @@ class Emitter {
             return false;
         }
         return true;
+    }
+
+    private simpleLazyYieldExpression(stmt: ts.Statement): ts.YieldExpression | null {
+        if (ts.isExpressionStatement(stmt)) {
+            const expr = stmt.expression;
+            if (ts.isYieldExpression(expr)) return expr;
+            if (
+                ts.isBinaryExpression(expr) &&
+                expr.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                ts.isYieldExpression(expr.right)
+            ) {
+                return expr.right;
+            }
+            return null;
+        }
+        if (ts.isVariableStatement(stmt)) {
+            if (stmt.declarationList.declarations.length !== 1) return null;
+            const decl = stmt.declarationList.declarations[0]!;
+            if (!ts.isIdentifier(decl.name) || !decl.initializer || !ts.isYieldExpression(decl.initializer)) {
+                return null;
+            }
+            return decl.initializer;
+        }
+        return null;
+    }
+
+    private nodeContainsYield(node: ts.Node): boolean {
+        let found = false;
+        const visit = (cur: ts.Node) => {
+            if (found) return;
+            if (ts.isYieldExpression(cur)) {
+                found = true;
+                return;
+            }
+            ts.forEachChild(cur, visit);
+        };
+        ts.forEachChild(node, visit);
+        return found;
     }
 
     private emitSimpleLazyGeneratorLike(
@@ -22536,7 +22582,7 @@ class Emitter {
         if (fn.body && ts.isBlock(fn.body)) {
             for (const stmt of fn.body.statements) {
                 if (ts.isEmptyStatement(stmt)) continue;
-                if (ts.isExpressionStatement(stmt) && ts.isYieldExpression(stmt.expression)) {
+                if (this.simpleLazyYieldExpression(stmt)) {
                     currentStatements.push(stmt);
                     states.push(currentStatements);
                     currentStatements = [];
@@ -22548,13 +22594,14 @@ class Emitter {
         if (currentStatements.length > 0) {
             states.push(currentStatements);
         }
-        this.protos.line(`static void ${lazyNextFuncName}(tsc_array_t* a, int* state, void* env, bool* done);`);
+        this.protos.line(`static void ${lazyNextFuncName}(tsc_array_t* a, int* state, void* env, tsc_value_t next_arg, bool* done);`);
         const nextBuf = new CBuf();
-        nextBuf.open(`static void ${lazyNextFuncName}(tsc_array_t* a, int* state, void* env, bool* done)`);
+        nextBuf.open(`static void ${lazyNextFuncName}(tsc_array_t* a, int* state, void* env, tsc_value_t next_arg, bool* done)`);
 
         this.returnStack.push(ret);
         this.cellScopes.push(capturedCells);
         this.generatorStack.push({ arrayVar: "a", elemType: elemType });
+        nextBuf.line("(void)next_arg;");
         const envBindings = new Map<ts.Symbol, ClosureEnvBinding>();
         if (envType) {
             const envLocal = this.freshTemp("_lazy_env");
@@ -22585,10 +22632,17 @@ class Emitter {
             for (let i = 0; i < states.length; i++) {
                 const state = states[i]!;
                 nextBuf.open(`case ${i}:`);
+                if (i > 0) {
+                    const previousState = states[i - 1]!;
+                    const previousLast = previousState[previousState.length - 1];
+                    if (previousLast) {
+                        this.emitSimpleLazyYieldResume(nextBuf, previousLast, "next_arg");
+                    }
+                }
 
                 const lastStmt = state[state.length - 1];
-                if (lastStmt && ts.isExpressionStatement(lastStmt) && ts.isYieldExpression(lastStmt.expression)) {
-                    const yieldExpr = lastStmt.expression;
+                const yieldExpr = lastStmt ? this.simpleLazyYieldExpression(lastStmt) : null;
+                if (yieldExpr) {
                     const otherStmts = state.slice(0, -1);
                     for (const s of otherStmts) {
                         this.emitStmt(nextBuf, s);
@@ -22661,6 +22715,40 @@ class Emitter {
         buf.line(`${arrayVar}->state = 0;`);
         buf.line(`${arrayVar}->lazy_next = (void*)${lazyNextFuncName};`);
         buf.line(`return ${arrayVar};`);
+    }
+
+    private emitSimpleLazyYieldResume(buf: CBuf, stmt: ts.Statement, nextArg: string): void {
+        const resumeValue: EmitResult = { c: nextArg, ty: T_VALUE };
+        if (ts.isExpressionStatement(stmt)) {
+            const expr = stmt.expression;
+            if (ts.isYieldExpression(expr)) return;
+            if (
+                ts.isBinaryExpression(expr) &&
+                expr.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                ts.isYieldExpression(expr.right)
+            ) {
+                const lhs = this.emitLvalue(expr.left);
+                const lhsType = this.storageType(expr.left);
+                buf.line(`${lhs} = ${this.coerce(resumeValue, lhsType, expr.right)};`);
+                return;
+            }
+        }
+        if (ts.isVariableStatement(stmt)) {
+            const decl = stmt.declarationList.declarations[0];
+            if (
+                decl &&
+                ts.isIdentifier(decl.name) &&
+                decl.initializer &&
+                ts.isYieldExpression(decl.initializer)
+            ) {
+                const sym = this.symbolForIdentifier(decl.name);
+                const envBinding = this.closureEnvBindingForSymbol(sym);
+                const targetType = envBinding?.type ?? this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
+                const target = envBinding ? `*${envBinding.ptr}` : this.identifierName(decl.name);
+                buf.line(`${target} = ${this.coerce(resumeValue, targetType, decl.initializer)};`);
+                return;
+            }
+        }
     }
 
     private fnSignature(fd: ts.FunctionDeclaration): {
@@ -37819,13 +37907,16 @@ class Emitter {
                 const out = this.freshTemp("_step");
                 const current = this.freshTemp("_current");
                 const boxed = this.coerce({ c: current, ty: et }, T_VALUE, call.expression);
+                const specs: SequencedCallArg[] = [{ value: recv }];
+                if (args[0]) specs.push({ value: this.emitExpr(args[0]), target: T_VALUE, node: args[0] });
+                specs.push(...this.ignoredArgumentSpecs(args, 1));
                 return this.emitSequencedExpr(
                     T_VALUE,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([arr]) =>
+                    specs,
+                    ([arr, nextArg]) =>
                         `({ tsc_array_t* const ${av} = ${arr}; ` +
                         `if (${av}->is_lazy_generator && ${av}->iter_pos >= ${av}->len && ${av}->lazy_next) { ` +
-                        `bool _done = false; ${av}->lazy_next(${av}, &${av}->state, ${av}->env, &_done); ` +
+                        `bool _done = false; ${av}->lazy_next(${av}, &${av}->state, ${av}->env, ${nextArg ?? "tsc_value_undefined()"}, &_done); ` +
                         `if (_done) { ${av}->is_lazy_generator = false; } ` +
                         `} ` +
                         `tsc_object_t* ${out} = tsc_object_new(); ` +

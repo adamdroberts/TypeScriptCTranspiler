@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators receive next(value) into suspended yield assignments"
+}
