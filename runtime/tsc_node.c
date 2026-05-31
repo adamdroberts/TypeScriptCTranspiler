@@ -293,6 +293,18 @@ tsc_buffer_t* tsc_crypto_pbkdf2_sync_bb(const tsc_buffer_t* password, const tsc_
     return tsc_crypto_pbkdf2_sync_impl(p_data, p_len, s_data, s_len, iterations, keylen, digest);
 }
 
+tsc_array_t* tsc_crypto_get_hashes(void) {
+    tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), 4);
+    tsc_str_t* s1 = tsc_str_from_cstr("md5");
+    tsc_array_push_raw(a, &s1);
+    tsc_str_t* s2 = tsc_str_from_cstr("sha1");
+    tsc_array_push_raw(a, &s2);
+    tsc_str_t* s3 = tsc_str_from_cstr("sha256");
+    tsc_array_push_raw(a, &s3);
+    tsc_str_t* s4 = tsc_str_from_cstr("sha512");
+    tsc_array_push_raw(a, &s4);
+    return a;
+}
 
 void hash_update_bytes(tsc_hash_t* h, const void* data, size_t len) {
     if (h->finalized) return;
