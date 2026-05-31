@@ -42,6 +42,8 @@ tsc_value_t tsc_node_eval(tsc_str_t* source);
 tsc_value_t tsc_node_function(tsc_str_t* body);
 tsc_value_t tsc_node_function_call(tsc_value_t fn, tsc_array_t* args);
 tsc_value_t tsc_node_native_addon(tsc_str_t* resolved_path);
+tsc_value_t tsc_builtin_eval(void* env, tsc_value_t this_arg, tsc_array_t* args);
+tsc_value_t tsc_builtin_function(void* env, tsc_value_t this_arg, tsc_array_t* args);
 }
 
 #ifndef TSC_HAS_LIBNODE
@@ -62,6 +64,16 @@ extern "C" tsc_value_t tsc_node_function_call(tsc_value_t, tsc_array_t*) {
 }
 
 extern "C" tsc_value_t tsc_node_native_addon(tsc_str_t*) {
+    tsc_panic("embedded Node bridge unavailable: binary was not linked with libnode");
+    return tsc_value_undefined();
+}
+
+extern "C" tsc_value_t tsc_builtin_eval(void*, tsc_value_t, tsc_array_t*) {
+    tsc_panic("embedded Node bridge unavailable: binary was not linked with libnode");
+    return tsc_value_undefined();
+}
+
+extern "C" tsc_value_t tsc_builtin_function(void*, tsc_value_t, tsc_array_t*) {
     tsc_panic("embedded Node bridge unavailable: binary was not linked with libnode");
     return tsc_value_undefined();
 }
@@ -405,6 +417,42 @@ extern "C" tsc_value_t tsc_node_native_addon(tsc_str_t* resolved_path) {
     source += ")";
     tsc_str_t source_str = { source.size(), source.c_str(), 0 };
     return evalSource(&source_str);
+}
+
+extern "C" tsc_value_t tsc_builtin_eval(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+#ifndef TSC_UNSAFE_EVAL
+    (void)args;
+    tsc_panic("embedded Node unsafe eval bridge disabled: compile with --unsafe-eval");
+    return tsc_value_undefined();
+#else
+    if (!args || args->len < 1) return tsc_value_undefined();
+    tsc_value_t arg = (static_cast<tsc_value_t*>(args->data))[0];
+    if (!valueIsBox(arg) || valueTag(arg) != TSC_VALUE_TAG_STRING) return arg;
+    return tsc_node_eval(static_cast<tsc_str_t*>(valuePtr(arg)));
+#endif
+}
+
+extern "C" tsc_value_t tsc_builtin_function(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+#ifndef TSC_UNSAFE_EVAL
+    (void)args;
+    tsc_panic("embedded Node unsafe Function bridge disabled: compile with --unsafe-eval");
+    return tsc_value_undefined();
+#else
+    if (!args || args->len < 1) {
+        static tsc_str_t empty = { 0, "", 0 };
+        return tsc_node_function(&empty);
+    }
+    tsc_value_t arg = (static_cast<tsc_value_t*>(args->data))[args->len - 1];
+    if (valueIsBox(arg) && valueTag(arg) == TSC_VALUE_TAG_STRING) {
+        return tsc_node_function(static_cast<tsc_str_t*>(valuePtr(arg)));
+    }
+    static tsc_str_t empty = { 0, "", 0 };
+    return tsc_node_function(&empty);
+#endif
 }
 
 #endif

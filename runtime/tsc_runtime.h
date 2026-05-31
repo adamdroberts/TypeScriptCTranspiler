@@ -78,6 +78,8 @@ tsc_value_t tsc_node_eval(tsc_str_t* source);
 tsc_value_t tsc_node_function(tsc_str_t* body);
 tsc_value_t tsc_node_function_call(tsc_value_t fn, struct tsc_array* args);
 tsc_value_t tsc_node_native_addon(tsc_str_t* resolved_path);
+tsc_value_t tsc_builtin_eval(void* env, tsc_value_t this_arg, struct tsc_array* args);
+tsc_value_t tsc_builtin_function(void* env, tsc_value_t this_arg, struct tsc_array* args);
 
 tsc_str_t* tsc_str_concat(const tsc_str_t* a, const tsc_str_t* b);
 tsc_str_t* tsc_str_concat_lit_int(const char* lit, size_t lit_len, int64_t n);

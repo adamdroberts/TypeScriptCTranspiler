@@ -2214,6 +2214,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `runtime_code_manifest_object` | named runtime-code manifest object maps dispatch eval/function allow-list entries to generated AOT constants |
 | `runtime_eval_unknown` | expected diagnostic for unknown-source `eval(...)` runtime compilation |
 | `runtime_eval_unsafe_bridge` | `--unsafe-eval --emit-c-only` emits the embedded Node bridge for unknown eval source |
+| `runtime_eval_value_unknown` | first-class global eval value references reject without unsafe eval |
+| `runtime_eval_value_unsafe` | first-class global eval value references lower to the embedded Node bridge wrapper with unsafe eval enabled |
 | `runtime_function_call` | constant-body direct `Function(...)` compiles AOT |
 | `runtime_function_call_unknown` | expected diagnostic for unknown-source direct `Function(...)` runtime compilation |
 | `runtime_function_constructor` | constant-body `new Function(...)` compiles AOT |
@@ -2224,6 +2226,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `runtime_function_template_literal_params_aot` | constant-body `Function(...)` with template-literal type alias parameter names compiles AOT |
 | `runtime_function_unsafe_bridge` | `--unsafe-eval --emit-c-only` emits the embedded Node bridge for unknown Function source |
 | `runtime_function_constructor_unsafe_bridge` | `--unsafe-eval --emit-c-only` emits the embedded Node bridge for unknown new Function source |
+| `runtime_function_value_unknown` | first-class global Function value references reject without unsafe eval |
+| `runtime_function_value_unsafe` | first-class global Function value references lower to the embedded Node bridge wrapper with unsafe eval enabled |
 | `satisfies_expression` | TypeScript satisfies expressions erase to their runtime operand |
 | `set_keys` | Set.keys alias for Set.values |
 | `string_char_code_at` | String.charCodeAt UTF-16 code-unit lookup |

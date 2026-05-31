@@ -171,6 +171,7 @@ function permanentLimitDiagnostics(
     } = {},
 ): PermanentLimitDiagnostic[] {
     const diagnostics: PermanentLimitDiagnostic[] = [];
+    const checker = program.getTypeChecker();
     for (const sf of program.getSourceFiles()) {
         if (sf.isDeclarationFile || sf.fileName === libCoreDts) continue;
         const visit = (node: ts.Node): void => {
@@ -271,12 +272,48 @@ function permanentLimitDiagnostics(
                         message: UNKNOWN_NEW_FUNCTION_AOT_MESSAGE,
                     });
                 }
+            } else if (
+                ts.isIdentifier(node) &&
+                (node.text === "eval" || node.text === "Function") &&
+                !opts.unsafeEval &&
+                isGlobalEvalOrFunctionValueReference(node, checker)
+            ) {
+                diagnostics.push({
+                    node,
+                    message: node.text === "eval" ? UNKNOWN_EVAL_AOT_MESSAGE : UNKNOWN_FUNCTION_AOT_MESSAGE,
+                });
             }
             ts.forEachChild(node, visit);
         };
         visit(sf);
     }
     return diagnostics;
+}
+
+function isGlobalEvalOrFunctionValueReference(node: ts.Identifier, checker: ts.TypeChecker): boolean {
+    const parent = node.parent;
+    if (!parent) return false;
+
+    if (ts.isPropertyAccessExpression(parent) && parent.name === node) {
+        return ts.isIdentifier(parent.expression) && parent.expression.text === "globalThis";
+    }
+    if (ts.isPropertyAssignment(parent) && parent.name === node) return false;
+    if (ts.isMethodDeclaration(parent) && parent.name === node) return false;
+    if (ts.isPropertyDeclaration(parent) && parent.name === node) return false;
+    if (ts.isPropertySignature(parent) && parent.name === node) return false;
+    if (ts.isMethodSignature(parent) && parent.name === node) return false;
+    if (ts.isBindingElement(parent) && parent.propertyName === node) return false;
+    if (ts.isImportSpecifier(parent) && parent.name === node) return false;
+    if (ts.isExportSpecifier(parent) && parent.name === node) return false;
+    if (ts.isNamespaceImport(parent) && parent.name === node) return false;
+    if (ts.isImportClause(parent) && parent.name === node) return false;
+    if (ts.isCallExpression(parent) && parent.expression === node) return false;
+    if (ts.isNewExpression(parent) && parent.expression === node) return false;
+
+    const sym = checker.getSymbolAtLocation(node);
+    if (!sym) return true;
+    const source = node.getSourceFile();
+    return !(sym.declarations ?? []).some((decl) => decl.getSourceFile() === source);
 }
 
 interface NodeEmbedLinkOptions {
