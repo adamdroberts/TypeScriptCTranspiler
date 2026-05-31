@@ -27930,7 +27930,7 @@ class Emitter {
         if (streamNamed) {
             return this.emitStreamCall(call, streamNamed);
         }
-        const cryptoNamed = ["createHash", "createHmac", "randomBytes", "randomUUID", "timingSafeEqual", "pbkdf2Sync", "getHashes"]
+        const cryptoNamed = ["createHash", "createHmac", "randomBytes", "randomUUID", "timingSafeEqual", "pbkdf2Sync", "getHashes", "scryptSync"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["crypto", "node:crypto"], exported));
         if (cryptoNamed) {
             return this.emitCryptoCall(call, cryptoNamed);
@@ -40967,6 +40967,99 @@ class Emitter {
                 ([p, s, i, k, d]) => `${cFn}(${p}, ${s}, ${i}, ${k}, ${d})`
             );
         }
+        if (name === "scryptSync") {
+            if (call.arguments.length < 3)
+                unsupported(call, "crypto.scryptSync expects password, salt, keylen");
+            const password = this.emitExpr(call.arguments[0]!);
+            const salt = this.emitExpr(call.arguments[1]!);
+            const keylen = this.emitExpr(call.arguments[2]!);
+
+            requireNumber(call.arguments[2]!, keylen.ty);
+
+            const passIsStr = password.ty.kind === "string";
+            const passIsBuf = password.ty.kind === "buffer";
+            if (!passIsStr && !passIsBuf) {
+                unsupported(call.arguments[0]!, "crypto.scryptSync password must be a string or Buffer");
+            }
+            const saltIsStr = salt.ty.kind === "string";
+            const saltIsBuf = salt.ty.kind === "buffer";
+            if (!saltIsStr && !saltIsBuf) {
+                unsupported(call.arguments[1]!, "crypto.scryptSync salt must be a string or Buffer");
+            }
+
+            let N_expr: ts.Expression | undefined;
+            let r_expr: ts.Expression | undefined;
+            let p_expr: ts.Expression | undefined;
+            let maxmem_expr: ts.Expression | undefined;
+
+            if (call.arguments.length >= 4) {
+                const options = call.arguments[3]!;
+                if (!this.isUndefinedLikeExpression(options)) {
+                    const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+                    if (!this.isUndefinedLikeExpression(resolvedOptions)) {
+                        if (!ts.isObjectLiteralExpression(resolvedOptions)) {
+                            unsupported(options, "crypto.scryptSync options must be an object literal in this subset");
+                        }
+                        for (const prop of resolvedOptions.properties) {
+                            if (!ts.isPropertyAssignment(prop)) {
+                                unsupported(prop, "crypto.scryptSync options only support property assignments");
+                            }
+                            const key = this.staticPropertyName(prop.name);
+                            if (key === "N" || key === "cost") {
+                                N_expr = prop.initializer;
+                            } else if (key === "r" || key === "blockSize") {
+                                r_expr = prop.initializer;
+                            } else if (key === "p" || key === "parallelization") {
+                                p_expr = prop.initializer;
+                            } else if (key === "maxmem") {
+                                maxmem_expr = prop.initializer;
+                            } else {
+                                unsupported(prop.name, `crypto.scryptSync unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+                            }
+                        }
+                    }
+                }
+            }
+
+            const N_val = N_expr ? this.emitExpr(N_expr) : undefined;
+            const r_val = r_expr ? this.emitExpr(r_expr) : undefined;
+            const p_val = p_expr ? this.emitExpr(p_expr) : undefined;
+            const maxmem_val = maxmem_expr ? this.emitExpr(maxmem_expr) : undefined;
+
+            if (N_val) requireNumber(N_expr!, N_val.ty);
+            if (r_val) requireNumber(r_expr!, r_val.ty);
+            if (p_val) requireNumber(p_expr!, p_val.ty);
+            if (maxmem_val) requireNumber(maxmem_expr!, maxmem_val.ty);
+
+            const suffix = (passIsStr ? "s" : "b") + (saltIsStr ? "s" : "b");
+            const cFn = `tsc_crypto_scrypt_sync_${suffix}`;
+
+            const specs: SequencedCallArg[] = [
+                { value: password, target: passIsStr ? T_STRING : T_BUFFER, node: call.arguments[0]! },
+                { value: salt, target: saltIsStr ? T_STRING : T_BUFFER, node: call.arguments[1]! },
+                { value: keylen, target: T_NUMBER, node: call.arguments[2]! },
+            ];
+
+            if (N_val) specs.push({ value: N_val, target: T_NUMBER, node: N_expr! });
+            if (r_val) specs.push({ value: r_val, target: T_NUMBER, node: r_expr! });
+            if (p_val) specs.push({ value: p_val, target: T_NUMBER, node: p_expr! });
+            if (maxmem_val) specs.push({ value: maxmem_val, target: T_NUMBER, node: maxmem_expr! });
+
+            specs.push(...this.ignoredArgumentSpecs(call.arguments, 4));
+
+            return this.emitSequencedExpr(
+                T_BUFFER,
+                specs,
+                (emittedArgs) => {
+                    let idx = 3;
+                    const p_arg = N_val ? emittedArgs[idx++] : "16384.0";
+                    const r_arg = r_val ? emittedArgs[idx++] : "8.0";
+                    const p_par_arg = p_val ? emittedArgs[idx++] : "1.0";
+                    const maxmem_arg = maxmem_val ? emittedArgs[idx++] : "33554432.0";
+                    return `${cFn}(${emittedArgs[0]}, ${emittedArgs[1]}, ${emittedArgs[2]}, ${p_arg}, ${r_arg}, ${p_par_arg}, ${maxmem_arg})`;
+                }
+            );
+        }
         if (name === "getHashes") {
             return this.emitSequencedExpr(
                 arrayType(T_STRING),
@@ -40974,7 +41067,7 @@ class Emitter {
                 () => "tsc_crypto_get_hashes()",
             );
         }
-        unsupported(call, `crypto.${name} (supported: createHash, createHmac, getHashes, randomBytes, randomUUID, timingSafeEqual, pbkdf2Sync)`);
+        unsupported(call, `crypto.${name} (supported: createHash, createHmac, getHashes, randomBytes, randomUUID, timingSafeEqual, pbkdf2Sync, scryptSync)`);
     }
 
     private validateCryptoRandomUUIDOptions(options: ts.Expression, label: string): void {

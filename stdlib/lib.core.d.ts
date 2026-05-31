@@ -1703,6 +1703,15 @@ type CryptoHashAlgorithm = "md5" | "sha1" | "sha224" | "sha256" | "sha384" | "sh
 interface CryptoRandomUUIDOptions {
     disableEntropyCache?: boolean;
 }
+interface CryptoScryptOptions {
+    N?: number;
+    cost?: number;
+    r?: number;
+    blockSize?: number;
+    p?: number;
+    parallelization?: number;
+    maxmem?: number;
+}
 interface CryptoHash {
     update(data: string | Buffer, ...ignored: any[]): CryptoHash;
     digest(encoding?: "hex" | "base64", ...ignored: any[]): string;
@@ -1722,6 +1731,7 @@ interface Crypto {
     randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
     timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
     pbkdf2Sync(password: string | Buffer, salt: string | Buffer, iterations: number, keylen: number, digest: CryptoHashAlgorithm, ...ignored: any[]): Buffer;
+    scryptSync(password: string | Buffer, salt: string | Buffer, keylen: number, options?: CryptoScryptOptions, ...ignored: any[]): Buffer;
 }
 declare const crypto: Crypto;
 declare module "crypto" {
@@ -1732,6 +1742,7 @@ declare module "crypto" {
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
     export function timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
     export function pbkdf2Sync(password: string | Buffer, salt: string | Buffer, iterations: number, keylen: number, digest: CryptoHashAlgorithm, ...ignored: any[]): Buffer;
+    export function scryptSync(password: string | Buffer, salt: string | Buffer, keylen: number, options?: CryptoScryptOptions, ...ignored: any[]): Buffer;
     const defaultCrypto: Crypto;
     export default defaultCrypto;
 }
@@ -1743,6 +1754,7 @@ declare module "node:crypto" {
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
     export function timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
     export function pbkdf2Sync(password: string | Buffer, salt: string | Buffer, iterations: number, keylen: number, digest: CryptoHashAlgorithm, ...ignored: any[]): Buffer;
+    export function scryptSync(password: string | Buffer, salt: string | Buffer, keylen: number, options?: CryptoScryptOptions, ...ignored: any[]): Buffer;
     const defaultCrypto: Crypto;
     export default defaultCrypto;
 }

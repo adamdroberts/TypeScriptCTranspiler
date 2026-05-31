@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `crypto.scryptSync(password, salt, keylen, options?, ...ignored)` computes scrypt derivative keys returning a Buffer, supporting password/salt as string or Buffer, numeric keylen, default parameters, option fields N/cost, r/blockSize, p/parallelization, maxmem, and catchable parameter validation failures. Test: `crypto_scrypt_sync`.
 - `Buffer.from(...)`, `Buffer.toString(...)`, `Buffer.byteLength(...)`, `Buffer.isEncoding(...)`, and Buffer write paths now support bounded `"latin1"`, `"binary"`, and `"ascii"` encoding aliases alongside the existing UTF-8, hex, and base64 subset. Test: `buffer_latin1_ascii_encoding`.
 - Extended `Buffer.prototype.compare` to support optional target and source range bounds (`targetStart?`, `targetEnd?`, `sourceStart?`, `sourceEnd?`) with Node-like range validations and error messages. Test: `buffer_compare_ranges`.
 - Add compile-time `os.constants.signals` object subset supporting named, default, and namespace imports from `"os"` / `"node:os"`, mapping common POSIX signals SIGHUP, SIGINT, SIGQUIT, SIGILL, SIGTRAP, SIGABRT, SIGBUS, SIGFPE, SIGKILL, SIGUSR1, SIGSEGV, SIGUSR2, SIGPIPE, SIGALRM, SIGTERM to stable POSIX/Linux numeric constants. Test: `os_constants_signals`.

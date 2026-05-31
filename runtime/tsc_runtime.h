@@ -289,6 +289,10 @@ struct tsc_buffer* tsc_crypto_pbkdf2_sync_ss(const tsc_str_t* password, const ts
 struct tsc_buffer* tsc_crypto_pbkdf2_sync_sb(const tsc_str_t* password, const struct tsc_buffer* salt, double iterations, double keylen, const tsc_str_t* digest);
 struct tsc_buffer* tsc_crypto_pbkdf2_sync_bs(const struct tsc_buffer* password, const tsc_str_t* salt, double iterations, double keylen, const tsc_str_t* digest);
 struct tsc_buffer* tsc_crypto_pbkdf2_sync_bb(const struct tsc_buffer* password, const struct tsc_buffer* salt, double iterations, double keylen, const tsc_str_t* digest);
+struct tsc_buffer* tsc_crypto_scrypt_sync_ss(const tsc_str_t* password, const tsc_str_t* salt, double keylen, double N, double r, double p, double maxmem);
+struct tsc_buffer* tsc_crypto_scrypt_sync_sb(const tsc_str_t* password, const struct tsc_buffer* salt, double keylen, double N, double r, double p, double maxmem);
+struct tsc_buffer* tsc_crypto_scrypt_sync_bs(const struct tsc_buffer* password, const tsc_str_t* salt, double keylen, double N, double r, double p, double maxmem);
+struct tsc_buffer* tsc_crypto_scrypt_sync_bb(const struct tsc_buffer* password, const struct tsc_buffer* salt, double keylen, double N, double r, double p, double maxmem);
 struct tsc_array* tsc_crypto_get_hashes(void);
 tsc_hash_t* tsc_hash_update(tsc_hash_t* h, const tsc_str_t* data);
 tsc_hash_t* tsc_hash_update_buffer(tsc_hash_t* h, const struct tsc_buffer* data);
