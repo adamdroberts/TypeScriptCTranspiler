@@ -27969,6 +27969,8 @@ class Emitter {
             "ftruncateSync",
             "readSync",
             "writeSync",
+            "readvSync",
+            "writevSync",
         ].find((exported) => this.isNamedImportFrom(calleeId, ["fs", "node:fs"], exported));
         if (fsNamed) {
             return this.emitFsCall(call, fsNamed);
@@ -39646,6 +39648,66 @@ class Emitter {
                 } else {
                     unsupported(args[1]!, "fs.writeSync second argument must be a string or a Buffer");
                 }
+            }
+            case "readvSync": {
+                if (args.length < 2) unsupported(call, "fs.readvSync needs fd and buffers");
+                const fdExpr = this.emitExpr(args[0]!);
+                if (fdExpr.ty.kind !== "number") unsupported(args[0]!, "fs.readvSync fd must be a number");
+
+                const buffersExpr = this.emitExpr(args[1]!);
+                if (buffersExpr.ty.kind !== "array") unsupported(args[1]!, "fs.readvSync second argument must be an array of Buffers");
+
+                let posSpec: SequencedCallArg;
+                let positionIsNull = true;
+                if (args[2] && !this.isUndefinedExpression(args[2]) && args[2].kind !== ts.SyntaxKind.NullKeyword) {
+                    const posExpr = this.emitExpr(args[2]!);
+                    if (posExpr.ty.kind !== "number") unsupported(args[2]!, "fs.readvSync position must be a number or null");
+                    posSpec = { value: posExpr, target: T_NUMBER, node: args[2] };
+                    positionIsNull = false;
+                } else {
+                    posSpec = { value: { c: "0.0", ty: T_NUMBER }, target: T_NUMBER, node: call };
+                }
+
+                const specs: SequencedCallArg[] = [
+                    { value: fdExpr, target: T_NUMBER, node: args[0]! },
+                    { value: buffersExpr, target: arrayType(T_BUFFER), node: args[1]! },
+                    posSpec,
+                    ...this.ignoredArgumentSpecs(args, 3),
+                ];
+
+                return this.emitSequencedExpr(T_NUMBER, specs, ([fd, buffers, pos]) =>
+                    `tsc_fs_readv_sync(${fd!}, ${buffers!}, ${pos!}, ${positionIsNull ? "true" : "false"})`
+                );
+            }
+            case "writevSync": {
+                if (args.length < 2) unsupported(call, "fs.writevSync needs fd and buffers");
+                const fdExpr = this.emitExpr(args[0]!);
+                if (fdExpr.ty.kind !== "number") unsupported(args[0]!, "fs.writevSync fd must be a number");
+
+                const buffersExpr = this.emitExpr(args[1]!);
+                if (buffersExpr.ty.kind !== "array") unsupported(args[1]!, "fs.writevSync second argument must be an array of Buffers");
+
+                let posSpec: SequencedCallArg;
+                let positionIsNull = true;
+                if (args[2] && !this.isUndefinedExpression(args[2]) && args[2].kind !== ts.SyntaxKind.NullKeyword) {
+                    const posExpr = this.emitExpr(args[2]!);
+                    if (posExpr.ty.kind !== "number") unsupported(args[2]!, "fs.writevSync position must be a number or null");
+                    posSpec = { value: posExpr, target: T_NUMBER, node: args[2] };
+                    positionIsNull = false;
+                } else {
+                    posSpec = { value: { c: "0.0", ty: T_NUMBER }, target: T_NUMBER, node: call };
+                }
+
+                const specs: SequencedCallArg[] = [
+                    { value: fdExpr, target: T_NUMBER, node: args[0]! },
+                    { value: buffersExpr, target: arrayType(T_BUFFER), node: args[1]! },
+                    posSpec,
+                    ...this.ignoredArgumentSpecs(args, 3),
+                ];
+
+                return this.emitSequencedExpr(T_NUMBER, specs, ([fd, buffers, pos]) =>
+                    `tsc_fs_writev_sync(${fd!}, ${buffers!}, ${pos!}, ${positionIsNull ? "true" : "false"})`
+                );
             }
         }
         unsupported(call, `fs.${name} (Phase 10 sync subset only)`);

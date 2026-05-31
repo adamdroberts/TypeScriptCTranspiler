@@ -1377,8 +1377,10 @@ interface FS {
     fdatasyncSync(fd: number, ...ignored: any[]): void;
     ftruncateSync(fd: number, len?: number, ...ignored: any[]): void;
     readSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
+    readvSync(fd: number, buffers: Buffer[], position?: number | null, ...ignored: any[]): number;
     writeSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
     writeSync(fd: number, string: string, position?: number | null, encoding?: string | null, ...ignored: any[]): number;
+    writevSync(fd: number, buffers: Buffer[], position?: number | null, ...ignored: any[]): number;
     existsSync(path: FSPathLike, ...ignored: any[]): boolean;
     accessSync(path: FSPathLike, mode?: number, ...ignored: any[]): void;
     readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Buffer[];
@@ -1458,8 +1460,10 @@ declare module "fs" {
     export function fdatasyncSync(fd: number, ...ignored: any[]): void;
     export function ftruncateSync(fd: number, len?: number, ...ignored: any[]): void;
     export function readSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
+    export function readvSync(fd: number, buffers: Buffer[], position?: number | null, ...ignored: any[]): number;
     export function writeSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
     export function writeSync(fd: number, string: string, position?: number | null, encoding?: string | null, ...ignored: any[]): number;
+    export function writevSync(fd: number, buffers: Buffer[], position?: number | null, ...ignored: any[]): number;
     export function existsSync(path: FSPathLike, ...ignored: any[]): boolean;
     export function accessSync(path: FSPathLike, mode?: number, ...ignored: any[]): void;
     export function readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Buffer[];
@@ -1506,8 +1510,10 @@ declare module "node:fs" {
     export function fdatasyncSync(fd: number, ...ignored: any[]): void;
     export function ftruncateSync(fd: number, len?: number, ...ignored: any[]): void;
     export function readSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
+    export function readvSync(fd: number, buffers: Buffer[], position?: number | null, ...ignored: any[]): number;
     export function writeSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
     export function writeSync(fd: number, string: string, position?: number | null, encoding?: string | null, ...ignored: any[]): number;
+    export function writevSync(fd: number, buffers: Buffer[], position?: number | null, ...ignored: any[]): number;
     export function existsSync(path: FSPathLike, ...ignored: any[]): boolean;
     export function accessSync(path: FSPathLike, mode?: number, ...ignored: any[]): void;
     export function readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Buffer[];

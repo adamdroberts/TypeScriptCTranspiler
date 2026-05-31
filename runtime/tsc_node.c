@@ -5042,6 +5042,108 @@ double tsc_fs_write_string_sync(double fd, const tsc_str_t* str, double position
     return (double)bytes_written;
 }
 
+double tsc_fs_readv_sync(double fd, const tsc_array_t* buffers, double position, bool position_is_null) {
+    int fd_int = (int)fd;
+    if (!buffers) {
+        tsc_throw_str(tsc_str_from_cstr("fs.readvSync: buffers array is null"));
+        return 0.0;
+    }
+    size_t iovcnt = buffers->len;
+    if (iovcnt == 0) {
+        return 0.0;
+    }
+    struct iovec* iov = NULL;
+    struct iovec iov_stack[32];
+    if (iovcnt > 32) {
+        iov = (struct iovec*)malloc(iovcnt * sizeof(struct iovec));
+        if (!iov) {
+            tsc_throw_str(tsc_str_from_cstr("fs.readvSync: out of memory"));
+            return 0.0;
+        }
+    } else {
+        iov = iov_stack;
+    }
+
+    for (size_t i = 0; i < iovcnt; i++) {
+        tsc_buffer_t* part = TSC_ARR(tsc_buffer_t*, buffers, i);
+        if (!part) {
+            if (iovcnt > 32) free(iov);
+            tsc_throw_str(tsc_str_from_cstr("fs.readvSync: buffer in array is null"));
+            return 0.0;
+        }
+        iov[i].iov_base = part->data;
+        iov[i].iov_len = part->len;
+    }
+
+    ssize_t bytes_read = 0;
+    if (position_is_null) {
+        bytes_read = readv(fd_int, iov, iovcnt);
+    } else {
+        bytes_read = preadv(fd_int, iov, iovcnt, (off_t)position);
+    }
+    if (iovcnt > 32) {
+        free(iov);
+    }
+    if (bytes_read < 0) {
+        char err_msg[256];
+        snprintf(err_msg, sizeof(err_msg), "fs.readvSync: read failed, %s", strerror(errno));
+        tsc_throw_str(tsc_str_from_cstr(err_msg));
+        return 0.0;
+    }
+    return (double)bytes_read;
+}
+
+double tsc_fs_writev_sync(double fd, const tsc_array_t* buffers, double position, bool position_is_null) {
+    int fd_int = (int)fd;
+    if (!buffers) {
+        tsc_throw_str(tsc_str_from_cstr("fs.writevSync: buffers array is null"));
+        return 0.0;
+    }
+    size_t iovcnt = buffers->len;
+    if (iovcnt == 0) {
+        return 0.0;
+    }
+    struct iovec* iov = NULL;
+    struct iovec iov_stack[32];
+    if (iovcnt > 32) {
+        iov = (struct iovec*)malloc(iovcnt * sizeof(struct iovec));
+        if (!iov) {
+            tsc_throw_str(tsc_str_from_cstr("fs.writevSync: out of memory"));
+            return 0.0;
+        }
+    } else {
+        iov = iov_stack;
+    }
+
+    for (size_t i = 0; i < iovcnt; i++) {
+        const tsc_buffer_t* part = TSC_ARR(tsc_buffer_t*, buffers, i);
+        if (!part) {
+            if (iovcnt > 32) free(iov);
+            tsc_throw_str(tsc_str_from_cstr("fs.writevSync: buffer in array is null"));
+            return 0.0;
+        }
+        iov[i].iov_base = part->data;
+        iov[i].iov_len = part->len;
+    }
+
+    ssize_t bytes_written = 0;
+    if (position_is_null) {
+        bytes_written = writev(fd_int, iov, iovcnt);
+    } else {
+        bytes_written = pwritev(fd_int, iov, iovcnt, (off_t)position);
+    }
+    if (iovcnt > 32) {
+        free(iov);
+    }
+    if (bytes_written < 0) {
+        char err_msg[256];
+        snprintf(err_msg, sizeof(err_msg), "fs.writevSync: write failed, %s", strerror(errno));
+        tsc_throw_str(tsc_str_from_cstr(err_msg));
+        return 0.0;
+    }
+    return (double)bytes_written;
+}
+
 static size_t find_substring(const char* data, size_t len, size_t start, const char* sub, size_t sub_len) {
     if (sub_len == 0) return start;
     if (start + sub_len > len) return (size_t)-1;
