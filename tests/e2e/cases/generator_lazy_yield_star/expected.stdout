@@ -1,0 +1,22 @@
+--- 1. Initialization ---
+Generator initialized lazily
+--- 2. Stepping through next() ---
+lazyYieldStarGen - start
+Yielding array
+Yielded value: 10
+Yielded value: 20
+Yielded array
+Yielding string
+Yielded value: a
+Yielded value: b
+Yielded value: c
+Yielded string
+Yielding set
+Yielded value: 100
+Yielded value: 200
+Yielded set
+Yielding custom iterable
+Yielded value: 300
+Yielded value: 400
+Yielded custom iterable
+Generator done. Return value: lazyDone

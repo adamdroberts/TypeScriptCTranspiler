@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Extended the narrow lazy generator lowering to support bounded `yield*` over arrays, strings, typed Sets, and custom iterable classes while keeping delegated sources lazy across `.next()` calls. Test: `generator_lazy_yield_star`.
 - Extended the narrow lazy generator lowering to resume a single suspended `yield` inside logical `&&` / `||` and nullish `??` expression trees for variable initializers, assignment RHS values, and return expressions. Test: `generator_lazy_yield_logical`.
 - Extended the narrow lazy generator lowering to resume a single suspended `yield` inside array literal expressions for variable initializers, assignment RHS values, and return expressions. Test: `generator_lazy_yield_array_literal`.
 - Extended the narrow lazy generator lowering to resume a single suspended `yield` inside prefix unary, typeof, and void expression trees for variable initializers, assignment RHS values, and return expressions. Test: `generator_lazy_yield_unary`.

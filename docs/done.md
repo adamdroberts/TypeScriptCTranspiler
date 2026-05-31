@@ -1563,6 +1563,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_yield_unary` | lazy generators resume single suspended yield unary/prefix/typeof/void expressions |
 | `generator_lazy_yield_array_literal` | lazy generators resume single suspended yield inside array literal expressions |
 | `generator_lazy_object_literal` | lazy generators resume single suspended yield inside object literal property values |
+| `generator_lazy_yield_star` | lazy generators delegate bounded yield* over arrays, strings, typed Sets, and custom iterables |
 | `generator_yield_undefined` | materialized generator bare yield produces undefined values |
 | `generator_yield_star_dynamic` | materialized generator yield* supports dynamic array and string iterable values |
 | `generator_yield_star_set` | materialized generator yield* supports typed Set sources |

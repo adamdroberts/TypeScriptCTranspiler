@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators support bounded yield* over arrays, strings, sets, and custom iterables"
+}
