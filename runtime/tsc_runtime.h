@@ -951,6 +951,7 @@ extern char** tsc_argv;
 tsc_array_t* tsc_process_argv(void);
 tsc_str_t* tsc_process_argv0(void);
 tsc_array_t* tsc_process_exec_argv(void);
+tsc_set_t* tsc_process_allowed_node_environment_flags(void);
 tsc_str_t* tsc_process_version(void);
 tsc_value_t tsc_process_versions(void);
 tsc_value_t tsc_process_release(void);

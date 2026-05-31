@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `process.allowedNodeEnvironmentFlags` is supported as a bounded read-only `Set<string>` containing a deterministic small list of common Node flags (`--inspect`, `--inspect-brk`, `--require`, `--loader`, `--enable-source-maps`), supporting global process and named, namespace, and default imports from `"process"` / `"node:process"`. Test: `process_allowed_node_environment_flags`.
 - `fs.statfsSync(path[, options])` returns a small object with numeric `bsize`, `frsize`, `blocks`, `bfree`, `bavail`, `files`, and `ffree` fields when `statvfs` is available. Supports `bigint: false` and named, default, and namespace imports from `fs` / `node:fs` while evaluating options-slot and ignored-extra side effects. Test: `fs_statfs_sync`.
 - Implemented POSIX-backed `os.getPriority(pid?)` and `os.setPriority(pidOrPriority, priority?)` plus process scheduling priority constants `os.constants.priority` supporting named, default, and namespace imports from `"os"` / `"node:os"`, including argument evaluation side-effects preservation. Test: `os_priority`.
 - Added `util.types` module under `"util"` and `"node:util"` imports, providing bounded type predicate helpers `isDate`, `isRegExp`, `isNativeError`, `isPromise`, `isMap`, `isSet`, and `isTypedArray` with dynamic runtime checking and static AOT compilation support. Test: `util_types_basic`.

@@ -765,6 +765,7 @@ interface Process {
     readonly release: any;
     readonly features: any;
     readonly title: string;
+    readonly allowedNodeEnvironmentFlags: Set<string>;
     argv: string[];
     argv0: string;
     execPath: string;
@@ -817,6 +818,7 @@ declare module "node:stream" {
     export default defaultStream;
 }
 declare module "process" {
+    export const allowedNodeEnvironmentFlags: Process["allowedNodeEnvironmentFlags"];
     export const arch: Process["arch"];
     export const argv: Process["argv"];
     export const argv0: Process["argv0"];
@@ -854,6 +856,7 @@ declare module "process" {
     export default defaultProcess;
 }
 declare module "node:process" {
+    export const allowedNodeEnvironmentFlags: Process["allowedNodeEnvironmentFlags"];
     export const arch: Process["arch"];
     export const argv: Process["argv"];
     export const argv0: Process["argv0"];
