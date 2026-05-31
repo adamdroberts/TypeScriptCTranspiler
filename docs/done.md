@@ -610,6 +610,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `URLSearchParams` supports bounded `keys()`, `values()`, `entries()`, `[Symbol.iterator]()`, direct for-of `[key, value]` destructuring, and `forEach(callback, thisArg?, ...ignored)` iteration helpers with ignored trailing-argument evaluation. Test: `url_search_params_iterators`
 - `URLSearchParams` supports `sort(...ignored)` in stable name-order semantics preserving duplicate value order for equal names, returning `void`. Test: `url_search_params_sort`
 - `URLSearchParams` supports the `size` readonly property, returning the correct number of query parameter pairs after construction, `append()`, `set()`, `delete()`, and `sort()`, supporting both global and `node:url` instances. Test: `url_search_params_size`
+- `URLSearchParams` supports value-aware `has(name, value?)` and `delete(name, value?)` overloads to check and delete by matching name-value pair while preserving one-argument behavior and evaluating ignored extra arguments. Test: `url_search_params_value_delete_has`
 - URL instances expose `.toString(...ignored)`, `.toJSON(...ignored)`, `.toLocaleString(...ignored)`, `.valueOf(...ignored)`, typed `Reflect.get` / `Reflect.has` for bounded prototype-style string fields, and empty own-property results through `Object.keys`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, `Reflect.ownKeys`, and `Reflect.getOwnPropertyDescriptor`. Test: `url_object_methods`
 
 ### `querystring`
@@ -2235,6 +2236,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `url_search_params` | URLSearchParams string construction, URL searchParams reads, and basic mutation/stringification methods |
 | `url_search_params_sort` | URLSearchParams sort method with stable name-order semantics |
 | `url_search_params_size` | URLSearchParams.size readonly property support |
+| `url_search_params_value_delete_has` | URLSearchParams value-aware has and delete overloads |
 | `url_errors` | URL constructor/base/file-path validation failures are catchable |
 | `url_object_methods` | URL toString/toJSON/toLocaleString/valueOf and object helper coverage |
 | `url_parse` | URL parsing fields |

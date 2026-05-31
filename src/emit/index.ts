@@ -36068,11 +36068,15 @@ class Emitter {
             }
             case "delete": {
                 if (args.length < 1) unsupported(call, "URLSearchParams.delete expects name");
+                const hasValue = args.length >= 2;
                 return this.emitSequencedExpr(T_VOID, [
                     { value: recv },
                     { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
-                    ...this.ignoredArgumentSpecs(args, 1),
-                ], ([params, name]) => `tsc_url_search_params_delete(${params}, ${name})`);
+                    hasValue
+                        ? { value: this.emitExpr(args[1]!), target: T_STRING, node: args[1]! }
+                        : { value: { c: "NULL", ty: T_STRING } },
+                    ...this.ignoredArgumentSpecs(args, hasValue ? 2 : 1),
+                ], ([params, name, value]) => `tsc_url_search_params_delete(${params}, ${name}, ${value})`);
             }
             case "get": {
                 if (args.length < 1) unsupported(call, "URLSearchParams.get expects name");
@@ -36084,11 +36088,15 @@ class Emitter {
             }
             case "has": {
                 if (args.length < 1) unsupported(call, "URLSearchParams.has expects name");
+                const hasValue = args.length >= 2;
                 return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: recv },
                     { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
-                    ...this.ignoredArgumentSpecs(args, 1),
-                ], ([params, name]) => `tsc_url_search_params_has(${params}, ${name})`);
+                    hasValue
+                        ? { value: this.emitExpr(args[1]!), target: T_STRING, node: args[1]! }
+                        : { value: { c: "NULL", ty: T_STRING } },
+                    ...this.ignoredArgumentSpecs(args, hasValue ? 2 : 1),
+                ], ([params, name, value]) => `tsc_url_search_params_has(${params}, ${name}, ${value})`);
             }
             case "set": {
                 if (args.length < 2) unsupported(call, "URLSearchParams.set expects name and value");
