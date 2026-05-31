@@ -109,7 +109,10 @@ static tsc_value_t promise_thenable_resolve(void* env, tsc_value_t this_arg, tsc
     if (state && state->promise) {
         if (state->done) return tsc_value_undefined();
         state->done = true;
-        if (tsc_value_eq(value, state->thenable)) {
+        if (
+            tsc_value_eq(value, state->thenable) ||
+            (tsc_value_is_promise(value) && tsc_value_as_promise(value) == state->promise)
+        ) {
             tsc_promise_reject_in_place(state->promise, tsc_value_string(tsc_str_from_cstr("TypeError: Promise resolved with itself")));
             return tsc_value_undefined();
         }

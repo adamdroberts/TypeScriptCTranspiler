@@ -1,4 +1,5 @@
-events: self|outer|first|second
+events: self|outer|first|second|pending-self
 self: TypeError: Promise resolved with itself
 cycle: TypeError: Promise resolution cycle
+pending-self: TypeError: Promise resolved with itself
 outer: TypeError: Promise resolved with itself
