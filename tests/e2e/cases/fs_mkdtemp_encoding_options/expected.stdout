@@ -1,6 +1,12 @@
 sync: true true
 sync buffer: true true true
 sync null: false true true
+sync null object: false true true
+sync undefined object: true true
+sync default object: true true
 promise: true true
 promise buffer: true true true
 promise null: false true true
+promise null object: false true true
+promise undefined object: true true
+promise default object: true true

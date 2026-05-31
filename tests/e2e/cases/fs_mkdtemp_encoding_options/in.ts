@@ -20,6 +20,15 @@ console.log("sync buffer:", Buffer.isBuffer(syncBufferDir), syncBufferPath.index
 const syncNullDir = fs.mkdtempSync(syncPrefix, NULL_ENCODING);
 console.log("sync null:", Buffer.isBuffer(syncNullDir as any), syncNullDir.indexOf(syncPrefix) === 0, fs.statSync(syncNullDir).isDirectory());
 
+const syncNullObjectDir = fs.mkdtempSync(syncPrefix, { encoding: null });
+console.log("sync null object:", Buffer.isBuffer(syncNullObjectDir as any), syncNullObjectDir.indexOf(syncPrefix) === 0, fs.statSync(syncNullObjectDir).isDirectory());
+
+const syncUndefinedObjectDir = fs.mkdtempSync(syncPrefix, { encoding: undefined });
+console.log("sync undefined object:", syncUndefinedObjectDir.indexOf(syncPrefix) === 0, fs.statSync(syncUndefinedObjectDir).isDirectory());
+
+const syncDefaultObjectDir = fs.mkdtempSync(syncPrefix, {});
+console.log("sync default object:", syncDefaultObjectDir.indexOf(syncPrefix) === 0, fs.statSync(syncDefaultObjectDir).isDirectory());
+
 nodefs.promises.mkdtemp(promisePrefix, UTF8_DASH_OPTIONS).then((promiseDir: string): string => {
     console.log("promise:", promiseDir.indexOf(promisePrefix) === 0, fs.statSync(promiseDir).isDirectory());
     fs.rmSync(promiseDir, { recursive: true, force: true });
@@ -37,6 +46,24 @@ nodefs.promises.mkdtemp(promisePrefix, NULL_OPTIONS).then((promiseDir: string): 
     fs.rmSync(promiseDir, { recursive: true, force: true });
 });
 
+nodefs.promises.mkdtemp(promisePrefix, { encoding: null }).then((promiseDir: string): void => {
+    console.log("promise null object:", Buffer.isBuffer(promiseDir as any), promiseDir.indexOf(promisePrefix) === 0, fs.statSync(promiseDir).isDirectory());
+    fs.rmSync(promiseDir, { recursive: true, force: true });
+});
+
+nodefs.promises.mkdtemp(promisePrefix, { encoding: undefined }).then((promiseDir: string): void => {
+    console.log("promise undefined object:", promiseDir.indexOf(promisePrefix) === 0, fs.statSync(promiseDir).isDirectory());
+    fs.rmSync(promiseDir, { recursive: true, force: true });
+});
+
+nodefs.promises.mkdtemp(promisePrefix, {}).then((promiseDir: string): void => {
+    console.log("promise default object:", promiseDir.indexOf(promisePrefix) === 0, fs.statSync(promiseDir).isDirectory());
+    fs.rmSync(promiseDir, { recursive: true, force: true });
+});
+
 fs.rmSync(syncDir, { recursive: true, force: true });
 fs.rmSync(syncBufferPath, { recursive: true, force: true });
 fs.rmSync(syncNullDir, { recursive: true, force: true });
+fs.rmSync(syncNullObjectDir, { recursive: true, force: true });
+fs.rmSync(syncUndefinedObjectDir, { recursive: true, force: true });
+fs.rmSync(syncDefaultObjectDir, { recursive: true, force: true });
