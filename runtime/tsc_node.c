@@ -70,6 +70,17 @@ tsc_str_t* tsc_crypto_random_uuid(void) {
     return out;
 }
 
+bool tsc_crypto_timing_safe_equal(const tsc_buffer_t* a, const tsc_buffer_t* b) {
+    if (!a || !b || a->len != b->len) {
+        tsc_throw_str(tsc_str_from_cstr("crypto.timingSafeEqual: inputs must have the same byte length"));
+    }
+    uint8_t diff = 0;
+    for (size_t i = 0; i < a->len; i++) {
+        diff |= (uint8_t)(a->data[i] ^ b->data[i]);
+    }
+    return diff == 0;
+}
+
 void hash_update_bytes(tsc_hash_t* h, const void* data, size_t len) {
     if (h->finalized) return;
     if (len == 0) return;
