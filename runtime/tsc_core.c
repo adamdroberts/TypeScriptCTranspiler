@@ -103,6 +103,7 @@ static tsc_str_t* g_current_error = NULL;
 static struct timespec g_boot_time;
 static bool g_boot_time_set = false;
 static bool g_dynamic_stats_enabled = false;
+bool g_shape_diagnostics_enabled = false;
 static uint64_t g_dynamic_stats[TSC_DYNAMIC_STAT_COUNT];
 typedef struct {
     tsc_next_tick_fn_t fn;
@@ -184,6 +185,10 @@ void tsc_bootstrap(int argc, char** argv) {
     if (dynamic_stats && dynamic_stats[0] != '\0' && strcmp(dynamic_stats, "0") != 0) {
         g_dynamic_stats_enabled = true;
         atexit(tsc_dynamic_stats_report);
+    }
+    const char* shape_diags = getenv("TSC_SHAPE_DIAGNOSTICS");
+    if (shape_diags && shape_diags[0] != '\0' && strcmp(shape_diags, "0") != 0) {
+        g_shape_diagnostics_enabled = true;
     }
     srand((unsigned)time(NULL));
     if (clock_gettime(CLOCK_MONOTONIC, &g_boot_time) == 0) {
