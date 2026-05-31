@@ -5069,6 +5069,17 @@ function typeofEqualityDce(): string {
         : "local_dead_typeof_equality_false";
 }
 
+function typeofExpressionDce(): string {
+    return (typeof (true && "logical_typeof") === "string" &&
+        typeof (false || 42) === "number" &&
+        typeof ((undefined as bigint | undefined) ?? 1n) === "bigint" &&
+        typeof (undefined ?? (() => 1)) === "function" &&
+        typeof (true ? { ok: 1 } : { ok: 2 }) === "object" &&
+        typeof ((("cond" + "ition").length > 0) ? "left_typeof" : "right_typeof") === "string")
+        ? "kept_typeof_expression"
+        : "local_dead_typeof_expression_false";
+}
+
 function lengthComparisonDce(): string {
     const localText: string = "static";
     const localArray: number[] = [1, 2, 3];
@@ -5573,6 +5584,7 @@ console.log(
     primitiveCallableConstructorDce(),
     primitiveRelationalDce(),
     typeofEqualityDce(),
+    typeofExpressionDce(),
     lengthComparisonDce(),
     numericArithmeticDce(),
     stringConcatDce(),

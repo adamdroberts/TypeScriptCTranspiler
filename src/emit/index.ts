@@ -13400,6 +13400,47 @@ class Emitter {
         ) {
             return "object";
         }
+        if (ts.isConditionalExpression(unwrapped)) {
+            const condition = this.staticBooleanValue(unwrapped.condition, seenConsts);
+            if (condition === true) return this.sideEffectFreeTypeofString(unwrapped.whenTrue, seenConsts);
+            if (condition === false) return this.sideEffectFreeTypeofString(unwrapped.whenFalse, seenConsts);
+            if (this.isSideEffectFreeTopLevelConstInitializer(unwrapped.condition, seenConsts)) {
+                const whenTrue = this.sideEffectFreeTypeofString(unwrapped.whenTrue, seenConsts);
+                const whenFalse = this.sideEffectFreeTypeofString(unwrapped.whenFalse, seenConsts);
+                if (whenTrue !== null && whenTrue === whenFalse) return whenTrue;
+            }
+        }
+        if (ts.isBinaryExpression(unwrapped)) {
+            switch (unwrapped.operatorToken.kind) {
+                case ts.SyntaxKind.AmpersandAmpersandToken: {
+                    const left = this.staticBooleanValue(unwrapped.left, seenConsts);
+                    if (left === false) return this.sideEffectFreeTypeofString(unwrapped.left, seenConsts);
+                    if (left === true) return this.sideEffectFreeTypeofString(unwrapped.right, seenConsts);
+                    const leftType = this.sideEffectFreeTypeofString(unwrapped.left, seenConsts);
+                    const rightType = this.sideEffectFreeTypeofString(unwrapped.right, seenConsts);
+                    if (leftType !== null && leftType === rightType) return leftType;
+                    break;
+                }
+                case ts.SyntaxKind.BarBarToken: {
+                    const left = this.staticBooleanValue(unwrapped.left, seenConsts);
+                    if (left === true) return this.sideEffectFreeTypeofString(unwrapped.left, seenConsts);
+                    if (left === false) return this.sideEffectFreeTypeofString(unwrapped.right, seenConsts);
+                    const leftType = this.sideEffectFreeTypeofString(unwrapped.left, seenConsts);
+                    const rightType = this.sideEffectFreeTypeofString(unwrapped.right, seenConsts);
+                    if (leftType !== null && leftType === rightType) return leftType;
+                    break;
+                }
+                case ts.SyntaxKind.QuestionQuestionToken: {
+                    const left = this.staticNullishState(unwrapped.left, seenConsts);
+                    if (left === "nonNullish") return this.sideEffectFreeTypeofString(unwrapped.left, seenConsts);
+                    if (left === "nullish") return this.sideEffectFreeTypeofString(unwrapped.right, seenConsts);
+                    const leftType = this.sideEffectFreeTypeofString(unwrapped.left, seenConsts);
+                    const rightType = this.sideEffectFreeTypeofString(unwrapped.right, seenConsts);
+                    if (leftType !== null && leftType === rightType) return leftType;
+                    break;
+                }
+            }
+        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeTypeofString(init, seenConsts) : null;
     }
