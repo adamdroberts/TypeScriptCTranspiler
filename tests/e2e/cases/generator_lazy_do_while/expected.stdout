@@ -1,0 +1,6 @@
+false yield-0
+false yield-1
+true total-6
+start|before:0:0|after:0:2|before:1:2|after:1:6|done:6:1
+false once-1
+true seen-1
