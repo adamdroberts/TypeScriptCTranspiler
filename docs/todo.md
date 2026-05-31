@@ -96,6 +96,7 @@ This is the next item that most directly expands what programs can be written ag
   - Generated-C DCE static primitive equality now folds side-effect-free loose equality across string, number, boolean, and nullish operands. Test: `generated_c_dce_const`.
   - Generated-C DCE static primitive equality now folds side-effect-free loose equality between BigInt operands and statically coercible number, string, or boolean counterparts. Test: `generated_c_dce_const`.
   - Generated-C DCE static boolean analysis now folds side-effect-free numeric and string relational comparisons. Test: `generated_c_dce_const`.
+  - Generated-C DCE static boolean analysis now folds side-effect-free `Array.isArray(...)` calls over statically known array and primitive operands. Test: `generated_c_dce_const`.
   - Generated-C DCE static primitive equality now folds `typeof` over side-effect-free literal and const operands. Test: `generated_c_dce_const`.
   - Generated-C DCE static `typeof` analysis now folds side-effect-free computed primitive operands. Test: `generated_c_dce_const`.
   - Generated-C DCE static `typeof` analysis now folds side-effect-free conditional, logical `&&`/`||`, and nullish `??` expression trees when their resulting operand type is statically known. Test: `generated_c_dce_const`.

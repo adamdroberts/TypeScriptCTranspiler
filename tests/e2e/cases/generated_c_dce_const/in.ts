@@ -5080,6 +5080,20 @@ function typeofExpressionDce(): string {
         : "local_dead_typeof_expression_false";
 }
 
+function arrayIsArrayStaticDce(): string {
+    const localArray = [1, 2, 3];
+    return (Array.isArray(["array_is_array_static"], "ignored_array_is_array_static" as any) &&
+        Array.isArray(localArray) &&
+        !Array.isArray("not_array") &&
+        !Array.isArray(123) &&
+        !Array.isArray(true) &&
+        !Array.isArray(null) &&
+        !Array.isArray(undefined) &&
+        !Array.isArray(1n))
+        ? "kept_array_is_array_static"
+        : "local_dead_array_is_array_static_false";
+}
+
 function lengthComparisonDce(): string {
     const localText: string = "static";
     const localArray: number[] = [1, 2, 3];
@@ -5585,6 +5599,7 @@ console.log(
     primitiveRelationalDce(),
     typeofEqualityDce(),
     typeofExpressionDce(),
+    arrayIsArrayStaticDce(),
     lengthComparisonDce(),
     numericArithmeticDce(),
     stringConcatDce(),
