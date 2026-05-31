@@ -1,4 +1,5 @@
 events: throw getter|noncall getter
 throw getter: getter boom
 noncall getter: 7
+primitive: 42
 callback throw getter: getter boom
