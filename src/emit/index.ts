@@ -1009,9 +1009,14 @@ class Emitter {
                 if (ts.isSpreadAssignment(prop)) {
                     return this.isSideEffectFreeObjectSpreadOperand(prop.expression, seenConsts);
                 }
-                if (!ts.isPropertyAssignment(prop)) return false;
-                if (!this.objectLiteralPropertyNameHasNoDefinitionSideEffects(prop.name, seenConsts)) return false;
-                return this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts);
+                if (ts.isPropertyAssignment(prop)) {
+                    if (!this.objectLiteralPropertyNameHasNoDefinitionSideEffects(prop.name, seenConsts)) return false;
+                    return this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts);
+                }
+                if (ts.isShorthandPropertyAssignment(prop)) {
+                    return this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts);
+                }
+                return false;
             });
         }
         return false;
@@ -27991,6 +27996,9 @@ class Emitter {
         if (name === "setTimeout") {
             return this.emitSetTimeoutCall(call);
         }
+        if (name === "setInterval") {
+            return this.emitSetIntervalCall(call);
+        }
         if (name === "clearTimeout" || name === "clearInterval") {
             return this.emitClearTimerCall(call, "tsc_clear_timeout");
         }
@@ -28008,7 +28016,7 @@ class Emitter {
         if (bufferTranscodeNamed) {
             return this.emitBufferTranscodeCall(call);
         }
-        const timersNamed = ["setTimeout", "clearTimeout", "clearInterval", "setImmediate", "clearImmediate"]
+        const timersNamed = ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "setImmediate", "clearImmediate"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["timers", "node:timers"], exported));
         if (timersNamed) {
             return this.emitTimersCall(call, timersNamed);
@@ -31632,7 +31640,8 @@ class Emitter {
                 { value: argList, node: call },
             ], ([target, list]) => {
                 const fn = this.freshTemp("_dyn_call_fn");
-                return `({ tsc_value_t ${fn} = tsc_value_get_prop(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)})); tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${list})); })`;
+                const cache = this.freshTemp("_prop_cache");
+                return `({ static tsc_prop_cache_t ${cache}; tsc_value_t ${fn} = tsc_value_get_prop_cached(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}), &${cache}); tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${list})); })`;
             });
         }
         for (const arg of args) {
@@ -31641,7 +31650,9 @@ class Emitter {
         return this.emitSequencedExpr(T_VALUE, specs, ([target, ...values]) => {
             const av = this.freshTemp("_dyn_call_args");
             const fn = this.freshTemp("_dyn_call_fn");
+            const cache = this.freshTemp("_prop_cache");
             const pieces = [
+                `static tsc_prop_cache_t ${cache}`,
                 `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${values.length || 1})`,
             ];
             for (const value of values) {
@@ -31649,7 +31660,7 @@ class Emitter {
                 pieces.push(`tsc_value_t ${tmp} = ${value}`);
                 pieces.push(`tsc_array_push_raw(${av}, &${tmp})`);
             }
-            pieces.push(`tsc_value_t ${fn} = tsc_value_get_prop(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}))`);
+            pieces.push(`tsc_value_t ${fn} = tsc_value_get_prop_cached(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}), &${cache})`);
             pieces.push(`tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${av}))`);
             return `({ ${pieces.join("; ")}; })`;
         });
@@ -34611,9 +34622,9 @@ class Emitter {
 
     private dnsLookupOptions(options: ts.Expression | undefined): { family: number; all: boolean; hints: number } {
         const out = { family: 0, all: false, hints: 0 };
-        if (!options || this.isUndefinedLikeExpression(options)) return out;
+        if (!options || this.isUndefinedLikeExpression(options) || this.isNullExpression(options)) return out;
         options = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (this.isUndefinedLikeExpression(options)) return out;
+        if (this.isUndefinedLikeExpression(options) || this.isNullExpression(options)) return out;
         const numericFamily = this.dnsLookupNumberValue(options);
         if (numericFamily !== null) {
             out.family = numericFamily;
@@ -34626,44 +34637,50 @@ class Emitter {
             unsupported(options, "dns.lookup options must be a numeric family or object literal in this subset");
         }
         for (const prop of options.properties) {
-            if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, "dns.lookup options only support property assignments");
+            let key: string | null = null;
+            let valueNode: ts.Expression | undefined;
+            if (ts.isPropertyAssignment(prop)) {
+                key = this.staticPropertyName(prop.name);
+                valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+            } else if (ts.isShorthandPropertyAssignment(prop)) {
+                key = prop.name.text;
+                valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.name);
+            } else {
+                unsupported(prop, "dns.lookup options only support property assignments and shorthand property assignments");
             }
-            const key = this.staticPropertyName(prop.name);
             if (key !== "family" && key !== "all" && key !== "verbatim" && key !== "order" && key !== "hints") {
                 unsupported(prop.name, `dns.lookup unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
-            const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
             if (this.isUndefinedExpression(valueNode)) {
                 continue;
             }
             if (key === "family") {
                 const family = this.dnsLookupNumberValue(valueNode);
                 if (family === null) {
-                    unsupported(prop.initializer, "dns.lookup family must be numeric literal 0, 4, or 6 in this subset");
+                    unsupported(valueNode, "dns.lookup family must be numeric literal 0, 4, or 6 in this subset");
                 }
                 out.family = family;
                 if (out.family !== 0 && out.family !== 4 && out.family !== 6) {
-                    unsupported(prop.initializer, "dns.lookup family must be 0, 4, or 6 in this subset");
+                    unsupported(valueNode, "dns.lookup family must be 0, 4, or 6 in this subset");
                 }
             } else if (key === "all") {
                 const all = this.dnsLookupBooleanValue(valueNode);
                 if (all === null) {
-                    unsupported(prop.initializer, "dns.lookup all must be a boolean literal in this subset");
+                    unsupported(valueNode, "dns.lookup all must be a boolean literal in this subset");
                 }
                 out.all = all;
             } else if (key === "verbatim") {
                 const verbatim = this.dnsLookupBooleanValue(valueNode);
                 if (verbatim === null) {
-                    unsupported(prop.initializer, "dns.lookup verbatim must be a boolean literal in this subset");
+                    unsupported(valueNode, "dns.lookup verbatim must be a boolean literal in this subset");
                 }
             } else if (key === "order") {
                 const order = this.dnsLookupStringValue(valueNode);
                 if (order === null) {
-                    unsupported(prop.initializer, "dns.lookup order must be a string literal in this subset");
+                    unsupported(valueNode, "dns.lookup order must be a string literal in this subset");
                 }
                 if (order !== "verbatim" && order !== "ipv4first" && order !== "ipv6first") {
-                    unsupported(prop.initializer, "dns.lookup order must be verbatim, ipv4first, or ipv6first");
+                    unsupported(valueNode, "dns.lookup order must be verbatim, ipv4first, or ipv6first");
                 }
             } else if (key === "hints") {
                 out.hints = this.dnsLookupHintValue(valueNode);
@@ -35849,10 +35866,50 @@ class Emitter {
         });
     }
 
+    private emitSetIntervalCall(call: ts.CallExpression): EmitResult {
+        if (call.arguments.length < 1) unsupported(call, "setInterval expects a callback and optional literal 0 delay");
+        const callbackNode = call.arguments[0]!;
+        const callback = this.emitExpr(callbackNode);
+        if (call.arguments.length >= 2 && !this.isZeroDelayLiteral(call.arguments[1]!)) {
+            unsupported(call.arguments[1]!, "setInterval in this subset requires an omitted delay or literal 0 delay");
+        }
+        const delayNode = call.arguments[1];
+        const delayValue = delayNode && this.shouldEvaluateSideEffectfulVoidDefault(delayNode)
+            ? this.emitExpr(delayNode)
+            : undefined;
+        const argNodes = call.arguments.length >= 2
+            ? Array.from(call.arguments.slice(2))
+            : [];
+        const argValues = argNodes.map((arg) => this.emitExpr(arg));
+        const adapter = this.ensureTimeoutAdapter(callbackNode, callback.ty, argValues.map((arg) => arg.ty));
+        const prepared = this.prepareType(callback.ty);
+        const params = prepared.kind === "function" ? prepared.params ?? [] : [];
+        return this.emitSequencedExpr(T_NUMBER, [
+            { value: callback, target: callback.ty, node: callbackNode },
+            ...(delayNode && delayValue
+                ? [{ value: delayValue, target: T_VOID, node: delayNode }]
+                : []),
+            ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
+        ], ([fn, ...values]) => {
+            const args = delayValue ? values.slice(1) : values;
+            const envType = `${adapter}_env_t`;
+            const env = this.freshTemp("_interval_env");
+            const pieces = [
+                `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
+                `${env}->fn = ${fn}`,
+            ];
+            args.forEach((arg, i) => pieces.push(`${env}->arg${i} = ${arg}`));
+            pieces.push(`tsc_set_interval(${adapter}, ${env})`);
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
     private emitTimersCall(call: ts.CallExpression, name: string): EmitResult {
         switch (name) {
             case "setTimeout":
                 return this.emitSetTimeoutCall(call);
+            case "setInterval":
+                return this.emitSetIntervalCall(call);
             case "setImmediate":
                 return this.emitSetImmediateCall(call);
             case "clearTimeout":
