@@ -37449,14 +37449,12 @@ class Emitter {
     }
 
     private emitSetTimeoutCall(call: ts.CallExpression): EmitResult {
-        if (call.arguments.length < 1) unsupported(call, "setTimeout expects a callback and optional literal 0 delay");
+        if (call.arguments.length < 1) unsupported(call, "setTimeout expects a callback and optional delay");
         const callbackNode = call.arguments[0]!;
         const callback = this.emitExpr(callbackNode);
-        if (call.arguments.length >= 2 && !this.isZeroDelayLiteral(call.arguments[1]!)) {
-            unsupported(call.arguments[1]!, "setTimeout in this subset requires an omitted delay or literal 0 delay");
-        }
         const delayNode = call.arguments[1];
-        const delayValue = delayNode && this.shouldEvaluateSideEffectfulVoidDefault(delayNode)
+        const delayIsDefault = !delayNode || this.isUndefinedLikeExpression(delayNode);
+        const delayValue = delayNode && (!delayIsDefault || this.shouldEvaluateSideEffectfulVoidDefault(delayNode))
             ? this.emitExpr(delayNode)
             : undefined;
         const argNodes = call.arguments.length >= 2
@@ -37466,14 +37464,17 @@ class Emitter {
         const adapter = this.ensureTimeoutAdapter(callbackNode, callback.ty, argValues.map((arg) => arg.ty));
         const prepared = this.prepareType(callback.ty);
         const params = prepared.kind === "function" ? prepared.params ?? [] : [];
-        return this.emitSequencedExpr(T_NUMBER, [
+        const specs: SequencedCallArg[] = [
             { value: callback, target: callback.ty, node: callbackNode },
             ...(delayNode && delayValue
-                ? [{ value: delayValue, target: T_VOID, node: delayNode }]
+                ? [{ value: delayValue, target: delayIsDefault ? T_VOID : T_NUMBER, node: delayNode }]
                 : []),
             ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
-        ], ([fn, ...values]) => {
-            const args = delayValue ? values.slice(1) : values;
+        ];
+        return this.emitSequencedExpr(T_NUMBER, specs, ([fn, ...values]) => {
+            const hasSequencedDelay = !!(delayNode && delayValue);
+            const delayC = hasSequencedDelay && !delayIsDefault ? values[0] : "0.0";
+            const args = hasSequencedDelay ? values.slice(1) : values;
             const envType = `${adapter}_env_t`;
             const env = this.freshTemp("_timeout_env");
             const pieces = [
@@ -37481,7 +37482,7 @@ class Emitter {
                 `${env}->fn = ${fn}`,
             ];
             args.forEach((arg, i) => pieces.push(`${env}->arg${i} = ${arg}`));
-            pieces.push(`tsc_set_timeout(${adapter}, ${env})`);
+            pieces.push(`tsc_set_timeout(${adapter}, ${env}, ${delayC})`);
             return `({ ${pieces.join("; ")}; })`;
         });
     }

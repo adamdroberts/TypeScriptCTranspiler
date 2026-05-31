@@ -134,6 +134,8 @@ typedef struct {
     double id;
     bool canceled;
     bool is_interval;
+    double delay_ms;
+    double trigger_ms;
 } tsc_timeout_entry_t;
 static tsc_timeout_entry_t* g_timeout_queue = NULL;
 static size_t g_timeout_len = 0;
@@ -755,7 +757,20 @@ void tsc_drain_immediates(void) {
     }
 }
 
-double tsc_set_timeout(tsc_timeout_fn_t fn, void* env) {
+static double tsc_now_ms(void) {
+    return tsc_process_uptime() * 1000.0;
+}
+
+static double tsc_timer_delay_ms(double delay) {
+    if (isnan(delay) || isinf(delay) || delay < 0.0) return 0.0;
+    return delay;
+}
+
+static bool tsc_timeout_ready(const tsc_timeout_entry_t* entry, double now_ms) {
+    return entry->trigger_ms <= now_ms;
+}
+
+double tsc_set_timeout(tsc_timeout_fn_t fn, void* env, double delay) {
     if (!fn) return 0.0;
     if (g_timeout_len == g_timeout_cap) {
         size_t next = g_timeout_cap ? g_timeout_cap * 2 : 8;
@@ -765,7 +780,8 @@ double tsc_set_timeout(tsc_timeout_fn_t fn, void* env) {
         g_timeout_cap = next;
     }
     double id = g_next_timer_id++;
-    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, false };
+    double delay_ms = tsc_timer_delay_ms(delay);
+    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, false, delay_ms, tsc_now_ms() + delay_ms };
     return id;
 }
 
@@ -779,7 +795,7 @@ double tsc_set_interval(tsc_timeout_fn_t fn, void* env) {
         g_timeout_cap = next;
     }
     double id = g_next_timer_id++;
-    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, true };
+    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, true, 0.0, tsc_now_ms() };
     return id;
 }
 
@@ -795,9 +811,10 @@ void tsc_clear_timeout(double id) {
 void tsc_drain_timeouts(void) {
     size_t count = g_timeout_len;
     size_t idx = 0;
+    double now_ms = tsc_now_ms();
     while (idx < count) {
         tsc_timeout_entry_t entry = g_timeout_queue[idx++];
-        if (!g_timeout_queue[idx - 1].canceled && entry.fn) {
+        if (!g_timeout_queue[idx - 1].canceled && entry.fn && tsc_timeout_ready(&entry, now_ms)) {
             entry.fn(entry.env);
             if (entry.is_interval && !g_timeout_queue[idx - 1].canceled) {
                 if (g_timeout_len == g_timeout_cap) {
@@ -807,29 +824,63 @@ void tsc_drain_timeouts(void) {
                     g_timeout_queue = entries;
                     g_timeout_cap = next;
                 }
-                g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ entry.fn, entry.env, entry.id, false, true };
+                g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ entry.fn, entry.env, entry.id, false, true, 0.0, tsc_now_ms() };
             }
+            g_timeout_queue[idx - 1].canceled = true;
         }
         tsc_drain_microtasks_and_next_ticks();
     }
-    if (g_timeout_len > count) {
-        size_t remaining = g_timeout_len - count;
-        memmove(g_timeout_queue, g_timeout_queue + count, remaining * sizeof(tsc_timeout_entry_t));
-        g_timeout_len = remaining;
-    } else {
-        g_timeout_len = 0;
+    size_t live = 0;
+    for (size_t i = 0; i < g_timeout_len; i++) {
+        if (!g_timeout_queue[i].canceled) {
+            g_timeout_queue[live++] = g_timeout_queue[i];
+        }
     }
+    g_timeout_len = live;
+}
+
+static bool tsc_has_ready_timeout(void) {
+    double now_ms = tsc_now_ms();
+    for (size_t i = 0; i < g_timeout_len; i++) {
+        if (!g_timeout_queue[i].canceled && g_timeout_queue[i].fn && tsc_timeout_ready(&g_timeout_queue[i], now_ms)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static double tsc_next_timeout_delay_ms(void) {
+    double now_ms = tsc_now_ms();
+    double delay = -1.0;
+    for (size_t i = 0; i < g_timeout_len; i++) {
+        if (g_timeout_queue[i].canceled || !g_timeout_queue[i].fn) continue;
+        double candidate = g_timeout_queue[i].trigger_ms - now_ms;
+        if (candidate < 0.0) candidate = 0.0;
+        if (delay < 0.0 || candidate < delay) delay = candidate;
+    }
+    return delay;
+}
+
+static void tsc_sleep_ms(double delay_ms) {
+    if (delay_ms <= 0.0) return;
+    struct timespec ts;
+    ts.tv_sec = (time_t)(delay_ms / 1000.0);
+    ts.tv_nsec = (long)((delay_ms - ((double)ts.tv_sec * 1000.0)) * 1000000.0);
+    nanosleep(&ts, NULL);
 }
 
 void tsc_run_event_loop(void) {
     while (g_next_tick_len > 0 || g_microtask_len > 0 || g_timeout_len > 0 || g_immediate_len > 0) {
         tsc_drain_microtasks_and_next_ticks();
-        while (g_timeout_len > 0) {
+        while (tsc_has_ready_timeout()) {
             tsc_drain_timeouts();
             tsc_drain_microtasks_and_next_ticks();
         }
         if (g_immediate_len > 0) {
             tsc_drain_immediates();
+        }
+        if (g_next_tick_len == 0 && g_microtask_len == 0 && g_immediate_len == 0 && g_timeout_len > 0) {
+            tsc_sleep_ms(tsc_next_timeout_delay_ms());
         }
     }
 }
