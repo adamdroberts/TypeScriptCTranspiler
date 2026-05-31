@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Extended `Object.prototype.isPrototypeOf.call(...)` across array and function prototype chains, and made `Object.getOwnPropertyDescriptors(...)` return empty descriptor objects for primitive non-nullish targets while preserving nullish rejection. Test: `object_prototype_is_prototype_of_arrays_functions`.
 - Embedded Node native-addon bridge conversion now preserves function-valued properties in both directions, so addon-exported callbacks can be invoked from compiled code and compiled AOT function values can be passed back into V8. Test: `native_addon_manifest_function_export`.
 - Extended the narrow lazy generator lowering to support nested `switch` statements and nested block-local `break` statements without breaking the enclosing C state-machine switch. Tests: `generator_lazy_switch_nested`, `generator_lazy_switch_nested_switch`.
 - Added a bounded wall-clock `timers/promises.setTimeout(delay, value?, options?)` path for nonzero numeric delays, including dynamic delay expressions and delayed Promise fulfillment. Test: `timers_promises_delay`.
