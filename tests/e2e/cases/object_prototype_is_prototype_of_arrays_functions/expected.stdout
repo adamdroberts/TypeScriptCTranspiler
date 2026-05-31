@@ -1,0 +1,13 @@
+arrayProto: object [object Object]
+functionProto: object [object Object]
+objectProto: object null
+arrayProto isPrototypeOf arr: true
+functionProto isPrototypeOf fnVal: true
+objectProto isPrototypeOf arr: Object.prototype.isPrototypeOf.call receiver is null or undefined
+objectProto isPrototypeOf fnVal: Object.prototype.isPrototypeOf.call receiver is null or undefined
+null isPrototypeOf arr: Object.prototype.isPrototypeOf.call receiver is null or undefined
+undefined isPrototypeOf fnVal: Object.prototype.isPrototypeOf.call receiver is null or undefined
+descsNum keys: 
+descsBool keys: 
+descsNull: Object.getOwnPropertyDescriptors target must not be null or undefined
+descsUndefined: Object.getOwnPropertyDescriptors target must not be null or undefined

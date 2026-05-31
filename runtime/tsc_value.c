@@ -882,16 +882,22 @@ tsc_value_t tsc_value_object_create(tsc_value_t prototype) {
 }
 
 bool tsc_value_is_prototype_of(tsc_value_t prototype, tsc_value_t object) {
-    if (
-        value_is_box(prototype) &&
-        value_tag(prototype) == TSC_VALUE_TAG_OBJECT &&
-        value_is_box(object) &&
-        value_tag(object) == TSC_VALUE_TAG_OBJECT
-    ) {
-        return tsc_object_is_prototype_of(
-            (tsc_object_t*)value_ptr(prototype),
-            (tsc_object_t*)value_ptr(object)
-        );
+    if (!value_is_box(prototype) || !value_is_box(object)) return false;
+    tsc_value_tag_t proto_tag = value_tag(prototype);
+    tsc_value_tag_t obj_tag = value_tag(object);
+    if (proto_tag != TSC_VALUE_TAG_OBJECT && proto_tag != TSC_VALUE_TAG_ARRAY && proto_tag != TSC_VALUE_TAG_FUNCTION) {
+        return false;
+    }
+    if (obj_tag != TSC_VALUE_TAG_OBJECT && obj_tag != TSC_VALUE_TAG_ARRAY && obj_tag != TSC_VALUE_TAG_FUNCTION) {
+        return false;
+    }
+    const void* needle = (const void*)value_ptr(prototype);
+    tsc_value_t cur = tsc_value_get_prototype_of(object);
+    while (value_is_box(cur)) {
+        tsc_value_tag_t cur_tag = value_tag(cur);
+        if (cur_tag != TSC_VALUE_TAG_OBJECT && cur_tag != TSC_VALUE_TAG_ARRAY && cur_tag != TSC_VALUE_TAG_FUNCTION) break;
+        if (value_ptr(cur) == needle) return true;
+        cur = tsc_value_get_prototype_of(cur);
     }
     return false;
 }
@@ -1670,7 +1676,12 @@ tsc_value_t tsc_value_get_own_property_descriptors(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         return value_descriptors_from_function((const tsc_function_identity_t*)value_ptr(v));
     }
-    if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) return tsc_value_undefined();
+    if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) {
+        if (tsc_value_is_nullish(v)) {
+            tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyDescriptors target must not be null or undefined"));
+        }
+        return tsc_value_object(tsc_object_new());
+    }
     tsc_object_t* o = (tsc_object_t*)value_ptr(v);
     tsc_object_t* out = tsc_object_new();
     if (o->is_proxy) {
