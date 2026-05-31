@@ -5178,6 +5178,15 @@ function stringInstanceRepeatPadDce(): string {
         : "local_dead_string_instance_repeat_pad_false";
 }
 
+function uriStaticFoldingDce(): string {
+    return (encodeURI("a b") === "a%20b" &&
+        encodeURIComponent("a/b") === "a%2Fb" &&
+        decodeURI("abc") === "abc" &&
+        decodeURIComponent("def") === "def")
+        ? "kept_uri_static_folding"
+        : "local_dead_uri_folding_false";
+}
+
 function computedTruthyFalsyDce(): string {
     const localText: string = "truth";
     const localArray: number[] = [1];
@@ -5461,6 +5470,7 @@ console.log(
     stringInstanceCaseFoldingDce(),
     stringInstanceTrimDce(),
     stringInstanceRepeatPadDce(),
+    uriStaticFoldingDce(),
     computedTruthyFalsyDce(),
     computedSwitchKeyDce(),
     numericBitwiseDce(),

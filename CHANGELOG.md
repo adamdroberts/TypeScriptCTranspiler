@@ -7,6 +7,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ### Added
 - Generated-C DCE static numeric analysis now folds side-effect-free numeric parser calls including `Number.parseInt(...)`, `Number.parseFloat(...)`, global `parseInt(...)`, and global `parseFloat(...)` with primitive string/number inputs and pure ignored arguments. Test: `generated_c_dce_const`.
 - Generated-C DCE static string analysis now folds ASCII side-effect-free `.trim()`, `.trimStart()`, `.trimEnd()`, `.trimLeft()`, and `.trimRight()` string method calls. Test: `generated_c_dce_const`.
+- Generated-C DCE static string analysis now folds safe ASCII `encodeURI(...)`, `encodeURIComponent(...)`, `decodeURI(...)`, and `decodeURIComponent(...)` helper calls. Test: `generated_c_dce_const`.
 - Generated-C DCE static string analysis now folds ASCII side-effect-free `RegExp.escape(...)` calls. Test: `generated_c_dce_const`.
 - Generated-C DCE static string analysis now folds ASCII side-effect-free `.toUpperCase()` and `.toLowerCase()` string method calls. Test: `generated_c_dce_const`.
 - Generated-C DCE static string analysis now folds ASCII side-effect-free `.repeat(count)`, `.padStart(targetLength, padString?)`, and `.padEnd(targetLength, padString?)` string method calls. Test: `generated_c_dce_const`.

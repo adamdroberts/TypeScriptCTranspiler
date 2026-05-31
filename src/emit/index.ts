@@ -12634,6 +12634,34 @@ class Emitter {
                 ? ""
                 : this.sideEffectFreeTemplateSubstitutionText(unwrapped.arguments[0]!, seenConsts);
         }
+        if (
+            ts.isCallExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression)
+        ) {
+            const name = unwrapped.expression.text;
+            if (
+                (name === "encodeURI" ||
+                 name === "encodeURIComponent" ||
+                 name === "decodeURI" ||
+                 name === "decodeURIComponent") &&
+                this.isUnshadowedGlobalIdentifier(unwrapped.expression, name) &&
+                unwrapped.arguments.length >= 1 &&
+                this.isSideEffectFreeUriStringCoercion(unwrapped.arguments[0]!, seenConsts) &&
+                this.callIgnoredArgumentsAreSideEffectFree(unwrapped.arguments, 1, seenConsts)
+            ) {
+                const argText = this.sideEffectFreeStringLiteralText(unwrapped.arguments[0]!, seenConsts);
+                if (argText !== null) {
+                    try {
+                        if (name === "encodeURI") return encodeURI(argText);
+                        if (name === "encodeURIComponent") return encodeURIComponent(argText);
+                        if (name === "decodeURI") return decodeURI(argText);
+                        if (name === "decodeURIComponent") return decodeURIComponent(argText);
+                    } catch {
+                        return null;
+                    }
+                }
+            }
+        }
         const staticStringCallText = this.sideEffectFreeStringStaticCallText(unwrapped, seenConsts);
         if (staticStringCallText !== null) return staticStringCallText;
         const instanceStringCallText = this.sideEffectFreeStringInstanceCallText(unwrapped, seenConsts);

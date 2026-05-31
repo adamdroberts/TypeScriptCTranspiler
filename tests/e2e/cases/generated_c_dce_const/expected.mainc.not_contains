@@ -4980,6 +4980,7 @@ local_dead_length
 local_dead_index
 local_dead_prop
 local_dead_comma
+local_dead_uri_folding_false
 unused_local_static_conditional
 local_dead_static_conditional_call
 local_dead_static_conditional_value
