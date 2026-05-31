@@ -1,0 +1,4 @@
+callback ::1: true ::1
+callback direct ::1: true ::1
+promise ::1: ::1
+promise direct ::1: ::1
