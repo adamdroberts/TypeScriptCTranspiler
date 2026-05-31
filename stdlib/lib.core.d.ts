@@ -1683,6 +1683,7 @@ interface CryptoHmac {
 interface Crypto {
     createHash(algorithm: CryptoHashAlgorithm, ...ignored: any[]): CryptoHash;
     createHmac(algorithm: CryptoHashAlgorithm, key: string | Buffer, ...ignored: any[]): CryptoHmac;
+    getHashes(...ignored: any[]): string[];
     randomBytes(size: number, ...ignored: any[]): Buffer;
     randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
     timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
@@ -1692,6 +1693,7 @@ declare const crypto: Crypto;
 declare module "crypto" {
     export function createHash(algorithm: CryptoHashAlgorithm, ...ignored: any[]): CryptoHash;
     export function createHmac(algorithm: CryptoHashAlgorithm, key: string | Buffer, ...ignored: any[]): CryptoHmac;
+    export function getHashes(...ignored: any[]): string[];
     export function randomBytes(size: number, ...ignored: any[]): Buffer;
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
     export function timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
@@ -1702,6 +1704,7 @@ declare module "crypto" {
 declare module "node:crypto" {
     export function createHash(algorithm: CryptoHashAlgorithm, ...ignored: any[]): CryptoHash;
     export function createHmac(algorithm: CryptoHashAlgorithm, key: string | Buffer, ...ignored: any[]): CryptoHmac;
+    export function getHashes(...ignored: any[]): string[];
     export function randomBytes(size: number, ...ignored: any[]): Buffer;
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
     export function timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;

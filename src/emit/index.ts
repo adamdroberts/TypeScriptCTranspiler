@@ -27866,7 +27866,7 @@ class Emitter {
         if (streamNamed) {
             return this.emitStreamCall(call, streamNamed);
         }
-        const cryptoNamed = ["createHash", "createHmac", "randomBytes", "randomUUID", "timingSafeEqual", "pbkdf2Sync"]
+        const cryptoNamed = ["createHash", "createHmac", "randomBytes", "randomUUID", "timingSafeEqual", "pbkdf2Sync", "getHashes"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["crypto", "node:crypto"], exported));
         if (cryptoNamed) {
             return this.emitCryptoCall(call, cryptoNamed);
@@ -40707,7 +40707,14 @@ class Emitter {
                 ([p, s, i, k, d]) => `${cFn}(${p}, ${s}, ${i}, ${k}, ${d})`
             );
         }
-        unsupported(call, `crypto.${name} (supported: createHash, createHmac, randomBytes, randomUUID, timingSafeEqual, pbkdf2Sync)`);
+        if (name === "getHashes") {
+            return this.emitSequencedExpr(
+                arrayType(T_STRING),
+                this.ignoredArgumentSpecs(call.arguments, 0),
+                () => "tsc_crypto_get_hashes()",
+            );
+        }
+        unsupported(call, `crypto.${name} (supported: createHash, createHmac, getHashes, randomBytes, randomUUID, timingSafeEqual, pbkdf2Sync)`);
     }
 
     private validateCryptoRandomUUIDOptions(options: ts.Expression, label: string): void {

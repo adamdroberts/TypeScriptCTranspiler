@@ -484,6 +484,7 @@ Supported fs path arguments use a bounded `PathLike` subset: strings pass throug
 | Symbol | Signature | JS equivalent |
 |--------|-----------|---------------|
 | `tsc_crypto_create_hash(algorithm)` | `tsc_hash_t*` | `crypto.createHash("sha256")` |
+| `tsc_crypto_get_hashes()` | `tsc_array_t*` | `crypto.getHashes()` |
 | `tsc_hash_update(hash, data)` | `tsc_hash_t*` | `.update(data)` |
 | `tsc_hash_digest(hash, encoding)` | `tsc_str_t*` | `.digest("hex")` |
 
