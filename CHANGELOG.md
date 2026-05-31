@@ -6,6 +6,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 - `Buffer.from(...)`, `Buffer.toString(...)`, `Buffer.byteLength(...)`, `Buffer.isEncoding(...)`, and Buffer write paths now support bounded `"latin1"`, `"binary"`, and `"ascii"` encoding aliases alongside the existing UTF-8, hex, and base64 subset. Test: `buffer_latin1_ascii_encoding`.
+- Extended `Buffer.prototype.compare` to support optional target and source range bounds (`targetStart?`, `targetEnd?`, `sourceStart?`, `sourceEnd?`) with Node-like range validations and error messages. Test: `buffer_compare_ranges`.
 - `URLSearchParams` now supports the `size` readonly property, returning the correct number of query parameter pairs after construction, `append()`, `set()`, `delete()`, and `sort()`, supporting both global and `node:url` instances. Test: `url_search_params_size`.
 - Supported `crypto.getHashes()` compatibility expansion, returning a stable string array of the currently supported digest names (`["md5", "sha1", "sha256", "sha512"]`) while evaluating and ignoring extra arguments across global crypto and named, namespace, and default imports from `"crypto"` / `"node:crypto"`. Test: `crypto_get_hashes`.
 - Supported `crypto.createHash(...)` and `crypto.createHmac(...)` compatibility expansion for SHA-224 and SHA-384 algorithms, allowing hash and HMAC computation with string/Buffer data and keys, and returning hex/base64 strings or Buffers depending on digest encoding. Test: `crypto_sha224_sha384`.

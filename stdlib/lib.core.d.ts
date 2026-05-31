@@ -1760,7 +1760,7 @@ interface Buffer {
     lastIndexOf(value: number | string | Buffer, byteOffset?: number, ...ignored: any[]): number;
     includes(value: number | string | Buffer, byteOffset?: number, ...ignored: any[]): boolean;
     equals(other: Buffer, ...ignored: any[]): boolean;
-    compare(other: Buffer, ...ignored: any[]): number;
+    compare(target: Buffer, targetStart?: number, targetEnd?: number, sourceStart?: number, sourceEnd?: number, ...ignored: any[]): number;
     [n: number]: number;
 }
 interface BufferConstructor {

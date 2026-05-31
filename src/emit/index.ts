@@ -41507,14 +41507,48 @@ class Emitter {
                 );
             }
             case "compare": {
-                if (args.length < 1) unsupported(call, "Buffer.compare expects other");
+                if (args.length < 1) unsupported(call, "Buffer.prototype.compare expects target");
                 const other = this.emitExpr(args[0]!);
-                if (other.ty.kind !== "buffer") unsupported(args[0]!, "Buffer.compare expects Buffer");
-                return this.emitSequencedExpr(
-                    T_NUMBER,
-                    [{ value: recv }, { value: other }, ...this.ignoredArgumentSpecs(args, 1)],
-                    ([left, right]) => `tsc_buffer_compare(${left}, ${right})`,
-                );
+                if (other.ty.kind !== "buffer") unsupported(args[0]!, "Buffer.prototype.compare target must be Buffer");
+                const specs: SequencedCallArg[] = [
+                    { value: recv },
+                    { value: other },
+                ];
+                const hasTargetStart = !!args[1] && !this.isUndefinedExpression(args[1]);
+                const hasTargetEnd = !!args[2] && !this.isUndefinedExpression(args[2]);
+                const hasSourceStart = !!args[3] && !this.isUndefinedExpression(args[3]);
+                const hasSourceEnd = !!args[4] && !this.isUndefinedExpression(args[4]);
+                if (hasTargetStart) {
+                    const bound = this.emitExpr(args[1]);
+                    requireNumber(args[1], bound.ty);
+                    specs.push({ value: bound, target: T_NUMBER, node: args[1] });
+                }
+                if (hasTargetEnd) {
+                    const bound = this.emitExpr(args[2]);
+                    requireNumber(args[2], bound.ty);
+                    specs.push({ value: bound, target: T_NUMBER, node: args[2] });
+                }
+                if (hasSourceStart) {
+                    const bound = this.emitExpr(args[3]);
+                    requireNumber(args[3], bound.ty);
+                    specs.push({ value: bound, target: T_NUMBER, node: args[3] });
+                }
+                if (hasSourceEnd) {
+                    const bound = this.emitExpr(args[4]);
+                    requireNumber(args[4], bound.ty);
+                    specs.push({ value: bound, target: T_NUMBER, node: args[4] });
+                }
+                specs.push(...this.ignoredArgumentSpecs(args, 5));
+                return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
+                    const source = vals[0]!;
+                    const target = vals[1]!;
+                    let next = 2;
+                    const targetStart = hasTargetStart ? vals[next++]! : "0.0";
+                    const targetEnd = hasTargetEnd ? vals[next++]! : `(double)${target}->len`;
+                    const sourceStart = hasSourceStart ? vals[next++]! : "0.0";
+                    const sourceEnd = hasSourceEnd ? vals[next++]! : `(double)${source}->len`;
+                    return `tsc_buffer_compare_ranges(${source}, ${target}, ${targetStart}, ${targetEnd}, ${sourceStart}, ${sourceEnd})`;
+                });
             }
             case "hasOwnProperty":
             case "propertyIsEnumerable":

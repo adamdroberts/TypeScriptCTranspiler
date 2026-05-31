@@ -420,6 +420,9 @@ double tsc_buffer_index_of_buffer(const tsc_buffer_t* b, const tsc_buffer_t* val
 double tsc_buffer_last_index_of_buffer(const tsc_buffer_t* b, const tsc_buffer_t* value, double offset);
 bool tsc_buffer_equals(const tsc_buffer_t* a, const tsc_buffer_t* b);
 double tsc_buffer_compare(const tsc_buffer_t* a, const tsc_buffer_t* b);
+double tsc_buffer_compare_ranges(const tsc_buffer_t* source, const tsc_buffer_t* target,
+                                 double target_start, double target_end,
+                                 double source_start, double source_end);
 double tsc_buffer_byte_length_str(const tsc_str_t* input, const tsc_str_t* encoding);
 bool tsc_buffer_is_encoding(const tsc_str_t* encoding);
 double tsc_buffer_length(const tsc_buffer_t* b);
