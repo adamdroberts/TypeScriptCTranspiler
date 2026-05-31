@@ -18786,6 +18786,12 @@ class Emitter {
             this.isDefaultImportFrom(id, ["util", "node:util"]);
     }
 
+    private isQueryStringModuleIdentifier(id: ts.Identifier): boolean {
+        return id.text === "querystring" ||
+            this.isNamespaceImportFrom(id, ["querystring", "node:querystring"]) ||
+            this.isDefaultImportFrom(id, ["querystring", "node:querystring"]);
+    }
+
     private isDnsModuleIdentifier(id: ts.Identifier): boolean {
         return id.text === "dns" ||
             this.isNamespaceImportFrom(id, ["dns", "node:dns"]) ||
@@ -27991,6 +27997,11 @@ class Emitter {
         if (osNamed) {
             return this.emitOsCall(call, osNamed);
         }
+        const querystringNamed = ["parse", "stringify"]
+            .find((exported) => this.isNamedImportFrom(calleeId, ["querystring", "node:querystring"], exported));
+        if (querystringNamed) {
+            return this.emitQueryStringCall(call, querystringNamed);
+        }
         const urlNamed = ["fileURLToPath", "pathToFileURL"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["url", "node:url"], exported));
         if (urlNamed) {
@@ -29596,6 +29607,10 @@ class Emitter {
             return this.emitUtilCall(call, memberName);
         }
 
+        if (ts.isIdentifier(recvExpr) && this.isQueryStringModuleIdentifier(recvExpr)) {
+            return this.emitQueryStringCall(call, memberName);
+        }
+
         if (ts.isIdentifier(recvExpr) && this.isUrlModuleIdentifier(recvExpr)) {
             return this.emitUrlModuleCall(call, memberName);
         }
@@ -30244,6 +30259,9 @@ class Emitter {
         }
         if (ts.isIdentifier(recvExpr) && this.isOsModuleIdentifier(recvExpr)) {
             return this.emitOsCall(call, memberName);
+        }
+        if (ts.isIdentifier(recvExpr) && this.isQueryStringModuleIdentifier(recvExpr)) {
+            return this.emitQueryStringCall(call, memberName);
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Date") {
             if (memberName === "now") {
@@ -41909,6 +41927,66 @@ class Emitter {
             }
         }
         unsupported(call, `os.${name}`);
+    }
+
+    private emitQueryStringCall(call: ts.CallExpression, name: string): EmitResult {
+        const args = call.arguments;
+        if (name === "parse") {
+            if (args.length < 1) unsupported(call, "querystring.parse expects at least 1 argument");
+            const strVal = this.emitExpr(args[0]!);
+            const specs: SequencedCallArg[] = [
+                { value: strVal, target: T_STRING, node: args[0]! }
+            ];
+            if (args[1]) {
+                specs.push({ value: this.emitExpr(args[1]), target: T_VALUE, node: args[1] });
+            } else {
+                specs.push({ value: { c: "tsc_value_undefined()", ty: T_VALUE }, target: T_VALUE, node: call });
+            }
+            if (args[2]) {
+                specs.push({ value: this.emitExpr(args[2]), target: T_VALUE, node: args[2] });
+            } else {
+                specs.push({ value: { c: "tsc_value_undefined()", ty: T_VALUE }, target: T_VALUE, node: call });
+            }
+            if (args[3]) {
+                specs.push({ value: this.emitExpr(args[3]), target: T_VALUE, node: args[3] });
+            } else {
+                specs.push({ value: { c: "tsc_value_undefined()", ty: T_VALUE }, target: T_VALUE, node: call });
+            }
+            specs.push(...this.ignoredArgumentSpecs(args, 4));
+            return this.emitSequencedExpr(
+                T_VALUE,
+                specs,
+                (values) => `tsc_querystring_parse(${values[0]}, ${values[1]}, ${values[2]}, ${values[3]})`
+            );
+        } else if (name === "stringify") {
+            if (args.length < 1) unsupported(call, "querystring.stringify expects at least 1 argument");
+            const objVal = this.emitExpr(args[0]!);
+            const specs: SequencedCallArg[] = [
+                { value: objVal, target: T_VALUE, node: args[0]! }
+            ];
+            if (args[1]) {
+                specs.push({ value: this.emitExpr(args[1]), target: T_VALUE, node: args[1] });
+            } else {
+                specs.push({ value: { c: "tsc_value_undefined()", ty: T_VALUE }, target: T_VALUE, node: call });
+            }
+            if (args[2]) {
+                specs.push({ value: this.emitExpr(args[2]), target: T_VALUE, node: args[2] });
+            } else {
+                specs.push({ value: { c: "tsc_value_undefined()", ty: T_VALUE }, target: T_VALUE, node: call });
+            }
+            if (args[3]) {
+                specs.push({ value: this.emitExpr(args[3]), target: T_VALUE, node: args[3] });
+            } else {
+                specs.push({ value: { c: "tsc_value_undefined()", ty: T_VALUE }, target: T_VALUE, node: call });
+            }
+            specs.push(...this.ignoredArgumentSpecs(args, 4));
+            return this.emitSequencedExpr(
+                T_STRING,
+                specs,
+                (values) => `tsc_querystring_stringify(${values[0]}, ${values[1]}, ${values[2]}, ${values[3]})`
+            );
+        }
+        unsupported(call, `querystring.${name}`);
     }
 
     private validateOsUserInfoOptions(options: ts.Expression | undefined): void {
