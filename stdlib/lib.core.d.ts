@@ -2315,17 +2315,23 @@ declare module "node:util" {
 interface QueryStringModule {
     parse(str: string, sep?: string, eq?: string, options?: any, ...ignored: any[]): any;
     stringify(obj: any, sep?: string, eq?: string, options?: any, ...ignored: any[]): string;
+    escape(str: string, ...ignored: any[]): string;
+    unescape(str: string, ...ignored: any[]): string;
 }
 declare const querystring: QueryStringModule;
 declare module "querystring" {
     export function parse(str: string, sep?: string, eq?: string, options?: any, ...ignored: any[]): any;
     export function stringify(obj: any, sep?: string, eq?: string, options?: any, ...ignored: any[]): string;
+    export function escape(str: string, ...ignored: any[]): string;
+    export function unescape(str: string, ...ignored: any[]): string;
     const defaultQueryString: QueryStringModule;
     export default defaultQueryString;
 }
 declare module "node:querystring" {
     export function parse(str: string, sep?: string, eq?: string, options?: any, ...ignored: any[]): any;
     export function stringify(obj: any, sep?: string, eq?: string, options?: any, ...ignored: any[]): string;
+    export function escape(str: string, ...ignored: any[]): string;
+    export function unescape(str: string, ...ignored: any[]): string;
     const defaultQueryString: QueryStringModule;
     export default defaultQueryString;
 }
