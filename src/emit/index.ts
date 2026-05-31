@@ -27298,6 +27298,12 @@ class Emitter {
                             }
                         }
                     }
+                } else if (recv.ty.kind === "value") {
+                    return this.emitSequencedExpr(
+                        T_VALUE,
+                        [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
+                        ([val]) => `tsc_value_symbol_iterator(${val!})`,
+                    );
                 }
                 unsupported(call.expression, `[Symbol.iterator]() call on type ${recv.ty.kind}`);
             }

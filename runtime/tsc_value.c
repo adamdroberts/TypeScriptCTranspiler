@@ -269,6 +269,43 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
 }
 
 
+static tsc_value_t tsc_value_generator_next(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_array_t* av = (tsc_array_t*)env;
+    tsc_object_t* out = tsc_object_new();
+    if (av->iter_pos < av->len) {
+        tsc_value_t current = TSC_ARR(tsc_value_t, av, av->iter_pos++);
+        tsc_object_set(out, tsc_str_from_lit("done", 4), tsc_value_bool(false));
+        tsc_object_set(out, tsc_str_from_lit("value", 5), current);
+    } else {
+        tsc_object_set(out, tsc_str_from_lit("done", 4), tsc_value_bool(true));
+        if (av->iter_has_return && !av->iter_return_consumed) {
+            tsc_object_set(out, tsc_str_from_lit("value", 5), av->iter_return);
+            av->iter_return_consumed = true;
+        } else {
+            tsc_object_set(out, tsc_str_from_lit("value", 5), tsc_value_undefined());
+        }
+    }
+    return tsc_value_object(out);
+}
+
+static tsc_value_t tsc_value_generator_return(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_array_t* av = (tsc_array_t*)env;
+    av->iter_pos = av->len;
+    av->iter_return_consumed = true;
+    tsc_value_t valueArg = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    tsc_object_t* out = tsc_object_new();
+    tsc_object_set(out, tsc_str_from_lit("done", 4), tsc_value_bool(true));
+    tsc_object_set(out, tsc_str_from_lit("value", 5), valueArg);
+    return tsc_value_object(out);
+}
+
+static tsc_value_t tsc_value_generator_throw(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_value_t err = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    tsc_str_t* errStr = tsc_value_to_string(err);
+    tsc_throw_str(errStr);
+    return tsc_value_undefined();
+}
+
 tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_GET_PROP);
     if (!value_is_box(v)) return tsc_value_undefined();
@@ -288,6 +325,15 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
     if (value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(v);
         if (tsc_str_is_length_key(key)) return tsc_value_num((double)a->len);
+        if (str_lit_eq(key, "next")) {
+            return tsc_value_function_generic(tsc_value_generator_next, a);
+        }
+        if (str_lit_eq(key, "return")) {
+            return tsc_value_function_generic(tsc_value_generator_return, a);
+        }
+        if (str_lit_eq(key, "throw")) {
+            return tsc_value_function_generic(tsc_value_generator_throw, a);
+        }
         size_t idx = 0;
         if (a->es == sizeof(tsc_value_t) && tsc_str_array_index(key, &idx) && idx < a->len) {
             return TSC_ARR(tsc_value_t, a, idx);
@@ -1684,6 +1730,21 @@ tsc_array_t* tsc_value_iter_values(tsc_value_t v) {
     }
     tsc_throw_str(tsc_str_from_cstr("for-of value is not iterable"));
     return tsc_array_new(sizeof(tsc_value_t), 1);
+}
+
+tsc_value_t tsc_value_symbol_iterator(tsc_value_t v) {
+    if (value_is_box(v)) {
+        if (value_tag(v) == TSC_VALUE_TAG_ARRAY) {
+            return v;
+        }
+        if (value_tag(v) == TSC_VALUE_TAG_STRING) {
+            tsc_str_t* s = (tsc_str_t*)value_ptr(v);
+            tsc_array_t* chars = value_string_values(s);
+            return tsc_value_array(chars);
+        }
+    }
+    tsc_throw_str(tsc_str_from_cstr("[Symbol.iterator] call target is not iterable"));
+    return tsc_value_undefined();
 }
 
 tsc_array_t* tsc_value_array_from_values(tsc_value_t v) {

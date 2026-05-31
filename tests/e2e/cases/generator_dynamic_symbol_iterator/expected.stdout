@@ -1,0 +1,8 @@
+gen next 1: 10
+gen next 2: 11
+gen next 3: 12
+gen next 4 done: true
+str next 1: x
+str next 2: y
+str next 3: z
+str next 4 done: true
