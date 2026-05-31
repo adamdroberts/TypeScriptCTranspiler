@@ -1421,6 +1421,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `process_next_tick` | bounded zero-argument process.nextTick queue drained before exit |
 | `process_next_tick_args` | bounded process.nextTick callback arguments are queued and delivered in order |
 | `process_next_tick_basic` | bounded process.nextTick callback arguments with sequenced evaluation order |
+| `process_next_tick_event_loop` | process.nextTick, Promise microtask, timeout, and setImmediate queues drain through a unified event loop in nested scheduling order |
 | `process_next_tick_import` | named, aliased named, and namespace process nextTick imports use the bounded nextTick queue |
 | `process_ppid` | process.ppid parent process metadata |
 | `process_posix_ids` | process POSIX uid/gid/euid/egid helpers |

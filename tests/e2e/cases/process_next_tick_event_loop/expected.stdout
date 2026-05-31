@@ -1,0 +1,1 @@
+EVENT_LOOP_ORDER: sync-start|sync-end|tick1|tick-nested|micro1|micro-from-tick1|tick-from-micro1|timeout1|tick-from-timeout1|immediate1|tick-from-immediate1|immediate2

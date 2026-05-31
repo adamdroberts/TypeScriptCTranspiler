@@ -737,13 +737,22 @@ void tsc_clear_immediate(double id) {
 }
 
 void tsc_drain_immediates(void) {
+    size_t count = g_immediate_len;
     size_t idx = 0;
-    while (idx < g_immediate_len) {
+    while (idx < count) {
         tsc_immediate_entry_t entry = g_immediate_queue[idx++];
-        if (!entry.canceled && entry.fn) entry.fn(entry.env);
+        if (!g_immediate_queue[idx - 1].canceled && entry.fn) {
+            entry.fn(entry.env);
+        }
         tsc_drain_microtasks_and_next_ticks();
     }
-    g_immediate_len = 0;
+    if (g_immediate_len > count) {
+        size_t remaining = g_immediate_len - count;
+        memmove(g_immediate_queue, g_immediate_queue + count, remaining * sizeof(tsc_immediate_entry_t));
+        g_immediate_len = remaining;
+    } else {
+        g_immediate_len = 0;
+    }
 }
 
 double tsc_set_timeout(tsc_timeout_fn_t fn, void* env) {
@@ -784,10 +793,11 @@ void tsc_clear_timeout(double id) {
 }
 
 void tsc_drain_timeouts(void) {
+    size_t count = g_timeout_len;
     size_t idx = 0;
-    while (idx < g_timeout_len) {
+    while (idx < count) {
         tsc_timeout_entry_t entry = g_timeout_queue[idx++];
-        if (!entry.canceled && entry.fn) {
+        if (!g_timeout_queue[idx - 1].canceled && entry.fn) {
             entry.fn(entry.env);
             if (entry.is_interval && !g_timeout_queue[idx - 1].canceled) {
                 if (g_timeout_len == g_timeout_cap) {
@@ -802,7 +812,26 @@ void tsc_drain_timeouts(void) {
         }
         tsc_drain_microtasks_and_next_ticks();
     }
-    g_timeout_len = 0;
+    if (g_timeout_len > count) {
+        size_t remaining = g_timeout_len - count;
+        memmove(g_timeout_queue, g_timeout_queue + count, remaining * sizeof(tsc_timeout_entry_t));
+        g_timeout_len = remaining;
+    } else {
+        g_timeout_len = 0;
+    }
+}
+
+void tsc_run_event_loop(void) {
+    while (g_next_tick_len > 0 || g_microtask_len > 0 || g_timeout_len > 0 || g_immediate_len > 0) {
+        tsc_drain_microtasks_and_next_ticks();
+        while (g_timeout_len > 0) {
+            tsc_drain_timeouts();
+            tsc_drain_microtasks_and_next_ticks();
+        }
+        if (g_immediate_len > 0) {
+            tsc_drain_immediates();
+        }
+    }
 }
 
 /* ---------------- exceptions ---------------- */
