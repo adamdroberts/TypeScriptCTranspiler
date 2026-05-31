@@ -14196,9 +14196,7 @@ class Emitter {
         for (const modId of this.graph.topoOrder) {
             out.line(`    mod_init_${modId}();`);
         }
-        out.line("    tsc_drain_microtasks_and_next_ticks();");
-        out.line("    tsc_drain_timeouts();");
-        out.line("    tsc_drain_immediates();");
+        out.line("    tsc_run_event_loop();");
         out.line("    return 0;");
         out.line("}");
         return { mainC: out.toString(), diagnostics: this.diagnostics };
