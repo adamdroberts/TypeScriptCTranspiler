@@ -10,3 +10,4 @@ hex -> base64: SGVsbG8gV29ybGQ=
 base64 -> hex: 48656c6c6f20576f726c64
 --- Ignored arguments side effects ---
 utf-8 -> hex: 48656c6c6f20576f726c64 seen: x
+bad target: buffer.transcode: unsupported toEnc

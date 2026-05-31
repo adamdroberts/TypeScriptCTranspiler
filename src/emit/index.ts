@@ -27765,7 +27765,7 @@ class Emitter {
         if (streamNamed) {
             return this.emitStreamCall(call, streamNamed);
         }
-        const cryptoNamed = ["createHash", "randomBytes", "randomUUID"]
+        const cryptoNamed = ["createHash", "randomBytes", "randomUUID", "timingSafeEqual"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["crypto", "node:crypto"], exported));
         if (cryptoNamed) {
             return this.emitCryptoCall(call, cryptoNamed);
@@ -40128,7 +40128,25 @@ class Emitter {
                 () => "tsc_crypto_random_uuid()",
             );
         }
-        unsupported(call, `crypto.${name} (supported: createHash, randomBytes, randomUUID)`);
+        if (name === "timingSafeEqual") {
+            if (call.arguments.length < 2)
+                unsupported(call, "crypto.timingSafeEqual expects two Buffer arguments");
+            const a = this.emitExpr(call.arguments[0]!);
+            const b = this.emitExpr(call.arguments[1]!);
+            if (a.ty.kind !== "buffer" || b.ty.kind !== "buffer") {
+                unsupported(call, "crypto.timingSafeEqual expects Buffer arguments");
+            }
+            return this.emitSequencedExpr(
+                T_BOOLEAN,
+                [
+                    { value: a },
+                    { value: b },
+                    ...this.ignoredArgumentSpecs(call.arguments, 2),
+                ],
+                ([left, right]) => `tsc_crypto_timing_safe_equal(${left}, ${right})`,
+            );
+        }
+        unsupported(call, `crypto.${name} (supported: createHash, randomBytes, randomUUID, timingSafeEqual)`);
     }
 
     private validateCryptoRandomUUIDOptions(options: ts.Expression, label: string): void {

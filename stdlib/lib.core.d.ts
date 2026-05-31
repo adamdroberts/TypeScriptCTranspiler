@@ -1649,12 +1649,14 @@ interface Crypto {
     createHash(algorithm: CryptoHashAlgorithm, ...ignored: any[]): CryptoHash;
     randomBytes(size: number, ...ignored: any[]): Buffer;
     randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
+    timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
 }
 declare const crypto: Crypto;
 declare module "crypto" {
     export function createHash(algorithm: CryptoHashAlgorithm, ...ignored: any[]): CryptoHash;
     export function randomBytes(size: number, ...ignored: any[]): Buffer;
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
+    export function timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
     const defaultCrypto: Crypto;
     export default defaultCrypto;
 }
@@ -1662,6 +1664,7 @@ declare module "node:crypto" {
     export function createHash(algorithm: CryptoHashAlgorithm, ...ignored: any[]): CryptoHash;
     export function randomBytes(size: number, ...ignored: any[]): Buffer;
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
+    export function timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
     const defaultCrypto: Crypto;
     export default defaultCrypto;
 }

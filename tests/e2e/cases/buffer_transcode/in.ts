@@ -44,3 +44,12 @@ function mark(label: string): string {
 }
 const t7 = transcode(bufBytes, "utf-8", "hex", mark("x"));
 console.log("utf-8 -> hex:", t7.toString(), "seen:", seen);
+
+function badTargetEncoding(): string {
+    try {
+        return transcode(bufBytes, "utf8", "bogus").toString();
+    } catch (err) {
+        return String(err);
+    }
+}
+console.log("bad target:", badTargetEncoding());

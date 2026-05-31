@@ -1251,7 +1251,6 @@ tsc_buffer_t* tsc_buffer_transcode(const tsc_buffer_t* source, const tsc_str_t* 
         tsc_throw_str(tsc_str_from_cstr("buffer.transcode: source must not be null"));
     }
 
-    // Step 1: Decode source from from_enc to raw bytes (raw_buf)
     tsc_buffer_t* raw_buf = NULL;
     if (buffer_encoding_is_utf8(from_enc)) {
         raw_buf = tsc_buffer_from_buffer(source);
@@ -1265,7 +1264,6 @@ tsc_buffer_t* tsc_buffer_transcode(const tsc_buffer_t* source, const tsc_str_t* 
         tsc_throw_str(tsc_str_from_cstr("buffer.transcode: unsupported fromEnc"));
     }
 
-    // Step 2: Encode raw_buf into to_enc
     tsc_buffer_t* result = NULL;
     if (buffer_encoding_is_utf8(to_enc)) {
         result = raw_buf;
@@ -1276,13 +1274,11 @@ tsc_buffer_t* tsc_buffer_transcode(const tsc_buffer_t* source, const tsc_str_t* 
         tsc_str_t* str = tsc_buffer_to_string(raw_buf, tsc_str_from_lit("base64", 6));
         result = tsc_buffer_from_str(str, tsc_str_from_lit("utf8", 4));
     } else {
-        result = raw_buf; // fallback/noop if somehow not matched
+        tsc_throw_str(tsc_str_from_cstr("buffer.transcode: unsupported toEnc"));
     }
 
     return result;
 }
-
-
 double tsc_buffer_length(const tsc_buffer_t* b) { return (double)b->len; }
 
 double tsc_buffer_get(const tsc_buffer_t* b, double idx) {
