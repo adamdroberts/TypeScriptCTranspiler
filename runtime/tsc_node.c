@@ -5212,6 +5212,34 @@ static tsc_str_t* querystring_escape(const tsc_str_t* input) {
     return out;
 }
 
+tsc_str_t* tsc_querystring_escape(const tsc_str_t* str) {
+    return querystring_escape(str);
+}
+
+static tsc_str_t* querystring_unescape(const tsc_str_t* input) {
+    if (!input) return tsc_str_from_lit("", 0);
+    tsc_str_t* out = str_alloc(input->len);
+    char* w = (char*)out->data;
+    size_t j = 0;
+    for (size_t i = 0; i < input->len; i++) {
+        if (input->data[i] == '%' && i + 2 < input->len && url_hex_value(input->data[i + 1]) >= 0 && url_hex_value(input->data[i + 2]) >= 0) {
+            int hi = url_hex_value(input->data[i + 1]);
+            int lo = url_hex_value(input->data[i + 2]);
+            w[j++] = (char)((hi << 4) | lo);
+            i += 2;
+        } else {
+            w[j++] = input->data[i];
+        }
+    }
+    out->len = j;
+    w[j] = '\0';
+    return out;
+}
+
+tsc_str_t* tsc_querystring_unescape(const tsc_str_t* str) {
+    return querystring_unescape(str);
+}
+
 tsc_value_t tsc_querystring_parse(const tsc_str_t* str, tsc_value_t sep_val, tsc_value_t eq_val, tsc_value_t options_val) {
     (void)options_val;
     tsc_str_t* sep = tsc_value_is_nullish(sep_val) ? tsc_str_from_lit("&", 1) : tsc_value_to_string(sep_val);

@@ -28064,7 +28064,7 @@ class Emitter {
         if (osNamed) {
             return this.emitOsCall(call, osNamed);
         }
-        const querystringNamed = ["parse", "stringify"]
+        const querystringNamed = ["parse", "stringify", "escape", "unescape"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["querystring", "node:querystring"], exported));
         if (querystringNamed) {
             return this.emitQueryStringCall(call, querystringNamed);
@@ -42375,6 +42375,30 @@ class Emitter {
                 T_STRING,
                 specs,
                 (values) => `tsc_querystring_stringify(${values[0]}, ${values[1]}, ${values[2]}, ${values[3]})`
+            );
+        } else if (name === "escape") {
+            if (args.length < 1) unsupported(call, "querystring.escape expects at least 1 argument");
+            const strVal = this.emitExpr(args[0]!);
+            const specs: SequencedCallArg[] = [
+                { value: strVal, target: T_STRING, node: args[0]! }
+            ];
+            specs.push(...this.ignoredArgumentSpecs(args, 1));
+            return this.emitSequencedExpr(
+                T_STRING,
+                specs,
+                (values) => `tsc_querystring_escape(${values[0]})`
+            );
+        } else if (name === "unescape") {
+            if (args.length < 1) unsupported(call, "querystring.unescape expects at least 1 argument");
+            const strVal = this.emitExpr(args[0]!);
+            const specs: SequencedCallArg[] = [
+                { value: strVal, target: T_STRING, node: args[0]! }
+            ];
+            specs.push(...this.ignoredArgumentSpecs(args, 1));
+            return this.emitSequencedExpr(
+                T_STRING,
+                specs,
+                (values) => `tsc_querystring_unescape(${values[0]})`
             );
         }
         unsupported(call, `querystring.${name}`);
