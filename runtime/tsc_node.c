@@ -4183,3 +4183,169 @@ tsc_str_t* tsc_path_format(tsc_value_t path_object) {
     }
     return base;
 }
+
+double tsc_fs_open_sync(const tsc_str_t* path, const tsc_str_t* flags_str, double flags_num, bool flags_is_num, double mode) {
+    char* path_c = cstr_dup(path);
+    int open_flags = 0;
+    char* flags_c = NULL;
+    if (flags_is_num) {
+        open_flags = (int)flags_num;
+    } else {
+        const char* f = "r";
+        if (flags_str && flags_str->data) {
+            flags_c = cstr_dup(flags_str);
+            f = flags_c;
+        }
+        if (strcmp(f, "r") == 0) {
+            open_flags = O_RDONLY;
+        } else if (strcmp(f, "r+") == 0) {
+            open_flags = O_RDWR;
+        } else if (strcmp(f, "rs") == 0) {
+            open_flags = O_RDONLY | O_SYNC;
+        } else if (strcmp(f, "rs+") == 0) {
+            open_flags = O_RDWR | O_SYNC;
+        } else if (strcmp(f, "w") == 0) {
+            open_flags = O_WRONLY | O_CREAT | O_TRUNC;
+        } else if (strcmp(f, "wx") == 0 || strcmp(f, "xw") == 0) {
+            open_flags = O_WRONLY | O_CREAT | O_TRUNC | O_EXCL;
+        } else if (strcmp(f, "w+") == 0) {
+            open_flags = O_RDWR | O_CREAT | O_TRUNC;
+        } else if (strcmp(f, "wx+") == 0 || strcmp(f, "xw+") == 0) {
+            open_flags = O_RDWR | O_CREAT | O_TRUNC | O_EXCL;
+        } else if (strcmp(f, "a") == 0) {
+            open_flags = O_WRONLY | O_CREAT | O_APPEND;
+        } else if (strcmp(f, "ax") == 0 || strcmp(f, "xa") == 0) {
+            open_flags = O_WRONLY | O_CREAT | O_APPEND | O_EXCL;
+        } else if (strcmp(f, "a+") == 0) {
+            open_flags = O_RDWR | O_CREAT | O_APPEND;
+        } else if (strcmp(f, "ax+") == 0 || strcmp(f, "xa+") == 0) {
+            open_flags = O_RDWR | O_CREAT | O_APPEND | O_EXCL;
+        } else if (strcmp(f, "as") == 0) {
+            open_flags = O_WRONLY | O_CREAT | O_APPEND | O_SYNC;
+        } else if (strcmp(f, "as+") == 0) {
+            open_flags = O_RDWR | O_CREAT | O_APPEND | O_SYNC;
+        } else {
+            char err_msg[256];
+            snprintf(err_msg, sizeof(err_msg), "fs.openSync: unsupported flags '%s'", f);
+            free(flags_c);
+            free(path_c);
+            tsc_throw_str(tsc_str_from_cstr(err_msg));
+            return -1.0;
+        }
+    }
+    mode_t open_mode = 0666;
+    if (mode >= 0) {
+        open_mode = (mode_t)mode;
+    }
+    free(flags_c);
+    int fd = open(path_c, open_flags, open_mode);
+    free(path_c);
+    if (fd < 0) {
+        char err_msg[256];
+        snprintf(err_msg, sizeof(err_msg), "fs.openSync: could not open file, %s", strerror(errno));
+        tsc_throw_str(tsc_str_from_cstr(err_msg));
+        return -1.0;
+    }
+    return (double)fd;
+}
+
+void tsc_fs_close_sync(double fd) {
+    int fd_int = (int)fd;
+    int r = close(fd_int);
+    if (r != 0) {
+        char err_msg[256];
+        snprintf(err_msg, sizeof(err_msg), "fs.closeSync: could not close file descriptor %d, %s", fd_int, strerror(errno));
+        tsc_throw_str(tsc_str_from_cstr(err_msg));
+    }
+}
+
+double tsc_fs_read_sync(double fd, tsc_buffer_t* buffer, double offset, double length, double position, bool position_is_null) {
+    int fd_int = (int)fd;
+    if (!buffer) {
+        tsc_throw_str(tsc_str_from_cstr("fs.readSync: buffer is null"));
+        return 0.0;
+    }
+    double off_d = offset < 0 ? 0.0 : offset;
+    size_t off = (size_t)off_d;
+    if (off > buffer->len) {
+        tsc_throw_str(tsc_str_from_cstr("fs.readSync: offset out of bounds"));
+        return 0.0;
+    }
+    double len_d = length < 0 ? (double)(buffer->len - off) : length;
+    size_t len = (size_t)len_d;
+    if (off + len > buffer->len) {
+        tsc_throw_str(tsc_str_from_cstr("fs.readSync: offset + length out of bounds"));
+        return 0.0;
+    }
+    uint8_t* ptr = buffer->data + off;
+    ssize_t bytes_read = 0;
+    if (position_is_null) {
+        bytes_read = read(fd_int, ptr, len);
+    } else {
+        bytes_read = pread(fd_int, ptr, len, (off_t)position);
+    }
+    if (bytes_read < 0) {
+        char err_msg[256];
+        snprintf(err_msg, sizeof(err_msg), "fs.readSync: read failed, %s", strerror(errno));
+        tsc_throw_str(tsc_str_from_cstr(err_msg));
+        return 0.0;
+    }
+    return (double)bytes_read;
+}
+
+double tsc_fs_write_buffer_sync(double fd, const tsc_buffer_t* buffer, double offset, double length, double position, bool position_is_null) {
+    int fd_int = (int)fd;
+    if (!buffer) {
+        tsc_throw_str(tsc_str_from_cstr("fs.writeSync: buffer is null"));
+        return 0.0;
+    }
+    double off_d = offset < 0 ? 0.0 : offset;
+    size_t off = (size_t)off_d;
+    if (off > buffer->len) {
+        tsc_throw_str(tsc_str_from_cstr("fs.writeSync: offset out of bounds"));
+        return 0.0;
+    }
+    double len_d = length < 0 ? (double)(buffer->len - off) : length;
+    size_t len = (size_t)len_d;
+    if (off + len > buffer->len) {
+        tsc_throw_str(tsc_str_from_cstr("fs.writeSync: offset + length out of bounds"));
+        return 0.0;
+    }
+    const uint8_t* ptr = buffer->data + off;
+    ssize_t bytes_written = 0;
+    if (position_is_null) {
+        bytes_written = write(fd_int, ptr, len);
+    } else {
+        bytes_written = pwrite(fd_int, ptr, len, (off_t)position);
+    }
+    if (bytes_written < 0) {
+        char err_msg[256];
+        snprintf(err_msg, sizeof(err_msg), "fs.writeSync: write failed, %s", strerror(errno));
+        tsc_throw_str(tsc_str_from_cstr(err_msg));
+        return 0.0;
+    }
+    return (double)bytes_written;
+}
+
+double tsc_fs_write_string_sync(double fd, const tsc_str_t* str, double position, bool position_is_null) {
+    int fd_int = (int)fd;
+    if (!str) {
+        tsc_throw_str(tsc_str_from_cstr("fs.writeSync: string is null"));
+        return 0.0;
+    }
+    const char* ptr = str->data;
+    size_t len = str->len;
+    ssize_t bytes_written = 0;
+    if (position_is_null) {
+        bytes_written = write(fd_int, ptr, len);
+    } else {
+        bytes_written = pwrite(fd_int, ptr, len, (off_t)position);
+    }
+    if (bytes_written < 0) {
+        char err_msg[256];
+        snprintf(err_msg, sizeof(err_msg), "fs.writeSync: write failed, %s", strerror(errno));
+        tsc_throw_str(tsc_str_from_cstr(err_msg));
+        return 0.0;
+    }
+    return (double)bytes_written;
+}

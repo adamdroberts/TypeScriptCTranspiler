@@ -1,0 +1,17 @@
+--- Test 1: Open and write string ---
+Opened fd1: valid
+Bytes written (string): 35
+--- Test 2: Read using position ---
+Bytes read: 12
+Content read: "Antigravity "
+--- Test 3: Write Buffer ---
+Bytes written (Buffer): 10
+Encoding side effect: 1 1
+--- Test 4: Sequential Read (position = null) ---
+Bytes read (seq 1): 46
+Content (seq 1): Hello Antigravity Transpiler World! Excellent!
+Bytes read (seq 2, EOF): 0
+--- Test 5: Error Handling ---
+Caught nonexistent read error
+Caught invalid fd close error
+Caught invalid flag error
