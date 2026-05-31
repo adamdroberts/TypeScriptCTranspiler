@@ -1,0 +1,21 @@
+--- Test 1: Open and writevSync sequential (position = null/undefined) ---
+Opened fd: valid
+Bytes written (seq 1): 19
+--- Test 2: readvSync sequential (position = null/undefined) ---
+Bytes read (seq 1): 19
+Read buf1: "Hello "
+Read buf2: "Vector "
+Read buf3: "World!"
+--- Test 3: readvSync sequential past EOF ---
+Bytes read past EOF: 0
+--- Test 4: writevSync with explicit numeric position ---
+Bytes written (pos 6): 9
+--- Test 5: readvSync with explicit numeric position ---
+Bytes read (pos 6): 13
+Read at pos 6: "COOL WORKrld!"
+--- Test 6: Empty buffers list ---
+Empty writevSync bytes: 0
+Empty readvSync bytes: 0
+--- Test 7: Error handling ---
+Caught readvSync invalid fd error
+Caught writevSync invalid fd error

@@ -31,6 +31,7 @@
 #include <sys/sysinfo.h>
 #endif
 #include <sys/types.h>
+#include <sys/uio.h>
 #include <sys/utsname.h>
 #include <time.h>
 #include <unicode/unorm2.h>
