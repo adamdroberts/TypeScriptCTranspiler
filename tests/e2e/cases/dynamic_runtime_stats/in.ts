@@ -29,3 +29,10 @@ console.log("has:", "y" in obj);
 delete obj.y;
 console.log("deleted:", "y" in obj);
 console.log("cached:", obj.cached);
+
+obj.customMethod = function() {
+    return 42;
+};
+for (let i = 0; i < 2; i++) {
+    console.log("custom method call:", obj.customMethod());
+}

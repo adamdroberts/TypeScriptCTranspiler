@@ -31632,7 +31632,8 @@ class Emitter {
                 { value: argList, node: call },
             ], ([target, list]) => {
                 const fn = this.freshTemp("_dyn_call_fn");
-                return `({ tsc_value_t ${fn} = tsc_value_get_prop(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)})); tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${list})); })`;
+                const cache = this.freshTemp("_prop_cache");
+                return `({ static tsc_prop_cache_t ${cache}; tsc_value_t ${fn} = tsc_value_get_prop_cached(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}), &${cache}); tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${list})); })`;
             });
         }
         for (const arg of args) {
@@ -31641,7 +31642,9 @@ class Emitter {
         return this.emitSequencedExpr(T_VALUE, specs, ([target, ...values]) => {
             const av = this.freshTemp("_dyn_call_args");
             const fn = this.freshTemp("_dyn_call_fn");
+            const cache = this.freshTemp("_prop_cache");
             const pieces = [
+                `static tsc_prop_cache_t ${cache}`,
                 `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${values.length || 1})`,
             ];
             for (const value of values) {
@@ -31649,7 +31652,7 @@ class Emitter {
                 pieces.push(`tsc_value_t ${tmp} = ${value}`);
                 pieces.push(`tsc_array_push_raw(${av}, &${tmp})`);
             }
-            pieces.push(`tsc_value_t ${fn} = tsc_value_get_prop(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}))`);
+            pieces.push(`tsc_value_t ${fn} = tsc_value_get_prop_cached(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}), &${cache})`);
             pieces.push(`tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${av}))`);
             return `({ ${pieces.join("; ")}; })`;
         });
