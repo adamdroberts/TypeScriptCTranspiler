@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Added opt-in dynamic object shape diagnostics that print object shape creation, update, and transitions (add, modify, delete, prototype, preventExtensions, seal, freeze) to stderr under the environment variable `TSC_SHAPE_DIAGNOSTICS=1`. Test: `dynamic_shape_diagnostics`.
 - Added unsupported diagnostic for the module-level `events.on` async iterator helper to reject it with a precise message during AOT compilation, and added a focused regression test. Test: `event_emitter_on_async_iterator_reject`.
 - `URLSearchParams` now supports the `getAll(name)` method, returning an array of string values matching the given parameter name in stable order (or an empty array if not found), evaluating ignored extra arguments and supporting both global and `node:url` instances. Test: `url_search_params_get_all`.
 - Extended CommonJS static named-export analysis to recursively resolve nested property and element accesses on constant object and array literals (e.g. `const keys = { first: { name: "value" } }; exports[keys.first.name] = ...`), enabling compilation of nested static computed export-key patterns. Test: `node_modules_commonjs_computed_keys_as_const`.

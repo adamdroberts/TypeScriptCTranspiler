@@ -361,6 +361,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Dynamic array literals typed as `any` support spread from dynamic arrays, dynamic/typed strings, and typed arrays, boxing spread elements into `tsc_value_t`. Test: `dynamic_array_spread`
 - Dynamic property and element access supports object properties, array indices, and `.length` on dynamic arrays/strings.
 - Dynamic property writes (`obj.x = value`, `obj["x"] = value`) and compound/logical writes (`+=`, `-=`, `*=`, `/=`, `%=`, `**=`, `&=`, `|=`, `^=`, `<<=`, `>>=`, `>>>=`, `&&=`, `||=`, `??=`) lower through descriptor-aware `tsc_value_set_prop` / dynamic operator helpers with RHS short-circuiting for logical assignment. Tests: `dynamic_property_assignment`, `dynamic_property_logical_assign`, `dynamic_bitwise_ops`
+- Opt-in dynamic object shape diagnostics trace object shape creation, update, and transitions (add, modify, delete, prototype, preventExtensions, seal, freeze) to stderr under the environment variable `TSC_SHAPE_DIAGNOSTICS=1`. Test: `dynamic_shape_diagnostics`
 - Literal dynamic property reads, dynamic string-key element reads, two-/three-argument dynamic `Reflect.get(...)` reads, direct dynamic property/string-key writes, three-/four-argument dynamic `Reflect.set(...)` writes, and custom dynamic method calls emit per-site shape-validated cache slots for own object properties, while preserving proxy, prototype-chain, accessor receiver, descriptor-aware write, array, string, and function fallback behavior. `TSC_DYNAMIC_STATS=1` prints opt-in get/set/has/delete/own-key/descriptor counters, object shape-update counters, and property-cache hit/miss counters to stderr at process exit. Test: `dynamic_runtime_stats`
 - Dynamic array index writes (`arr[i] = value`) and numeric-index compound writes extend/update `tsc_value_t` arrays, filling skipped slots with `undefined`. Test: `dynamic_index_assignment`
 - Dynamic `"key" in object` and `delete object.key` / `delete object["key"]` route through descriptor-aware dynamic object lookup/deletion. Test: `dynamic_property_ops`
@@ -2186,6 +2187,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_ops` | dynamic arithmetic, equality, relational, logical, nullish, and compound operators |
 | `dynamic_property_ops` | dynamic `in` and `delete` property operations |
 | `dynamic_runtime_stats` | opt-in dynamic operation, shape-update, and property-cache counters print to stderr |
+| `dynamic_shape_diagnostics` | opt-in dynamic shape transition logs print to stderr |
 | `dynamic_unary_ops` | dynamic unary numeric and bitwise-not operators |
 | `dynamic_update_ops` | dynamic pre/post update operators over local, property, and index lvalues |
 | `dynamic_values` | NaN-boxed `any`/`unknown`, JSON.parse including Unicode escapes, heterogeneous arrays/objects |
