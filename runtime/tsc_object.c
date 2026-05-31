@@ -1,5 +1,30 @@
 #include "tsc_internal.h"
 
+static uint64_t g_object_id_counter = 0;
+
+static void print_shape_keys(const tsc_object_t* o, const tsc_str_t* skip_key, const tsc_str_t* add_key) {
+    fprintf(stderr, "{");
+    bool first = true;
+    for (size_t i = 0; i < o->len; i++) {
+        if (o->props[i].key) {
+            if (skip_key && tsc_str_eq(o->props[i].key, skip_key)) {
+                continue;
+            }
+            if (!first) {
+                fprintf(stderr, ", ");
+            }
+            fprintf(stderr, "%.*s", (int)o->props[i].key->len, o->props[i].key->data);
+            first = false;
+        }
+    }
+    if (add_key) {
+        if (!first) {
+            fprintf(stderr, ", ");
+        }
+        fprintf(stderr, "%.*s", (int)add_key->len, add_key->data);
+    }
+    fprintf(stderr, "}");
+}
 
 tsc_object_t* tsc_object_new(void) {
     tsc_object_t* o = (tsc_object_t*)TSC_GC_MALLOC(sizeof(tsc_object_t));
@@ -17,15 +42,49 @@ tsc_object_t* tsc_object_new(void) {
     o->is_error = false;
     o->is_typed_array = false;
     o->shape_version = 1;
+    o->object_id = ++g_object_id_counter;
     o->proxy_target = tsc_value_undefined();
     o->proxy_handler = tsc_value_undefined();
     o->prototype = tsc_value_null();
     o->props = (tsc_object_prop_t*)TSC_GC_MALLOC(sizeof(tsc_object_prop_t) * o->cap);
+    if (g_shape_diagnostics_enabled) {
+        fprintf(stderr, "[tsc shape] Obj #%" PRIu64 " created (empty)\n", o->object_id);
+    }
     return o;
 }
 
-static void object_shape_changed(tsc_object_t* o) {
+static void object_shape_changed(tsc_object_t* o, const char* action, const tsc_str_t* key) {
     if (!o) return;
+    if (g_shape_diagnostics_enabled) {
+        fprintf(stderr, "[tsc shape] Obj #%" PRIu64 " transition: shape_version %" PRIu64 " -> %" PRIu64 " | old: ",
+                o->object_id, o->shape_version, o->shape_version + 1);
+        if (strcmp(action, "add") == 0) {
+            print_shape_keys(o, key, NULL);
+            fprintf(stderr, " -> new: ");
+            print_shape_keys(o, NULL, NULL);
+            fprintf(stderr, " | via add '%.*s'\n", key ? (int)key->len : 0, key ? key->data : "");
+        } else if (strcmp(action, "delete") == 0) {
+            print_shape_keys(o, NULL, key);
+            fprintf(stderr, " -> new: ");
+            print_shape_keys(o, NULL, NULL);
+            fprintf(stderr, " | via delete '%.*s'\n", key ? (int)key->len : 0, key ? key->data : "");
+        } else if (strcmp(action, "modify") == 0) {
+            print_shape_keys(o, NULL, NULL);
+            fprintf(stderr, " -> new: ");
+            print_shape_keys(o, NULL, NULL);
+            fprintf(stderr, " | via modify '%.*s'\n", key ? (int)key->len : 0, key ? key->data : "");
+        } else if (strcmp(action, "prototype") == 0) {
+            print_shape_keys(o, NULL, NULL);
+            fprintf(stderr, " -> new: ");
+            print_shape_keys(o, NULL, NULL);
+            fprintf(stderr, " | via prototype change\n");
+        } else {
+            print_shape_keys(o, NULL, NULL);
+            fprintf(stderr, " -> new: ");
+            print_shape_keys(o, NULL, NULL);
+            fprintf(stderr, " | via %s\n", action);
+        }
+    }
     o->shape_version++;
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_OBJECT_SHAPE_UPDATE);
 }
@@ -614,7 +673,7 @@ bool object_set_own_data(tsc_object_t* o, tsc_str_t* key, tsc_value_t value) {
     o->props[o->len].enumerable = true;
     o->props[o->len].configurable = true;
     o->len++;
-    object_shape_changed(o);
+    object_shape_changed(o, "add", key);
     return true;
 }
 
@@ -728,7 +787,7 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
         if (has_writable) p->writable = writable;
         if (has_enumerable) p->enumerable = enumerable;
         if (has_configurable) p->configurable = configurable;
-        object_shape_changed(o);
+        object_shape_changed(o, "modify", key);
         return true;
     }
     if (!o->extensible) return false;
@@ -746,7 +805,7 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
     o->props[o->len].enumerable = has_enumerable ? enumerable : false;
     o->props[o->len].configurable = has_configurable ? configurable : false;
     o->len++;
-    object_shape_changed(o);
+    object_shape_changed(o, "add", key);
     return true;
 }
 
@@ -815,7 +874,7 @@ bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_ge
         prop->writable = false;
         prop->enumerable = next_enumerable;
         prop->configurable = next_configurable;
-        object_shape_changed(o);
+        object_shape_changed(o, "modify", key);
         return true;
     }
     if (!o->extensible) return false;
@@ -833,7 +892,7 @@ bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_ge
     o->props[o->len].enumerable = has_enumerable ? enumerable : false;
     o->props[o->len].configurable = has_configurable ? configurable : false;
     o->len++;
-    object_shape_changed(o);
+    object_shape_changed(o, "add", key);
     return true;
 }
 
@@ -899,7 +958,7 @@ bool tsc_object_set_prototype_of(tsc_object_t* o, tsc_value_t prototype) {
     if (!o->extensible) return false;
     if (object_chain_contains(prototype, o)) return false;
     o->prototype = prototype;
-    object_shape_changed(o);
+    object_shape_changed(o, "prototype", NULL);
     return true;
 }
 
@@ -1104,7 +1163,7 @@ bool tsc_object_delete(tsc_object_t* o, const tsc_str_t* key) {
         o->props[i - 1] = o->props[i];
     }
     o->len--;
-    object_shape_changed(o);
+    object_shape_changed(o, "delete", key);
     return true;
 }
 
@@ -1155,7 +1214,7 @@ bool tsc_object_prevent_extensions(tsc_object_t* o) {
     }
     if (o->extensible) {
         o->extensible = false;
-        object_shape_changed(o);
+        object_shape_changed(o, "preventExtensions", NULL);
     }
     return true;
 }
@@ -1228,7 +1287,7 @@ bool tsc_object_seal(tsc_object_t* o) {
     for (size_t i = 0; i < o->len; i++) {
         o->props[i].configurable = false;
     }
-    object_shape_changed(o);
+    object_shape_changed(o, "seal", NULL);
     return true;
 }
 
@@ -1242,7 +1301,7 @@ bool tsc_object_freeze(tsc_object_t* o) {
     for (size_t i = 0; i < o->len; i++) {
         o->props[i].writable = false;
     }
-    object_shape_changed(o);
+    object_shape_changed(o, "freeze", NULL);
     return true;
 }
 

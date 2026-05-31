@@ -578,6 +578,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-computed-string-exports-package": cjsPackage("tsc2c-cjs-computed-string-exports-package", {
         "index.js": 'exports.__esModule = true;\nconst answerPrefix = "ans";\nconst labelPrefix = "la";\nconst labelSuffix = "bel";\nconst comboMiddle = "bo";\nconst keys = ["extra", "mapped"];\nconst keyMap = { alias: "mapped" };\nexports[answerPrefix + "wer"] = 53;\nmodule.exports[`${labelPrefix}${labelSuffix}`] = "computed-static";\nexports[`com${comboMiddle}`] = true;\nexports[keys[0]] = "array-key";\nmodule.exports[keyMap.alias] = 71;\n',
     }),
+    "tsc2c-cjs-computed-keys-as-const-package": cjsPackage("tsc2c-cjs-computed-keys-as-const-package", {
+        "index.js": 'exports.__esModule = true;\nconst keys = { first: { name: "value" } };\nexports[keys.first.name] = function() { return "it-works"; };\n',
+    }),
     "tsc2c-cjs-define-properties-exports": cjsPackage("tsc2c-cjs-define-properties-exports", {
         "index.js": 'exports.__esModule = true;\nObject.defineProperties(exports, {\n  default: { value: function greet(name) { return "hello " + name; }, enumerable: true },\n  label: { value: "define-properties", enumerable: true },\n  count: { value: 45, enumerable: true }\n});\n',
     }),

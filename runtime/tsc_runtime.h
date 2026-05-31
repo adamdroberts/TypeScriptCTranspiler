@@ -348,6 +348,7 @@ tsc_url_search_params_t* tsc_url_search_params_new(const tsc_str_t* init);
 void tsc_url_search_params_append(tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value);
 void tsc_url_search_params_delete(tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value);
 tsc_str_t* tsc_url_search_params_get(const tsc_url_search_params_t* params, const tsc_str_t* name);
+struct tsc_array* tsc_url_search_params_get_all(const tsc_url_search_params_t* params, const tsc_str_t* name);
 bool tsc_url_search_params_has(const tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value);
 void tsc_url_search_params_set(tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value);
 tsc_str_t* tsc_url_search_params_to_string(const tsc_url_search_params_t* params);
@@ -1005,6 +1006,7 @@ double tsc_set_immediate(tsc_immediate_fn_t fn, void* env);
 void tsc_clear_immediate(double id);
 void tsc_drain_immediates(void);
 double tsc_set_timeout(tsc_timeout_fn_t fn, void* env);
+double tsc_set_interval(tsc_timeout_fn_t fn, void* env);
 void tsc_clear_timeout(double id);
 void tsc_drain_timeouts(void);
 
