@@ -14728,7 +14728,10 @@ class Emitter {
         ) {
             const defaultMember = this.commonJsExportedMemberDeclaration(target.getSourceFile(), "default");
             if (defaultMember) return defaultMember;
-            return target;
+            if (!this.hasCommonJsEsModuleMarker(target.getSourceFile())) {
+                return target;
+            }
+            return null;
         }
         if (target && ts.isCallExpression(target)) {
             const defineExport = this.commonJsDefinePropertyExportForCallDeclaration(target);
@@ -14745,7 +14748,12 @@ class Emitter {
         const info = this.resolvedModuleInfoForSpecifier(specifier.text, id.getSourceFile().fileName);
         const sf = info?.sf;
         if (!sf || !this.isJavaScriptSourceFile(sf)) return null;
-        return this.commonJsExportedMemberDeclaration(sf, "default");
+        const defaultMember = this.commonJsExportedMemberDeclaration(sf, "default");
+        if (defaultMember) return defaultMember;
+        if (!this.hasCommonJsEsModuleMarker(sf)) {
+            return sf;
+        }
+        return null;
     }
 
     private commonJsNamedImportDeclaration(id: ts.Identifier): ts.Node | null {
@@ -14779,6 +14787,9 @@ class Emitter {
     }
 
     private declarationCName(decl: ts.Node): string | null {
+        if (ts.isSourceFile(decl)) {
+            return this.commonJsModuleExportsCName(decl);
+        }
         if (ts.isPropertyAccessExpression(decl) || ts.isElementAccessExpression(decl)) {
             const commonJsName = this.commonJsExportCName(decl);
             if (commonJsName) return commonJsName;
@@ -14961,6 +14972,13 @@ class Emitter {
         const key = call.arguments[1];
         if (!target || !key || !ts.isStringLiteralLike(key) || key.text !== "__esModule") return false;
         return this.isCommonJsExportsTargetExpression(target);
+    }
+
+    private hasCommonJsEsModuleMarker(sf: ts.SourceFile): boolean {
+        for (const stmt of sf.statements) {
+            if (this.commonJsEsModuleMarker(stmt)) return true;
+        }
+        return false;
     }
 
     private commonJsDefinePropertyExport(
@@ -17440,6 +17458,9 @@ class Emitter {
     }
 
     private commonJsExportedCType(node: ts.Node): CType {
+        if (ts.isSourceFile(node)) {
+            return T_VALUE;
+        }
         let valueNode = this.commonJsExportValueNode(node);
         while (ts.isParenthesizedExpression(valueNode)) valueNode = valueNode.expression;
         if (ts.isConditionalExpression(valueNode)) {
@@ -18863,6 +18884,11 @@ class Emitter {
         const info = this.resolvedModuleInfoForSpecifier(spec, pa.getSourceFile().fileName);
         const commonJsDecl = info ? this.commonJsExportedMemberDeclaration(info.sf, pa.name.text) : null;
         if (commonJsDecl) return commonJsDecl;
+        if (pa.name.text === "default" && info && this.isJavaScriptSourceFile(info.sf)) {
+            if (!this.hasCommonJsEsModuleMarker(info.sf)) {
+                return info.sf;
+            }
+        }
         const sym = this.checker.getSymbolAtLocation(pa.name);
         if (sym) {
             let target = sym;
@@ -18881,12 +18907,22 @@ class Emitter {
 
     private moduleNamespaceMemberCName(pa: ts.PropertyAccessExpression): string | null {
         const decl = this.moduleNamespaceMemberDeclaration(pa);
+        if (decl && ts.isSourceFile(decl)) {
+            const spec = this.moduleNamespaceImportSpecifier(pa.expression as ts.Identifier);
+            if (spec) {
+                const res = this.emitCommonJsRequireModuleValue(pa as any, spec, "import");
+                return res.c;
+            }
+        }
         return decl ? this.declarationCName(decl) : null;
     }
 
     private moduleNamespaceMemberType(pa: ts.PropertyAccessExpression): CType {
         const decl = this.moduleNamespaceMemberDeclaration(pa);
         if (decl) {
+            if (ts.isSourceFile(decl)) {
+                return T_VALUE;
+            }
             if (ts.isExportAssignment(decl)) {
                 return this.defaultExportAssignmentCType(decl);
             }
@@ -26981,6 +27017,19 @@ class Emitter {
             }
             const commonJsDefaultImport = this.commonJsDefaultImportDeclaration(expr);
             if (commonJsDefaultImport) {
+                if (ts.isSourceFile(commonJsDefaultImport)) {
+                    const raw = this.checker.getSymbolAtLocation(expr);
+                    const importClause = (raw?.declarations ?? []).find((decl): decl is ts.ImportClause =>
+                        ts.isImportClause(decl) && decl.name?.text === expr.text,
+                    );
+                    if (importClause && ts.isImportDeclaration(importClause.parent)) {
+                        const specifier = importClause.parent.moduleSpecifier;
+                        if (ts.isStringLiteralLike(specifier)) {
+                            return this.emitCommonJsRequireModuleValue(expr as any, specifier.text, "import");
+                        }
+                    }
+                    unsupported(expr, "unsupported CommonJS default import fallback");
+                }
                 const cName = this.declarationCName(commonJsDefaultImport);
                 if (!cName) unsupported(expr, "unsupported CommonJS default import");
                 return { c: cName, ty: this.commonJsExportedCType(commonJsDefaultImport) };
@@ -29195,10 +29244,10 @@ class Emitter {
         return { c: `tsc_value_object(tsc_object_new())`, ty: T_VALUE };
     }
 
-    private emitCommonJsRequireModuleValue(call: ts.CallExpression, spec: string): EmitResult {
+    private emitCommonJsRequireModuleValue(call: ts.CallExpression, spec: string, edgeKind: "import" | "require" = "require"): EmitResult {
         const nativeAddon = this.emitNativeAddonValue(spec, call.getSourceFile().fileName);
         if (nativeAddon) return nativeAddon;
-        const info = this.resolvedModuleInfoForSpecifier(spec, call.getSourceFile().fileName, "require");
+        const info = this.resolvedModuleInfoForSpecifier(spec, call.getSourceFile().fileName, edgeKind);
         if (!info) unsupported(call, `unresolved require("${spec}")`);
         const exportDecl = this.commonJsModuleExportsValueDeclaration(info.sf);
         if (exportDecl) {
