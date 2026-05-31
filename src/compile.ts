@@ -331,6 +331,7 @@ function stringSpecifierTexts(expr: ts.Expression): string[] {
 }
 
 function canAotCompileEvalCall(call: ts.CallExpression): boolean {
+    if (call.arguments.length === 0) return true;
     const source = call.arguments[0] ? runtimeCodeStringText(call.arguments[0]!) : null;
     return source !== null && parseAotEvalConstant(source) !== null;
 }
@@ -345,6 +346,8 @@ function canAotDispatchFunctionManifest(call: ts.CallExpression | ts.NewExpressi
 }
 
 function functionConstructorBodyText(call: ts.CallExpression | ts.NewExpression): string | null {
+    const args = call.arguments ?? [];
+    if (args.length === 0) return "";
     const bodyArg = functionConstructorBodyArg(call);
     return bodyArg ? runtimeCodeStringText(bodyArg) : null;
 }
