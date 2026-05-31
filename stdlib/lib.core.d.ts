@@ -2030,7 +2030,7 @@ interface DnsLookupOptions {
 }
 interface DnsPromises {
     lookup(hostname: string): Promise<any>;
-    lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined, ...ignored: any[]): Promise<any>;
+    lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined | null, ...ignored: any[]): Promise<any>;
     resolve4(hostname: string): Promise<string[]>;
     resolve4(hostname: string, options: DnsResolveOptions | undefined, ...ignored: any[]): Promise<string[]>;
     resolve6(hostname: string): Promise<string[]>;
@@ -2045,8 +2045,8 @@ interface DNS {
     readonly ALL: number;
     promises: DnsPromises;
     lookup(hostname: string, callback: DnsLookupCallback, ...ignored: any[]): void;
-    lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined, callback: DnsLookupCallback, ...ignored: any[]): void;
-    lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined, callback: DnsLookupAllCallback, ...ignored: any[]): void;
+    lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined | null, callback: DnsLookupCallback, ...ignored: any[]): void;
+    lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined | null, callback: DnsLookupAllCallback, ...ignored: any[]): void;
     resolve4(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     resolve4(hostname: string, options: DnsResolveOptions | undefined, callback: DnsResolveCallback, ...ignored: any[]): void;
     resolve6(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
@@ -2062,8 +2062,8 @@ declare module "dns" {
     export const ALL: number;
     export const promises: DnsPromises;
     export function lookup(hostname: string, callback: DnsLookupCallback, ...ignored: any[]): void;
-    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined, callback: DnsLookupCallback, ...ignored: any[]): void;
-    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined, callback: DnsLookupAllCallback, ...ignored: any[]): void;
+    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined | null, callback: DnsLookupCallback, ...ignored: any[]): void;
+    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined | null, callback: DnsLookupAllCallback, ...ignored: any[]): void;
     export function resolve4(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolve4(hostname: string, options: DnsResolveOptions | undefined, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolve6(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
@@ -2080,8 +2080,8 @@ declare module "node:dns" {
     export const ALL: number;
     export const promises: DnsPromises;
     export function lookup(hostname: string, callback: DnsLookupCallback, ...ignored: any[]): void;
-    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined, callback: DnsLookupCallback, ...ignored: any[]): void;
-    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined, callback: DnsLookupAllCallback, ...ignored: any[]): void;
+    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined | null, callback: DnsLookupCallback, ...ignored: any[]): void;
+    export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined | null, callback: DnsLookupAllCallback, ...ignored: any[]): void;
     export function resolve4(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolve4(hostname: string, options: DnsResolveOptions | undefined, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolve6(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;

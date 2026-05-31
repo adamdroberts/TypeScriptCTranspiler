@@ -1009,9 +1009,14 @@ class Emitter {
                 if (ts.isSpreadAssignment(prop)) {
                     return this.isSideEffectFreeObjectSpreadOperand(prop.expression, seenConsts);
                 }
-                if (!ts.isPropertyAssignment(prop)) return false;
-                if (!this.objectLiteralPropertyNameHasNoDefinitionSideEffects(prop.name, seenConsts)) return false;
-                return this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts);
+                if (ts.isPropertyAssignment(prop)) {
+                    if (!this.objectLiteralPropertyNameHasNoDefinitionSideEffects(prop.name, seenConsts)) return false;
+                    return this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts);
+                }
+                if (ts.isShorthandPropertyAssignment(prop)) {
+                    return this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts);
+                }
+                return false;
             });
         }
         return false;
@@ -34611,9 +34616,9 @@ class Emitter {
 
     private dnsLookupOptions(options: ts.Expression | undefined): { family: number; all: boolean; hints: number } {
         const out = { family: 0, all: false, hints: 0 };
-        if (!options || this.isUndefinedLikeExpression(options)) return out;
+        if (!options || this.isUndefinedLikeExpression(options) || this.isNullExpression(options)) return out;
         options = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (this.isUndefinedLikeExpression(options)) return out;
+        if (this.isUndefinedLikeExpression(options) || this.isNullExpression(options)) return out;
         const numericFamily = this.dnsLookupNumberValue(options);
         if (numericFamily !== null) {
             out.family = numericFamily;
@@ -34626,44 +34631,50 @@ class Emitter {
             unsupported(options, "dns.lookup options must be a numeric family or object literal in this subset");
         }
         for (const prop of options.properties) {
-            if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, "dns.lookup options only support property assignments");
+            let key: string | null = null;
+            let valueNode: ts.Expression | undefined;
+            if (ts.isPropertyAssignment(prop)) {
+                key = this.staticPropertyName(prop.name);
+                valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+            } else if (ts.isShorthandPropertyAssignment(prop)) {
+                key = prop.name.text;
+                valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.name);
+            } else {
+                unsupported(prop, "dns.lookup options only support property assignments and shorthand property assignments");
             }
-            const key = this.staticPropertyName(prop.name);
             if (key !== "family" && key !== "all" && key !== "verbatim" && key !== "order" && key !== "hints") {
                 unsupported(prop.name, `dns.lookup unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
-            const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
             if (this.isUndefinedExpression(valueNode)) {
                 continue;
             }
             if (key === "family") {
                 const family = this.dnsLookupNumberValue(valueNode);
                 if (family === null) {
-                    unsupported(prop.initializer, "dns.lookup family must be numeric literal 0, 4, or 6 in this subset");
+                    unsupported(valueNode, "dns.lookup family must be numeric literal 0, 4, or 6 in this subset");
                 }
                 out.family = family;
                 if (out.family !== 0 && out.family !== 4 && out.family !== 6) {
-                    unsupported(prop.initializer, "dns.lookup family must be 0, 4, or 6 in this subset");
+                    unsupported(valueNode, "dns.lookup family must be 0, 4, or 6 in this subset");
                 }
             } else if (key === "all") {
                 const all = this.dnsLookupBooleanValue(valueNode);
                 if (all === null) {
-                    unsupported(prop.initializer, "dns.lookup all must be a boolean literal in this subset");
+                    unsupported(valueNode, "dns.lookup all must be a boolean literal in this subset");
                 }
                 out.all = all;
             } else if (key === "verbatim") {
                 const verbatim = this.dnsLookupBooleanValue(valueNode);
                 if (verbatim === null) {
-                    unsupported(prop.initializer, "dns.lookup verbatim must be a boolean literal in this subset");
+                    unsupported(valueNode, "dns.lookup verbatim must be a boolean literal in this subset");
                 }
             } else if (key === "order") {
                 const order = this.dnsLookupStringValue(valueNode);
                 if (order === null) {
-                    unsupported(prop.initializer, "dns.lookup order must be a string literal in this subset");
+                    unsupported(valueNode, "dns.lookup order must be a string literal in this subset");
                 }
                 if (order !== "verbatim" && order !== "ipv4first" && order !== "ipv6first") {
-                    unsupported(prop.initializer, "dns.lookup order must be verbatim, ipv4first, or ipv6first");
+                    unsupported(valueNode, "dns.lookup order must be verbatim, ipv4first, or ipv6first");
                 }
             } else if (key === "hints") {
                 out.hints = this.dnsLookupHintValue(valueNode);
