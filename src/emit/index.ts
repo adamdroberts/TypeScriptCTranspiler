@@ -22455,6 +22455,24 @@ class Emitter {
             return this.isValidLazyGeneratorStatement(stmt.statement);
         }
 
+        if (ts.isSwitchStatement(stmt)) {
+            if (this.nodeContainsYield(stmt.expression)) return false;
+            for (const clause of stmt.caseBlock.clauses) {
+                if (ts.isCaseClause(clause) && this.nodeContainsYield(clause.expression)) {
+                    return false;
+                }
+                let sawBreak = false;
+                for (const child of clause.statements) {
+                    if (child.kind === ts.SyntaxKind.BreakStatement) {
+                        sawBreak = true;
+                        continue;
+                    }
+                    if (sawBreak || !this.isValidLazyGeneratorStatement(child)) return false;
+                }
+            }
+            return true;
+        }
+
         if (ts.isExpressionStatement(stmt) || ts.isVariableStatement(stmt) || ts.isReturnStatement(stmt)) {
             if (ts.isVariableStatement(stmt)) {
                 for (const decl of stmt.declarationList.declarations) {
@@ -22676,6 +22694,100 @@ class Emitter {
         }
     }
 
+    private emitLazyGeneratorSwitchClauseStatements(
+        buf: CBuf,
+        statements: ts.NodeArray<ts.Statement>,
+        nextStateId: () => number,
+        nextYieldStarSlot: () => number,
+        elemType: CType,
+        envLocalName: string,
+    ): void {
+        for (const stmt of statements) {
+            if (stmt.kind === ts.SyntaxKind.BreakStatement) return;
+            this.emitLazyGeneratorStmt(buf, stmt, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+        }
+    }
+
+    private emitLazyGeneratorSwitch(
+        buf: CBuf,
+        stmt: ts.SwitchStatement,
+        nextStateId: () => number,
+        nextYieldStarSlot: () => number,
+        elemType: CType,
+        envLocalName: string,
+    ): void {
+        const disc = this.emitExpr(stmt.expression);
+        const isStr = disc.ty.kind === "string";
+        const isBool = disc.ty.kind === "boolean";
+        if (!isStr && !isBool) requireNumber(stmt.expression, disc.ty);
+        const discVar = this.freshTemp("_sw");
+        buf.open("");
+        buf.line(`${disc.ty.c} ${discVar} = ${disc.c};`);
+
+        let pending: string[] = [];
+        let first = true;
+        const buildCond = (caseExpr: ts.Expression): string => {
+            const caseVal = this.emitExpr(caseExpr);
+            if (isStr) {
+                return `tsc_str_eq(${discVar}, ${this.coerce(caseVal, disc.ty, caseExpr)})`;
+            }
+            if (isBool) {
+                return `(${discVar} == ${this.coerce(caseVal, disc.ty, caseExpr)})`;
+            }
+            return `(${discVar} == ${this.coerce(caseVal, disc.ty, caseExpr)})`;
+        };
+
+        for (const clause of stmt.caseBlock.clauses) {
+            if (ts.isCaseClause(clause)) {
+                pending.push(buildCond(clause.expression));
+                if (clause.statements.length === 0) continue;
+                const cond = pending.join(" || ");
+                buf.open(first ? `if (${cond})` : `else if (${cond})`);
+                first = false;
+                this.emitLazyGeneratorSwitchClauseStatements(
+                    buf,
+                    clause.statements,
+                    nextStateId,
+                    nextYieldStarSlot,
+                    elemType,
+                    envLocalName,
+                );
+                buf.close();
+                pending = [];
+                continue;
+            }
+
+            if (pending.length > 0) {
+                const cond = pending.join(" || ");
+                buf.open(first ? `if (${cond})` : `else if (${cond})`);
+                first = false;
+                this.emitLazyGeneratorSwitchClauseStatements(
+                    buf,
+                    clause.statements,
+                    nextStateId,
+                    nextYieldStarSlot,
+                    elemType,
+                    envLocalName,
+                );
+                buf.close();
+                pending = [];
+            } else {
+                buf.open(first ? "if (true)" : "else");
+                first = false;
+                this.emitLazyGeneratorSwitchClauseStatements(
+                    buf,
+                    clause.statements,
+                    nextStateId,
+                    nextYieldStarSlot,
+                    elemType,
+                    envLocalName,
+                );
+                buf.close();
+            }
+        }
+        buf.close();
+    }
+
     private emitLazyGeneratorStmt(
         buf: CBuf,
         stmt: ts.Statement,
@@ -22729,6 +22841,11 @@ class Emitter {
             }
             buf.close();
             buf.close();
+            return;
+        }
+
+        if (ts.isSwitchStatement(stmt)) {
+            this.emitLazyGeneratorSwitch(buf, stmt, nextStateId, nextYieldStarSlot, elemType, envLocalName);
             return;
         }
 
