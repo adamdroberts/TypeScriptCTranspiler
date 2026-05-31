@@ -1470,6 +1470,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `scheduler_callback_this` | bounded scheduler callbacks with explicit this parameters receive runtime undefined |
 | `scheduler_many_args` | bounded scheduler callbacks accept more than five typed queued arguments |
 | `set_timeout_zero` | bounded zero-delay setTimeout callbacks drain before setImmediate |
+| `set_timeout_delay` | bounded nonzero-delay setTimeout callbacks wait for their runtime delay after zero-delay timers and immediates |
 | `set_immediate` | bounded setImmediate callbacks drain after nextTick, queueMicrotask, and zero-delay setTimeout before exit |
 | `timers_clear` | bounded setTimeout/setImmediate handles can be cleared before the before-exit drain, including clearInterval timeout-handle aliases |
 | `timers_module_import` | timers/node:timers imports route to bounded timeout and immediate scheduler helpers |
