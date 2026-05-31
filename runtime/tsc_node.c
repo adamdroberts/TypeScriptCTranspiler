@@ -225,6 +225,48 @@ tsc_str_t* tsc_crypto_random_uuid(void) {
     return out;
 }
 
+tsc_buffer_t* tsc_crypto_random_fill_sync(tsc_buffer_t* buffer, double offset, double size, bool offset_is_null, bool size_is_null) {
+    if (!buffer) {
+        tsc_throw_str(tsc_str_from_cstr("crypto.randomFillSync: buffer is null"));
+        return NULL;
+    }
+    size_t off = 0;
+    if (!offset_is_null) {
+        if (isnan(offset) || isinf(offset) || offset < 0) {
+            tsc_throw_str(tsc_str_from_cstr("crypto.randomFillSync: offset must be a non-negative finite number"));
+            return NULL;
+        }
+        off = (size_t)offset;
+        if (off > buffer->len) {
+            tsc_throw_str(tsc_str_from_cstr("crypto.randomFillSync: offset is out of bounds"));
+            return NULL;
+        }
+    }
+    size_t len = buffer->len - off;
+    if (!size_is_null) {
+        if (isnan(size) || isinf(size) || size < 0) {
+            tsc_throw_str(tsc_str_from_cstr("crypto.randomFillSync: size must be a non-negative finite number"));
+            return NULL;
+        }
+        len = (size_t)size;
+        if (off + len > buffer->len) {
+            tsc_throw_str(tsc_str_from_cstr("crypto.randomFillSync: offset + size is out of bounds"));
+            return NULL;
+        }
+    }
+    if (len == 0) {
+        return buffer;
+    }
+    uint8_t* ptr = buffer->data + off;
+    if (RAND_bytes(ptr, (int)len) != 1) {
+        for (size_t i = 0; i < len; i++) {
+            ptr[i] = (uint8_t)(rand() & 0xff);
+        }
+    }
+    return buffer;
+}
+
+
 bool tsc_crypto_timing_safe_equal(const tsc_buffer_t* a, const tsc_buffer_t* b) {
     if (!a || !b || a->len != b->len) {
         tsc_throw_str(tsc_str_from_cstr("crypto.timingSafeEqual: inputs must have the same byte length"));
