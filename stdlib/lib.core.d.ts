@@ -1885,6 +1885,14 @@ interface Buffer {
     readDoubleBE(offset?: number, ...ignored: any[]): number;
     writeDoubleLE(value: number, offset?: number, ...ignored: any[]): number;
     writeDoubleBE(value: number, offset?: number, ...ignored: any[]): number;
+    readUIntLE(offset: number, byteLength: number, ...ignored: any[]): number;
+    readUIntBE(offset: number, byteLength: number, ...ignored: any[]): number;
+    readIntLE(offset: number, byteLength: number, ...ignored: any[]): number;
+    readIntBE(offset: number, byteLength: number, ...ignored: any[]): number;
+    writeUIntLE(value: number, offset: number, byteLength: number, ...ignored: any[]): number;
+    writeUIntBE(value: number, offset: number, byteLength: number, ...ignored: any[]): number;
+    writeIntLE(value: number, offset: number, byteLength: number, ...ignored: any[]): number;
+    writeIntBE(value: number, offset: number, byteLength: number, ...ignored: any[]): number;
     swap16(...ignored: any[]): Buffer;
     swap32(...ignored: any[]): Buffer;
     swap64(...ignored: any[]): Buffer;

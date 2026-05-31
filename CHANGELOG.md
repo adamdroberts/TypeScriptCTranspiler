@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Supported variable-byte-length integer read and write Buffer methods (`readUIntLE`, `readUIntBE`, `readIntLE`, `readIntBE`, `writeUIntLE`, `writeUIntBE`, `writeIntLE`, `writeIntBE`) with Node-like range validations and error messages, and preserved ignored trailing argument evaluation. Test: `buffer_varint_io`.
 - Added opt-in dynamic object shape diagnostics that print object shape creation, update, and transitions (add, modify, delete, prototype, preventExtensions, seal, freeze) to stderr under the environment variable `TSC_SHAPE_DIAGNOSTICS=1`. Test: `dynamic_shape_diagnostics`.
 - Added unsupported diagnostic for the module-level `events.on` async iterator helper to reject it with a precise message during AOT compilation, and added a focused regression test. Test: `event_emitter_on_async_iterator_reject`.
 - `URLSearchParams` now supports the `getAll(name)` method, returning an array of string values matching the given parameter name in stable order (or an empty array if not found), evaluating ignored extra arguments and supporting both global and `node:url` instances. Test: `url_search_params_get_all`.
