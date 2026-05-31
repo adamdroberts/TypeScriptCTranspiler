@@ -108,10 +108,12 @@ static uint64_t g_dynamic_stats[TSC_DYNAMIC_STAT_COUNT];
 typedef struct {
     tsc_next_tick_fn_t fn;
     void* env;
+    int depth;
 } tsc_next_tick_entry_t;
 static tsc_next_tick_entry_t* g_next_tick_queue = NULL;
 static size_t g_next_tick_len = 0;
 static size_t g_next_tick_cap = 0;
+static int g_executing_next_tick_depth = 0;
 typedef struct {
     tsc_microtask_fn_t fn;
     void* env;
@@ -671,15 +673,24 @@ void tsc_process_next_tick(tsc_next_tick_fn_t fn, void* env) {
         g_next_tick_queue = entries;
         g_next_tick_cap = next;
     }
-    g_next_tick_queue[g_next_tick_len++] = (tsc_next_tick_entry_t){ fn, env };
+    int depth = g_executing_next_tick_depth + 1;
+    if (depth > 1000) {
+        tsc_throw_str(tsc_str_from_cstr("process.nextTick starvation: maximum recursion depth exceeded"));
+    }
+    g_next_tick_queue[g_next_tick_len++] = (tsc_next_tick_entry_t){ fn, env, depth };
 }
 
 void tsc_process_drain_next_ticks(void) {
     size_t idx = 0;
+    int old_executing_depth = g_executing_next_tick_depth;
     while (idx < g_next_tick_len) {
         tsc_next_tick_entry_t entry = g_next_tick_queue[idx++];
-        if (entry.fn) entry.fn(entry.env);
+        if (entry.fn) {
+            g_executing_next_tick_depth = entry.depth;
+            entry.fn(entry.env);
+        }
     }
+    g_executing_next_tick_depth = old_executing_depth;
     g_next_tick_len = 0;
 }
 
