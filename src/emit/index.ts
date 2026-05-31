@@ -40929,9 +40929,17 @@ class Emitter {
         if (ts.isAsExpression(cur) || ts.isTypeAssertionExpression(cur) || ts.isSatisfiesExpression(cur)) {
             return this.staticComputedPropertyExpression(cur.expression);
         }
-        if (ts.isStringLiteralLike(cur) || ts.isNumericLiteral(cur)) {
+        if (ts.isStringLiteralLike(cur)) {
             return cur.text;
         }
+        if (ts.isNumericLiteral(cur)) {
+            const val = Number(cur.text);
+            if (!Number.isFinite(val)) return null;
+            return Object.is(val, -0) ? "0" : String(val);
+        }
+        if (cur.kind === ts.SyntaxKind.TrueKeyword) return "true";
+        if (cur.kind === ts.SyntaxKind.FalseKeyword) return "false";
+
         const staticString = this.staticComputedStringExpression(cur);
         if (staticString !== null) return staticString;
         const staticResolvedString = staticStringExpressionText(cur);
@@ -40945,7 +40953,17 @@ class Emitter {
         }
         const ty = this.checker.getTypeAtLocation(cur);
         if (ty.isStringLiteral()) return ty.value;
-        if (ty.isNumberLiteral()) return String(ty.value);
+        if (ty.isNumberLiteral()) {
+            const val = ty.value;
+            if (!Number.isFinite(val)) return null;
+            return Object.is(val, -0) ? "0" : String(val);
+        }
+        if (ty.flags & ts.TypeFlags.BooleanLiteral) {
+            const intrinsicName = (ty as any).intrinsicName;
+            if (intrinsicName === "true" || intrinsicName === "false") {
+                return intrinsicName;
+            }
+        }
         return null;
     }
 
@@ -40956,6 +40974,14 @@ class Emitter {
             return this.staticComputedStringExpression(cur.expression);
         }
         if (ts.isStringLiteralLike(cur)) return cur.text;
+        if (ts.isNumericLiteral(cur)) {
+            const val = Number(cur.text);
+            if (!Number.isFinite(val)) return null;
+            return Object.is(val, -0) ? "0" : String(val);
+        }
+        if (cur.kind === ts.SyntaxKind.TrueKeyword) return "true";
+        if (cur.kind === ts.SyntaxKind.FalseKeyword) return "false";
+
         if (
             ts.isBinaryExpression(cur) &&
             cur.operatorToken.kind === ts.SyntaxKind.PlusToken
@@ -40981,7 +41007,19 @@ class Emitter {
             }
         }
         const ty = this.checker.getTypeAtLocation(cur);
-        return ty.isStringLiteral() ? ty.value : null;
+        if (ty.isStringLiteral()) return ty.value;
+        if (ty.isNumberLiteral()) {
+            const val = ty.value;
+            if (!Number.isFinite(val)) return null;
+            return Object.is(val, -0) ? "0" : String(val);
+        }
+        if (ty.flags & ts.TypeFlags.BooleanLiteral) {
+            const intrinsicName = (ty as any).intrinsicName;
+            if (intrinsicName === "true" || intrinsicName === "false") {
+                return intrinsicName;
+            }
+        }
+        return null;
     }
 
     private classMethodCName(name: ts.PropertyName): string | null {
