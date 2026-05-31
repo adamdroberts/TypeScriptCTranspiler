@@ -26491,6 +26491,28 @@ class Emitter {
         if (stringBool !== null) return stringBool;
         if (
             ts.isCallExpression(unwrapped) &&
+            ts.isPropertyAccessExpression(unwrapped.expression) &&
+            ts.isIdentifier(unwrapped.expression.expression) &&
+            unwrapped.expression.name.text === "isArray" &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Array") &&
+            unwrapped.arguments.length >= 1 &&
+            this.callIgnoredArgumentsAreSideEffectFree(unwrapped.arguments, 1, seenConsts)
+        ) {
+            const arg = unwrapped.arguments[0]!;
+            const unwrappedArg = this.unwrapSideEffectFreeStaticExpression(arg);
+            if (this.isSideEffectFreeArrayOperand(arg, seenConsts)) return true;
+            if (
+                this.staticNullishState(unwrappedArg, seenConsts) === "nullish" ||
+                this.sideEffectFreeStringLiteralText(unwrappedArg, seenConsts) !== null ||
+                this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrappedArg, seenConsts) !== null ||
+                this.sideEffectFreeBigIntLiteralText(unwrappedArg, seenConsts) !== null ||
+                this.sideEffectFreePrimitiveBooleanValue(unwrappedArg, seenConsts) !== null
+            ) {
+                return false;
+            }
+        }
+        if (
+            ts.isCallExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
             unwrapped.expression.text === "Boolean" &&
             this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Boolean") &&
