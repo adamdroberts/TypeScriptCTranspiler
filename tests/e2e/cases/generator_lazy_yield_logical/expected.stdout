@@ -1,0 +1,23 @@
+-- and --
+and-yield:pause
+first:false
+and-rhs:true
+second:true:true
+-- or --
+or-yield:pause
+first:false
+or-rhs:true
+or-return:true
+second:true:true
+-- nullish --
+nullish-yield:pause
+first:false
+nullish-rhs:fallback
+nullish-return:fallback
+second:true:fallback
+-- dynamic --
+dynamic-yield:
+first:false
+dynamic-rhs:fallback
+dynamic-return:fallback
+second:true:fallback
