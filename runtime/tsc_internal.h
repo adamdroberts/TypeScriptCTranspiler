@@ -117,6 +117,12 @@ struct tsc_object {
     bool is_proxy;
     bool proxy_revoked;
     bool is_promise;
+    bool is_date;
+    bool is_regexp;
+    bool is_map;
+    bool is_set;
+    bool is_error;
+    bool is_typed_array;
     uint64_t shape_version;
     tsc_value_t proxy_target;
     tsc_value_t proxy_handler;
