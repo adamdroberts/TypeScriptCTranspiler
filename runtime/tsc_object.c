@@ -534,6 +534,8 @@ void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* p
             if (target_has_value && has_value && !tsc_value_object_is(value, target_value)) {
                 tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key"));
             }
+        } else if (!writable) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report non-configurable writable key as non-writable"));
         }
         (void)has_writable;
         (void)target_has_writable;
@@ -673,6 +675,8 @@ void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* p
         if (has_value && !tsc_value_object_is(value, prop->value)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key"));
         }
+    } else if (!writable) {
+        tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap cannot report non-configurable writable key as non-writable"));
     }
 }
 

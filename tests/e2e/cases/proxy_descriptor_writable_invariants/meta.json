@@ -1,0 +1,3 @@
+{
+  "description": "Proxy getOwnPropertyDescriptor traps cannot report non-configurable writable target data properties as non-writable"
+}

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Proxy `getOwnPropertyDescriptor` result validation now rejects trap descriptors that report non-configurable writable object or array target data properties as non-writable, including omitted `writable` fields. Test: `proxy_descriptor_writable_invariants`.
 - Package exports/imports AOT resolution now honors compile-time custom conditions supplied through the compile API and CLI `--custom-condition`, including CommonJS `require(...)` exports and package-private imports. Test: `node_modules_package_require_custom_conditions`.
 - Generated-C DCE now prunes unused safe `Symbol.for(...)`, `Symbol.keyFor(...)`, direct `isPrototypeOf(...)` checks on known fresh built-in objects, and non-throwing wrapper `new Object` / `new String` / `new Number` / `new Boolean` constructions, including transparent constructor casts. Test: `generated_c_dce_static_builtins`.
 - Dynamic `Reflect.construct(...)` and Proxy construct validation now reject accessor getter/setter function identities as non-constructors before construct trap dispatch. Test: `reflect_construct_new_target_validation`.
