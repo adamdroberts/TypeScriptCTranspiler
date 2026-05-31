@@ -5120,6 +5120,23 @@ function stringInstanceCaseFoldingDce(): string {
         : "local_dead_string_instance_case_folding_false";
 }
 
+function stringInstanceTrimDce(): string {
+    const raw = "  abc  ";
+    const trimmed = raw.trim();
+    const trimmedStart = raw.trimStart();
+    const trimmedEnd = raw.trimEnd();
+    const trimmedLeft = raw.trimLeft();
+    const trimmedRight = raw.trimRight();
+    return (trimmed === "abc" &&
+        trimmedStart === "abc  " &&
+        trimmedEnd === "  abc" &&
+        trimmedLeft === "abc  " &&
+        trimmedRight === "  abc" &&
+        ("  local_dead_string_trim_ignored  ".trim() === "local_dead_string_trim_ignored" ? "kept_string_instance_trim" : "local_dead_string_instance_trim_false") === "kept_string_instance_trim")
+        ? "kept_string_instance_trim"
+        : "local_dead_string_instance_trim_false";
+}
+
 function computedTruthyFalsyDce(): string {
     const localText: string = "truth";
     const localArray: number[] = [1];
@@ -5384,6 +5401,7 @@ console.log(
     templateLiteralDce(),
     stringStaticCallDce(),
     stringInstanceCaseFoldingDce(),
+    stringInstanceTrimDce(),
     computedTruthyFalsyDce(),
     computedSwitchKeyDce(),
     numericBitwiseDce(),

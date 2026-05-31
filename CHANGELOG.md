@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE static string analysis now folds ASCII side-effect-free `.trim()`, `.trimStart()`, `.trimEnd()`, `.trimLeft()`, and `.trimRight()` string method calls. Test: `generated_c_dce_const`.
 - Generated-C DCE static string analysis now folds ASCII side-effect-free `RegExp.escape(...)` calls. Test: `generated_c_dce_const`.
 - Generated-C DCE static string analysis now folds ASCII side-effect-free `.toUpperCase()` and `.toLowerCase()` string method calls. Test: `generated_c_dce_const`.
 - Generated-C DCE static string analysis now folds safe `String.fromCharCode(...)` and `String.fromCodePoint(...)` calls. Test: `generated_c_dce_const`.

@@ -12775,11 +12775,35 @@ class Emitter {
             return null;
         }
         const method = expr.expression.name.text;
-        if (method !== "toUpperCase" && method !== "toLowerCase") return null;
+        const isCaseFolding = method === "toUpperCase" || method === "toLowerCase";
+        const isTrim = method === "trim" || method === "trimStart" || method === "trimEnd" || method === "trimLeft" || method === "trimRight";
+        if (!isCaseFolding && !isTrim) return null;
         const recvText = this.sideEffectFreeStringLiteralText(expr.expression.expression, seenConsts);
         if (recvText === null || !/^[\x00-\x7F]*$/.test(recvText)) return null;
-        return method === "toUpperCase" ? recvText.toUpperCase() : recvText.toLowerCase();
+        if (isCaseFolding) {
+            return method === "toUpperCase" ? recvText.toUpperCase() : recvText.toLowerCase();
+        }
+        return this.sideEffectFreeStringTrimCallText(method, recvText);
     }
+
+    private sideEffectFreeStringTrimCallText(
+        method: string,
+        recvText: string,
+    ): string | null {
+        switch (method) {
+            case "trim":
+                return recvText.trim();
+            case "trimStart":
+            case "trimLeft":
+                return recvText.trimStart();
+            case "trimEnd":
+            case "trimRight":
+                return recvText.trimEnd();
+            default:
+                return null;
+        }
+    }
+
 
     private sideEffectFreeTemplateSubstitutionText(
         expr: ts.Expression,

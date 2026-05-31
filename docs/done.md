@@ -995,6 +995,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Generated-C DCE static string analysis folds side-effect-free template literals with primitive substitutions. Test: `generated_c_dce_const`
 - Generated-C DCE static string analysis folds safe `String.fromCharCode(...)` and `String.fromCodePoint(...)` calls. Test: `generated_c_dce_const`
 - Generated-C DCE static string analysis folds ASCII side-effect-free `.toUpperCase()` and `.toLowerCase()` string method calls. Test: `generated_c_dce_const`
+- Generated-C DCE static string analysis folds ASCII side-effect-free `.trim()`, `.trimStart()`, `.trimEnd()`, `.trimLeft()`, and `.trimRight()` string method calls. Test: `generated_c_dce_const`
 - Generated-C DCE static string analysis folds ASCII side-effect-free `RegExp.escape(...)` calls. Test: `generated_c_dce_const`
 - Generated-C DCE static primitive analysis follows side-effect-free comma and conditional expression operands for string, number, and BigInt values. Test: `generated_c_dce_const`
 - Generated-C DCE static primitive analysis folds side-effect-free callable `String(...)`, `Number(...)`, `Boolean(...)`, and `BigInt(...)` constructor results. Test: `generated_c_dce_const`
