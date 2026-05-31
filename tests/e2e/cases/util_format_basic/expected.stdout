@@ -1,0 +1,11 @@
+hello world
+num=42/42 float=3.14
+json={"a":1,"b":"two"} percent=%
+leftovers one two 3
+just plain text
+1 2 3
+no placeholders but extra 10 true
+undefined
+null
+NaN NaN NaN
+

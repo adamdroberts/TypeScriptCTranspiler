@@ -1985,6 +1985,99 @@ void tsc_console_error_n(size_t n, ...) {
     va_end(ap);
 }
 
+tsc_str_t* tsc_util_format_n(size_t n, ...) {
+    if (n == 0) {
+        return tsc_str_from_lit("", 0);
+    }
+
+    tsc_value_t* args = (tsc_value_t*)calloc(n, sizeof(tsc_value_t));
+    va_list ap;
+    va_start(ap, n);
+    for (size_t i = 0; i < n; i++) {
+        args[i] = va_arg(ap, tsc_value_t);
+    }
+    va_end(ap);
+
+    tsc_jsonbuf_t b;
+    tsc_jsonbuf_init(&b);
+
+    bool is_fmt_str = value_is_box(args[0]) && value_tag(args[0]) == TSC_VALUE_TAG_STRING;
+    size_t next = 1;
+    if (is_fmt_str) {
+        const tsc_str_t* fmt = (const tsc_str_t*)value_ptr(args[0]);
+        for (size_t i = 0; i < fmt->len; i++) {
+            char ch = fmt->data[i];
+            if (ch != '%' || i + 1 >= fmt->len) {
+                tsc_jsonbuf_byte(&b, ch);
+                continue;
+            }
+            char spec = fmt->data[++i];
+            if (spec == '%') {
+                tsc_jsonbuf_byte(&b, '%');
+            } else if (spec == 's') {
+                if (next < n) {
+                    tsc_str_t* s = tsc_value_to_string(args[next++]);
+                    tsc_jsonbuf_append(&b, s->data, s->len);
+                } else {
+                    tsc_jsonbuf_append(&b, "%s", 2);
+                }
+            } else if (spec == 'd' || spec == 'i') {
+                if (next < n) {
+                    double num = tsc_value_as_num(args[next++]);
+                    if (isnan(num)) {
+                        tsc_jsonbuf_append(&b, "NaN", 3);
+                    } else {
+                        tsc_jsonbuf_int(&b, (int64_t)num);
+                    }
+                } else {
+                    tsc_jsonbuf_byte(&b, '%');
+                    tsc_jsonbuf_byte(&b, spec);
+                }
+            } else if (spec == 'f') {
+                if (next < n) {
+                    double num = tsc_value_as_num(args[next++]);
+                    if (isnan(num)) {
+                        tsc_jsonbuf_append(&b, "NaN", 3);
+                    } else {
+                        tsc_str_t* s = tsc_str_from_num(num);
+                        tsc_jsonbuf_append(&b, s->data, s->len);
+                    }
+                } else {
+                    tsc_jsonbuf_append(&b, "%f", 2);
+                }
+            } else if (spec == 'j') {
+                if (next < n) {
+                    tsc_value_t val = args[next++];
+                    if (value_is_box(val) && value_tag(val) == TSC_VALUE_TAG_UNDEFINED) {
+                        tsc_jsonbuf_append(&b, "undefined", 9);
+                    } else {
+                        tsc_str_t* s = tsc_value_json_stringify(val);
+                        tsc_jsonbuf_append(&b, s->data, s->len);
+                    }
+                } else {
+                    tsc_jsonbuf_append(&b, "%j", 2);
+                }
+            } else {
+                tsc_jsonbuf_byte(&b, '%');
+                tsc_jsonbuf_byte(&b, spec);
+            }
+        }
+    } else {
+        next = 0;
+    }
+
+    for (size_t i = next; i < n; i++) {
+        if (is_fmt_str || i > 0) {
+            tsc_jsonbuf_byte(&b, ' ');
+        }
+        tsc_str_t* s = tsc_value_to_string(args[i]);
+        tsc_jsonbuf_append(&b, s->data, s->len);
+    }
+
+    free(args);
+    return tsc_jsonbuf_finish(&b);
+}
+
 bool tsc_instanceof(const char* type_chain, const char* class_name) {
     if (!type_chain || !class_name) return false;
     size_t n = strlen(class_name);

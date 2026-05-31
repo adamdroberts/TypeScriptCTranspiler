@@ -18780,6 +18780,12 @@ class Emitter {
             this.isDefaultImportFrom(id, ["os", "node:os"]);
     }
 
+    private isUtilModuleIdentifier(id: ts.Identifier): boolean {
+        return id.text === "util" ||
+            this.isNamespaceImportFrom(id, ["util", "node:util"]) ||
+            this.isDefaultImportFrom(id, ["util", "node:util"]);
+    }
+
     private isDnsModuleIdentifier(id: ts.Identifier): boolean {
         return id.text === "dns" ||
             this.isNamespaceImportFrom(id, ["dns", "node:dns"]) ||
@@ -27929,6 +27935,11 @@ class Emitter {
         if (pathNamed) {
             return this.emitPathCall(call, pathNamed);
         }
+        const utilNamed = ["format"]
+            .find((exported) => this.isNamedImportFrom(calleeId, ["util", "node:util"], exported));
+        if (utilNamed) {
+            return this.emitUtilCall(call, utilNamed);
+        }
         if (this.isNamedImportFrom(calleeId, ["dns", "node:dns"], "lookup")) {
             return this.emitDnsCall(call, "lookup");
         }
@@ -29579,6 +29590,10 @@ class Emitter {
 
         if (ts.isIdentifier(recvExpr) && this.isOsModuleIdentifier(recvExpr)) {
             return this.emitOsCall(call, memberName);
+        }
+
+        if (ts.isIdentifier(recvExpr) && this.isUtilModuleIdentifier(recvExpr)) {
+            return this.emitUtilCall(call, memberName);
         }
 
         if (ts.isIdentifier(recvExpr) && this.isUrlModuleIdentifier(recvExpr)) {
@@ -41920,6 +41935,20 @@ class Emitter {
                 unsupported(prop.initializer, "os.userInfo currently supports UTF-8 encoding options only");
             }
         }
+    }
+
+    private emitUtilCall(call: ts.CallExpression, name: string): EmitResult {
+        const args = call.arguments;
+        switch (name) {
+            case "format": {
+                const specs = Array.from(args, (a) => {
+                    const r = this.emitExpr(a);
+                    return { value: r, target: T_VALUE, node: a };
+                });
+                return this.emitSequencedCall("tsc_util_format_n", T_STRING, specs, [args.length.toString()]);
+            }
+        }
+        unsupported(call, `util.${name}`);
     }
 
     private objectProperties(tsType: ts.Type): ts.Symbol[] {

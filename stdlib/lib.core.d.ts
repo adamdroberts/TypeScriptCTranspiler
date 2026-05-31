@@ -2194,3 +2194,17 @@ interface TextDecoderConstructor {
     new (label?: string, ...ignored: any[]): TextDecoder;
 }
 declare var TextDecoder: TextDecoderConstructor;
+
+interface UtilModule {
+    format(format?: any, ...args: any[]): string;
+}
+declare module "util" {
+    export function format(format?: any, ...args: any[]): string;
+    const defaultUtil: UtilModule;
+    export default defaultUtil;
+}
+declare module "node:util" {
+    export function format(format?: any, ...args: any[]): string;
+    const defaultUtil: UtilModule;
+    export default defaultUtil;
+}

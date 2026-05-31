@@ -534,6 +534,9 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `path.basename(path, suffix?, ...ignored)` / `dirname(path, ...ignored)` / `extname(path, ...ignored)`. Test: `path_basename_suffix`
 - Test: `fs_roundtrip`
 
+### `util`
+- `util.format(format?, ...args)` implements a bounded Node format helper. It supports `%s` (coerced to string), `%d` / `%i` (coerced to number and formatted as integer), `%f` (coerced to number and formatted as float), `%j` (coerced to JSON string), and `%%` (literal percent). It also appends extra unconsumed arguments separated by spaces. It supports default, namespace, named, and aliased named imports from `"util"` and `"node:util"`. Test: `util_format_basic`
+
 ### `os`
 - `os.platform(...ignored)` / `type(...ignored)` / `release(...ignored)` / `version(...ignored)` / `endianness(...ignored)` / `machine(...ignored)` / `arch(...ignored)` / `hostname(...ignored)` / `tmpdir(...ignored)` / `homedir(...ignored)` / `cpus(...ignored)` / `availableParallelism(...ignored)` / `totalmem(...ignored)` / `freemem(...ignored)` / `uptime(...ignored)` / `loadavg(...ignored)` / `userInfo({ encoding: "utf8" | "utf-8" | undefined | void }?, ...ignored)`, `os.EOL`, and `os.devNull`, with default, namespace, and named imports from `"os"` / `"node:os"` for the supported subset. `os.userInfo(...)` accepts earlier static `const` aliases for supported UTF-8 option objects and `encoding` option values, and whole-option `void` defaults preserve side-effectful evaluation before ignored trailing arguments.
 - Runtime: `tsc_os_*`. Named helper imports include aliased named forms. Tests: `stdlib_os`, `os_more`, `os_default_import`, `os_dev_null`, `os_host_more`, `os_system_stats`, `os_user_info`, `os_user_info_undefined_options`
@@ -1345,6 +1348,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `os_system_stats` | os.totalmem/freemem/uptime/loadavg through global, namespace, and named imports |
 | `os_user_info` | os.userInfo dynamic object plus UTF-8 options through global, namespace, and named imports |
 | `os_user_info_undefined_options` | os.userInfo treats explicit undefined options and encoding properties as defaults |
+| `util_format_basic` | bounded util.format placeholder formatting, leftover arguments, and import styles |
 | `path_constants` | path sep and delimiter constants for global, named import, and namespace import forms |
 | `path_basename_suffix` | path.basename optional suffix for global, namespace, named, and posix forms |
 | `path_import` | path named and namespace imports from node:path/path |
