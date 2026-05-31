@@ -337,9 +337,9 @@ tsc_str_t* tsc_url_file_url_to_path(const tsc_str_t* input);
 tsc_url_t* tsc_url_path_to_file_url(const tsc_str_t* path);
 tsc_url_search_params_t* tsc_url_search_params_new(const tsc_str_t* init);
 void tsc_url_search_params_append(tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value);
-void tsc_url_search_params_delete(tsc_url_search_params_t* params, const tsc_str_t* name);
+void tsc_url_search_params_delete(tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value);
 tsc_str_t* tsc_url_search_params_get(const tsc_url_search_params_t* params, const tsc_str_t* name);
-bool tsc_url_search_params_has(const tsc_url_search_params_t* params, const tsc_str_t* name);
+bool tsc_url_search_params_has(const tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value);
 void tsc_url_search_params_set(tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value);
 tsc_str_t* tsc_url_search_params_to_string(const tsc_url_search_params_t* params);
 struct tsc_array* tsc_url_search_params_keys(const tsc_url_search_params_t* params);
@@ -351,6 +351,8 @@ void tsc_url_search_params_sort(tsc_url_search_params_t* params);
 /* ------------- Querystring ------------- */
 tsc_value_t tsc_querystring_parse(const tsc_str_t* str, tsc_value_t sep_val, tsc_value_t eq_val, tsc_value_t options_val);
 tsc_str_t* tsc_querystring_stringify(tsc_value_t obj_val, tsc_value_t sep_val, tsc_value_t eq_val, tsc_value_t options_val);
+tsc_str_t* tsc_querystring_escape(const tsc_str_t* str);
+tsc_str_t* tsc_querystring_unescape(const tsc_str_t* str);
 
 /* ------------- Date ------------- */
 typedef struct tsc_date {
@@ -534,6 +536,7 @@ typedef struct tsc_fs_dirent tsc_fs_dirent_t;
 typedef struct tsc_dns_lookup_result tsc_dns_lookup_result_t;
 typedef struct tsc_dns_lookup_all_result tsc_dns_lookup_all_result_t;
 typedef struct tsc_dns_resolve4_result tsc_dns_resolve4_result_t;
+typedef struct tsc_dns_resolve6_result tsc_dns_resolve6_result_t;
 typedef struct tsc_dns_lookup_service_result tsc_dns_lookup_service_result_t;
 typedef tsc_value_t (*tsc_accessor_getter_t)(void* env, tsc_value_t receiver);
 typedef bool (*tsc_accessor_setter_t)(void* env, tsc_value_t receiver, tsc_value_t value);
@@ -717,6 +720,10 @@ struct tsc_dns_resolve4_result {
     tsc_str_t* error;
     tsc_array_t* addresses;
 };
+struct tsc_dns_resolve6_result {
+    tsc_str_t* error;
+    tsc_array_t* addresses;
+};
 struct tsc_dns_lookup_service_result {
     tsc_str_t* error;
     tsc_str_t* hostname;
@@ -725,6 +732,7 @@ struct tsc_dns_lookup_service_result {
 tsc_dns_lookup_result_t tsc_dns_lookup(tsc_str_t* hostname, double family, double hints);
 tsc_dns_lookup_all_result_t tsc_dns_lookup_all(tsc_str_t* hostname, double family, double hints);
 tsc_dns_resolve4_result_t tsc_dns_resolve4(tsc_str_t* hostname);
+tsc_dns_resolve6_result_t tsc_dns_resolve6(tsc_str_t* hostname);
 tsc_dns_lookup_service_result_t tsc_dns_lookup_service(tsc_str_t* address, double port);
 tsc_str_t* tsc_dns_get_default_result_order(void);
 void tsc_dns_set_default_result_order(tsc_str_t* order);

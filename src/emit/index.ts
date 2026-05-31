@@ -28015,12 +28015,12 @@ class Emitter {
         if (utilNamed) {
             return this.emitUtilCall(call, utilNamed);
         }
-        const dnsNamed = ["lookup", "resolve4", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
+        const dnsNamed = ["lookup", "resolve4", "resolve6", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["dns", "node:dns"], exported));
         if (dnsNamed) {
             return this.emitDnsCall(call, dnsNamed);
         }
-        const dnsPromisesNamed = ["lookup", "resolve4", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
+        const dnsPromisesNamed = ["lookup", "resolve4", "resolve6", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["dns/promises", "node:dns/promises"], exported));
         if (dnsPromisesNamed) {
             return this.emitDnsPromisesCall(call, dnsPromisesNamed);
@@ -28064,7 +28064,7 @@ class Emitter {
         if (osNamed) {
             return this.emitOsCall(call, osNamed);
         }
-        const querystringNamed = ["parse", "stringify"]
+        const querystringNamed = ["parse", "stringify", "escape", "unescape"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["querystring", "node:querystring"], exported));
         if (querystringNamed) {
             return this.emitQueryStringCall(call, querystringNamed);
@@ -34291,6 +34291,7 @@ class Emitter {
         if (
             method !== "lookup" &&
             method !== "resolve4" &&
+            method !== "resolve6" &&
             method !== "lookupService" &&
             method !== "getDefaultResultOrder" &&
             method !== "setDefaultResultOrder"
@@ -34398,6 +34399,14 @@ class Emitter {
                 };
                 const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, addresses], callbackNode);
                 return `({ tsc_dns_resolve4_result_t ${result} = tsc_dns_resolve4(${hostC}); (void)${callbackCall}; })`;
+            }
+            if (method === "resolve6") {
+                const addresses: EmitResult = {
+                    c: `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`,
+                    ty: arrayType(T_STRING),
+                };
+                const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, addresses], callbackNode);
+                return `({ tsc_dns_resolve6_result_t ${result} = tsc_dns_resolve6(${hostC}); (void)${callbackCall}; })`;
             }
             const lookupOptions = this.dnsLookupOptions(optionsNode);
             if (lookupOptions.all) {
@@ -34567,6 +34576,7 @@ class Emitter {
         if (
             method !== "lookup" &&
             method !== "resolve4" &&
+            method !== "resolve6" &&
             method !== "lookupService" &&
             method !== "getDefaultResultOrder" &&
             method !== "setDefaultResultOrder"
@@ -34638,6 +34648,15 @@ class Emitter {
                 const addresses = `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`;
                 return `({ ` +
                     `tsc_dns_resolve4_result_t ${result} = tsc_dns_resolve4(${hostC}); ` +
+                    `tsc_promise_t* ${out}; ` +
+                    `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
+                    `${out} = tsc_promise_resolve(tsc_value_array(${addresses})); } ` +
+                    `${out}; })`;
+            }
+            if (method === "resolve6") {
+                const addresses = `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`;
+                return `({ ` +
+                    `tsc_dns_resolve6_result_t ${result} = tsc_dns_resolve6(${hostC}); ` +
                     `tsc_promise_t* ${out}; ` +
                     `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
                     `${out} = tsc_promise_resolve(tsc_value_array(${addresses})); } ` +
@@ -36068,11 +36087,15 @@ class Emitter {
             }
             case "delete": {
                 if (args.length < 1) unsupported(call, "URLSearchParams.delete expects name");
+                const hasValue = args.length >= 2;
                 return this.emitSequencedExpr(T_VOID, [
                     { value: recv },
                     { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
-                    ...this.ignoredArgumentSpecs(args, 1),
-                ], ([params, name]) => `tsc_url_search_params_delete(${params}, ${name})`);
+                    hasValue
+                        ? { value: this.emitExpr(args[1]!), target: T_STRING, node: args[1]! }
+                        : { value: { c: "NULL", ty: T_STRING } },
+                    ...this.ignoredArgumentSpecs(args, hasValue ? 2 : 1),
+                ], ([params, name, value]) => `tsc_url_search_params_delete(${params}, ${name}, ${value})`);
             }
             case "get": {
                 if (args.length < 1) unsupported(call, "URLSearchParams.get expects name");
@@ -36084,11 +36107,15 @@ class Emitter {
             }
             case "has": {
                 if (args.length < 1) unsupported(call, "URLSearchParams.has expects name");
+                const hasValue = args.length >= 2;
                 return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: recv },
                     { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
-                    ...this.ignoredArgumentSpecs(args, 1),
-                ], ([params, name]) => `tsc_url_search_params_has(${params}, ${name})`);
+                    hasValue
+                        ? { value: this.emitExpr(args[1]!), target: T_STRING, node: args[1]! }
+                        : { value: { c: "NULL", ty: T_STRING } },
+                    ...this.ignoredArgumentSpecs(args, hasValue ? 2 : 1),
+                ], ([params, name, value]) => `tsc_url_search_params_has(${params}, ${name}, ${value})`);
             }
             case "set": {
                 if (args.length < 2) unsupported(call, "URLSearchParams.set expects name and value");
@@ -42406,6 +42433,30 @@ class Emitter {
                 T_STRING,
                 specs,
                 (values) => `tsc_querystring_stringify(${values[0]}, ${values[1]}, ${values[2]}, ${values[3]})`
+            );
+        } else if (name === "escape") {
+            if (args.length < 1) unsupported(call, "querystring.escape expects at least 1 argument");
+            const strVal = this.emitExpr(args[0]!);
+            const specs: SequencedCallArg[] = [
+                { value: strVal, target: T_STRING, node: args[0]! }
+            ];
+            specs.push(...this.ignoredArgumentSpecs(args, 1));
+            return this.emitSequencedExpr(
+                T_STRING,
+                specs,
+                (values) => `tsc_querystring_escape(${values[0]})`
+            );
+        } else if (name === "unescape") {
+            if (args.length < 1) unsupported(call, "querystring.unescape expects at least 1 argument");
+            const strVal = this.emitExpr(args[0]!);
+            const specs: SequencedCallArg[] = [
+                { value: strVal, target: T_STRING, node: args[0]! }
+            ];
+            specs.push(...this.ignoredArgumentSpecs(args, 1));
+            return this.emitSequencedExpr(
+                T_STRING,
+                specs,
+                (values) => `tsc_querystring_unescape(${values[0]})`
             );
         }
         unsupported(call, `querystring.${name}`);
