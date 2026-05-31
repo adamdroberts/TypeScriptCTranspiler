@@ -467,6 +467,14 @@ double tsc_buffer_read_double_le(const tsc_buffer_t* b, double offset);
 double tsc_buffer_read_double_be(const tsc_buffer_t* b, double offset);
 double tsc_buffer_write_double_le(tsc_buffer_t* b, double value, double offset);
 double tsc_buffer_write_double_be(tsc_buffer_t* b, double value, double offset);
+double tsc_buffer_read_uint_le(const tsc_buffer_t* b, double offset, double byte_len);
+double tsc_buffer_read_uint_be(const tsc_buffer_t* b, double offset, double byte_len);
+double tsc_buffer_read_int_le(const tsc_buffer_t* b, double offset, double byte_len);
+double tsc_buffer_read_int_be(const tsc_buffer_t* b, double offset, double byte_len);
+double tsc_buffer_write_uint_le(tsc_buffer_t* b, double value, double offset, double byte_len);
+double tsc_buffer_write_uint_be(tsc_buffer_t* b, double value, double offset, double byte_len);
+double tsc_buffer_write_int_le(tsc_buffer_t* b, double value, double offset, double byte_len);
+double tsc_buffer_write_int_be(tsc_buffer_t* b, double value, double offset, double byte_len);
 tsc_buffer_t* tsc_buffer_swap(tsc_buffer_t* b, size_t width);
 #define TSC_BUF(b, i) ((b)->data[(size_t)(i)])
 

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Supported variable-byte-length integer read and write Buffer methods (`readUIntLE`, `readUIntBE`, `readIntLE`, `readIntBE`, `writeUIntLE`, `writeUIntBE`, `writeIntLE`, `writeIntBE`) with Node-like range validations and error messages, and preserved ignored trailing argument evaluation. Test: `buffer_varint_io`.
 - Added a bounded `path.win32` / `"path/win32"` subset covering constants, join/resolve/normalize, absolute checks, relative paths, basename/dirname/extname, parse/format, toNamespacedPath, and matchesGlob across named, namespace, and subpath imports. Test: `path_win32`.
 - `process.allowedNodeEnvironmentFlags` is supported as a bounded read-only `Set<string>` containing a deterministic small list of common Node flags (`--inspect`, `--inspect-brk`, `--require`, `--loader`, `--enable-source-maps`), supporting global process and named, namespace, and default imports from `"process"` / `"node:process"`. Test: `process_allowed_node_environment_flags`.
 - `fs.statfsSync(path[, options])` returns a small object with numeric `bsize`, `frsize`, `blocks`, `bfree`, `bavail`, `files`, and `ffree` fields when `statvfs` is available. Supports `bigint: false` and named, default, and namespace imports from `fs` / `node:fs` while evaluating options-slot and ignored-extra side effects. Test: `fs_statfs_sync`.

@@ -41981,6 +41981,59 @@ class Emitter {
                     `${fn}(${vals[0]}, ${vals[1]}, ${hasOffset ? vals[2]! : "0"})`,
                 );
             }
+            case "readIntLE":
+            case "readUIntLE":
+            case "readIntBE":
+            case "readUIntBE": {
+                if (args.length < 2) unsupported(call, `Buffer.${method} expects offset and byteLength`);
+                const offset = this.emitExpr(args[0]!);
+                requireNumber(args[0]!, offset.ty);
+                const byteLength = this.emitExpr(args[1]!);
+                requireNumber(args[1]!, byteLength.ty);
+                const specs: SequencedCallArg[] = [
+                    { value: recv },
+                    { value: offset, target: T_NUMBER, node: args[0]! },
+                    { value: byteLength, target: T_NUMBER, node: args[1]! },
+                ];
+                specs.push(...this.ignoredArgumentSpecs(args, 2));
+                const fn = {
+                    readIntLE: "tsc_buffer_read_int_le",
+                    readUIntLE: "tsc_buffer_read_uint_le",
+                    readIntBE: "tsc_buffer_read_int_be",
+                    readUIntBE: "tsc_buffer_read_uint_be",
+                }[method]!;
+                return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
+                    `${fn}(${vals[0]}, ${vals[1]}, ${vals[2]})`,
+                );
+            }
+            case "writeIntLE":
+            case "writeUIntLE":
+            case "writeIntBE":
+            case "writeUIntBE": {
+                if (args.length < 3) unsupported(call, `Buffer.${method} expects value, offset, and byteLength`);
+                const value = this.emitExpr(args[0]!);
+                requireNumber(args[0]!, value.ty);
+                const offset = this.emitExpr(args[1]!);
+                requireNumber(args[1]!, offset.ty);
+                const byteLength = this.emitExpr(args[2]!);
+                requireNumber(args[2]!, byteLength.ty);
+                const specs: SequencedCallArg[] = [
+                    { value: recv },
+                    { value, target: T_NUMBER, node: args[0]! },
+                    { value: offset, target: T_NUMBER, node: args[1]! },
+                    { value: byteLength, target: T_NUMBER, node: args[2]! },
+                ];
+                specs.push(...this.ignoredArgumentSpecs(args, 3));
+                const fn = {
+                    writeIntLE: "tsc_buffer_write_int_le",
+                    writeUIntLE: "tsc_buffer_write_uint_le",
+                    writeIntBE: "tsc_buffer_write_int_be",
+                    writeUIntBE: "tsc_buffer_write_uint_be",
+                }[method]!;
+                return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
+                    `${fn}(${vals[0]}, ${vals[1]}, ${vals[2]}, ${vals[3]})`,
+                );
+            }
             case "swap16":
             case "swap32":
             case "swap64": {

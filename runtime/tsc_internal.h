@@ -452,6 +452,7 @@ double buffer_index_of_bytes(const tsc_buffer_t* b, const uint8_t* needle, size_
 double buffer_last_index_of_bytes(const tsc_buffer_t* b, const uint8_t* needle, size_t needle_len, double offset);
 size_t buffer_checked_offset(const tsc_buffer_t* b, double offset, size_t width, const char* label);
 uint32_t uint_from_double(double value);
+uint64_t uint64_from_double(double value);
 double double_from_float_bits(uint32_t bits);
 uint32_t float_bits_from_double(double value);
 double double_from_bits(uint64_t bits);
