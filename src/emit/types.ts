@@ -25,6 +25,7 @@ export type CTypeKind =
     | "regexp"
     | "hash"
     | "url"
+    | "urlsearchparams"
     | "date"
     | "error"
     | "buffer"
@@ -121,6 +122,7 @@ export const T_EVENT_TARGET: CType = { kind: "eventtarget", c: "tsc_event_target
 export const T_REGEXP: CType = { kind: "regexp", c: "tsc_regexp_t*" };
 export const T_HASH: CType = { kind: "hash", c: "tsc_hash_t*" };
 export const T_URL: CType = { kind: "url", c: "tsc_url_t*" };
+export const T_URL_SEARCH_PARAMS: CType = { kind: "urlsearchparams", c: "tsc_url_search_params_t*" };
 export const T_DATE: CType = { kind: "date", c: "tsc_date_t*" };
 export const T_ERROR: CType = { kind: "error", c: "tsc_error_t*" };
 export const T_BUFFER: CType = { kind: "buffer", c: "tsc_buffer_t*" };
@@ -422,6 +424,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         if (sym?.getName() === "RegExp") return T_REGEXP;
         if (sym?.getName() === "CryptoHash") return T_HASH;
         if (sym?.getName() === "URL") return T_URL;
+        if (sym?.getName() === "URLSearchParams") return T_URL_SEARCH_PARAMS;
         if (sym?.getName() === "Date") return T_DATE;
         if (
             sym?.getName() === "Error" ||

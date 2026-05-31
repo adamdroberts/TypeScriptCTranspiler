@@ -304,6 +304,15 @@ typedef struct tsc_url {
     tsc_str_t* hash;
     tsc_str_t* origin;
 } tsc_url_t;
+typedef struct tsc_url_search_param {
+    tsc_str_t* name;
+    tsc_str_t* value;
+} tsc_url_search_param_t;
+typedef struct tsc_url_search_params {
+    tsc_url_search_param_t* items;
+    size_t len;
+    size_t cap;
+} tsc_url_search_params_t;
 bool tsc_url_can_parse(const tsc_str_t* input);
 bool tsc_url_can_parse_base(const tsc_str_t* input, const tsc_str_t* base);
 tsc_url_t* tsc_url_new(const tsc_str_t* input);
@@ -311,6 +320,13 @@ tsc_url_t* tsc_url_new_base(const tsc_str_t* input, const tsc_str_t* base);
 tsc_str_t* tsc_url_file_path(const tsc_url_t* url);
 tsc_str_t* tsc_url_file_url_to_path(const tsc_str_t* input);
 tsc_url_t* tsc_url_path_to_file_url(const tsc_str_t* path);
+tsc_url_search_params_t* tsc_url_search_params_new(const tsc_str_t* init);
+void tsc_url_search_params_append(tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value);
+void tsc_url_search_params_delete(tsc_url_search_params_t* params, const tsc_str_t* name);
+tsc_str_t* tsc_url_search_params_get(const tsc_url_search_params_t* params, const tsc_str_t* name);
+bool tsc_url_search_params_has(const tsc_url_search_params_t* params, const tsc_str_t* name);
+void tsc_url_search_params_set(tsc_url_search_params_t* params, const tsc_str_t* name, const tsc_str_t* value);
+tsc_str_t* tsc_url_search_params_to_string(const tsc_url_search_params_t* params);
 
 /* ------------- Date ------------- */
 typedef struct tsc_date {

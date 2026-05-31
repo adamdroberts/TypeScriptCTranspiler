@@ -31,6 +31,7 @@ import {
     T_STRING,
     T_SYMBOL,
     T_URL,
+    T_URL_SEARCH_PARAMS,
     T_VALUE,
     T_VOID,
     withTypeBindings,
@@ -19532,7 +19533,7 @@ class Emitter {
             return null;
         }
         const cls = this.identifierName(init.expression);
-        if (["Map", "Set", "WeakMap", "WeakSet", "WeakRef", "FinalizationRegistry", "Promise", "EventEmitter", "Event", "EventTarget", "Date", "AggregateError", "RegExp", "URL"].includes(cls) ||
+        if (["Map", "Set", "WeakMap", "WeakSet", "WeakRef", "FinalizationRegistry", "Promise", "EventEmitter", "Event", "EventTarget", "Date", "AggregateError", "RegExp", "URL", "URLSearchParams"].includes(cls) ||
             this.isErrorConstructorName(cls)) {
             return null;
         }
@@ -25433,6 +25434,7 @@ class Emitter {
             case "regexp":
             case "hash":
             case "url":
+            case "urlsearchparams":
             case "date":
             case "error":
             case "buffer":
@@ -26225,7 +26227,7 @@ class Emitter {
                     );
                 }
                 const pointerKinds: readonly CType["kind"][] = [
-                    "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "date", "error", "buffer", "fsstats", "fsdirent", "function",
+                    "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "urlsearchparams", "date", "error", "buffer", "fsstats", "fsdirent", "function",
                 ];
                 if (pointerKinds.includes(left.ty.kind)) {
                     const tv = this.freshTemp("_nc");
@@ -26937,6 +26939,17 @@ class Emitter {
             this.isUrlModuleIdentifier(unwrapped.expression);
     }
 
+    private isUrlSearchParamsConstructorExpression(expr: ts.Expression): boolean {
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        if (ts.isIdentifier(unwrapped)) {
+            return unwrapped.text === "URLSearchParams" ||
+                this.isNamedImportFrom(unwrapped, ["url", "node:url"], "URLSearchParams");
+        }
+        return ts.isPropertyAccessExpression(unwrapped) &&
+            unwrapped.name.text === "URLSearchParams" &&
+            this.isUrlModuleIdentifier(unwrapped.expression);
+    }
+
     private emitUrlModuleCall(call: ts.CallExpression, name: string): EmitResult {
         const args = call.arguments;
         switch (name) {
@@ -27249,7 +27262,7 @@ class Emitter {
         }
         // Compare pointer-valued types (array, class, map, set, regexp, string) to null.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "date", "error", "buffer", "fsstats", "fsdirent", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "urlsearchparams", "date", "error", "buffer", "fsstats", "fsdirent", "function",
         ];
         const leftIsNull = left.ty.kind === "void";
         const rightIsNull = right.ty.kind === "void";
@@ -28158,6 +28171,7 @@ class Emitter {
             case "string": return "String";
             case "symbol": return "Symbol";
             case "url": return "URL";
+            case "urlsearchparams": return "URLSearchParams";
             case "weakmap": return "WeakMap";
             case "weakref": return "WeakRef";
             case "weakset": return "WeakSet";
@@ -30305,6 +30319,8 @@ class Emitter {
             return this.emitHashMethod(call, recv, memberName);
         if (recv.ty.kind === "url")
             return this.emitUrlMethod(call, recv, memberName);
+        if (recv.ty.kind === "urlsearchparams")
+            return this.emitUrlSearchParamsMethod(call, recv, memberName);
         if (recv.ty.kind === "date")
             return this.emitDateMethod(call, recv, memberName);
         if (recv.ty.kind === "error")
@@ -35665,6 +35681,75 @@ class Emitter {
                 return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "URL");
         }
         unsupported(call, `URL method .${method}`);
+    }
+
+    private emitUrlSearchParamsMethod(
+        call: ts.CallExpression,
+        recv: EmitResult,
+        method: string,
+    ): EmitResult {
+        const args = call.arguments;
+        switch (method) {
+            case "append": {
+                if (args.length < 2) unsupported(call, "URLSearchParams.append expects name and value");
+                return this.emitSequencedExpr(T_VOID, [
+                    { value: recv },
+                    { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
+                    { value: this.emitExpr(args[1]!), target: T_STRING, node: args[1]! },
+                    ...this.ignoredArgumentSpecs(args, 2),
+                ], ([params, name, value]) => `tsc_url_search_params_append(${params}, ${name}, ${value})`);
+            }
+            case "delete": {
+                if (args.length < 1) unsupported(call, "URLSearchParams.delete expects name");
+                return this.emitSequencedExpr(T_VOID, [
+                    { value: recv },
+                    { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ], ([params, name]) => `tsc_url_search_params_delete(${params}, ${name})`);
+            }
+            case "get": {
+                if (args.length < 1) unsupported(call, "URLSearchParams.get expects name");
+                return this.emitSequencedExpr(T_STRING, [
+                    { value: recv },
+                    { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ], ([params, name]) => `tsc_url_search_params_get(${params}, ${name})`);
+            }
+            case "has": {
+                if (args.length < 1) unsupported(call, "URLSearchParams.has expects name");
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: recv },
+                    { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ], ([params, name]) => `tsc_url_search_params_has(${params}, ${name})`);
+            }
+            case "set": {
+                if (args.length < 2) unsupported(call, "URLSearchParams.set expects name and value");
+                return this.emitSequencedExpr(T_VOID, [
+                    { value: recv },
+                    { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
+                    { value: this.emitExpr(args[1]!), target: T_STRING, node: args[1]! },
+                    ...this.ignoredArgumentSpecs(args, 2),
+                ], ([params, name, value]) => `tsc_url_search_params_set(${params}, ${name}, ${value})`);
+            }
+            case "toLocaleString":
+            case "toString":
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([params]) => `tsc_url_search_params_to_string(${params})`,
+                );
+            case "valueOf":
+                return this.emitSequencedExpr(
+                    recv.ty,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([params]) => params,
+                );
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "URLSearchParams");
+        }
+        unsupported(call, `URLSearchParams method .${method}`);
     }
 
     private urlPropertyFields(): string[] {
@@ -41631,6 +41716,7 @@ class Emitter {
             mapped.kind === "eventtarget" ||
             mapped.kind === "date" ||
             mapped.kind === "url" ||
+            mapped.kind === "urlsearchparams" ||
             mapped.kind === "hash";
         const emptyEnumerableBuiltinObjectArg =
             emptyOwnBuiltinObjectArg ||
@@ -44651,6 +44737,7 @@ class Emitter {
                     mapped.kind === "eventtarget" ||
                     mapped.kind === "date" ||
                     mapped.kind === "url" ||
+                    mapped.kind === "urlsearchparams" ||
                     mapped.kind === "hash"
                 ) {
                     const key = this.emitExpr(args[1]!);
@@ -44778,6 +44865,7 @@ class Emitter {
                     mapped.kind === "eventtarget" ||
                     mapped.kind === "date" ||
                     mapped.kind === "url" ||
+                    mapped.kind === "urlsearchparams" ||
                     mapped.kind === "hash"
                 ) {
                     const target = this.emitExpr(args[0]!);
@@ -44915,6 +45003,7 @@ class Emitter {
             case "eventtarget":
             case "date":
             case "url":
+            case "urlsearchparams":
             case "hash":
             case "regexp":
             case "error":
@@ -45502,6 +45591,27 @@ class Emitter {
         );
     }
 
+    private emitUrlSearchParamsConstructor(n: ts.NewExpression): EmitResult {
+        const args = n.arguments ?? [];
+        const input = args[0];
+        if (!input || this.isUndefinedExpression(input)) {
+            return this.emitSequencedExpr(
+                T_URL_SEARCH_PARAMS,
+                input ? this.ignoredArgumentSpecs(args, 1) : [],
+                () => "tsc_url_search_params_new(NULL)",
+            );
+        }
+        const value = this.emitExpr(input);
+        return this.emitSequencedExpr(
+            T_URL_SEARCH_PARAMS,
+            [
+                { value, target: T_STRING, node: input },
+                ...this.ignoredArgumentSpecs(args, 1),
+            ],
+            ([inputC]) => `tsc_url_search_params_new(${inputC})`,
+        );
+    }
+
     private emitNew(n: ts.NewExpression): EmitResult {
         if (
             ts.isPropertyAccessExpression(n.expression) &&
@@ -45517,6 +45627,9 @@ class Emitter {
         }
         if (this.isUrlConstructorExpression(n.expression)) {
             return this.emitUrlConstructor(n);
+        }
+        if (this.isUrlSearchParamsConstructorExpression(n.expression)) {
+            return this.emitUrlSearchParamsConstructor(n);
         }
         const ctorExpr = this.unwrapTransparentExpression(n.expression);
         if (!ts.isIdentifier(ctorExpr)) {
@@ -45955,6 +46068,7 @@ class Emitter {
             return this.emitRegExpConstructor(n);
         }
         if (cls === "URL") return this.emitUrlConstructor(n);
+        if (cls === "URLSearchParams") return this.emitUrlSearchParamsConstructor(n);
         const classDecl = targetClassDecl ?? this.findClassDecl(cls);
         if (!classDecl) {
             const ctor = this.emitExpr(n.expression);
@@ -46443,6 +46557,16 @@ class Emitter {
                     };
                 }
                 return { c: `${recv.c}->${mangleIdent(pa.name.text)}`, ty: T_STRING };
+            }
+            if (pa.name.text === "searchParams") {
+                if (isOpt) {
+                    const tv = this.freshTemp("_ou");
+                    return {
+                        c: `({ ${recv.ty.c} ${tv} = ${recv.c}; ${tv} != NULL ? tsc_url_search_params_new(${tv}->search) : tsc_url_search_params_new(NULL); })`,
+                        ty: T_URL_SEARCH_PARAMS,
+                    };
+                }
+                return { c: `tsc_url_search_params_new(${recv.c}->search)`, ty: T_URL_SEARCH_PARAMS };
             }
         }
         if (recv.ty.kind === "error") {
@@ -46989,6 +47113,7 @@ class Emitter {
         if (r.ty.kind === "eventtarget") return `tsc_str_from_lit("[object EventTarget]", 20)`;
         if (r.ty.kind === "regexp") return `tsc_regexp_to_string(${r.c})`;
         if (r.ty.kind === "url") return `${r.c}->href`;
+        if (r.ty.kind === "urlsearchparams") return `tsc_url_search_params_to_string(${r.c})`;
         if (r.ty.kind === "date") return `tsc_date_to_string(${r.c})`;
         if (r.ty.kind === "error") return `tsc_error_to_string(${r.c})`;
         if (r.ty.kind === "buffer") return `tsc_buffer_to_string(${r.c}, tsc_str_from_lit("utf8", 4))`;
@@ -47030,7 +47155,7 @@ class Emitter {
         // null (void) → any pointer type: emit typed NULL. Check before the
         // string-coerce branch since string is a pointer type too.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "url", "date", "error", "buffer", "fsstats", "fsdirent", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "url", "urlsearchparams", "date", "error", "buffer", "fsstats", "fsdirent", "function",
         ];
         if (r.ty.kind === "void" && pointerKinds.includes(target.kind)) {
             return `((${target.c})NULL)`;
@@ -47231,6 +47356,7 @@ function isWeakObjectKey(t: CType): boolean {
         "regexp",
         "hash",
         "url",
+        "urlsearchparams",
         "date",
         "error",
         "buffer",
@@ -47245,7 +47371,7 @@ function canBoxArrayFindElement(t: CType): boolean {
 
 function isPointerKind(t: CType): boolean {
     const pointerKinds: readonly CType["kind"][] = [
-        "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "url", "date", "error", "buffer", "fsstats", "fsdirent", "function",
+        "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "url", "urlsearchparams", "date", "error", "buffer", "fsstats", "fsdirent", "function",
     ];
     return pointerKinds.includes(t.kind);
 }

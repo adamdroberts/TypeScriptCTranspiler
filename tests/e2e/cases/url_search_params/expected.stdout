@@ -1,0 +1,5 @@
+read: 1 two words false a=1&b=two+words&a=3
+mutated: final value false a=final+value&c=x%2Fy
+url: 1 x=1&y=two
+module: hello there q=hello+there true
+seen: ctor,set,append,delete,get,has,string
