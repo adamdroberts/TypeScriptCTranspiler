@@ -1,0 +1,7 @@
+dead_dce_symbol_for_static
+dead_dce_symbol_keyfor_static
+dead_dce_is_prototype_of_static
+dead_dce_new_object_static
+dead_dce_new_string_static
+987654321
+dead_dce_new_boolean_static

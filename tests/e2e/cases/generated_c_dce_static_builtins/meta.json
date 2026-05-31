@@ -1,0 +1,3 @@
+{
+  "description": "generated-C DCE prunes unused safe Symbol helpers, object prototype checks, and wrapper constructors"
+}

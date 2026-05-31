@@ -1863,6 +1863,25 @@ class Emitter {
             }
         }
         if (
+            ts.isIdentifier(recv) &&
+            this.isUnshadowedGlobalIdentifier(recv, "Symbol")
+        ) {
+            if (method === "for") {
+                return call.arguments.length >= 1 &&
+                    this.isSideEffectFreeStringCoercion(call.arguments[0]!, seenConsts) &&
+                    Array.from(call.arguments).slice(1).every((arg) =>
+                        this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                    );
+            }
+            if (method === "keyFor") {
+                return call.arguments.length === 1 &&
+                    (
+                        this.isSideEffectFreeFreshSymbolOperand(call.arguments[0]!, seenConsts) ||
+                        this.isSideEffectFreeWellKnownSymbolRead(call.arguments[0]!)
+                    );
+            }
+        }
+        if (
             this.isBufferConstructorExpression(recv) &&
             (
                 this.isSideEffectFreeBufferStaticCall(method, call.arguments, seenConsts) ||
@@ -2940,6 +2959,11 @@ class Emitter {
                 return args.length >= 1 &&
                     this.isSideEffectFreePropertyKeyCoercion(args[0]!, seenConsts) &&
                     Array.from(args).slice(1).every((arg) =>
+                        this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                    );
+            case "isPrototypeOf":
+                return args.length >= 1 &&
+                    Array.from(args).every((arg) =>
                         this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
                     );
             case "toLocaleString":
@@ -7071,17 +7095,18 @@ class Emitter {
         expr: ts.NewExpression,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
-        if (!ts.isIdentifier(expr.expression)) return false;
-        const name = expr.expression.text;
+        const ctorExpr = this.unwrapTransparentExpression(expr.expression);
+        if (!ts.isIdentifier(ctorExpr)) return false;
+        const name = ctorExpr.text;
         const args = expr.arguments ?? ts.factory.createNodeArray();
-        if (this.isEventEmitterConstructorIdentifier(expr.expression)) {
+        if (this.isEventEmitterConstructorIdentifier(ctorExpr)) {
             return Array.from(args).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
             );
         }
         if (
             name === "EventTarget" &&
-            this.isUnshadowedGlobalIdentifier(expr.expression, "EventTarget")
+            this.isUnshadowedGlobalIdentifier(ctorExpr, "EventTarget")
         ) {
             return Array.from(args).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
@@ -7089,13 +7114,13 @@ class Emitter {
         }
         if (
             name === "Event" &&
-            this.isUnshadowedGlobalIdentifier(expr.expression, "Event")
+            this.isUnshadowedGlobalIdentifier(ctorExpr, "Event")
         ) {
             return this.isSideEffectFreeEventConstructorArgs(args, seenConsts);
         }
         if (
             name === "Promise" &&
-            this.isUnshadowedGlobalIdentifier(expr.expression, "Promise")
+            this.isUnshadowedGlobalIdentifier(ctorExpr, "Promise")
         ) {
             return args.length === 1 &&
                 this.isSideEffectFreePromiseExecutorOperand(args[0]!, seenConsts);
@@ -7109,8 +7134,8 @@ class Emitter {
             "EvalError",
             "URIError",
         ]);
-        if (!pureErrorConstructors.has(name) || !this.isUnshadowedGlobalIdentifier(expr.expression, name)) {
-            if (!this.isUnshadowedGlobalIdentifier(expr.expression, name)) return false;
+        if (!pureErrorConstructors.has(name) || !this.isUnshadowedGlobalIdentifier(ctorExpr, name)) {
+            if (!this.isUnshadowedGlobalIdentifier(ctorExpr, name)) return false;
             if (name === "RegExp") return this.isSideEffectFreeRegExpConstructorArgs(args, seenConsts);
             if (name === "Date") return this.isSideEffectFreeDateConstructorArgs(args, seenConsts);
             if (name === "AggregateError") return this.isSideEffectFreeAggregateErrorConstructorArgs(args, seenConsts);
@@ -7150,6 +7175,34 @@ class Emitter {
             if (name === "FinalizationRegistry") {
                 return args.length === 1 &&
                     this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts);
+            }
+            if (name === "Object") {
+                return Array.from(args).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+            }
+            if (name === "String") {
+                return args.length === 0 ||
+                    (
+                        this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
+                        Array.from(args).slice(1).every((arg) =>
+                            this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                        )
+                    );
+            }
+            if (name === "Number") {
+                return args.length === 0 ||
+                    (
+                        this.isSideEffectFreePrimitiveNumberCoercion(args[0]!, seenConsts) &&
+                        Array.from(args).slice(1).every((arg) =>
+                            this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                        )
+                    );
+            }
+            if (name === "Boolean") {
+                return Array.from(args).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
             }
             return false;
         }
