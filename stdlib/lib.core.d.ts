@@ -1649,12 +1649,14 @@ interface Crypto {
     createHash(algorithm: CryptoHashAlgorithm, ...ignored: any[]): CryptoHash;
     randomBytes(size: number, ...ignored: any[]): Buffer;
     randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
+    timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
 }
 declare const crypto: Crypto;
 declare module "crypto" {
     export function createHash(algorithm: CryptoHashAlgorithm, ...ignored: any[]): CryptoHash;
     export function randomBytes(size: number, ...ignored: any[]): Buffer;
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
+    export function timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
     const defaultCrypto: Crypto;
     export default defaultCrypto;
 }
@@ -1662,6 +1664,7 @@ declare module "node:crypto" {
     export function createHash(algorithm: CryptoHashAlgorithm, ...ignored: any[]): CryptoHash;
     export function randomBytes(size: number, ...ignored: any[]): Buffer;
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
+    export function timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
     const defaultCrypto: Crypto;
     export default defaultCrypto;
 }
@@ -1734,11 +1737,13 @@ interface BufferModule {
     Buffer: BufferConstructor;
     atob(value: string, ...ignored: any[]): string;
     btoa(value: string, ...ignored: any[]): string;
+    transcode(source: Buffer, fromEnc: string, toEnc: string, ...ignored: any[]): Buffer;
 }
 declare module "buffer" {
     export const Buffer: BufferConstructor;
     export function atob(value: string, ...ignored: any[]): string;
     export function btoa(value: string, ...ignored: any[]): string;
+    export function transcode(source: Buffer, fromEnc: string, toEnc: string, ...ignored: any[]): Buffer;
     const defaultBuffer: BufferModule;
     export default defaultBuffer;
 }
@@ -1746,6 +1751,7 @@ declare module "node:buffer" {
     export const Buffer: BufferConstructor;
     export function atob(value: string, ...ignored: any[]): string;
     export function btoa(value: string, ...ignored: any[]): string;
+    export function transcode(source: Buffer, fromEnc: string, toEnc: string, ...ignored: any[]): Buffer;
     const defaultBuffer: BufferModule;
     export default defaultBuffer;
 }
@@ -2142,7 +2148,7 @@ declare module "node:url" {
 }
 
 interface TextEncoder {
-    encode(input?: string): Buffer;
+    encode(input?: string, ...ignored: any[]): Buffer;
 }
 interface TextEncoderConstructor {
     new (): TextEncoder;
@@ -2150,9 +2156,9 @@ interface TextEncoderConstructor {
 declare var TextEncoder: TextEncoderConstructor;
 
 interface TextDecoder {
-    decode(input?: Buffer): string;
+    decode(input?: Buffer, ...ignored: any[]): string;
 }
 interface TextDecoderConstructor {
-    new (label?: string): TextDecoder;
+    new (label?: string, ...ignored: any[]): TextDecoder;
 }
 declare var TextDecoder: TextDecoderConstructor;

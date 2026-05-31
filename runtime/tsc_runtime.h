@@ -284,6 +284,7 @@ typedef struct tsc_hash tsc_hash_t;
 tsc_hash_t* tsc_crypto_create_hash(const tsc_str_t* algorithm);
 struct tsc_buffer* tsc_crypto_random_bytes(double size);
 tsc_str_t* tsc_crypto_random_uuid(void);
+bool tsc_crypto_timing_safe_equal(const struct tsc_buffer* a, const struct tsc_buffer* b);
 tsc_hash_t* tsc_hash_update(tsc_hash_t* h, const tsc_str_t* data);
 tsc_hash_t* tsc_hash_update_buffer(tsc_hash_t* h, const struct tsc_buffer* data);
 tsc_str_t* tsc_hash_digest(tsc_hash_t* h, const tsc_str_t* encoding);
@@ -375,6 +376,7 @@ typedef struct tsc_buffer {
     uint8_t* data;
 } tsc_buffer_t;
 tsc_buffer_t* tsc_buffer_from_str(const tsc_str_t* input, const tsc_str_t* encoding);
+tsc_buffer_t* tsc_buffer_transcode(const tsc_buffer_t* source, const tsc_str_t* from_enc, const tsc_str_t* to_enc);
 tsc_buffer_t* tsc_buffer_from_array(const struct tsc_array* input);
 tsc_buffer_t* tsc_buffer_from_buffer(const tsc_buffer_t* input);
 tsc_buffer_t* tsc_buffer_alloc(double size, double fill);

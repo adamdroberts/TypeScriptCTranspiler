@@ -27748,6 +27748,10 @@ class Emitter {
         if (bufferBase64Named) {
             return this.emitBase64Call(call, bufferBase64Named);
         }
+        const bufferTranscodeNamed = this.isNamedImportFrom(calleeId, ["buffer", "node:buffer"], "transcode");
+        if (bufferTranscodeNamed) {
+            return this.emitBufferTranscodeCall(call);
+        }
         const timersNamed = ["setTimeout", "clearTimeout", "clearInterval", "setImmediate", "clearImmediate"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["timers", "node:timers"], exported));
         if (timersNamed) {
@@ -27763,7 +27767,7 @@ class Emitter {
         if (streamNamed) {
             return this.emitStreamCall(call, streamNamed);
         }
-        const cryptoNamed = ["createHash", "randomBytes", "randomUUID"]
+        const cryptoNamed = ["createHash", "randomBytes", "randomUUID", "timingSafeEqual"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["crypto", "node:crypto"], exported));
         if (cryptoNamed) {
             return this.emitCryptoCall(call, cryptoNamed);
@@ -29410,6 +29414,10 @@ class Emitter {
 
         if (this.isBufferModuleIdentifier(recvExpr) && (memberName === "atob" || memberName === "btoa")) {
             return this.emitBase64Call(call, memberName);
+        }
+
+        if (this.isBufferModuleIdentifier(recvExpr) && memberName === "transcode") {
+            return this.emitBufferTranscodeCall(call);
         }
 
         if (
@@ -35298,6 +35306,31 @@ class Emitter {
         ], ([input]) => `${fn}(${input!})`);
     }
 
+    private emitBufferTranscodeCall(call: ts.CallExpression): EmitResult {
+        if (call.arguments.length < 3) {
+            unsupported(call, "buffer.transcode expects 3 arguments: source, fromEnc, toEnc");
+        }
+        const source = this.emitExpr(call.arguments[0]!);
+        if (source.ty.kind !== "buffer") {
+            unsupported(call.arguments[0]!, "buffer.transcode expects source to be a Buffer");
+        }
+        const fromEnc = this.emitExpr(call.arguments[1]!);
+        if (fromEnc.ty.kind !== "string") {
+            unsupported(call.arguments[1]!, "buffer.transcode expects fromEnc to be a string");
+        }
+        const toEnc = this.emitExpr(call.arguments[2]!);
+        if (toEnc.ty.kind !== "string") {
+            unsupported(call.arguments[2]!, "buffer.transcode expects toEnc to be a string");
+        }
+
+        return this.emitSequencedExpr(T_BUFFER, [
+            { value: source, target: T_BUFFER, node: call.arguments[0]! },
+            { value: fromEnc, target: T_STRING, node: call.arguments[1]! },
+            { value: toEnc, target: T_STRING, node: call.arguments[2]! },
+            ...this.ignoredArgumentSpecs(call.arguments, 3),
+        ], ([sourceVal, fromVal, toVal]) => `tsc_buffer_transcode(${sourceVal}, ${fromVal}, ${toVal})`);
+    }
+
     private emitSetImmediateCall(call: ts.CallExpression): EmitResult {
         if (call.arguments.length < 1) unsupported(call, "setImmediate expects a callback");
         const callbackNode = call.arguments[0]!;
@@ -40103,7 +40136,25 @@ class Emitter {
                 () => "tsc_crypto_random_uuid()",
             );
         }
-        unsupported(call, `crypto.${name} (supported: createHash, randomBytes, randomUUID)`);
+        if (name === "timingSafeEqual") {
+            if (call.arguments.length < 2)
+                unsupported(call, "crypto.timingSafeEqual expects two Buffer arguments");
+            const a = this.emitExpr(call.arguments[0]!);
+            const b = this.emitExpr(call.arguments[1]!);
+            if (a.ty.kind !== "buffer" || b.ty.kind !== "buffer") {
+                unsupported(call, "crypto.timingSafeEqual expects Buffer arguments");
+            }
+            return this.emitSequencedExpr(
+                T_BOOLEAN,
+                [
+                    { value: a },
+                    { value: b },
+                    ...this.ignoredArgumentSpecs(call.arguments, 2),
+                ],
+                ([left, right]) => `tsc_crypto_timing_safe_equal(${left}, ${right})`,
+            );
+        }
+        unsupported(call, `crypto.${name} (supported: createHash, randomBytes, randomUUID, timingSafeEqual)`);
     }
 
     private validateCryptoRandomUUIDOptions(options: ts.Expression, label: string): void {

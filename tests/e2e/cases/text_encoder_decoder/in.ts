@@ -24,3 +24,12 @@ const encodedEmpty = encoder.encode();
 console.log(`Encoded empty len: ${encodedEmpty.length}`);
 const decodedEmpty = decoder.decode();
 console.log(`Decoded empty: "${decodedEmpty}"`);
+
+function badDecoder(): string {
+    try {
+        return new TextDecoder("utf-16le").decode(encoded1);
+    } catch (err) {
+        return String(err);
+    }
+}
+console.log(`Bad decoder: ${badDecoder()}`);
