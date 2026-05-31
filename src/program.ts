@@ -16,6 +16,7 @@ export interface BuildProgramOpts {
     entry: string;
     packageRoot: string;
     dynamicRequires?: DynamicRequireManifest;
+    customConditions?: string[];
 }
 
 export interface BuiltProgram {
@@ -35,6 +36,13 @@ export function resolvePackageRoot(): string {
 export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
     const libCoreDts = path.resolve(opts.packageRoot, "stdlib/lib.core.d.ts");
 
+    const customConditions = [...new Set([
+        "node-addons",
+        "node",
+        "module-sync",
+        ...(opts.customConditions ?? []),
+    ])];
+
     const compilerOptions: ts.CompilerOptions = {
         target: ts.ScriptTarget.ES2022,
         module: ts.ModuleKind.ESNext,
@@ -49,7 +57,7 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
         types: [],
         esModuleInterop: true,
         allowSyntheticDefaultImports: true,
-        customConditions: ["node-addons", "node", "module-sync"],
+        customConditions,
         allowJs: true,
         checkJs: false,
         maxNodeModuleJsDepth: 5,

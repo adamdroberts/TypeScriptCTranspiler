@@ -5,6 +5,11 @@ import { compile } from "./compile";
 
 const program = new Command();
 
+function collectOption(value: string, previous: string[]): string[] {
+    previous.push(value);
+    return previous;
+}
+
 program
     .name("tsc2c")
     .description("Transpile TypeScript to C and compile to a native binary")
@@ -33,6 +38,12 @@ program
         "--runtime-code-manifest <path>",
         "JSON allow-list of eval/Function source strings compiled into AOT dispatch",
     )
+    .option(
+        "--custom-condition <condition>",
+        "additional package exports/imports condition to include in AOT module resolution",
+        collectOption,
+        [],
+    )
     .option("--verbose", "print compile steps")
     .action(async (entry: string, opts: Record<string, unknown>) => {
         const result = await compile({
@@ -55,6 +66,7 @@ program
             runtimeCodeManifest: opts.runtimeCodeManifest
                 ? path.resolve(opts.runtimeCodeManifest as string)
                 : undefined,
+            customConditions: opts.customCondition as string[] | undefined,
         });
         process.exit(result.exitCode);
     });
