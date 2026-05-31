@@ -26,6 +26,7 @@ interface Case {
     runtimeCodeManifest?: string;
     unsafeEval?: boolean;
     release?: boolean;
+    customConditions?: string[];
     runEnv?: Record<string, string>;
 }
 
@@ -56,6 +57,7 @@ async function discoverCases(): Promise<Case[]> {
         const nativeAddonManifestPath = path.join(casesDir, d, "native-addon-manifest.json");
         const dynamicRequireManifestPath = path.join(casesDir, d, "dynamic-require-manifest.json");
         const runtimeCodeManifestPath = path.join(casesDir, d, "runtime-code-manifest.json");
+        const customConditionsPath = path.join(casesDir, d, "compile.custom_conditions");
         const unsafeEvalPath = path.join(casesDir, d, "compile.unsafe_eval");
         const releasePath = path.join(casesDir, d, "compile.release");
         const runEnvPath = path.join(casesDir, d, "run.env");
@@ -73,6 +75,9 @@ async function discoverCases(): Promise<Case[]> {
             ? runtimeCodeManifestPath
             : undefined;
         const unsafeEval = await exists(unsafeEvalPath);
+        const customConditions = await exists(customConditionsPath)
+            ? parseCustomConditions(await fs.readFile(customConditionsPath, "utf8"), customConditionsPath)
+            : undefined;
         const expectedMainCContains = await exists(expectedMainCContainsPath)
             ? (await fs.readFile(expectedMainCContainsPath, "utf8")).trimEnd()
             : undefined;
@@ -105,6 +110,7 @@ async function discoverCases(): Promise<Case[]> {
                 runtimeCodeManifest,
                 unsafeEval,
                 release,
+                customConditions,
                 runEnv,
             });
             continue;
@@ -129,10 +135,22 @@ async function discoverCases(): Promise<Case[]> {
             runtimeCodeManifest,
             unsafeEval,
             release,
+            customConditions,
             runEnv,
         });
     }
     return cases.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function parseCustomConditions(raw: string, filename: string): string[] {
+    const conditions = raw
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0 && !line.startsWith("#"));
+    if (conditions.some((condition) => condition.includes(","))) {
+        throw new Error(`invalid compile.custom_conditions in ${filename}: use one condition per line`);
+    }
+    return conditions;
 }
 
 function parseRunEnv(raw: string, filename: string): Record<string, string> {
@@ -185,6 +203,7 @@ async function main(): Promise<void> {
             dynamicRequireManifest: c.dynamicRequireManifest,
             runtimeCodeManifest: c.runtimeCodeManifest,
             unsafeEval: c.unsafeEval,
+            customConditions: c.customConditions,
         });
         if (c.expectedExitCode !== undefined) {
             if (r.exitCode !== c.expectedExitCode) {

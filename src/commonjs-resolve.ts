@@ -35,7 +35,7 @@ function resolvePackageTarget(
     if (!pkg) return null;
 
     if (pkg.exports !== undefined) {
-        const target = resolveExportsMap(packageRoot, pkg.exports, parsed.subpath);
+        const target = resolveExportsMap(packageRoot, pkg.exports, parsed.subpath, compilerOptions);
         if (target) return target;
     }
     return null;
@@ -61,18 +61,23 @@ function resolvePackageImportsTarget(
         : null;
 }
 
-function resolveExportsMap(packageRoot: string, exportsField: unknown, subpath: string): string | null {
+function resolveExportsMap(
+    packageRoot: string,
+    exportsField: unknown,
+    subpath: string,
+    compilerOptions: ts.CompilerOptions,
+): string | null {
     if (
         subpath === "." &&
         (typeof exportsField === "string" ||
             Array.isArray(exportsField) ||
             isConditionMap(exportsField))
     ) {
-        return resolveConditionalPackageTarget(packageRoot, exportsField);
+        return resolveConditionalPackageTarget(packageRoot, exportsField, { compilerOptions });
     }
     if (!exportsField || typeof exportsField !== "object" || Array.isArray(exportsField)) return null;
     const target = lookupSubpathTarget(exportsField as Record<string, unknown>, subpath);
-    return target ? resolveConditionalPackageTarget(packageRoot, target) : null;
+    return target ? resolveConditionalPackageTarget(packageRoot, target, { compilerOptions }) : null;
 }
 
 function lookupSubpathTarget(map: Record<string, unknown>, subpath: string): unknown {
@@ -123,7 +128,9 @@ function resolveConditionalPackageTarget(
     }
     if (!target || typeof target !== "object") return null;
     for (const [condition, value] of Object.entries(target)) {
-        if (!COMMONJS_CONDITIONS.has(condition)) continue;
+        const isSupported = COMMONJS_CONDITIONS.has(condition) ||
+            (options.compilerOptions?.customConditions?.includes(condition) ?? false);
+        if (!isSupported) continue;
         const resolved = resolveConditionalPackageTarget(packageRoot, value, options);
         if (resolved) return resolved;
     }

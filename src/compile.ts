@@ -53,6 +53,8 @@ export interface CompileOptions {
     dynamicRequireManifest?: string;
     /** JSON allow-list of runtime code strings compiled into AOT dispatch. */
     runtimeCodeManifest?: string;
+    /** Additional package exports/imports conditions to include in AOT module resolution. */
+    customConditions?: string[];
 }
 
 export interface CompileResult {
@@ -614,6 +616,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         entry: opts.entry,
         packageRoot: pkg,
         dynamicRequires,
+        customConditions: opts.customConditions,
     });
     const permanent = permanentLimitDiagnostics(program, libCoreDts, {
         unsafeEval: opts.unsafeEval,
