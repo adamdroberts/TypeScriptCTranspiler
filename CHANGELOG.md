@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- First-class global `eval` and `Function` value references now require the gated `--unsafe-eval` path and lower to embedded Node bridge generic wrappers when explicitly enabled. Tests: `runtime_eval_value_unknown`, `runtime_eval_value_unsafe`, `runtime_function_value_unknown`, `runtime_function_value_unsafe`.
 - Extended CommonJS whole-value `module.exports` lowering to accept finite conditional expressions whose branches are supported AOT export values, including require-backed function defaults. Test: `node_modules_commonjs_module_exports_conditional`.
 - Extended the narrow lazy generator lowering to keep matched `switch` cases active across fallthrough until `break`, including suspended `.next(value)` assignments in fallthrough case bodies. Test: `generator_lazy_switch_fallthrough`.
 - Extended the narrow lazy generator lowering to resume across simple `switch` cases with suspended `.next(value)` assignments in case/default bodies. Test: `generator_lazy_switch`.

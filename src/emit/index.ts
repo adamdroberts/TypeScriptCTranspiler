@@ -26748,6 +26748,12 @@ class Emitter {
 
         if (ts.isIdentifier(expr)) {
             // Built-in global identifiers.
+            if (this.isUnshadowedGlobalIdentifier(expr, "eval")) {
+                return { c: "tsc_value_function_generic(tsc_builtin_eval, NULL)", ty: T_VALUE };
+            }
+            if (this.isUnshadowedGlobalIdentifier(expr, "Function")) {
+                return { c: "tsc_value_function_generic(tsc_builtin_function, NULL)", ty: T_VALUE };
+            }
             if (expr.text === "NaN") return { c: "((double)NAN)", ty: T_NUMBER };
             if (expr.text === "Infinity") return { c: "((double)INFINITY)", ty: T_NUMBER };
             if (expr.text === "undefined") return { c: "NULL", ty: T_VOID };

@@ -1,0 +1,3 @@
+{
+  "description": "unsafe-eval allows first-class global eval references to lower to the embedded Node bridge wrapper"
+}

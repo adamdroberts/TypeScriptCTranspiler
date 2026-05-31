@@ -1,0 +1,3 @@
+{
+  "description": "first-class global eval references require unsafe-eval or AOT runtime-code manifest support"
+}
