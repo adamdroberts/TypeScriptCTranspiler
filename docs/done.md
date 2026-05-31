@@ -748,6 +748,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Generated-C DCE prunes unused Object/Reflect enumeration helpers over pure fresh `Date`, `RegExp`, `Error`, `Event`, and `EventTarget` instances. Test: `generated_c_dce_const`
 - Generated-C DCE treats side-effect-free string-array method results as side-effect-free `.length`, string-method, and indexable operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE treats side-effect-free Symbol description and string method results as side-effect-free `.length`, string-method, and indexable operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
+- Generated-C DCE prunes unused safe `Symbol.for(...)`, `Symbol.keyFor(...)`, direct `isPrototypeOf(...)` checks on known fresh built-in objects, and non-throwing wrapper `new Object` / `new String` / `new Number` / `new Boolean` constructions, including transparent constructor casts. Test: `generated_c_dce_static_builtins`
 - Generated-C DCE treats side-effect-free fresh-RegExp string method results as side-effect-free `.length`, string-method, and indexable operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE treats side-effect-free Error-family string method results as side-effect-free `.length`, string-method, and indexable operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE treats side-effect-free string-returning string method results as side-effect-free `.length`, string-method, and indexable operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
@@ -1612,6 +1613,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generated_c_dce` | unreferenced non-exported top-level functions are omitted from generated C |
 | `generated_c_dce_class` | unreferenced no-side-effect class declarations and class-expression constants are omitted from generated C |
 | `generated_c_dce_const` | generated-C DCE prunes broad pure static expression, helper, Promise, collection, and object-operation trees |
+| `generated_c_dce_static_builtins` | generated-C DCE prunes unused safe Symbol helpers, object prototype checks, and wrapper constructors |
 | `generated_c_dce_lifted_arrow` | unreferenced non-exported lifted top-level arrow constants are omitted from generated C |
 | `global_number_predicates` | global isNaN/isFinite coercion for typed and dynamic values |
 | `group_by_this_param` | Object.groupBy and Map.groupBy callbacks with explicit this parameters |
