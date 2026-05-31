@@ -113,6 +113,7 @@ struct tsc_object {
     void* class_ptr;
     bool is_proxy;
     bool proxy_revoked;
+    bool is_promise;
     uint64_t shape_version;
     tsc_value_t proxy_target;
     tsc_value_t proxy_handler;
