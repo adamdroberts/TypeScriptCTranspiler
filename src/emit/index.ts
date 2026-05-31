@@ -22355,6 +22355,17 @@ class Emitter {
         if (ret.kind !== "array" || !ret.elem) {
             unsupported(fn, "generator functions must return Iterator<T> or IterableIterator<T>");
         }
+        if (this.isSimpleSequentialGenerator(fn)) {
+            this.emitSimpleLazyGeneratorLike(
+                buf,
+                fn,
+                returnType,
+                runtimeParams,
+                capturedCells,
+                thisParam,
+            );
+            return;
+        }
         const arrayVar = this.freshTemp("_gen");
         this.returnStack.push(ret);
         this.cellScopes.push(capturedCells);
@@ -22372,6 +22383,148 @@ class Emitter {
             this.cellScopes.pop();
             this.returnStack.pop();
         }
+    }
+
+    private isSimpleSequentialGenerator(fn: ts.FunctionLikeDeclaration): boolean {
+        if (!this.isGeneratorDeclaration(fn)) return false;
+        if (fn.parameters.length > 0) return false;
+        if (!fn.body || !ts.isBlock(fn.body)) return false;
+
+        for (let i = 0; i < fn.body.statements.length; i++) {
+            const stmt = fn.body.statements[i]!;
+            if (ts.isEmptyStatement(stmt)) continue;
+            if (ts.isExpressionStatement(stmt)) {
+                if (ts.isYieldExpression(stmt.expression) && stmt.expression.asteriskToken) {
+                    return false;
+                }
+                let hasNestedYield = false;
+                const checkYield = (node: ts.Node) => {
+                    if (ts.isYieldExpression(node)) {
+                        if (node !== stmt.expression) {
+                            hasNestedYield = true;
+                        }
+                    }
+                    ts.forEachChild(node, checkYield);
+                };
+                ts.forEachChild(stmt, checkYield);
+                if (hasNestedYield) return false;
+                continue;
+            }
+            if (ts.isReturnStatement(stmt)) {
+                if (i !== fn.body.statements.length - 1) return false;
+                continue;
+            }
+            return false;
+        }
+        return true;
+    }
+
+    private emitSimpleLazyGeneratorLike(
+        buf: CBuf,
+        fn: ts.FunctionLikeDeclaration,
+        returnType: CType,
+        runtimeParams: readonly ts.ParameterDeclaration[],
+        capturedCells: Map<ts.Symbol, CaptureCell>,
+        thisParam: EmitResult | null,
+    ): void {
+        const ret = this.prepareType(returnType);
+        const elemType = ret.elem!;
+
+        const baseName = fn.name && ts.isIdentifier(fn.name) ? mangleIdent(fn.name.text) : "expr";
+        const lazyNextFuncName = `_gen_lazy_next_${baseName}_${this.freshTemp("")}`;
+
+        const states: ts.Statement[][] = [];
+        let currentStatements: ts.Statement[] = [];
+        if (fn.body && ts.isBlock(fn.body)) {
+            for (const stmt of fn.body.statements) {
+                if (ts.isEmptyStatement(stmt)) continue;
+                if (ts.isExpressionStatement(stmt) && ts.isYieldExpression(stmt.expression)) {
+                    currentStatements.push(stmt);
+                    states.push(currentStatements);
+                    currentStatements = [];
+                } else {
+                    currentStatements.push(stmt);
+                }
+            }
+        }
+        if (currentStatements.length > 0) {
+            states.push(currentStatements);
+        }
+        this.protos.line(`static void ${lazyNextFuncName}(tsc_array_t* a, int* state, void* env, bool* done);`);
+        const nextBuf = new CBuf();
+        nextBuf.open(`static void ${lazyNextFuncName}(tsc_array_t* a, int* state, void* env, bool* done)`);
+
+        this.returnStack.push(ret);
+        this.cellScopes.push(capturedCells);
+        this.generatorStack.push({ arrayVar: "a", elemType: elemType });
+        if (thisParam) this.functionThisStack.push(thisParam);
+
+        try {
+            nextBuf.open("switch (*state)");
+            for (let i = 0; i < states.length; i++) {
+                const state = states[i]!;
+                nextBuf.open(`case ${i}:`);
+
+                const lastStmt = state[state.length - 1];
+                if (lastStmt && ts.isExpressionStatement(lastStmt) && ts.isYieldExpression(lastStmt.expression)) {
+                    const yieldExpr = lastStmt.expression;
+                    const otherStmts = state.slice(0, -1);
+                    for (const s of otherStmts) {
+                        this.emitStmt(nextBuf, s);
+                    }
+
+                    const value = yieldExpr.expression
+                        ? this.emitExpr(yieldExpr.expression)
+                        : { c: "NULL", ty: T_VOID };
+                    const valueNode = yieldExpr.expression ?? yieldExpr;
+                    const tmp = this.freshTemp("_yield");
+                    nextBuf.line(`${elemType.c} ${tmp} = ${this.coerce(value, elemType, valueNode)};`);
+                    nextBuf.line(`tsc_array_push_raw(a, &${tmp});`);
+
+                    nextBuf.line(`*state = ${i + 1};`);
+                    nextBuf.line(`*done = false;`);
+                    nextBuf.line("return;");
+                } else {
+                    for (const s of state) {
+                        if (ts.isReturnStatement(s)) {
+                            if (s.expression) {
+                                const expr = this.emitExpr(s.expression);
+                                nextBuf.line(`a->iter_return = ${this.coerce(expr, T_VALUE, s.expression)};`);
+                                nextBuf.line(`a->iter_has_return = true;`);
+                                nextBuf.line(`a->iter_return_consumed = false;`);
+                            }
+                            continue;
+                        }
+                        this.emitStmt(nextBuf, s);
+                    }
+                    nextBuf.line(`*state = -1;`);
+                    nextBuf.line(`*done = true;`);
+                    nextBuf.line("return;");
+                }
+                nextBuf.close();
+            }
+            nextBuf.open("default:");
+            nextBuf.line("*done = true;");
+            nextBuf.line("return;");
+            nextBuf.close();
+            nextBuf.close();
+        } finally {
+            if (thisParam) this.functionThisStack.pop();
+            this.generatorStack.pop();
+            this.cellScopes.pop();
+            this.returnStack.pop();
+        }
+
+        nextBuf.close();
+        nextBuf.line();
+        this.closureDefs.write(nextBuf.toString());
+
+        const arrayVar = this.freshTemp("_gen");
+        buf.line(`tsc_array_t* ${arrayVar} = tsc_array_new(sizeof(${elemType.c}), 4);`);
+        buf.line(`${arrayVar}->is_lazy_generator = true;`);
+        buf.line(`${arrayVar}->state = 0;`);
+        buf.line(`${arrayVar}->lazy_next = (void*)${lazyNextFuncName};`);
+        buf.line(`return ${arrayVar};`);
     }
 
     private fnSignature(fd: ts.FunctionDeclaration): {
@@ -23800,6 +23953,7 @@ class Emitter {
 
         buf.open("");
         buf.line(`tsc_array_t* const ${arrVar} = ${arrayExpr};`);
+        buf.line(`tsc_array_materialize_all(${arrVar});`);
         buf.open(
             `for (size_t ${idxVar} = 0; ${idxVar} < ${arrVar}->len; ${idxVar}++)`,
         );
@@ -24149,6 +24303,7 @@ class Emitter {
 
         buf.open("");
         buf.line(`tsc_array_t* const ${arrVar} = ${arrayExpr};`);
+        buf.line(`tsc_array_materialize_all(${arrVar});`);
         buf.open(
             `for (size_t ${idxVar} = 0; ${idxVar} < ${arrVar}->len; ${idxVar}++)`,
         );
@@ -24223,6 +24378,7 @@ class Emitter {
 
         buf.open("");
         buf.line(`tsc_array_t* const ${arrVar} = ${arrayExpr};`);
+        buf.line(`tsc_array_materialize_all(${arrVar});`);
         buf.open(
             `for (size_t ${idxVar} = 0; ${idxVar} < ${arrVar}->len; ${idxVar}++)`,
         );
@@ -36825,6 +36981,13 @@ class Emitter {
         recv: EmitResult,
         method: string,
     ): EmitResult {
+        if (method !== "next" && method !== "return" && method !== "throw") {
+            const tmp = this.freshTemp("_recv_mat");
+            recv = {
+                c: `({ tsc_array_t* ${tmp} = ${recv.c}; tsc_array_materialize_all(${tmp}); ${tmp}; })`,
+                ty: recv.ty
+            };
+        }
         const et = recv.ty.elem!;
         const args = call.arguments;
         const emitJoinStringExpr = (arr: string, sep: string): string => {
@@ -37184,6 +37347,10 @@ class Emitter {
                     [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
                     ([arr]) =>
                         `({ tsc_array_t* const ${av} = ${arr}; ` +
+                        `if (${av}->is_lazy_generator && ${av}->iter_pos >= ${av}->len && ${av}->lazy_next) { ` +
+                        `bool _done = false; ${av}->lazy_next(${av}, &${av}->state, ${av}->env, &_done); ` +
+                        `if (_done) { ${av}->is_lazy_generator = false; } ` +
+                        `} ` +
                         `tsc_object_t* ${out} = tsc_object_new(); ` +
                         `if (${av}->iter_pos < ${av}->len) { ` +
                         `${et.c} ${current} = TSC_ARR(${et.c}, ${av}, ${av}->iter_pos++); ` +
@@ -37209,6 +37376,7 @@ class Emitter {
                     specs,
                     ([arr, valueArg]) =>
                         `({ tsc_array_t* const ${av} = ${arr!}; ${av}->iter_pos = ${av}->len; ` +
+                        `${av}->is_lazy_generator = false; ${av}->state = -1; ` +
                         `${av}->iter_return_consumed = true; ` +
                         `tsc_object_t* ${out} = tsc_object_new(); ` +
                         `tsc_object_set(${out}, tsc_str_from_lit("done", 4), tsc_value_bool(true)); ` +
@@ -48860,7 +49028,7 @@ class Emitter {
                         const idx = this.freshTemp("_idx");
                         const elem = this.freshTemp("_elem");
                         const boxed = this.coerce({ c: elem, ty: r.ty.elem }, T_VALUE, node);
-                        return `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(tsc_value_t), ${tmpIn}->len ? ${tmpIn}->len : 1); for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { ${r.ty.elem.c} ${elem} = TSC_ARR(${r.ty.elem.c}, ${tmpIn}, ${idx}); tsc_value_t _boxed = ${boxed}; tsc_array_push_raw(${tmpOut}, &_boxed); } ${tmpOut}->iter_pos = ${tmpIn}->iter_pos; ${tmpOut}->iter_has_return = ${tmpIn}->iter_has_return; ${tmpOut}->iter_return_consumed = ${tmpIn}->iter_return_consumed; ${tmpOut}->iter_return = ${tmpIn}->iter_return; tsc_value_array(${tmpOut}); })`;
+                        return `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_materialize_all(${tmpIn}); tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(tsc_value_t), ${tmpIn}->len ? ${tmpIn}->len : 1); for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { ${r.ty.elem.c} ${elem} = TSC_ARR(${r.ty.elem.c}, ${tmpIn}, ${idx}); tsc_value_t _boxed = ${boxed}; tsc_array_push_raw(${tmpOut}, &_boxed); } ${tmpOut}->iter_pos = ${tmpIn}->iter_pos; ${tmpOut}->iter_has_return = ${tmpIn}->iter_has_return; ${tmpOut}->iter_return_consumed = ${tmpIn}->iter_return_consumed; ${tmpOut}->iter_return = ${tmpIn}->iter_return; tsc_value_array(${tmpOut}); })`;
                     }
                     return `tsc_value_array(${r.c})`;
                 }

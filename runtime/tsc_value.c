@@ -276,6 +276,13 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
 
 static tsc_value_t tsc_value_generator_next(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     tsc_array_t* av = (tsc_array_t*)env;
+    if (av->is_lazy_generator && av->iter_pos >= av->len && av->lazy_next) {
+        bool done = false;
+        av->lazy_next(av, &av->state, av->env, &done);
+        if (done) {
+            av->is_lazy_generator = false;
+        }
+    }
     tsc_object_t* out = tsc_object_new();
     if (av->iter_pos < av->len) {
         tsc_value_t current = TSC_ARR(tsc_value_t, av, av->iter_pos++);
@@ -296,6 +303,8 @@ static tsc_value_t tsc_value_generator_next(void* env, tsc_value_t this_arg, tsc
 static tsc_value_t tsc_value_generator_return(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     tsc_array_t* av = (tsc_array_t*)env;
     av->iter_pos = av->len;
+    av->is_lazy_generator = false;
+    av->state = -1;
     av->iter_return_consumed = true;
     tsc_value_t valueArg = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
     tsc_object_t* out = tsc_object_new();
@@ -1364,6 +1373,7 @@ bool tsc_value_is_frozen(tsc_value_t v) {
 }
 
 tsc_array_t* value_array_keys(const tsc_array_t* src, bool include_length) {
+    tsc_array_materialize_all((tsc_array_t*)src);
     size_t cap = (src ? src->len : 0) + (include_length ? 1 : 0);
     tsc_array_t* out = tsc_array_new(sizeof(tsc_str_t*), cap ? cap : 1);
     if (!src) return out;
@@ -1379,6 +1389,7 @@ tsc_array_t* value_array_keys(const tsc_array_t* src, bool include_length) {
 }
 
 tsc_array_t* value_array_values(const tsc_array_t* src) {
+    tsc_array_materialize_all((tsc_array_t*)src);
     tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), src ? src->len : 1);
     if (!src || src->es != sizeof(tsc_value_t)) return out;
     for (size_t i = 0; i < src->len; i++) {
@@ -1389,6 +1400,7 @@ tsc_array_t* value_array_values(const tsc_array_t* src) {
 }
 
 tsc_array_t* value_array_entries(const tsc_array_t* src) {
+    tsc_array_materialize_all((tsc_array_t*)src);
     tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), src ? src->len : 1);
     if (!src || src->es != sizeof(tsc_value_t)) return out;
     for (size_t i = 0; i < src->len; i++) {

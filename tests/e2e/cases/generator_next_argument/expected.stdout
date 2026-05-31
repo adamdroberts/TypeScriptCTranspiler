@@ -1,2 +1,2 @@
 steps: false 1 false 2 true done
-events: body|first|second|second-extra|third|third-extra-a|third-extra-b
+events: first|body|second|second-extra|third|third-extra-a|third-extra-b

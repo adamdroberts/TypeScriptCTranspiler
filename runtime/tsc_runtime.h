@@ -502,11 +502,16 @@ typedef struct tsc_array {
     bool iter_has_return;
     bool iter_return_consumed;
     tsc_value_t iter_return;
+    bool is_lazy_generator;
+    int state;
+    void* env;
+    void (*lazy_next)(struct tsc_array* a, int* state, void* env, bool* done);
     void* data;
 } tsc_array_t;
 
 tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap);
 tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap);
+void tsc_array_materialize_all(tsc_array_t* a);
 tsc_array_t* tsc_array_from_buf(size_t elem_size, const void* src, size_t n);
 void tsc_array_reserve(tsc_array_t* a, size_t new_cap);
 void tsc_array_push_raw(tsc_array_t* a, const void* elem);
