@@ -1,11 +1,11 @@
-Global: md5,sha1,sha256,sha512
-Global extra args: md5,sha1,sha256,sha512
-Named: md5,sha1,sha256,sha512
-Named Alias: md5,sha1,sha256,sha512
-Named Node Alias: md5,sha1,sha256,sha512
-Namespace: md5,sha1,sha256,sha512
-Namespace Node: md5,sha1,sha256,sha512
-Default: md5,sha1,sha256,sha512
-Default Node: md5,sha1,sha256,sha512
+Global: md5,sha1,sha224,sha256,sha384,sha512
+Global extra args: md5,sha1,sha224,sha256,sha384,sha512
+Named: md5,sha1,sha224,sha256,sha384,sha512
+Named Alias: md5,sha1,sha224,sha256,sha384,sha512
+Named Node Alias: md5,sha1,sha224,sha256,sha384,sha512
+Namespace: md5,sha1,sha224,sha256,sha384,sha512
+Namespace Node: md5,sha1,sha224,sha256,sha384,sha512
+Default: md5,sha1,sha224,sha256,sha384,sha512
+Default Node: md5,sha1,sha224,sha256,sha384,sha512
 IsArray: true
-Hashes mapped: MD5,SHA1,SHA256,SHA512
+Hashes mapped: MD5,SHA1,SHA224,SHA256,SHA384,SHA512

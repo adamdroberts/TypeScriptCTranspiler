@@ -2497,7 +2497,7 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): boolean {
         const alg = this.sideEffectFreeStringLiteralText(expr, seenConsts);
-        return alg === "md5" || alg === "sha1" || alg === "sha256" || alg === "sha512";
+        return alg === "md5" || alg === "sha1" || alg === "sha224" || alg === "sha256" || alg === "sha384" || alg === "sha512";
     }
 
     private isSideEffectFreeCryptoDigestEncoding(

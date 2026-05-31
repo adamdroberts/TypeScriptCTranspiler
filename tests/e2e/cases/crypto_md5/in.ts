@@ -29,13 +29,13 @@ console.log("hmac3 hex from buffer:", buf.toString("hex"));
 
 // 4. Catch that unsupported algorithms still throw in our transpiled runtime
 try {
-    crypto.createHash("sha384" as any);
+    crypto.createHash("sha384-unsupported" as any);
 } catch (e) {
     console.log("sha384 throw caught:", String(e));
 }
 
 try {
-    crypto.createHmac("sha384" as any, "key");
+    crypto.createHmac("sha384-unsupported" as any, "key");
 } catch (e) {
     console.log("hmac sha384 throw caught:", String(e));
 }

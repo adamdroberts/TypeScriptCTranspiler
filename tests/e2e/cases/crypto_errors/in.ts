@@ -1,4 +1,4 @@
-const badAlgorithm: any = "sha384";
+const badAlgorithm: any = "sha384-unsupported";
 const badDigestEncoding: any = "latin1";
 
 function badCreateHash(): string {
