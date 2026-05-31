@@ -240,6 +240,14 @@ void tsc_promise_fulfill_in_place(tsc_promise_t* p, tsc_value_t value) {
     tsc_promise_trigger_callbacks(p);
 }
 
+void tsc_promise_fulfill_in_place_ptr(tsc_promise_t* p, void* ptr_result) {
+    if (!p || p->state != TSC_PROMISE_PENDING) return;
+    p->state = TSC_PROMISE_FULFILLED;
+    p->result = tsc_value_undefined();
+    p->ptr_result = ptr_result;
+    tsc_promise_trigger_callbacks(p);
+}
+
 void tsc_promise_reject_in_place(tsc_promise_t* p, tsc_value_t reason) {
     if (!p || p->state != TSC_PROMISE_PENDING) return;
     p->state = TSC_PROMISE_REJECTED;

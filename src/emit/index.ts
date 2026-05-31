@@ -241,6 +241,7 @@ class Emitter {
     private microtaskAdapters = new Map<string, string>();
     private immediateAdapters = new Map<string, string>();
     private timeoutAdapters = new Map<string, string>();
+    private timersPromisesSetTimeoutAdapters = 0;
     private nodeFunctionAdapters = new Set<string>();
     private dynamicFunctionAdapters = new Map<string, string>();
     private classInstanceMethodValueAdapters = new Map<string, string>();
@@ -37549,30 +37550,87 @@ class Emitter {
         switch (name) {
             case "setTimeout": {
                 const delay = call.arguments[0];
-                if (delay && !this.isZeroDelayLiteral(delay)) {
-                    unsupported(delay, "timers/promises.setTimeout in this subset requires an omitted delay or literal 0 delay");
-                }
                 const options = call.arguments[2];
                 this.validateTimersPromisesOptions(options, "timers/promises.setTimeout");
+                const zeroDelay = !delay || this.isZeroDelayLiteral(delay);
+                if (zeroDelay) {
+                    const specs: SequencedCallArg[] = [];
+                    if (delay && this.shouldEvaluateSideEffectfulVoidDefault(delay)) {
+                        specs.push({ value: this.emitExpr(delay), target: T_VOID, node: delay });
+                    }
+                    const valueNode = call.arguments[1];
+                    const optionSpecs: SequencedCallArg[] = [];
+                    if (options && this.shouldEvaluateSideEffectfulVoidDefault(options)) {
+                        optionSpecs.push({ value: this.emitExpr(options), target: T_VOID, node: options });
+                    }
+                    optionSpecs.push(...this.ignoredArgumentSpecs(call.arguments, 3));
+                    if (!valueNode) {
+                        return this.emitSequencedExpr(mapped, [...specs, ...optionSpecs], () => "tsc_promise_resolve(tsc_value_undefined())");
+                    }
+                    const value = this.emitExpr(valueNode);
+                    return this.emitSequencedExpr(mapped, [
+                        ...specs,
+                        { value, node: valueNode },
+                        ...optionSpecs,
+                    ], (values) => this.promiseResolveResult({ c: values[specs.length]!, ty: value.ty }, valueNode));
+                }
+
                 const specs: SequencedCallArg[] = [];
-                if (delay && this.shouldEvaluateSideEffectfulVoidDefault(delay)) {
-                    specs.push({ value: this.emitExpr(delay), target: T_VOID, node: delay });
-                }
+                const delayValue = this.emitExpr(delay);
+                specs.push({ value: delayValue, target: T_NUMBER, node: delay });
+
                 const valueNode = call.arguments[1];
-                const optionSpecs: SequencedCallArg[] = [];
+                const value = valueNode ? this.emitExpr(valueNode) : undefined;
+                const storedValueType = value && value.ty.kind !== "void" ? value.ty : T_VALUE;
+                if (valueNode && value) {
+                    specs.push({ value, target: storedValueType, node: valueNode });
+                }
                 if (options && this.shouldEvaluateSideEffectfulVoidDefault(options)) {
-                    optionSpecs.push({ value: this.emitExpr(options), target: T_VOID, node: options });
+                    specs.push({ value: this.emitExpr(options), target: T_VOID, node: options });
                 }
-                optionSpecs.push(...this.ignoredArgumentSpecs(call.arguments, 3));
-                if (!valueNode) {
-                    return this.emitSequencedExpr(mapped, [...specs, ...optionSpecs], () => "tsc_promise_resolve(tsc_value_undefined())");
-                }
-                const value = this.emitExpr(valueNode);
-                return this.emitSequencedExpr(mapped, [
-                    ...specs,
-                    { value, node: valueNode },
-                    ...optionSpecs,
-                ], (values) => this.promiseResolveResult({ c: values[specs.length]!, ty: value.ty }, valueNode));
+                specs.push(...this.ignoredArgumentSpecs(call.arguments, 3));
+
+                return this.emitSequencedExpr(mapped, specs, (args) => {
+                    const delayVar = args[0]!;
+                    const valueVar = valueNode ? args[1]! : "tsc_value_undefined()";
+                    const callbackName = `tsc_timers_promises_setTimeout_${this.timersPromisesSetTimeoutAdapters++}`;
+                    const envType = `${callbackName}_env_t`;
+
+                    this.structDecls.open(`typedef struct ${envType}`);
+                    this.structDecls.line("tsc_promise_t* promise;");
+                    if (valueNode) this.structDecls.line(`${storedValueType.c} value;`);
+                    this.structDecls.close(` ${envType};`);
+
+                    this.protos.line(`void ${callbackName}(void* env);`);
+
+                    const buf = new CBuf();
+                    buf.open(`void ${callbackName}(void* env)`);
+                    buf.line(`${envType}* state = (${envType}*)env;`);
+                    buf.line("tsc_promise_t* promise = state->promise;");
+                    const stored = this.prepareType(storedValueType);
+                    const valueAccess = valueNode ? "state->value" : "tsc_value_undefined()";
+                    if (stored.kind === "promise") {
+                        buf.line(`tsc_promise_adopt_into(promise, ${valueAccess});`);
+                    } else if (stored.kind === "fsstats" || stored.kind === "buffer" || stored.kind === "array") {
+                        buf.line(`tsc_promise_fulfill_in_place_ptr(promise, ${valueAccess});`);
+                    } else {
+                        const fulfilled = this.coerce({ c: valueAccess, ty: storedValueType }, T_VALUE, valueNode ?? call);
+                        buf.line(`tsc_promise_fulfill_in_place(promise, ${fulfilled});`);
+                    }
+                    buf.close();
+                    this.closureDefs.write(buf.toString());
+
+                    const env = this.freshTemp("_timeoutEnv");
+                    const promiseVar = this.freshTemp("_promise");
+                    const pieces: string[] = [
+                        `tsc_promise_t* ${promiseVar} = tsc_promise_pending()`,
+                        `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
+                        `${env}->promise = ${promiseVar}`,
+                    ];
+                    if (valueNode) pieces.push(`${env}->value = ${valueVar}`);
+                    pieces.push(`tsc_set_timeout(${callbackName}, ${env}, ${delayVar})`);
+                    return `({ ${pieces.join("; ")}; ${promiseVar}; })`;
+                });
             }
             case "setImmediate": {
                 const options = call.arguments[1];
