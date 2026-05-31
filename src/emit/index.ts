@@ -38608,6 +38608,9 @@ class Emitter {
         if (this.isUndefinedLikeExpression(resolvedOptions)) {
             return { recursive: false, mode: { ...defaultMode, node: options ?? undefined } };
         }
+        if (resolvedOptions.kind === ts.SyntaxKind.NullKeyword) {
+            return { recursive: false, mode: { ...defaultMode, node: options ?? undefined } };
+        }
         if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             const mode = this.emitExpr(resolvedOptions);
             if (mode.ty.kind !== "number") unsupported(options, `${label} mode must be numeric in this subset`);
@@ -38891,9 +38894,11 @@ class Emitter {
         if (!options || this.isUndefinedLikeExpression(options)) return { ...out, encoding, mode };
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
         if (this.isUndefinedLikeExpression(resolvedOptions)) return { ...out, encoding, mode };
+        if (resolvedOptions.kind === ts.SyntaxKind.NullKeyword) return { ...out, encoding, mode };
         const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" => {
             node = this.resolveSideEffectFreeEarlierConstExpression(node);
             if (this.isUndefinedExpression(node)) return "utf8";
+            if (node.kind === ts.SyntaxKind.NullKeyword) return "utf8";
             const text = this.sideEffectFreeStringLiteralText(node, new Set());
             if (text !== null) {
                 if (text === "utf8" || text === "utf-8") return "utf8";
@@ -38960,9 +38965,11 @@ class Emitter {
         if (!options || this.isUndefinedLikeExpression(options)) return { ...out, encoding, mode };
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
         if (this.isUndefinedLikeExpression(resolvedOptions)) return { ...out, encoding, mode };
+        if (resolvedOptions.kind === ts.SyntaxKind.NullKeyword) return { ...out, encoding, mode };
         const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" => {
             node = this.resolveSideEffectFreeEarlierConstExpression(node);
             if (this.isUndefinedExpression(node)) return "utf8";
+            if (node.kind === ts.SyntaxKind.NullKeyword) return "utf8";
             const text = this.sideEffectFreeStringLiteralText(node, new Set());
             if (text !== null) {
                 if (text === "utf8" || text === "utf-8") return "utf8";

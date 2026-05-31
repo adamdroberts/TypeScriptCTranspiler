@@ -1285,20 +1285,20 @@ type FSReadFileBufferOptions = FSBufferEncoding | null | FSReadFileBufferObjectO
 type FSReadFileStringOptions = FSReadFileStringEncoding | FSReadFileOptions;
 type FSWriteFileFlag = "w" | "wx" | "w+" | "wx+" | "a" | "ax" | "a+" | "ax+" | "as" | "as+" | "r+" | "rs+";
 interface FSWriteFileOptions {
-    encoding?: FSFileContentEncoding;
+    encoding?: FSFileContentEncoding | null;
     flag?: FSWriteFileFlag;
     mode?: number;
     flush?: boolean;
 }
-type FSWriteFileEncodingOptions = FSFileContentEncoding | FSWriteFileOptions;
+type FSWriteFileEncodingOptions = FSFileContentEncoding | null | FSWriteFileOptions;
 type FSAppendFileFlag = "a" | "ax" | "a+" | "ax+" | "as" | "as+";
 interface FSAppendFileOptions {
-    encoding?: FSFileContentEncoding;
+    encoding?: FSFileContentEncoding | null;
     flag?: FSAppendFileFlag;
     mode?: number;
     flush?: boolean;
 }
-type FSAppendFileEncodingOptions = FSFileContentEncoding | FSAppendFileOptions;
+type FSAppendFileEncodingOptions = FSFileContentEncoding | null | FSAppendFileOptions;
 interface FSReaddirOptions {
     encoding?: FSReaddirStringEncoding | null;
     recursive?: boolean;
@@ -1367,7 +1367,7 @@ interface FS {
     chownSync(path: FSPathLike, uid: number, gid: number, ...ignored: any[]): void;
     lchownSync(path: FSPathLike, uid: number, gid: number, ...ignored: any[]): void;
     chmodSync(path: FSPathLike, mode: number, ...ignored: any[]): void;
-    mkdirSync(path: FSPathLike, options?: number | FSMkdirOptions, ...ignored: any[]): void;
+    mkdirSync(path: FSPathLike, options?: number | FSMkdirOptions | null, ...ignored: any[]): void;
     unlinkSync(path: FSPathLike, ...ignored: any[]): void;
     rmSync(path: FSPathLike, options?: FSRmOptions, ...ignored: any[]): void;
     rmdirSync(path: FSPathLike, options?: FSRmdirOptions, ...ignored: any[]): void;
@@ -1401,7 +1401,7 @@ interface FSPromises {
     lchown(path: FSPathLike, uid: number, gid: number, ...ignored: any[]): Promise<void>;
     chmod(path: FSPathLike, mode: number, ...ignored: any[]): Promise<void>;
     access(path: FSPathLike, mode?: number, ...ignored: any[]): Promise<void>;
-    mkdir(path: FSPathLike, options?: number | FSMkdirOptions, ...ignored: any[]): Promise<void>;
+    mkdir(path: FSPathLike, options?: number | FSMkdirOptions | null, ...ignored: any[]): Promise<void>;
     unlink(path: FSPathLike, ...ignored: any[]): Promise<void>;
     rm(path: FSPathLike, options?: FSRmOptions, ...ignored: any[]): Promise<void>;
     rmdir(path: FSPathLike, options?: FSRmdirOptions, ...ignored: any[]): Promise<void>;
@@ -1440,7 +1440,7 @@ declare module "fs" {
     export function chownSync(path: FSPathLike, uid: number, gid: number, ...ignored: any[]): void;
     export function lchownSync(path: FSPathLike, uid: number, gid: number, ...ignored: any[]): void;
     export function chmodSync(path: FSPathLike, mode: number, ...ignored: any[]): void;
-    export function mkdirSync(path: FSPathLike, options?: number | FSMkdirOptions, ...ignored: any[]): void;
+    export function mkdirSync(path: FSPathLike, options?: number | FSMkdirOptions | null, ...ignored: any[]): void;
     export function unlinkSync(path: FSPathLike, ...ignored: any[]): void;
     export function rmSync(path: FSPathLike, options?: FSRmOptions, ...ignored: any[]): void;
     export function rmdirSync(path: FSPathLike, options?: FSRmdirOptions, ...ignored: any[]): void;
@@ -1480,7 +1480,7 @@ declare module "node:fs" {
     export function chownSync(path: FSPathLike, uid: number, gid: number, ...ignored: any[]): void;
     export function lchownSync(path: FSPathLike, uid: number, gid: number, ...ignored: any[]): void;
     export function chmodSync(path: FSPathLike, mode: number, ...ignored: any[]): void;
-    export function mkdirSync(path: FSPathLike, options?: number | FSMkdirOptions, ...ignored: any[]): void;
+    export function mkdirSync(path: FSPathLike, options?: number | FSMkdirOptions | null, ...ignored: any[]): void;
     export function unlinkSync(path: FSPathLike, ...ignored: any[]): void;
     export function rmSync(path: FSPathLike, options?: FSRmOptions, ...ignored: any[]): void;
     export function rmdirSync(path: FSPathLike, options?: FSRmdirOptions, ...ignored: any[]): void;
