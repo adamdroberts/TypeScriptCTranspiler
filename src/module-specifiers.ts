@@ -106,31 +106,76 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return stringLiteralUnionIdentifierTexts(node);
     };
 
+    const resolveCollectionExpression = (node: ts.Expression): ts.Expression | null => {
+        let cur = node;
+        while (
+            ts.isParenthesizedExpression(cur) ||
+            ts.isAsExpression(cur) ||
+            ts.isTypeAssertionExpression(cur) ||
+            ts.isSatisfiesExpression(cur)
+        ) {
+            cur = cur.expression;
+        }
+
+        if (ts.isIdentifier(cur)) {
+            const decl = earlierConstStringDeclaration(cur) ?? topLevelConstStringDeclaration(cur);
+            if (!decl?.initializer || seen.has(decl)) return null;
+            seen.add(decl);
+            const val = resolveCollectionExpression(decl.initializer);
+            seen.delete(decl);
+            return val;
+        }
+
+        if (ts.isPropertyAccessExpression(cur)) {
+            const obj = resolveCollectionExpression(cur.expression);
+            if (obj && ts.isObjectLiteralExpression(obj)) {
+                for (const prop of obj.properties) {
+                    if (ts.isPropertyAssignment(prop)) {
+                        const key = staticPropertyName(prop.name);
+                        if (key === cur.name.text) {
+                            return resolveCollectionExpression(prop.initializer);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (ts.isElementAccessExpression(cur) && cur.argumentExpression) {
+            const col = resolveCollectionExpression(cur.expression);
+            if (!col) return null;
+            const indexTexts = resolve(cur.argumentExpression);
+            if (indexTexts.length !== 1) return null;
+            const indexText = indexTexts[0]!;
+
+            if (ts.isArrayLiteralExpression(col)) {
+                if (/^(0|[1-9][0-9]*)$/.test(indexText)) {
+                    const idx = Number(indexText);
+                    const element = col.elements[idx];
+                    if (element && !ts.isSpreadElement(element)) {
+                        return resolveCollectionExpression(element);
+                    }
+                }
+            } else if (ts.isObjectLiteralExpression(col)) {
+                for (const prop of col.properties) {
+                    if (ts.isPropertyAssignment(prop)) {
+                        const key = staticPropertyName(prop.name);
+                        if (key === indexText) {
+                            return resolveCollectionExpression(prop.initializer);
+                        }
+                    }
+                }
+            }
+        }
+
+        return cur;
+    };
+
     const resolveStaticCollectionAccess = (
         collectionExpr: ts.Expression,
         keyExpr: ts.Expression | ts.Identifier,
     ): string[] => {
-        while (
-            ts.isParenthesizedExpression(collectionExpr) ||
-            ts.isAsExpression(collectionExpr) ||
-            ts.isTypeAssertionExpression(collectionExpr) ||
-            ts.isSatisfiesExpression(collectionExpr)
-        ) {
-            collectionExpr = collectionExpr.expression;
-        }
-        if (!ts.isIdentifier(collectionExpr)) return [];
-        const decl = earlierConstStringDeclaration(collectionExpr) ?? topLevelConstStringDeclaration(collectionExpr);
-        if (!decl?.initializer || seen.has(decl)) return [];
-        seen.add(decl);
-        let init = decl.initializer;
-        while (
-            ts.isParenthesizedExpression(init) ||
-            ts.isAsExpression(init) ||
-            ts.isTypeAssertionExpression(init) ||
-            ts.isSatisfiesExpression(init)
-        ) {
-            init = init.expression;
-        }
+        const init = resolveCollectionExpression(collectionExpr);
+        if (!init) return [];
 
         let values: string[] = [];
         if (ts.isArrayLiteralExpression(init)) {
@@ -138,7 +183,6 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         } else if (ts.isObjectLiteralExpression(init)) {
             values = resolveStaticObjectAccess(init, keyExpr);
         }
-        seen.delete(decl);
         return dedupe(values);
     };
 
