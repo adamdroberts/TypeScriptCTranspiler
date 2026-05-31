@@ -1,0 +1,5 @@
+namespace: ok
+named: ok
+subpath: ok
+missing: fs.statfsSync: could not statfs path
+events: ignored-extra|void-option

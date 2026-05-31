@@ -1464,6 +1464,7 @@ interface FSPromises {
     readdir(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Promise<Buffer[]>;
     readdir(path: FSPathLike, options: FSReaddirDirentOptions, ...ignored: any[]): Promise<FSDirent[]>;
     readdir(path: FSPathLike, options?: FSReaddirStringOptions, ...ignored: any[]): Promise<string[]>;
+    statfs(path: FSPathLike, options?: FSStatFsOptions, ...ignored: any[]): Promise<FSStatFs>;
     stat(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): Promise<FSStats>;
     lstat(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): Promise<FSStats>;
     realpath(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Promise<Buffer>;
@@ -1597,6 +1598,7 @@ declare module "fs/promises" {
     export const writeFile: FSPromises["writeFile"];
     export const appendFile: FSPromises["appendFile"];
     export const readdir: FSPromises["readdir"];
+    export const statfs: FSPromises["statfs"];
     export const stat: FSPromises["stat"];
     export const lstat: FSPromises["lstat"];
     export const realpath: FSPromises["realpath"];
@@ -1626,6 +1628,7 @@ declare module "node:fs/promises" {
     export const writeFile: FSPromises["writeFile"];
     export const appendFile: FSPromises["appendFile"];
     export const readdir: FSPromises["readdir"];
+    export const statfs: FSPromises["statfs"];
     export const stat: FSPromises["stat"];
     export const lstat: FSPromises["lstat"];
     export const realpath: FSPromises["realpath"];
