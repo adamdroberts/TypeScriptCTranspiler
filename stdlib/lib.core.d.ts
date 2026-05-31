@@ -1056,6 +1056,7 @@ interface OS {
     uptime(...ignored: any[]): number;
     loadavg(...ignored: any[]): number[];
     userInfo(options?: OSUserInfoOptions, ...ignored: any[]): any;
+    networkInterfaces(...ignored: any[]): any;
 }
 interface OSUserInfoOptions {
     encoding?: FSEncoding;
@@ -1081,6 +1082,7 @@ declare module "os" {
     export function uptime(...ignored: any[]): number;
     export function loadavg(...ignored: any[]): number[];
     export function userInfo(options?: OSUserInfoOptions, ...ignored: any[]): any;
+    export function networkInterfaces(...ignored: any[]): any;
     const defaultOs: OS;
     export default defaultOs;
 }
@@ -1104,6 +1106,7 @@ declare module "node:os" {
     export function uptime(...ignored: any[]): number;
     export function loadavg(...ignored: any[]): number[];
     export function userInfo(options?: OSUserInfoOptions, ...ignored: any[]): any;
+    export function networkInterfaces(...ignored: any[]): any;
     const defaultOs: OS;
     export default defaultOs;
 }

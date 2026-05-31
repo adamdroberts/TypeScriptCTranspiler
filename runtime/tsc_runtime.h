@@ -1056,6 +1056,7 @@ double tsc_os_freemem(void);
 double tsc_os_uptime(void);
 tsc_array_t* tsc_os_loadavg(void);
 tsc_value_t tsc_os_user_info(void);
+tsc_value_t tsc_os_network_interfaces(void);
 double tsc_date_now(void);
 
 /* ------------- path ------------- */

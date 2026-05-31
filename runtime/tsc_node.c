@@ -3698,6 +3698,176 @@ tsc_value_t tsc_os_user_info(void) {
     return tsc_value_object(out);
 }
 
+#if !defined(_WIN32)
+#include <ifaddrs.h>
+#include <net/if.h>
+#if defined(__linux__)
+#include <netpacket/packet.h>
+#elif defined(__APPLE__)
+#include <net/if_dl.h>
+#endif
+
+static int ipv4_netmask_to_prefix(struct in_addr mask) {
+    uint32_t val = ntohl(mask.s_addr);
+    int prefix = 0;
+    while (val > 0) {
+        if (val & 0x80000000) {
+            prefix++;
+            val <<= 1;
+        } else {
+            break;
+        }
+    }
+    return prefix;
+}
+
+static int ipv6_netmask_to_prefix(const uint8_t mask[16]) {
+    int prefix = 0;
+    for (int i = 0; i < 16; i++) {
+        uint8_t byte = mask[i];
+        while (byte > 0) {
+            if (byte & 0x80) {
+                prefix++;
+                byte <<= 1;
+            } else {
+                break;
+            }
+        }
+        if (mask[i] != 255) {
+            break;
+        }
+    }
+    return prefix;
+}
+
+static void get_mac_address(struct ifaddrs* head, const char* ifa_name, char* mac_out) {
+    strcpy(mac_out, "00:00:00:00:00:00");
+    for (struct ifaddrs* ifa = head; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL || ifa->ifa_name == NULL) continue;
+        if (strcmp(ifa->ifa_name, ifa_name) != 0) continue;
+
+#if defined(__linux__)
+        if (ifa->ifa_addr->sa_family == AF_PACKET) {
+            struct sockaddr_ll* sll = (struct sockaddr_ll*)ifa->ifa_addr;
+            if (sll->sll_halen == 6) {
+                snprintf(mac_out, 18, "%02x:%02x:%02x:%02x:%02x:%02x",
+                        sll->sll_addr[0], sll->sll_addr[1], sll->sll_addr[2],
+                        sll->sll_addr[3], sll->sll_addr[4], sll->sll_addr[5]);
+                return;
+            }
+        }
+#elif defined(__APPLE__)
+        if (ifa->ifa_addr->sa_family == AF_LINK) {
+            struct sockaddr_dl* sdl = (struct sockaddr_dl*)ifa->ifa_addr;
+            if (sdl->sdl_alen == 6) {
+                unsigned char* ptr = (unsigned char*)LLADDR(sdl);
+                snprintf(mac_out, 18, "%02x:%02x:%02x:%02x:%02x:%02x",
+                        ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5]);
+                return;
+            }
+        }
+#endif
+    }
+}
+#endif
+
+tsc_value_t tsc_os_network_interfaces(void) {
+    tsc_object_t* out = tsc_object_new();
+#if !defined(_WIN32)
+    struct ifaddrs *ifaddr = NULL;
+    if (getifaddrs(&ifaddr) == -1) {
+        return tsc_value_object(out);
+    }
+
+    struct ifaddrs *ifa;
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL || ifa->ifa_name == NULL) {
+            continue;
+        }
+
+        int family = ifa->ifa_addr->sa_family;
+        if (family != AF_INET && family != AF_INET6) {
+            continue;
+        }
+
+        // Get/create array for the interface name
+        tsc_str_t* name_str = tsc_str_from_cstr(ifa->ifa_name);
+        tsc_array_t* arr = NULL;
+        if (tsc_object_has(out, name_str)) {
+            tsc_value_t val = tsc_object_get(out, name_str);
+            arr = tsc_value_as_array(val);
+        } else {
+            arr = tsc_array_new(sizeof(tsc_value_t), 0);
+            tsc_object_set(out, name_str, tsc_value_array(arr));
+        }
+
+        // Create the record object
+        tsc_object_t* record = tsc_object_new();
+
+        // 1. address & netmask & family & cidr
+        char ip_str[INET6_ADDRSTRLEN] = {0};
+        char netmask_str[INET6_ADDRSTRLEN] = {0};
+        int prefix = 0;
+
+        if (family == AF_INET) {
+            struct sockaddr_in* sa = (struct sockaddr_in*)ifa->ifa_addr;
+            inet_ntop(AF_INET, &(sa->sin_addr), ip_str, INET_ADDRSTRLEN);
+
+            tsc_object_set(record, tsc_str_from_lit("family", 6), tsc_value_string(tsc_str_from_lit("IPv4", 4)));
+            tsc_object_set(record, tsc_str_from_lit("address", 7), tsc_value_string(tsc_str_from_cstr(ip_str)));
+
+            if (ifa->ifa_netmask && ifa->ifa_netmask->sa_family == AF_INET) {
+                struct sockaddr_in* nm = (struct sockaddr_in*)ifa->ifa_netmask;
+                inet_ntop(AF_INET, &(nm->sin_addr), netmask_str, INET_ADDRSTRLEN);
+                prefix = ipv4_netmask_to_prefix(nm->sin_addr);
+            } else {
+                strcpy(netmask_str, "0.0.0.0");
+            }
+            tsc_object_set(record, tsc_str_from_lit("netmask", 7), tsc_value_string(tsc_str_from_cstr(netmask_str)));
+
+            char cidr_str[INET_ADDRSTRLEN + 8];
+            snprintf(cidr_str, sizeof(cidr_str), "%s/%d", ip_str, prefix);
+            tsc_object_set(record, tsc_str_from_lit("cidr", 4), tsc_value_string(tsc_str_from_cstr(cidr_str)));
+        } else if (family == AF_INET6) {
+            struct sockaddr_in6* sa6 = (struct sockaddr_in6*)ifa->ifa_addr;
+            inet_ntop(AF_INET6, &(sa6->sin6_addr), ip_str, INET6_ADDRSTRLEN);
+
+            tsc_object_set(record, tsc_str_from_lit("family", 6), tsc_value_string(tsc_str_from_lit("IPv6", 4)));
+            tsc_object_set(record, tsc_str_from_lit("address", 7), tsc_value_string(tsc_str_from_cstr(ip_str)));
+
+            if (ifa->ifa_netmask && ifa->ifa_netmask->sa_family == AF_INET6) {
+                struct sockaddr_in6* nm6 = (struct sockaddr_in6*)ifa->ifa_netmask;
+                inet_ntop(AF_INET6, &(nm6->sin6_addr), netmask_str, INET6_ADDRSTRLEN);
+                prefix = ipv6_netmask_to_prefix((const uint8_t*)&(nm6->sin6_addr));
+            } else {
+                strcpy(netmask_str, "::");
+            }
+            tsc_object_set(record, tsc_str_from_lit("netmask", 7), tsc_value_string(tsc_str_from_cstr(netmask_str)));
+
+            char cidr_str[INET6_ADDRSTRLEN + 8];
+            snprintf(cidr_str, sizeof(cidr_str), "%s/%d", ip_str, prefix);
+            tsc_object_set(record, tsc_str_from_lit("cidr", 4), tsc_value_string(tsc_str_from_cstr(cidr_str)));
+        }
+
+        // 2. internal
+        bool internal = (ifa->ifa_flags & IFF_LOOPBACK) != 0;
+        tsc_object_set(record, tsc_str_from_lit("internal", 8), tsc_value_bool(internal));
+
+        // 3. mac
+        char mac_str[18] = {0};
+        get_mac_address(ifaddr, ifa->ifa_name, mac_str);
+        tsc_object_set(record, tsc_str_from_lit("mac", 3), tsc_value_string(tsc_str_from_cstr(mac_str)));
+
+        // Push record value to array
+        tsc_value_t rec_val = tsc_value_object(record);
+        tsc_array_push_raw(arr, &rec_val);
+    }
+
+    freeifaddrs(ifaddr);
+#endif
+    return tsc_value_object(out);
+}
+
 double tsc_date_now(void) {
     struct timespec ts;
     if (clock_gettime(CLOCK_REALTIME, &ts) == 0) {
