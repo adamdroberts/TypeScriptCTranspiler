@@ -22915,7 +22915,145 @@ class Emitter {
                 : this.emitExpr(expr.whenFalse);
             return this.emitSimpleLazyResumeConditional(expr, cond, whenTrue, whenFalse);
         }
-        unsupported(expr, "lazy generator suspended yield expression currently supports direct, parenthesized, binary, and conditional expressions");
+        if (ts.isArrayLiteralExpression(expr)) {
+            return this.emitSimpleLazyResumeArrayLiteral(expr, nextArg);
+        }
+        unsupported(expr, "lazy generator suspended yield expression currently supports direct, parenthesized, unary, typeof, void, binary, conditional, and array literal expressions");
+    }
+
+    private emitSimpleLazyResumeArrayLiteral(al: ts.ArrayLiteralExpression, nextArg: string): EmitResult {
+        const litType =
+            this.checker.getContextualType(al) ??
+            this.checker.getTypeAtLocation(al);
+        const mapped = this.isUntypedJsArrayLiteral(al)
+            ? T_VALUE
+            : mapTsType(al, litType, this.checker);
+        if (mapped.kind === "value") {
+            const pieces: string[] = [];
+            const av = this.freshTemp("_dynarr");
+            pieces.push(
+                `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, al.elements.length)})`
+            );
+            for (const e of al.elements) {
+                if (e.kind === ts.SyntaxKind.OmittedExpression)
+                    unsupported(e, "sparse array literals");
+                if (ts.isSpreadElement(e)) {
+                    const hasYield = !!this.singleYieldExpressionInExpression(e.expression);
+                    const r = hasYield
+                        ? this.emitSimpleLazyResumeExpression(e.expression, nextArg)
+                        : this.emitExpr(e.expression);
+                    if (r.ty.kind === "array") {
+                        const src = this.freshTemp("_dynspread_src");
+                        const idx = this.freshTemp("_dynspread_i");
+                        const value = this.freshTemp("_dynspread_v");
+                        const elem = r.ty.elem!;
+                        const current = { c: `TSC_ARR(${elem.c}, ${src}, ${idx})`, ty: elem };
+                        const boxed = this.coerce(current, T_VALUE, e.expression);
+                        pieces.push(
+                            `{ tsc_array_t* const ${src} = ${r.c}; for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { tsc_value_t ${value} = ${boxed}; tsc_array_push_raw(${av}, &${value}); } }`
+                        );
+                        continue;
+                    }
+                    if (r.ty.kind === "value" || r.ty.kind === "string") {
+                        const spread = this.freshTemp("_dynspread");
+                        pieces.push(`tsc_array_t* ${spread} = tsc_value_iter_values(${this.coerce(r, T_VALUE, e.expression)})`);
+                        pieces.push(`tsc_array_append(${av}, ${spread})`);
+                        continue;
+                    }
+                    unsupported(e, "dynamic array literal spread expects an array or string");
+                }
+                const hasYield = !!this.singleYieldExpressionInExpression(e as ts.Expression);
+                const r = hasYield
+                    ? this.emitSimpleLazyResumeExpression(e as ts.Expression, nextArg)
+                    : this.emitExpr(e as ts.Expression);
+                const tmp = this.freshTemp("_dynv");
+                pieces.push(`${T_VALUE.c} ${tmp} = ${this.coerce(r, T_VALUE, e as ts.Expression)}`);
+                pieces.push(`tsc_array_push_raw(${av}, &${tmp})`);
+            }
+            pieces.push(`tsc_value_array(${av})`);
+            return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
+        }
+        if (mapped.kind === "entry") {
+            if (al.elements.length !== 2) {
+                unsupported(al, "Object.entries tuple literal must have exactly two elements");
+            }
+            const [keyExpr, valueExpr] = al.elements;
+            if (
+                !keyExpr ||
+                !valueExpr ||
+                keyExpr.kind === ts.SyntaxKind.OmittedExpression ||
+                valueExpr.kind === ts.SyntaxKind.OmittedExpression ||
+                ts.isSpreadElement(keyExpr) ||
+                ts.isSpreadElement(valueExpr)
+            ) {
+                unsupported(al, "Object.entries tuple literal cannot be sparse or spread");
+            }
+            const keyHasYield = !!this.singleYieldExpressionInExpression(keyExpr as ts.Expression);
+            const key = keyHasYield
+                ? this.emitSimpleLazyResumeExpression(keyExpr as ts.Expression, nextArg)
+                : this.emitExpr(keyExpr as ts.Expression);
+            const keyType = mapped.key ?? T_STRING;
+            const valueType = mapped.elem ?? T_VOID;
+            const valueHasYield = !!this.singleYieldExpressionInExpression(valueExpr as ts.Expression);
+            const value = valueHasYield
+                ? this.emitSimpleLazyResumeExpression(valueExpr as ts.Expression, nextArg)
+                : this.emitExpr(valueExpr as ts.Expression);
+            const tmp = this.freshTemp("_entry");
+            const pieces = [
+                `${mapped.c} ${tmp}`,
+                this.objectEntryKeySet(
+                    tmp,
+                    keyType,
+                    this.coerce(key, keyType, keyExpr as ts.Expression)
+                ),
+                this.objectEntrySet(
+                    tmp,
+                    valueType,
+                    this.coerce(value, valueType, valueExpr as ts.Expression)
+                ),
+                tmp
+            ];
+            return { c: `({ ${pieces.join("; ")}; })`, ty: mapped };
+        }
+        if (mapped.kind !== "array") {
+            unsupported(al, `array literal inferred non-array type ${mapped.c}`);
+        }
+        const et = mapped.elem!;
+        const pieces: string[] = [];
+        const av = this.freshTemp("_al");
+        const initialCap = al.elements.length === 0 && et.kind === "number"
+            ? 2048
+            : Math.max(8, al.elements.length);
+        const arrayCtor = et.kind === "number" || et.kind === "boolean"
+            ? "tsc_array_new_atomic"
+            : "tsc_array_new";
+        pieces.push(
+            `tsc_array_t* ${av} = ${arrayCtor}(sizeof(${et.c}), ${initialCap})`
+        );
+        for (const e of al.elements) {
+            if (e.kind === ts.SyntaxKind.OmittedExpression)
+                unsupported(e, "sparse array literals");
+            if (ts.isSpreadElement(e)) {
+                const hasYield = !!this.singleYieldExpressionInExpression(e.expression);
+                const r = hasYield
+                    ? this.emitSimpleLazyResumeExpression(e.expression, nextArg)
+                    : this.emitExpr(e.expression);
+                if (r.ty.kind !== "array")
+                    unsupported(e, "spread must be an array");
+                pieces.push(`tsc_array_append(${av}, ${r.c})`);
+                continue;
+            }
+            const hasYield = !!this.singleYieldExpressionInExpression(e as ts.Expression);
+            const r = hasYield
+                ? this.emitSimpleLazyResumeExpression(e as ts.Expression, nextArg)
+                : this.emitExpr(e as ts.Expression);
+            const coerced = this.coerce(r, et, e as ts.Expression);
+            const tv = this.freshTemp("_el");
+            pieces.push(`${et.c} ${tv} = ${coerced}`);
+            pieces.push(`TSC_ARR(${et.c}, ${av}, ${av}->len) = ${tv}; ${av}->len++`);
+        }
+        pieces.push(av);
+        return { c: `({ ${pieces.join("; ")}; })`, ty: mapped };
     }
 
     private truthyExprFromEmitResult(value: EmitResult, node: ts.Expression): string {
