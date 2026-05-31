@@ -883,6 +883,7 @@ bool tsc_set_is_disjoint_from(const tsc_set_t* a, const tsc_set_t* b);
 /* ------------- console ------------- */
 void tsc_console_log_n(size_t n, ...);
 void tsc_console_error_n(size_t n, ...);
+tsc_str_t* tsc_util_format_n(size_t n, ...);
 bool tsc_instanceof(const char* type_chain, const char* class_name);
 
 /* ------------- process ------------- */
