@@ -566,6 +566,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Direct named, aliased named, namespace, and default imports from `"dns/promises"` / `"node:dns/promises"` route to the same immediate `dns.promises.lookup` subset. Test: `dns_promises_subpath_import`
 - Aliased named imports for DNS hint constants such as `V4MAPPED as hint` lower correctly in expressions and DNS lookup options. Test: `dns_lookup_hints`
 - `dns.resolve4(hostname[, options], callback)` and `dns.promises.resolve4(hostname[, options])` are implemented as immediate subsets using host resolver behavior to resolve IPv4 address records, returning/passing a simple `string[]` array. Ignored trailing arguments and side-effectful options/defaults are evaluated. Named, aliased named, default, namespace, and subpath imports from `"dns"`, `"node:dns"`, `"dns/promises"`, and `"node:dns/promises"` are supported. Test: `dns_resolve4`
+- `dns.resolve6(hostname[, options], callback)` and `dns.promises.resolve6(hostname[, options])` are implemented as immediate subsets using host resolver behavior to resolve IPv6 address records, returning/passing a simple `string[]` array. Ignored trailing arguments and side-effectful options/defaults are evaluated. Named, aliased named, default, namespace, and subpath imports from `"dns"`, `"node:dns"`, `"dns/promises"`, and `"node:dns/promises"` are supported. Test: `dns_resolve6`
 - `dns.lookupService(address, port, callback)` and `dns.promises.lookupService(address, port)` are implemented as immediate subsets using `getnameinfo` host resolver behavior to resolve an IP address and port to a hostname and service name, returning/passing a fulfilled object `{ hostname, service }` or callback arguments `(err, hostname, service)`. Ignored trailing arguments are evaluated. Named, aliased named, default, namespace, and subpath imports from `"dns"`, `"node:dns"`, `"dns/promises"`, and `"node:dns/promises"` are supported. Test: `dns_lookup_service`
 - `dns.getDefaultResultOrder(...ignored)` / `dns.setDefaultResultOrder(order, ...ignored)` and the matching `dns.promises` / `"dns/promises"` helpers maintain a process-local bounded default result order of `"verbatim"`, `"ipv4first"`, or `"ipv6first"`, validating invalid orders and preserving ignored argument evaluation across named, default, namespace, and subpath imports. Test: `dns_default_result_order`
 
@@ -614,9 +615,11 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - URL instances expose `.toString(...ignored)`, `.toJSON(...ignored)`, `.toLocaleString(...ignored)`, `.valueOf(...ignored)`, typed `Reflect.get` / `Reflect.has` for bounded prototype-style string fields, and empty own-property results through `Object.keys`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, `Reflect.ownKeys`, and `Reflect.getOwnPropertyDescriptor`. Test: `url_object_methods`
 
 ### `querystring`
-- Named, aliased, namespace, and default imports from `"querystring"` / `"node:querystring"` route to the supported `parse` and `stringify` helpers. Test: `querystring_basic`
+- Named, aliased, namespace, and default imports from `"querystring"` / `"node:querystring"` route to the supported `parse`, `stringify`, `escape`, and `unescape` helpers. Test: `querystring_basic`, `querystring_escape_unescape`
 - `parse(str, sep?, eq?, options?)` converts a query string into a null-prototype object, handles duplicate keys by grouping their values into an array, decodes percent-encoded characters (including decoding `+` to spaces), supports custom separator (`sep`) and assignment (`eq`) strings, and evaluates ignored trailing arguments for side effects. Test: `querystring_basic`
 - `stringify(obj, sep?, eq?, options?)` stringifies plain dynamic objects with primitive values or arrays, percent-encodes keys and values (including spaces to `%20`), supports custom separator (`sep`) and assignment (`eq`) strings, and evaluates ignored trailing arguments for side effects. Test: `querystring_basic`
+- `escape(str)` performs URL percent-encoding on `str`, preserving unencoded safe characters and percent-encoding spaces to `%20` and `+` to `%2B`, with ignored trailing arguments evaluated. Test: `querystring_escape_unescape`
+- `unescape(str)` performs URL percent-decoding on `str`, preserving raw `+` characters instead of converting them to spaces, with ignored trailing arguments evaluated. Test: `querystring_escape_unescape`
 
 ### `Math`
 - `floor`, `ceil`, `round` (JS half-to-+Inf), `abs`, `trunc`, `sign`
@@ -1272,6 +1275,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dns_promises_lookup` | immediate dns.promises.lookup fulfilled result objects with ignored extras |
 | `dns_promises_subpath_import` | direct dns/promises named, namespace, and default imports |
 | `dns_resolve4` | callback and promise forms of dns.resolve4 and dns.promises.resolve4 |
+| `dns_resolve6` | callback and promise forms of dns.resolve6 and dns.promises.resolve6 |
 | `dns_lookup_service` | callback and promise forms of dns.lookupService and dns.promises.lookupService |
 | `dns_default_result_order` | dns getDefaultResultOrder and setDefaultResultOrder for dns and dns/promises import styles |
 | `enums` | numeric enum constants |

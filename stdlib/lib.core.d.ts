@@ -1946,6 +1946,8 @@ interface DnsPromises {
     lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined, ...ignored: any[]): Promise<any>;
     resolve4(hostname: string): Promise<string[]>;
     resolve4(hostname: string, options: DnsResolveOptions | undefined, ...ignored: any[]): Promise<string[]>;
+    resolve6(hostname: string): Promise<string[]>;
+    resolve6(hostname: string, options: DnsResolveOptions | undefined, ...ignored: any[]): Promise<string[]>;
     lookupService(address: string, port: number): Promise<{ hostname: string; service: string }>;
     getDefaultResultOrder(...ignored: any[]): "ipv4first" | "ipv6first" | "verbatim";
     setDefaultResultOrder(order: "ipv4first" | "ipv6first" | "verbatim", ...ignored: any[]): void;
@@ -1960,6 +1962,8 @@ interface DNS {
     lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined, callback: DnsLookupAllCallback, ...ignored: any[]): void;
     resolve4(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     resolve4(hostname: string, options: DnsResolveOptions | undefined, callback: DnsResolveCallback, ...ignored: any[]): void;
+    resolve6(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
+    resolve6(hostname: string, options: DnsResolveOptions | undefined, callback: DnsResolveCallback, ...ignored: any[]): void;
     lookupService(address: string, port: number, callback: DnsLookupServiceCallback, ...ignored: any[]): void;
     getDefaultResultOrder(...ignored: any[]): "ipv4first" | "ipv6first" | "verbatim";
     setDefaultResultOrder(order: "ipv4first" | "ipv6first" | "verbatim", ...ignored: any[]): void;
@@ -1975,6 +1979,8 @@ declare module "dns" {
     export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined, callback: DnsLookupAllCallback, ...ignored: any[]): void;
     export function resolve4(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolve4(hostname: string, options: DnsResolveOptions | undefined, callback: DnsResolveCallback, ...ignored: any[]): void;
+    export function resolve6(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
+    export function resolve6(hostname: string, options: DnsResolveOptions | undefined, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function lookupService(address: string, port: number, callback: DnsLookupServiceCallback, ...ignored: any[]): void;
     export function getDefaultResultOrder(...ignored: any[]): "ipv4first" | "ipv6first" | "verbatim";
     export function setDefaultResultOrder(order: "ipv4first" | "ipv6first" | "verbatim", ...ignored: any[]): void;
@@ -1991,6 +1997,8 @@ declare module "node:dns" {
     export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined, callback: DnsLookupAllCallback, ...ignored: any[]): void;
     export function resolve4(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolve4(hostname: string, options: DnsResolveOptions | undefined, callback: DnsResolveCallback, ...ignored: any[]): void;
+    export function resolve6(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
+    export function resolve6(hostname: string, options: DnsResolveOptions | undefined, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function lookupService(address: string, port: number, callback: DnsLookupServiceCallback, ...ignored: any[]): void;
     export function getDefaultResultOrder(...ignored: any[]): "ipv4first" | "ipv6first" | "verbatim";
     export function setDefaultResultOrder(order: "ipv4first" | "ipv6first" | "verbatim", ...ignored: any[]): void;
@@ -2000,6 +2008,7 @@ declare module "node:dns" {
 declare module "dns/promises" {
     export const lookup: DnsPromises["lookup"];
     export const resolve4: DnsPromises["resolve4"];
+    export const resolve6: DnsPromises["resolve6"];
     export const lookupService: DnsPromises["lookupService"];
     export const getDefaultResultOrder: DnsPromises["getDefaultResultOrder"];
     export const setDefaultResultOrder: DnsPromises["setDefaultResultOrder"];
@@ -2009,6 +2018,7 @@ declare module "dns/promises" {
 declare module "node:dns/promises" {
     export const lookup: DnsPromises["lookup"];
     export const resolve4: DnsPromises["resolve4"];
+    export const resolve6: DnsPromises["resolve6"];
     export const lookupService: DnsPromises["lookupService"];
     export const getDefaultResultOrder: DnsPromises["getDefaultResultOrder"];
     export const setDefaultResultOrder: DnsPromises["setDefaultResultOrder"];
@@ -2305,17 +2315,23 @@ declare module "node:util" {
 interface QueryStringModule {
     parse(str: string, sep?: string, eq?: string, options?: any, ...ignored: any[]): any;
     stringify(obj: any, sep?: string, eq?: string, options?: any, ...ignored: any[]): string;
+    escape(str: string, ...ignored: any[]): string;
+    unescape(str: string, ...ignored: any[]): string;
 }
 declare const querystring: QueryStringModule;
 declare module "querystring" {
     export function parse(str: string, sep?: string, eq?: string, options?: any, ...ignored: any[]): any;
     export function stringify(obj: any, sep?: string, eq?: string, options?: any, ...ignored: any[]): string;
+    export function escape(str: string, ...ignored: any[]): string;
+    export function unescape(str: string, ...ignored: any[]): string;
     const defaultQueryString: QueryStringModule;
     export default defaultQueryString;
 }
 declare module "node:querystring" {
     export function parse(str: string, sep?: string, eq?: string, options?: any, ...ignored: any[]): any;
     export function stringify(obj: any, sep?: string, eq?: string, options?: any, ...ignored: any[]): string;
+    export function escape(str: string, ...ignored: any[]): string;
+    export function unescape(str: string, ...ignored: any[]): string;
     const defaultQueryString: QueryStringModule;
     export default defaultQueryString;
 }
