@@ -815,6 +815,12 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-local-factory-parenthesized-object": cjsPackage("tsc2c-cjs-module-local-factory-parenthesized-object", {
         "index.js": 'function createApi() {\n  return ({\n    default: "factory-paren-default",\n    label: "factory-paren",\n    count: 126,\n    triple: (value) => value * 3\n  });\n}\nmodule.exports = createApi();\n',
     }),
+    "tsc2c-cjs-module-local-arrow-factory-object": cjsPackage("tsc2c-cjs-module-local-arrow-factory-object", {
+        "index.js": 'const makeArrowApi = () => ({\n  default: "factory-arrow-default",\n  label: "factory-arrow",\n  count: 127,\n  inc(value) { return value + 1; },\n  enabled: true\n});\nmodule.exports = makeArrowApi();\n',
+    }),
+    "tsc2c-cjs-module-local-function-expression-factory-object": cjsPackage("tsc2c-cjs-module-local-function-expression-factory-object", {
+        "index.js": 'const makeExpressionApi = (function () {\n  return ({\n    default: "factory-expression-default",\n    label: "factory-expression",\n    count: 128,\n    quadruple: (value) => value * 4\n  });\n});\nmodule.exports = (makeExpressionApi)();\n',
+    }),
     "tsc2c-cjs-module-object-identifier": cjsPackage("tsc2c-cjs-module-object-identifier", {
         "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "identifier-default",\n  greet: function greet(name) { return "identifier " + name; },\n  label: local.label,\n  count: 72,\n  double: local.double,\n  enabled: true\n};\nmodule.exports = api;\n',
         "local.js": 'exports.label = "object-identifier";\nexports.double = function double(value) { return value * 2; };\n',
