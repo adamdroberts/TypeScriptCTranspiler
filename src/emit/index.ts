@@ -27991,6 +27991,9 @@ class Emitter {
         if (name === "setTimeout") {
             return this.emitSetTimeoutCall(call);
         }
+        if (name === "setInterval") {
+            return this.emitSetIntervalCall(call);
+        }
         if (name === "clearTimeout" || name === "clearInterval") {
             return this.emitClearTimerCall(call, "tsc_clear_timeout");
         }
@@ -28008,7 +28011,7 @@ class Emitter {
         if (bufferTranscodeNamed) {
             return this.emitBufferTranscodeCall(call);
         }
-        const timersNamed = ["setTimeout", "clearTimeout", "clearInterval", "setImmediate", "clearImmediate"]
+        const timersNamed = ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "setImmediate", "clearImmediate"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["timers", "node:timers"], exported));
         if (timersNamed) {
             return this.emitTimersCall(call, timersNamed);
@@ -35849,10 +35852,50 @@ class Emitter {
         });
     }
 
+    private emitSetIntervalCall(call: ts.CallExpression): EmitResult {
+        if (call.arguments.length < 1) unsupported(call, "setInterval expects a callback and optional literal 0 delay");
+        const callbackNode = call.arguments[0]!;
+        const callback = this.emitExpr(callbackNode);
+        if (call.arguments.length >= 2 && !this.isZeroDelayLiteral(call.arguments[1]!)) {
+            unsupported(call.arguments[1]!, "setInterval in this subset requires an omitted delay or literal 0 delay");
+        }
+        const delayNode = call.arguments[1];
+        const delayValue = delayNode && this.shouldEvaluateSideEffectfulVoidDefault(delayNode)
+            ? this.emitExpr(delayNode)
+            : undefined;
+        const argNodes = call.arguments.length >= 2
+            ? Array.from(call.arguments.slice(2))
+            : [];
+        const argValues = argNodes.map((arg) => this.emitExpr(arg));
+        const adapter = this.ensureTimeoutAdapter(callbackNode, callback.ty, argValues.map((arg) => arg.ty));
+        const prepared = this.prepareType(callback.ty);
+        const params = prepared.kind === "function" ? prepared.params ?? [] : [];
+        return this.emitSequencedExpr(T_NUMBER, [
+            { value: callback, target: callback.ty, node: callbackNode },
+            ...(delayNode && delayValue
+                ? [{ value: delayValue, target: T_VOID, node: delayNode }]
+                : []),
+            ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
+        ], ([fn, ...values]) => {
+            const args = delayValue ? values.slice(1) : values;
+            const envType = `${adapter}_env_t`;
+            const env = this.freshTemp("_interval_env");
+            const pieces = [
+                `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
+                `${env}->fn = ${fn}`,
+            ];
+            args.forEach((arg, i) => pieces.push(`${env}->arg${i} = ${arg}`));
+            pieces.push(`tsc_set_interval(${adapter}, ${env})`);
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
     private emitTimersCall(call: ts.CallExpression, name: string): EmitResult {
         switch (name) {
             case "setTimeout":
                 return this.emitSetTimeoutCall(call);
+            case "setInterval":
+                return this.emitSetIntervalCall(call);
             case "setImmediate":
                 return this.emitSetImmediateCall(call);
             case "clearTimeout":
