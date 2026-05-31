@@ -28013,7 +28013,7 @@ class Emitter {
         if (timersNamed) {
             return this.emitTimersCall(call, timersNamed);
         }
-        const eventsNamed = ["listenerCount", "getEventListeners", "once", "setMaxListeners", "getMaxListeners"]
+        const eventsNamed = ["listenerCount", "getEventListeners", "once", "on", "setMaxListeners", "getMaxListeners"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["events", "node:events"], exported));
         if (eventsNamed) {
             return this.emitEventsStaticCall(call, eventsNamed);
@@ -29737,7 +29737,7 @@ class Emitter {
         }
 
         if (ts.isIdentifier(recvExpr) && this.isEventsModuleIdentifier(recvExpr)) {
-            if (memberName === "listenerCount" || memberName === "getEventListeners" || memberName === "once" || memberName === "setMaxListeners" || memberName === "getMaxListeners") {
+            if (memberName === "listenerCount" || memberName === "getEventListeners" || memberName === "once" || memberName === "on" || memberName === "setMaxListeners" || memberName === "getMaxListeners") {
                 return this.emitEventsStaticCall(call, memberName);
             }
             unsupported(call, `events.${memberName}`);
@@ -34301,6 +34301,9 @@ class Emitter {
                 }
                 specs.push(...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2));
                 return this.emitSequencedExpr(mapped, specs, ([ee, event]) => `tsc_event_emitter_once_promise(${ee}, ${event})`);
+            }
+            case "on": {
+                unsupported(call, "events.on async iterator helper requires async iterator lowering");
             }
             case "setMaxListeners": {
                 if (args.length < 2) unsupported(call, "events.setMaxListeners expects count and at least one emitter");
