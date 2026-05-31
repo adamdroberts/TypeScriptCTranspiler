@@ -1324,6 +1324,59 @@ double tsc_buffer_compare(const tsc_buffer_t* a, const tsc_buffer_t* b) {
     return 0.0;
 }
 
+static void check_compare_bound(double val, const char* name, double max_val) {
+    if (isnan(val) || isinf(val) || floor(val) != val) {
+        char err_msg[128];
+        if (isnan(val)) {
+            snprintf(err_msg, sizeof(err_msg), "The value of \"%s\" is out of range. It must be an integer. Received NaN", name);
+        } else if (isinf(val)) {
+            snprintf(err_msg, sizeof(err_msg), "The value of \"%s\" is out of range. It must be an integer. Received Infinity", name);
+        } else {
+            snprintf(err_msg, sizeof(err_msg), "The value of \"%s\" is out of range. It must be an integer. Received %g", name, val);
+        }
+        tsc_throw_str(tsc_str_from_cstr(err_msg));
+    }
+    if (val < 0.0 || val > max_val) {
+        char err_msg[128];
+        snprintf(err_msg, sizeof(err_msg), "The value of \"%s\" is out of range. It must be >= 0 and <= %.0f. Received %g", name, max_val, val);
+        tsc_throw_str(tsc_str_from_cstr(err_msg));
+    }
+}
+
+double tsc_buffer_compare_ranges(const tsc_buffer_t* source, const tsc_buffer_t* target,
+                                 double target_start, double target_end,
+                                 double source_start, double source_end) {
+    if (!source || !target) {
+        return 0.0;
+    }
+
+    check_compare_bound(target_start, "targetStart", 4294967296.0);
+    check_compare_bound(target_end, "targetEnd", (double)target->len);
+    check_compare_bound(source_start, "sourceStart", 4294967296.0);
+    check_compare_bound(source_end, "sourceEnd", (double)source->len);
+
+    size_t s_start = (size_t)source_start;
+    size_t s_end = (size_t)source_end;
+    size_t t_start = (size_t)target_start;
+    size_t t_end = (size_t)target_end;
+
+    if (s_start > s_end) s_start = s_end;
+    if (t_start > t_end) t_start = t_end;
+
+    size_t s_len = s_end - s_start;
+    size_t t_len = t_end - t_start;
+
+    size_t n = s_len < t_len ? s_len : t_len;
+    int cmp = n > 0 ? memcmp(source->data + s_start, target->data + t_start, n) : 0;
+    if (cmp < 0) return -1.0;
+    if (cmp > 0) return 1.0;
+    if (s_len < t_len) return -1.0;
+    if (s_len > t_len) return 1.0;
+    return 0.0;
+}
+
+
+
 double tsc_buffer_byte_length_str(const tsc_str_t* input, const tsc_str_t* encoding) {
     if (buffer_encoding_is_utf8(encoding)) return (double)input->len;
     if (str_lit_eq(encoding, "hex")) return floor((double)input->len / 2.0);

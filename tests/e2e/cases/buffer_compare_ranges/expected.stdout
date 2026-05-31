@@ -1,0 +1,17 @@
+normal [3,6) and [0,3): 0
+normal [3,5) and [0,3): -1
+normal [3,6) and [0,2): 1
+defaults target: 0
+defaults source: -1
+all defaults: -1
+targetStart > targetEnd: 1
+sourceStart > sourceEnd: -1
+ignored args: 0 a|b|
+err negative targetStart: The value of "targetStart" is out of range. It must be >= 0 and <= 4294967296. Received -1
+err out of bounds targetEnd: The value of "targetEnd" is out of range. It must be >= 0 and <= 3. Received 10
+err negative sourceStart: The value of "sourceStart" is out of range. It must be >= 0 and <= 4294967296. Received -1
+err out of bounds sourceEnd: The value of "sourceEnd" is out of range. It must be >= 0 and <= 6. Received 10
+err NaN targetStart: The value of "targetStart" is out of range. It must be an integer. Received NaN
+err NaN targetEnd: The value of "targetEnd" is out of range. It must be an integer. Received NaN
+err NaN sourceStart: The value of "sourceStart" is out of range. It must be an integer. Received NaN
+err NaN sourceEnd: The value of "sourceEnd" is out of range. It must be an integer. Received NaN
