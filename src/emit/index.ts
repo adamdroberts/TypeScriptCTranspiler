@@ -20346,10 +20346,33 @@ class Emitter {
                     ts.isVariableDeclaration(parent) &&
                     parent.initializer === n
                 ) {
-                    const aliasCapacity = this.nonEscapingArrayAliasExtraCapacity(parent, scope);
+                    const aliasCapacity = this.nonEscapingArrayAliasExtraCapacity(parent, scope, new Set([sym]));
                     if (aliasCapacity !== null) {
                         extraCapacity += aliasCapacity;
                         return;
+                    }
+                }
+                if (
+                    ts.isBinaryExpression(parent) &&
+                    parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                    parent.right === n &&
+                    ts.isIdentifier(parent.left)
+                ) {
+                    const aliasSym = this.checker.getSymbolAtLocation(parent.left);
+                    if (
+                        aliasSym?.valueDeclaration &&
+                        ts.isVariableDeclaration(aliasSym.valueDeclaration) &&
+                        aliasSym.valueDeclaration.parent.parent?.parent === scope
+                    ) {
+                        const aliasCapacity = this.nonEscapingArrayAliasExtraCapacity(
+                            aliasSym.valueDeclaration,
+                            scope,
+                            new Set([sym]),
+                        );
+                        if (aliasCapacity !== null) {
+                            extraCapacity += aliasCapacity;
+                            return;
+                        }
                     }
                 }
                 if (
@@ -20573,10 +20596,16 @@ class Emitter {
             this.nonEscapingArrayAliasExtraCapacity(d, scope) !== null;
     }
 
-    private nonEscapingArrayAliasExtraCapacity(d: ts.VariableDeclaration, scope: ts.Block): number | null {
+    private nonEscapingArrayAliasExtraCapacity(
+        d: ts.VariableDeclaration,
+        scope: ts.Block,
+        visitedSymbols = new Set<ts.Symbol>(),
+    ): number | null {
         if (!ts.isIdentifier(d.name)) return null;
         const sym = this.symbolForIdentifier(d.name);
         if (!sym) return null;
+        if (visitedSymbols.has(sym)) return null;
+        visitedSymbols.add(sym);
         let safe = true;
         let extraCapacity = 0;
         const visit = (n: ts.Node): void => {
@@ -20587,7 +20616,7 @@ class Emitter {
             }
             if (ts.isIdentifier(n) && this.checker.getSymbolAtLocation(n) === sym) {
                 if (n === d.name) return;
-                const useCapacity = this.nonEscapingArrayAliasUseExtraCapacity(n, scope);
+                const useCapacity = this.nonEscapingArrayAliasUseExtraCapacity(n, scope, visitedSymbols);
                 if (useCapacity === null) {
                     safe = false;
                     return;
@@ -20598,20 +20627,43 @@ class Emitter {
             ts.forEachChild(n, visit);
         };
         visit(scope);
+        visitedSymbols.delete(sym);
         return safe ? extraCapacity : null;
     }
 
-    private nonEscapingArrayAliasUseIsSafe(n: ts.Identifier, scope: ts.Block): boolean {
-        return this.nonEscapingArrayAliasUseExtraCapacity(n, scope) !== null;
+    private nonEscapingArrayAliasUseIsSafe(
+        n: ts.Identifier,
+        scope: ts.Block,
+        visitedSymbols = new Set<ts.Symbol>(),
+    ): boolean {
+        return this.nonEscapingArrayAliasUseExtraCapacity(n, scope, visitedSymbols) !== null;
     }
 
-    private nonEscapingArrayAliasUseExtraCapacity(n: ts.Identifier, scope: ts.Block): number | null {
+    private nonEscapingArrayAliasUseExtraCapacity(
+        n: ts.Identifier,
+        scope: ts.Block,
+        visitedSymbols: Set<ts.Symbol>,
+    ): number | null {
         const parent = n.parent;
         if (
             ts.isVariableDeclaration(parent) &&
             parent.initializer === n
         ) {
-            return this.nonEscapingArrayAliasExtraCapacity(parent, scope);
+            return this.nonEscapingArrayAliasExtraCapacity(parent, scope, visitedSymbols);
+        }
+        if (
+            ts.isBinaryExpression(parent) &&
+            parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            parent.right === n &&
+            ts.isIdentifier(parent.left)
+        ) {
+            const sym = this.checker.getSymbolAtLocation(parent.left);
+            if (!sym?.valueDeclaration || !ts.isVariableDeclaration(sym.valueDeclaration)) {
+                return null;
+            }
+            const stmt = sym.valueDeclaration.parent.parent;
+            if (stmt?.parent !== scope) return null;
+            return this.nonEscapingArrayAliasExtraCapacity(sym.valueDeclaration, scope, visitedSymbols);
         }
         if (
             ts.isBinaryExpression(parent) &&
