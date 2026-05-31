@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE now prunes unused callable `Object(...)` and Error-family constructor calls when their operands are side-effect-free and non-throwing. Test: `generated_c_dce_static_builtins`.
 - Process stdio streams now expose bounded `_readableState` for `stdin` and `_writableState` for `stdout` / `stderr` with inert queue/state metadata objects. Test: `process_stdio_state_objects`.
 - Extended the narrow lazy generator lowering to resume across simple `do...while` loop suspension points, including loop-local `break`. Test: `generator_lazy_do_while`.
 - Proxy `getOwnPropertyDescriptor` result validation now rejects trap descriptors that report non-configurable writable object or array target data properties as non-writable, including omitted `writable` fields. Test: `proxy_descriptor_writable_invariants`.

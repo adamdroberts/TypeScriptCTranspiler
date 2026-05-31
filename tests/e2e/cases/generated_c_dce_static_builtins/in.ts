@@ -6,5 +6,8 @@ const boxedObject = new (Object as any)({ dead_dce_new_object_static: true });
 const boxedString = new (String as any)("dead_dce_new_string_static");
 const boxedNumber = new (Number as any)("987654321");
 const boxedBoolean = new (Boolean as any)("dead_dce_new_boolean_static");
+const callableObject = Object({ dead_dce_callable_object_static: true });
+const callableError = Error("dead_dce_callable_error_static");
+const callableTypeError = TypeError("dead_dce_callable_type_error_static");
 
 console.log("kept static dce builtins");

@@ -265,6 +265,7 @@ interface Object {
 type ObjectEntry<T, K = string> = [K, T];
 type Record<K extends string | number | symbol, T> = { [P in K]: T };
 interface ObjectConstructor {
+    (value?: any, ...ignored: any[]): any;
     readonly prototype: Object;
     assign<T, U>(target: T, source: U): T & U;
     assign<T, U, V>(target: T, source1: U, source2: V): T & U & V;

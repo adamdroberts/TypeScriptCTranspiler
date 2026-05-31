@@ -6997,6 +6997,12 @@ class Emitter {
                     this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
                 );
         }
+        if (name === "Object") {
+            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+                Array.from(call.arguments).every((arg) =>
+                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                );
+        }
         if (name === "String" || name === "Number" || name === "Boolean") {
             return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
                 this.isSideEffectFreePrimitiveCallableConstructorArgs(call.arguments, seenConsts);
@@ -7046,6 +7052,28 @@ class Emitter {
         if (name === "AggregateError") {
             return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
                 this.isSideEffectFreeAggregateErrorConstructorArgs(call.arguments, seenConsts);
+        }
+        const pureErrorConstructors = new Set([
+            "Error",
+            "TypeError",
+            "RangeError",
+            "SyntaxError",
+            "ReferenceError",
+            "EvalError",
+            "URIError",
+        ]);
+        if (pureErrorConstructors.has(name)) {
+            const errorArgs = Array.from(call.arguments);
+            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+                (
+                    errorArgs.length === 0 ||
+                    (
+                        this.isSideEffectFreePrimitiveNumberCoercion(errorArgs[0]!, seenConsts) &&
+                        errorArgs.slice(1).every((arg) =>
+                            this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                        )
+                    )
+                );
         }
         if (name === "Symbol") {
             return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
