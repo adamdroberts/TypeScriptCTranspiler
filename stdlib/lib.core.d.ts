@@ -690,6 +690,24 @@ interface ProcessHrtime {
     (time?: number[], ...ignored: any[]): number[];
     bigint(...ignored: any[]): bigint;
 }
+interface ProcessReadableState {
+    readonly highWaterMark: number;
+    readonly length: number;
+    readonly objectMode: boolean;
+    readonly ended: boolean;
+    readonly flowing: any;
+    readonly destroyed: boolean;
+    readonly errored: any;
+}
+interface ProcessWritableState {
+    readonly highWaterMark: number;
+    readonly length: number;
+    readonly objectMode: boolean;
+    readonly ended: boolean;
+    readonly finished: boolean;
+    readonly destroyed: boolean;
+    readonly errored: any;
+}
 interface ProcessWritableStream {
     readonly closed: boolean;
     readonly destroyed: boolean;
@@ -704,6 +722,7 @@ interface ProcessWritableStream {
     readonly writableHighWaterMark: number;
     readonly writableLength: number;
     readonly writableNeedDrain: boolean;
+    readonly _writableState: ProcessWritableState;
     addListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     cork(...ignored: any[]): void;
     end(callback?: () => void, ...ignored: any[]): void;
@@ -730,6 +749,7 @@ interface ProcessReadableStream {
     readonly readableFlowing: any;
     readonly readableHighWaterMark: number;
     readonly readableLength: number;
+    readonly _readableState: ProcessReadableState;
     addListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;

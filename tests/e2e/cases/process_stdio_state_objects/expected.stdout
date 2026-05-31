@@ -1,0 +1,4 @@
+readable: 65536 0 false false true false true
+writable: 65536 0 false false false false true
+stderr: 65536 0 false false
+default: 0 65536

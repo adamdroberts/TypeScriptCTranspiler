@@ -12150,6 +12150,7 @@ class Emitter {
             case "readableFlowing":
             case "readableLength":
             case "readableHighWaterMark":
+            case "_readableState":
                 return streamName === "stdin";
             case "writable":
                 return streamName !== "stdin";
@@ -12159,6 +12160,7 @@ class Emitter {
             case "writableLength":
             case "writableNeedDrain":
             case "writableHighWaterMark":
+            case "_writableState":
                 return streamName !== "stdin";
             default:
                 return false;
@@ -50422,6 +50424,22 @@ class Emitter {
                 case "readableHighWaterMark":
                     if (stdioStreamName === "stdin") return { c: "65536.0", ty: T_NUMBER };
                     break;
+                case "_readableState":
+                    if (stdioStreamName === "stdin") {
+                        return {
+                            c: `({ tsc_object_t* obj = tsc_object_new(); ` +
+                                `tsc_object_set(obj, tsc_str_from_lit("highWaterMark", 13), tsc_value_num(65536.0)); ` +
+                                `tsc_object_set(obj, tsc_str_from_lit("length", 6), tsc_value_num(0.0)); ` +
+                                `tsc_object_set(obj, tsc_str_from_lit("objectMode", 10), tsc_value_bool(false)); ` +
+                                `tsc_object_set(obj, tsc_str_from_lit("ended", 5), tsc_value_bool(false)); ` +
+                                `tsc_object_set(obj, tsc_str_from_lit("flowing", 7), tsc_value_null()); ` +
+                                `tsc_object_set(obj, tsc_str_from_lit("destroyed", 9), tsc_value_bool(false)); ` +
+                                `tsc_object_set(obj, tsc_str_from_lit("errored", 7), tsc_value_null()); ` +
+                                `tsc_value_object(obj); })`,
+                            ty: T_VALUE,
+                        };
+                    }
+                    break;
                 case "writable":
                     if (stdioStreamName !== "stdin") return { c: "true", ty: T_BOOLEAN };
                     break;
@@ -50441,6 +50459,25 @@ class Emitter {
                     break;
                 case "writableHighWaterMark":
                     if (stdioStreamName !== "stdin") return { c: "65536.0", ty: T_NUMBER };
+                    break;
+                case "_writableState":
+                    if (stdioStreamName !== "stdin") {
+                        const endedFn = stdioStreamName === "stdout"
+                            ? "tsc_process_stdout_writable_ended()"
+                            : "tsc_process_stderr_writable_ended()";
+                        return {
+                            c: `({ tsc_object_t* obj = tsc_object_new(); ` +
+                                `tsc_object_set(obj, tsc_str_from_lit("highWaterMark", 13), tsc_value_num(65536.0)); ` +
+                                `tsc_object_set(obj, tsc_str_from_lit("length", 6), tsc_value_num(0.0)); ` +
+                                `tsc_object_set(obj, tsc_str_from_lit("objectMode", 10), tsc_value_bool(false)); ` +
+                                `tsc_object_set(obj, tsc_str_from_lit("ended", 5), tsc_value_bool(${endedFn})); ` +
+                                `tsc_object_set(obj, tsc_str_from_lit("finished", 8), tsc_value_bool(${endedFn})); ` +
+                                `tsc_object_set(obj, tsc_str_from_lit("destroyed", 9), tsc_value_bool(false)); ` +
+                                `tsc_object_set(obj, tsc_str_from_lit("errored", 7), tsc_value_null()); ` +
+                                `tsc_value_object(obj); })`,
+                            ty: T_VALUE,
+                        };
+                    }
                     break;
             }
         }
