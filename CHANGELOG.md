@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Proxy handler validation now accepts arrays and functions in addition to standard objects. Test: `proxy_handler_types`.
 - Manual computed `[Symbol.iterator]()` invocations are supported for typed arrays, strings, Sets, Maps, generator results, custom iterable classes, and custom iterator objects, allowing manual iterator protocol navigation. Test: `manual_symbol_iterator`.
 - Implemented immediate-settled callback and promise forms of `dns.resolve4` and `dns.promises.resolve4` using host resolver behavior for resolving IPv4 addresses. Test: `dns_resolve4`.
 - `process.stdin.readableHighWaterMark` and `process.stdout.writableHighWaterMark` / `process.stderr.writableHighWaterMark` now expose standard stream metadata properties in the bounded process stdio stream subset. Test: `process_stdio_high_water_mark`.
