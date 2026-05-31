@@ -288,6 +288,14 @@ bool tsc_crypto_timing_safe_equal(const struct tsc_buffer* a, const struct tsc_b
 tsc_hash_t* tsc_hash_update(tsc_hash_t* h, const tsc_str_t* data);
 tsc_hash_t* tsc_hash_update_buffer(tsc_hash_t* h, const struct tsc_buffer* data);
 tsc_str_t* tsc_hash_digest(tsc_hash_t* h, const tsc_str_t* encoding);
+
+typedef struct tsc_hmac tsc_hmac_t;
+tsc_hmac_t* tsc_crypto_create_hmac_str(const tsc_str_t* algorithm, const tsc_str_t* key);
+tsc_hmac_t* tsc_crypto_create_hmac_buffer(const tsc_str_t* algorithm, const struct tsc_buffer* key);
+tsc_hmac_t* tsc_hmac_update(tsc_hmac_t* h, const tsc_str_t* data);
+tsc_hmac_t* tsc_hmac_update_buffer(tsc_hmac_t* h, const struct tsc_buffer* data);
+tsc_str_t* tsc_hmac_digest(tsc_hmac_t* h, const tsc_str_t* encoding);
+struct tsc_buffer* tsc_hmac_digest_buffer(tsc_hmac_t* h, const tsc_str_t* encoding);
 struct tsc_buffer* tsc_child_process_exec_sync(const tsc_str_t* command, const tsc_str_t* cwd, const tsc_str_t* input, const struct tsc_array* env, const tsc_str_t* shell, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal);
 struct tsc_buffer* tsc_child_process_exec_file_sync(const tsc_str_t* file, const struct tsc_array* args, const tsc_str_t* cwd, const tsc_str_t* input, const struct tsc_array* env, const tsc_str_t* shell, const tsc_str_t* argv0, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal);
 tsc_value_t tsc_child_process_spawn_sync(const tsc_str_t* file, const struct tsc_array* args, const tsc_str_t* cwd, const tsc_str_t* input, const struct tsc_array* env, const tsc_str_t* shell, const tsc_str_t* argv0, bool pipe_stdin, bool ignore_stdin, bool capture_stdout, bool capture_stderr, bool inherit_stdout, bool inherit_stderr, bool detached, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal);

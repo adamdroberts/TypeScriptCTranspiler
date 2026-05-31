@@ -1,0 +1,7 @@
+sha256 string-key hex: 095d5a21fe6d0646db223fdf3de6436bb8dfb2fab0b51677ecf6441fcf5f2a67
+sha1 buffer-key base64: QzUzZf+DMEiYg6B8V/VCCG7M8MY=
+sha512 string-key buffer-digest: true 064ff6e031f93bd1
+explicit hex digest: 9a1d65ce36eff2c044ecec4ee20dfdb1a682a87071d93919df715f2169c157e0
+named import: c1140fda2a532b4c7aa73aff3a2ff45f8d2ddc000b67364b1e4fbb7154c78642
+namespace import: nThHDx8VfiRQk3zYyMbcOp61
+default digest: 9a1d65ce36eff2c0

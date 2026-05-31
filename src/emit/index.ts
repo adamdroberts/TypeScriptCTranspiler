@@ -27,6 +27,7 @@ import {
     T_FS_DIRENT,
     T_FS_STATS,
     T_HASH,
+    T_HMAC,
     T_NUMBER,
     T_NUMBER_INT,
     T_REGEXP,
@@ -2471,9 +2472,16 @@ class Emitter {
         args: ts.NodeArray<ts.Expression>,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
-        return method === "createHash" &&
-            args.length === 1 &&
-            this.isSideEffectFreeCryptoHashAlgorithm(args[0]!, seenConsts);
+        if (method === "createHash") {
+            return args.length === 1 &&
+                this.isSideEffectFreeCryptoHashAlgorithm(args[0]!, seenConsts);
+        }
+        if (method === "createHmac") {
+            return args.length === 2 &&
+                this.isSideEffectFreeCryptoHashAlgorithm(args[0]!, seenConsts) &&
+                (this.isSideEffectFreeStringCoercion(args[1]!, seenConsts) || this.isSideEffectFreeFreshBufferOperand(args[1]!, seenConsts));
+        }
+        return false;
     }
 
     private isSideEffectFreePrimitiveCryptoCall(
@@ -2520,7 +2528,7 @@ class Emitter {
         ) {
             const recv = unwrapped.expression.expression;
             const method = unwrapped.expression.name.text;
-            if (method === "createHash" && ts.isIdentifier(recv) && this.isCryptoModuleIdentifier(recv)) {
+            if ((method === "createHash" || method === "createHmac") && ts.isIdentifier(recv) && this.isCryptoModuleIdentifier(recv)) {
                 return this.isSideEffectFreeCryptoCall(method, unwrapped.arguments, seenConsts);
             }
             if (method === "update") {
@@ -25435,6 +25443,7 @@ class Emitter {
             case "eventemitter":
             case "regexp":
             case "hash":
+            case "hmac":
             case "url":
             case "urlsearchparams":
             case "date":
@@ -26229,7 +26238,7 @@ class Emitter {
                     );
                 }
                 const pointerKinds: readonly CType["kind"][] = [
-                    "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "urlsearchparams", "date", "error", "buffer", "textencoder", "textdecoder", "fsstats", "fsdirent", "function",
+                    "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "textencoder", "textdecoder", "fsstats", "fsdirent", "function",
                 ];
                 if (pointerKinds.includes(left.ty.kind)) {
                     const tv = this.freshTemp("_nc");
@@ -27264,7 +27273,7 @@ class Emitter {
         }
         // Compare pointer-valued types (array, class, map, set, regexp, string) to null.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "urlsearchparams", "date", "error", "buffer", "textencoder", "textdecoder", "fsstats", "fsdirent", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "textencoder", "textdecoder", "fsstats", "fsdirent", "function",
         ];
         const leftIsNull = left.ty.kind === "void";
         const rightIsNull = right.ty.kind === "void";
@@ -27767,7 +27776,7 @@ class Emitter {
         if (streamNamed) {
             return this.emitStreamCall(call, streamNamed);
         }
-        const cryptoNamed = ["createHash", "randomBytes", "randomUUID", "timingSafeEqual"]
+        const cryptoNamed = ["createHash", "createHmac", "randomBytes", "randomUUID", "timingSafeEqual"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["crypto", "node:crypto"], exported));
         if (cryptoNamed) {
             return this.emitCryptoCall(call, cryptoNamed);
@@ -30329,6 +30338,8 @@ class Emitter {
             return this.emitRegexpMethod(call, recv, memberName);
         if (recv.ty.kind === "hash")
             return this.emitHashMethod(call, recv, memberName);
+        if (recv.ty.kind === "hmac")
+            return this.emitHmacMethod(call, recv, memberName);
         if (recv.ty.kind === "url")
             return this.emitUrlMethod(call, recv, memberName);
         if (recv.ty.kind === "urlsearchparams")
@@ -40112,6 +40123,35 @@ class Emitter {
                 ([algorithm]) => `tsc_crypto_create_hash(${algorithm})`,
             );
         }
+        if (name === "createHmac") {
+            if (call.arguments.length < 2)
+                unsupported(call, "crypto.createHmac expects at least 2 args");
+            const alg = this.emitExpr(call.arguments[0]!);
+            const key = this.emitExpr(call.arguments[1]!);
+            if (key.ty.kind === "string") {
+                return this.emitSequencedExpr(
+                    T_HMAC,
+                    [
+                        { value: alg, target: T_STRING, node: call.arguments[0]! },
+                        { value: key, target: T_STRING, node: call.arguments[1]! },
+                        ...this.ignoredArgumentSpecs(call.arguments, 2),
+                    ],
+                    ([algorithm, keyArg]) => `tsc_crypto_create_hmac_str(${algorithm}, ${keyArg})`,
+                );
+            } else if (key.ty.kind === "buffer") {
+                return this.emitSequencedExpr(
+                    T_HMAC,
+                    [
+                        { value: alg, target: T_STRING, node: call.arguments[0]! },
+                        { value: key, target: T_BUFFER, node: call.arguments[1]! },
+                        ...this.ignoredArgumentSpecs(call.arguments, 2),
+                    ],
+                    ([algorithm, keyArg]) => `tsc_crypto_create_hmac_buffer(${algorithm}, ${keyArg})`,
+                );
+            } else {
+                unsupported(call.arguments[1]!, "crypto.createHmac key must be a string or Buffer");
+            }
+        }
         if (name === "randomBytes") {
             if (call.arguments.length < 1)
                 unsupported(call, "crypto.randomBytes expects 1 arg");
@@ -40154,7 +40194,7 @@ class Emitter {
                 ([left, right]) => `tsc_crypto_timing_safe_equal(${left}, ${right})`,
             );
         }
-        unsupported(call, `crypto.${name} (supported: createHash, randomBytes, randomUUID, timingSafeEqual)`);
+        unsupported(call, `crypto.${name} (supported: createHash, createHmac, randomBytes, randomUUID, timingSafeEqual)`);
     }
 
     private validateCryptoRandomUUIDOptions(options: ts.Expression, label: string): void {
@@ -40235,6 +40275,70 @@ class Emitter {
                 return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Object");
         }
         unsupported(call, `Hash.${method} (only update/digest are supported)`);
+    }
+
+    private emitHmacMethod(
+        call: ts.CallExpression,
+        recv: EmitResult,
+        method: string,
+    ): EmitResult {
+        const args = call.arguments;
+        switch (method) {
+            case "update": {
+                if (args.length < 1) unsupported(call, "Hmac.update expects 1 arg");
+                const data = this.emitExpr(args[0]!);
+                if (data.ty.kind === "buffer") {
+                    return this.emitSequencedExpr(
+                        recv.ty,
+                        [
+                            { value: recv },
+                            { value: data },
+                            ...this.ignoredArgumentSpecs(args, 1),
+                        ],
+                        ([hmac, buffer]) => `tsc_hmac_update_buffer(${hmac}, ${buffer})`,
+                    );
+                }
+                if (data.ty.kind !== "string") unsupported(args[0]!, "Hmac.update expects string or Buffer");
+                return this.emitSequencedExpr(
+                    recv.ty,
+                    [
+                        { value: recv },
+                        { value: data, target: T_STRING, node: args[0]! },
+                        ...this.ignoredArgumentSpecs(args, 1),
+                    ],
+                    ([hmac, input]) => `tsc_hmac_update(${hmac}, ${input})`,
+                );
+            }
+            case "digest": {
+                const specs: SequencedCallArg[] = [{ value: recv }];
+                const hasEncoding = !!args[0] && !this.isUndefinedExpression(args[0]);
+                if (hasEncoding) {
+                    specs.push({ value: this.emitExpr(args[0]), target: T_STRING, node: args[0] });
+                }
+                specs.push(...this.ignoredArgumentSpecs(args, 1));
+                const encodingText = hasEncoding ? this.sideEffectFreeStringLiteralText(args[0]!, new Set()) : null;
+                const isBuffer = encodingText === "buffer";
+                return this.emitSequencedExpr(
+                    isBuffer ? T_BUFFER : T_STRING,
+                    specs,
+                    (vals) => {
+                        const encodingArg = hasEncoding ? vals[1]! : `tsc_str_from_lit("hex", 3)`;
+                        if (isBuffer) {
+                            return `tsc_hmac_digest_buffer(${vals[0]}, ${encodingArg})`;
+                        } else {
+                            return `tsc_hmac_digest(${vals[0]}, ${encodingArg})`;
+                        }
+                    },
+                );
+            }
+            case "hasOwnProperty":
+            case "propertyIsEnumerable":
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Object");
+        }
+        unsupported(call, `Hmac.${method} (only update/digest are supported)`);
     }
 
     private emitBufferStatic(call: ts.CallExpression, name: string): EmitResult {
@@ -41846,7 +41950,8 @@ class Emitter {
             mapped.kind === "date" ||
             mapped.kind === "url" ||
             mapped.kind === "urlsearchparams" ||
-            mapped.kind === "hash";
+            mapped.kind === "hash" ||
+            mapped.kind === "hmac";
         const emptyEnumerableBuiltinObjectArg =
             emptyOwnBuiltinObjectArg ||
             mapped.kind === "regexp" ||
@@ -44867,7 +44972,8 @@ class Emitter {
                     mapped.kind === "date" ||
                     mapped.kind === "url" ||
                     mapped.kind === "urlsearchparams" ||
-                    mapped.kind === "hash"
+                    mapped.kind === "hash" ||
+                    mapped.kind === "hmac"
                 ) {
                     const key = this.emitExpr(args[1]!);
                     return this.emitSequencedExpr(T_VALUE, [
@@ -44995,7 +45101,8 @@ class Emitter {
                     mapped.kind === "date" ||
                     mapped.kind === "url" ||
                     mapped.kind === "urlsearchparams" ||
-                    mapped.kind === "hash"
+                    mapped.kind === "hash" ||
+                    mapped.kind === "hmac"
                 ) {
                     const target = this.emitExpr(args[0]!);
                     return this.emitSequencedExpr(arrayType(T_STRING), [{ value: target, node: args[0]! }, ...ignored], ([t]) =>
@@ -45134,6 +45241,7 @@ class Emitter {
             case "url":
             case "urlsearchparams":
             case "hash":
+            case "hmac":
             case "regexp":
             case "error":
             case "fsstats":
@@ -47313,7 +47421,7 @@ class Emitter {
         // null (void) → any pointer type: emit typed NULL. Check before the
         // string-coerce branch since string is a pointer type too.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "url", "urlsearchparams", "date", "error", "buffer", "fsstats", "fsdirent", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "fsstats", "fsdirent", "function",
         ];
         if (r.ty.kind === "void" && pointerKinds.includes(target.kind)) {
             return `((${target.c})NULL)`;
@@ -47529,7 +47637,7 @@ function canBoxArrayFindElement(t: CType): boolean {
 
 function isPointerKind(t: CType): boolean {
     const pointerKinds: readonly CType["kind"][] = [
-        "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "url", "urlsearchparams", "date", "error", "buffer", "fsstats", "fsdirent", "function",
+        "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "fsstats", "fsdirent", "function",
     ];
     return pointerKinds.includes(t.kind);
 }

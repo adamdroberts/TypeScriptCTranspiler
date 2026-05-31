@@ -40,6 +40,143 @@ tsc_hash_t* tsc_crypto_create_hash(const tsc_str_t* algorithm) {
     return h;
 }
 
+/* ---------------- hmac ---------------- */
+
+struct tsc_hmac {
+    const EVP_MD* md;
+    HMAC_CTX* ctx;
+    bool finalized;
+    size_t digest_len;
+    unsigned char digest[EVP_MAX_MD_SIZE];
+};
+
+tsc_hmac_t* tsc_crypto_create_hmac_str(const tsc_str_t* algorithm, const tsc_str_t* key) {
+    const EVP_MD* md = NULL;
+    if (str_lit_eq(algorithm, "sha1")) {
+        md = EVP_sha1();
+    } else if (str_lit_eq(algorithm, "sha256")) {
+        md = EVP_sha256();
+    } else if (str_lit_eq(algorithm, "sha512")) {
+        md = EVP_sha512();
+    } else {
+        tsc_throw_str(tsc_str_from_cstr("crypto.createHmac: only sha1, sha256, and sha512 are supported"));
+    }
+
+    tsc_hmac_t* h = (tsc_hmac_t*)TSC_GC_MALLOC(sizeof(tsc_hmac_t));
+    h->md = md;
+    h->ctx = HMAC_CTX_new();
+    h->finalized = false;
+    memset(h->digest, 0, sizeof h->digest);
+    int digest_size = EVP_MD_size(md);
+    if (!h->ctx || digest_size <= 0 || (size_t)digest_size > sizeof h->digest) {
+        tsc_panic("crypto.createHmac: could not initialize context");
+    }
+    h->digest_len = (size_t)digest_size;
+
+    const void* key_data = key ? key->data : NULL;
+    int key_len = key ? (int)key->len : 0;
+    if (HMAC_Init_ex(h->ctx, key_data, key_len, h->md, NULL) != 1) {
+        HMAC_CTX_free(h->ctx);
+        h->ctx = NULL;
+        tsc_panic("crypto.createHmac: could not initialize hmac");
+    }
+    return h;
+}
+
+tsc_hmac_t* tsc_crypto_create_hmac_buffer(const tsc_str_t* algorithm, const tsc_buffer_t* key) {
+    const EVP_MD* md = NULL;
+    if (str_lit_eq(algorithm, "sha1")) {
+        md = EVP_sha1();
+    } else if (str_lit_eq(algorithm, "sha256")) {
+        md = EVP_sha256();
+    } else if (str_lit_eq(algorithm, "sha512")) {
+        md = EVP_sha512();
+    } else {
+        tsc_throw_str(tsc_str_from_cstr("crypto.createHmac: only sha1, sha256, and sha512 are supported"));
+    }
+
+    tsc_hmac_t* h = (tsc_hmac_t*)TSC_GC_MALLOC(sizeof(tsc_hmac_t));
+    h->md = md;
+    h->ctx = HMAC_CTX_new();
+    h->finalized = false;
+    memset(h->digest, 0, sizeof h->digest);
+    int digest_size = EVP_MD_size(md);
+    if (!h->ctx || digest_size <= 0 || (size_t)digest_size > sizeof h->digest) {
+        tsc_panic("crypto.createHmac: could not initialize context");
+    }
+    h->digest_len = (size_t)digest_size;
+
+    const void* key_data = key ? key->data : NULL;
+    int key_len = key ? (int)key->len : 0;
+    if (HMAC_Init_ex(h->ctx, key_data, key_len, h->md, NULL) != 1) {
+        HMAC_CTX_free(h->ctx);
+        h->ctx = NULL;
+        tsc_panic("crypto.createHmac: could not initialize hmac");
+    }
+    return h;
+}
+
+void hmac_update_bytes(tsc_hmac_t* h, const void* data, size_t len) {
+    if (h->finalized) return;
+    if (len == 0) return;
+    if (!h->ctx || HMAC_Update(h->ctx, (const unsigned char*)data, len) != 1) {
+        tsc_panic("Hmac.update: could not update hmac");
+    }
+}
+
+tsc_hmac_t* tsc_hmac_update(tsc_hmac_t* h, const tsc_str_t* data) {
+    hmac_update_bytes(h, data->data, data->len);
+    return h;
+}
+
+tsc_hmac_t* tsc_hmac_update_buffer(tsc_hmac_t* h, const tsc_buffer_t* data) {
+    if (data) hmac_update_bytes(h, data->data, data->len);
+    return h;
+}
+
+void hmac_finalize(tsc_hmac_t* h) {
+    if (!h->finalized) {
+        unsigned int digest_len = 0;
+        if (!h->ctx || HMAC_Final(h->ctx, h->digest, &digest_len) != 1) {
+            tsc_panic("Hmac.digest: could not finalize hmac");
+        }
+        h->digest_len = (size_t)digest_len;
+        HMAC_CTX_free(h->ctx);
+        h->ctx = NULL;
+        h->finalized = true;
+    }
+}
+
+tsc_str_t* tsc_hmac_digest(tsc_hmac_t* h, const tsc_str_t* encoding) {
+    bool use_hex = str_lit_eq(encoding, "hex");
+    bool use_base64 = str_lit_eq(encoding, "base64");
+    if (!use_hex && !use_base64) {
+        tsc_throw_str(tsc_str_from_cstr("Hmac.digest: only hex and base64 encodings are supported"));
+    }
+    hmac_finalize(h);
+    if (use_base64) {
+        return str_from_base64_bytes(h->digest, h->digest_len);
+    }
+    static const char hex[] = "0123456789abcdef";
+    tsc_str_t* out = str_alloc(h->digest_len * 2);
+    char* p = (char*)out->data;
+    for (size_t i = 0; i < h->digest_len; i++) {
+        p[i * 2] = hex[h->digest[i] >> 4];
+        p[i * 2 + 1] = hex[h->digest[i] & 0x0f];
+    }
+    return out;
+}
+
+tsc_buffer_t* tsc_hmac_digest_buffer(tsc_hmac_t* h, const tsc_str_t* encoding) {
+    if (!str_lit_eq(encoding, "buffer")) {
+        tsc_throw_str(tsc_str_from_cstr("Hmac.digest: encoding must be 'buffer' when returning a Buffer"));
+    }
+    hmac_finalize(h);
+    tsc_buffer_t* out = tsc_buffer_alloc((double)h->digest_len, 0.0);
+    memcpy(out->data, h->digest, h->digest_len);
+    return out;
+}
+
 tsc_buffer_t* tsc_crypto_random_bytes(double size) {
     if (isnan(size) || isinf(size) || size < 0) {
         tsc_throw_str(tsc_str_from_cstr("crypto.randomBytes size must be a non-negative finite number"));

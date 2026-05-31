@@ -1645,8 +1645,16 @@ interface CryptoHash {
     update(data: string | Buffer, ...ignored: any[]): CryptoHash;
     digest(encoding?: "hex" | "base64", ...ignored: any[]): string;
 }
+interface CryptoHmac {
+    update(data: string | Buffer, ...ignored: any[]): CryptoHmac;
+    digest(): string;
+    digest(encoding: "hex" | "base64", ...ignored: any[]): string;
+    digest(encoding: "buffer", ...ignored: any[]): Buffer;
+    digest(encoding?: "hex" | "base64" | "buffer", ...ignored: any[]): string | Buffer;
+}
 interface Crypto {
     createHash(algorithm: CryptoHashAlgorithm, ...ignored: any[]): CryptoHash;
+    createHmac(algorithm: CryptoHashAlgorithm, key: string | Buffer, ...ignored: any[]): CryptoHmac;
     randomBytes(size: number, ...ignored: any[]): Buffer;
     randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
     timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
@@ -1654,6 +1662,7 @@ interface Crypto {
 declare const crypto: Crypto;
 declare module "crypto" {
     export function createHash(algorithm: CryptoHashAlgorithm, ...ignored: any[]): CryptoHash;
+    export function createHmac(algorithm: CryptoHashAlgorithm, key: string | Buffer, ...ignored: any[]): CryptoHmac;
     export function randomBytes(size: number, ...ignored: any[]): Buffer;
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
     export function timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
@@ -1662,6 +1671,7 @@ declare module "crypto" {
 }
 declare module "node:crypto" {
     export function createHash(algorithm: CryptoHashAlgorithm, ...ignored: any[]): CryptoHash;
+    export function createHmac(algorithm: CryptoHashAlgorithm, key: string | Buffer, ...ignored: any[]): CryptoHmac;
     export function randomBytes(size: number, ...ignored: any[]): Buffer;
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
     export function timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
