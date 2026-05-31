@@ -692,24 +692,7 @@ const tsc_object_prop_t* object_find_chain_prop(const tsc_object_t* o, const tsc
 }
 
 bool object_chain_contains(tsc_value_t prototype, const tsc_object_t* needle) {
-    while (value_is_box(prototype)) {
-        if (value_tag(prototype) == TSC_VALUE_TAG_OBJECT) {
-            const tsc_object_t* cur = (const tsc_object_t*)value_ptr(prototype);
-            if (cur == needle) return true;
-            prototype = cur->prototype;
-            continue;
-        }
-        if (value_tag(prototype) == TSC_VALUE_TAG_ARRAY) {
-            prototype = ((const tsc_array_t*)value_ptr(prototype))->prototype;
-            continue;
-        }
-        if (value_tag(prototype) == TSC_VALUE_TAG_FUNCTION) {
-            prototype = ((const tsc_function_identity_t*)value_ptr(prototype))->prototype;
-            continue;
-        }
-        break;
-    }
-    return false;
+    return tsc_value_chain_contains(prototype, tsc_value_object((tsc_object_t*)needle));
 }
 
 bool tsc_object_is_prototype_of(const tsc_object_t* prototype, const tsc_object_t* object) {

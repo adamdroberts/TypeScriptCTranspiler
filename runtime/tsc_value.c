@@ -925,6 +925,37 @@ bool tsc_value_is_prototype_of(tsc_value_t prototype, tsc_value_t object) {
     return false;
 }
 
+bool tsc_value_chain_contains(tsc_value_t prototype, tsc_value_t needle) {
+    if (!value_is_box(needle)) return false;
+    tsc_value_tag_t needle_tag = value_tag(needle);
+    if (
+        needle_tag != TSC_VALUE_TAG_OBJECT &&
+        needle_tag != TSC_VALUE_TAG_ARRAY &&
+        needle_tag != TSC_VALUE_TAG_FUNCTION
+    ) {
+        return false;
+    }
+    const void* needle_ptr = value_ptr(needle);
+    while (value_is_box(prototype)) {
+        tsc_value_tag_t tag = value_tag(prototype);
+        if (tag == needle_tag && value_ptr(prototype) == needle_ptr) return true;
+        if (tag == TSC_VALUE_TAG_OBJECT) {
+            prototype = ((const tsc_object_t*)value_ptr(prototype))->prototype;
+            continue;
+        }
+        if (tag == TSC_VALUE_TAG_ARRAY) {
+            prototype = ((const tsc_array_t*)value_ptr(prototype))->prototype;
+            continue;
+        }
+        if (tag == TSC_VALUE_TAG_FUNCTION) {
+            prototype = ((const tsc_function_identity_t*)value_ptr(prototype))->prototype;
+            continue;
+        }
+        break;
+    }
+    return false;
+}
+
 tsc_value_t tsc_value_get_prototype_of(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_get_prototype_of((tsc_object_t*)value_ptr(v));
@@ -1002,6 +1033,7 @@ bool tsc_value_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
         if (!value_is_valid_prototype(prototype)) return false;
         if (a->prototype == prototype) return true;
         if (!a->extensible) return false;
+        if (tsc_value_chain_contains(prototype, v)) return false;
         a->prototype = prototype;
         return true;
     }
@@ -1010,6 +1042,7 @@ bool tsc_value_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
         if (!value_is_valid_prototype(prototype)) return false;
         if (fn->prototype == prototype) return true;
         if (!fn->extensible) return false;
+        if (tsc_value_chain_contains(prototype, v)) return false;
         fn->prototype = prototype;
         return true;
     }
