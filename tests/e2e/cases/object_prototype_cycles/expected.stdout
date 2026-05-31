@@ -1,0 +1,8 @@
+array reflect cycle: false
+array object cycle: Object.setPrototypeOf failed
+function reflect cycle: false
+function object cycle: Object.setPrototypeOf failed
+array self cycle: false
+function self cycle: false
+array non-cycle: true ok
+function non-cycle: true ok

@@ -431,6 +431,7 @@ const tsc_object_t* object_prototype_object(const tsc_object_t* o);
 const tsc_object_prop_t* object_find_chain_prop(const tsc_object_t* o, const tsc_str_t* key);
 bool value_set_receiver_own_data(tsc_value_t receiver, tsc_str_t* key, tsc_value_t value);
 bool object_chain_contains(tsc_value_t prototype, const tsc_object_t* needle);
+bool tsc_value_chain_contains(tsc_value_t prototype, tsc_value_t needle);
 bool object_set_own_data(tsc_object_t* o, tsc_str_t* key, tsc_value_t value);
 bool value_set_receiver_own_data(tsc_value_t receiver, tsc_str_t* key, tsc_value_t value);
 bool value_json_omits_object_property(tsc_value_t v);
