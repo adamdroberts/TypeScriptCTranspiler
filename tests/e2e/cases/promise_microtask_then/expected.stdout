@@ -1,0 +1,6 @@
+sync: sync
+nextTick: sync,nextTick
+promise: sync,nextTick,promise
+microtask: sync,nextTick,promise,microtask
+timeout: sync,nextTick,promise,microtask,timeout
+immediate: sync,nextTick,promise,microtask,timeout,immediate

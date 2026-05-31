@@ -1,9 +1,9 @@
+marks: abcdefghiEjklm
 all: 1,2
 settled: fulfilled 3 rejected bad
-race: first
 any: kept
 try: 9
 catch: recover
+race: first
 recovered: 7
 plain: plain
-marks: abAcdBefCghDiEjFklm

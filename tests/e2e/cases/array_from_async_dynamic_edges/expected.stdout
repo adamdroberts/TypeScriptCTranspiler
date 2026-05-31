@@ -1,5 +1,5 @@
-null: Array.from source must not be null or undefined
+marks: a
 number: true 0 
 object: true 0 
 string: true 2 a|b
-marks: a
+null: Array.from source must not be null or undefined

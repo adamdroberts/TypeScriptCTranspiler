@@ -1,0 +1,3 @@
+{
+  "description": "fulfilled Promise.resolve.then callback runs through before-exit microtask queue ordering relative to process.nextTick, queueMicrotask, zero-delay timers, and setImmediate"
+}

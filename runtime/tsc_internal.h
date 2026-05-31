@@ -136,10 +136,18 @@ typedef enum {
     TSC_PROMISE_REJECTED,
 } tsc_promise_state_t;
 
+typedef struct {
+    void (*fn)(void*);
+    void* env;
+} tsc_promise_callback_t;
+
 struct tsc_promise {
     tsc_promise_state_t state;
     tsc_value_t result;
     void* ptr_result;
+    tsc_promise_callback_t* callbacks;
+    size_t callbacks_len;
+    size_t callbacks_cap;
 };
 
 typedef struct tsc_event_listener {

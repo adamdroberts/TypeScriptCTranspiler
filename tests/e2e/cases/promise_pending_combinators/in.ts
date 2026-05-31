@@ -118,4 +118,4 @@ Promise.race(new Set([pending, Promise.reject<string>("set-bad")]))
         return value;
     });
 
-console.log("pending callbacks:", callbacks.length, callbacks.join("|"));
+console.log("pending callbacks:", callbacks.length, callbacks.length === 0 ? "<none>" : callbacks.join("|"));

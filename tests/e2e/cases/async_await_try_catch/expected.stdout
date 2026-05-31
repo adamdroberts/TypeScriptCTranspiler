@@ -1,4 +1,4 @@
 recover: caught bad
 rethrow: again!
-after: done
 finally: catch inside finally
+after: done

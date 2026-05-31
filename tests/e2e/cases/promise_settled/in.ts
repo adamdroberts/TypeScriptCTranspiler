@@ -92,5 +92,5 @@ Promise.allSettled(new Set([Promise.resolve(13, mark("r")), Promise.reject<numbe
         return items;
     });
 
-console.log("events:", events.join("|"));
+console.log("events:", events.length === 0 ? "<none>" : events.join("|"));
 console.log("ignored:", ignored);

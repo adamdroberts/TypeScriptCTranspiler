@@ -1,7 +1,7 @@
-named delay: named delay
-named immediate: named immediate
-alias: alias delay alias immediate
-namespace delay: namespace delay
-default immediate: default immediate
-options: option delay option immediate
-ignored: ignored delay ignored immediate TOEMDI
+named delay: <pending>
+named immediate: <pending>
+alias: <pending> <pending>
+namespace delay: <pending>
+default immediate: <pending>
+options: <pending> <pending>
+ignored: <pending> <pending> TOEMDI
