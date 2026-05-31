@@ -1,0 +1,5 @@
+sync-end
+record: first 1
+inline: second 2
+zero-arg nextTick
+final order: eval:A:1|eval:B:2|sync-end|first:1|inline:second:2|zero
