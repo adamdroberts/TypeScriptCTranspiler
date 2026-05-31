@@ -5448,8 +5448,23 @@ function mathStaticFoldingDce(): string {
     // Ignored/extra arguments side-effect-free checks
     const math_abs_ignored_args = Math.abs(-5, "ignored_arg" as any) === 5 ? "kept_math_abs_ignored_args" : (console.log("dead_math_abs_ignored_args"), "dead_math_abs_ignored_args");
 
-    return math_abs_dead + " " + math_floor_dead + " " + math_ceil_dead + " " + math_trunc_dead + " " + math_min_dead + " " + math_max_dead + " " + math_abs_ignored_args;
+    // Math.sign static folding tests
+    const math_sign_pos_dead = Math.sign(5) === 1 ? "kept_math_sign_pos_branch" : (console.log("dead_math_sign_pos_branch"), "dead_math_sign_pos_branch");
+    const math_sign_neg_dead = Math.sign(-5) === -1 ? "kept_math_sign_neg_branch" : (console.log("dead_math_sign_neg_branch"), "dead_math_sign_neg_branch");
+    const math_sign_ignored_args = Math.sign(5, "ignored_arg" as any) === 1 ? "kept_math_sign_ignored_args" : (console.log("dead_math_sign_ignored_args"), "dead_math_sign_ignored_args");
+
+    // Math.sign conservative tests (should NOT fold, keeping branches)
+    const math_sign_zero_dynamic = Math.sign(0) === 0 ? "kept_math_sign_zero_dynamic" : (console.log("dead_math_sign_zero_branch"), "dead_math_sign_zero_branch");
+    const math_sign_nan_dynamic = Number.isNaN(Math.sign(NaN)) ? "kept_math_sign_nan_dynamic" : (console.log("dead_math_sign_nan_branch"), "dead_math_sign_nan_branch");
+    const math_sign_inf_dynamic = Math.sign(Infinity) === 1 ? "kept_math_sign_inf_dynamic" : (console.log("dead_math_sign_inf_branch"), "dead_math_sign_inf_branch");
+    let dynamic_num = 5;
+    const math_sign_dynamic = Math.sign(dynamic_num) === 1 ? "kept_math_sign_dynamic" : (console.log("dead_math_sign_dynamic_branch"), "dead_math_sign_dynamic_branch");
+
+    return math_abs_dead + " " + math_floor_dead + " " + math_ceil_dead + " " + math_trunc_dead + " " + math_min_dead + " " + math_max_dead + " " + math_abs_ignored_args + " " +
+        math_sign_pos_dead + " " + math_sign_neg_dead + " " + math_sign_ignored_args + " " +
+        math_sign_zero_dynamic + " " + math_sign_nan_dynamic + " " + math_sign_inf_dynamic + " " + math_sign_dynamic;
 }
+
 
 console.log(
     usedLocal(used_count),

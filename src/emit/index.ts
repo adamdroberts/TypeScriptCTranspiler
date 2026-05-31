@@ -13069,6 +13069,16 @@ class Emitter {
             }
             return Math.max(...args);
         }
+        if (method === "sign") {
+            if (expr.arguments.length < 1) return null;
+            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
+            if (arg === null) return null;
+            if (Number.isNaN(arg) || arg === 0 || !Number.isFinite(arg)) return null;
+            if (this.sideEffectFreeTypeofString(expr.arguments[0]!, seenConsts) !== "number") return null;
+            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
+                return Math.sign(arg);
+            }
+        }
         return null;
     }
 
@@ -13168,7 +13178,7 @@ class Emitter {
             if (
                 ts.isIdentifier(recv) &&
                 this.isUnshadowedGlobalIdentifier(recv, "Math") &&
-                (method === "abs" || method === "floor" || method === "ceil" || method === "trunc" || method === "min" || method === "max")
+                (method === "abs" || method === "floor" || method === "ceil" || method === "trunc" || method === "min" || method === "max" || method === "sign")
             ) {
                 return unwrapped.arguments.every((arg) => this.isSideEffectFreePrimitiveNumberCoercion(arg, seenConsts));
             }

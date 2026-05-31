@@ -6098,3 +6098,6 @@ dead_math_trunc_branch
 dead_math_min_branch
 dead_math_max_branch
 dead_math_abs_ignored_args
+dead_math_sign_pos_branch
+dead_math_sign_neg_branch
+dead_math_sign_ignored_args
