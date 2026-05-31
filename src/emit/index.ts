@@ -17324,7 +17324,8 @@ class Emitter {
         if (!assignment) return null;
         const right = ts.isObjectLiteralExpression(assignment.right)
             ? assignment.right
-            : this.commonJsIifeReturnedObjectLiteral(assignment.right);
+            : this.commonJsIifeReturnedObjectLiteral(assignment.right) ??
+                this.commonJsZeroArgFunctionReturnedObjectLiteral(assignment.right);
         if (!right) return null;
         for (const prop of right.properties) {
             if (ts.isSpreadAssignment(prop) && this.isCommonJsModuleExportsSpreadValue(prop.expression)) continue;
@@ -17391,6 +17392,54 @@ class Emitter {
         return ts.isObjectLiteralExpression(returned) ? returned : null;
     }
 
+    private commonJsZeroArgFunctionReturnedObjectLiteral(expr: ts.Expression): ts.ObjectLiteralExpression | null {
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isCallExpression(cur) || cur.arguments.length !== 0) return null;
+        let callee: ts.Expression = cur.expression;
+        while (ts.isParenthesizedExpression(callee)) callee = callee.expression;
+        if (!ts.isIdentifier(callee)) return null;
+        const sym = this.symbolForIdentifier(callee);
+        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        if (!decl || !ts.isFunctionDeclaration(decl)) return null;
+        if (decl.getSourceFile() !== cur.getSourceFile()) return null;
+        return this.commonJsZeroArgFunctionDeclarationReturnedObjectLiteral(decl);
+    }
+
+    private commonJsZeroArgFunctionDeclarationReturnedObjectLiteral(
+        decl: ts.FunctionDeclaration,
+    ): ts.ObjectLiteralExpression | null {
+        if (!decl.name || decl.parameters.length !== 0 || !decl.body) return null;
+        if (!ts.isSourceFile(decl.parent)) return null;
+        if (decl.body.statements.length !== 1) return null;
+        const stmt = decl.body.statements[0]!;
+        if (!ts.isReturnStatement(stmt) || !stmt.expression) return null;
+        let returned = stmt.expression;
+        while (ts.isParenthesizedExpression(returned)) returned = returned.expression;
+        return ts.isObjectLiteralExpression(returned) ? returned : null;
+    }
+
+    private commonJsObjectLiteralReturnedByExportedZeroArgFunction(
+        object: ts.ObjectLiteralExpression,
+    ): boolean {
+        const returnStmt = object.parent;
+        if (!returnStmt || !ts.isReturnStatement(returnStmt)) return false;
+        const body = returnStmt.parent;
+        const decl = body?.parent;
+        if (!body || !ts.isBlock(body) || !decl || !ts.isFunctionDeclaration(decl)) return false;
+        if (this.commonJsZeroArgFunctionDeclarationReturnedObjectLiteral(decl) !== object) return false;
+        for (const stmt of object.getSourceFile().statements) {
+            const assignment = this.commonJsModuleExportsValueAssignmentChain(stmt);
+            if (
+                assignment &&
+                this.commonJsZeroArgFunctionReturnedObjectLiteral(assignment.right) === object
+            ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private commonJsModuleExportsObjectAssignmentEntries(
         object: ts.ObjectLiteralExpression,
     ): CommonJsObjectAssignExportEntry[] {
@@ -17444,7 +17493,8 @@ class Emitter {
             ) {
                 const right = ts.isObjectLiteralExpression(parent.right)
                     ? parent.right
-                    : this.commonJsIifeReturnedObjectLiteral(parent.right);
+                    : this.commonJsIifeReturnedObjectLiteral(parent.right) ??
+                        this.commonJsZeroArgFunctionReturnedObjectLiteral(parent.right);
                 return right === object;
             }
             if (
@@ -17460,7 +17510,7 @@ class Emitter {
             }
             break;
         }
-        return false;
+        return this.commonJsObjectLiteralReturnedByExportedZeroArgFunction(object);
     }
 
     private commonJsObjectExportValueDeclaration(node: ts.Node): ts.Declaration | null {

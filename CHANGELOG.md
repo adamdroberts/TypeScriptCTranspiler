@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS package metadata now recognizes top-level zero-argument local factory functions that return static object literals in whole-value `module.exports = makeApi()` assignments. Test: `node_modules_commonjs_module_exports_local_factory_object`.
 - CommonJS package metadata now recognizes zero-argument IIFEs that return static object literals in whole-value `module.exports = ...` assignments. Test: `node_modules_commonjs_module_exports_iife_object`.
 - Added immediate-settled `fs.promises.statfs(path[, options])` support across `fs.promises`, `"fs/promises"`, and `"node:fs/promises"` using the existing POSIX statfs runtime subset. Test: `fs_promises_statfs`.
 - Object and Reflect `setPrototypeOf` now reject array and function prototype cycles instead of allowing cyclic prototype chains. Test: `object_prototype_cycles`.
