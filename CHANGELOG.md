@@ -6,6 +6,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 - Promise thenable assimilation now rejects delayed resolver self-resolution when a thenable later resolves with the Promise record returned by `Promise.resolve(thenable)`. Test: `promise_thenable_self_resolution`.
+- CommonJS package metadata now recognizes top-level zero-argument local arrow and function-expression factories that return static object literals in whole-value `module.exports = makeApi()` assignments. Test: `node_modules_commonjs_module_exports_local_factory_object`.
 - Generated-C DCE static boolean analysis now folds side-effect-free `Array.isArray(...)` calls over statically known array and primitive operands. Test: `generated_c_dce_const`.
 - Basic escape analysis now stack-allocates non-escaping typed array literals through same-block assignment alias chains such as `alias = values; second = alias; second.push(...)`. Test: `array_literal_stack_alloc_alias_assignment_direct`.
 - Generated-C DCE static `typeof` analysis now folds side-effect-free conditional, logical `&&`/`||`, and nullish `??` expression trees when the resulting operand type is statically known. Test: `generated_c_dce_const`.
