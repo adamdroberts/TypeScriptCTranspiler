@@ -1,0 +1,6 @@
+all dynamic: promise,thenable,plain,nested
+all set dynamic: set-promise,thenable,set-plain
+race dynamic: thenable
+any dynamic: thenable
+settled dynamic: fulfilled done rejected bad fulfilled plain
+settled set dynamic: fulfilled set-done rejected set-bad fulfilled set-plain
