@@ -1,0 +1,2 @@
+tsc_node_native_addon(tsc_str_from_lit("
+tsc_value_get_prop_cached(tsc_node_native_addon(

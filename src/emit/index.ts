@@ -27421,7 +27421,7 @@ class Emitter {
             if (nativeImported) {
                 const addon = this.emitNativeAddonValue(nativeImported.spec, expr.getSourceFile().fileName);
                 if (addon) {
-                    if (!nativeImported.exportName) return addon;
+                    if (!nativeImported.exportName || nativeImported.exportName === "default") return addon;
                     const key = nativeImported.exportName;
                     return {
                         c: `tsc_value_get_prop(${addon.c}, tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}))`,
