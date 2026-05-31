@@ -22433,6 +22433,11 @@ class Emitter {
             return !stmt.elseStatement || this.isValidLazyGeneratorStatement(stmt.elseStatement);
         }
 
+        if (ts.isWhileStatement(stmt)) {
+            return !this.nodeContainsYield(stmt.expression) &&
+                this.isValidLazyGeneratorStatement(stmt.statement);
+        }
+
         if (ts.isExpressionStatement(stmt) || ts.isVariableStatement(stmt) || ts.isReturnStatement(stmt)) {
             if (ts.isVariableStatement(stmt)) {
                 for (const decl of stmt.declarationList.declarations) {
@@ -22654,6 +22659,14 @@ class Emitter {
                 buf.open("else");
                 this.emitLazyGeneratorStmt(buf, stmt.elseStatement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
             }
+            buf.close();
+            return;
+        }
+
+        if (ts.isWhileStatement(stmt)) {
+            if (this.staticBooleanValue(stmt.expression) === false) return;
+            buf.open(`while (${this.emitBoolExpr(stmt.expression)})`);
+            this.emitLazyGeneratorStmt(buf, stmt.statement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
             buf.close();
             return;
         }

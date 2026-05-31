@@ -1558,6 +1558,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_locals` | lazy generator environments preserve simple locals across suspension points |
 | `generator_lazy_next_value` | lazy generators receive next(value) into simple suspended yield assignments |
 | `generator_lazy_return_yield` | lazy generators return the value sent into a final suspended yield |
+| `generator_lazy_while` | lazy generators resume across simple while-loop suspension points |
 | `generator_lazy_yield_expression` | lazy generators resume single suspended yield expressions |
 | `generator_lazy_yield_conditional` | lazy generators resume single suspended yield conditional expressions |
 | `generator_lazy_yield_logical` | lazy generators resume single suspended yield logical and nullish expressions |
