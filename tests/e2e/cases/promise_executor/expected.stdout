@@ -1,9 +1,9 @@
-fulfilled: made!
-rejected: bad
-recovered: 7
-thrown: explode
-thrown recovered: caught
-resolve before throw: kept
 idle: [object Promise]
 callbacks: 0
 events: made executor|reject executor|throw executor|resolve throw executor|idle executor
+rejected: bad
+thrown: explode
+resolve before throw: kept
+fulfilled: made!
+recovered: 7
+thrown recovered: caught

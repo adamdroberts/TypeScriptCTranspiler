@@ -62,10 +62,10 @@ timersPromises.setImmediate("ignored immediate", undefined, (ignoredOrder += "I"
     ignoredImmediate = value;
 });
 
-console.log("named delay:", namedDelay);
-console.log("named immediate:", namedImmediate);
-console.log("alias:", aliasDelay, aliasImmediate);
-console.log("namespace delay:", namespaceDelay);
-console.log("default immediate:", defaultImmediate);
-console.log("options:", optionDelay, optionImmediate);
-console.log("ignored:", ignoredDelay, ignoredImmediate, ignoredOrder);
+console.log("named delay:", namedDelay === "" ? "<pending>" : namedDelay);
+console.log("named immediate:", namedImmediate === "" ? "<pending>" : namedImmediate);
+console.log("alias:", aliasDelay === "" ? "<pending>" : aliasDelay, aliasImmediate === "" ? "<pending>" : aliasImmediate);
+console.log("namespace delay:", namespaceDelay === "" ? "<pending>" : namespaceDelay);
+console.log("default immediate:", defaultImmediate === "" ? "<pending>" : defaultImmediate);
+console.log("options:", optionDelay === "" ? "<pending>" : optionDelay, optionImmediate === "" ? "<pending>" : optionImmediate);
+console.log("ignored:", ignoredDelay === "" ? "<pending>" : ignoredDelay, ignoredImmediate === "" ? "<pending>" : ignoredImmediate, ignoredOrder);

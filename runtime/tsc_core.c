@@ -702,6 +702,16 @@ void tsc_drain_microtasks(void) {
     g_microtask_len = 0;
 }
 
+void tsc_drain_microtasks_and_next_ticks(void) {
+    while (g_next_tick_len > 0 || g_microtask_len > 0) {
+        if (g_next_tick_len > 0) {
+            tsc_process_drain_next_ticks();
+        } else {
+            tsc_drain_microtasks();
+        }
+    }
+}
+
 double tsc_set_immediate(tsc_immediate_fn_t fn, void* env) {
     if (!fn) return 0.0;
     if (g_immediate_len == g_immediate_cap) {
@@ -731,8 +741,7 @@ void tsc_drain_immediates(void) {
     while (idx < g_immediate_len) {
         tsc_immediate_entry_t entry = g_immediate_queue[idx++];
         if (!entry.canceled && entry.fn) entry.fn(entry.env);
-        tsc_process_drain_next_ticks();
-        tsc_drain_microtasks();
+        tsc_drain_microtasks_and_next_ticks();
     }
     g_immediate_len = 0;
 }
@@ -791,8 +800,7 @@ void tsc_drain_timeouts(void) {
                 g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ entry.fn, entry.env, entry.id, false, true };
             }
         }
-        tsc_process_drain_next_ticks();
-        tsc_drain_microtasks();
+        tsc_drain_microtasks_and_next_ticks();
     }
     g_timeout_len = 0;
 }

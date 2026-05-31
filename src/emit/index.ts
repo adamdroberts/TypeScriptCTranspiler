@@ -232,6 +232,8 @@ class Emitter {
     private accessorAdapters = new Map<string, string>();
     private promiseResolveAdapters = new Map<string, string>();
     private promiseRejectAdapters = new Map<string, string>();
+    private promiseThenAdapters = new Map<string, string>();
+    private promiseFinallyAdapters = new Map<string, string>();
     private promiseExecutorEnvDeclared = false;
     private commonJsExportGlobals = new Set<string>();
     private requireDestructureTypes = new Map<ts.Symbol, CType>();
@@ -14194,8 +14196,7 @@ class Emitter {
         for (const modId of this.graph.topoOrder) {
             out.line(`    mod_init_${modId}();`);
         }
-        out.line("    tsc_process_drain_next_ticks();");
-        out.line("    tsc_drain_microtasks();");
+        out.line("    tsc_drain_microtasks_and_next_ticks();");
         out.line("    tsc_drain_timeouts();");
         out.line("    tsc_drain_immediates();");
         out.line("    return 0;");
@@ -33800,6 +33801,197 @@ class Emitter {
         return name;
     }
 
+    private ensurePromiseThenAdapter(
+        call: ts.CallExpression,
+        recvType: CType,
+        fulfilledType: CType | null,
+        rejectedType: CType | null,
+        mappedType: CType,
+        node: ts.Expression,
+    ): string {
+        const key = `then:${this.typeKey(recvType)}:${fulfilledType ? this.typeKey(fulfilledType) : "null"}:${rejectedType ? this.typeKey(rejectedType) : "null"}:${this.typeKey(mappedType)}`;
+        const existing = this.promiseThenAdapters.get(key);
+        if (existing) return existing;
+
+        const name = `tsc_promise_then_callback_${this.promiseThenAdapters.size}`;
+        this.promiseThenAdapters.set(key, name);
+
+        const envType = `${name}_env_t`;
+        const preparedFulfilled = fulfilledType ? this.prepareType(fulfilledType) : null;
+        const preparedRejected = rejectedType ? this.prepareType(rejectedType) : null;
+
+        // Emit Struct Definition
+        this.structDecls.open(`typedef struct ${envType}`);
+        this.structDecls.line("tsc_promise_t* receiver;");
+        this.structDecls.line("tsc_promise_t* result_promise;");
+        if (preparedFulfilled) {
+            this.structDecls.line(`${preparedFulfilled.c} onFulfilled;`);
+        }
+        if (preparedRejected) {
+            this.structDecls.line(`${preparedRejected.c} onRejected;`);
+        }
+        this.structDecls.close(` ${envType};`);
+        this.structDecls.line();
+
+        // Emit Prototype
+        this.protos.line(`void ${name}(void* env);`);
+
+        // Emit Function Body
+        const buf = new CBuf();
+        buf.open(`void ${name}(void* env)`);
+        buf.line(`${envType}* state = (${envType}*)env;`);
+        buf.line("tsc_promise_t* _p = state->receiver;");
+        buf.line("tsc_promise_t* _ret = state->result_promise;");
+
+        buf.open("if (tsc_promise_is_fulfilled(_p))");
+        if (preparedFulfilled && fulfilledType) {
+            const callResult = this.promiseCallbackCall(call, fulfilledType, "state->onFulfilled", [this.promiseFulfilledValue(recvType.elem, "_p")], node);
+            const ret = this.prepareType(fulfilledType.ret!);
+            const resPromise = this.freshTemp("_res_p");
+            const eh = this.freshTemp("_eh");
+            buf.line(`tsc_promise_t* ${resPromise};`);
+            buf.line(`tsc_try_frame_t ${eh};`);
+            buf.line(`tsc_try_push(&${eh});`);
+            buf.open(`if (setjmp(${eh}.jb) == 0)`);
+            if (ret.kind === "void" || ret.kind === "never") {
+                buf.line(`${callResult};`);
+                buf.line("tsc_try_pop();");
+                buf.line(`${resPromise} = tsc_promise_resolve(tsc_value_undefined());`);
+            } else {
+                const valueTmp = this.freshTemp("_val");
+                buf.line(`${ret.c} ${valueTmp} = ${callResult};`);
+                buf.line("tsc_try_pop();");
+                buf.line(`${resPromise} = ${this.promiseResolveResult({ c: valueTmp, ty: ret }, node)};`);
+            }
+            buf.close();
+            buf.open("else");
+            buf.line("tsc_try_pop();");
+            buf.line(`${resPromise} = tsc_promise_reject(tsc_value_string(tsc_current_error()));`);
+            buf.close();
+            buf.line(`tsc_promise_adopt_into(_ret, ${resPromise});`);
+        } else {
+            buf.line(`tsc_promise_adopt_into(_ret, ${this.promiseResolveStoredValue(recvType.elem, "_p")});`);
+        }
+        buf.close(); // end of if fulfilled
+
+        buf.open("else if (tsc_promise_is_rejected(_p))");
+        if (preparedRejected && rejectedType) {
+            const callResult = this.promiseCallbackCall(call, rejectedType, "state->onRejected", [{ c: "tsc_promise_reason(_p)", ty: T_VALUE }], node);
+            const ret = this.prepareType(rejectedType.ret!);
+            const resPromise = this.freshTemp("_res_p");
+            const eh = this.freshTemp("_eh");
+            buf.line(`tsc_promise_t* ${resPromise};`);
+            buf.line(`tsc_try_frame_t ${eh};`);
+            buf.line(`tsc_try_push(&${eh});`);
+            buf.open(`if (setjmp(${eh}.jb) == 0)`);
+            if (ret.kind === "void" || ret.kind === "never") {
+                buf.line(`${callResult};`);
+                buf.line("tsc_try_pop();");
+                buf.line(`${resPromise} = tsc_promise_resolve(tsc_value_undefined());`);
+            } else {
+                const valueTmp = this.freshTemp("_val");
+                buf.line(`${ret.c} ${valueTmp} = ${callResult};`);
+                buf.line("tsc_try_pop();");
+                buf.line(`${resPromise} = ${this.promiseResolveResult({ c: valueTmp, ty: ret }, node)};`);
+            }
+            buf.close();
+            buf.open("else");
+            buf.line("tsc_try_pop();");
+            buf.line(`${resPromise} = tsc_promise_reject(tsc_value_string(tsc_current_error()));`);
+            buf.close();
+            buf.line(`tsc_promise_adopt_into(_ret, ${resPromise});`);
+        } else {
+            buf.line("tsc_promise_adopt_into(_ret, _p);");
+        }
+        buf.close(); // end of else if rejected
+
+        buf.close(); // end of function
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
+    private ensurePromiseFinallyAdapter(
+        call: ts.CallExpression,
+        recvType: CType,
+        cbType: CType | null,
+        mappedType: CType,
+        node: ts.Expression,
+    ): string {
+        const key = `finally:${this.typeKey(recvType)}:${cbType ? this.typeKey(cbType) : "null"}:${this.typeKey(mappedType)}`;
+        const existing = this.promiseFinallyAdapters.get(key);
+        if (existing) return existing;
+
+        const name = `tsc_promise_finally_callback_${this.promiseFinallyAdapters.size}`;
+        this.promiseFinallyAdapters.set(key, name);
+
+        const envType = `${name}_env_t`;
+        const preparedCb = cbType ? this.prepareType(cbType) : null;
+
+        // Struct
+        this.structDecls.open(`typedef struct ${envType}`);
+        this.structDecls.line("tsc_promise_t* receiver;");
+        this.structDecls.line("tsc_promise_t* result_promise;");
+        if (preparedCb) {
+            this.structDecls.line(`${preparedCb.c} cb;`);
+        }
+        this.structDecls.close(` ${envType};`);
+        this.structDecls.line();
+
+        // Proto
+        this.protos.line(`void ${name}(void* env);`);
+
+        // Function
+        const buf = new CBuf();
+        buf.open(`void ${name}(void* env)`);
+        buf.line(`${envType}* state = (${envType}*)env;`);
+        buf.line("tsc_promise_t* _p = state->receiver;");
+        buf.line("tsc_promise_t* _ret = state->result_promise;");
+
+        const resPromise = this.freshTemp("_res_p");
+        buf.line(`tsc_promise_t* ${resPromise};`);
+
+        if (preparedCb && cbType) {
+            const callStmt = this.promiseCallbackCall(call, cbType, "state->cb", [], node);
+            const cbRet = preparedCb.kind === "function" && preparedCb.ret ? this.prepareType(preparedCb.ret) : null;
+            const eh = this.freshTemp("_eh");
+            buf.line(`tsc_try_frame_t ${eh};`);
+            buf.line(`tsc_try_push(&${eh});`);
+            buf.open(`if (setjmp(${eh}.jb) == 0)`);
+            if (cbRet?.kind === "promise") {
+                const finalPromise = this.freshTemp("_promise_finally_return");
+                buf.line(`tsc_promise_t* const ${finalPromise} = ${callStmt};`);
+                buf.line("tsc_try_pop();");
+                buf.open(`if (tsc_promise_is_rejected(${finalPromise}))`);
+                buf.line(`${resPromise} = tsc_promise_reject(tsc_promise_reason(${finalPromise}));`);
+                buf.close();
+                buf.open(`else if (tsc_promise_is_pending(${finalPromise}))`);
+                buf.line(`${resPromise} = tsc_promise_pending();`);
+                buf.close();
+                buf.open("else");
+                buf.line(`${resPromise} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recvType.elem, "_p")};`);
+                buf.close();
+            } else {
+                buf.line(`${callStmt};`);
+                buf.line("tsc_try_pop();");
+                buf.line(`${resPromise} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recvType.elem, "_p")};`);
+            }
+            buf.close();
+            buf.open("else");
+            buf.line("tsc_try_pop();");
+            buf.line(`${resPromise} = tsc_promise_reject(tsc_value_string(tsc_current_error()));`);
+            buf.close();
+        } else {
+            buf.line(`${resPromise} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recvType.elem, "_p")};`);
+        }
+        buf.line(`tsc_promise_adopt_into(_ret, ${resPromise});`);
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+
+        return name;
+    }
+
     private emitPromiseMethod(
         call: ts.CallExpression,
         recv: EmitResult,
@@ -33838,13 +34030,41 @@ class Emitter {
                     const promise = vals[0]!;
                     const onFulfilled = fulfilled ? vals[1]! : null;
                     const onRejected = rejected ? vals[fulfilled ? 2 : 1] : undefined;
-                    const okValue = fulfilled && onFulfilled
-                        ? this.promiseCallbackResolve(call, fulfilled.ty, onFulfilled, this.promiseFulfilledValue(recv.ty.elem, promise), args[0]!)
-                        : this.promiseResolveStoredValue(recv.ty.elem, promise);
-                    const errValue = rejected && onRejected
-                        ? this.promiseCallbackResolve(call, rejected.ty, onRejected, { c: `tsc_promise_reason(${promise})`, ty: T_VALUE }, args[1]!)
-                        : `tsc_promise_reject(tsc_promise_reason(${promise}))`;
-                    return `({ tsc_promise_t* const _p = ${promise}; tsc_promise_is_fulfilled(_p) ? ${okValue} : (tsc_promise_is_rejected(_p) ? ${errValue} : tsc_promise_pending()); })`;
+
+                    const adapter = this.ensurePromiseThenAdapter(
+                        call,
+                        recv.ty,
+                        fulfilled ? fulfilled.ty : null,
+                        rejected ? rejected.ty : null,
+                        mapped,
+                        call,
+                    );
+                    const envType = `${adapter}_env_t`;
+                    const env = this.freshTemp("_then_env");
+                    const retPromise = this.freshTemp("_then_ret");
+
+                    const assignments: string[] = [];
+                    assignments.push(`${env}->receiver = _p;`);
+                    assignments.push(`${env}->result_promise = ${retPromise};`);
+                    if (fulfilled && onFulfilled) {
+                        assignments.push(`${env}->onFulfilled = ${onFulfilled};`);
+                    }
+                    if (rejected && onRejected) {
+                        assignments.push(`${env}->onRejected = ${onRejected};`);
+                    }
+
+                    return `({ tsc_promise_t* const _p = ${promise}; ` +
+                        `tsc_promise_t* const ${retPromise} = tsc_promise_pending(); ` +
+                        `if (tsc_promise_is_pending(_p)) { ` +
+                            `${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
+                            `${assignments.join(" ")} ` +
+                            `tsc_promise_add_callback(_p, ${adapter}, ${env}); ` +
+                        `} else { ` +
+                            `${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
+                            `${assignments.join(" ")} ` +
+                            `tsc_queue_microtask(${adapter}, ${env}); ` +
+                        `} ` +
+                        `${retPromise}; })`;
                 });
             }
             case "catch": {
@@ -33860,10 +34080,38 @@ class Emitter {
                 return this.emitSequencedExpr(mapped, specs, (vals) => {
                     const promise = vals[0]!;
                     const onRejected = rejected ? vals[1]! : null;
-                    const errValue = rejected && onRejected
-                        ? this.promiseCallbackResolve(call, rejected.ty, onRejected, { c: `tsc_promise_reason(${promise})`, ty: T_VALUE }, handler!)
-                        : `tsc_promise_reject(tsc_promise_reason(${promise}))`;
-                    return `({ tsc_promise_t* const _p = ${promise}; tsc_promise_is_rejected(_p) ? ${errValue} : (tsc_promise_is_fulfilled(_p) ? ${this.promiseResolveStoredValue(recv.ty.elem, "_p")} : tsc_promise_pending()); })`;
+
+                    const adapter = this.ensurePromiseThenAdapter(
+                        call,
+                        recv.ty,
+                        null,
+                        rejected ? rejected.ty : null,
+                        mapped,
+                        call,
+                    );
+                    const envType = `${adapter}_env_t`;
+                    const env = this.freshTemp("_catch_env");
+                    const retPromise = this.freshTemp("_catch_ret");
+
+                    const assignments: string[] = [];
+                    assignments.push(`${env}->receiver = _p;`);
+                    assignments.push(`${env}->result_promise = ${retPromise};`);
+                    if (rejected && onRejected) {
+                        assignments.push(`${env}->onRejected = ${onRejected};`);
+                    }
+
+                    return `({ tsc_promise_t* const _p = ${promise}; ` +
+                        `tsc_promise_t* const ${retPromise} = tsc_promise_pending(); ` +
+                        `if (tsc_promise_is_pending(_p)) { ` +
+                            `${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
+                            `${assignments.join(" ")} ` +
+                            `tsc_promise_add_callback(_p, ${adapter}, ${env}); ` +
+                        `} else { ` +
+                            `${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
+                            `${assignments.join(" ")} ` +
+                            `tsc_queue_microtask(${adapter}, ${env}); ` +
+                        `} ` +
+                        `${retPromise}; })`;
                 });
             }
             case "finally": {
@@ -33879,19 +34127,37 @@ class Emitter {
                 return this.emitSequencedExpr(mapped, specs, (vals) => {
                     const promise = vals[0]!;
                     const fn = cb ? vals[1]! : null;
-                    const result = this.freshTemp("_promise_finally");
+
+                    const adapter = this.ensurePromiseFinallyAdapter(
+                        call,
+                        recv.ty,
+                        cb ? cb.ty : null,
+                        mapped,
+                        call,
+                    );
+                    const envType = `${adapter}_env_t`;
+                    const env = this.freshTemp("_finally_env");
+                    const retPromise = this.freshTemp("_finally_ret");
+
+                    const assignments: string[] = [];
+                    assignments.push(`${env}->receiver = _p;`);
+                    assignments.push(`${env}->result_promise = ${retPromise};`);
                     if (cb && fn) {
-                        const eh = this.freshTemp("_promise_finally_eh");
-                        const callStmt = this.promiseCallbackCall(call, cb.ty, fn, [], handler!);
-                        const cbType = this.prepareType(cb.ty);
-                        const cbRet = cbType.kind === "function" && cbType.ret ? this.prepareType(cbType.ret) : null;
-                        if (cbRet?.kind === "promise") {
-                            const finalPromise = this.freshTemp("_promise_finally_return");
-                            return `({ tsc_promise_t* const _p = ${promise}; tsc_promise_t* ${result}; if (tsc_promise_is_pending(_p)) { ${result} = tsc_promise_pending(); } else { tsc_try_frame_t ${eh}; tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { tsc_promise_t* const ${finalPromise} = ${callStmt}; tsc_try_pop(); if (tsc_promise_is_rejected(${finalPromise})) { ${result} = tsc_promise_reject(tsc_promise_reason(${finalPromise})); } else if (tsc_promise_is_pending(${finalPromise})) { ${result} = tsc_promise_pending(); } else { ${result} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recv.ty.elem, "_p")}; } } else { ${result} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } } ${result}; })`;
-                        }
-                        return `({ tsc_promise_t* const _p = ${promise}; tsc_promise_t* ${result}; if (tsc_promise_is_pending(_p)) { ${result} = tsc_promise_pending(); } else { tsc_try_frame_t ${eh}; tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { ${callStmt}; tsc_try_pop(); ${result} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recv.ty.elem, "_p")}; } else { ${result} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } } ${result}; })`;
+                        assignments.push(`${env}->cb = ${fn};`);
                     }
-                    return `({ tsc_promise_t* const _p = ${promise}; tsc_promise_t* ${result}; if (tsc_promise_is_pending(_p)) { ${result} = tsc_promise_pending(); } else { ${result} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recv.ty.elem, "_p")}; } ${result}; })`;
+
+                    return `({ tsc_promise_t* const _p = ${promise}; ` +
+                        `tsc_promise_t* const ${retPromise} = tsc_promise_pending(); ` +
+                        `if (tsc_promise_is_pending(_p)) { ` +
+                            `${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
+                            `${assignments.join(" ")} ` +
+                            `tsc_promise_add_callback(_p, ${adapter}, ${env}); ` +
+                        `} else { ` +
+                            `${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
+                            `${assignments.join(" ")} ` +
+                            `tsc_queue_microtask(${adapter}, ${env}); ` +
+                        `} ` +
+                        `${retPromise}; })`;
                 });
             }
         }

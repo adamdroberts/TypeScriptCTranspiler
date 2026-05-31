@@ -1,5 +1,5 @@
 fail: boom
-recovered: 7
 inside: caught inner
 rethrow: again!
+recovered: 7
 after: done

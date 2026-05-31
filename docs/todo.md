@@ -21,8 +21,8 @@ This is the next item that most directly expands what programs can be written ag
 
 - **Phase 6 — `async`/`await` + libuv event loop** (~3 weeks)
   - Full state-machine lowering of each `async` function remains deferred. A real `await` must become a suspend/resume point that chains a `.then` onto the awaited promise.
-  - Still missing: suspend/resume `await` state-machine lowering, microtask-scheduled `.then` dispatch, broader thenable assimilation edge cases outside the immediate dynamic settled/nested/self-resolution/cycle subset, and full async function edge cases.
-  - Still missing: full Promise microtask scheduling, full `process.nextTick` semantics, nonzero-delay timers/promises, real timer signal handling, nonzero-delay `setInterval`, real event-loop-backed `setImmediate`, and future async I/O on top of libuv.
+  - Still missing: suspend/resume `await` state-machine lowering, broader thenable assimilation edge cases outside the immediate dynamic settled/nested/self-resolution/cycle subset, and full async function edge cases.
+  - Still missing: full `process.nextTick` semantics, nonzero-delay timers/promises, real timer signal handling, nonzero-delay `setInterval`, real event-loop-backed `setImmediate`, and future async I/O on top of libuv.
   - **Depends on Phase 3** for the `Promise<T>` value representation (mixed boxed + unboxed).
 
 - **Phase 7 remainder — ES language features** (~3 weeks)

@@ -1,6 +1,6 @@
-fulfilled: ok
-catch omitted: bad
-after catch: recovered
-undefined handlers: again
-finally callback: side 1
 pending: [object Promise] false
+catch omitted: bad
+finally callback: side 1
+fulfilled: ok
+undefined handlers: again
+after catch: recovered
