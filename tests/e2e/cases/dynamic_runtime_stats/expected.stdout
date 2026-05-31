@@ -13,3 +13,5 @@ receiver set: true 1
 has: true
 deleted: false
 cached: 1
+custom method call: 42
+custom method call: 42
