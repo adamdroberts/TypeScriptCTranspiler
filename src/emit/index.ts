@@ -12060,6 +12060,7 @@ class Emitter {
             case "readableEnded":
             case "readableFlowing":
             case "readableLength":
+            case "readableHighWaterMark":
                 return streamName === "stdin";
             case "writable":
                 return streamName !== "stdin";
@@ -12068,6 +12069,7 @@ class Emitter {
             case "writableFinished":
             case "writableLength":
             case "writableNeedDrain":
+            case "writableHighWaterMark":
                 return streamName !== "stdin";
             default:
                 return false;
@@ -45593,6 +45595,9 @@ class Emitter {
                 case "readableLength":
                     if (stdioStreamName === "stdin") return { c: "0.0", ty: T_NUMBER };
                     break;
+                case "readableHighWaterMark":
+                    if (stdioStreamName === "stdin") return { c: "65536.0", ty: T_NUMBER };
+                    break;
                 case "writable":
                     if (stdioStreamName !== "stdin") return { c: "true", ty: T_BOOLEAN };
                     break;
@@ -45609,6 +45614,9 @@ class Emitter {
                     break;
                 case "writableNeedDrain":
                     if (stdioStreamName !== "stdin") return { c: "false", ty: T_BOOLEAN };
+                    break;
+                case "writableHighWaterMark":
+                    if (stdioStreamName !== "stdin") return { c: "65536.0", ty: T_NUMBER };
                     break;
             }
         }

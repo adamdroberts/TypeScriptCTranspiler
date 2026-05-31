@@ -1,0 +1,3 @@
+stdin highWaterMark: 65536
+stdout highWaterMark: 65536
+stderr highWaterMark: 65536

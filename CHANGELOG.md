@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `process.stdin.readableHighWaterMark` and `process.stdout.writableHighWaterMark` / `process.stderr.writableHighWaterMark` now expose standard stream metadata properties in the bounded process stdio stream subset. Test: `process_stdio_high_water_mark`.
 - Generated-C DCE static numeric analysis now folds side-effect-free standard mathematical calls including `Math.abs(...)`, `Math.floor(...)`, `Math.ceil(...)`, `Math.trunc(...)`, `Math.min(...)`, and `Math.max(...)` with primitive inputs and pure ignored arguments. Test: `generated_c_dce_const`.
 - Generated-C DCE static numeric analysis now folds side-effect-free numeric parser calls including `Number.parseInt(...)`, `Number.parseFloat(...)`, global `parseInt(...)`, and global `parseFloat(...)` with primitive string/number inputs and pure ignored arguments. Test: `generated_c_dce_const`.
 - Generated-C DCE static string analysis now folds ASCII side-effect-free `.trim()`, `.trimStart()`, `.trimEnd()`, `.trimLeft()`, and `.trimRight()` string method calls. Test: `generated_c_dce_const`.

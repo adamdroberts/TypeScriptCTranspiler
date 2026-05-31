@@ -701,6 +701,7 @@ interface ProcessWritableStream {
     readonly writableCorked: number;
     readonly writableEnded: boolean;
     readonly writableFinished: boolean;
+    readonly writableHighWaterMark: number;
     readonly writableLength: number;
     readonly writableNeedDrain: boolean;
     addListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
@@ -727,6 +728,7 @@ interface ProcessReadableStream {
     readonly readable: boolean;
     readonly readableEnded: boolean;
     readonly readableFlowing: any;
+    readonly readableHighWaterMark: number;
     readonly readableLength: number;
     addListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
