@@ -47287,6 +47287,16 @@ class Emitter {
         if (recv.ty.kind === "set" && pa.name.text === "size") {
             return { c: `tsc_set_size(${recv.c})`, ty: T_NUMBER };
         }
+        if (recv.ty.kind === "urlsearchparams" && pa.name.text === "size") {
+            if (isOpt) {
+                const tv = this.freshTemp("_usp");
+                return {
+                    c: `({ ${recv.ty.c} ${tv} = ${recv.c}; ${tv} != NULL ? ((double)${tv}->len) : 0.0; })`,
+                    ty: T_NUMBER,
+                };
+            }
+            return { c: `((double)${recv.c}->len)`, ty: T_NUMBER };
+        }
         if (recv.ty.kind === "symbol" && pa.name.text === "description") {
             return { c: `tsc_symbol_description(${recv.c})`, ty: T_STRING };
         }

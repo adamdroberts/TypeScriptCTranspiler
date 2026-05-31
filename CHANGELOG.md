@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `URLSearchParams` now supports the `size` readonly property, returning the correct number of query parameter pairs after construction, `append()`, `set()`, `delete()`, and `sort()`, supporting both global and `node:url` instances. Test: `url_search_params_size`.
 - Supported `crypto.createHash(...)` and `crypto.createHmac(...)` compatibility expansion for MD5 algorithm, allowing MD5 digest computation with string/Buffer data and keys, and returning hex/base64 strings or Buffers depending on digest encoding. Test: `crypto_md5`.
 - `URLSearchParams` now supports `.sort(...ignored)` in stable name-order semantics, preserving duplicate value order for equal names and returning `void`. Test: `url_search_params_sort`.
 - Added a bounded Node util subset with `util.format(format?, ...args)` support, including `%s`, `%d` / `%i`, `%f`, `%j`, and `%%` placeholder formatting, leftover arguments formatting, and named, aliased named, default, and namespace imports from `"util"` and `"node:util"`. Test: `util_format_basic`.
