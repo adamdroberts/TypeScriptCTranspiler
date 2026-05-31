@@ -1,0 +1,18 @@
+default: 127.0.0.1 ipv4 0 0
+empty options: 127.0.0.1 ipv4 0 0
+ipv6 default: :: ipv6 0 0
+custom ipv4: 192.168.1.1 ipv4 8080 0
+custom ipv6: fe80::1 ipv6 443 100
+port too high: RangeError: Port should be >= 0 and < 65536
+port too low: RangeError: Port should be >= 0 and < 65536
+flowlabel too high: RangeError: flowlabel should be >= 0 and < 4294967296
+parse ipv4 with port: 127.0.0.1 ipv4 80 0
+parse ipv4 without port: 127.0.0.1 ipv4 0 0
+parse ipv6 with port: ::1 ipv6 8080 0
+parse ipv6 without port: ::1 ipv6 0 0
+parse ipv6 with brackets no port: ::1 ipv6 0 0
+namespace parse: 10.0.0.1 ipv4 22
+parse invalid ip: true
+parse invalid port: true
+parse negative port: true
+parse empty string: true

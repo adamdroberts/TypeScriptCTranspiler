@@ -728,6 +728,8 @@ tsc_dns_lookup_service_result_t tsc_dns_lookup_service(tsc_str_t* address, doubl
 double tsc_net_is_ip(tsc_str_t* input);
 bool tsc_net_is_ipv4(tsc_str_t* input);
 bool tsc_net_is_ipv6(tsc_str_t* input);
+tsc_value_t tsc_net_socket_address_new(tsc_value_t options);
+tsc_value_t tsc_net_socket_address_parse(tsc_str_t* input);
 
 tsc_value_t tsc_value_add(tsc_value_t a, tsc_value_t b);
 tsc_value_t tsc_value_sub(tsc_value_t a, tsc_value_t b);
