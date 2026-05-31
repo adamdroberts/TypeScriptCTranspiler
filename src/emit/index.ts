@@ -17075,16 +17075,23 @@ class Emitter {
     }
 
     private validateCommonJsModuleExportsValueAssignment(expr: ts.Expression): void {
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isConditionalExpression(cur)) {
+            this.validateCommonJsModuleExportsValueAssignment(cur.whenTrue);
+            this.validateCommonJsModuleExportsValueAssignment(cur.whenFalse);
+            return;
+        }
         if (
-            !ts.isFunctionExpression(expr) &&
-            !ts.isArrowFunction(expr) &&
-            !ts.isIdentifier(expr) &&
-            !ts.isArrayLiteralExpression(expr) &&
-            !this.requireCallModuleExportsDeclaration(expr) &&
-            !(ts.isCallExpression(expr) && this.commonJsRequireSpreadMemberDeclarations(expr)) &&
-            !(ts.isPropertyAccessExpression(expr) && this.requireModuleMemberDeclaration(expr)) &&
-            !this.isCommonJsRuntimeComputedModuleExportsValue(expr) &&
-            !this.isCommonJsObjectLiteralExportValue(expr)
+            !ts.isFunctionExpression(cur) &&
+            !ts.isArrowFunction(cur) &&
+            !ts.isIdentifier(cur) &&
+            !ts.isArrayLiteralExpression(cur) &&
+            !this.requireCallModuleExportsDeclaration(cur) &&
+            !(ts.isCallExpression(cur) && this.commonJsRequireSpreadMemberDeclarations(cur)) &&
+            !(ts.isPropertyAccessExpression(cur) && this.requireModuleMemberDeclaration(cur)) &&
+            !this.isCommonJsRuntimeComputedModuleExportsValue(cur) &&
+            !this.isCommonJsObjectLiteralExportValue(cur)
         ) {
             unsupported(expr, "CommonJS module.exports value assignment currently supports functions, arrays, declared identifiers, literal require re-exports, literal require member re-exports, runtime-computed dynamic objects, and primitive literals only");
         }
@@ -17338,6 +17345,12 @@ class Emitter {
     private commonJsExportedCType(node: ts.Node): CType {
         let valueNode = this.commonJsExportValueNode(node);
         while (ts.isParenthesizedExpression(valueNode)) valueNode = valueNode.expression;
+        if (ts.isConditionalExpression(valueNode)) {
+            const trueTy = this.commonJsExportedCType(valueNode.whenTrue);
+            const falseTy = this.commonJsExportedCType(valueNode.whenFalse);
+            if (trueTy.c === falseTy.c) return trueTy;
+            return T_VALUE;
+        }
         if (ts.isObjectLiteralExpression(valueNode) && this.isCommonJsObjectLiteralDefaultValue(valueNode)) {
             return T_VALUE;
         }

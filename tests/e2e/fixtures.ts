@@ -762,6 +762,11 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-arrow": cjsPackage("tsc2c-cjs-module-arrow", {
         "index.js": "module.exports = (value) => value * 2;\n",
     }),
+    "tsc2c-cjs-module-conditional": cjsPackage("tsc2c-cjs-module-conditional", {
+        "index.js": "module.exports = true ? require('./true.js') : require('./false.js');\n",
+        "true.js": "module.exports = (value) => value + 10;\n",
+        "false.js": "module.exports = (value) => value + 20;\n",
+    }),
     "tsc2c-cjs-function-package": cjsPackage("tsc2c-cjs-function-package", {
         "index.js": "module.exports = function add(left, right) { return left + right; };\n",
     }),
