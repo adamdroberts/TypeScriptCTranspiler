@@ -90,6 +90,7 @@ typedef struct tsc_function_identity {
     double length;
     tsc_str_t* name;
     tsc_value_t prototype;
+    tsc_value_t func_prototype;
     union {
         tsc_accessor_getter_t getter;
         tsc_accessor_setter_t setter;
@@ -228,7 +229,14 @@ static inline bool value_is_object_value(tsc_value_t v) {
 }
 
 static inline bool value_is_valid_prototype(tsc_value_t v) {
-    return value_is_null_value(v) || value_is_object_value(v);
+    return value_is_null_value(v) || (
+        value_is_box(v) &&
+        (
+            value_tag(v) == TSC_VALUE_TAG_OBJECT ||
+            value_tag(v) == TSC_VALUE_TAG_ARRAY ||
+            value_tag(v) == TSC_VALUE_TAG_FUNCTION
+        )
+    );
 }
 
 
