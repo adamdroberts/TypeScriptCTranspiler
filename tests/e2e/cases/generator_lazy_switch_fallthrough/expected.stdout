@@ -1,0 +1,10 @@
+alpha false yield-alpha
+alpha false yield-beta
+alpha true total-13
+start:alpha|alpha-before|alpha-after:3|beta-before|beta-after:13|done:13
+beta false yield-beta
+beta true total-14
+start:beta|beta-before|beta-after:14|done:14
+gamma false yield-default
+gamma true total-33
+start:gamma|default-before|default-after:33|done:33

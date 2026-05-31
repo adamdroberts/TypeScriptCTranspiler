@@ -22461,6 +22461,9 @@ class Emitter {
                 if (ts.isCaseClause(clause) && this.nodeContainsYield(clause.expression)) {
                     return false;
                 }
+                if (ts.isCaseClause(clause) && !this.switchCaseKey(clause.expression)) {
+                    return false;
+                }
                 let sawBreak = false;
                 for (const child of clause.statements) {
                     if (child.kind === ts.SyntaxKind.BreakStatement) {
@@ -22701,10 +22704,35 @@ class Emitter {
         nextYieldStarSlot: () => number,
         elemType: CType,
         envLocalName: string,
-    ): void {
+    ): boolean {
         for (const stmt of statements) {
-            if (stmt.kind === ts.SyntaxKind.BreakStatement) return;
+            if (stmt.kind === ts.SyntaxKind.BreakStatement) {
+                return true;
+            }
             this.emitLazyGeneratorStmt(buf, stmt, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+        }
+        return false;
+    }
+
+    private emitLazyGeneratorSwitchClauseRange(
+        buf: CBuf,
+        clauses: readonly ts.CaseOrDefaultClause[],
+        startIndex: number,
+        nextStateId: () => number,
+        nextYieldStarSlot: () => number,
+        elemType: CType,
+        envLocalName: string,
+    ): void {
+        for (let i = startIndex; i < clauses.length; i++) {
+            const didBreak = this.emitLazyGeneratorSwitchClauseStatements(
+                buf,
+                clauses[i]!.statements,
+                nextStateId,
+                nextYieldStarSlot,
+                elemType,
+                envLocalName,
+            );
+            if (didBreak) return;
         }
     }
 
@@ -22724,8 +22752,6 @@ class Emitter {
         buf.open("");
         buf.line(`${disc.ty.c} ${discVar} = ${disc.c};`);
 
-        let pending: string[] = [];
-        let first = true;
         const buildCond = (caseExpr: ts.Expression): string => {
             const caseVal = this.emitExpr(caseExpr);
             if (isStr) {
@@ -22736,54 +22762,50 @@ class Emitter {
             }
             return `(${discVar} == ${this.coerce(caseVal, disc.ty, caseExpr)})`;
         };
-
+        const caseConds = new Map<ts.CaseClause, string>();
+        const allCaseConds: string[] = [];
         for (const clause of stmt.caseBlock.clauses) {
+            if (!ts.isCaseClause(clause)) continue;
+            const cond = buildCond(clause.expression);
+            caseConds.set(clause, cond);
+            allCaseConds.push(cond);
+        }
+
+        let first = true;
+        let defaultIndex = -1;
+        for (const [index, clause] of stmt.caseBlock.clauses.entries()) {
             if (ts.isCaseClause(clause)) {
-                pending.push(buildCond(clause.expression));
-                if (clause.statements.length === 0) continue;
-                const cond = pending.join(" || ");
+                const cond = caseConds.get(clause)!;
                 buf.open(first ? `if (${cond})` : `else if (${cond})`);
-                first = false;
-                this.emitLazyGeneratorSwitchClauseStatements(
+                this.emitLazyGeneratorSwitchClauseRange(
                     buf,
-                    clause.statements,
+                    stmt.caseBlock.clauses,
+                    index,
                     nextStateId,
                     nextYieldStarSlot,
                     elemType,
                     envLocalName,
                 );
                 buf.close();
-                pending = [];
+                first = false;
                 continue;
             }
 
-            if (pending.length > 0) {
-                const cond = pending.join(" || ");
-                buf.open(first ? `if (${cond})` : `else if (${cond})`);
-                first = false;
-                this.emitLazyGeneratorSwitchClauseStatements(
-                    buf,
-                    clause.statements,
-                    nextStateId,
-                    nextYieldStarSlot,
-                    elemType,
-                    envLocalName,
-                );
-                buf.close();
-                pending = [];
-            } else {
-                buf.open(first ? "if (true)" : "else");
-                first = false;
-                this.emitLazyGeneratorSwitchClauseStatements(
-                    buf,
-                    clause.statements,
-                    nextStateId,
-                    nextYieldStarSlot,
-                    elemType,
-                    envLocalName,
-                );
-                buf.close();
-            }
+            defaultIndex = index;
+        }
+
+        if (defaultIndex >= 0) {
+            buf.open(first ? "if (true)" : "else");
+            this.emitLazyGeneratorSwitchClauseRange(
+                buf,
+                stmt.caseBlock.clauses,
+                defaultIndex,
+                nextStateId,
+                nextYieldStarSlot,
+                elemType,
+                envLocalName,
+            );
+            buf.close();
         }
         buf.close();
     }
