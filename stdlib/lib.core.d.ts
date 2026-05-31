@@ -2144,6 +2144,7 @@ interface URLSearchParams {
     toString(...ignored: any[]): string;
     toLocaleString(...ignored: any[]): string;
     valueOf(...ignored: any[]): URLSearchParams;
+    sort(...ignored: any[]): void;
     keys(...ignored: any[]): string[];
     values(...ignored: any[]): string[];
     entries(...ignored: any[]): ObjectEntry<string, string>[];

@@ -1306,6 +1306,20 @@ tsc_array_t* tsc_url_search_params_entries(const tsc_url_search_params_t* params
     return a;
 }
 
+void tsc_url_search_params_sort(tsc_url_search_params_t* params) {
+    if (!params || params->len <= 1) return;
+    for (size_t i = 1; i < params->len; i++) {
+        tsc_url_search_param_t key = params->items[i];
+        size_t j = i;
+        while (j > 0 && tsc_str_cmp(params->items[j - 1].name, key.name) > 0) {
+            params->items[j] = params->items[j - 1];
+            j--;
+        }
+        params->items[j] = key;
+    }
+}
+
+
 int tsc_dns_lookup_ai_flags(double hints) {
     if (isnan(hints) || isinf(hints)) return 0;
     int flags = (int)hints;
