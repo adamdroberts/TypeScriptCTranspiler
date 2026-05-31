@@ -1063,6 +1063,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `TSC2C_CC` / `TSC2C_CXX` — override the C and C++ compiler commands used by the linker driver; Linux CI runs both gcc and clang lanes.
 - `--unsafe-eval` — opt into runtime code compilation through the embedded Node bridge and compile the unsafe bridge entry points behind `TSC_UNSAFE_EVAL`. Linking requires `libnode`; set `TSC2C_LIBNODE` and optionally `TSC2C_NODE_INCLUDE` when Node headers/libs are not in the active Node prefix.
 - `--native-addon-manifest <path>` — opt specific native addon specifiers into the embedded Node bridge without enabling unsafe eval/Function entry points. The JSON shape is `{ "addons": { "specifier": "relative/or/absolute/addon.node" } }`; paths are resolved relative to the manifest and must point to existing `.node` files.
+- Embedded Node native-addon bridge values preserve function-valued properties in both directions: V8 functions become generic `tsc_value_t` callables, and compiled AOT function values passed back into V8 are exposed as V8 callbacks.
 - `--dynamic-require-manifest <path>` — opt non-finite dynamic require sites into finite AOT dispatch. The JSON shape is `{ "requires": ["./specifier"] }` or a named object map such as `{ "requires": { "primary": "./specifier" } }`; each listed specifier is resolved from the dynamic call's containing file and compiled into the module graph.
 - `--runtime-code-manifest <path>` — opt non-constant `eval(...)` / `Function(...)` source strings into finite AOT dispatch without enabling unsafe eval. The JSON shape is `{ "eval": ["1 + 2"], "functions": ["return 42;"] }` or named object maps such as `{ "eval": { "sum": "1 + 2" }, "functions": { "answer": "return 42;" } }`; each listed source string must parse as a supported AOT constant expression or constant-return function body.
 - OpenSSL (`libssl-dev`), ICU (`libicu-dev`), and GMP (`libgmp-dev`) are linked for crypto hashing, Unicode normalization, and BigInt.
@@ -1622,6 +1623,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `weak_ref_dynamic` | dynamic WeakRef target validation and deref value preservation |
 | `native_addon` | expected diagnostic for literal native addon imports |
 | `native_addon_manifest_import` | manifest-listed direct `.node` import emits the embedded Node native-addon bridge |
+| `native_addon_manifest_function_export` | manifest-backed native addon bridge preserves function-valued exports and callbacks |
 | `native_addon_manifest_require` | compile-time native-addon manifest lowers an allow-listed require to the embedded Node bridge |
 | `native_addon_manifest_require_destructure_rest` | manifest-backed native-addon require destructuring reads bridge properties and rest objects |
 | `native_addon_manifest_external_imports` | manifest-backed package-private import to an external native-addon package emits the embedded Node bridge |
