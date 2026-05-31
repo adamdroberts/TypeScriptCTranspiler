@@ -1,0 +1,9 @@
+Length: 13
+Byte 0: 72
+Byte 1: 101
+Decoded: Hello, World!
+Decoded Unicode: 😊 UTF-8 Unicode 🚀
+Decoded UTF-8 with label: 😊 UTF-8 Unicode 🚀
+Encoded empty len: 0
+Decoded empty: ""
+Bad decoder: TextDecoder: only utf-8 encoding is supported

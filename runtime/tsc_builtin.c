@@ -1582,8 +1582,37 @@ tsc_buffer_t* tsc_buffer_swap(tsc_buffer_t* b, size_t width) {
     return b;
 }
 
+/* ------------- TextEncoder / TextDecoder ------------- */
+tsc_text_encoder_t* tsc_text_encoder_new(void) {
+    tsc_text_encoder_t* encoder = (tsc_text_encoder_t*)TSC_GC_MALLOC(sizeof(tsc_text_encoder_t));
+    encoder->dummy = 0;
+    return encoder;
+}
 
+tsc_buffer_t* tsc_text_encoder_encode(const tsc_text_encoder_t* encoder, const tsc_str_t* input) {
+    (void)encoder;
+    if (!input) {
+        return tsc_buffer_alloc(0, 0);
+    }
+    return tsc_buffer_from_str(input, tsc_str_from_lit("utf8", 4));
+}
 
+tsc_text_decoder_t* tsc_text_decoder_new(const tsc_str_t* encoding) {
+    if (encoding && !buffer_encoding_is_utf8(encoding)) {
+        tsc_throw_str(tsc_str_from_cstr("TextDecoder: only utf-8 encoding is supported"));
+    }
+    tsc_text_decoder_t* decoder = (tsc_text_decoder_t*)TSC_GC_MALLOC(sizeof(tsc_text_decoder_t));
+    decoder->dummy = 0;
+    return decoder;
+}
+
+tsc_str_t* tsc_text_decoder_decode(const tsc_text_decoder_t* decoder, const tsc_buffer_t* input) {
+    (void)decoder;
+    if (!input) {
+        return tsc_str_from_lit("", 0);
+    }
+    return tsc_buffer_to_string(input, tsc_str_from_lit("utf8", 4));
+}
 
 tsc_value_t tsc_proxy_new(tsc_value_t target, tsc_value_t handler) {
     if (

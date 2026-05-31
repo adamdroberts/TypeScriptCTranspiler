@@ -433,6 +433,21 @@ double tsc_buffer_write_double_be(tsc_buffer_t* b, double value, double offset);
 tsc_buffer_t* tsc_buffer_swap(tsc_buffer_t* b, size_t width);
 #define TSC_BUF(b, i) ((b)->data[(size_t)(i)])
 
+/* ------------- TextEncoder / TextDecoder ------------- */
+typedef struct tsc_text_encoder {
+    char dummy;
+} tsc_text_encoder_t;
+
+typedef struct tsc_text_decoder {
+    char dummy;
+} tsc_text_decoder_t;
+
+tsc_text_encoder_t* tsc_text_encoder_new(void);
+tsc_buffer_t* tsc_text_encoder_encode(const tsc_text_encoder_t* encoder, const tsc_str_t* input);
+
+tsc_text_decoder_t* tsc_text_decoder_new(const tsc_str_t* encoding);
+tsc_str_t* tsc_text_decoder_decode(const tsc_text_decoder_t* decoder, const tsc_buffer_t* input);
+
 /* ------------- JSON ------------- */
 tsc_str_t* tsc_json_escape_string(const tsc_str_t* s);  /* adds quotes + escapes */
 tsc_str_t* tsc_json_num(double n);  /* JSON-safe number formatting */

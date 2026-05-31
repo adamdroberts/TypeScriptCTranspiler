@@ -17,6 +17,8 @@ import {
     T_BIGINT,
     T_BOOLEAN,
     T_BUFFER,
+    T_TEXT_DECODER,
+    T_TEXT_ENCODER,
     T_DATE,
     T_ERROR,
     T_EVENT,
@@ -26227,7 +26229,7 @@ class Emitter {
                     );
                 }
                 const pointerKinds: readonly CType["kind"][] = [
-                    "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "urlsearchparams", "date", "error", "buffer", "fsstats", "fsdirent", "function",
+                    "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "urlsearchparams", "date", "error", "buffer", "textencoder", "textdecoder", "fsstats", "fsdirent", "function",
                 ];
                 if (pointerKinds.includes(left.ty.kind)) {
                     const tv = this.freshTemp("_nc");
@@ -27262,7 +27264,7 @@ class Emitter {
         }
         // Compare pointer-valued types (array, class, map, set, regexp, string) to null.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "urlsearchparams", "date", "error", "buffer", "fsstats", "fsdirent", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "url", "urlsearchparams", "date", "error", "buffer", "textencoder", "textdecoder", "fsstats", "fsdirent", "function",
         ];
         const leftIsNull = left.ty.kind === "void";
         const rightIsNull = right.ty.kind === "void";
@@ -28158,6 +28160,8 @@ class Emitter {
             case "bigint": return "BigInt";
             case "boolean": return "Boolean";
             case "buffer": return "Uint8Array";
+            case "textencoder": return "TextEncoder";
+            case "textdecoder": return "TextDecoder";
             case "date": return "Date";
             case "error": return "Error";
             case "event": return "Event";
@@ -30335,6 +30339,10 @@ class Emitter {
             return this.emitErrorMethod(call, recv, memberName);
         if (recv.ty.kind === "buffer")
             return this.emitBufferMethod(call, recv, memberName);
+        if (recv.ty.kind === "textencoder")
+            return this.emitTextEncoderMethod(call, recv, memberName);
+        if (recv.ty.kind === "textdecoder")
+            return this.emitTextDecoderMethod(call, recv, memberName);
         if (recv.ty.kind === "fsstats")
             return this.emitFsStatsMethod(call, recv, memberName);
         if (recv.ty.kind === "fsdirent")
@@ -40472,6 +40480,76 @@ class Emitter {
         unsupported(call, `Dirent method .${method}`);
     }
 
+    private emitTextEncoderMethod(
+        call: ts.CallExpression,
+        recv: EmitResult,
+        method: string,
+    ): EmitResult {
+        const args = call.arguments;
+        switch (method) {
+            case "encode": {
+                const specs: SequencedCallArg[] = [{ value: recv }];
+                const hasInput = args.length >= 1 && !this.isUndefinedExpression(args[0]);
+                if (hasInput) {
+                    specs.push({
+                        value: this.emitExpr(args[0]),
+                        target: T_STRING,
+                        node: args[0],
+                    });
+                }
+                specs.push(...this.ignoredArgumentSpecs(args, 1));
+                return this.emitSequencedExpr(
+                    T_BUFFER,
+                    specs,
+                    (vals) => {
+                        const str = hasInput ? vals[1]! : "NULL";
+                        return `tsc_text_encoder_encode(${vals[0]}, ${str})`;
+                    },
+                );
+            }
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Object");
+        }
+        unsupported(call, `TextEncoder.${method} (only encode is supported)`);
+    }
+
+    private emitTextDecoderMethod(
+        call: ts.CallExpression,
+        recv: EmitResult,
+        method: string,
+    ): EmitResult {
+        const args = call.arguments;
+        switch (method) {
+            case "decode": {
+                const specs: SequencedCallArg[] = [{ value: recv }];
+                const hasBuffer = args.length >= 1 && !this.isUndefinedExpression(args[0]);
+                if (hasBuffer) {
+                    specs.push({
+                        value: this.emitExpr(args[0]),
+                        target: T_BUFFER,
+                        node: args[0],
+                    });
+                }
+                specs.push(...this.ignoredArgumentSpecs(args, 1));
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    specs,
+                    (vals) => {
+                        const buf = hasBuffer ? vals[1]! : "NULL";
+                        return `tsc_text_decoder_decode(${vals[0]}, ${buf})`;
+                    },
+                );
+            }
+            case "toLocaleString":
+            case "toString":
+            case "valueOf":
+                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Object");
+        }
+        unsupported(call, `TextDecoder.${method} (only decode is supported)`);
+    }
+
     private emitBufferMethod(
         call: ts.CallExpression,
         recv: EmitResult,
@@ -45705,6 +45783,35 @@ class Emitter {
         const cls = targetClassDecl?.name?.text ?? this.identifierName(ctorExpr);
         if (cls === "Function") {
             return this.emitUnsafeFunctionConstructor(n);
+        }
+        if (cls === "TextEncoder") {
+            const args = n.arguments ?? [];
+            return this.emitSequencedExpr(
+                T_TEXT_ENCODER,
+                this.ignoredArgumentSpecs(args, 0),
+                () => "tsc_text_encoder_new()",
+            );
+        }
+        if (cls === "TextDecoder") {
+            const args = n.arguments ?? [];
+            const specs: SequencedCallArg[] = [];
+            const hasEncoding = args.length >= 1 && !this.isUndefinedExpression(args[0]);
+            if (hasEncoding) {
+                specs.push({
+                    value: this.emitExpr(args[0]),
+                    target: T_STRING,
+                    node: args[0],
+                });
+            }
+            specs.push(...this.ignoredArgumentSpecs(args, 1));
+            return this.emitSequencedExpr(
+                T_TEXT_DECODER,
+                specs,
+                (vals) => {
+                    const enc = hasEncoding ? vals[0]! : "NULL";
+                    return `tsc_text_decoder_new(${enc})`;
+                },
+            );
         }
         // Built-in Map / Set constructors.
         if (cls === "Map") {

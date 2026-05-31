@@ -2146,3 +2146,19 @@ declare module "node:url" {
     const defaultUrl: UrlModule;
     export default defaultUrl;
 }
+
+interface TextEncoder {
+    encode(input?: string, ...ignored: any[]): Buffer;
+}
+interface TextEncoderConstructor {
+    new (): TextEncoder;
+}
+declare var TextEncoder: TextEncoderConstructor;
+
+interface TextDecoder {
+    decode(input?: Buffer, ...ignored: any[]): string;
+}
+interface TextDecoderConstructor {
+    new (label?: string, ...ignored: any[]): TextDecoder;
+}
+declare var TextDecoder: TextDecoderConstructor;
