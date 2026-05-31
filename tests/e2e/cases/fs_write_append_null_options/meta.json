@@ -1,0 +1,3 @@
+{
+  "description": "fs write, append, and mkdir options supporting direct null options and { encoding: null }"
+}

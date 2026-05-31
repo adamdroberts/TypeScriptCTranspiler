@@ -1,0 +1,6 @@
+mkdirSync path exists: true
+sync content:
+write-sync-enc-null|append-sync-null|append-sync-enc-null
+promises.mkdir path exists: true
+promise content:
+write-promise-enc-null|append-promise-null|append-promise-enc-null
