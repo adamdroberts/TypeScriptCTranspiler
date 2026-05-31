@@ -27818,6 +27818,10 @@ class Emitter {
             "cpSync",
             "copyFileSync",
             "renameSync",
+            "openSync",
+            "closeSync",
+            "readSync",
+            "writeSync",
         ].find((exported) => this.isNamedImportFrom(calleeId, ["fs", "node:fs"], exported));
         if (fsNamed) {
             return this.emitFsCall(call, fsNamed);
@@ -39031,6 +39035,189 @@ class Emitter {
                 }
                 specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_VOID, specs, ([src, dest]) => `tsc_fs_rename_sync(${src!}, ${dest!})`);
+            }
+            case "openSync": {
+                if (args.length < 1) unsupported(call, "fs.openSync needs a path");
+                const pathExpr = this.emitExpr(args[0]!);
+
+                // flags default to 'r'
+                let flagsIsNum = false;
+                let flagsSpec: SequencedCallArg;
+                if (args[1] && !this.isUndefinedExpression(args[1])) {
+                    const flagsExpr = this.emitExpr(args[1]!);
+                    if (flagsExpr.ty.kind === "string") {
+                        flagsSpec = { value: flagsExpr, target: T_STRING, node: args[1] };
+                        flagsIsNum = false;
+                    } else if (flagsExpr.ty.kind === "number") {
+                        flagsSpec = { value: flagsExpr, target: T_NUMBER, node: args[1] };
+                        flagsIsNum = true;
+                    } else {
+                        unsupported(args[1]!, "fs.openSync flags must be string or number");
+                    }
+                } else {
+                    flagsSpec = { value: { c: `tsc_str_from_cstr("r")`, ty: T_STRING }, target: T_STRING, node: call };
+                    flagsIsNum = false;
+                }
+
+                // mode defaults to 0o666 (438 in decimal)
+                let modeSpec: SequencedCallArg;
+                if (args[2] && !this.isUndefinedExpression(args[2])) {
+                    const modeExpr = this.emitExpr(args[2]!);
+                    if (modeExpr.ty.kind !== "number") unsupported(args[2]!, "fs.openSync mode must be a number");
+                    modeSpec = { value: modeExpr, target: T_NUMBER, node: args[2] };
+                } else {
+                    modeSpec = { value: { c: "438.0", ty: T_NUMBER }, target: T_NUMBER, node: call };
+                }
+
+                const specs: SequencedCallArg[] = [
+                    this.fsPathSpec(pathExpr, args[0]!, "fs.openSync path"),
+                    flagsSpec,
+                    modeSpec,
+                ];
+
+                specs.push(...this.ignoredArgumentSpecs(args, 3));
+
+                return this.emitSequencedExpr(T_NUMBER, specs, ([path, flags, mode]) => {
+                    const flagsStr = flagsIsNum ? "NULL" : flags!;
+                    const flagsNum = flagsIsNum ? flags! : "0.0";
+                    return `tsc_fs_open_sync(${path!}, ${flagsStr}, ${flagsNum}, ${flagsIsNum ? "true" : "false"}, ${mode!})`;
+                });
+            }
+            case "closeSync": {
+                if (args.length < 1) unsupported(call, "fs.closeSync needs a file descriptor");
+                const fdExpr = this.emitExpr(args[0]!);
+                if (fdExpr.ty.kind !== "number") unsupported(args[0]!, "fs.closeSync file descriptor must be a number");
+
+                const specs: SequencedCallArg[] = [
+                    { value: fdExpr, target: T_NUMBER, node: args[0]! },
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ];
+
+                return this.emitSequencedExpr(T_VOID, specs, ([fd]) => `tsc_fs_close_sync(${fd!})`);
+            }
+            case "readSync": {
+                if (args.length < 2) unsupported(call, "fs.readSync needs fd and buffer");
+                const fdExpr = this.emitExpr(args[0]!);
+                if (fdExpr.ty.kind !== "number") unsupported(args[0]!, "fs.readSync fd must be a number");
+
+                const bufExpr = this.emitExpr(args[1]!);
+                if (bufExpr.ty.kind !== "buffer") unsupported(args[1]!, "fs.readSync second argument must be a Buffer");
+
+                let offsetSpec: SequencedCallArg;
+                if (args[2] && !this.isUndefinedExpression(args[2])) {
+                    const offsetExpr = this.emitExpr(args[2]!);
+                    if (offsetExpr.ty.kind !== "number") unsupported(args[2]!, "fs.readSync offset must be a number");
+                    offsetSpec = { value: offsetExpr, target: T_NUMBER, node: args[2] };
+                } else {
+                    offsetSpec = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: call };
+                }
+
+                let lengthSpec: SequencedCallArg;
+                if (args[3] && !this.isUndefinedExpression(args[3])) {
+                    const lengthExpr = this.emitExpr(args[3]!);
+                    if (lengthExpr.ty.kind !== "number") unsupported(args[3]!, "fs.readSync length must be a number");
+                    lengthSpec = { value: lengthExpr, target: T_NUMBER, node: args[3] };
+                } else {
+                    lengthSpec = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: call };
+                }
+
+                let posSpec: SequencedCallArg;
+                let positionIsNull = true;
+                if (args[4] && !this.isUndefinedExpression(args[4]) && args[4].kind !== ts.SyntaxKind.NullKeyword) {
+                    const posExpr = this.emitExpr(args[4]!);
+                    if (posExpr.ty.kind !== "number") unsupported(args[4]!, "fs.readSync position must be a number or null");
+                    posSpec = { value: posExpr, target: T_NUMBER, node: args[4] };
+                    positionIsNull = false;
+                } else {
+                    posSpec = { value: { c: "0.0", ty: T_NUMBER }, target: T_NUMBER, node: call };
+                }
+
+                const specs: SequencedCallArg[] = [
+                    { value: fdExpr, target: T_NUMBER, node: args[0]! },
+                    { value: bufExpr, target: T_BUFFER, node: args[1]! },
+                    offsetSpec,
+                    lengthSpec,
+                    posSpec,
+                    ...this.ignoredArgumentSpecs(args, 5),
+                ];
+
+                return this.emitSequencedExpr(T_NUMBER, specs, ([fd, buf, offset, length, pos]) =>
+                    `tsc_fs_read_sync(${fd!}, ${buf!}, ${offset!}, ${length!}, ${pos!}, ${positionIsNull ? "true" : "false"})`
+                );
+            }
+            case "writeSync": {
+                if (args.length < 2) unsupported(call, "fs.writeSync needs fd and data");
+                const fdExpr = this.emitExpr(args[0]!);
+                if (fdExpr.ty.kind !== "number") unsupported(args[0]!, "fs.writeSync fd must be a number");
+
+                const dataExpr = this.emitExpr(args[1]!);
+                if (dataExpr.ty.kind === "string") {
+                    let posSpec: SequencedCallArg;
+                    let positionIsNull = true;
+                    if (args[2] && !this.isUndefinedExpression(args[2]) && args[2].kind !== ts.SyntaxKind.NullKeyword) {
+                        const posExpr = this.emitExpr(args[2]!);
+                        if (posExpr.ty.kind !== "number") unsupported(args[2]!, "fs.writeSync position must be a number or null");
+                        posSpec = { value: posExpr, target: T_NUMBER, node: args[2] };
+                        positionIsNull = false;
+                    } else {
+                        posSpec = { value: { c: "0.0", ty: T_NUMBER }, target: T_NUMBER, node: call };
+                    }
+
+                    const specs: SequencedCallArg[] = [
+                        { value: fdExpr, target: T_NUMBER, node: args[0]! },
+                        { value: dataExpr, target: T_STRING, node: args[1]! },
+                        posSpec,
+                        ...this.ignoredArgumentSpecs(args, 3),
+                    ];
+
+                    return this.emitSequencedExpr(T_NUMBER, specs, ([fd, str, pos]) =>
+                        `tsc_fs_write_string_sync(${fd!}, ${str!}, ${pos!}, ${positionIsNull ? "true" : "false"})`
+                    );
+                } else if (dataExpr.ty.kind === "buffer") {
+                    let offsetSpec: SequencedCallArg;
+                    if (args[2] && !this.isUndefinedExpression(args[2])) {
+                        const offsetExpr = this.emitExpr(args[2]!);
+                        if (offsetExpr.ty.kind !== "number") unsupported(args[2]!, "fs.writeSync offset must be a number");
+                        offsetSpec = { value: offsetExpr, target: T_NUMBER, node: args[2] };
+                    } else {
+                        offsetSpec = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: call };
+                    }
+
+                    let lengthSpec: SequencedCallArg;
+                    if (args[3] && !this.isUndefinedExpression(args[3])) {
+                        const lengthExpr = this.emitExpr(args[3]!);
+                        if (lengthExpr.ty.kind !== "number") unsupported(args[3]!, "fs.writeSync length must be a number");
+                        lengthSpec = { value: lengthExpr, target: T_NUMBER, node: args[3] };
+                    } else {
+                        lengthSpec = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: call };
+                    }
+
+                    let posSpec: SequencedCallArg;
+                    let positionIsNull = true;
+                    if (args[4] && !this.isUndefinedExpression(args[4]) && args[4].kind !== ts.SyntaxKind.NullKeyword) {
+                        const posExpr = this.emitExpr(args[4]!);
+                        if (posExpr.ty.kind !== "number") unsupported(args[4]!, "fs.writeSync position must be a number or null");
+                        posSpec = { value: posExpr, target: T_NUMBER, node: args[4] };
+                        positionIsNull = false;
+                    } else {
+                        posSpec = { value: { c: "0.0", ty: T_NUMBER }, target: T_NUMBER, node: call };
+                    }
+
+                    const specs: SequencedCallArg[] = [
+                        { value: fdExpr, target: T_NUMBER, node: args[0]! },
+                        { value: dataExpr, target: T_BUFFER, node: args[1]! },
+                        offsetSpec,
+                        lengthSpec,
+                        posSpec,
+                        ...this.ignoredArgumentSpecs(args, 5),
+                    ];
+
+                    return this.emitSequencedExpr(T_NUMBER, specs, ([fd, buf, offset, length, pos]) =>
+                        `tsc_fs_write_buffer_sync(${fd!}, ${buf!}, ${offset!}, ${length!}, ${pos!}, ${positionIsNull ? "true" : "false"})`
+                    );
+                } else {
+                    unsupported(args[1]!, "fs.writeSync second argument must be a string or a Buffer");
+                }
             }
         }
         unsupported(call, `fs.${name} (Phase 10 sync subset only)`);
