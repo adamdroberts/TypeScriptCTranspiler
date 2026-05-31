@@ -27995,7 +27995,7 @@ class Emitter {
         if (childProcessNamed) {
             return this.emitChildProcessCall(call, childProcessNamed);
         }
-        const osNamed = ["platform", "type", "release", "version", "endianness", "machine", "arch", "hostname", "tmpdir", "homedir", "cpus", "availableParallelism", "totalmem", "freemem", "uptime", "loadavg", "userInfo"]
+        const osNamed = ["platform", "type", "release", "version", "endianness", "machine", "arch", "hostname", "tmpdir", "homedir", "cpus", "availableParallelism", "totalmem", "freemem", "uptime", "loadavg", "userInfo", "networkInterfaces"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["os", "node:os"], exported));
         if (osNamed) {
             return this.emitOsCall(call, osNamed);
@@ -42011,6 +42011,9 @@ class Emitter {
                     arrayType(T_NUMBER),
                     `({ double _n = tsc_os_cpu_count(); tsc_array_t* _a = tsc_array_new(sizeof(double), (size_t)_n); _a->len = (size_t)_n; _a; })`,
                 );
+            }
+            case "networkInterfaces": {
+                return ret(T_VALUE, `tsc_os_network_interfaces()`);
             }
         }
         unsupported(call, `os.${name}`);

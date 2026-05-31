@@ -1,0 +1,13 @@
+ignored: gnu
+global is object: true
+namespace is object: true
+named is object: true
+has interfaces: true
+records is array: true
+record is object: true
+address is string: true
+netmask is string: true
+family is IPv4 or IPv6: true
+mac is string: true
+internal is boolean: true
+cidr is string: true
