@@ -1,0 +1,7 @@
+hash1: 5eb63bbbe01eeed093cb22bb8f5acdc3
+hash2: kAFQmDzST7DWlj99KOF/cg==
+hmac1: 36b89aaa72560638852703acba484b2b
+hmac2: +QoUbNkXDMKPK9GBC92qvw==
+hmac3 hex from buffer: 357b4c4e31c0a8003e32da521bdeab58
+sha384 throw caught: crypto.createHash: only md5, sha1, sha256, and sha512 are supported
+hmac sha384 throw caught: crypto.createHmac: only md5, sha1, sha256, and sha512 are supported

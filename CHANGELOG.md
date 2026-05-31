@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Supported `crypto.createHash(...)` and `crypto.createHmac(...)` compatibility expansion for MD5 algorithm, allowing MD5 digest computation with string/Buffer data and keys, and returning hex/base64 strings or Buffers depending on digest encoding. Test: `crypto_md5`.
 - Bounded global `TextEncoder` and `TextDecoder` constructors support deterministic UTF-8 encode and decode operations. Test: `text_encoder_decoder`.
 - `buffer.transcode(source, fromEnc, toEnc, ...ignored)` is supported for transcoding between UTF-8, hex, and base64 encodings, across named, aliased named, default, and namespace imports from `"buffer"` / `"node:buffer"`. Test: `buffer_transcode`.
 - `crypto.timingSafeEqual(a, b, ...ignored)` now compares same-length Buffers through global, named, aliased named, namespace, and default `"crypto"` / `"node:crypto"` imports with catchable length validation. Test: `crypto_timing_safe_equal`.
