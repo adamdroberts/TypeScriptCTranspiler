@@ -53,6 +53,7 @@ import {
 } from "../native-addons";
 import {
     dynamicRequireManifestHasEntries,
+    dynamicRequireSpecifiersForFile,
     emptyDynamicRequireManifest,
     type DynamicRequireManifest,
 } from "../dynamic-require";
@@ -18425,7 +18426,9 @@ class Emitter {
             const staticSpecs = staticStringExpressionTexts(specifierArg);
             if (staticSpecs.length > 0) return staticSpecs;
             const dynamicRequires = this.options.dynamicRequires ?? emptyDynamicRequireManifest();
-            return dynamicRequireManifestHasEntries(dynamicRequires) ? dynamicRequires.specifiers : [];
+            return dynamicRequireManifestHasEntries(dynamicRequires)
+                ? dynamicRequireSpecifiersForFile(dynamicRequires, expr.getSourceFile().fileName)
+                : [];
         }
         return null;
     }

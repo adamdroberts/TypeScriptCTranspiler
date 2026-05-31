@@ -8,6 +8,7 @@ import {
 } from "./module-specifiers";
 import {
     dynamicRequireManifestHasEntries,
+    dynamicRequireSpecifiersForFile,
     type DynamicRequireManifest,
 } from "./dynamic-require";
 import { resolveCommonJsRequireModuleName } from "./commonjs-resolve";
@@ -105,7 +106,16 @@ function collectStaticRequireRoots(
         const moduleAliases = commonJsModuleAliases(sf);
         const requireAliases = commonJsRequireAliases(sf, moduleAliases);
         for (const stmt of sf.statements) {
-            for (const spec of staticRequireSpecifiers(stmt, requireAliases, moduleAliases, dynamicRequires)) {
+            const importSpec = moduleImportSpecifier(stmt);
+            if (importSpec) {
+                const resolvedFile = resolveTypeScriptModuleName(importSpec, fileName, compilerOptions);
+                if (resolvedFile && !seen.has(resolvedFile)) {
+                    seen.add(resolvedFile);
+                    roots.push(resolvedFile);
+                    queue.push(resolvedFile);
+                }
+            }
+            for (const spec of staticRequireSpecifiers(stmt, requireAliases, moduleAliases, dynamicRequires, fileName)) {
                 const resolvedFile = resolveCommonJsRequireModuleName(spec, fileName, compilerOptions);
                 if (!resolvedFile || seen.has(resolvedFile)) continue;
                 seen.add(resolvedFile);
@@ -115,6 +125,27 @@ function collectStaticRequireRoots(
         }
     }
     return roots;
+}
+
+function moduleImportSpecifier(stmt: ts.Statement): string | null {
+    if (!ts.isImportDeclaration(stmt) && !ts.isExportDeclaration(stmt)) return null;
+    if (isTypeOnlyModuleEdge(stmt)) return null;
+    const spec = stmt.moduleSpecifier;
+    return spec && ts.isStringLiteral(spec) ? spec.text : null;
+}
+
+function isTypeOnlyModuleEdge(stmt: ts.ImportDeclaration | ts.ExportDeclaration): boolean {
+    if (ts.isImportDeclaration(stmt)) return stmt.importClause?.isTypeOnly === true;
+    return stmt.isTypeOnly === true;
+}
+
+function resolveTypeScriptModuleName(
+    spec: string,
+    containingFile: string,
+    compilerOptions: ts.CompilerOptions,
+): string | null {
+    const resolved = ts.resolveModuleName(spec, containingFile, compilerOptions, ts.sys).resolvedModule;
+    return resolved?.resolvedFileName ?? null;
 }
 
 function scriptKindForFile(fileName: string): ts.ScriptKind {
@@ -129,6 +160,7 @@ function staticRequireSpecifiers(
     requireAliases: Set<string>,
     moduleAliases: Set<string>,
     dynamicRequires: DynamicRequireManifest | undefined,
+    fileName: string,
 ): string[] {
     const specs: string[] = [];
     const visit = (node: ts.Node): void => {
@@ -137,7 +169,7 @@ function staticRequireSpecifiers(
             if (nodeSpecs.length > 0) {
                 specs.push(...nodeSpecs);
             } else if (dynamicRequires && dynamicRequireManifestHasEntries(dynamicRequires)) {
-                specs.push(...dynamicRequires.specifiers);
+                specs.push(...dynamicRequireSpecifiersForFile(dynamicRequires, fileName));
             }
         }
         ts.forEachChild(node, visit);

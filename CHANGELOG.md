@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic require manifests may now scope non-finite `require(variable)` allow-list entries to individual caller files, keeping each AOT dispatch table limited to the matching source file. Tests: `dynamic_require_manifest_by_file`, `dynamic_require_manifest_by_file_unmatched`.
 - Generated-C DCE now prunes unused callable `Object(...)` and Error-family constructor calls when their operands are side-effect-free and non-throwing. Test: `generated_c_dce_static_builtins`.
 - Process stdio streams now expose bounded `_readableState` for `stdin` and `_writableState` for `stdout` / `stderr` with inert queue/state metadata objects. Test: `process_stdio_state_objects`.
 - Extended the narrow lazy generator lowering to resume across simple `do...while` loop suspension points, including loop-local `break`. Test: `generator_lazy_do_while`.
