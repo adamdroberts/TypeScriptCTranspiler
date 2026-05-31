@@ -215,6 +215,8 @@ class Emitter {
     private returnStack: CType[] = [];
     private tailFunctionStack: TailFunctionContext[] = [];
     private generatorStack: GeneratorContext[] = [];
+    private activeLazyGeneratorBreakTargets: Array<"loop" | "switch"> = [];
+    private activeLazyGeneratorSwitchEndLabels: string[] = [];
     private asyncFunctionStack: AsyncFunctionContext[] = [];
     private tryDepth = 0;
     private currentClass: string | null = null;
@@ -22420,6 +22422,7 @@ class Emitter {
 
     private isValidLazyGeneratorStatement(stmt: ts.Statement): boolean {
         if (ts.isEmptyStatement(stmt)) return true;
+        if (ts.isBreakStatement(stmt)) return !stmt.label;
 
         let hasNestedFunctionOrClass = false;
         const checkNestedScopes = (node: ts.Node) => {
@@ -22478,11 +22481,12 @@ class Emitter {
                 }
                 let sawBreak = false;
                 for (const child of clause.statements) {
-                    if (child.kind === ts.SyntaxKind.BreakStatement) {
+                    if (ts.isBreakStatement(child) && !child.label) {
                         sawBreak = true;
                         continue;
                     }
                     if (sawBreak || !this.isValidLazyGeneratorStatement(child)) return false;
+                    if (this.endsWithUnconditionalBreak(child)) sawBreak = true;
                 }
             }
             return true;
@@ -22549,6 +22553,15 @@ class Emitter {
             return stmt.expression ? this.singleYieldExpressionInExpression(stmt.expression) : null;
         }
         return null;
+    }
+
+    private endsWithUnconditionalBreak(stmt: ts.Statement): boolean {
+        if (ts.isBreakStatement(stmt)) return !stmt.label;
+        if (ts.isBlock(stmt)) {
+            const last = stmt.statements[stmt.statements.length - 1];
+            return !!last && this.endsWithUnconditionalBreak(last);
+        }
+        return false;
     }
 
     private singleYieldExpressionInExpression(expr: ts.Expression): ts.YieldExpression | null {
@@ -22721,6 +22734,10 @@ class Emitter {
             if (stmt.kind === ts.SyntaxKind.BreakStatement) {
                 return true;
             }
+            if (this.endsWithUnconditionalBreak(stmt)) {
+                this.emitLazyGeneratorStmt(buf, stmt, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+                return true;
+            }
             this.emitLazyGeneratorStmt(buf, stmt, nextStateId, nextYieldStarSlot, elemType, envLocalName);
         }
         return false;
@@ -22756,70 +22773,79 @@ class Emitter {
         elemType: CType,
         envLocalName: string,
     ): void {
-        const disc = this.emitExpr(stmt.expression);
-        const isStr = disc.ty.kind === "string";
-        const isBool = disc.ty.kind === "boolean";
-        if (!isStr && !isBool) requireNumber(stmt.expression, disc.ty);
-        const discVar = this.freshTemp("_sw");
-        buf.open("");
-        buf.line(`${disc.ty.c} ${discVar} = ${disc.c};`);
+        const endLabel = this.freshTemp("_sw_end");
+        this.activeLazyGeneratorBreakTargets.push("switch");
+        this.activeLazyGeneratorSwitchEndLabels.push(endLabel);
+        try {
+            const disc = this.emitExpr(stmt.expression);
+            const isStr = disc.ty.kind === "string";
+            const isBool = disc.ty.kind === "boolean";
+            if (!isStr && !isBool) requireNumber(stmt.expression, disc.ty);
+            const discVar = this.freshTemp("_sw");
+            buf.open("");
+            buf.line(`${disc.ty.c} ${discVar} = ${disc.c};`);
 
-        const buildCond = (caseExpr: ts.Expression): string => {
-            const caseVal = this.emitExpr(caseExpr);
-            if (isStr) {
-                return `tsc_str_eq(${discVar}, ${this.coerce(caseVal, disc.ty, caseExpr)})`;
-            }
-            if (isBool) {
+            const buildCond = (caseExpr: ts.Expression): string => {
+                const caseVal = this.emitExpr(caseExpr);
+                if (isStr) {
+                    return `tsc_str_eq(${discVar}, ${this.coerce(caseVal, disc.ty, caseExpr)})`;
+                }
+                if (isBool) {
+                    return `(${discVar} == ${this.coerce(caseVal, disc.ty, caseExpr)})`;
+                }
                 return `(${discVar} == ${this.coerce(caseVal, disc.ty, caseExpr)})`;
+            };
+            const caseConds = new Map<ts.CaseClause, string>();
+            const allCaseConds: string[] = [];
+            for (const clause of stmt.caseBlock.clauses) {
+                if (!ts.isCaseClause(clause)) continue;
+                const cond = buildCond(clause.expression);
+                caseConds.set(clause, cond);
+                allCaseConds.push(cond);
             }
-            return `(${discVar} == ${this.coerce(caseVal, disc.ty, caseExpr)})`;
-        };
-        const caseConds = new Map<ts.CaseClause, string>();
-        const allCaseConds: string[] = [];
-        for (const clause of stmt.caseBlock.clauses) {
-            if (!ts.isCaseClause(clause)) continue;
-            const cond = buildCond(clause.expression);
-            caseConds.set(clause, cond);
-            allCaseConds.push(cond);
-        }
 
-        let first = true;
-        let defaultIndex = -1;
-        for (const [index, clause] of stmt.caseBlock.clauses.entries()) {
-            if (ts.isCaseClause(clause)) {
-                const cond = caseConds.get(clause)!;
-                buf.open(first ? `if (${cond})` : `else if (${cond})`);
+            let first = true;
+            let defaultIndex = -1;
+            for (const [index, clause] of stmt.caseBlock.clauses.entries()) {
+                if (ts.isCaseClause(clause)) {
+                    const cond = caseConds.get(clause)!;
+                    buf.open(first ? `if (${cond})` : `else if (${cond})`);
+                    this.emitLazyGeneratorSwitchClauseRange(
+                        buf,
+                        stmt.caseBlock.clauses,
+                        index,
+                        nextStateId,
+                        nextYieldStarSlot,
+                        elemType,
+                        envLocalName,
+                    );
+                    buf.close();
+                    first = false;
+                    continue;
+                }
+
+                defaultIndex = index;
+            }
+
+            if (defaultIndex >= 0) {
+                buf.open(first ? "if (true)" : "else");
                 this.emitLazyGeneratorSwitchClauseRange(
                     buf,
                     stmt.caseBlock.clauses,
-                    index,
+                    defaultIndex,
                     nextStateId,
                     nextYieldStarSlot,
                     elemType,
                     envLocalName,
                 );
                 buf.close();
-                first = false;
-                continue;
             }
-
-            defaultIndex = index;
-        }
-
-        if (defaultIndex >= 0) {
-            buf.open(first ? "if (true)" : "else");
-            this.emitLazyGeneratorSwitchClauseRange(
-                buf,
-                stmt.caseBlock.clauses,
-                defaultIndex,
-                nextStateId,
-                nextYieldStarSlot,
-                elemType,
-                envLocalName,
-            );
             buf.close();
+        } finally {
+            this.activeLazyGeneratorSwitchEndLabels.pop();
+            this.activeLazyGeneratorBreakTargets.pop();
         }
-        buf.close();
+        buf.line(`${endLabel}:;`);
     }
 
     private emitLazyGeneratorStmt(
@@ -22858,7 +22884,12 @@ class Emitter {
         if (ts.isWhileStatement(stmt)) {
             if (this.staticBooleanValue(stmt.expression) === false) return;
             buf.open(`while (${this.emitBoolExpr(stmt.expression)})`);
-            this.emitLazyGeneratorStmt(buf, stmt.statement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            this.activeLazyGeneratorBreakTargets.push("loop");
+            try {
+                this.emitLazyGeneratorStmt(buf, stmt.statement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            } finally {
+                this.activeLazyGeneratorBreakTargets.pop();
+            }
             buf.close();
             return;
         }
@@ -22868,7 +22899,12 @@ class Emitter {
             this.emitLazyGeneratorForInitializer(buf, stmt.initializer);
             const cond = stmt.condition ? this.emitBoolExpr(stmt.condition) : "true";
             buf.open(`while (${cond})`);
-            this.emitLazyGeneratorStmt(buf, stmt.statement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            this.activeLazyGeneratorBreakTargets.push("loop");
+            try {
+                this.emitLazyGeneratorStmt(buf, stmt.statement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            } finally {
+                this.activeLazyGeneratorBreakTargets.pop();
+            }
             if (stmt.incrementor) {
                 const inc = this.emitExpr(stmt.incrementor);
                 buf.line(`(void)(${inc.c});`);
@@ -22880,6 +22916,18 @@ class Emitter {
 
         if (ts.isSwitchStatement(stmt)) {
             this.emitLazyGeneratorSwitch(buf, stmt, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            return;
+        }
+
+        if (ts.isBreakStatement(stmt)) {
+            if (stmt.label) unsupported(stmt, "labeled breaks are not supported in lazy generators");
+            const innermost = this.activeLazyGeneratorBreakTargets[this.activeLazyGeneratorBreakTargets.length - 1];
+            if (innermost === "switch") {
+                const label = this.activeLazyGeneratorSwitchEndLabels[this.activeLazyGeneratorSwitchEndLabels.length - 1]!;
+                buf.line(`goto ${label};`);
+            } else {
+                buf.line("break;");
+            }
             return;
         }
 
