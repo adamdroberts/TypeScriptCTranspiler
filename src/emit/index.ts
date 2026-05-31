@@ -19809,6 +19809,19 @@ class Emitter {
         ) {
             return true;
         }
+        if (
+            ts.isBinaryExpression(parent) &&
+            parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            parent.right === expr &&
+            ts.isIdentifier(parent.left)
+        ) {
+            const sym = this.checker.getSymbolAtLocation(parent.left);
+            if (sym && sym.valueDeclaration && ts.isVariableDeclaration(sym.valueDeclaration)) {
+                if (this.nonEscapingArrayAssignmentAliasUsesAreSafe(sym.valueDeclaration)) {
+                    return true;
+                }
+            }
+        }
         if (ts.isElementAccessExpression(parent) && parent.expression === expr) {
             return true;
         }
@@ -19859,6 +19872,14 @@ class Emitter {
             this.nonEscapingArrayAliasExtraCapacity(d, scope) !== null;
     }
 
+    private nonEscapingArrayAssignmentAliasUsesAreSafe(d: ts.VariableDeclaration): boolean {
+        const stmt = d.parent.parent;
+        const scope = stmt?.parent;
+        return !!scope &&
+            ts.isBlock(scope) &&
+            this.nonEscapingArrayAliasExtraCapacity(d, scope) !== null;
+    }
+
     private nonEscapingArrayAliasExtraCapacity(d: ts.VariableDeclaration, scope: ts.Block): number | null {
         if (!ts.isIdentifier(d.name)) return null;
         const sym = this.symbolForIdentifier(d.name);
@@ -19898,6 +19919,13 @@ class Emitter {
             parent.initializer === n
         ) {
             return this.nonEscapingArrayAliasExtraCapacity(parent, scope);
+        }
+        if (
+            ts.isBinaryExpression(parent) &&
+            parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            parent.left === n
+        ) {
+            return 0;
         }
         if (ts.isElementAccessExpression(parent) && parent.expression === n) {
             return 0;
