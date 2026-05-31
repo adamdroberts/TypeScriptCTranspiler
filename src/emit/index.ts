@@ -22393,12 +22393,26 @@ class Emitter {
 
     private isSimpleSequentialGenerator(fn: ts.FunctionLikeDeclaration): boolean {
         if (!this.isGeneratorDeclaration(fn)) return false;
-        if (fn.parameters.length > 0) return false;
         if (!fn.body || !ts.isBlock(fn.body)) return false;
+        for (const param of fn.parameters) {
+            if (this.isThisParameter(param)) continue;
+            if (!ts.isIdentifier(param.name)) return false;
+            if (param.initializer || param.dotDotDotToken) return false;
+        }
 
         for (let i = 0; i < fn.body.statements.length; i++) {
             const stmt = fn.body.statements[i]!;
             if (ts.isEmptyStatement(stmt)) continue;
+            let hasNestedFunctionOrClass = false;
+            const checkNestedScopes = (node: ts.Node) => {
+                if (node !== stmt && (ts.isFunctionLike(node) || ts.isClassLike(node))) {
+                    hasNestedFunctionOrClass = true;
+                    return;
+                }
+                ts.forEachChild(node, checkNestedScopes);
+            };
+            ts.forEachChild(stmt, checkNestedScopes);
+            if (hasNestedFunctionOrClass) return false;
             if (ts.isExpressionStatement(stmt)) {
                 if (ts.isYieldExpression(stmt.expression) && stmt.expression.asteriskToken) {
                     return false;
@@ -22435,9 +22449,39 @@ class Emitter {
     ): void {
         const ret = this.prepareType(returnType);
         const elemType = ret.elem!;
+        const implicitThisParam = thisParam ??
+            (this.currentClass ? { c: "self", ty: classType(this.currentClass) } : null);
+        let lazyThisParam = implicitThisParam;
+        const originalThisParam = implicitThisParam;
 
         const baseName = fn.name && ts.isIdentifier(fn.name) ? mangleIdent(fn.name.text) : "expr";
         const lazyNextFuncName = `_gen_lazy_next_${baseName}_${this.freshTemp("")}`;
+        const runtimeParamInfos = runtimeParams.filter((param) => !this.isThisParameter(param)).map((param, index) => {
+            if (!ts.isIdentifier(param.name)) unsupported(param, "lazy generator parameters must be identifiers");
+            const symbol = this.symbolForIdentifier(param.name);
+            if (!symbol) unsupported(param.name, "could not resolve lazy generator parameter symbol");
+            return {
+                param,
+                symbol,
+                name: mangleIdent(param.name.text),
+                field: `param_${index}_${mangleIdent(param.name.text)}`,
+                type: this.prepareType(mapType(param, this.checker)),
+            };
+        });
+        const needsEnv = runtimeParamInfos.length > 0 || !!implicitThisParam;
+        const envType = needsEnv ? `_gen_lazy_env_${baseName}_${this.freshTemp("")}` : null;
+        const thisField = implicitThisParam ? "this_arg" : null;
+        if (envType) {
+            this.structDecls.open(`typedef struct ${envType}`);
+            if (implicitThisParam && thisField) {
+                this.structDecls.line(`${implicitThisParam.ty.c} ${thisField};`);
+            }
+            for (const info of runtimeParamInfos) {
+                this.structDecls.line(`${info.type.c} ${info.field};`);
+            }
+            this.structDecls.close(`${envType};`);
+            this.structDecls.line();
+        }
 
         const states: ts.Statement[][] = [];
         let currentStatements: ts.Statement[] = [];
@@ -22463,7 +22507,24 @@ class Emitter {
         this.returnStack.push(ret);
         this.cellScopes.push(capturedCells);
         this.generatorStack.push({ arrayVar: "a", elemType: elemType });
-        if (thisParam) this.functionThisStack.push(thisParam);
+        const envBindings = new Map<ts.Symbol, ClosureEnvBinding>();
+        if (envType) {
+            const envLocal = this.freshTemp("_lazy_env");
+            nextBuf.line(`${envType}* const ${envLocal} = (${envType}*)env;`);
+            if (lazyThisParam && thisField) {
+                lazyThisParam = { c: `${envLocal}->${thisField}`, ty: lazyThisParam.ty };
+            }
+            for (const info of runtimeParamInfos) {
+                envBindings.set(info.symbol, {
+                    type: info.type,
+                    ptr: `&${envLocal}->${info.field}`,
+                });
+            }
+        } else {
+            nextBuf.line("(void)env;");
+        }
+        this.closureEnvScopes.push(envBindings);
+        if (lazyThisParam) this.functionThisStack.push(lazyThisParam);
 
         try {
             nextBuf.open("switch (*state)");
@@ -22515,7 +22576,8 @@ class Emitter {
             nextBuf.close();
             nextBuf.close();
         } finally {
-            if (thisParam) this.functionThisStack.pop();
+            if (lazyThisParam) this.functionThisStack.pop();
+            this.closureEnvScopes.pop();
             this.generatorStack.pop();
             this.cellScopes.pop();
             this.returnStack.pop();
@@ -22527,6 +22589,17 @@ class Emitter {
 
         const arrayVar = this.freshTemp("_gen");
         buf.line(`tsc_array_t* ${arrayVar} = tsc_array_new(sizeof(${elemType.c}), 4);`);
+        if (envType) {
+            const envVar = this.freshTemp("_lazy_env");
+            buf.line(`${envType}* ${envVar} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}));`);
+            if (originalThisParam && thisField) {
+                buf.line(`${envVar}->${thisField} = ${originalThisParam.c};`);
+            }
+            for (const info of runtimeParamInfos) {
+                buf.line(`${envVar}->${info.field} = ${info.name};`);
+            }
+            buf.line(`${arrayVar}->env = ${envVar};`);
+        }
         buf.line(`${arrayVar}->is_lazy_generator = true;`);
         buf.line(`${arrayVar}->state = 0;`);
         buf.line(`${arrayVar}->lazy_next = (void*)${lazyNextFuncName};`);

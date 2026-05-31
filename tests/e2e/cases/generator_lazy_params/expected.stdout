@@ -1,0 +1,14 @@
+--- parameterized generator ---
+parameterized generator initialized
+P start 10
+first: false 10
+P after first
+P after second
+mapped: 11, 16, 21
+second: false 15
+--- method generator ---
+method generator initialized
+M method start 7
+method first: false M:7
+M method after first
+method second: false M:8
