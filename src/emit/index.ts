@@ -22416,7 +22416,11 @@ class Emitter {
             if (ts.isExpressionStatement(stmt)) {
                 const yieldExpr = this.simpleLazyYieldExpression(stmt);
                 if (yieldExpr) {
-                    if (yieldExpr.asteriskToken) return false;
+                    if (yieldExpr.asteriskToken) {
+                        if (!yieldExpr.expression || !this.isSimpleLazyYieldStarSource(yieldExpr.expression)) {
+                            return false;
+                        }
+                    }
                     let hasOtherYield = false;
                     const checkYield = (node: ts.Node) => {
                         if (ts.isYieldExpression(node) && node !== yieldExpr) {
@@ -22435,7 +22439,11 @@ class Emitter {
             if (ts.isVariableStatement(stmt)) {
                 const yieldExpr = this.simpleLazyYieldExpression(stmt);
                 if (yieldExpr) {
-                    if (yieldExpr.asteriskToken) return false;
+                    if (yieldExpr.asteriskToken) {
+                        if (!yieldExpr.expression || !this.isSimpleLazyYieldStarSource(yieldExpr.expression)) {
+                            return false;
+                        }
+                    }
                     let hasOtherYield = false;
                     const checkYield = (node: ts.Node) => {
                         if (ts.isYieldExpression(node) && node !== yieldExpr) {
@@ -22458,7 +22466,11 @@ class Emitter {
                 if (i !== fn.body.statements.length - 1) return false;
                 const yieldExpr = this.simpleLazyYieldExpression(stmt);
                 if (yieldExpr) {
-                    if (yieldExpr.asteriskToken) return false;
+                    if (yieldExpr.asteriskToken) {
+                        if (!yieldExpr.expression || !this.isSimpleLazyYieldStarSource(yieldExpr.expression)) {
+                            return false;
+                        }
+                    }
                     let hasOtherYield = false;
                     const checkYield = (node: ts.Node) => {
                         if (ts.isYieldExpression(node) && node !== yieldExpr) {
@@ -22477,6 +22489,14 @@ class Emitter {
             return false;
         }
         return true;
+    }
+
+    private isSimpleLazyYieldStarSource(expr: ts.Expression): boolean {
+        const sourceTy = this.prepareType(mapType(expr, this.checker));
+        return sourceTy.kind === "array" ||
+            sourceTy.kind === "string" ||
+            sourceTy.kind === "set" ||
+            sourceTy.kind === "class";
     }
 
     private simpleLazyYieldExpression(stmt: ts.Statement): ts.YieldExpression | null {
@@ -22617,24 +22637,6 @@ class Emitter {
                 }
             }
         }
-        const needsEnv = runtimeParamInfos.length > 0 || localVarInfos.length > 0 || !!implicitThisParam;
-        const envType = needsEnv ? `_gen_lazy_env_${baseName}_${this.freshTemp("")}` : null;
-        const thisField = implicitThisParam ? "this_arg" : null;
-        if (envType) {
-            this.structDecls.open(`typedef struct ${envType}`);
-            if (implicitThisParam && thisField) {
-                this.structDecls.line(`${implicitThisParam.ty.c} ${thisField};`);
-            }
-            for (const info of runtimeParamInfos) {
-                this.structDecls.line(`${info.type.c} ${info.field};`);
-            }
-            for (const info of localVarInfos) {
-                this.structDecls.line(`${info.type.c} ${info.field};`);
-            }
-            this.structDecls.close(`${envType};`);
-            this.structDecls.line();
-        }
-
         const states: ts.Statement[][] = [];
         let currentStatements: ts.Statement[] = [];
         if (fn.body && ts.isBlock(fn.body)) {
@@ -22658,6 +22660,43 @@ class Emitter {
                 states.push([]);
             }
         }
+
+        const hasYieldStar = states.some((state) => {
+            const last = state[state.length - 1];
+            const yieldExpr = last ? this.simpleLazyYieldExpression(last) : null;
+            return yieldExpr !== null && !!yieldExpr.asteriskToken;
+        });
+        const needsEnv = runtimeParamInfos.length > 0 ||
+            localVarInfos.length > 0 ||
+            !!implicitThisParam ||
+            hasYieldStar;
+        const envType = needsEnv ? `_gen_lazy_env_${baseName}_${this.freshTemp("")}` : null;
+        const thisField = implicitThisParam ? "this_arg" : null;
+        if (envType) {
+            this.structDecls.open(`typedef struct ${envType}`);
+            if (implicitThisParam && thisField) {
+                this.structDecls.line(`${implicitThisParam.ty.c} ${thisField};`);
+            }
+            for (const info of runtimeParamInfos) {
+                this.structDecls.line(`${info.type.c} ${info.field};`);
+            }
+            for (const info of localVarInfos) {
+                this.structDecls.line(`${info.type.c} ${info.field};`);
+            }
+            if (hasYieldStar) {
+                for (let i = 0; i < states.length; i++) {
+                    const state = states[i]!;
+                    const last = state[state.length - 1];
+                    const yieldExpr = last ? this.simpleLazyYieldExpression(last) : null;
+                    if (yieldExpr && yieldExpr.asteriskToken) {
+                        this.structDecls.line(`tsc_array_t* yield_star_arr_${i};`);
+                        this.structDecls.line(`size_t yield_star_idx_${i};`);
+                    }
+                }
+            }
+            this.structDecls.close(`${envType};`);
+            this.structDecls.line();
+        }
         this.protos.line(`static void ${lazyNextFuncName}(tsc_array_t* a, int* state, void* env, tsc_value_t next_arg, bool* done);`);
         const nextBuf = new CBuf();
         nextBuf.open(`static void ${lazyNextFuncName}(tsc_array_t* a, int* state, void* env, tsc_value_t next_arg, bool* done)`);
@@ -22667,8 +22706,10 @@ class Emitter {
         this.generatorStack.push({ arrayVar: "a", elemType: elemType });
         nextBuf.line("(void)next_arg;");
         const envBindings = new Map<ts.Symbol, ClosureEnvBinding>();
+        let envLocalName = "";
         if (envType) {
             const envLocal = this.freshTemp("_lazy_env");
+            envLocalName = envLocal;
             nextBuf.line(`${envType}* const ${envLocal} = (${envType}*)env;`);
             if (lazyThisParam && thisField) {
                 lazyThisParam = { c: `${envLocal}->${thisField}`, ty: lazyThisParam.ty };
@@ -22692,6 +22733,7 @@ class Emitter {
         if (lazyThisParam) this.functionThisStack.push(lazyThisParam);
 
         try {
+            nextBuf.open("while (true)");
             nextBuf.open("switch (*state)");
             for (let i = 0; i < states.length; i++) {
                 const state = states[i]!;
@@ -22707,22 +22749,77 @@ class Emitter {
                 const lastStmt = state[state.length - 1];
                 const yieldExpr = lastStmt ? this.simpleLazyYieldExpression(lastStmt) : null;
                 if (yieldExpr) {
-                    const otherStmts = state.slice(0, -1);
-                    for (const s of otherStmts) {
-                        this.emitStmt(nextBuf, s);
+                    if (yieldExpr.asteriskToken) {
+                        nextBuf.open(`if (${envLocalName}->yield_star_arr_${i} == NULL)`);
+                        const otherStmts = state.slice(0, -1);
+                        for (const s of otherStmts) {
+                            this.emitStmt(nextBuf, s);
+                        }
+                        if (!yieldExpr.expression) unsupported(yieldExpr, "yield* without a value");
+                        const source = this.emitExpr(yieldExpr.expression);
+                        let arrayExpr: string;
+                        let sourceElemType: CType;
+                        if (source.ty.kind === "array" && source.ty.elem) {
+                            arrayExpr = source.c;
+                            sourceElemType = source.ty.elem;
+                        } else if (source.ty.kind === "set" && source.ty.elem) {
+                            arrayExpr = `tsc_set_values(${source.c})`;
+                            sourceElemType = source.ty.elem;
+                        } else if (source.ty.kind === "string") {
+                            arrayExpr = `tsc_str_chars(${source.c})`;
+                            sourceElemType = T_STRING;
+                        } else if (source.ty.kind === "class") {
+                            const custom = this.emitCustomIterableArray(yieldExpr.expression, source) ??
+                                this.emitCustomIteratorArray(yieldExpr.expression, source);
+                            if (!custom) {
+                                unsupported(
+                                    yieldExpr.expression,
+                                    "yield* over a class currently needs [Symbol.iterator]() returning a typed array-backed IterableIterator<T> or class iterator object",
+                                );
+                            }
+                            arrayExpr = custom.c;
+                            sourceElemType = custom.ty.elem!;
+                        } else {
+                            unsupported(yieldExpr.expression, "yield* currently supports arrays, strings, sets, and custom iterables");
+                        }
+                        nextBuf.line(`${envLocalName}->yield_star_arr_${i} = ${arrayExpr};`);
+                        nextBuf.line(`${envLocalName}->yield_star_idx_${i} = 0;`);
+                        nextBuf.close();
+
+                        nextBuf.open(`if (${envLocalName}->yield_star_idx_${i} < ${envLocalName}->yield_star_arr_${i}->len)`);
+                        const current = {
+                            c: `TSC_ARR(${sourceElemType.c}, ${envLocalName}->yield_star_arr_${i}, ${envLocalName}->yield_star_idx_${i})`,
+                            ty: sourceElemType,
+                        };
+                        const tmp = this.freshTemp("_yield");
+                        nextBuf.line(`${elemType.c} ${tmp} = ${this.coerce(current, elemType, yieldExpr.expression)};`);
+                        nextBuf.line(`tsc_array_push_raw(a, &${tmp});`);
+                        nextBuf.line(`${envLocalName}->yield_star_idx_${i}++;`);
+                        nextBuf.line("*done = false;");
+                        nextBuf.line("return;");
+                        nextBuf.close();
+                        nextBuf.open("else");
+                        nextBuf.line(`*state = ${i + 1};`);
+                        nextBuf.line("continue;");
+                        nextBuf.close();
+                    } else {
+                        const otherStmts = state.slice(0, -1);
+                        for (const s of otherStmts) {
+                            this.emitStmt(nextBuf, s);
+                        }
+
+                        const value = yieldExpr.expression
+                            ? this.emitExpr(yieldExpr.expression)
+                            : { c: "NULL", ty: T_VOID };
+                        const valueNode = yieldExpr.expression ?? yieldExpr;
+                        const tmp = this.freshTemp("_yield");
+                        nextBuf.line(`${elemType.c} ${tmp} = ${this.coerce(value, elemType, valueNode)};`);
+                        nextBuf.line(`tsc_array_push_raw(a, &${tmp});`);
+
+                        nextBuf.line(`*state = ${i + 1};`);
+                        nextBuf.line("*done = false;");
+                        nextBuf.line("return;");
                     }
-
-                    const value = yieldExpr.expression
-                        ? this.emitExpr(yieldExpr.expression)
-                        : { c: "NULL", ty: T_VOID };
-                    const valueNode = yieldExpr.expression ?? yieldExpr;
-                    const tmp = this.freshTemp("_yield");
-                    nextBuf.line(`${elemType.c} ${tmp} = ${this.coerce(value, elemType, valueNode)};`);
-                    nextBuf.line(`tsc_array_push_raw(a, &${tmp});`);
-
-                    nextBuf.line(`*state = ${i + 1};`);
-                    nextBuf.line(`*done = false;`);
-                    nextBuf.line("return;");
                 } else {
                     for (const s of state) {
                         if (ts.isReturnStatement(s)) {
@@ -22745,6 +22842,7 @@ class Emitter {
             nextBuf.open("default:");
             nextBuf.line("*done = true;");
             nextBuf.line("return;");
+            nextBuf.close();
             nextBuf.close();
             nextBuf.close();
         } finally {
@@ -22772,6 +22870,17 @@ class Emitter {
             }
             for (const info of localVarInfos) {
                 buf.line(`${envVar}->${info.field} = ${this.zeroValue(info.type)};`);
+            }
+            if (hasYieldStar) {
+                for (let i = 0; i < states.length; i++) {
+                    const state = states[i]!;
+                    const last = state[state.length - 1];
+                    const yieldExpr = last ? this.simpleLazyYieldExpression(last) : null;
+                    if (yieldExpr && yieldExpr.asteriskToken) {
+                        buf.line(`${envVar}->yield_star_arr_${i} = NULL;`);
+                        buf.line(`${envVar}->yield_star_idx_${i} = 0;`);
+                    }
+                }
             }
             buf.line(`${arrayVar}->env = ${envVar};`);
         }
