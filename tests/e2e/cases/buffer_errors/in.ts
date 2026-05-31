@@ -1,4 +1,4 @@
-const badEncoding: any = "latin1";
+const badEncoding: any = "bogus";
 const one = Buffer.from("ff", "hex");
 const two = Buffer.from("ffff", "hex");
 const three = Buffer.from("ffffff", "hex");

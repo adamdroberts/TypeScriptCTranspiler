@@ -1,11 +1,11 @@
 base64: Buffer.from base64 input contains non-base64 digit
 hex odd: Buffer.from hex input must have even length
 hex digit: Buffer.from hex input contains non-hex digit
-from encoding: Buffer.from: only utf8, hex, and base64 encodings are supported
+from encoding: Buffer.from: only utf8, hex, base64, latin1, ascii, and binary encodings are supported
 alloc: Buffer.alloc size must be a non-negative finite number
 concat: Buffer.concat totalLength must be a non-negative finite number
-toString: Buffer.toString: only utf8, hex, and base64 encodings are supported
-byteLength: Buffer.byteLength: only utf8, hex, and base64 encodings are supported
+toString: Buffer.toString: only utf8, hex, base64, latin1, ascii, and binary encodings are supported
+byteLength: Buffer.byteLength: only utf8, hex, base64, latin1, ascii, and binary encodings are supported
 read8: Buffer.readUInt8 offset out of range
 write8: Buffer.writeInt8 offset out of range
 read wide: Buffer.readUInt16LE offset out of range

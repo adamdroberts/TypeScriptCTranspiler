@@ -434,6 +434,8 @@ tsc_buffer_t* buffer_alloc_len(size_t len);
 int hex_value(unsigned char c);
 bool buffer_encoding_is_utf8(const tsc_str_t* encoding);
 bool buffer_encoding_is_base64(const tsc_str_t* encoding);
+bool buffer_encoding_is_latin1(const tsc_str_t* encoding);
+bool buffer_encoding_is_ascii(const tsc_str_t* encoding);
 size_t buffer_index(double raw, size_t len);
 int base64_value(unsigned char c);
 void base64_decode_group(tsc_buffer_t* out, size_t* pos, const int* q, int qlen);
