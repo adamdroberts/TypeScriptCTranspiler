@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators support single suspended yield inside object literals in variable initializers, assignments, and returns"
+}

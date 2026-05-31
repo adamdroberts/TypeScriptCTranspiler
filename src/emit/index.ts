@@ -22918,7 +22918,10 @@ class Emitter {
         if (ts.isArrayLiteralExpression(expr)) {
             return this.emitSimpleLazyResumeArrayLiteral(expr, nextArg);
         }
-        unsupported(expr, "lazy generator suspended yield expression currently supports direct, parenthesized, unary, typeof, void, binary, conditional, and array literal expressions");
+        if (ts.isObjectLiteralExpression(expr)) {
+            return this.emitSimpleLazyResumeObjectLiteral(expr, nextArg);
+        }
+        unsupported(expr, "lazy generator suspended yield expression currently supports direct, parenthesized, unary, typeof, void, binary, conditional, array literal, and object literal expressions");
     }
 
     private emitSimpleLazyResumeArrayLiteral(al: ts.ArrayLiteralExpression, nextArg: string): EmitResult {
@@ -23053,6 +23056,184 @@ class Emitter {
             pieces.push(`TSC_ARR(${et.c}, ${av}, ${av}->len) = ${tv}; ${av}->len++`);
         }
         pieces.push(av);
+        return { c: `({ ${pieces.join("; ")}; })`, ty: mapped };
+    }
+
+    private emitSimpleLazyResumeObjectLiteral(ol: ts.ObjectLiteralExpression, nextArg: string): EmitResult {
+        const targetType =
+            this.checker.getContextualType(ol) ??
+            this.checker.getTypeAtLocation(ol);
+        const mapped = this.isUntypedJsObjectLiteral(ol)
+            ? T_VALUE
+            : this.prepareType(mapTsType(ol, targetType, this.checker));
+        if (mapped.kind === "value") {
+            const obj = this.freshTemp("_dynobj");
+            const pieces: string[] = [`tsc_object_t* ${obj} = tsc_object_new()`];
+            for (const prop of ol.properties) {
+                let fieldName: string;
+                let expr: ts.Expression | ts.MethodDeclaration;
+                if (ts.isSpreadAssignment(prop)) {
+                    const value = this.singleYieldExpressionInExpression(prop.expression)
+                        ? this.emitSimpleLazyResumeExpression(prop.expression, nextArg)
+                        : this.emitExpr(prop.expression);
+                    pieces.push(
+                        `tsc_value_object_assign(tsc_value_object(${obj}), ${this.coerce(value, T_VALUE, prop.expression)})`,
+                    );
+                    continue;
+                } else if (ts.isPropertyAssignment(prop)) {
+                    const staticName = this.staticPropertyName(prop.name);
+                    if (!staticName) {
+                        unsupported(prop.name, "dynamic object key must be a string/number literal");
+                    }
+                    fieldName = staticName;
+                    expr = prop.initializer;
+                } else if (ts.isShorthandPropertyAssignment(prop)) {
+                    fieldName = prop.name.text;
+                    expr = prop.name;
+                } else if (ts.isMethodDeclaration(prop)) {
+                    const staticName = this.staticPropertyName(prop.name);
+                    if (!staticName) {
+                        unsupported(prop.name, "dynamic object method key must be a string/number literal");
+                    }
+                    fieldName = staticName;
+                    expr = prop;
+                } else {
+                    unsupported(prop, `object literal property kind ${ts.SyntaxKind[prop.kind]}`);
+                }
+                const value = ts.isMethodDeclaration(expr)
+                    ? this.emitClosureExpression(expr)
+                    : (this.singleYieldExpressionInExpression(expr)
+                        ? this.emitSimpleLazyResumeExpression(expr, nextArg)
+                        : this.emitExpr(expr));
+                pieces.push(
+                    `tsc_object_set(${obj}, tsc_str_from_lit("${escapeCString(fieldName)}", ${utf8ByteLen(fieldName)}), ${this.coerce(value, T_VALUE, expr)})`,
+                );
+            }
+            pieces.push(`tsc_value_object(${obj})`);
+            return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
+        }
+        if (mapped.kind !== "class") {
+            unsupported(
+                ol,
+                "object literal requires a named interface/class as its type",
+            );
+        }
+        const cls = mapped.className!;
+        const tmp = this.freshTemp("_obj");
+        const alloc = this.objectLiteralInitializesAllFields(ol, targetType)
+            ? "TSC_GC_MALLOC_UNINIT"
+            : "TSC_GC_MALLOC";
+        const pieces: string[] = [
+            `${cls}_t* ${tmp} = (${cls}_t*)${alloc}(sizeof(${cls}_t))`,
+        ];
+        const targetFields = this.objectProperties(targetType).map((prop) => {
+            const name = prop.getName();
+            const decl = prop.valueDeclaration ?? prop.getDeclarations()?.[0] ?? ol;
+            return {
+                name,
+                field: mangleIdent(name),
+                type: this.prepareType(mapTsType(
+                    decl,
+                    this.checker.getTypeOfSymbolAtLocation(prop, decl),
+                    this.checker,
+                )),
+            };
+        });
+        const targetByName = new Map(targetFields.map((field) => [field.name, field]));
+        for (const prop of ol.properties) {
+            if (ts.isPropertyAssignment(prop)) {
+                const fieldName = this.staticPropertyName(prop.name);
+                if (!fieldName) {
+                    unsupported(
+                        prop.name,
+                        "computed property name must resolve to a string or number literal",
+                    );
+                }
+                const val = this.singleYieldExpressionInExpression(prop.initializer)
+                    ? this.emitSimpleLazyResumeExpression(prop.initializer, nextArg)
+                    : this.emitExpr(prop.initializer);
+                const fieldType = this.objectFieldType(ol, targetType, fieldName, prop.name);
+                pieces.push(
+                    `${tmp}->${mangleIdent(fieldName)} = ${this.coerce(val, fieldType, prop.initializer)}`,
+                );
+            } else if (ts.isShorthandPropertyAssignment(prop)) {
+                const val = this.singleYieldExpressionInExpression(prop.name)
+                    ? this.emitSimpleLazyResumeExpression(prop.name, nextArg)
+                    : this.emitExpr(prop.name);
+                const fieldType = this.objectFieldType(ol, targetType, prop.name.text, prop.name);
+                pieces.push(
+                    `${tmp}->${mangleIdent(prop.name.text)} = ${this.coerce(val, fieldType, prop.name)}`,
+                );
+            } else if (ts.isMethodDeclaration(prop)) {
+                const fieldName = this.staticPropertyName(prop.name);
+                if (!fieldName) {
+                    unsupported(
+                        prop.name,
+                        "computed method name must resolve to a string or number literal",
+                    );
+                }
+                const val = this.emitClosureExpression(prop);
+                const fieldType = this.objectFieldType(ol, targetType, fieldName, prop.name);
+                pieces.push(
+                    `${tmp}->${mangleIdent(fieldName)} = ${this.coerce(val, fieldType, prop)}`,
+                );
+            } else if (ts.isSpreadAssignment(prop)) {
+                const sourceTsType = this.expressionDeclaredOrCurrentType(prop.expression);
+                const source = this.singleYieldExpressionInExpression(prop.expression)
+                    ? this.emitSimpleLazyResumeExpression(prop.expression, nextArg)
+                    : this.emitExpr(prop.expression);
+                const sourceTmp = this.freshTemp("_obj_spread");
+                pieces.push(`${source.ty.c} const ${sourceTmp} = ${source.c}`);
+                const primitiveSource =
+                    source.ty.kind === "number" ||
+                    source.ty.kind === "boolean" ||
+                    source.ty.kind === "bigint" ||
+                    source.ty.kind === "symbol";
+                if (source.ty.kind === "class") {
+                    for (const sourceProp of this.objectProperties(sourceTsType)) {
+                        const targetField = targetByName.get(sourceProp.getName());
+                        if (!targetField) continue;
+                        const decl = sourceProp.valueDeclaration ?? sourceProp.getDeclarations()?.[0] ?? prop.expression;
+                        const sourceType = this.prepareType(mapTsType(
+                            decl,
+                            this.checker.getTypeOfSymbolAtLocation(sourceProp, decl),
+                            this.checker,
+                        ));
+                        const raw = {
+                            c: `${sourceTmp}->${mangleIdent(sourceProp.getName())}`,
+                            ty: sourceType,
+                        };
+                        pieces.push(
+                            `${tmp}->${targetField.field} = ${this.coerce(raw, targetField.type, prop.expression)}`,
+                        );
+                    }
+                    continue;
+                }
+                if (source.ty.kind === "value" || source.ty.kind === "array" || source.ty.kind === "string") {
+                    const boxed = this.coerce({ c: sourceTmp, ty: source.ty }, T_VALUE, prop.expression);
+                    for (const targetField of targetFields) {
+                        const key = `tsc_str_from_lit("${escapeCString(targetField.name)}", ${utf8ByteLen(targetField.name)})`;
+                        const raw = {
+                            c: `tsc_value_get_prop(${boxed}, ${key})`,
+                            ty: T_VALUE,
+                        };
+                        pieces.push(
+                            `if (tsc_value_has_own_prop(${boxed}, ${key})) ${tmp}->${targetField.field} = ${this.coerce(raw, targetField.type, prop.expression)}`,
+                        );
+                    }
+                    continue;
+                }
+                if (!primitiveSource) {
+                    unsupported(prop.expression, "typed object literal spread currently supports typed object, array, string, dynamic, or primitive sources");
+                }
+            } else {
+                unsupported(
+                    prop,
+                    `object literal property kind ${ts.SyntaxKind[prop.kind]}`,
+                );
+            }
+        }
+        pieces.push(tmp);
         return { c: `({ ${pieces.join("; ")}; })`, ty: mapped };
     }
 

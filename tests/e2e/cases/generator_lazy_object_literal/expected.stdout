@@ -1,0 +1,9 @@
+--- Test 1: Variable Initializers and Return ---
+Yield 1: false 10
+Yield 2: false 20
+Return: true {"z":true}
+--- Test 2: Assignment RHS ---
+Yield 3: false 30
+Return 2: true assign end
+--- Events Log ---
+created it1 | ignored1 | var init start | resumed1 | dyn.b = resumed1 | true | created it2 | ignored2 | assign start | resumed2 | dyn.val = resumed2
