@@ -547,9 +547,9 @@ void tsc_array_oob(const tsc_array_t* a, double i);
 
 /* ------------- dynamic values (NaN-boxed) ------------- */
 typedef struct tsc_object tsc_object_t;
+typedef struct tsc_shape tsc_shape_t;
 typedef struct {
-    const tsc_object_t* object;
-    uint64_t shape_version;
+    const tsc_shape_t* shape;
     size_t index;
 } tsc_cache_entry_t;
 

@@ -1898,12 +1898,23 @@ tsc_value_t tsc_proxy_new(tsc_value_t target, tsc_value_t handler) {
     o->len = 0;
     o->cap = 0;
     o->extensible = true;
-    o->prototype = tsc_value_null();
-    o->props = NULL;
+    o->class_ptr = NULL;
     o->is_proxy = true;
     o->proxy_revoked = false;
+    o->is_promise = false;
+    o->is_date = false;
+    o->is_regexp = false;
+    o->is_map = false;
+    o->is_set = false;
+    o->is_error = false;
+    o->is_typed_array = false;
+    o->shape_version = 1;
+    o->shape = NULL;
+    o->object_id = 0;
     o->proxy_target = target;
     o->proxy_handler = handler;
+    o->prototype = tsc_value_null();
+    o->props = NULL;
     return tsc_value_object(o);
 }
 
