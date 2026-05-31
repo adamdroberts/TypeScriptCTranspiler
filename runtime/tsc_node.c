@@ -4491,3 +4491,170 @@ double tsc_fs_write_string_sync(double fd, const tsc_str_t* str, double position
     }
     return (double)bytes_written;
 }
+
+static size_t find_substring(const char* data, size_t len, size_t start, const char* sub, size_t sub_len) {
+    if (sub_len == 0) return start;
+    if (start + sub_len > len) return (size_t)-1;
+    for (size_t i = start; i <= len - sub_len; i++) {
+        if (memcmp(data + i, sub, sub_len) == 0) {
+            return i;
+        }
+    }
+    return (size_t)-1;
+}
+
+static bool querystring_encode_byte(unsigned char ch) {
+    if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')) return false;
+    return !(ch == '-' || ch == '.' || ch == '_' || ch == '~' || ch == '!' || ch == '*' || ch == '\'' || ch == '(' || ch == ')');
+}
+
+static tsc_str_t* querystring_escape(const tsc_str_t* input) {
+    if (!input) return tsc_str_from_lit("", 0);
+    size_t out_len = 0;
+    for (size_t i = 0; i < input->len; i++) {
+        unsigned char ch = (unsigned char)input->data[i];
+        out_len += querystring_encode_byte(ch) ? 3 : 1;
+    }
+    tsc_str_t* out = str_alloc(out_len);
+    char* w = (char*)out->data;
+    size_t j = 0;
+    static const char hex[] = "0123456789ABCDEF";
+    for (size_t i = 0; i < input->len; i++) {
+        unsigned char ch = (unsigned char)input->data[i];
+        if (querystring_encode_byte(ch)) {
+            w[j++] = '%';
+            w[j++] = hex[ch >> 4];
+            w[j++] = hex[ch & 15];
+        } else {
+            w[j++] = (char)ch;
+        }
+    }
+    out->len = j;
+    w[j] = '\0';
+    return out;
+}
+
+tsc_value_t tsc_querystring_parse(const tsc_str_t* str, tsc_value_t sep_val, tsc_value_t eq_val, tsc_value_t options_val) {
+    (void)options_val;
+    tsc_str_t* sep = tsc_value_is_nullish(sep_val) ? tsc_str_from_lit("&", 1) : tsc_value_to_string(sep_val);
+    tsc_str_t* eq = tsc_value_is_nullish(eq_val) ? tsc_str_from_lit("=", 1) : tsc_value_to_string(eq_val);
+
+    tsc_value_t obj_val = tsc_value_object_create(tsc_value_null());
+    tsc_object_t* obj = (tsc_object_t*)value_ptr(obj_val);
+
+    if (!str || str->len == 0) {
+        return obj_val;
+    }
+
+    if (sep->len == 0) {
+        return obj_val;
+    }
+
+    size_t start = 0;
+    while (start < str->len) {
+        size_t next_sep = find_substring(str->data, str->len, start, sep->data, sep->len);
+        size_t segment_end = (next_sep == (size_t)-1) ? str->len : next_sep;
+
+        if (segment_end > start) {
+            size_t eq_idx = find_substring(str->data, segment_end, start, eq->data, eq->len);
+            tsc_str_t* key = NULL;
+            tsc_str_t* val = NULL;
+            if (eq_idx == (size_t)-1) {
+                key = url_query_decode_range(str->data, start, segment_end);
+                val = tsc_str_from_lit("", 0);
+            } else {
+                key = url_query_decode_range(str->data, start, eq_idx);
+                val = url_query_decode_range(str->data, eq_idx + eq->len, segment_end);
+            }
+
+            if (tsc_object_has_own(obj, key)) {
+                tsc_value_t existing = tsc_object_get(obj, key);
+                if (tsc_value_is_array(existing)) {
+                    tsc_array_t* arr = tsc_value_as_array(existing);
+                    tsc_array_push_value(arr, tsc_value_string(val));
+                } else {
+                    tsc_array_t* arr = tsc_array_new(sizeof(tsc_value_t), 2);
+                    tsc_array_push_value(arr, existing);
+                    tsc_array_push_value(arr, tsc_value_string(val));
+                    tsc_object_set(obj, key, tsc_value_array(arr));
+                }
+            } else {
+                tsc_object_set(obj, key, tsc_value_string(val));
+            }
+        }
+
+        if (next_sep == (size_t)-1) break;
+        start = next_sep + sep->len;
+    }
+
+    return obj_val;
+}
+
+tsc_str_t* tsc_querystring_stringify(tsc_value_t obj_val, tsc_value_t sep_val, tsc_value_t eq_val, tsc_value_t options_val) {
+    (void)options_val;
+    tsc_str_t* sep = tsc_value_is_nullish(sep_val) ? tsc_str_from_lit("&", 1) : tsc_value_to_string(sep_val);
+    tsc_str_t* eq = tsc_value_is_nullish(eq_val) ? tsc_str_from_lit("=", 1) : tsc_value_to_string(eq_val);
+
+    if (tsc_value_is_nullish(obj_val) || !value_is_box(obj_val) || value_tag(obj_val) != TSC_VALUE_TAG_OBJECT) {
+        return tsc_str_from_lit("", 0);
+    }
+
+    tsc_array_t* keys = tsc_value_object_keys(obj_val);
+    if (!keys || keys->len == 0) {
+        return tsc_str_from_lit("", 0);
+    }
+
+    tsc_array_t* pieces = tsc_array_new(sizeof(tsc_str_t*), 4);
+    for (size_t i = 0; i < keys->len; i++) {
+        tsc_str_t* key = ((tsc_str_t**)keys->data)[i];
+        tsc_value_t val = tsc_value_get_prop(obj_val, key);
+
+        if (tsc_value_is_array(val)) {
+            tsc_array_t* arr = tsc_value_as_array(val);
+            for (size_t j = 0; j < arr->len; j++) {
+                tsc_value_t elem = TSC_ARR(tsc_value_t, arr, j);
+                tsc_str_t* elem_str = tsc_value_to_string(elem);
+
+                tsc_str_t* encoded_key = querystring_escape(key);
+                tsc_str_t* encoded_val = querystring_escape(elem_str);
+
+                tsc_str_t* piece = tsc_str_concat(encoded_key, tsc_str_concat(eq, encoded_val));
+                tsc_array_push_raw(pieces, &piece);
+            }
+        } else {
+            tsc_str_t* val_str = tsc_value_to_string(val);
+
+            tsc_str_t* encoded_key = querystring_escape(key);
+            tsc_str_t* encoded_val = querystring_escape(val_str);
+
+            tsc_str_t* piece = tsc_str_concat(encoded_key, tsc_str_concat(eq, encoded_val));
+            tsc_array_push_raw(pieces, &piece);
+        }
+    }
+
+    if (pieces->len == 0) {
+        return tsc_str_from_lit("", 0);
+    }
+
+    size_t total_len = (pieces->len - 1) * sep->len;
+    for (size_t i = 0; i < pieces->len; i++) {
+        tsc_str_t* p = ((tsc_str_t**)pieces->data)[i];
+        total_len += p->len;
+    }
+
+    tsc_str_t* out = str_alloc(total_len);
+    char* w = (char*)out->data;
+    size_t offset = 0;
+    for (size_t i = 0; i < pieces->len; i++) {
+        if (i > 0) {
+            memcpy(w + offset, sep->data, sep->len);
+            offset += sep->len;
+        }
+        tsc_str_t* p = ((tsc_str_t**)pieces->data)[i];
+        memcpy(w + offset, p->data, p->len);
+        offset += p->len;
+    }
+    out->len = offset;
+    w[offset] = '\0';
+    return out;
+}

@@ -605,6 +605,11 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `URLSearchParams` supports `sort(...ignored)` in stable name-order semantics preserving duplicate value order for equal names, returning `void`. Test: `url_search_params_sort`
 - URL instances expose `.toString(...ignored)`, `.toJSON(...ignored)`, `.toLocaleString(...ignored)`, `.valueOf(...ignored)`, typed `Reflect.get` / `Reflect.has` for bounded prototype-style string fields, and empty own-property results through `Object.keys`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, `Reflect.ownKeys`, and `Reflect.getOwnPropertyDescriptor`. Test: `url_object_methods`
 
+### `querystring`
+- Named, aliased, namespace, and default imports from `"querystring"` / `"node:querystring"` route to the supported `parse` and `stringify` helpers. Test: `querystring_basic`
+- `parse(str, sep?, eq?, options?)` converts a query string into a null-prototype object, handles duplicate keys by grouping their values into an array, decodes percent-encoded characters (including decoding `+` to spaces), supports custom separator (`sep`) and assignment (`eq`) strings, and evaluates ignored trailing arguments for side effects. Test: `querystring_basic`
+- `stringify(obj, sep?, eq?, options?)` stringifies plain dynamic objects with primitive values or arrays, percent-encodes keys and values (including spaces to `%20`), supports custom separator (`sep`) and assignment (`eq`) strings, and evaluates ignored trailing arguments for side effects. Test: `querystring_basic`
+
 ### `Math`
 - `floor`, `ceil`, `round` (JS half-to-+Inf), `abs`, `trunc`, `sign`
 - `imul`, `clz32`, `fround` — JS-style 32-bit integer multiply/count-leading-zeroes and single-precision rounding

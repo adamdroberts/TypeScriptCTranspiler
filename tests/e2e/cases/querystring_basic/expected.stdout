@@ -1,0 +1,27 @@
+--- 1. Basic Parse & Stringify ---
+proto is null: true
+parsed1.foo: bar
+parsed1.baz: qux
+parsed1.a: 123
+stringified1: foo=bar&baz=qux&a=123
+--- 2. Duplicate Keys ---
+parsed2.foo: bar
+parsed2.baz is array: true
+parsed2.baz.length: 3
+parsed2.baz[0]: qux
+parsed2.baz[1]: abc
+parsed2.baz[2]: 123
+stringified2: foo=bar&baz=qux&baz=abc&baz=123
+--- 3. Custom delimiters (sep & eq) ---
+parsed3.foo: bar
+parsed3.baz[0]: qux
+parsed3.baz[1]: abc
+stringified3: foo:bar;baz:qux;baz:abc
+--- 4. Percent Encoding & Spaces ---
+parsed4['a b']: c d
+parsed4['foo bar']: baz qux
+stringified4: a%20b=c%20d&foo%20bar=baz%20qux
+--- 5. Ignored Trailing/Extra Arguments ---
+parsed5.foo: bar
+stringified5: foo=bar
+side effects: PS

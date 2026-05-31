@@ -342,6 +342,10 @@ struct tsc_array* tsc_url_search_params_entries(const tsc_url_search_params_t* p
 void tsc_url_search_params_sort(tsc_url_search_params_t* params);
 
 
+/* ------------- Querystring ------------- */
+tsc_value_t tsc_querystring_parse(const tsc_str_t* str, tsc_value_t sep_val, tsc_value_t eq_val, tsc_value_t options_val);
+tsc_str_t* tsc_querystring_stringify(tsc_value_t obj_val, tsc_value_t sep_val, tsc_value_t eq_val, tsc_value_t options_val);
+
 /* ------------- Date ------------- */
 typedef struct tsc_date {
     double ms;

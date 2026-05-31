@@ -2208,3 +2208,21 @@ declare module "node:util" {
     const defaultUtil: UtilModule;
     export default defaultUtil;
 }
+
+interface QueryStringModule {
+    parse(str: string, sep?: string, eq?: string, options?: any, ...ignored: any[]): any;
+    stringify(obj: any, sep?: string, eq?: string, options?: any, ...ignored: any[]): string;
+}
+declare const querystring: QueryStringModule;
+declare module "querystring" {
+    export function parse(str: string, sep?: string, eq?: string, options?: any, ...ignored: any[]): any;
+    export function stringify(obj: any, sep?: string, eq?: string, options?: any, ...ignored: any[]): string;
+    const defaultQueryString: QueryStringModule;
+    export default defaultQueryString;
+}
+declare module "node:querystring" {
+    export function parse(str: string, sep?: string, eq?: string, options?: any, ...ignored: any[]): any;
+    export function stringify(obj: any, sep?: string, eq?: string, options?: any, ...ignored: any[]): string;
+    const defaultQueryString: QueryStringModule;
+    export default defaultQueryString;
+}
