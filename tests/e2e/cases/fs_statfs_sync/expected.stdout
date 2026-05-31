@@ -1,0 +1,7 @@
+global: true true
+fields: true true true true true true
+named: true true
+default: true true
+namespace: true true
+missing error thrown: true
+events: ignored-extra|void-side-effect

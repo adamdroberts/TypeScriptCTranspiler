@@ -1022,6 +1022,7 @@ tsc_fs_stats_t* tsc_fs_stat_sync(const tsc_str_t* path);
 tsc_fs_stats_t* tsc_fs_stat_sync_no_throw(const tsc_str_t* path);
 tsc_fs_stats_t* tsc_fs_lstat_sync(const tsc_str_t* path);
 tsc_fs_stats_t* tsc_fs_lstat_sync_no_throw(const tsc_str_t* path);
+tsc_value_t tsc_fs_statfs_sync(const tsc_str_t* path);
 tsc_str_t* tsc_fs_realpath_sync(const tsc_str_t* path);
 tsc_str_t* tsc_fs_readlink_sync(const tsc_str_t* path);
 void tsc_fs_symlink_sync(const tsc_str_t* target, const tsc_str_t* path);
