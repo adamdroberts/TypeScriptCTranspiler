@@ -28006,11 +28006,17 @@ class Emitter {
         if (this.isNamedImportFrom(calleeId, ["dns", "node:dns"], "resolve4")) {
             return this.emitDnsCall(call, "resolve4");
         }
+        if (this.isNamedImportFrom(calleeId, ["dns", "node:dns"], "lookupService")) {
+            return this.emitDnsCall(call, "lookupService");
+        }
         if (this.isNamedImportFrom(calleeId, ["dns/promises", "node:dns/promises"], "lookup")) {
             return this.emitDnsPromisesCall(call, "lookup");
         }
         if (this.isNamedImportFrom(calleeId, ["dns/promises", "node:dns/promises"], "resolve4")) {
             return this.emitDnsPromisesCall(call, "resolve4");
+        }
+        if (this.isNamedImportFrom(calleeId, ["dns/promises", "node:dns/promises"], "lookupService")) {
+            return this.emitDnsPromisesCall(call, "lookupService");
         }
         if (this.isNamedImportFrom(calleeId, ["process", "node:process"], "nextTick")) {
             return this.emitProcessNextTickCall(call);
@@ -34262,7 +34268,48 @@ class Emitter {
     }
 
     private emitDnsCall(call: ts.CallExpression, method: string): EmitResult {
-        if (method !== "lookup" && method !== "resolve4") unsupported(call, `dns.${method}`);
+        if (method !== "lookup" && method !== "resolve4" && method !== "lookupService") unsupported(call, `dns.${method}`);
+        if (method === "lookupService") {
+            if (call.arguments.length < 3) {
+                unsupported(call, `dns.lookupService expects address, port, and callback`);
+            }
+            const addressNode = call.arguments[0]!;
+            const portNode = call.arguments[1]!;
+            const callbackNode = call.arguments[2]!;
+            const address = this.emitExpr(addressNode);
+            const port = this.emitExpr(portNode);
+            const callback = this.emitExpr(callbackNode);
+            const callbackType = this.prepareType(callback.ty);
+            if (callbackType.kind !== "function" || !callbackType.ret) {
+                unsupported(callbackNode, `dns.lookupService callback must be a function`);
+            }
+            const specs: SequencedCallArg[] = [
+                { value: address, target: T_STRING, node: addressNode },
+                { value: port, target: T_NUMBER, node: portNode },
+                { value: callback, target: callbackType, node: callbackNode },
+                ...this.ignoredArgumentSpecs(call.arguments, 3),
+            ];
+            return this.emitSequencedExpr(T_VOID, specs, (values) => {
+                const addressC = values[0];
+                const portC = values[1];
+                const callbackC = values[2];
+                const result = this.freshTemp("_dns");
+                const err: EmitResult = {
+                    c: `${result}.error ? tsc_value_string(${result}.error) : tsc_value_null()`,
+                    ty: T_VALUE,
+                };
+                const hostname: EmitResult = {
+                    c: `${result}.hostname ? ${result}.hostname : tsc_str_from_lit("", 0)`,
+                    ty: T_STRING,
+                };
+                const service: EmitResult = {
+                    c: `${result}.service ? ${result}.service : tsc_str_from_lit("", 0)`,
+                    ty: T_STRING,
+                };
+                const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, hostname, service], callbackNode);
+                return `({ tsc_dns_lookup_service_result_t ${result} = tsc_dns_lookup_service(${addressC}, ${portC}); (void)${callbackCall}; })`;
+            });
+        }
         if (call.arguments.length < 2) {
             unsupported(call, `dns.${method} expects hostname, optional options, and callback`);
         }
@@ -34471,12 +34518,39 @@ class Emitter {
     }
 
     private emitDnsPromisesCall(call: ts.CallExpression, method: string): EmitResult {
-        if (method !== "lookup" && method !== "resolve4") unsupported(call, `dns.promises.${method}`);
-        if (call.arguments.length < 1) {
-            unsupported(call, `dns.promises.${method} expects hostname and optional options`);
-        }
+        if (method !== "lookup" && method !== "resolve4" && method !== "lookupService") unsupported(call, `dns.promises.${method}`);
         const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
         if (mapped.kind !== "promise") unsupported(call, `dns.promises.${method} result must be Promise<T>`);
+        if (method === "lookupService") {
+            if (call.arguments.length < 2) {
+                unsupported(call, `dns.promises.lookupService expects address and port`);
+            }
+            const addressNode = call.arguments[0]!;
+            const portNode = call.arguments[1]!;
+            const address = this.emitExpr(addressNode);
+            const port = this.emitExpr(portNode);
+            const specs: SequencedCallArg[] = [
+                { value: address, target: T_STRING, node: addressNode },
+                { value: port, target: T_NUMBER, node: portNode },
+                ...this.ignoredArgumentSpecs(call.arguments, 2),
+            ];
+            return this.emitSequencedExpr(mapped, specs, ([addressC, portC]) => {
+                const result = this.freshTemp("_dns");
+                const out = this.freshTemp("_dns_promise");
+                const obj = this.freshTemp("_dns_result");
+                const hostname = `${result}.hostname ? ${result}.hostname : tsc_str_from_lit("", 0)`;
+                const service = `${result}.service ? ${result}.service : tsc_str_from_lit("", 0)`;
+                return `({ ` +
+                    `tsc_dns_lookup_service_result_t ${result} = tsc_dns_lookup_service(${addressC}, ${portC}); ` +
+                    `tsc_promise_t* ${out}; ` +
+                    `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
+                    `tsc_object_t* ${obj} = tsc_object_new(); ` +
+                    `tsc_object_set(${obj}, tsc_str_from_lit("hostname", 8), tsc_value_string(${hostname})); ` +
+                    `tsc_object_set(${obj}, tsc_str_from_lit("service", 7), tsc_value_string(${service})); ` +
+                    `${out} = tsc_promise_resolve(tsc_value_object(${obj})); } ` +
+                    `${out}; })`;
+            });
+        }
         const hostNode = call.arguments[0]!;
         const optionsNode = call.arguments[1];
         const host = this.emitExpr(hostNode);

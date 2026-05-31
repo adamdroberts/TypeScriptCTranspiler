@@ -1,0 +1,8 @@
+dns.lookupService: true true true
+lookupService: true true true
+dnsPromises.lookupService: true true
+lookupServicePromises: true true
+invalid IP callback err: true
+invalid IP promise err: true
+invalid port callback err: true
+invalid port promise err: true

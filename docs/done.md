@@ -565,6 +565,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Direct named, aliased named, namespace, and default imports from `"dns/promises"` / `"node:dns/promises"` route to the same immediate `dns.promises.lookup` subset. Test: `dns_promises_subpath_import`
 - Aliased named imports for DNS hint constants such as `V4MAPPED as hint` lower correctly in expressions and DNS lookup options. Test: `dns_lookup_hints`
 - `dns.resolve4(hostname[, options], callback)` and `dns.promises.resolve4(hostname[, options])` are implemented as immediate subsets using host resolver behavior to resolve IPv4 address records, returning/passing a simple `string[]` array. Ignored trailing arguments and side-effectful options/defaults are evaluated. Named, aliased named, default, namespace, and subpath imports from `"dns"`, `"node:dns"`, `"dns/promises"`, and `"node:dns/promises"` are supported. Test: `dns_resolve4`
+- `dns.lookupService(address, port, callback)` and `dns.promises.lookupService(address, port)` are implemented as immediate subsets using `getnameinfo` host resolver behavior to resolve an IP address and port to a hostname and service name, returning/passing a fulfilled object `{ hostname, service }` or callback arguments `(err, hostname, service)`. Ignored trailing arguments are evaluated. Named, aliased named, default, namespace, and subpath imports from `"dns"`, `"node:dns"`, `"dns/promises"`, and `"node:dns/promises"` are supported. Test: `dns_lookup_service`
 
 ### `net`
 - `net.isIP(input, ...ignored)`, `net.isIPv4(input, ...ignored)`, and `net.isIPv6(input, ...ignored)` are implemented as a pure address-classification subset for global `net`, default imports, named/aliased named imports, and namespace imports from `"net"` / `"node:net"`, backed by host `inet_pton`, with ignored extra-argument evaluation. Tests: `net_is_ip`, `net_default_import`
@@ -1267,6 +1268,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dns_promises_lookup` | immediate dns.promises.lookup fulfilled result objects with ignored extras |
 | `dns_promises_subpath_import` | direct dns/promises named, namespace, and default imports |
 | `dns_resolve4` | callback and promise forms of dns.resolve4 and dns.promises.resolve4 |
+| `dns_lookup_service` | callback and promise forms of dns.lookupService and dns.promises.lookupService |
 | `enums` | numeric enum constants |
 | `error_constructors` | TypeError, RangeError, and SyntaxError constructors share Error object behavior and ignored extra args |
 | `error_cause` | Error-family and AggregateError literal cause options exposed through .cause |
