@@ -2441,6 +2441,29 @@ bool value_array_last_start(size_t len, double from_index, size_t* out) {
     return true;
 }
 
+tsc_array_t* value_array_like_slice(tsc_value_t recv, double start, double end) {
+    size_t len = (size_t)tsc_value_length(recv);
+    size_t from = value_array_forward_start(len, start);
+    size_t to = value_array_forward_start(len, end);
+    if (to < from) to = from;
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), to > from ? to - from : 1);
+    for (size_t i = from; i < to; i++) {
+        tsc_value_t value = tsc_value_get_index(recv, (double)i);
+        tsc_array_push_raw(out, &value);
+    }
+    return out;
+}
+
+tsc_array_t* value_array_like_to_reversed(tsc_value_t recv) {
+    size_t len = (size_t)tsc_value_length(recv);
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
+    for (size_t i = len; i > 0; i--) {
+        tsc_value_t value = tsc_value_get_index(recv, (double)(i - 1));
+        tsc_array_push_raw(out, &value);
+    }
+    return out;
+}
+
 tsc_str_t* value_join_part(tsc_value_t v) {
     return tsc_value_is_nullish(v) ? tsc_str_from_lit("", 0) : tsc_value_to_string(v);
 }
@@ -2851,6 +2874,9 @@ tsc_value_t tsc_value_method_to_reversed(tsc_value_t recv) {
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         return tsc_value_array(tsc_array_to_reversed((const tsc_array_t*)value_ptr(recv)));
     }
+    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
+        return tsc_value_array(value_array_like_to_reversed(recv));
+    }
     return tsc_value_undefined();
 }
 
@@ -2863,6 +2889,9 @@ tsc_value_t tsc_value_method_slice(tsc_value_t recv, tsc_value_t start, tsc_valu
     }
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         return tsc_value_array(tsc_array_slice((const tsc_array_t*)value_ptr(recv), s, e));
+    }
+    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
+        return tsc_value_array(value_array_like_slice(recv, s, e));
     }
     return tsc_value_undefined();
 }
