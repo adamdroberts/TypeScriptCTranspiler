@@ -1,0 +1,2 @@
+tsc_node_function(
+tsc_str_from_lit("return 6 * 7;", 13)

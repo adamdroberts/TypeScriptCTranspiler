@@ -199,6 +199,7 @@ export function emitProgram(
         nativeAddons?: NativeAddonManifest;
         dynamicRequires?: DynamicRequireManifest;
         runtimeCode?: RuntimeCodeManifest;
+        unsafeEval?: boolean;
     } = {},
 ): EmittedProgram {
     const em = new Emitter(checker, graph, options);
@@ -296,6 +297,7 @@ class Emitter {
             nativeAddons?: NativeAddonManifest;
             dynamicRequires?: DynamicRequireManifest;
             runtimeCode?: RuntimeCodeManifest;
+            unsafeEval?: boolean;
         } = {},
     ) {}
 
@@ -31735,20 +31737,9 @@ class Emitter {
         if (type.kind !== "function" || !type.closureName) {
             unsupported(call, "Function constructor result must be callable");
         }
-        const adapter = this.ensureNodeFunctionAdapter(call, type);
-        const envType = `${adapter}_env_t`;
         return this.emitSequencedExpr(type, [
             { value: body, target: T_STRING, node: bodyNode },
-        ], ([source]) => {
-            const env = this.freshTemp("_node_fn_env");
-            const fn = this.freshTemp("_node_fn");
-            return (
-                `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
-                `${env}->fn = tsc_node_function(${source}); ` +
-                `${type.c} ${fn} = (${type.c})TSC_GC_MALLOC(sizeof(${type.closureName})); ` +
-                `${fn}->fn = ${adapter}; ${fn}->env = ${env}; ${fn}; })`
-            );
-        });
+        ], ([source]) => this.emitNodeFunctionBridgeAllocation(call, type, source));
     }
 
     private functionConstructorBodyArg(call: ts.CallExpression | ts.NewExpression): ts.Expression | null {
@@ -31782,7 +31773,9 @@ class Emitter {
                 const cond = `${index === 0 ? "if" : "else if"} (tsc_str_eq(${sourceValue}, ${this.cStringLiteral(entry.source)}))`;
                 dispatch += `${cond} { ${out} = ${this.emitAotRuntimeConstant(entry.constant).c}; } `;
             });
-            dispatch += `else { tsc_throw_str(tsc_str_from_cstr("runtime eval source outside AOT allow-list")); }`;
+            dispatch += this.options.unsafeEval
+                ? `else { ${out} = tsc_node_eval(${sourceValue}); }`
+                : `else { tsc_throw_str(tsc_str_from_cstr("runtime eval source outside AOT allow-list")); }`;
             pieces.push(dispatch);
             pieces.push(out);
             return `({ ${pieces.join("; ")}; })`;
@@ -31819,11 +31812,30 @@ class Emitter {
                 const cond = `${index === 0 ? "if" : "else if"} (tsc_str_eq(${bodyValue}, ${this.cStringLiteral(entry.source)}))`;
                 dispatch += `${cond} { ${out} = ${this.emitAotFunctionAllocation(type, adapter)}; } `;
             });
-            dispatch += `else { tsc_throw_str(tsc_str_from_cstr("runtime Function source outside AOT allow-list")); }`;
+            dispatch += this.options.unsafeEval
+                ? `else { ${out} = ${this.emitNodeFunctionBridgeAllocation(call, type, bodyValue)}; }`
+                : `else { tsc_throw_str(tsc_str_from_cstr("runtime Function source outside AOT allow-list")); }`;
             pieces.push(dispatch);
             pieces.push(out);
             return `({ ${pieces.join("; ")}; })`;
         });
+    }
+
+    private emitNodeFunctionBridgeAllocation(
+        node: ts.Node,
+        type: CType,
+        bodyValue: string,
+    ): string {
+        const adapter = this.ensureNodeFunctionAdapter(node, type);
+        const envType = `${adapter}_env_t`;
+        const env = this.freshTemp("_node_fn_env");
+        const fn = this.freshTemp("_node_fn");
+        return (
+            `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
+            `${env}->fn = tsc_node_function(${bodyValue}); ` +
+            `${type.c} ${fn} = (${type.c})TSC_GC_MALLOC(sizeof(${type.closureName})); ` +
+            `${fn}->fn = ${adapter}; ${fn}->env = ${env}; ${fn}; })`
+        );
     }
 
     private emitAotFunctionAllocation(type: CType, adapter: string): string {

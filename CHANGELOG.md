@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Runtime-code manifest dispatch now falls back to the embedded Node `eval` / `Function` bridge for allow-list misses only when `--unsafe-eval` is enabled, while keeping the default AOT allow-list throw. Tests: `runtime_eval_manifest_unsafe_fallback`, `runtime_function_manifest_unsafe_fallback`.
 - Proxy `getOwnPropertyDescriptor` traps now accept array and function values as descriptor objects, matching `ToPropertyDescriptor` object coercion across object-, array-, and function-target proxies. Test: `proxy_descriptor_invariants`.
 - Dynamic function `prototype` metadata now persists `Object.defineProperty(fn, "prototype", { writable: false })`, reports the updated descriptor, blocks later prototype assignment, and preserves function-target Proxy descriptor forwarding. Test: `proxy_function_prototype_invariants`.
 - `JSON.stringify(...)` now serializes object- and array-target Proxy values through proxy-aware `ownKeys`, descriptor, length, and `get` paths instead of reading the proxy wrapper's empty backing object. Tests: `proxy_json_stringify`, `proxy_callable_json`.

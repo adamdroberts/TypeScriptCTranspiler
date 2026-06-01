@@ -669,7 +669,12 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         console.error(`[tsc2c] topo: ${graph.topoOrder.join(" -> ")}`);
     }
 
-    const { mainC, diagnostics } = emitProgram(graph, checker, { nativeAddons, dynamicRequires, runtimeCode });
+    const { mainC, diagnostics } = emitProgram(graph, checker, {
+        nativeAddons,
+        dynamicRequires,
+        runtimeCode,
+        unsafeEval: opts.unsafeEval,
+    });
     if (diagnostics.length > 0) {
         for (const d of diagnostics) process.stderr.write(d + "\n");
         return { exitCode: 3, buildDir, mainC: "" };
