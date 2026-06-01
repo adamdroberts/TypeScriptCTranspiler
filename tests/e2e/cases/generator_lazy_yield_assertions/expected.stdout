@@ -1,0 +1,11 @@
+created
+start
+next1: {"done":false,"value":"as"}
+as: OK
+next2: {"done":false,"value":"type"}
+type: 42
+next3: {"done":false,"value":"satisfies"}
+satisfies: box
+next4: {"done":false,"value":"nonnull"}
+nonnull: value
+next5: {"done":true,"value":"done"}
