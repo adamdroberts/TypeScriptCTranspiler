@@ -1602,6 +1602,17 @@ static void validate_proxy_own_keys_result(const tsc_object_t* proxy, const tsc_
                 }
             }
         }
+        if (target->props) {
+            for (size_t i = 0; i < target->props->len; i++) {
+                const tsc_object_prop_t* prop = &target->props->props[i];
+                if (!prop->configurable && !str_array_contains(keys, prop->key)) {
+                    tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result missing non-configurable key"));
+                }
+                if (!target->extensible && !str_array_contains(keys, prop->key)) {
+                    tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result missing key on non-extensible target"));
+                }
+            }
+        }
         if (!target->extensible) {
             for (size_t i = 0; i < keys->len; i++) {
                 if (!tsc_array_has_own_key(target, TSC_ARR(tsc_str_t*, keys, i))) {
