@@ -1,0 +1,6 @@
+tsc_value_object_keys(
+tsc_object_set(
+tsc_value_get_prop(
+tsc_value_is_undefined(
+tsc_node_native_addon(tsc_str_from_lit("{{NATIVE_PKG_NODE}}"
+tsc_node_native_addon(tsc_str_from_lit("

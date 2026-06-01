@@ -19317,6 +19317,23 @@ class Emitter {
         return null;
     }
 
+    private nativeAddonSpecifierFromExpression(expr: ts.Expression): string | null {
+        const directSpec = this.requireCallSpecifier(expr);
+        if (directSpec && this.nativeAddonPathForSpecifier(directSpec, expr.getSourceFile().fileName)) {
+            return directSpec;
+        }
+        while (ts.isParenthesizedExpression(expr)) expr = expr.expression;
+        if (!ts.isIdentifier(expr)) return null;
+        const requireSpec = this.requireBindingSpecifier(expr);
+        if (requireSpec && this.nativeAddonPathForSpecifier(requireSpec, expr.getSourceFile().fileName)) {
+            return requireSpec;
+        }
+        const imported = this.nativeAddonImportedBinding(expr);
+        return imported && (!imported.exportName || imported.exportName === "default")
+            ? imported.spec
+            : null;
+    }
+
     private requireCallSpecifiers(expr: ts.Expression): string[] | null {
         if (ts.isCallExpression(expr)) {
             const specifierArg = this.commonJsRequireSpecifierArgument(expr);
@@ -19605,7 +19622,8 @@ class Emitter {
         ) {
             return null;
         }
-        const spec = this.requireCallSpecifier(varDecl.initializer);
+        const spec = this.nativeAddonSpecifierFromExpression(varDecl.initializer) ??
+            this.requireCallSpecifier(varDecl.initializer);
         if (!spec) return null;
         if (this.nativeAddonPathForSpecifier(spec, varDecl.getSourceFile().fileName)) {
             if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
@@ -25841,7 +25859,9 @@ class Emitter {
                     this.emitTopLevelCommonJsModuleDestructuring(initBuf, d);
                     continue;
                 }
-                const spec = d.initializer ? this.requireCallSpecifier(d.initializer) : null;
+                const spec = d.initializer
+                    ? this.nativeAddonSpecifierFromExpression(d.initializer) ?? this.requireCallSpecifier(d.initializer)
+                    : null;
                 if (spec && ts.isObjectBindingPattern(d.name)) {
                     this.emitTopLevelRequireDestructuring(initBuf, d, spec);
                     continue;
@@ -26445,7 +26465,9 @@ class Emitter {
                     this.emitLocalCommonJsModuleDestructuring(buf, d, isConst);
                     continue;
                 }
-                const spec = d.initializer ? this.requireCallSpecifier(d.initializer) : null;
+                const spec = d.initializer
+                    ? this.nativeAddonSpecifierFromExpression(d.initializer) ?? this.requireCallSpecifier(d.initializer)
+                    : null;
                 if (spec && ts.isObjectBindingPattern(d.name)) {
                     this.emitLocalRequireDestructuring(buf, d, spec, isConst);
                     continue;

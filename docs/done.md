@@ -1958,6 +1958,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_package_namespace` | TypeScript package namespace imports through package exports |
 | `node_modules_package_side_effect` | package side-effect-only imports through package exports |
 | `node_modules_transitive_native_addon` | expected diagnostic for package source importing a native addon package |
+| `native_addon_manifest_binding_destructure` | manifest-backed native-addon require and import bindings support destructuring through the embedded Node bridge |
 | `number_constants` | Number static constants |
 | `number_static_more` | Number.is* predicates over any value plus parseInt/parseFloat coercion, radix support, radix inference, and invalid-radix handling |
 | `json` | JSON.stringify of primitives, arrays, typed objects |
