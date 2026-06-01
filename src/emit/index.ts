@@ -17544,9 +17544,56 @@ class Emitter {
             }
             if (!ts.isPropertyAssignment(prop)) return false;
             if (this.staticPropertyName(prop.name) == null) return false;
-            if (!this.isCommonJsModuleExportsDefaultValue(prop.initializer)) return false;
+            if (!this.isCommonJsModuleExportsDefaultInitializerValue(prop.initializer)) return false;
         }
         return true;
+    }
+
+    private isCommonJsModuleExportsDefaultInitializerValue(expr: ts.Expression): boolean {
+        const cur = this.unwrapTransparentExpression(expr);
+        if (this.isCommonJsModuleExportsDefaultValue(cur)) return true;
+        if (this.isCommonJsRuntimeComputedModuleExportsValue(cur)) return true;
+        if (ts.isIdentifier(cur)) {
+            return this.isSideEffectFreeTopLevelConstInitializer(cur);
+        }
+        if (
+            ts.isPrefixUnaryExpression(cur) &&
+            this.isCommonJsModuleExportsDefaultPrefixOperator(cur.operator)
+        ) {
+            return this.isCommonJsModuleExportsDefaultInitializerValue(cur.operand);
+        }
+        if (ts.isTypeOfExpression(cur) || ts.isVoidExpression(cur)) {
+            return this.isCommonJsModuleExportsDefaultInitializerValue(cur.expression);
+        }
+        if (ts.isBinaryExpression(cur)) {
+            if (
+                cur.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
+                cur.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+                cur.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
+            ) {
+                return this.isCommonJsModuleExportsDefaultInitializerValue(cur.left) &&
+                    this.isCommonJsModuleExportsDefaultInitializerValue(cur.right);
+            }
+            return this.isCommonJsModuleExportsDefaultBinaryOperator(cur.operatorToken.kind) &&
+                this.isCommonJsModuleExportsDefaultInitializerValue(cur.left) &&
+                this.isCommonJsModuleExportsDefaultInitializerValue(cur.right);
+        }
+        if (ts.isConditionalExpression(cur)) {
+            return this.isCommonJsModuleExportsDefaultInitializerValue(cur.condition) &&
+                this.isCommonJsModuleExportsDefaultInitializerValue(cur.whenTrue) &&
+                this.isCommonJsModuleExportsDefaultInitializerValue(cur.whenFalse);
+        }
+        if (ts.isArrayLiteralExpression(cur)) {
+            return cur.elements.every((element) =>
+                !ts.isSpreadElement(element) &&
+                element.kind !== ts.SyntaxKind.OmittedExpression &&
+                this.isCommonJsModuleExportsDefaultInitializerValue(element),
+            );
+        }
+        if (ts.isObjectLiteralExpression(cur)) {
+            return this.isCommonJsObjectLiteralDefaultValue(cur);
+        }
+        return false;
     }
 
     private isCommonJsModuleExportsSpreadValue(expr: ts.Expression): boolean {
@@ -17583,7 +17630,7 @@ class Emitter {
             return cur.elements.every((element) =>
                 !ts.isSpreadElement(element) &&
                 element.kind !== ts.SyntaxKind.OmittedExpression &&
-                this.isCommonJsModuleExportsDefaultValue(element),
+                this.isCommonJsModuleExportsDefaultInitializerValue(element),
             );
         }
         if (ts.isObjectLiteralExpression(cur)) {
@@ -17702,10 +17749,10 @@ class Emitter {
             }
             if (ts.isPropertyAssignment(prop) && ts.isFunctionExpression(prop.initializer)) continue;
             if (ts.isPropertyAssignment(prop) && ts.isArrowFunction(prop.initializer)) continue;
-            if (ts.isPropertyAssignment(prop) && this.isCommonJsModuleExportsDefaultValue(prop.initializer)) continue;
+            if (ts.isPropertyAssignment(prop) && this.isCommonJsModuleExportsDefaultInitializerValue(prop.initializer)) continue;
             if (ts.isMethodDeclaration(prop)) continue;
             if (ts.isGetAccessorDeclaration(prop) && this.commonJsObjectAssignGetterReturnExpression(prop)) continue;
-            unsupported(prop, "CommonJS module.exports object currently supports declared identifier, function-valued, arrow-function-valued, static require values, and static literal-value exports only");
+            unsupported(prop, "CommonJS module.exports object currently supports declared identifier, function-valued, arrow-function-valued, static require values, static literal-value exports, and bounded runtime-computed default initializers only");
         }
         return { left: assignment.left, right, exportLefts: assignment.exportLefts };
     }
@@ -19394,8 +19441,8 @@ class Emitter {
             if (fieldName == null) {
                 unsupported(prop.name, "CommonJS module.exports object default requires static property names");
             }
-            if (!this.isCommonJsModuleExportsDefaultValue(prop.initializer)) {
-                unsupported(prop.initializer, "CommonJS module.exports object default only supports static literal properties");
+            if (!this.isCommonJsModuleExportsDefaultInitializerValue(prop.initializer)) {
+                unsupported(prop.initializer, "CommonJS module.exports object default only supports static literal or bounded runtime-computed properties");
             }
             const value = this.emitCommonJsModuleExportsDefaultValue(prop.initializer);
             pieces.push(
@@ -19423,8 +19470,8 @@ class Emitter {
                 if (ts.isSpreadElement(element) || element.kind === ts.SyntaxKind.OmittedExpression) {
                     unsupported(element, "CommonJS module.exports array default requires dense literal elements");
                 }
-                if (!this.isCommonJsModuleExportsDefaultValue(element)) {
-                    unsupported(element, "CommonJS module.exports array default only supports static literal elements");
+                if (!this.isCommonJsModuleExportsDefaultInitializerValue(element)) {
+                    unsupported(element, "CommonJS module.exports array default only supports static literal or bounded runtime-computed elements");
                 }
                 const value = this.emitCommonJsModuleExportsDefaultValue(element);
                 const tmp = this.freshTemp("_cjsel");
@@ -19445,6 +19492,25 @@ class Emitter {
             this.isCommonJsModuleExportsDefaultBinaryOperator(cur.operatorToken.kind)
         ) {
             return { c: this.coerce(this.emitExpr(cur), T_VALUE, cur), ty: T_VALUE };
+        }
+        if (
+            ts.isTypeOfExpression(cur) ||
+            ts.isVoidExpression(cur) ||
+            ts.isConditionalExpression(cur) ||
+            (
+                ts.isBinaryExpression(cur) &&
+                (
+                    cur.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
+                    cur.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+                    cur.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
+                )
+            ) ||
+            ts.isIdentifier(cur) ||
+            this.isCommonJsRuntimeComputedModuleExportsValue(cur)
+        ) {
+            if (this.isCommonJsModuleExportsDefaultInitializerValue(cur)) {
+                return { c: this.coerce(this.emitExpr(cur), T_VALUE, cur), ty: T_VALUE };
+            }
         }
         unsupported(expr, "CommonJS module.exports default only supports static literal values");
     }
