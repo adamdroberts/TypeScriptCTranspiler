@@ -15122,6 +15122,10 @@ class Emitter {
     }
 
     private commonJsNamedImportDeclaration(id: ts.Identifier): ts.Node | null {
+        return this.commonJsNamedImportDeclarationInfo(id)?.decl ?? null;
+    }
+
+    private commonJsNamedImportDeclarationInfo(id: ts.Identifier): { name: string; decl: ts.Node } | null {
         const raw = this.checker.getSymbolAtLocation(id);
         const importSpec = (raw?.declarations ?? []).find((decl): decl is ts.ImportSpecifier =>
             ts.isImportSpecifier(decl) && decl.name.text === id.text,
@@ -15135,7 +15139,8 @@ class Emitter {
         const sf = info?.sf;
         if (!sf || !this.isJavaScriptSourceFile(sf)) return null;
         const exportName = importSpec.propertyName?.text ?? importSpec.name.text;
-        return this.commonJsExportedMemberDeclaration(sf, exportName);
+        const decl = this.commonJsExportedMemberDeclaration(sf, exportName);
+        return decl ? { name: exportName, decl } : null;
     }
 
     private declarationName(decl: ts.Node): ts.Identifier | null {
@@ -15290,7 +15295,7 @@ class Emitter {
             expr.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
             this.isCommonJsExportAccess(expr.left)
         ) {
-            if (!this.commonJsExportName(expr.left)) return null;
+            if (this.commonJsExportNames(expr.left).length === 0) return null;
             lefts.push(expr.left);
             expr = expr.right;
         }
@@ -17587,7 +17592,7 @@ class Emitter {
                 moduleExportsLeft ??= expr.left;
                 moduleExportsAssignment ??= expr;
             } else if (this.isCommonJsExportAccess(expr.left)) {
-                if (!this.commonJsExportName(expr.left)) return null;
+                if (this.commonJsExportNames(expr.left).length === 0) return null;
                 exportLefts.push(expr.left);
             } else if (
                 !(ts.isIdentifier(expr.left) && expr.left.text === "exports")
@@ -18338,15 +18343,23 @@ class Emitter {
         buf: CBuf,
         assignment: { left: CommonJsExportAccess; right: ts.Expression },
     ): void {
-        const cName = this.commonJsExportCName(assignment.left);
-        if (!cName) unsupported(assignment.left, "unsupported CommonJS export assignment");
+        const names = this.commonJsExportNames(assignment.left);
+        if (names.length === 0) unsupported(assignment.left, "unsupported CommonJS export assignment");
         const ty = this.commonJsExportedCType(assignment.left);
-        if (!this.commonJsExportGlobals.has(cName)) {
-            this.commonJsExportGlobals.add(cName);
-            this.globalDecls.line(`static ${ty.c} ${cName};`);
+        for (const name of names) {
+            const cName = this.commonJsExportCNameForName(assignment.left, name);
+            if (!this.commonJsExportGlobals.has(cName)) {
+                this.commonJsExportGlobals.add(cName);
+                this.globalDecls.line(`static ${ty.c} ${cName};`);
+            }
         }
+        const keyTmp = ts.isElementAccessExpression(assignment.left) && names.length > 1
+            ? this.emitCommonJsExportKey(buf, assignment.left)
+            : null;
         const value = this.emitExpr(assignment.right);
-        buf.line(`${cName} = ${this.coerce(value, ty, assignment.right)};`);
+        const valueTmp = this.freshTemp("_cjsexp");
+        buf.line(`${ty.c} ${valueTmp} = ${this.coerce(value, ty, assignment.right)};`);
+        this.emitCommonJsExportStores(buf, assignment.left, names, valueTmp, keyTmp);
     }
 
     private emitCommonJsExportAssignmentChain(
@@ -18354,18 +18367,54 @@ class Emitter {
         assignment: { lefts: CommonJsExportAccess[]; right: ts.Expression },
     ): void {
         const ty = this.commonJsExportedCType(assignment.lefts[0]!);
+        const stores = assignment.lefts.map((left) => {
+            const names = this.commonJsExportNames(left);
+            if (names.length === 0) unsupported(left, "unsupported CommonJS export assignment");
+            for (const name of names) {
+                const cName = this.commonJsExportCNameForName(left, name);
+                if (!this.commonJsExportGlobals.has(cName)) {
+                    this.commonJsExportGlobals.add(cName);
+                    this.globalDecls.line(`static ${ty.c} ${cName};`);
+                }
+            }
+            const keyTmp = ts.isElementAccessExpression(left) && names.length > 1
+                ? this.emitCommonJsExportKey(buf, left)
+                : null;
+            return { left, names, keyTmp };
+        });
         const value = this.emitExpr(assignment.right);
         const tmp = this.freshTemp("_cjsexp");
         buf.line(`${ty.c} ${tmp} = ${this.coerce(value, ty, assignment.right)};`);
-        for (const left of assignment.lefts) {
-            const cName = this.commonJsExportCName(left);
-            if (!cName) unsupported(left, "unsupported CommonJS export assignment");
-            if (!this.commonJsExportGlobals.has(cName)) {
-                this.commonJsExportGlobals.add(cName);
-                this.globalDecls.line(`static ${ty.c} ${cName};`);
-            }
-            buf.line(`${cName} = ${tmp};`);
+        for (const store of stores) {
+            this.emitCommonJsExportStores(buf, store.left, store.names, tmp, store.keyTmp);
         }
+    }
+
+    private emitCommonJsExportKey(buf: CBuf, left: ts.ElementAccessExpression): string {
+        const key = this.emitExpr(left.argumentExpression);
+        const keyTmp = this.freshTemp("_cjsexp_key");
+        buf.line(`tsc_str_t* ${keyTmp} = ${this.coerce(key, T_STRING, left.argumentExpression)};`);
+        return keyTmp;
+    }
+
+    private emitCommonJsExportStores(
+        buf: CBuf,
+        left: CommonJsExportAccess,
+        names: readonly string[],
+        valueTmp: string,
+        keyTmp: string | null,
+    ): void {
+        if (names.length === 1 || !keyTmp) {
+            const cName = this.commonJsExportCNameForName(left, names[0]!);
+            buf.line(`${cName} = ${valueTmp};`);
+            return;
+        }
+        names.forEach((name, index) => {
+            const cName = this.commonJsExportCNameForName(left, name);
+            const keyword = index === 0 ? "if" : "else if";
+            buf.line(`${keyword} (tsc_str_eq(${keyTmp}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))) { ${cName} = ${valueTmp}; }`);
+        });
+        buf.line(`else { tsc_throw_str(tsc_str_from_cstr("CommonJS export key resolved outside finite AOT set")); }`);
     }
 
     private emitCommonJsModuleExportsValueAssignment(
@@ -18402,13 +18451,19 @@ class Emitter {
                 buf.line(`${T_VALUE.c} ${tmp} = ${value.c};`);
                 buf.line(`${cName} = ${tmp};`);
                 for (const left of assignment.exportLefts) {
-                    const exportCName = this.commonJsExportCName(left);
-                    if (!exportCName) unsupported(left, "unsupported CommonJS export assignment");
-                    if (!this.commonJsExportGlobals.has(exportCName)) {
-                        this.commonJsExportGlobals.add(exportCName);
-                        this.globalDecls.line(`static ${T_VALUE.c} ${exportCName};`);
+                    const names = this.commonJsExportNames(left);
+                    if (names.length === 0) unsupported(left, "unsupported CommonJS export assignment");
+                    const keyTmp = ts.isElementAccessExpression(left) && names.length > 1
+                        ? this.emitCommonJsExportKey(buf, left)
+                        : null;
+                    for (const name of names) {
+                        const exportCName = this.commonJsExportCNameForName(left, name);
+                        if (!this.commonJsExportGlobals.has(exportCName)) {
+                            this.commonJsExportGlobals.add(exportCName);
+                            this.globalDecls.line(`static ${T_VALUE.c} ${exportCName};`);
+                        }
                     }
-                    buf.line(`${exportCName} = ${tmp};`);
+                    this.emitCommonJsExportStores(buf, left, names, tmp, keyTmp);
                 }
             } else {
                 buf.line(`${cName} = ${value.c};`);
@@ -18648,32 +18703,57 @@ class Emitter {
     }
 
     private commonJsExportName(expr: CommonJsExportAccess): string | null {
+        const names = this.commonJsExportNames(expr);
+        return names.length === 1 ? names[0]! : null;
+    }
+
+    private commonJsExportNames(expr: CommonJsExportAccess): string[] {
         if (
             ts.isPropertyAccessExpression(expr) &&
             ts.isIdentifier(expr.expression) &&
             (expr.expression.text === "exports" || this.isCommonJsExportsAliasIdentifier(expr.expression))
         ) {
-            return expr.name.text;
+            return [expr.name.text];
         }
         if (
             ts.isPropertyAccessExpression(expr) &&
             ts.isPropertyAccessExpression(expr.expression) &&
             this.isModuleExportsAccess(expr.expression)
         ) {
-            return expr.name.text;
+            return [expr.name.text];
         }
         if (ts.isElementAccessExpression(expr)) {
-            const name = this.staticComputedPropertyExpression(expr.argumentExpression);
-            if (name == null) return null;
+            const staticName = this.staticComputedPropertyExpression(expr.argumentExpression);
+            const names = staticName == null
+                ? staticStringExpressionTexts(expr.argumentExpression)
+                : [staticName];
+            if (names.length === 0) return [];
             if (
                 ts.isIdentifier(expr.expression) &&
                 (expr.expression.text === "exports" || this.isCommonJsExportsAliasIdentifier(expr.expression))
             ) {
-                return name;
+                return names;
             }
             if (ts.isPropertyAccessExpression(expr.expression) && this.isModuleExportsAccess(expr.expression)) {
-                return name;
+                return names;
             }
+        }
+        return [];
+    }
+
+    private commonJsExportCNameForName(node: ts.Node, name: string): string {
+        const modId = this.graph.fileToModuleId.get(node.getSourceFile().fileName) ?? this.currentModuleId ?? "module";
+        return `${modId}_${mangleIdent(name)}`;
+    }
+
+    private commonJsExportedDeclarationCName(decl: ts.Node, exportName: string): string | null {
+        const cName = this.declarationCName(decl);
+        if (cName) return cName;
+        if (
+            (ts.isPropertyAccessExpression(decl) || ts.isElementAccessExpression(decl)) &&
+            this.commonJsExportNames(decl).includes(exportName)
+        ) {
+            return this.commonJsExportCNameForName(decl, exportName);
         }
         return null;
     }
@@ -18779,8 +18859,7 @@ class Emitter {
     private commonJsExportCName(expr: CommonJsExportAccess): string | null {
         const name = this.commonJsExportName(expr);
         if (!name) return null;
-        const modId = this.graph.fileToModuleId.get(expr.getSourceFile().fileName) ?? this.currentModuleId ?? "module";
-        return `${modId}_${mangleIdent(name)}`;
+        return this.commonJsExportCNameForName(expr, name);
     }
 
     private commonJsModuleExportsCName(node: ts.Node): string {
@@ -19037,7 +19116,7 @@ class Emitter {
         const pieces = [`tsc_object_t* ${obj} = tsc_object_new()`];
         for (const exported of this.commonJsExportedMemberDeclarations(info.sf)) {
             if (excluded.has(exported.name)) continue;
-            const cName = this.declarationCName(exported.decl);
+            const cName = this.commonJsExportedDeclarationCName(exported.decl, exported.name);
             if (!cName) unsupported(exported.decl, `unsupported CommonJS export "${exported.name}" for require rest binding`);
             const ty = this.commonJsExportedCType(exported.decl);
             pieces.push(
@@ -19151,7 +19230,7 @@ class Emitter {
                 if (sym) this.requireDestructureTypes.set(sym, fallback.ty);
                 continue;
             }
-            const cName = this.declarationCName(decl);
+            const cName = this.commonJsExportedDeclarationCName(decl, exportName);
             if (!cName) {
                 unsupported(decl, `unsupported CommonJS export "${exportName}"`);
             }
@@ -19431,8 +19510,9 @@ class Emitter {
             const moduleObjectAssignment = this.commonJsModuleExportsObjectAssignment(stmt);
             if (moduleObjectAssignment) {
                 for (const left of moduleObjectAssignment.exportLefts) {
-                    const name = this.commonJsExportName(left);
-                    if (name) out.push({ name, decl: left });
+                    for (const name of this.commonJsExportNames(left)) {
+                        out.push({ name, decl: left });
+                    }
                 }
                 for (const prop of moduleObjectAssignment.right.properties) {
                     if (!ts.isSpreadAssignment(prop)) continue;
@@ -19459,8 +19539,9 @@ class Emitter {
             const assignmentChain = this.commonJsExportAssignmentChain(stmt);
             if (assignmentChain) {
                 for (const left of assignmentChain.lefts) {
-                    const assignmentName = this.commonJsExportName(left);
-                    if (assignmentName) out.push({ name: assignmentName, decl: left });
+                    for (const assignmentName of this.commonJsExportNames(left)) {
+                        out.push({ name: assignmentName, decl: left });
+                    }
                 }
                 continue;
             }
@@ -19566,7 +19647,8 @@ class Emitter {
 
     private requireModuleMemberCName(access: CommonJsExportAccess): string | null {
         const decl = this.requireModuleMemberDeclaration(access);
-        return decl ? this.declarationCName(decl) : null;
+        const name = this.commonJsAccessMemberName(access);
+        return decl && name ? this.commonJsExportedDeclarationCName(decl, name) : null;
     }
 
     private requireBindingModuleExportsDeclaration(id: ts.Identifier): ts.Node | null {
@@ -19819,7 +19901,8 @@ class Emitter {
                 return res.c;
             }
         }
-        return decl ? this.declarationCName(decl) : null;
+        const name = this.commonJsAccessMemberName(access);
+        return decl && name ? this.commonJsExportedDeclarationCName(decl, name) : null;
     }
 
     private moduleNamespaceMemberType(access: CommonJsExportAccess): CType {
@@ -19836,7 +19919,7 @@ class Emitter {
             }
             if (
                 (ts.isPropertyAccessExpression(decl) || ts.isElementAccessExpression(decl)) &&
-                this.commonJsExportName(decl)
+                this.commonJsExportNames(decl).length > 0
             ) {
                 return this.commonJsExportedCType(decl);
             }
@@ -26215,7 +26298,7 @@ class Emitter {
                 buf.line(`${fallback.ty.c}${qual} ${localName} = ${fallback.c};`);
                 continue;
             }
-            const cName = this.declarationCName(decl);
+            const cName = this.commonJsExportedDeclarationCName(decl, exportName);
             if (!cName) {
                 unsupported(decl, `unsupported CommonJS export "${exportName}"`);
             }
@@ -28383,11 +28466,11 @@ class Emitter {
                 if (!cName) unsupported(expr, "unsupported CommonJS default import");
                 return { c: cName, ty: this.commonJsExportedCType(commonJsDefaultImport) };
             }
-            const commonJsNamedImport = this.commonJsNamedImportDeclaration(expr);
+            const commonJsNamedImport = this.commonJsNamedImportDeclarationInfo(expr);
             if (commonJsNamedImport) {
-                const cName = this.declarationCName(commonJsNamedImport);
+                const cName = this.commonJsExportedDeclarationCName(commonJsNamedImport.decl, commonJsNamedImport.name);
                 if (!cName) unsupported(expr, "unsupported CommonJS named import");
-                return { c: cName, ty: this.commonJsExportedCType(commonJsNamedImport) };
+                return { c: cName, ty: this.commonJsExportedCType(commonJsNamedImport.decl) };
             }
             const jsDefaultExport = this.jsDefaultExportAssignmentForImport(expr);
             if (jsDefaultExport) {
@@ -30615,7 +30698,7 @@ class Emitter {
             const obj = this.freshTemp("_reqobj");
             const pieces = [`tsc_object_t* ${obj} = tsc_object_new()`];
             for (const exported of exportedMembers) {
-                const cName = this.declarationCName(exported.decl);
+                const cName = this.commonJsExportedDeclarationCName(exported.decl, exported.name);
                 if (!cName) unsupported(exported.decl, `unsupported CommonJS export "${exported.name}" for require("${spec}")`);
                 const ty = this.commonJsExportedCType(exported.decl);
                 pieces.push(
@@ -32722,7 +32805,7 @@ class Emitter {
                 memberTy.kind === "function" &&
                 decl &&
                 (
-                    ((ts.isPropertyAccessExpression(decl) || ts.isElementAccessExpression(decl)) && this.commonJsExportName(decl)) ||
+                    ((ts.isPropertyAccessExpression(decl) || ts.isElementAccessExpression(decl)) && this.commonJsExportNames(decl).length > 0) ||
                     (ts.isPropertyAssignment(decl) && (ts.isFunctionExpression(decl.initializer) || ts.isArrowFunction(decl.initializer))) ||
                     this.isCommonJsStaticRequireBackedExportProperty(decl) ||
                     ts.isMethodDeclaration(decl) ||
@@ -32771,7 +32854,7 @@ class Emitter {
                 decl &&
                 memberTy.kind === "function" &&
                 (
-                    (ts.isPropertyAccessExpression(decl) && this.commonJsExportName(decl)) ||
+                    ((ts.isPropertyAccessExpression(decl) || ts.isElementAccessExpression(decl)) && this.commonJsExportNames(decl).length > 0) ||
                     this.isCommonJsStaticRequireBackedExportProperty(decl) ||
                     (ts.isCallExpression(decl) && !!this.commonJsDefinePropertyExportForCallDeclaration(decl)) ||
                     (ts.isPropertyAssignment(decl) && !!this.commonJsDefinePropertiesExportEntry(decl)) ||
