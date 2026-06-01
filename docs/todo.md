@@ -56,6 +56,7 @@ This is the next item that most directly expands what programs can be written ag
   - Dynamic require manifests reject non-object top-level JSON values before reading `requires`. Test: `dynamic_require_manifest_invalid_root`.
   - Runtime-code AOT eval constants accept empty source strings and `void` expressions as `undefined`. Test: `runtime_eval_empty_void_aot`.
   - Generated-C DCE static boolean analysis folds side-effect-free `Number.isFinite(...)`, `Number.isInteger(...)`, `Number.isNaN(...)`, and `Number.isSafeInteger(...)` predicate calls. Test: `generated_c_dce_static_builtins`.
+  - Generated-C DCE static boolean analysis folds side-effect-free global `isFinite(...)` and `isNaN(...)` predicate calls. Test: `generated_c_dce_static_builtins`.
   - Promise adoption subscribes to pending source promises so `Promise.resolve(pending)` settles when the source later resolves or rejects. Test: `promise_resolve_adopt`.
 
 - **Phase 15 — perf & polish** (ongoing)

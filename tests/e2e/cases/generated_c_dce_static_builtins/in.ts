@@ -46,5 +46,17 @@ if (Number.isSafeInteger("dead_dce_number_issafeinteger_string_static")) {
 if (Number.isSafeInteger(9007199254740992)) {
     console.log("dead_dce_number_issafeinteger_large_branch_static");
 }
+if (isFinite("dead_dce_global_isfinite_string_static")) {
+    console.log("dead_dce_global_isfinite_string_branch_static");
+}
+if (isFinite(Infinity)) {
+    console.log("dead_dce_global_isfinite_infinity_branch_static");
+}
+if (isNaN("123")) {
+    console.log("dead_dce_global_isnan_numeric_string_branch_static");
+}
+if (isNaN(0)) {
+    console.log("dead_dce_global_isnan_zero_branch_static");
+}
 
 console.log("kept static dce builtins");
