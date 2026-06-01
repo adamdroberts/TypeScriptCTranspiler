@@ -1,21 +1,23 @@
 same boxed: true true
 function length: 2 2
 function name: Stable Stable
-function own: true true 0 2 length name 2 length name
+function own: true true true 0 3 length name prototype 3 length name prototype
 length desc: 2 false false false
 name desc: Stable false false false
+prototype desc: true true false false true
 shared proto: stable
 shared extensible: false false
 typed function enum: 0 0 0
-typed function own: 2 length name true TypedDirect TypedDirect
+typed function own: 3 length name prototype true true TypedDirect TypedDirect true
 typed function proto: typed
 typed function prevent: true true false
 typed function seal: true true false
 typed function freeze: true true true
-typed reflect own: 2 length name TypedReflect true TypedReflect
+typed reflect own: 3 length name prototype TypedReflect true true TypedReflect true
 typed reflect proto: reflect
 typed reflect prevent: true true false
 typed function define: true true false 1
+typed function prototype define: true true
 typed function delete: false false true true true
 function length samevalue: true false true
 function length samevalue object: Object.defineProperty failed
@@ -30,7 +32,7 @@ proxy function get length: Proxy get trap cannot report different value for non-
 proxy function set length: Proxy set trap cannot report success changing non-configurable non-writable key
 proxy function desc name: Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key
 proxy function keys missing: Proxy ownKeys trap result missing non-configurable key
-proxy function keys complete: 2
+proxy function keys complete: 3
 proxy function keys extra: Proxy ownKeys trap result included extra key on non-extensible target
 proxy function has length: Proxy has trap cannot report false for non-configurable key
 proxy function has missing: false
