@@ -1976,9 +1976,32 @@ tsc_str_t* tsc_value_json_stringify(tsc_value_t v) {
             if (o && o->is_proxy && tsc_proxy_chain_has_revoked(v)) {
                 tsc_throw_str(tsc_str_from_cstr("Cannot perform 'get' on a proxy that has been revoked"));
             }
+            if (o && o->is_proxy && tsc_value_is_array(v)) {
+                size_t len = (size_t)tsc_value_length(v);
+                tsc_str_t* out = tsc_str_from_lit("[", 1);
+                for (size_t i = 0; i < len; i++) {
+                    if (i > 0) out = tsc_str_concat(out, tsc_str_from_lit(",", 1));
+                    out = tsc_str_concat(out, tsc_value_json_stringify(tsc_value_get_index(v, (double)i)));
+                }
+                return tsc_str_concat(out, tsc_str_from_lit("]", 1));
+            }
             if (value_is_callable_proxy(v)) return tsc_str_from_lit("null", 4);
             tsc_str_t* out = tsc_str_from_lit("{", 1);
             bool first = true;
+            if (o && o->is_proxy) {
+                tsc_array_t* keys = tsc_object_keys_dyn(o);
+                for (size_t i = 0; i < keys->len; i++) {
+                    tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
+                    tsc_value_t prop_value = tsc_object_get(o, key);
+                    if (value_json_omits_object_property(prop_value)) continue;
+                    if (!first) out = tsc_str_concat(out, tsc_str_from_lit(",", 1));
+                    first = false;
+                    out = tsc_str_concat(out, tsc_json_escape_string(key));
+                    out = tsc_str_concat(out, tsc_str_from_lit(":", 1));
+                    out = tsc_str_concat(out, tsc_value_json_stringify(prop_value));
+                }
+                return tsc_str_concat(out, tsc_str_from_lit("}", 1));
+            }
             for (size_t i = 0; i < o->len; i++) {
                 if (!o->props[i].enumerable) continue;
                 tsc_value_t prop_value = tsc_object_get(o, o->props[i].key);
