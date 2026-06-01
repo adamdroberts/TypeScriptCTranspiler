@@ -17720,6 +17720,9 @@ class Emitter {
             return this.isCommonJsModuleExportsDefaultPrefixOperator(cur.operator) &&
                 this.isCommonJsModuleExportsDefaultValue(cur.operand);
         }
+        if (ts.isTypeOfExpression(cur)) {
+            return this.isCommonJsModuleExportsDefaultInitializerValue(cur.expression);
+        }
         if (ts.isBinaryExpression(cur)) {
             return this.isCommonJsModuleExportsDefaultBinaryOperator(cur.operatorToken.kind) &&
                 this.isCommonJsModuleExportsDefaultValue(cur.left) &&
