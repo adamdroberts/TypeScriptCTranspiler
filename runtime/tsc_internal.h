@@ -23,6 +23,7 @@
 #include <poll.h>
 #include <pwd.h>
 #include <signal.h>
+#include <sys/ioctl.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
