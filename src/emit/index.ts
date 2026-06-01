@@ -51424,6 +51424,12 @@ class Emitter {
         }
 
         if (ts.isIdentifier(pa.expression)) {
+            if (
+                pa.name.text === "prototype" &&
+                this.isUnshadowedGlobalIdentifier(pa.expression, "Array")
+            ) {
+                return { c: "tsc_array_prototype()", ty: arrayType(T_VALUE) };
+            }
             if (pa.expression.text === "Math") {
                 const name = pa.name.text;
                 switch (name) {
