@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE now treats unused pure `ArrayBuffer` allocations and empty own-key Object/Reflect helper reads over fresh `ArrayBuffer` instances as discardable. Test: `generated_c_dce_const`.
 - Lazy generator lowering now resumes single suspended `yield` values through `%`, `**`, bitwise, and shift binary operators. Test: `generator_lazy_yield_binary_more`.
 - Immediate `fs.promises.readdir(...)` now accepts and evaluates `signal` option values in the bounded sync-backed subset while leaving real AbortSignal cancellation deferred to future libuv-backed async I/O. Test: `fs_readdir_recursive`.
 - CommonJS whole-value `module.exports = ...` defaults now accept `delete obj.key` expressions by boxing the boolean result while preserving the delete side effect. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.

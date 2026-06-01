@@ -5995,6 +5995,7 @@ class Emitter {
                 "Date",
                 "Event",
                 "EventTarget",
+                "ArrayBuffer",
             ]);
             if (emptyOwnKeyBuiltins.has(name)) {
                 return this.isSideEffectFreeNewExpression(unwrapped, seenConsts) ? 0 : null;
@@ -7217,6 +7218,7 @@ class Emitter {
             if (name === "Date") return this.isSideEffectFreeDateConstructorArgs(args, seenConsts);
             if (name === "AggregateError") return this.isSideEffectFreeAggregateErrorConstructorArgs(args, seenConsts);
             if (name === "URL") return this.isSideEffectFreeURLConstructorArgs(args, seenConsts);
+            if (name === "ArrayBuffer") return this.isSideEffectFreeArrayBufferConstructorArgs(args, seenConsts);
             if (name === "Map") {
                 return args.length === 0 ||
                     (
@@ -7289,6 +7291,19 @@ class Emitter {
             errorArgs.slice(1).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
         );
+    }
+
+    private isSideEffectFreeArrayBufferConstructorArgs(
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (args.length === 0) return true;
+        if (args.length !== 1) return false;
+        const length = this.sideEffectFreeNumericLiteralSameValueZeroValue(args[0]!, seenConsts);
+        return length !== null &&
+            Number.isFinite(length) &&
+            Number.isInteger(length) &&
+            length >= 0;
     }
 
     private isSideEffectFreeEventConstructorArgs(
@@ -13991,7 +14006,8 @@ class Emitter {
                 unwrapped.expression.text === "URIError" ||
                 unwrapped.expression.text === "AggregateError" ||
                 unwrapped.expression.text === "Event" ||
-                unwrapped.expression.text === "EventTarget"
+                unwrapped.expression.text === "EventTarget" ||
+                unwrapped.expression.text === "ArrayBuffer"
             )
         ) {
             return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
