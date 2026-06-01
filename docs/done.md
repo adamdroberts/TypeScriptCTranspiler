@@ -655,6 +655,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `process.stdin.fd` exposes `0`, `process.stdin.isTTY` uses `isatty(0)`, and `process.stdin.readable` returns `true` in the bounded stdio subset. Named, aliased named, and namespace `stdin` imports from `"process"` / `"node:process"` expose the same metadata. Tests: `process_stdin_metadata`, `process_stdio_readable_writable`, `process_stdio_metadata_import`
 - Process stdio streams expose inert state flags for the bounded subset: `destroyed` / `closed` are `false`, `errored` is `null`, `stdin.readableEnded` is `false`, `stdin.readableFlowing` is `null`, `stdin.readableLength` is `0`, and `stdout` / `stderr` expose `writableEnded` / `writableFinished` / `writableNeedDrain` as `false` plus `writableCorked` / `writableLength` as `0`. Test: `process_stdio_state_flags`
 - `process.stdin.readableHighWaterMark` and `process.stdout.writableHighWaterMark` / `process.stderr.writableHighWaterMark` expose `65536` in the bounded stdio stream metadata subset. Test: `process_stdio_high_water_mark`
+- `process.stdin.readableObjectMode` and `process.stdout.writableObjectMode` / `process.stderr.writableObjectMode` expose `false` in the bounded stdio stream metadata subset. Test: `process_stdio_object_mode`
 - `process.stdout.columns` / `process.stdout.rows` and `process.stderr.columns` / `process.stderr.rows` expose terminal dimension metadata in the bounded stdio stream subset, falling back to `80` columns and `24` rows when no TTY size is available. Test: `process_stdio_columns_rows`
 - Process stdio streams expose bounded state objects: `stdin._readableState` reports inert readable queue metadata, while `stdout._writableState` / `stderr._writableState` report inert writable queue metadata with current ended/finished flags. Test: `process_stdio_state_objects`
 - `process.stdin.setEncoding(...)`, `process.stdin.resume(...)`, and `process.stdin.pause(...)` are accepted as no-op compatibility methods in the bounded stdio subset while evaluating consumed and ignored arguments. Named, namespace, and default process imports route to the same helpers. Test: `process_stdin_noop_methods`
@@ -1467,6 +1468,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `process_stdio_event_noop_methods` | process stdio no-op EventEmitter listener methods |
 | `process_stdio_columns_rows` | process stdout/stderr terminal dimension metadata |
 | `process_stdio_high_water_mark` | process stdio stream highWaterMark properties |
+| `process_stdio_object_mode` | process stdio stream objectMode properties |
 | `process_stdio_import` | named, aliased named, and namespace process stdout/stderr imports use existing stdio write helpers |
 | `process_stdio_metadata` | process stdout/stderr fd and isTTY metadata |
 | `process_stdio_metadata_import` | named, aliased named, and namespace process stdio imports expose existing fd/isTTY/readable/writable metadata |

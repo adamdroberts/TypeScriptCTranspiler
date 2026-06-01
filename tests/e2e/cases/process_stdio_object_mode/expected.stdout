@@ -1,0 +1,3 @@
+stdin objectMode: false
+stdout objectMode: false
+stderr objectMode: false
