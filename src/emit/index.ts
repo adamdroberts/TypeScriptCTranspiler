@@ -29147,7 +29147,10 @@ class Emitter {
                         { value: left, target: T_STRING, node: bin.left },
                         { value: right, target: T_VALUE, node: bin.right },
                     ],
-                    ([key, obj]) => `tsc_value_has_prop(${obj}, ${key})`,
+                    ([key, obj]) => {
+                        const cache = this.freshTemp("_cache");
+                        return `({ static tsc_prop_cache_t ${cache}; tsc_value_has_prop_cached(${obj}, ${key}, &${cache}); })`;
+                    },
                 );
             }
             case ts.SyntaxKind.PlusToken: {
@@ -49788,7 +49791,10 @@ class Emitter {
                     { value: target, target: T_VALUE, node: args[0]! },
                     { value: key, target: T_STRING, node: args[1]! },
                     ...ignored,
-                ], ([t, k]) => `tsc_reflect_has_prop(${t}, ${k})`);
+                ], ([t, k]) => {
+                    const cache = this.freshTemp("_cache");
+                    return `({ static tsc_prop_cache_t ${cache}; tsc_reflect_has_prop_cached(${t}, ${k}, &${cache}); })`;
+                });
             }
             case "isExtensible": {
                 if (args.length < 1) unsupported(call, "Reflect.isExtensible expects target");

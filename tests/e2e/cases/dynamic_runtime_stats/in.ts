@@ -25,6 +25,12 @@ for (let i = 0; i < 2; i++) {
     console.log("receiver set:", Reflect.set(obj, key, i, writeReceiver), writeReceiver.x);
 }
 obj.y = 2;
+for (let i = 0; i < 2; i++) {
+    console.log("has cached:", "x" in obj);
+}
+for (let i = 0; i < 2; i++) {
+    console.log("reflect has cached:", Reflect.has(obj, "x"));
+}
 console.log("has:", "y" in obj);
 delete obj.y;
 console.log("deleted:", "y" in obj);

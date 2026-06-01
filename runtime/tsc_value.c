@@ -1406,9 +1406,38 @@ bool tsc_value_has_prop(tsc_value_t v, const tsc_str_t* key) {
     return false;
 }
 
+bool tsc_value_has_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_cache_t* cache) {
+    if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) {
+        return tsc_value_has_prop(v, key);
+    }
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_HAS_PROP);
+    tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+    if (!o || o->is_proxy || !cache) {
+        tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_MISS);
+        return tsc_object_has(o, key);
+    }
+    tsc_object_prop_t* cached = prop_cache_lookup(cache, o, key);
+    if (cached) {
+        tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_HIT);
+        return true;
+    }
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_MISS);
+    ssize_t idx = object_find(o, key);
+    if (idx >= 0) {
+        prop_cache_store(cache, o, (size_t)idx);
+        return true;
+    }
+    return tsc_object_has(o, key);
+}
+
 bool tsc_reflect_has_prop(tsc_value_t v, const tsc_str_t* key) {
     require_reflect_object_target(v, "Reflect.has target must be an object");
     return tsc_value_has_prop(v, key);
+}
+
+bool tsc_reflect_has_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_cache_t* cache) {
+    require_reflect_object_target(v, "Reflect.has target must be an object");
+    return tsc_value_has_prop_cached(v, key, cache);
 }
 
 bool tsc_value_delete_prop(tsc_value_t v, tsc_str_t* key) {
