@@ -1,0 +1,8 @@
+false odd-1
+false odd-3
+true for-total-30
+false while-yield-1
+false while-yield-3
+false while-yield-4
+true while-total-8
+for:0|skip-for:0|for:1|after-for:1:10|tail-for:1|for:2|skip-for:2|for:3|after-for:3:30|continue-after-yield:3|for:4|skip-for:4|while:1|while:2|skip-while:2|while:3|while:4
