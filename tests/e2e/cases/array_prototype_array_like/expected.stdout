@@ -1,0 +1,5 @@
+join: a||c
+search: true false 1 0
+at: c p
+iters: 0|1|2 a||c 1:
+inherited: p/q true

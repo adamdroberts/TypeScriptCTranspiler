@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Detached `Array.prototype` read methods now operate on dynamic array-like object receivers through generic `length` and numeric property reads for `join`, search helpers, `at`, `keys`, `values`, and `entries`. Test: `array_prototype_array_like`.
 - Static `Object.prototype` reads now lower to the shared runtime Object prototype sentinel, preserving identity with ordinary object prototype chains, a `null` parent prototype, non-enumerable method properties, and detached prototype method calls. Test: `object_prototype_value`.
 - Static `Array.prototype` reads now lower to the shared runtime Array prototype value, preserving zero-length array identity, `Object.prototype` inheritance, non-enumerable `length`, and detached prototype method calls. Test: `array_prototype_value`.
 - Dynamic `in` checks and dynamic `Reflect.has(...)` calls over boxed object values now emit per-site shape-validated property-cache lookups, extending the existing dynamic property cache to presence checks. Tests: `dynamic_runtime_stats`, `dynamic_polymorphic_cache`.
