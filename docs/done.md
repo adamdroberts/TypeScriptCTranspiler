@@ -1859,6 +1859,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_commonjs_computed_tuple_union_exports` | CommonJS computed named-export metadata accepts tuple keys indexed by finite numeric literal unions |
 | `node_modules_commonjs_computed_object_map_union_exports` | CommonJS computed named-export metadata accepts const object-map values indexed by finite key unions |
 | `node_modules_commonjs_computed_object_keys_values_exports` | CommonJS computed named-export metadata accepts finite Object.keys/Object.values indexed export keys over static object literals |
+| `node_modules_commonjs_computed_object_entries_exports` | CommonJS computed named-export metadata accepts finite Object.entries indexed key export names over static object literals |
 | `node_modules_commonjs_module_exports_object_from_entries_named` | narrow CommonJS package `module.exports = Object.fromEntries([...])` static entry-array default/named export metadata plus whole-value default |
 | `node_modules_commonjs_module_exports_object_from_entries_computed_named` | narrow CommonJS package `module.exports = Object.fromEntries([...])` static computed-key default/named export metadata |
 | `node_modules_commonjs_module_exports_object_from_entries_finite_keys` | narrow CommonJS package `module.exports = Object.fromEntries([...])` named export metadata with finite dynamic key alternatives |
@@ -2268,6 +2269,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_require_static_keyof_map` | `keyof typeof` const object-map indexes provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_object_map_unknown` | unproven dynamic object-map indexes stay rejected instead of falling back to every map value |
 | `dynamic_require_static_object_keys_values` | indexed Object.keys/Object.values calls over static object literals provide finite AOT dynamic require alternatives |
+| `dynamic_require_static_object_entries` | indexed Object.entries calls over static object literals provide finite AOT dynamic require alternatives from entry keys and static string values |
 | `dynamic_require_template_literal_numeric_type` | numeric and boolean literal placeholders inside finite template-literal string type aliases provide AOT dynamic require alternatives |
 | `dynamic_require_template_literal_primitive_type` | bigint, null, and undefined literal placeholders inside finite template-literal string type aliases provide AOT dynamic require alternatives |
 | `dynamic_require_manifest` | explicit dynamic require manifest compiles a non-finite `require(variable)` allow-list into the AOT graph and finite runtime dispatch |

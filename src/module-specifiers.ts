@@ -129,6 +129,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (ts.isElementAccessExpression(node) && node.argumentExpression) {
             const objectKeysValues = resolveObjectKeysValuesAccess(node);
             if (objectKeysValues.length > 0) return objectKeysValues;
+            const objectEntries = resolveObjectEntriesAccess(node);
+            if (objectEntries.length > 0) return objectEntries;
             return resolveStaticCollectionAccess(node.expression, node.argumentExpression);
         }
         if (ts.isPropertyAccessExpression(node)) {
@@ -390,6 +392,52 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const out: string[] = [];
         for (const key of keys) {
             const values = slots[key];
+            if (!values) return [];
+            out.push(...values);
+        }
+        return dedupe(out);
+    };
+
+    const resolveObjectEntriesAccess = (expr: ts.ElementAccessExpression): string[] => {
+        if (!expr.argumentExpression) return [];
+        const tupleIndices = resolveStaticNumericKeys(expr.argumentExpression);
+        if (tupleIndices.length !== 1 || (tupleIndices[0] !== 0 && tupleIndices[0] !== 1)) return [];
+
+        const inner = unwrapStaticExpression(expr.expression);
+        if (!ts.isElementAccessExpression(inner) || !inner.argumentExpression) return [];
+        const entryIndices = resolveStaticNumericKeys(inner.argumentExpression);
+        if (entryIndices.length === 0) return [];
+
+        const call = unwrapStaticExpression(inner.expression);
+        if (!ts.isCallExpression(call) || call.arguments.length !== 1) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Object" || callee.name.text !== "entries") return [];
+
+        const object = resolveCollectionExpression(call.arguments[0]!);
+        if (!object || !ts.isObjectLiteralExpression(object)) return [];
+
+        const slotIndex = tupleIndices[0]!;
+        const slots: string[][] = [];
+        for (const prop of object.properties) {
+            if (ts.isSpreadAssignment(prop)) return [];
+            const propName = prop.name ? staticPropertyName(prop.name) : null;
+            if (propName === null) return [];
+            if (slotIndex === 0) {
+                slots.push([propName]);
+                continue;
+            }
+            if (!ts.isPropertyAssignment(prop) && !ts.isShorthandPropertyAssignment(prop)) return [];
+            const valueExpr = ts.isPropertyAssignment(prop) ? prop.initializer : prop.name;
+            const values = resolve(valueExpr);
+            if (values.length === 0) return [];
+            slots.push(values);
+        }
+
+        const out: string[] = [];
+        for (const index of entryIndices) {
+            const values = slots[index];
             if (!values) return [];
             out.push(...values);
         }
