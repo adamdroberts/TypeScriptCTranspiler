@@ -388,7 +388,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             entries.set(key, values);
         }
         const keys = resolveKeyTexts(keyExpr);
-        if (keys.length === 0) return dedupe([...entries.values()].flat());
+        if (keys.length === 0) return [];
         const out: string[] = [];
         for (const key of keys) {
             const values = entries.get(key);
@@ -731,6 +731,9 @@ function stringLiteralUnionTypeTexts(
     if (ts.isTemplateLiteralTypeNode(typeNode)) {
         return templateLiteralTypeTexts(typeNode, seenAliases);
     }
+    if (ts.isTypeOperatorNode(typeNode) && typeNode.operator === ts.SyntaxKind.KeyOfKeyword) {
+        return keyofTypeTexts(typeNode.type);
+    }
     if (typeNode.kind === ts.SyntaxKind.NullKeyword) return ["null"];
     if (typeNode.kind === ts.SyntaxKind.UndefinedKeyword) return ["undefined"];
     if (ts.isLiteralTypeNode(typeNode)) {
@@ -762,6 +765,26 @@ function stringLiteralUnionTypeTexts(
             seen.add(value);
             values.push(value);
         }
+    }
+    return values;
+}
+
+function keyofTypeTexts(typeNode: ts.TypeNode): string[] {
+    if (!ts.isTypeQueryNode(typeNode) || !ts.isIdentifier(typeNode.exprName)) return [];
+    const decl = earlierConstStringDeclaration(typeNode.exprName) ?? topLevelConstStringDeclaration(typeNode.exprName);
+    if (!decl?.initializer) return [];
+    const init = unwrapStaticExpression(decl.initializer);
+    if (!ts.isObjectLiteralExpression(init)) return [];
+    const values: string[] = [];
+    const seen = new Set<string>();
+    for (const prop of init.properties) {
+        if (!ts.isPropertyAssignment(prop) && !ts.isShorthandPropertyAssignment(prop)) return [];
+        const key = staticPropertyName(prop.name);
+        if (key === null) return [];
+        if (seen.has(key)) continue;
+        seen.add(key);
+        values.push(key);
+        if (values.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
     }
     return values;
 }
