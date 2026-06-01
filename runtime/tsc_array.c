@@ -506,6 +506,7 @@ tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap) {
     a->state = 0;
     a->env = NULL;
     a->lazy_next = NULL;
+    a->props = tsc_object_new();
     a->data = initial_cap ? TSC_GC_MALLOC(initial_cap * elem_size) : NULL;
     return a;
 }
@@ -527,6 +528,7 @@ tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap) {
     a->state = 0;
     a->env = NULL;
     a->lazy_next = NULL;
+    a->props = tsc_object_new();
     a->data = initial_cap ? TSC_GC_MALLOC_ATOMIC(initial_cap * elem_size) : NULL;
     return a;
 }
@@ -561,13 +563,15 @@ bool tsc_array_has_own_key(const tsc_array_t* a, const tsc_str_t* key) {
     if (!a) return false;
     if (tsc_str_is_length_key(key)) return true;
     size_t idx = 0;
-    return tsc_str_array_index(key, &idx) && idx < a->len;
+    if (tsc_str_array_index(key, &idx) && idx < a->len) return true;
+    return a->props && tsc_object_has_own(a->props, key);
 }
 
 bool tsc_array_property_is_enumerable_key(const tsc_array_t* a, const tsc_str_t* key) {
     if (!a || tsc_str_is_length_key(key)) return false;
     size_t idx = 0;
-    return tsc_str_array_index(key, &idx) && idx < a->len;
+    if (tsc_str_array_index(key, &idx) && idx < a->len) return true;
+    return a->props && tsc_object_property_is_enumerable(a->props, key);
 }
 
 void tsc_array_reserve(tsc_array_t* a, size_t new_cap) {
