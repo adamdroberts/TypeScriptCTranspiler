@@ -84,9 +84,17 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             ts.isBinaryExpression(node) &&
             (
                 node.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
-                node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken
+                node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
+                node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
             )
         ) {
+            if (node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
+                const left = resolveNullishStringOperand(node.left);
+                if (!left) return [];
+                if (!left.hasNullish) return dedupe(left.strings);
+                const right = resolve(node.right);
+                return right.length === 0 ? [] : dedupe([...left.strings, ...right]);
+            }
             const left = resolveLogicalStringOperand(node.left);
             if (left.length === 0) return [];
             const truthyLeft = left.filter((value) => value.length > 0);
@@ -169,6 +177,54 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return values;
         }
         return [];
+    };
+
+    const resolveNullishStringOperand = (node: ts.Expression): { strings: string[]; hasNullish: boolean } | null => {
+        const cur = unwrapStaticExpression(node);
+        if (
+            cur.kind === ts.SyntaxKind.NullKeyword ||
+            cur.kind === ts.SyntaxKind.UndefinedKeyword ||
+            (ts.isIdentifier(cur) && cur.text === "undefined") ||
+            ts.isVoidExpression(cur)
+        ) {
+            return { strings: [], hasNullish: true };
+        }
+        if (ts.isConditionalExpression(cur)) {
+            const whenTrue = resolveNullishStringOperand(cur.whenTrue);
+            const whenFalse = resolveNullishStringOperand(cur.whenFalse);
+            if (!whenTrue || !whenFalse) return null;
+            return {
+                strings: dedupe([...whenTrue.strings, ...whenFalse.strings]),
+                hasNullish: whenTrue.hasNullish || whenFalse.hasNullish,
+            };
+        }
+        if (
+            ts.isBinaryExpression(cur) &&
+            cur.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
+        ) {
+            const left = resolveNullishStringOperand(cur.left);
+            if (!left) return null;
+            if (!left.hasNullish) return left;
+            const right = resolveNullishStringOperand(cur.right);
+            if (!right) return null;
+            return {
+                strings: dedupe([...left.strings, ...right.strings]),
+                hasNullish: right.hasNullish,
+            };
+        }
+        if (ts.isIdentifier(cur)) {
+            if (cur.text === "__filename" || cur.text === "__dirname") {
+                return { strings: resolve(cur), hasNullish: false };
+            }
+            const decl = earlierConstStringDeclaration(cur) ?? topLevelConstStringDeclaration(cur);
+            if (!decl?.initializer || seen.has(decl)) return null;
+            seen.add(decl);
+            const values = resolveNullishStringOperand(decl.initializer);
+            seen.delete(decl);
+            return values;
+        }
+        const strings = resolveLogicalStringOperand(cur);
+        return strings.length === 0 ? null : { strings, hasNullish: false };
     };
 
     const resolveStringRawTemplate = (

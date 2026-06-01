@@ -2259,6 +2259,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_require_string_raw` | finite `String.raw` tagged-template specifiers provide AOT dynamic require alternatives, including finite substitutions |
 | `dynamic_require_path_join` | finite `path.join` / `path.resolve` / `path.normalize` specifiers from `path` or `node:path` bindings provide AOT dynamic require alternatives, including CommonJS path constants and absolute local paths |
 | `dynamic_require_logical_specifiers` | typed string logical OR/AND expressions preserve selected string values and provide finite AOT dynamic require alternatives |
+| `dynamic_require_nullish_specifiers` | finite nullish coalescing string specifiers provide AOT dynamic require alternatives without stringifying nullish values |
 | `dynamic_require_template_literal_numeric_type` | numeric and boolean literal placeholders inside finite template-literal string type aliases provide AOT dynamic require alternatives |
 | `dynamic_require_template_literal_primitive_type` | bigint, null, and undefined literal placeholders inside finite template-literal string type aliases provide AOT dynamic require alternatives |
 | `dynamic_require_manifest` | explicit dynamic require manifest compiles a non-finite `require(variable)` allow-list into the AOT graph and finite runtime dispatch |
