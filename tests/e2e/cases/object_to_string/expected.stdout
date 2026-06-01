@@ -3,3 +3,6 @@ array: 1,2
 num: 12.5
 text: hello
 bool: true
+own object: own:x own:x
+bad object: toString is not a function
+bare object: toString is not a function

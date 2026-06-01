@@ -2765,6 +2765,7 @@ tsc_str_t* tsc_value_method_to_string(tsc_value_t recv, tsc_value_t radix) {
             }
             return tsc_value_to_string(tsc_value_apply_function(fn, recv, tsc_value_array(args)));
         }
+        tsc_throw_str(tsc_str_from_cstr("toString is not a function"));
     }
     return tsc_value_to_string(recv);
 }
@@ -2776,6 +2777,7 @@ tsc_str_t* tsc_value_method_to_locale_string(tsc_value_t recv) {
             tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
             return tsc_value_to_string(tsc_value_apply_function(fn, recv, tsc_value_array(args)));
         }
+        tsc_throw_str(tsc_str_from_cstr("toLocaleString is not a function"));
     }
     return tsc_value_to_string(recv);
 }
@@ -2789,6 +2791,7 @@ tsc_value_t tsc_value_method_value_of(tsc_value_t recv) {
                 tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
                 return tsc_value_apply_function(fn, recv, tsc_value_array(args));
             }
+            tsc_throw_str(tsc_str_from_cstr("valueOf is not a function"));
         }
     }
     return recv;

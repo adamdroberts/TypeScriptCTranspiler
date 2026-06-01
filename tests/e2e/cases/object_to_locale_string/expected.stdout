@@ -1,3 +1,6 @@
 object: [object Object]
 num: 12.5
 text: hello
+own object: locale:x locale:x
+bad object: toLocaleString is not a function
+bare object: toLocaleString is not a function
