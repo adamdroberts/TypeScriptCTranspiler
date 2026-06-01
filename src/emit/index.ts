@@ -17704,6 +17704,7 @@ class Emitter {
             ts.isNewExpression(cur) ||
             ts.isPropertyAccessExpression(cur) ||
             ts.isElementAccessExpression(cur) ||
+            ts.isPostfixUnaryExpression(cur) ||
             ts.isTemplateExpression(cur) ||
             ts.isTaggedTemplateExpression(cur);
     }
