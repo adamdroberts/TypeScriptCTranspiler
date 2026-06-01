@@ -17723,6 +17723,9 @@ class Emitter {
         if (ts.isTypeOfExpression(cur)) {
             return this.isCommonJsModuleExportsDefaultInitializerValue(cur.expression);
         }
+        if (ts.isVoidExpression(cur)) {
+            return this.isCommonJsModuleExportsDefaultInitializerValue(cur.expression);
+        }
         if (ts.isBinaryExpression(cur)) {
             return this.isCommonJsModuleExportsDefaultBinaryOperator(cur.operatorToken.kind) &&
                 this.isCommonJsModuleExportsDefaultValue(cur.left) &&
@@ -18195,6 +18198,9 @@ class Emitter {
         let valueNode = this.commonJsExportValueNode(node);
         if (ts.isExpression(valueNode)) valueNode = this.unwrapTransparentExpression(valueNode);
         if (valueNode.kind === ts.SyntaxKind.NullKeyword) {
+            return T_VALUE;
+        }
+        if (ts.isVoidExpression(valueNode)) {
             return T_VALUE;
         }
         if (ts.isExpression(valueNode) && this.isCommonJsRuntimeComputedModuleExportsValue(valueNode)) {
