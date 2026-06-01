@@ -22,8 +22,9 @@ This is the next item that most directly expands what programs can be written ag
 
 - **Phase 6 — `async`/`await` + libuv event loop**
   - Full state-machine lowering of each `async` function remains deferred. A real `await` must become a suspend/resume point that chains a `.then` onto the awaited promise.
-  - Still missing: suspend/resume `await` state-machine lowering, broader thenable assimilation edge cases outside the immediate dynamic settled/nested/self-resolution/cycle subset, and full async function edge cases.
+  - Still missing: suspend/resume `await` state-machine lowering, broader thenable assimilation edge cases outside the immediate dynamic settled/nested/self-resolution/cycle and executor-resolved thenable/nested-promise subset, and full async function edge cases.
   - Done: thenable assimilation now rejects delayed resolver self-resolution when a thenable later resolves with the Promise record returned by `Promise.resolve(thenable)`. Test: `promise_thenable_self_resolution`.
+  - Done: `new Promise(...)` executor `resolve(...)` callbacks assimilate dynamic thenables and nested native Promise records. Test: `promise_executor_thenable_assimilation`.
   - Done: bounded before-exit queue draining now loops across `process.nextTick`, Promise microtasks, zero-delay timers, and `setImmediate`, preserving nested scheduling order for the compiled runtime subset; nonzero-delay `setTimeout`, `setInterval`, and `timers/promises.setTimeout` wait on the runtime clock before running callbacks or fulfilling Promises; recursively scheduled next ticks have bounded starvation protection; recursively scheduled `setImmediate` callbacks are backed by the event-loop scheduling model, yielding to the next tick check phase to preserve proper timer and microtask ordering.
   - Still missing: real timer signal handling and future async I/O on top of libuv.
   - **Depends on Phase 3** for the `Promise<T>` value representation (mixed boxed + unboxed).
