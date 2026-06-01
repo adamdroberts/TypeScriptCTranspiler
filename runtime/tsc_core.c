@@ -27,6 +27,7 @@ tsc_value_t value_event_listener_identity(void* identity) {
     entry->extensible = true;
     entry->sealed = false;
     entry->frozen = false;
+    entry->func_prototype_writable = true;
     entry->length = 0.0;
     entry->name = tsc_str_from_lit("", 0);
     entry->prototype = tsc_function_default_prototype();
@@ -56,6 +57,7 @@ tsc_value_t value_event_raw_listener_identity(void* identity, uint64_t order, bo
     entry->extensible = true;
     entry->sealed = false;
     entry->frozen = false;
+    entry->func_prototype_writable = true;
     entry->length = 0.0;
     entry->name = tsc_str_from_lit("", 0);
     entry->prototype = tsc_function_default_prototype();

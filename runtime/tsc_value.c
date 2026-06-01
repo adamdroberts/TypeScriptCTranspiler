@@ -108,6 +108,7 @@ tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* en
     id->extensible = true;
     id->sealed = false;
     id->frozen = false;
+    id->func_prototype_writable = true;
     id->length = length;
     id->name = name;
     id->prototype = tsc_function_default_prototype();
@@ -625,16 +626,19 @@ static bool tsc_value_define_function_metadata_desc(const tsc_function_identity_
     } else if (str_lit_eq(key, "prototype")) {
         tsc_function_identity_t* mutable_fn = (tsc_function_identity_t*)fn;
         current = tsc_function_own_prototype(mutable_fn, value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)mutable_fn));
-        current_writable = !fn->frozen;
+        current_writable = !fn->frozen && fn->func_prototype_writable;
     } else {
         return false;
     }
     if (has_configurable && configurable) return false;
     if (has_enumerable && enumerable) return false;
-    if (has_writable && writable != current_writable) return false;
+    if (has_writable && writable && !current_writable) return false;
     if (!current_writable && has_value && !tsc_value_object_is(value, current)) return false;
     if (current_writable && has_value) {
         ((tsc_function_identity_t*)fn)->func_prototype = value;
+    }
+    if (str_lit_eq(key, "prototype") && has_writable && !writable) {
+        ((tsc_function_identity_t*)fn)->func_prototype_writable = false;
     }
     return true;
 }
@@ -1227,7 +1231,7 @@ bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(v);
         if (str_lit_eq(key, "prototype")) {
-            if (fn->frozen) return false;
+            if (fn->frozen || !fn->func_prototype_writable) return false;
             fn->func_prototype = value;
             return true;
         }
@@ -1798,7 +1802,7 @@ tsc_value_t value_descriptor_from_function_prototype(const tsc_function_identity
         ? value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)mutable_fn)
         : tsc_value_undefined();
     tsc_object_set(desc, tsc_str_from_lit("value", 5), tsc_function_own_prototype(mutable_fn, fn_value));
-    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(fn ? !fn->frozen : false));
+    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(fn ? (!fn->frozen && fn->func_prototype_writable) : false));
     tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(false));
     tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(false));
     return tsc_value_object(desc);
