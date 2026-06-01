@@ -246,14 +246,12 @@ static tsc_value_t array_prototype_splice(void* env, tsc_value_t this_arg, tsc_a
 
 static tsc_value_t array_prototype_sort(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    (void)args;
-    return tsc_value_method_sort(this_arg);
+    return tsc_value_method_sort(this_arg, array_proto_arg(args, 0));
 }
 
 static tsc_value_t array_prototype_to_sorted(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    (void)args;
-    return tsc_value_method_to_sorted(this_arg);
+    return tsc_value_method_to_sorted(this_arg, array_proto_arg(args, 0));
 }
 
 static tsc_value_t array_prototype_with(void* env, tsc_value_t this_arg, tsc_array_t* args) {
