@@ -17532,8 +17532,11 @@ class Emitter {
     }
 
     private isCommonJsRuntimeComputedModuleExportsValue(expr: ts.Expression): boolean {
-        const objectCallName = this.objectStaticCallName(expr);
-        return objectCallName === "assign" ||
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        const objectCallName = this.objectStaticCallName(cur);
+        if (
+            objectCallName === "assign" ||
             objectCallName === "create" ||
             objectCallName === "fromEntries" ||
             objectCallName === "defineProperty" ||
@@ -17541,7 +17544,15 @@ class Emitter {
             objectCallName === "setPrototypeOf" ||
             objectCallName === "preventExtensions" ||
             objectCallName === "seal" ||
-            objectCallName === "freeze";
+            objectCallName === "freeze"
+        ) {
+            return true;
+        }
+        return ts.isCallExpression(cur) ||
+            ts.isNewExpression(cur) ||
+            ts.isPropertyAccessExpression(cur) ||
+            ts.isElementAccessExpression(cur) ||
+            ts.isTemplateExpression(cur);
     }
 
     private objectStaticCallName(expr: ts.Expression): string | null {
@@ -17934,6 +17945,9 @@ class Emitter {
         if (valueNode.kind === ts.SyntaxKind.NullKeyword) {
             return T_VALUE;
         }
+        if (ts.isExpression(valueNode) && this.isCommonJsRuntimeComputedModuleExportsValue(valueNode)) {
+            return T_VALUE;
+        }
         if (ts.isConditionalExpression(valueNode)) {
             const trueTy = this.commonJsExportedCType(valueNode.whenTrue);
             const falseTy = this.commonJsExportedCType(valueNode.whenFalse);
@@ -17961,7 +17975,6 @@ class Emitter {
         if (ts.isCallExpression(valueNode)) {
             const decl = this.requireCallModuleExportsDeclaration(valueNode);
             if (decl) return this.commonJsExportedCType(decl);
-            if (this.isCommonJsRuntimeComputedModuleExportsValue(valueNode)) return T_VALUE;
         }
         return this.prepareType(mapType(valueNode, this.checker));
     }
