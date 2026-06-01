@@ -2392,7 +2392,7 @@ tsc_value_t tsc_value_method_flat(tsc_value_t recv, tsc_value_t depth) {
     return tsc_value_array(out);
 }
 
-tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_value_t delete_count, tsc_array_t* items) {
+tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_value_t delete_count, int argc, tsc_array_t* items) {
     if (!value_is_box(recv) || value_tag(recv) != TSC_VALUE_TAG_ARRAY) return tsc_value_undefined();
     tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
     if (a->sealed || a->frozen) return tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1));
@@ -2403,11 +2403,18 @@ tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_val
     if (at < 0) at = 0;
     if (at > len) at = len;
 
-    double del_num = tsc_value_is_nullish(delete_count)
-        ? (double)(len - at)
-        : tsc_value_as_num(delete_count);
-    int64_t del = isnan(del_num) || del_num < 0 ? 0 : (int64_t)del_num;
-    if (del > len - at) del = len - at;
+    int64_t del = 0;
+    if (argc >= 1) {
+        double del_num = argc < 2
+            ? (double)(len - at)
+            : tsc_value_as_num(delete_count);
+        if (isinf(del_num) && del_num > 0) {
+            del = len - at;
+        } else if (!isnan(del_num) && del_num > 0) {
+            del = (int64_t)del_num;
+            if (del > len - at) del = len - at;
+        }
+    }
 
     size_t insert_len = items ? items->len : 0;
     tsc_array_t* removed = tsc_array_new(sizeof(tsc_value_t), del > 0 ? (size_t)del : 1);

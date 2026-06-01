@@ -33543,6 +33543,7 @@ class Emitter {
                         { value: recv, target: T_VALUE, node: call.expression },
                         { value: zero, target: T_VALUE, node: call.expression },
                         { value: zero, target: T_VALUE, node: call.expression },
+                        { value: { c: "0", ty: T_NUMBER }, target: T_NUMBER, node: call.expression },
                         { value: items, target: arrayType(T_VALUE), node: call.expression },
                     ]);
                 }
@@ -33564,7 +33565,7 @@ class Emitter {
                         pieces.push(`tsc_value_t ${tmp} = ${item}`);
                         pieces.push(`tsc_array_push_raw(${av}, &${tmp})`);
                     }
-                    pieces.push(`tsc_value_method_splice(${target}, ${startArg}, ${deleteArg}, ${av})`);
+                    pieces.push(`tsc_value_method_splice(${target}, ${startArg}, ${deleteArg}, ${args.length}, ${av})`);
                     return `({ ${pieces.join("; ")}; })`;
                 });
             }

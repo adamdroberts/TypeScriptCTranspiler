@@ -387,7 +387,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Dynamic array `toSorted()` returns a sorted copy without mutating the receiver, using default string-conversion ordering or an inline expression-body/single-return block-body/named comparator. Tests: `dynamic_array_to_sorted`, `dynamic_array_to_sorted_comparator`
 - Dynamic array `with(index, value)` returns a copy with one replaced element, leaves the receiver unchanged, and throws catchable out-of-range errors. Tests: `dynamic_array_with`, `array_with_errors`
 - Dynamic array `toSpliced(start?, deleteCount?, ...items)` returns a spliced copy and leaves the receiver unchanged. Test: `dynamic_array_to_spliced`
-- Dynamic array `splice(start, deleteCount?, ...items)` mutates `tsc_value_t` arrays and returns removed elements as a dynamic array. Test: `dynamic_array_splice`
+- Dynamic array `splice(start, deleteCount?, ...items)` mutates `tsc_value_t` arrays and returns removed elements as a dynamic array, preserving argument-count semantics for omitted versus explicit `undefined` or `null` `deleteCount`. Test: `dynamic_array_splice`
 - Dynamic array-literal spread boxes elements from dynamic arrays, dynamic/typed strings, and typed arrays into the produced dynamic array. Test: `dynamic_array_spread`
 - Dynamic array `slice(start?, end?)` returns a shallow copied range with negative/clipped bounds, treating `null` numeric bounds as zero rather than omitted/defaulted, and `reverse()` mutates the receiver while returning the same array identity. Test: `dynamic_array_slice_reverse`
 - Dynamic array `sort()` mutates `tsc_value_t` arrays with JS-style default string-conversion ordering or an inline expression-body/single-return block-body/named comparator. Tests: `dynamic_array_sort`, `dynamic_array_sort_comparator`
@@ -2205,7 +2205,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_array_slice_reverse` | dynamic Array.slice range copying and reverse receiver mutation |
 | `dynamic_array_sort` | dynamic Array.sort default string-conversion ordering |
 | `dynamic_array_sort_comparator` | dynamic Array.sort inline expression/block-body and named comparators |
-| `dynamic_array_splice` | dynamic Array.splice mutation and removed-element return |
+| `dynamic_array_splice` | dynamic Array.splice mutation, removed-element return, and delete-count argument semantics |
 | `dynamic_array_spread` | dynamic array literal spread from dynamic arrays/strings and typed arrays |
 | `dynamic_string_match` | dynamic string match/matchAll with RegExp captures |
 | `dynamic_string_match_string` | dynamic string match/matchAll with string patterns |
