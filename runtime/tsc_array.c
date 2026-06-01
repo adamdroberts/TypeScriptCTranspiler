@@ -274,6 +274,11 @@ static tsc_value_t array_prototype_to_spliced(void* env, tsc_value_t this_arg, t
     );
 }
 
+static tsc_value_t array_prototype_flat(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    return tsc_value_method_flat(this_arg, array_proto_arg(args, 0));
+}
+
 static tsc_value_t array_prototype_reverse(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)args;
@@ -556,6 +561,7 @@ static tsc_value_t tsc_array_default_prototype(void) {
         array_prototype_define_method(proto->props, "toSorted", 8, array_prototype_to_sorted);
         array_prototype_define_method(proto->props, "with", 4, array_prototype_with);
         array_prototype_define_method(proto->props, "toSpliced", 9, array_prototype_to_spliced);
+        array_prototype_define_method(proto->props, "flat", 4, array_prototype_flat);
         array_prototype_define_method(proto->props, "reverse", 7, array_prototype_reverse);
         array_prototype_define_method(proto->props, "toReversed", 10, array_prototype_to_reversed);
         array_prototype_define_method(proto->props, "forEach", 7, array_prototype_for_each);

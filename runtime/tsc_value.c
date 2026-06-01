@@ -2749,13 +2749,21 @@ void value_flat_push(tsc_array_t* out, tsc_value_t value, int depth) {
 }
 
 tsc_value_t tsc_value_method_flat(tsc_value_t recv, tsc_value_t depth) {
-    if (!value_is_box(recv) || value_tag(recv) != TSC_VALUE_TAG_ARRAY) return tsc_value_undefined();
+    if (!value_is_box(recv) || (value_tag(recv) != TSC_VALUE_TAG_ARRAY && value_tag(recv) != TSC_VALUE_TAG_OBJECT)) return tsc_value_undefined();
     double depth_num = tsc_value_is_undefined(depth) ? 1.0 : tsc_value_as_num(depth);
     int depth_i = isnan(depth_num) || depth_num < 0 ? 0 : (isinf(depth_num) || depth_num > INT_MAX ? INT_MAX : (int)depth_num);
-    tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), a->len ? a->len : 1);
-    for (size_t i = 0; i < a->len; i++) {
-        value_flat_push(out, TSC_ARR(tsc_value_t, a, i), depth_i);
+    size_t len = (size_t)tsc_value_length(recv);
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
+    if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
+        tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
+        for (size_t i = 0; i < a->len; i++) {
+            value_flat_push(out, TSC_ARR(tsc_value_t, a, i), depth_i);
+        }
+    } else {
+        for (size_t i = 0; i < len; i++) {
+            if (!value_array_like_has_index(recv, i)) continue;
+            value_flat_push(out, tsc_value_get_index(recv, (double)i), depth_i);
+        }
     }
     return tsc_value_array(out);
 }
