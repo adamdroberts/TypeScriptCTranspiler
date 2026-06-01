@@ -3186,17 +3186,17 @@ static tsc_value_t reflect_arg(tsc_array_t* args, size_t index, const char* mess
 static tsc_value_t reflect_apply_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
-    tsc_value_t target = reflect_arg(args, 0, "Reflect.apply expects target, thisArg, and argumentsList");
-    tsc_value_t receiver = reflect_arg(args, 1, "Reflect.apply expects target, thisArg, and argumentsList");
-    tsc_value_t arguments = reflect_arg(args, 2, "Reflect.apply expects target, thisArg, and argumentsList");
+    tsc_value_t target = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    tsc_value_t receiver = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
+    tsc_value_t arguments = args->len > 2 ? TSC_ARR(tsc_value_t, args, 2) : tsc_value_undefined();
     return tsc_value_apply_function(target, receiver, arguments);
 }
 
 static tsc_value_t reflect_construct_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
-    tsc_value_t target = reflect_arg(args, 0, "Reflect.construct expects target and argumentsList");
-    tsc_value_t arguments = reflect_arg(args, 1, "Reflect.construct expects target and argumentsList");
+    tsc_value_t target = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    tsc_value_t arguments = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
     tsc_value_t new_target = args->len > 2 ? TSC_ARR(tsc_value_t, args, 2) : target;
     return tsc_value_construct_with_new_target(target, arguments, new_target);
 }
