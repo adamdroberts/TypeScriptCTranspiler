@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS computed named-export metadata now accepts const object-map values indexed by finite key unions through checker-proven element access. Test: `node_modules_commonjs_computed_object_map_union_exports`.
 - CommonJS computed named-export metadata now accepts tuple keys indexed by finite numeric literal unions through checker-proven element access. Test: `node_modules_commonjs_computed_tuple_union_exports`.
 - CommonJS outer factory wrappers invoked through static `factory.call(...)` or `factory.apply(..., [require, module, exports])` now preserve finite AOT require and named-export metadata. Test: `node_modules_commonjs_factory_wrapper_call_apply`.
 - CommonJS whole-value `module.exports = ...` defaults now accept conditional, logical, and nullish expressions that select inline function or arrow values through the boxed AOT package-source path. Test: `node_modules_commonjs_module_exports_runtime_function_default`.
