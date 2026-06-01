@@ -23453,13 +23453,31 @@ class Emitter {
             sourceTy.kind === "class";
     }
 
+    private isSimpleLazyYieldCompoundAssignmentOperator(kind: ts.SyntaxKind): boolean {
+        return kind === ts.SyntaxKind.PlusEqualsToken ||
+            kind === ts.SyntaxKind.MinusEqualsToken ||
+            kind === ts.SyntaxKind.AsteriskEqualsToken ||
+            kind === ts.SyntaxKind.SlashEqualsToken ||
+            kind === ts.SyntaxKind.PercentEqualsToken ||
+            kind === ts.SyntaxKind.AmpersandEqualsToken ||
+            kind === ts.SyntaxKind.BarEqualsToken ||
+            kind === ts.SyntaxKind.CaretEqualsToken ||
+            kind === ts.SyntaxKind.LessThanLessThanEqualsToken ||
+            kind === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken ||
+            kind === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken ||
+            kind === ts.SyntaxKind.AsteriskAsteriskEqualsToken;
+    }
+
     private simpleLazyYieldExpression(stmt: ts.Statement): ts.YieldExpression | null {
         if (ts.isExpressionStatement(stmt)) {
             const expr = stmt.expression;
             if (ts.isYieldExpression(expr)) return expr;
             if (
                 ts.isBinaryExpression(expr) &&
-                expr.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                (
+                    expr.operatorToken.kind === ts.SyntaxKind.EqualsToken ||
+                    (ts.isIdentifier(expr.left) && this.isSimpleLazyYieldCompoundAssignmentOperator(expr.operatorToken.kind))
+                ) &&
                 this.singleYieldExpressionInExpression(expr.right)
             ) {
                 return this.singleYieldExpressionInExpression(expr.right);
@@ -23513,7 +23531,10 @@ class Emitter {
         if (ts.isExpressionStatement(stmt)) {
             const expr = stmt.expression;
             return ts.isBinaryExpression(expr) &&
-                expr.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                (
+                    expr.operatorToken.kind === ts.SyntaxKind.EqualsToken ||
+                    (ts.isIdentifier(expr.left) && this.isSimpleLazyYieldCompoundAssignmentOperator(expr.operatorToken.kind))
+                ) &&
                 !!this.singleYieldExpressionInExpression(expr.right);
         }
         if (ts.isVariableStatement(stmt)) {
@@ -24139,13 +24160,23 @@ class Emitter {
             if (ts.isYieldExpression(expr)) return;
             if (
                 ts.isBinaryExpression(expr) &&
-                expr.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                (
+                    expr.operatorToken.kind === ts.SyntaxKind.EqualsToken ||
+                    (ts.isIdentifier(expr.left) && this.isSimpleLazyYieldCompoundAssignmentOperator(expr.operatorToken.kind))
+                ) &&
                 this.singleYieldExpressionInExpression(expr.right)
             ) {
+                if (expr.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+                    const lhs = this.emitLvalue(expr.left);
+                    const lhsType = this.storageType(expr.left);
+                    const value = this.emitSimpleLazyResumeExpression(expr.right, nextArg);
+                    buf.line(`${lhs} = ${this.coerce(value, lhsType, expr.right)};`);
+                    return;
+                }
                 const lhs = this.emitLvalue(expr.left);
                 const lhsType = this.storageType(expr.left);
                 const value = this.emitSimpleLazyResumeExpression(expr.right, nextArg);
-                buf.line(`${lhs} = ${this.coerce(value, lhsType, expr.right)};`);
+                buf.line(`${this.emitSimpleLazyCompoundAssignment(expr, lhs, lhsType, value)};`);
                 return;
             }
         }
@@ -24318,6 +24349,63 @@ class Emitter {
             }
         }
         unsupported(expr, "lazy generator suspended yield expression currently supports direct, parenthesized, unary, typeof, void, binary, conditional, array literal, object literal, property access, element access, call, new, template, and tagged template expressions");
+    }
+
+    private emitSimpleLazyCompoundAssignment(
+        expr: ts.BinaryExpression,
+        lhs: string,
+        lhsType: CType,
+        rhs: EmitResult,
+    ): string {
+        const op = expr.operatorToken.kind;
+        if (lhsType.kind === "value") {
+            const fn =
+                op === ts.SyntaxKind.PlusEqualsToken
+                    ? "tsc_value_add"
+                    : op === ts.SyntaxKind.MinusEqualsToken
+                        ? "tsc_value_sub"
+                        : op === ts.SyntaxKind.AsteriskEqualsToken
+                            ? "tsc_value_mul"
+                            : op === ts.SyntaxKind.AsteriskAsteriskEqualsToken
+                                ? "tsc_value_pow"
+                                : op === ts.SyntaxKind.SlashEqualsToken
+                                    ? "tsc_value_div"
+                                    : op === ts.SyntaxKind.PercentEqualsToken
+                                        ? "tsc_value_mod"
+                                        : op === ts.SyntaxKind.AmpersandEqualsToken
+                                            ? "tsc_value_bit_and"
+                                            : op === ts.SyntaxKind.BarEqualsToken
+                                                ? "tsc_value_bit_or"
+                                                : op === ts.SyntaxKind.CaretEqualsToken
+                                                    ? "tsc_value_bit_xor"
+                                                    : op === ts.SyntaxKind.LessThanLessThanEqualsToken
+                                                        ? "tsc_value_shl"
+                                                        : op === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken
+                                                            ? "tsc_value_shr"
+                                                            : op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken
+                                                                ? "tsc_value_ushr"
+                                                                : null;
+            if (fn) return `(${lhs} = ${fn}(${lhs}, ${this.coerce(rhs, T_VALUE, expr.right)}))`;
+        }
+        if (lhsType.kind === "string" && op === ts.SyntaxKind.PlusEqualsToken) {
+            return `(${lhs} = tsc_str_concat(${lhs}, ${this.coerceToString(rhs, expr.right)}))`;
+        }
+
+        requireNumber(expr.left, lhsType);
+        const rhsNum = this.coerce(rhs, T_NUMBER, expr.right);
+        if (op === ts.SyntaxKind.PlusEqualsToken) return `(${lhs} += ${rhsNum})`;
+        if (op === ts.SyntaxKind.MinusEqualsToken) return `(${lhs} -= ${rhsNum})`;
+        if (op === ts.SyntaxKind.AsteriskEqualsToken) return `(${lhs} *= ${rhsNum})`;
+        if (op === ts.SyntaxKind.SlashEqualsToken) return `(${lhs} /= ${rhsNum})`;
+        if (op === ts.SyntaxKind.PercentEqualsToken) return `(${lhs} = tsc_num_mod(${lhs}, ${rhsNum}))`;
+        if (op === ts.SyntaxKind.AsteriskAsteriskEqualsToken) return `(${lhs} = pow(${lhs}, ${rhsNum}))`;
+        if (op === ts.SyntaxKind.AmpersandEqualsToken) return `(${lhs} = (double)((int32_t)(${lhs}) & (int32_t)(${rhsNum})))`;
+        if (op === ts.SyntaxKind.BarEqualsToken) return `(${lhs} = (double)((int32_t)(${lhs}) | (int32_t)(${rhsNum})))`;
+        if (op === ts.SyntaxKind.CaretEqualsToken) return `(${lhs} = (double)((int32_t)(${lhs}) ^ (int32_t)(${rhsNum})))`;
+        if (op === ts.SyntaxKind.LessThanLessThanEqualsToken) return `(${lhs} = (double)((int32_t)(${lhs}) << (int32_t)(${rhsNum})))`;
+        if (op === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken) return `(${lhs} = (double)((int32_t)(${lhs}) >> (int32_t)(${rhsNum})))`;
+        if (op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken) return `(${lhs} = (double)((uint32_t)(${lhs}) >> (uint32_t)(${rhsNum})))`;
+        unsupported(expr, `lazy generator suspended yield compound assignment ${ts.SyntaxKind[op]}`);
     }
 
     private emitSimpleLazyResumeArrayLiteral(al: ts.ArrayLiteralExpression, nextArg: string): EmitResult {
