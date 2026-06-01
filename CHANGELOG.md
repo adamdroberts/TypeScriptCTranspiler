@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic descriptor redefinition now permits compatible generic redefinitions of non-configurable accessor properties while continuing to reject data/writable/getter/setter changes. Test: `object_accessor_redefine`.
 - Dynamic `Object.defineProperty(...)`, `Reflect.defineProperty(...)`, and `Object.defineProperties(...)` now accept array and function objects as property descriptors or descriptor maps where ECMAScript treats them as ordinary descriptor objects. Test: `object_dynamic_descriptor`.
 - Generated-C DCE static boolean analysis now folds side-effect-free global `isFinite(...)` and `isNaN(...)` predicate calls. Test: `generated_c_dce_static_builtins`.
 - Promise adoption now subscribes to pending source promises so `Promise.resolve(pending)` settles when the source later resolves or rejects. Test: `promise_resolve_adopt`.

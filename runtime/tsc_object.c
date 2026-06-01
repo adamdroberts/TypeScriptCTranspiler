@@ -822,7 +822,12 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
         size_t idx = (size_t)found;
         tsc_object_prop_t* p = &o->props[idx];
         if (!p->configurable) {
-            if (p->accessor) return false;
+            if (p->accessor) {
+                if (has_value || has_writable) return false;
+                if (has_configurable && configurable) return false;
+                if (has_enumerable && enumerable != p->enumerable) return false;
+                return true;
+            }
             if (has_configurable && configurable) return false;
             if (has_enumerable && enumerable != p->enumerable) return false;
             if (has_writable && writable && !p->writable) return false;
@@ -903,9 +908,11 @@ bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_ge
             if (!prop->accessor) return false;
             if (has_configurable && configurable) return false;
             if (has_enumerable && enumerable != prop->enumerable) return false;
+            tsc_value_t next_getter_value = has_getter ? value_accessor_getter_identity(getter, getter_env) : prop->getter_value;
+            tsc_value_t next_setter_value = has_setter ? value_accessor_setter_identity(setter, setter_env) : prop->setter_value;
             if (
-                (has_getter && (getter != prop->getter || getter_env != prop->getter_env)) ||
-                (has_setter && (setter != prop->setter || setter_env != prop->setter_env))
+                !tsc_value_object_is(next_getter_value, prop->getter_value) ||
+                !tsc_value_object_is(next_setter_value, prop->setter_value)
             ) {
                 return false;
             }

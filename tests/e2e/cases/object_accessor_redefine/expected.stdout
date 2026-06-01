@@ -1,5 +1,9 @@
 initial: true 1
 same: true 1
+same empty: true 1
+same enumerable only: true 1
+same configurable only: true 1
+bad writable: false 1
 bad getter: false 1
 bad enum: false 1
 accessor to data: false 1
