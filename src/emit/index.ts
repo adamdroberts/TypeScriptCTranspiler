@@ -24039,6 +24039,14 @@ class Emitter {
             const inner = this.emitSimpleLazyResumeExpression(expr.expression, nextArg);
             return { c: `(${inner.c})`, ty: inner.ty };
         }
+        if (
+            ts.isAsExpression(expr) ||
+            ts.isTypeAssertionExpression(expr) ||
+            ts.isSatisfiesExpression(expr) ||
+            ts.isNonNullExpression(expr)
+        ) {
+            return this.emitSimpleLazyResumeExpression(expr.expression, nextArg);
+        }
         if (ts.isPrefixUnaryExpression(expr)) {
             const inner = this.emitSimpleLazyResumeExpression(expr.operand, nextArg);
             const op = expr.operator;

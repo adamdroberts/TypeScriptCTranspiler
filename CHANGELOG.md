@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Extended the narrow lazy generator lowering to resume a single suspended `yield` through TypeScript-only `as`, angle-bracket, `satisfies`, and non-null assertion wrappers. Test: `generator_lazy_yield_assertions`.
 - Dynamic `Array.prototype.entries()` now materializes numeric index keys instead of stringified object-entry keys, and dynamic `Array.prototype.flat(Infinity)` safely treats infinite depth as unbounded without casting infinity to `int`. Tests: `dynamic_array_entries`, `dynamic_array_flat`.
 - Proxy construction now rejects revoked Proxy chains used as the target while still accepting revoked handler objects until trap lookup, matching the ECMAScript object-validation split. Test: `proxy_constructor_validation`.
 - Manifest-backed native-addon bridge loads now call the embedded Node `require` hook through V8 directly, so native addons no longer depend on the unsafe source-compilation helper unless `--unsafe-eval` is enabled. Checks: `bun run build`, `TSC2C_NO_GC=1 bun tests/e2e/run.ts --filter native_addon_manifest_require`, `bun run test:native-addon-smoke` when `libnode` is available.
