@@ -20,6 +20,21 @@ function dataDescriptor(target: any, prop: any): any {
     return { value: 1, writable: true, enumerable: true, configurable: true };
 }
 
+function mixedDescriptor(target: any, prop: any): any {
+    events.push("mixed trap:" + String(prop));
+    return { value: 1, get: getterValue as any, enumerable: true, configurable: true };
+}
+
+function badGetterDescriptor(target: any, prop: any): any {
+    events.push("bad getter trap:" + String(prop));
+    return { get: 1, enumerable: true, configurable: true };
+}
+
+function badSetterDescriptor(target: any, prop: any): any {
+    events.push("bad setter trap:" + String(prop));
+    return { set: 1, enumerable: true, configurable: true };
+}
+
 function fixedNewDescriptor(target: any, prop: any): any {
     events.push("fixed new trap:" + String(prop));
     return { value: 1, writable: true, enumerable: true, configurable: false };
@@ -119,6 +134,27 @@ try {
     console.log("new closed:", Object.getOwnPropertyDescriptor(newClosedProxy, "missing", mark("new closed"))?.value);
 } catch (e: any) {
     console.log("new closed:", e);
+}
+
+const mixedDescriptorProxy: any = new Proxy({}, { getOwnPropertyDescriptor: mixedDescriptor as any });
+try {
+    console.log("mixed descriptor:", Object.getOwnPropertyDescriptor(mixedDescriptorProxy, "x", mark("mixed descriptor"))?.value);
+} catch (e: any) {
+    console.log("mixed descriptor:", e);
+}
+
+const badGetterProxy: any = new Proxy({}, { getOwnPropertyDescriptor: badGetterDescriptor as any });
+try {
+    console.log("bad getter:", Object.getOwnPropertyDescriptor(badGetterProxy, "x", mark("bad getter"))?.get);
+} catch (e: any) {
+    console.log("bad getter:", e);
+}
+
+const badSetterProxy: any = new Proxy({}, { getOwnPropertyDescriptor: badSetterDescriptor as any });
+try {
+    console.log("bad setter:", Object.getOwnPropertyDescriptor(badSetterProxy, "x", mark("bad setter"))?.set);
+} catch (e: any) {
+    console.log("bad setter:", e);
 }
 
 const newFixedProxy: any = new Proxy({}, { getOwnPropertyDescriptor: fixedNewDescriptor as any });
