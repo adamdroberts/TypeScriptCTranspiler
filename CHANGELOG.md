@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- First-class `Reflect.getPrototypeOf`, `Reflect.isExtensible`, `Reflect.ownKeys`, and `Reflect.preventExtensions` method calls now route omitted targets through normal runtime object-target validation. Test: `reflect_target_method_missing_arguments`.
 - First-class `Reflect.apply` and `Reflect.construct` method calls now route omitted required arguments through normal runtime `undefined` validation instead of failing with wrapper arity messages. Test: `reflect_method_missing_arguments`.
 - Dynamic `Reflect.construct(...)` now distinguishes omitted `newTarget` from an explicit `undefined` third argument, defaulting only the omitted case and rejecting explicit `undefined` as a non-constructor. Test: `reflect_construct_explicit_new_target`.
 - Array-target Proxy invariants now account for non-configurable dynamic array own accessor properties when validating `get`, `set`, `defineProperty`, and `getOwnPropertyDescriptor` trap results. Test: `proxy_array_accessor_invariants`.
