@@ -47014,6 +47014,8 @@ class Emitter {
     private staticComputedPropertyExpressionTexts(expr: ts.Expression): string[] {
         const direct = this.staticComputedPropertyExpression(expr);
         if (direct !== null) return [direct];
+        const objectKeysValuesTexts = this.staticObjectKeysValuesIndexedAccessPropertyTexts(expr);
+        if (objectKeysValuesTexts.length > 0) return objectKeysValuesTexts;
         const objectMapTexts = this.staticObjectMapIndexedAccessPropertyTexts(expr);
         if (objectMapTexts.length > 0) return objectMapTexts;
         const syntaxTexts = staticStringExpressionTexts(expr);
@@ -47021,6 +47023,55 @@ class Emitter {
         const indexedTexts = this.staticIndexedAccessPropertyTexts(expr);
         if (indexedTexts.length > 0) return indexedTexts;
         return this.staticLiteralUnionPropertyTexts(expr);
+    }
+
+    private staticObjectKeysValuesIndexedAccessPropertyTexts(expr: ts.Expression): string[] {
+        const cur = this.unwrapTransparentExpression(expr);
+        if (!ts.isElementAccessExpression(cur) || !cur.argumentExpression) return [];
+        const indices = this.staticFiniteNumericIndexValues(cur.argumentExpression);
+        if (indices.length === 0) return [];
+
+        const call = this.unwrapTransparentExpression(cur.expression);
+        if (!ts.isCallExpression(call) || call.arguments.length !== 1) return [];
+        const callee = this.unwrapTransparentExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const target = this.unwrapTransparentExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Object") return [];
+        const method = callee.name.text;
+        if (method !== "keys" && method !== "values") return [];
+
+        const object = this.staticObjectMapExpression(call.arguments[0]!);
+        if (!object) return [];
+
+        const slots: string[][] = [];
+        for (const prop of object.properties) {
+            if (ts.isSpreadAssignment(prop)) return [];
+            const propNames = prop.name ? this.staticPropertyNames(prop.name) : [];
+            if (propNames.length === 0) return [];
+            if (method === "keys") {
+                slots.push(propNames);
+                continue;
+            }
+            if (!ts.isPropertyAssignment(prop) && !ts.isShorthandPropertyAssignment(prop)) return [];
+            const valueExpr = ts.isPropertyAssignment(prop) ? prop.initializer : prop.name;
+            const values = this.staticComputedPropertyExpressionTexts(valueExpr);
+            if (values.length === 0) return [];
+            slots.push(values);
+        }
+
+        const out: string[] = [];
+        const seen = new Set<string>();
+        for (const index of indices) {
+            const values = slots[index];
+            if (!values) return [];
+            for (const value of values) {
+                if (seen.has(value)) continue;
+                seen.add(value);
+                out.push(value);
+                if (out.length > MAX_STATIC_COMPUTED_PROPERTY_ALTERNATIVES) return [];
+            }
+        }
+        return out;
     }
 
     private staticObjectMapIndexedAccessPropertyTexts(expr: ts.Expression): string[] {

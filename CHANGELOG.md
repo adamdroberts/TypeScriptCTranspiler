@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS computed named-export metadata now accepts finite `Object.keys({...})[idx]` and `Object.values({...})[idx]` export keys over static object literals. Test: `node_modules_commonjs_computed_object_keys_values_exports`.
 - Finite dynamic `require(...)` proofs now accept `keyof typeof` const object-map indexes while rejecting unproven object-map indexes without falling back to every map value. Tests: `dynamic_require_static_keyof_map`, `dynamic_require_static_object_map_unknown`.
 - CommonJS computed named-export metadata now accepts const object-map values indexed by finite key unions through checker-proven element access. Test: `node_modules_commonjs_computed_object_map_union_exports`.
 - CommonJS computed named-export metadata now accepts tuple keys indexed by finite numeric literal unions through checker-proven element access. Test: `node_modules_commonjs_computed_tuple_union_exports`.
