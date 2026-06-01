@@ -627,6 +627,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-computed-conditional-exports": cjsPackage("tsc2c-cjs-computed-conditional-exports", {
         "index.js": 'const isProd = true;\nconst labelKey = isProd ? "label" : "devLabel";\nexports[labelKey] = "computed-conditional";\n',
     }),
+    "tsc2c-cjs-dynamic-computed-exports": cjsPackage("tsc2c-cjs-dynamic-computed-exports", {
+        "index.js": 'let enabled = true;\nconst labelKey = enabled ? "label" : "fallbackLabel";\nconst fnKey = enabled ? "double" : "triple";\nexports[labelKey] = "dynamic-computed";\nmodule.exports[fnKey] = function double(value) { return value * 2; };\n',
+    }),
     "tsc2c-cjs-define-properties-exports": cjsPackage("tsc2c-cjs-define-properties-exports", {
         "index.js": 'exports.__esModule = true;\nObject.defineProperties(exports, {\n  default: { value: function greet(name) { return "hello " + name; }, enumerable: true },\n  label: { value: "define-properties", enumerable: true },\n  count: { value: 45, enumerable: true }\n});\n',
     }),
