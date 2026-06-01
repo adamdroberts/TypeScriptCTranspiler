@@ -5,6 +5,10 @@ function OpenExtensible(this: any): void {}
 function ClosedExtensible(this: any): void {}
 function FakePrevent(this: any): void {}
 function RealPrevent(this: any): void {}
+function MissingPrototype(this: any): void {}
+function ExactFunction(this: any): void {}
+function ExtraClosedFunction(this: any): void {}
+function PrototypeDescriptor(this: any): void {}
 const events: string[] = [];
 
 function mark(label: string): string {
@@ -35,6 +39,58 @@ function trueIsExtensible(target: any): boolean {
 function truePreventExtensions(target: any): boolean {
   events.push("prevent true trap");
   return true;
+}
+
+function missingPrototypeKey(target: any): string[] {
+  events.push("missing prototype keys");
+  return ["length", "name"];
+}
+
+function exactFunctionKeys(target: any): string[] {
+  events.push("exact function keys");
+  return ["length", "name", "prototype"];
+}
+
+function extraClosedFunctionKeys(target: any): string[] {
+  events.push("extra closed function keys");
+  return ["length", "name", "prototype", "ghost"];
+}
+
+function realFunctionDescriptor(target: any, prop: any): any {
+  events.push("real function desc:" + String(prop));
+  return Reflect.getOwnPropertyDescriptor(target, prop);
+}
+
+function writablePrototypeDescriptor(target: any, prop: any): any {
+  events.push("writable prototype desc:" + String(prop));
+  if (prop === "prototype") {
+    return { value: target.prototype, writable: true, enumerable: false, configurable: false };
+  }
+  return Reflect.getOwnPropertyDescriptor(target, prop);
+}
+
+function nonWritablePrototypeDescriptor(target: any, prop: any): any {
+  events.push("nonwritable prototype desc:" + String(prop));
+  if (prop === "prototype") {
+    return { value: target.prototype, writable: false, enumerable: false, configurable: false };
+  }
+  return Reflect.getOwnPropertyDescriptor(target, prop);
+}
+
+function configurablePrototypeDescriptor(target: any, prop: any): any {
+  events.push("configurable prototype desc:" + String(prop));
+  if (prop === "prototype") {
+    return { value: target.prototype, writable: true, enumerable: false, configurable: true };
+  }
+  return Reflect.getOwnPropertyDescriptor(target, prop);
+}
+
+function hiddenPrototypeDescriptor(target: any, prop: any): any {
+  events.push("hidden prototype desc:" + String(prop));
+  if (prop === "prototype") {
+    return undefined;
+  }
+  return Reflect.getOwnPropertyDescriptor(target, prop);
 }
 
 const baseProto: any = { marker: "base" };
@@ -121,4 +177,61 @@ try {
 } catch (err: any) {
   console.log("real prevent:", err);
 }
+
+const missingPrototypeTarget: any = MissingPrototype as any;
+const missingPrototypeProxy: any = new Proxy(missingPrototypeTarget, { ownKeys: missingPrototypeKey as any });
+try {
+  console.log("missing prototype key:", Reflect.ownKeys(missingPrototypeProxy, mark("missing prototype key")).join(","));
+} catch (err: any) {
+  console.log("missing prototype key:", err);
+}
+
+const exactFunctionTarget: any = ExactFunction as any;
+const exactFunctionProxy: any = new Proxy(exactFunctionTarget, { ownKeys: exactFunctionKeys as any });
+console.log("exact function keys:", Reflect.ownKeys(exactFunctionProxy, mark("exact function keys")).join(","));
+
+const extraClosedFunctionTarget: any = ExtraClosedFunction as any;
+Object.preventExtensions(extraClosedFunctionTarget);
+const extraClosedFunctionProxy: any = new Proxy(extraClosedFunctionTarget, { ownKeys: extraClosedFunctionKeys as any });
+try {
+  console.log("extra closed function keys:", Reflect.ownKeys(extraClosedFunctionProxy, mark("extra closed function keys")).join(","));
+} catch (err: any) {
+  console.log("extra closed function keys:", err);
+}
+
+const prototypeDescriptorTarget: any = PrototypeDescriptor as any;
+const prototypeDescriptorProxy: any = new Proxy(prototypeDescriptorTarget, { getOwnPropertyDescriptor: writablePrototypeDescriptor as any });
+const prototypeDesc: any = Object.getOwnPropertyDescriptor(prototypeDescriptorProxy, "prototype", mark("prototype descriptor"));
+console.log(
+  "prototype descriptor:",
+  prototypeDesc.writable,
+  prototypeDesc.enumerable,
+  prototypeDesc.configurable,
+  prototypeDesc.value === prototypeDescriptorTarget.prototype,
+);
+
+const nonWritablePrototypeProxy: any = new Proxy(prototypeDescriptorTarget, { getOwnPropertyDescriptor: nonWritablePrototypeDescriptor as any });
+try {
+  console.log("nonwritable prototype descriptor:", Object.getOwnPropertyDescriptor(nonWritablePrototypeProxy, "prototype", mark("nonwritable prototype descriptor"))?.writable);
+} catch (err: any) {
+  console.log("nonwritable prototype descriptor:", err);
+}
+
+const configurablePrototypeProxy: any = new Proxy(prototypeDescriptorTarget, { getOwnPropertyDescriptor: configurablePrototypeDescriptor as any });
+try {
+  console.log("configurable prototype descriptor:", Reflect.getOwnPropertyDescriptor(configurablePrototypeProxy, "prototype", mark("configurable prototype descriptor"))?.configurable);
+} catch (err: any) {
+  console.log("configurable prototype descriptor:", err);
+}
+
+const hiddenPrototypeProxy: any = new Proxy(prototypeDescriptorTarget, { getOwnPropertyDescriptor: hiddenPrototypeDescriptor as any });
+try {
+  console.log("hidden prototype descriptor:", Object.getOwnPropertyDescriptor(hiddenPrototypeProxy, "prototype", mark("hidden prototype descriptor"))?.value);
+} catch (err: any) {
+  console.log("hidden prototype descriptor:", err);
+}
+
+const realFunctionDescriptorProxy: any = new Proxy(prototypeDescriptorTarget, { getOwnPropertyDescriptor: realFunctionDescriptor as any });
+const realPrototypeDesc: any = Reflect.getOwnPropertyDescriptor(realFunctionDescriptorProxy, "prototype", mark("real prototype descriptor"));
+console.log("real prototype descriptor:", realPrototypeDesc.writable, realPrototypeDesc.configurable);
 console.log("events:", events.join("|"));

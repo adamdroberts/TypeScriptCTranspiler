@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Function-target Proxy `ownKeys` and `getOwnPropertyDescriptor` invariants now include the non-configurable writable `prototype` metadata property instead of treating function metadata as only non-writable `length` / `name`. Test: `proxy_function_prototype_invariants`.
 - Process stdio streams now accept `.destroy(error?)` as an inert compatibility method while preserving argument evaluation and leaving destroyed state predicates false. Test: `process_stdio_destroy`.
 - `child_process.spawnSync(...)` now returns Buffer-backed `stdout`, `stderr`, and `output` entries when encoding is omitted or literal `"buffer"`, while preserving string output for literal UTF-8 encodings. Test: `child_process_spawn_sync_buffer_encoding`.
 - Lazy generator lowering now accepts synchronous `try`/`catch`/`finally` statements that do not contain suspension points, while leaving yield-across-try control flow unsupported. Test: `generator_lazy_try`.
