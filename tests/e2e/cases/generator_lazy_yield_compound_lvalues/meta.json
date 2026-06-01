@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators resume property and element compound assignments from pre-yield lvalue snapshots"
+}

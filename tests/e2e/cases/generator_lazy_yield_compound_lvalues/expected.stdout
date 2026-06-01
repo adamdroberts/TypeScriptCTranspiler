@@ -1,0 +1,4 @@
+created: <empty>
+steps: false 1 false 2 true 15|300
+state: 15 300
+events: ignored:99|start|yield prop:1|prop:5|box 15|yield elem:2|elem:3|value 300

@@ -97,6 +97,11 @@ interface GeneratorContext {
     elemType: CType;
 }
 
+interface LazyCompoundResumeSlot {
+    field: string;
+    type: CType;
+}
+
 interface AsyncFunctionContext {
     promiseType: CType;
 }
@@ -224,6 +229,7 @@ class Emitter {
     private activeLazyGeneratorContinueTargets: Array<string | null> = [];
     private activeLazyGeneratorSwitchEndLabels: string[] = [];
     private lazyGeneratorResumeOverride: { expr: ts.Expression; result: EmitResult } | null = null;
+    private lazyCompoundResumeSlots = new WeakMap<ts.BinaryExpression, LazyCompoundResumeSlot>();
     private asyncFunctionStack: AsyncFunctionContext[] = [];
     private tryDepth = 0;
     private currentClass: string | null = null;
@@ -24011,6 +24017,25 @@ class Emitter {
             kind === ts.SyntaxKind.AsteriskAsteriskEqualsToken;
     }
 
+    private isSimpleLazyStableLvaluePart(expr: ts.Expression): boolean {
+        if (ts.isIdentifier(expr) || expr.kind === ts.SyntaxKind.ThisKeyword) return true;
+        if (ts.isNumericLiteral(expr) || ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) return true;
+        return false;
+    }
+
+    private isSimpleLazyYieldCompoundAssignment(expr: ts.BinaryExpression): boolean {
+        if (!this.isSimpleLazyYieldCompoundAssignmentOperator(expr.operatorToken.kind)) return false;
+        if (ts.isIdentifier(expr.left)) return true;
+        if (ts.isPropertyAccessExpression(expr.left)) {
+            return this.isSimpleLazyStableLvaluePart(expr.left.expression);
+        }
+        if (ts.isElementAccessExpression(expr.left)) {
+            return this.isSimpleLazyStableLvaluePart(expr.left.expression) &&
+                this.isSimpleLazyStableLvaluePart(expr.left.argumentExpression);
+        }
+        return false;
+    }
+
     private simpleLazyYieldExpression(stmt: ts.Statement): ts.YieldExpression | null {
         if (ts.isExpressionStatement(stmt)) {
             const expr = stmt.expression;
@@ -24019,7 +24044,7 @@ class Emitter {
                 ts.isBinaryExpression(expr) &&
                 (
                     expr.operatorToken.kind === ts.SyntaxKind.EqualsToken ||
-                    (ts.isIdentifier(expr.left) && this.isSimpleLazyYieldCompoundAssignmentOperator(expr.operatorToken.kind))
+                    this.isSimpleLazyYieldCompoundAssignment(expr)
                 ) &&
                 this.singleYieldExpressionInExpression(expr.right)
             ) {
@@ -24467,6 +24492,7 @@ class Emitter {
                 buf.line(`case ${nextState}:;`);
             } else {
                 const nextState = nextStateId();
+                this.emitSimpleLazyYieldPreSuspend(buf, stmt, envLocalName);
                 const value = yieldExpr.expression
                     ? this.emitExpr(yieldExpr.expression)
                     : { c: "NULL", ty: T_VOID };
@@ -24480,7 +24506,7 @@ class Emitter {
                 buf.line(`case ${nextState}:;`);
             }
             if (this.simpleLazyYieldNeedsResume(stmt)) {
-                this.emitSimpleLazyYieldResume(buf, stmt, "next_arg");
+                this.emitSimpleLazyYieldResume(buf, stmt, "next_arg", envLocalName);
             }
             if (ts.isReturnStatement(stmt)) {
                 buf.line("*state = -1;");
@@ -24542,6 +24568,11 @@ class Emitter {
             field: string;
             type: CType;
         }> = [];
+        const compoundResumeInfos: Array<{
+            expr: ts.BinaryExpression;
+            field: string;
+            type: CType;
+        }> = [];
         if (fn.body && ts.isBlock(fn.body)) {
             const collectVars = (node: ts.Node) => {
                 if (ts.isVariableDeclaration(node)) {
@@ -24565,6 +24596,25 @@ class Emitter {
                 ts.forEachChild(node, collectVars);
             };
             ts.forEachChild(fn.body, collectVars);
+
+            const collectCompoundResumeSlots = (node: ts.Node) => {
+                if (
+                    ts.isExpressionStatement(node) &&
+                    ts.isBinaryExpression(node.expression) &&
+                    !ts.isIdentifier(node.expression.left) &&
+                    this.isSimpleLazyYieldCompoundAssignment(node.expression) &&
+                    !!this.singleYieldExpressionInExpression(node.expression.right)
+                ) {
+                    const index = compoundResumeInfos.length;
+                    const type = this.storageType(node.expression.left);
+                    const field = `compound_${index}`;
+                    compoundResumeInfos.push({ expr: node.expression, field, type });
+                    this.lazyCompoundResumeSlots.set(node.expression, { field, type });
+                }
+                if (node !== fn.body && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+                ts.forEachChild(node, collectCompoundResumeSlots);
+            };
+            ts.forEachChild(fn.body, collectCompoundResumeSlots);
         }
 
         if (!fn.body || !ts.isBlock(fn.body)) unsupported(fn, "lazy generator function requires a block body");
@@ -24572,6 +24622,7 @@ class Emitter {
         const hasYieldStar = yieldStarCount > 0;
         const needsEnv = runtimeParamInfos.length > 0 ||
             localVarInfos.length > 0 ||
+            compoundResumeInfos.length > 0 ||
             !!implicitThisParam ||
             hasYieldStar;
         const envType = needsEnv ? `_gen_lazy_env_${baseName}_${this.freshTemp("")}` : null;
@@ -24585,6 +24636,9 @@ class Emitter {
                 this.structDecls.line(`${info.type.c} ${info.field};`);
             }
             for (const info of localVarInfos) {
+                this.structDecls.line(`${info.type.c} ${info.field};`);
+            }
+            for (const info of compoundResumeInfos) {
                 this.structDecls.line(`${info.type.c} ${info.field};`);
             }
             if (hasYieldStar) {
@@ -24686,6 +24740,9 @@ class Emitter {
             for (const info of localVarInfos) {
                 buf.line(`${envVar}->${info.field} = ${this.zeroValue(info.type)};`);
             }
+            for (const info of compoundResumeInfos) {
+                buf.line(`${envVar}->${info.field} = ${this.zeroValue(info.type)};`);
+            }
             if (hasYieldStar) {
                 for (let i = 0; i < yieldStarCount; i++) {
                     buf.line(`${envVar}->yield_star_arr_${i} = NULL;`);
@@ -24700,7 +24757,24 @@ class Emitter {
         buf.line(`return ${arrayVar};`);
     }
 
-    private emitSimpleLazyYieldResume(buf: CBuf, stmt: ts.Statement, nextArg: string): void {
+    private emitSimpleLazyYieldPreSuspend(buf: CBuf, stmt: ts.Statement, envLocalName: string): void {
+        if (!ts.isExpressionStatement(stmt)) return;
+        const expr = stmt.expression;
+        if (
+            !ts.isBinaryExpression(expr) ||
+            ts.isIdentifier(expr.left) ||
+            !this.isSimpleLazyYieldCompoundAssignment(expr) ||
+            !this.singleYieldExpressionInExpression(expr.right)
+        ) {
+            return;
+        }
+        const slot = this.lazyCompoundResumeSlots.get(expr);
+        if (!slot || !envLocalName) return;
+        const current = this.emitExpr(expr.left);
+        buf.line(`${envLocalName}->${slot.field} = ${this.coerce(current, slot.type, expr.left)};`);
+    }
+
+    private emitSimpleLazyYieldResume(buf: CBuf, stmt: ts.Statement, nextArg: string, envLocalName: string): void {
         const resumeValue: EmitResult = { c: nextArg, ty: T_VALUE };
         if (ts.isExpressionStatement(stmt)) {
             const expr = stmt.expression;
@@ -24709,7 +24783,7 @@ class Emitter {
                 ts.isBinaryExpression(expr) &&
                 (
                     expr.operatorToken.kind === ts.SyntaxKind.EqualsToken ||
-                    (ts.isIdentifier(expr.left) && this.isSimpleLazyYieldCompoundAssignmentOperator(expr.operatorToken.kind))
+                    this.isSimpleLazyYieldCompoundAssignment(expr)
                 ) &&
                 this.singleYieldExpressionInExpression(expr.right)
             ) {
@@ -24723,7 +24797,9 @@ class Emitter {
                 const lhs = this.emitLvalue(expr.left);
                 const lhsType = this.storageType(expr.left);
                 const value = this.emitSimpleLazyResumeExpression(expr.right, nextArg);
-                buf.line(`${this.emitSimpleLazyCompoundAssignment(expr, lhs, lhsType, value)};`);
+                const slot = this.lazyCompoundResumeSlots.get(expr);
+                const current = slot && envLocalName ? `${envLocalName}->${slot.field}` : lhs;
+                buf.line(`${this.emitSimpleLazyCompoundAssignment(expr, lhs, current, lhsType, value)};`);
                 return;
             }
             if (this.singleYieldExpressionInExpression(expr)) {
@@ -24906,6 +24982,7 @@ class Emitter {
     private emitSimpleLazyCompoundAssignment(
         expr: ts.BinaryExpression,
         lhs: string,
+        current: string,
         lhsType: CType,
         rhs: EmitResult,
     ): string {
@@ -24937,26 +25014,26 @@ class Emitter {
                                                             : op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken
                                                                 ? "tsc_value_ushr"
                                                                 : null;
-            if (fn) return `(${lhs} = ${fn}(${lhs}, ${this.coerce(rhs, T_VALUE, expr.right)}))`;
+            if (fn) return `(${lhs} = ${fn}(${current}, ${this.coerce(rhs, T_VALUE, expr.right)}))`;
         }
         if (lhsType.kind === "string" && op === ts.SyntaxKind.PlusEqualsToken) {
-            return `(${lhs} = tsc_str_concat(${lhs}, ${this.coerceToString(rhs, expr.right)}))`;
+            return `(${lhs} = tsc_str_concat(${current}, ${this.coerceToString(rhs, expr.right)}))`;
         }
 
         requireNumber(expr.left, lhsType);
         const rhsNum = this.coerce(rhs, T_NUMBER, expr.right);
-        if (op === ts.SyntaxKind.PlusEqualsToken) return `(${lhs} += ${rhsNum})`;
-        if (op === ts.SyntaxKind.MinusEqualsToken) return `(${lhs} -= ${rhsNum})`;
-        if (op === ts.SyntaxKind.AsteriskEqualsToken) return `(${lhs} *= ${rhsNum})`;
-        if (op === ts.SyntaxKind.SlashEqualsToken) return `(${lhs} /= ${rhsNum})`;
-        if (op === ts.SyntaxKind.PercentEqualsToken) return `(${lhs} = tsc_num_mod(${lhs}, ${rhsNum}))`;
-        if (op === ts.SyntaxKind.AsteriskAsteriskEqualsToken) return `(${lhs} = pow(${lhs}, ${rhsNum}))`;
-        if (op === ts.SyntaxKind.AmpersandEqualsToken) return `(${lhs} = (double)((int32_t)(${lhs}) & (int32_t)(${rhsNum})))`;
-        if (op === ts.SyntaxKind.BarEqualsToken) return `(${lhs} = (double)((int32_t)(${lhs}) | (int32_t)(${rhsNum})))`;
-        if (op === ts.SyntaxKind.CaretEqualsToken) return `(${lhs} = (double)((int32_t)(${lhs}) ^ (int32_t)(${rhsNum})))`;
-        if (op === ts.SyntaxKind.LessThanLessThanEqualsToken) return `(${lhs} = (double)((int32_t)(${lhs}) << (int32_t)(${rhsNum})))`;
-        if (op === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken) return `(${lhs} = (double)((int32_t)(${lhs}) >> (int32_t)(${rhsNum})))`;
-        if (op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken) return `(${lhs} = (double)((uint32_t)(${lhs}) >> (uint32_t)(${rhsNum})))`;
+        if (op === ts.SyntaxKind.PlusEqualsToken) return `(${lhs} = ${current} + ${rhsNum})`;
+        if (op === ts.SyntaxKind.MinusEqualsToken) return `(${lhs} = ${current} - ${rhsNum})`;
+        if (op === ts.SyntaxKind.AsteriskEqualsToken) return `(${lhs} = ${current} * ${rhsNum})`;
+        if (op === ts.SyntaxKind.SlashEqualsToken) return `(${lhs} = ${current} / ${rhsNum})`;
+        if (op === ts.SyntaxKind.PercentEqualsToken) return `(${lhs} = tsc_num_mod(${current}, ${rhsNum}))`;
+        if (op === ts.SyntaxKind.AsteriskAsteriskEqualsToken) return `(${lhs} = pow(${current}, ${rhsNum}))`;
+        if (op === ts.SyntaxKind.AmpersandEqualsToken) return `(${lhs} = (double)((int32_t)(${current}) & (int32_t)(${rhsNum})))`;
+        if (op === ts.SyntaxKind.BarEqualsToken) return `(${lhs} = (double)((int32_t)(${current}) | (int32_t)(${rhsNum})))`;
+        if (op === ts.SyntaxKind.CaretEqualsToken) return `(${lhs} = (double)((int32_t)(${current}) ^ (int32_t)(${rhsNum})))`;
+        if (op === ts.SyntaxKind.LessThanLessThanEqualsToken) return `(${lhs} = (double)((int32_t)(${current}) << (int32_t)(${rhsNum})))`;
+        if (op === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken) return `(${lhs} = (double)((int32_t)(${current}) >> (int32_t)(${rhsNum})))`;
+        if (op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken) return `(${lhs} = (double)((uint32_t)(${current}) >> (uint32_t)(${rhsNum})))`;
         unsupported(expr, `lazy generator suspended yield compound assignment ${ts.SyntaxKind[op]}`);
     }
 

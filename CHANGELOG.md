@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Lazy generator lowering now resumes simple property and element compound assignments from pre-yield lvalue snapshots. Test: `generator_lazy_yield_compound_lvalues`.
 - Generated-C DCE static numeric analysis now folds side-effect-free `Math.pow(...)`, `Math.fround(...)`, and `Math.imul(...)` calls with primitive inputs and pure ignored arguments. Test: `generated_c_dce_const`.
 - Dynamic require manifest caller-scoped entries now match only exact normalized absolute source-file paths, removing suffix fallback matches between unrelated files. Test: `dynamic_require_manifest_by_file_exact`.
 - Trapless array and function Proxy targets now forward accessor `Object.defineProperty` / `Reflect.defineProperty` definitions to their target side-property stores. Test: `proxy_accessor_forward_non_object_targets`.
