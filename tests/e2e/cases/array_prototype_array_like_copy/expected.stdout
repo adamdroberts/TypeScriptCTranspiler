@@ -1,0 +1,4 @@
+slice: true |c
+slice2: q|r
+toReversed: c||a a c
+toReversed2: r|q|p
