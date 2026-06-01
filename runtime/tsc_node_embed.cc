@@ -9,6 +9,7 @@ typedef struct tsc_str {
     const char* data;
     uint64_t hash;
 } tsc_str_t;
+typedef struct tsc_object tsc_object_t;
 typedef struct tsc_array {
     size_t len;
     size_t cap;
@@ -25,9 +26,9 @@ typedef struct tsc_array {
     int state;
     void* env;
     void (*lazy_next)(struct tsc_array* a, int* state, void* env, tsc_value_t next_arg, bool* done);
+    tsc_object_t* props;
     void* data;
 } tsc_array_t;
-typedef struct tsc_object tsc_object_t;
 typedef tsc_value_t (*tsc_generic_function_t)(void* env, tsc_value_t this_arg, tsc_array_t* args);
 
 void tsc_panic(const char* msg);

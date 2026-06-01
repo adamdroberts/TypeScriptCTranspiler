@@ -377,6 +377,9 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
             return TSC_ARR(tsc_value_t, a, idx);
         }
         if (str_lit_eq(key, "__proto__")) return a->prototype;
+        if (a->props && tsc_object_has_own(a->props, key)) {
+            return tsc_object_get(a->props, key);
+        }
         return tsc_value_get_prop(a->prototype, key);
     }
     if (value_tag(v) == TSC_VALUE_TAG_STRING) {
@@ -641,6 +644,7 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
             if (!next_writable || !next_enumerable) return false;
             return has_value ? tsc_value_set_index(v, (double)idx, value) : true;
         }
+        return tsc_object_define_desc(a->props, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
     }
     return false;
 }
@@ -1151,6 +1155,7 @@ bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
         if (tsc_str_is_length_key(key)) return tsc_value_array_set_length(a, value);
         size_t idx = 0;
         if (tsc_str_array_index(key, &idx)) return tsc_value_set_index(v, (double)idx, value);
+        return tsc_object_set(a->props, key, value);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(v);
@@ -1337,7 +1342,10 @@ bool tsc_value_delete_prop(tsc_value_t v, tsc_str_t* key) {
         if (a->es == sizeof(tsc_value_t) && tsc_str_array_index(key, &idx) && idx < a->len) {
             if (a->sealed || a->frozen) return false;
             TSC_ARR(tsc_value_t, a, idx) = tsc_value_undefined();
+            return true;
         }
+        if (a->props && tsc_object_has_own(a->props, key)) return tsc_object_delete(a->props, key);
+        return true;
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
         return !tsc_value_has_own_prop(v, key);
@@ -1371,8 +1379,9 @@ bool tsc_value_prevent_extensions(tsc_value_t v) {
         return tsc_object_prevent_extensions((tsc_object_t*)value_ptr(v));
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
-        ((tsc_array_t*)value_ptr(v))->extensible = false;
-        return true;
+        tsc_array_t* a = (tsc_array_t*)value_ptr(v);
+        a->extensible = false;
+        return tsc_object_prevent_extensions(a->props);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         ((tsc_function_identity_t*)value_ptr(v))->extensible = false;
@@ -1399,7 +1408,7 @@ bool tsc_value_seal(tsc_value_t v) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(v);
         a->extensible = false;
         a->sealed = true;
-        return true;
+        return tsc_object_seal(a->props);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(v);
@@ -1419,7 +1428,7 @@ bool tsc_value_freeze(tsc_value_t v) {
         a->extensible = false;
         a->sealed = true;
         a->frozen = true;
-        return true;
+        return tsc_object_freeze(a->props);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(v);
@@ -1436,7 +1445,8 @@ bool tsc_value_is_sealed(tsc_value_t v) {
         return tsc_object_is_sealed((tsc_object_t*)value_ptr(v));
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
-        return ((tsc_array_t*)value_ptr(v))->sealed;
+        const tsc_array_t* a = (const tsc_array_t*)value_ptr(v);
+        return a->sealed && tsc_object_is_sealed(a->props);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         return ((tsc_function_identity_t*)value_ptr(v))->sealed;
@@ -1449,7 +1459,8 @@ bool tsc_value_is_frozen(tsc_value_t v) {
         return tsc_object_is_frozen((tsc_object_t*)value_ptr(v));
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
-        return ((tsc_array_t*)value_ptr(v))->frozen;
+        const tsc_array_t* a = (const tsc_array_t*)value_ptr(v);
+        return a->frozen && tsc_object_is_frozen(a->props);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         return ((tsc_function_identity_t*)value_ptr(v))->frozen;
@@ -1459,7 +1470,8 @@ bool tsc_value_is_frozen(tsc_value_t v) {
 
 tsc_array_t* value_array_keys(const tsc_array_t* src, bool include_length) {
     tsc_array_materialize_all((tsc_array_t*)src);
-    size_t cap = (src ? src->len : 0) + (include_length ? 1 : 0);
+    size_t side_len = src && src->props ? src->props->len : 0;
+    size_t cap = (src ? src->len : 0) + (include_length ? 1 : 0) + side_len;
     tsc_array_t* out = tsc_array_new(sizeof(tsc_str_t*), cap ? cap : 1);
     if (!src) return out;
     for (size_t i = 0; i < src->len; i++) {
@@ -1470,15 +1482,27 @@ tsc_array_t* value_array_keys(const tsc_array_t* src, bool include_length) {
         tsc_str_t* length = tsc_str_from_lit("length", 6);
         tsc_array_push_raw(out, &length);
     }
+    tsc_array_t* side_keys = include_length ? tsc_object_own_keys_dyn(src->props) : tsc_object_keys_dyn(src->props);
+    for (size_t i = 0; i < side_keys->len; i++) {
+        tsc_str_t* key = TSC_ARR(tsc_str_t*, side_keys, i);
+        tsc_array_push_raw(out, &key);
+    }
     return out;
 }
 
 tsc_array_t* value_array_values(const tsc_array_t* src) {
     tsc_array_materialize_all((tsc_array_t*)src);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), src ? src->len : 1);
+    size_t side_len = src && src->props ? src->props->len : 0;
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), src ? src->len + side_len : 1);
     if (!src || src->es != sizeof(tsc_value_t)) return out;
     for (size_t i = 0; i < src->len; i++) {
         tsc_value_t value = TSC_ARR(tsc_value_t, src, i);
+        tsc_array_push_raw(out, &value);
+    }
+    tsc_array_t* side_keys = tsc_object_keys_dyn(src->props);
+    for (size_t i = 0; i < side_keys->len; i++) {
+        tsc_str_t* key = TSC_ARR(tsc_str_t*, side_keys, i);
+        tsc_value_t value = tsc_object_get(src->props, key);
         tsc_array_push_raw(out, &value);
     }
     return out;
@@ -1486,13 +1510,25 @@ tsc_array_t* value_array_values(const tsc_array_t* src) {
 
 tsc_array_t* value_array_entries(const tsc_array_t* src) {
     tsc_array_materialize_all((tsc_array_t*)src);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), src ? src->len : 1);
+    size_t side_len = src && src->props ? src->props->len : 0;
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), src ? src->len + side_len : 1);
     if (!src || src->es != sizeof(tsc_value_t)) return out;
     for (size_t i = 0; i < src->len; i++) {
         tsc_array_t* pair = tsc_array_new(sizeof(tsc_value_t), 2);
         tsc_value_t key = tsc_value_string(tsc_str_from_int((int64_t)i));
         tsc_value_t value = TSC_ARR(tsc_value_t, src, i);
         tsc_array_push_raw(pair, &key);
+        tsc_array_push_raw(pair, &value);
+        tsc_value_t boxed = tsc_value_array(pair);
+        tsc_array_push_raw(out, &boxed);
+    }
+    tsc_array_t* side_keys = tsc_object_keys_dyn(src->props);
+    for (size_t i = 0; i < side_keys->len; i++) {
+        tsc_str_t* key = TSC_ARR(tsc_str_t*, side_keys, i);
+        tsc_array_t* pair = tsc_array_new(sizeof(tsc_value_t), 2);
+        tsc_value_t key_value = tsc_value_string(key);
+        tsc_value_t value = tsc_object_get(src->props, key);
+        tsc_array_push_raw(pair, &key_value);
         tsc_array_push_raw(pair, &value);
         tsc_value_t boxed = tsc_value_array(pair);
         tsc_array_push_raw(out, &boxed);
@@ -1582,6 +1618,9 @@ tsc_value_t value_descriptor_from_array_key(const tsc_array_t* src, const tsc_st
     if (src->es == sizeof(tsc_value_t) && tsc_str_array_index(key, &idx) && idx < src->len) {
         return value_descriptor_from_array_index(src, idx);
     }
+    if (src->props && tsc_object_has_own(src->props, key)) {
+        return tsc_value_get_own_property_descriptor(tsc_value_object(src->props), (tsc_str_t*)key);
+    }
     return tsc_value_undefined();
 }
 
@@ -1660,6 +1699,13 @@ tsc_value_t value_descriptors_from_array(const tsc_array_t* src) {
         }
     }
     tsc_object_set(out, tsc_str_from_lit("length", 6), value_descriptor_from_array_length(src));
+    if (src->props) {
+        tsc_array_t* keys = tsc_object_own_keys_dyn(src->props);
+        for (size_t i = 0; i < keys->len; i++) {
+            tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
+            tsc_object_set(out, key, tsc_value_get_own_property_descriptor(tsc_value_object(src->props), key));
+        }
+    }
     return tsc_value_object(out);
 }
 

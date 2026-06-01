@@ -501,6 +501,8 @@ tsc_str_t* tsc_text_decoder_decode(const tsc_text_decoder_t* decoder, const tsc_
 tsc_str_t* tsc_json_escape_string(const tsc_str_t* s);  /* adds quotes + escapes */
 tsc_str_t* tsc_json_num(double n);  /* JSON-safe number formatting */
 
+typedef struct tsc_object tsc_object_t;
+
 /* ------------- arrays ------------- */
 typedef struct tsc_array {
     size_t len;
@@ -518,6 +520,7 @@ typedef struct tsc_array {
     int state;
     void* env;
     void (*lazy_next)(struct tsc_array* a, int* state, void* env, tsc_value_t next_arg, bool* done);
+    tsc_object_t* props;
     void* data;
 } tsc_array_t;
 
@@ -548,7 +551,6 @@ void tsc_array_oob(const tsc_array_t* a, double i);
 #define TSC_ARR(T, a, i) (((T*)((a)->data))[(size_t)(i)])
 
 /* ------------- dynamic values (NaN-boxed) ------------- */
-typedef struct tsc_object tsc_object_t;
 typedef struct tsc_shape tsc_shape_t;
 typedef struct {
     const tsc_shape_t* shape;
