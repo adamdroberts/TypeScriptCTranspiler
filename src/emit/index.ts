@@ -17716,6 +17716,7 @@ class Emitter {
     private isCommonJsModuleExportsDefaultValue(expr: ts.Expression): boolean {
         const cur = this.unwrapTransparentExpression(expr);
         if (this.isCommonJsObjectLiteralExportValue(cur)) return true;
+        if (this.isUnshadowedUndefinedExpression(cur)) return true;
         if (ts.isPrefixUnaryExpression(cur)) {
             return this.isCommonJsModuleExportsDefaultPrefixOperator(cur.operator) &&
                 this.isCommonJsModuleExportsDefaultValue(cur.operand);
@@ -18198,6 +18199,9 @@ class Emitter {
         let valueNode = this.commonJsExportValueNode(node);
         if (ts.isExpression(valueNode)) valueNode = this.unwrapTransparentExpression(valueNode);
         if (valueNode.kind === ts.SyntaxKind.NullKeyword) {
+            return T_VALUE;
+        }
+        if (ts.isExpression(valueNode) && this.isUnshadowedUndefinedExpression(valueNode)) {
             return T_VALUE;
         }
         if (ts.isVoidExpression(valueNode)) {
