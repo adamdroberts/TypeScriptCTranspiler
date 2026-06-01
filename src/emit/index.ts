@@ -419,6 +419,9 @@ class Emitter {
                 this.isPrunableTopLevelVariable(node) &&
                 !this.referencedTopLevelVariables.has(node)
             ) {
+                if (node.initializer && !this.isSideEffectFreeTopLevelConstInitializer(node.initializer)) {
+                    visit(node.initializer);
+                }
                 return;
             }
             if (
@@ -426,6 +429,9 @@ class Emitter {
                 this.isPrunableLocalVariable(node) &&
                 !this.referencedVariables.has(node)
             ) {
+                if (node.initializer && !this.isSideEffectFreeTopLevelConstInitializer(node.initializer)) {
+                    visit(node.initializer);
+                }
                 return;
             }
             if (
@@ -810,8 +816,7 @@ class Emitter {
         )) {
             return false;
         }
-        if (!decl.initializer) return true;
-        return this.isSideEffectFreeTopLevelConstInitializer(decl.initializer);
+        return true;
     }
 
     private isSideEffectFreeTopLevelConstInitializer(
@@ -14481,8 +14486,7 @@ class Emitter {
         const isConst = (decl.parent.flags & ts.NodeFlags.Const) !== 0;
         const isLet = (decl.parent.flags & ts.NodeFlags.Let) !== 0;
         if (!isConst && !isLet) return false;
-        if (!decl.initializer) return true;
-        return this.isSideEffectFreeTopLevelConstInitializer(decl.initializer);
+        return true;
     }
 
     private shouldEmitLocalVariable(decl: ts.VariableDeclaration): boolean {
@@ -25113,7 +25117,13 @@ class Emitter {
             ) {
                 continue;
             }
-            if (!this.shouldEmitTopLevelVariable(d)) continue;
+            if (!this.shouldEmitTopLevelVariable(d)) {
+                if (d.initializer && !this.isSideEffectFreeTopLevelConstInitializer(d.initializer)) {
+                    const value = this.emitExpr(d.initializer);
+                    initBuf.line(`${value.c};`);
+                }
+                continue;
+            }
             const name = this.declaredName(d.name);
             const baseCt = d.initializer && this.requireCallSpecifier(d.initializer)
                 ? T_VALUE
@@ -25712,7 +25722,13 @@ class Emitter {
             ) {
                 continue;
             }
-            if (!this.shouldEmitLocalVariable(d)) continue;
+            if (!this.shouldEmitLocalVariable(d)) {
+                if (d.initializer && !this.isSideEffectFreeTopLevelConstInitializer(d.initializer)) {
+                    const value = this.emitExpr(d.initializer);
+                    buf.line(`${value.c};`);
+                }
+                continue;
+            }
             const sym = this.symbolForIdentifier(d.name);
             const envBinding = this.closureEnvBindingForSymbol(sym);
             if (envBinding) {

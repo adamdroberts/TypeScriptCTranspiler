@@ -3,3 +3,7 @@ dead_leaf(
 dead_parent(
 dead_local_helper(
 dead local effect
+unused_top_effect
+unused_top_let_effect
+unused_local_effect
+unused_local_let_effect
