@@ -67,7 +67,8 @@ static bool array_proto_has_index(tsc_value_t receiver, size_t index) {
 
 static tsc_value_t array_proto_get_index(tsc_value_t receiver, size_t index) {
     if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_ARRAY) {
-        return TSC_ARR(tsc_value_t, (tsc_array_t*)value_ptr(receiver), index);
+        tsc_array_t* array = (tsc_array_t*)value_ptr(receiver);
+        return index < array->len ? TSC_ARR(tsc_value_t, array, index) : tsc_value_undefined();
     }
     return tsc_value_get_index(receiver, (double)index);
 }

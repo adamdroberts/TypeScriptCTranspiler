@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Detached dynamic `Array.prototype` finder callbacks now read `undefined` instead of past the dynamic-array buffer when the callback shrinks the receiver length during iteration. Test: `dynamic_array_prototype_hof_length_shrink`.
 - Detached dynamic `Array.prototype.sort` and `toSorted` calls now honor runtime comparator callbacks for array and array-like receivers, including invalid comparator validation. Test: `dynamic_array_prototype_sort_comparator`.
 - CommonJS IIFE wrapper parameters passed `require`, `module`, and `exports` now preserve finite AOT export metadata for named exports assigned through `module` / `exports` parameters inside the wrapper body. Test: `node_modules_commonjs_iife_parameter_wrapper`.
 - CommonJS computed named-export assignments now accept finite dynamic key alternatives, lowering `exports[key] = ...` / `module.exports[key] = ...` to AOT string dispatch over known export names. Test: `node_modules_commonjs_dynamic_computed_exports`.
