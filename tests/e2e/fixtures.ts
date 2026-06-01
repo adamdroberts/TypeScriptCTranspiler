@@ -818,6 +818,14 @@ const packages: Record<string, PackageFixture> = {
         "index.js": '(function (factory) {\n  if (typeof module === "object" && module.exports) {\n    factory(require, module, exports);\n  }\n})(function (req, mod, out) {\n  const local = req("./local.js");\n  out.default = function greet(name) { return "factory-wrapper " + name; };\n  out.label = local.label;\n  mod.exports.count = local.count;\n  out.double = function double(value) { return value * 9; };\n});\n',
         "local.js": 'exports.label = "factory-wrapper";\nexports.count = 83;\n',
     }),
+    "tsc2c-cjs-factory-wrapper-call": cjsPackage("tsc2c-cjs-factory-wrapper-call", {
+        "index.js": '(function (factory) {\n  if (typeof module === "object" && module.exports) {\n    factory.call(undefined, require, module, exports);\n  }\n})(function (req, mod, out) {\n  const local = req("./local.js");\n  out.default = function greet(name) { return "factory-wrapper-call " + name; };\n  out.label = local.label;\n  mod.exports.count = local.count;\n  out.double = function double(value) { return value * 10; };\n});\n',
+        "local.js": 'exports.label = "factory-wrapper-call";\nexports.count = 84;\n',
+    }),
+    "tsc2c-cjs-factory-wrapper-apply": cjsPackage("tsc2c-cjs-factory-wrapper-apply", {
+        "index.js": '(function (factory) {\n  if (typeof module === "object" && module.exports) {\n    factory.apply(null, [require, module, exports]);\n  }\n})(function (req, mod, out) {\n  const local = req("./local.js");\n  out.default = function greet(name) { return "factory-wrapper-apply " + name; };\n  out.label = local.label;\n  mod.exports.count = local.count;\n  out.double = function double(value) { return value * 11; };\n});\n',
+        "local.js": 'exports.label = "factory-wrapper-apply";\nexports.count = 85;\n',
+    }),
     "tsc2c-cjs-require-assertion-wrappers": {
         packageJson: { name: "tsc2c-cjs-require-assertion-wrappers", version: "1.0.0", main: "index.ts" },
         files: {

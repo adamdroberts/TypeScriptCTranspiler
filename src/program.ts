@@ -263,7 +263,7 @@ function commonJsFactoryWrapperScopedAliases(
 function commonJsFactoryWrapperInvocation(call: ts.CallExpression): {
     fn: ts.FunctionExpression | ts.ArrowFunction;
     factoryArgument: ts.Expression;
-    args: ts.NodeArray<ts.Expression>;
+    args: readonly ts.Expression[];
 } | null {
     const outer = commonJsIifeCallee(call.expression);
     if (!outer || !ts.isBlock(outer.body) || call.arguments.length < outer.parameters.length) return null;
@@ -281,7 +281,7 @@ function commonJsFactoryWrapperInvocation(call: ts.CallExpression): {
     const invocations: {
         fn: ts.FunctionExpression | ts.ArrowFunction;
         factoryArgument: ts.Expression;
-        args: ts.NodeArray<ts.Expression>;
+        args: readonly ts.Expression[];
     }[] = [];
     const visit = (node: ts.Node): void => {
         if (
@@ -304,6 +304,21 @@ function commonJsFactoryWrapperInvocation(call: ts.CallExpression): {
                 const factory = factories.get(callee.text);
                 if (factory) {
                     invocations.push({ fn: factory.fn, factoryArgument: factory.argument, args: node.arguments });
+                }
+            } else if (ts.isPropertyAccessExpression(callee)) {
+                let target: ts.Expression = callee.expression;
+                while (ts.isParenthesizedExpression(target)) target = target.expression;
+                if (ts.isIdentifier(target)) {
+                    const factory = factories.get(target.text);
+                    if (factory && callee.name.text === "call") {
+                        invocations.push({ fn: factory.fn, factoryArgument: factory.argument, args: node.arguments.slice(1) });
+                    } else if (factory && callee.name.text === "apply" && node.arguments.length >= 2) {
+                        let argArray = node.arguments[1]!;
+                        while (ts.isParenthesizedExpression(argArray)) argArray = argArray.expression;
+                        if (ts.isArrayLiteralExpression(argArray)) {
+                            invocations.push({ fn: factory.fn, factoryArgument: factory.argument, args: argArray.elements });
+                        }
+                    }
                 }
             }
         }
@@ -445,7 +460,7 @@ function commonJsIifeCallForFunction(fn: ts.FunctionExpression | ts.ArrowFunctio
 }
 
 function commonJsFactoryWrapperInvocationForFunction(fn: ts.FunctionExpression | ts.ArrowFunction): {
-    args: ts.NodeArray<ts.Expression>;
+    args: readonly ts.Expression[];
 } | null {
     let cur: ts.Node = fn;
     while (cur.parent) {
