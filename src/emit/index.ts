@@ -17460,6 +17460,7 @@ class Emitter {
         if (
             ts.isBinaryExpression(cur) &&
             (cur.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+             cur.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
              cur.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)
         ) {
             this.validateCommonJsModuleExportsValueAssignment(cur.left);
@@ -17952,6 +17953,17 @@ class Emitter {
             const trueTy = this.commonJsExportedCType(valueNode.whenTrue);
             const falseTy = this.commonJsExportedCType(valueNode.whenFalse);
             if (trueTy.c === falseTy.c) return trueTy;
+            return T_VALUE;
+        }
+        if (
+            ts.isBinaryExpression(valueNode) &&
+            (valueNode.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+             valueNode.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
+             valueNode.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)
+        ) {
+            const leftTy = this.commonJsExportedCType(valueNode.left);
+            const rightTy = this.commonJsExportedCType(valueNode.right);
+            if (leftTy.c === rightTy.c) return leftTy;
             return T_VALUE;
         }
         if (ts.isObjectLiteralExpression(valueNode) && this.isCommonJsObjectLiteralDefaultValue(valueNode)) {
