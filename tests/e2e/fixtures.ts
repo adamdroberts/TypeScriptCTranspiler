@@ -859,6 +859,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-iife-object-function": cjsPackage("tsc2c-cjs-module-iife-object-function", {
         "index.js": 'module.exports = (function () {\n  return {\n    label: "iife-function",\n    count: 124,\n    triple(value) { return value * 3; },\n    default: "iife-function-default"\n  };\n})();\n',
     }),
+    "tsc2c-cjs-module-iife-wrapper-object": cjsPackage("tsc2c-cjs-module-iife-wrapper-object", {
+        "index.js": 'module.exports = (function () {\n  return Object.freeze({\n    default: "iife-wrapper-default",\n    label: "iife-wrapper",\n    count: 129,\n    double(value) { return value * 2; }\n  });\n})();\n',
+    }),
     "tsc2c-cjs-module-local-factory-object": cjsPackage("tsc2c-cjs-module-local-factory-object", {
         "index.js": 'const label = "factory-object";\nfunction makeApi() {\n  return {\n    default: "factory-default",\n    label,\n    count: 125,\n    double(value) { return value * 2; },\n    enabled: true\n  };\n}\nmodule.exports = makeApi();\n',
     }),
@@ -870,6 +873,9 @@ const packages: Record<string, PackageFixture> = {
     }),
     "tsc2c-cjs-module-local-function-expression-factory-object": cjsPackage("tsc2c-cjs-module-local-function-expression-factory-object", {
         "index.js": 'const makeExpressionApi = (function () {\n  return ({\n    default: "factory-expression-default",\n    label: "factory-expression",\n    count: 128,\n    quadruple: (value) => value * 4\n  });\n});\nmodule.exports = (makeExpressionApi)();\n',
+    }),
+    "tsc2c-cjs-module-local-wrapper-factory-object": cjsPackage("tsc2c-cjs-module-local-wrapper-factory-object", {
+        "index.js": 'function makeWrappedApi() {\n  return Object.seal({\n    default: "factory-wrapper-default",\n    label: "factory-wrapper",\n    count: 130,\n    double(value) { return value * 2; }\n  });\n}\nmodule.exports = makeWrappedApi();\n',
     }),
     "tsc2c-cjs-module-object-identifier": cjsPackage("tsc2c-cjs-module-object-identifier", {
         "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "identifier-default",\n  greet: function greet(name) { return "identifier " + name; },\n  label: local.label,\n  count: 72,\n  double: local.double,\n  enabled: true\n};\nmodule.exports = api;\n',
