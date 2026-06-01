@@ -1162,10 +1162,7 @@ bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_ge
         if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'defineProperty' on a proxy that has been revoked"));
         tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("defineProperty", 14));
         if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
-            if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
-                return tsc_object_define_accessor((tsc_object_t*)value_ptr(o->proxy_target), key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
-            }
-            return false;
+            return tsc_value_define_accessor_desc(o->proxy_target, key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
         }
         tsc_proxy_require_callable_trap(trap, "Proxy defineProperty trap must be callable");
         tsc_object_t* desc = tsc_object_new();

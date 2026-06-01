@@ -482,6 +482,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `JSON.stringify(...)` serializes object- and array-target Proxy values through proxy-aware `ownKeys`, descriptor, length, and `get` paths while preserving callable-proxy omission/null behavior. Tests: `proxy_json_stringify`, `proxy_callable_json`
 - `new Proxy(target, handler, ...ignored)` and `Proxy.revocable(target, handler, ...ignored)` evaluate and ignore trailing arguments after the required target and handler. Test: `proxy_constructor_ignored_arguments`
 - Trapless array- and function-target Proxy `set` forwarding preserves explicit `Reflect.set(...)` receivers instead of writing those fallback assignments onto the target. Tests: `proxy_array_mutation_forward`, `proxy_function_set_forward`
+- Trapless array and function Proxy targets forward accessor `Object.defineProperty` / `Reflect.defineProperty` definitions to their target side-property stores. Test: `proxy_accessor_forward_non_object_targets`
 - Array-target Proxy `ownKeys` invariant validation accounts for dynamic array own string-key side properties as target keys, including non-configurable side-key presence and exact-key checks for non-extensible arrays. Test: `proxy_array_ownkeys_invariants`
 - Array-target Proxy invariants account for non-configurable dynamic array own accessor properties when validating `get`, `set`, `defineProperty`, and `getOwnPropertyDescriptor` trap results, including absent getter/setter hooks, data/accessor descriptor mismatches, and changed accessor identities. Test: `proxy_array_accessor_invariants`
 - `Object.getPrototypeOf(proxy)`, `Object.setPrototypeOf(proxy, proto)`, `Object.isExtensible(proxy)`, and `Object.preventExtensions(proxy)` preserve ignored trailing-argument evaluation before dispatching proxy prototype/extensibility traps. Test: `proxy_object_helper_ignored_arguments`
@@ -2107,6 +2108,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_apply_empty_arguments_list` | callable Proxy values support Function.prototype.apply with omitted and nullish argument lists |
 | `proxy_callable_nullish_traps_forward` | nullish callable Proxy apply and construct traps forward to the function target |
 | `proxy_array_mutation_forward` | trapless array Proxy dynamic writes, Reflect.set receiver fallback, descriptor definitions, length updates, and deletes forward correctly |
+| `proxy_accessor_forward_non_object_targets` | trapless array and function Proxy accessor definitions forward to target side-property stores |
 | `proxy_array_extensibility_forward` | trapless array Proxy extensibility checks and preventExtensions forward to the array target |
 | `proxy_array_seal_freeze_forward` | trapless array Proxy seal/freeze operations and sealed/frozen checks forward to the array target |
 | `proxy_array_extensibility_trap_invariants` | array Proxy isExtensible/preventExtensions trap results validate against target extensibility after ignored-argument evaluation and trap dispatch |

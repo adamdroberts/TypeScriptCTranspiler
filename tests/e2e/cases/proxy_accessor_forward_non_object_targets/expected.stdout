@@ -1,0 +1,6 @@
+array define: true
+array get: arr arr side
+array set: set-next set-next
+function define: true
+function get: 4 4 side
+function set: 18 18
