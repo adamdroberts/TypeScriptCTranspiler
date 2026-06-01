@@ -43,6 +43,7 @@ export async function loadRuntimeCodeManifest(
 }
 
 export function parseAotEvalConstant(source: string): AotRuntimeConstant | null {
+    if (source.trim() === "") return { kind: "undefined" };
     const expr = parseExpression(source);
     return expr ? evaluateConstant(expr) : null;
 }
@@ -86,6 +87,7 @@ function evaluateConstant(expr: ts.Expression): AotRuntimeConstant | null {
     if (expr.kind === ts.SyntaxKind.FalseKeyword) return { kind: "boolean", value: false };
     if (expr.kind === ts.SyntaxKind.NullKeyword) return { kind: "null" };
     if (ts.isIdentifier(expr) && expr.text === "undefined") return { kind: "undefined" };
+    if (ts.isVoidExpression(expr)) return { kind: "undefined" };
 
     if (ts.isPrefixUnaryExpression(expr)) {
         const value = evaluateConstant(expr.operand);

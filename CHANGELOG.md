@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Runtime-code AOT eval constants now accept empty source strings and `void` expressions as `undefined`. Test: `runtime_eval_empty_void_aot`.
 - Dynamic require manifests now reject non-object top-level JSON values before reading `requires`. Test: `dynamic_require_manifest_invalid_root`.
 - CommonJS package-source metadata now accepts `null` literals in whole-value `module.exports` defaults and nested static object/array exports. Test: `node_modules_commonjs_module_exports_null`.
 - Generated-C DCE static boolean analysis now folds side-effect-free `Array.isArray(...)` calls over pure fresh non-array built-in instances. Test: `generated_c_dce_static_builtins`.
