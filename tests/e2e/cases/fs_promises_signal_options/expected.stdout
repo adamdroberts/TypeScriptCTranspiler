@@ -1,0 +1,2 @@
+seen: write;read;
+read: signal ok

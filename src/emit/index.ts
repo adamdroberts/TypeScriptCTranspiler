@@ -43040,6 +43040,19 @@ class Emitter {
         return init ? this.fsBooleanOptionValue(init, seenConsts) : null;
     }
 
+    private fsSignalOptionSpecs(options: ts.Expression | undefined): SequencedCallArg[] {
+        if (!options || this.isUndefinedLikeExpression(options)) return [];
+        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedLikeExpression(resolvedOptions) || !ts.isObjectLiteralExpression(resolvedOptions)) return [];
+        const specs: SequencedCallArg[] = [];
+        for (const prop of resolvedOptions.properties) {
+            if (!ts.isPropertyAssignment(prop)) continue;
+            if (this.staticPropertyName(prop.name) !== "signal") continue;
+            specs.push({ value: this.emitExpr(prop.initializer), target: T_VOID, node: prop.initializer });
+        }
+        return specs;
+    }
+
     private validateFsEncodingOptions(options: ts.Expression | undefined, label: string): "utf8" | "hex" | "base64" | "buffer" {
         if (!options || this.isUndefinedLikeExpression(options)) return "utf8";
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
@@ -43097,7 +43110,11 @@ class Emitter {
         return `tsc_fs_dirents_encode_names(${value}, tsc_str_from_lit("${encoding}", ${encoding.length}))`;
     }
 
-    private validateFsReadFileOptions(options: ts.Expression | undefined, label: string): "utf8" | "hex" | "base64" | "buffer" {
+    private validateFsReadFileOptions(
+        options: ts.Expression | undefined,
+        label: string,
+        allowSignal = false,
+    ): "utf8" | "hex" | "base64" | "buffer" {
         if (!options || this.isUndefinedLikeExpression(options)) return "utf8";
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
         if (this.isUndefinedLikeExpression(resolvedOptions)) return "utf8";
@@ -43144,6 +43161,9 @@ class Emitter {
                 checkFlag(prop.initializer);
                 continue;
             }
+            if (allowSignal && key === "signal") {
+                continue;
+            }
             unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
         }
         return result;
@@ -43175,7 +43195,11 @@ class Emitter {
         return `tsc_fs_write_file_buffer_sync_opts_mode(${path}, ${encoded}, ${append}, ${exclusive}, ${update}, ${mode})`;
     }
 
-    private validateFsWriteFileOptions(options: ts.Expression | undefined, label: string): { append: boolean; exclusive: boolean; update: boolean; encoding: "utf8" | "hex" | "base64"; mode: SequencedCallArg } {
+    private validateFsWriteFileOptions(
+        options: ts.Expression | undefined,
+        label: string,
+        allowSignal = false,
+    ): { append: boolean; exclusive: boolean; update: boolean; encoding: "utf8" | "hex" | "base64"; mode: SequencedCallArg } {
         const out = { append: false, exclusive: false, update: false };
         let encoding: "utf8" | "hex" | "base64" = "utf8";
         let mode: SequencedCallArg = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
@@ -43239,6 +43263,8 @@ class Emitter {
                 if (this.fsBooleanOptionValue(flushNode) === null) {
                     unsupported(prop.initializer, `${label}.flush must be a boolean literal in this subset`);
                 }
+            } else if (allowSignal && key === "signal") {
+                continue;
             } else {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
@@ -43499,12 +43525,13 @@ class Emitter {
         switch (name) {
             case "readFile": {
                 if (args.length < 1) unsupported(call, "fs.promises.readFile needs path and optional UTF-8/hex/base64/buffer/null encoding/flag options");
-                const result = this.validateFsReadFileOptions(args[1], "fs.promises.readFile");
+                const result = this.validateFsReadFileOptions(args[1], "fs.promises.readFile", true);
                 const p = this.emitExpr(args[0]!);
                 const optionSpecs: SequencedCallArg[] = [];
                 if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
                     optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
                 }
+                optionSpecs.push(...this.fsSignalOptionSpecs(args[1]));
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.readFile path"),
                     ...optionSpecs,
@@ -43518,7 +43545,7 @@ class Emitter {
             }
             case "writeFile": {
                 if (args.length < 2) unsupported(call, "fs.promises.writeFile needs path, data, and optional UTF-8/hex/base64 encoding/flag options");
-                const options = this.validateFsWriteFileOptions(args[2], "fs.promises.writeFile");
+                const options = this.validateFsWriteFileOptions(args[2], "fs.promises.writeFile", true);
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.promises.writeFile data must be string or Buffer");
@@ -43526,6 +43553,7 @@ class Emitter {
                 if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
                     optionSpecs.push({ value: this.emitExpr(args[2]), target: T_VOID, node: args[2] });
                 }
+                optionSpecs.push(...this.fsSignalOptionSpecs(args[2]));
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.writeFile path"),
                     { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },

@@ -16,5 +16,7 @@ fs.promises.readdir("/tmp").then((names: string[]): string => {
     return found;
 });
 
-console.log("read:", readBack.trim());
-console.log("found:", found);
+setImmediate((): void => {
+    console.log("read:", readBack.trim());
+    console.log("found:", found);
+});

@@ -25,6 +25,8 @@ nodefs.promises.readFile(tmpPath).then((text: string): string => {
     return namespaceRead;
 });
 
-console.log("named:", namedRead);
-console.log("alias:", aliasRead);
-console.log("namespace:", namespaceRead);
+setImmediate((): void => {
+    console.log("named:", namedRead);
+    console.log("alias:", aliasRead);
+    console.log("namespace:", namespaceRead);
+});

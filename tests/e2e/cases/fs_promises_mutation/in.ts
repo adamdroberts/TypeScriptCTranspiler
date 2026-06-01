@@ -18,7 +18,9 @@ fs.promises.writeFile(rmFilePath, "remove me");
 fs.promises.rm(rmFilePath);
 fs.promises.rmdir(dirPath);
 
-console.log("names:", names);
-console.log("file exists:", fs.existsSync(filePath));
-console.log("rm exists:", fs.existsSync(rmFilePath));
-console.log("dir exists:", fs.existsSync(dirPath));
+setImmediate((): void => {
+    console.log("names:", names);
+    console.log("file exists:", fs.existsSync(filePath));
+    console.log("rm exists:", fs.existsSync(rmFilePath));
+    console.log("dir exists:", fs.existsSync(dirPath));
+});
