@@ -1194,13 +1194,25 @@ bool tsc_value_set_prop_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value,
     return ok;
 }
 
+static bool tsc_value_define_receiver_data(tsc_value_t receiver, tsc_str_t* key, tsc_value_t value) {
+    if (!value_is_box(receiver)) return false;
+    tsc_value_tag_t tag = value_tag(receiver);
+    if (tag != TSC_VALUE_TAG_OBJECT && tag != TSC_VALUE_TAG_ARRAY && tag != TSC_VALUE_TAG_FUNCTION) {
+        return false;
+    }
+    return tsc_value_define_property_desc(receiver, key, value, true, true, true, true, true, true, true);
+}
+
 bool tsc_value_set_prop_receiver(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver) {
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_SET_PROP_RECEIVER);
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_set_receiver((tsc_object_t*)value_ptr(v), key, value, receiver);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
-        return tsc_value_set_prop(receiver, key, value);
+        return tsc_value_define_receiver_data(receiver, key, value);
+    }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+        return tsc_value_define_receiver_data(receiver, key, value);
     }
     return false;
 }
