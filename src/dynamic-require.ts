@@ -101,22 +101,17 @@ function dynamicRequireMappedSpecifiersForFile(
     fileName: string,
 ): string[] | null {
     if (!manifest.byFile) return null;
-    const normalizedFile = normalizeManifestPath(path.resolve(fileName));
+    const normalizedFile = canonicalManifestFilePath(fileName);
     const baseDir = manifest.baseDir ?? process.cwd();
     for (const [rawPattern, specifiers] of Object.entries(manifest.byFile)) {
-        const normalizedPattern = normalizeManifestPath(rawPattern);
-        const absolutePattern = normalizeManifestPath(path.resolve(baseDir, rawPattern));
-        if (
-            normalizedFile === absolutePattern ||
-            normalizedFile === normalizedPattern ||
-            normalizedFile.endsWith(`/${normalizedPattern}`)
-        ) {
+        const absolutePattern = canonicalManifestFilePath(rawPattern, baseDir);
+        if (normalizedFile === absolutePattern) {
             return specifiers;
         }
     }
     return null;
 }
 
-function normalizeManifestPath(fileName: string): string {
-    return fileName.replace(/\\/g, "/");
+function canonicalManifestFilePath(fileName: string, baseDir?: string): string {
+    return path.normalize(baseDir ? path.resolve(baseDir, fileName) : path.resolve(fileName)).replace(/\\/g, "/");
 }
