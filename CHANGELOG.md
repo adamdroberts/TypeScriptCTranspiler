@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic arrays now inherit callable `Array.prototype` methods for `join`, `includes`, `indexOf`, `lastIndexOf`, `at`, `keys`, `values`, and `entries`, so detached prototype method calls work through dynamic lookup. Test: `dynamic_array_prototype_methods`.
 - Trapless array- and function-target Proxy `set` forwarding now preserves explicit `Reflect.set(...)` receivers instead of writing those fallback assignments onto the target. Tests: `proxy_array_mutation_forward`, `proxy_function_set_forward`.
 - Dynamic `Reflect.construct(...)` now falls back to `Object.prototype` when `newTarget.prototype` is explicitly `null`, matching constructor allocation semantics. Test: `reflect_construct_dynamic_function`.
 - Generated-C DCE now treats unused pure `DataView` allocations over fresh bounded `ArrayBuffer` inputs and empty own-key Object/Reflect helper reads over fresh `DataView` instances as discardable. Test: `generated_c_dce_const`.
