@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Lazy generator lowering now resumes suspended `throw (yield ...)` expressions, closes the generator state before throwing the resumed value, and leaves later `next(...)` calls done. Test: `generator_lazy_throw_yield`.
 - CommonJS computed named-export metadata now accepts checker-proven finite literal-union keys, including JavaScript JSDoc union keys, and lowers them through existing AOT export dispatch. Test: `node_modules_commonjs_jsdoc_union_computed_exports`.
 - CommonJS whole-value `module.exports = "key" in object` defaults now lower through the AOT package-source path as boxed boolean values. Test: `node_modules_commonjs_module_exports_in_default`.
 - CommonJS named `default` imports now use the same whole-`module.exports` AOT fallback as default and namespace-default imports when a JavaScript CommonJS package has no `__esModule` marker and no explicit `default` property. Test: `node_modules_commonjs_mixed_interop_default`.
