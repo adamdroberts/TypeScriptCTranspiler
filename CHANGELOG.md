@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Finite dynamic `require(...)` proofs now resolve `path.join(...)`, `path.resolve(...)`, and `path.normalize(...)` specifiers from `path` / `node:path` bindings, including CommonJS `__dirname` / `__filename` constants and absolute local module paths. Test: `dynamic_require_path_join`.
 - Finite dynamic `require(...)` proofs now resolve `String.raw` tagged-template specifiers, including finite substitutions, into the AOT module graph. Test: `dynamic_require_string_raw`.
 - CommonJS outer factory wrappers now preserve finite AOT require and named-export metadata when the wrapper invokes the factory with `require`, `module`, and `exports`. Test: `node_modules_commonjs_factory_wrapper`.
 - CommonJS `Object.fromEntries(...)` named-export metadata now accepts finite dynamic key alternatives for direct `module.exports` sources and `Object.defineProperties(..., Object.fromEntries(...))` descriptor maps. Tests: `node_modules_commonjs_module_exports_object_from_entries_finite_keys`, `node_modules_commonjs_define_properties_from_entries_finite_keys`.

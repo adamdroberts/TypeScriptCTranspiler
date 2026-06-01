@@ -10,6 +10,7 @@ export function resolveCommonJsRequireModuleName(
     containingFile: string,
     compilerOptions: ts.CompilerOptions,
 ): string | null {
+    if (path.isAbsolute(spec)) return resolveSourceFile(spec);
     const packageResolved = resolvePackageTarget(spec, containingFile, compilerOptions);
     if (packageResolved) return packageResolved;
     return ts.resolveModuleName(spec, containingFile, compilerOptions, ts.sys).resolvedModule?.resolvedFileName ?? null;
