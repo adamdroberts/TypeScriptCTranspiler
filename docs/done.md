@@ -423,6 +423,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Detached `Array.prototype` read methods for `join`, `includes`, `indexOf`, `lastIndexOf`, `at`, `keys`, `values`, and `entries` operate on dynamic array-like object receivers through generic `length` and numeric property reads, including inherited array-like slots. Test: `array_prototype_array_like`
 - Detached `Array.prototype` mutators for `push`, `pop`, `shift`, and `unshift` operate on dynamic array-like object receivers, updating numeric properties and `length` through the existing dynamic object helpers. Test: `array_prototype_array_like_mutators`
 - Detached `Array.prototype` copy methods for `slice` and `toReversed` operate on dynamic array-like object receivers through generic `length` and numeric property reads, including inherited array-like slots. Test: `array_prototype_array_like_copy`
+- Detached `Array.prototype` higher-order methods operate on dynamic array-like object receivers, including inherited array-like slots, callback receiver identity, sparse-object callback skipping for map-style methods, and every-index `find` / `findIndex` scans. Test: `array_prototype_array_like_hof`
 - Dynamic arrays inherit callable mutating and copy-returning `Array.prototype` methods for `pop`, `push`, `shift`, `unshift`, `concat`, `slice`, `fill`, `copyWithin`, `splice`, `sort`, `toSorted`, `with`, `toSpliced`, `reverse`, and `toReversed`, including detached `Reflect.apply(...)` calls backed by the existing dynamic array helper semantics. Test: `dynamic_array_prototype_mutators`
 - Dynamic arrays inherit callable higher-order `Array.prototype` methods for `forEach`, `map`, `flatMap`, `filter`, `some`, `every`, `find`, `findIndex`, `findLast`, `findLastIndex`, `reduce`, and `reduceRight`, including detached `Reflect.apply(...)` calls with boxed callbacks and optional receiver binding where applicable. Test: `dynamic_array_prototype_hof`
 - Dynamic arrays inherit callable `Array.prototype.toString`, `toLocaleString`, and `valueOf`, including detached `Reflect.apply(...)` calls, comma stringification, and receiver identity from `valueOf`. Test: `dynamic_array_prototype_string_value`
@@ -2235,6 +2236,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_extensibility` | typed array Object/Reflect extensibility, seal, freeze, compatible frozen descriptor redefinition, and write state |
 | `array_prototype_array_like` | detached Array.prototype read methods over dynamic array-like object receivers |
 | `array_prototype_array_like_copy` | detached Array.prototype slice/toReversed over dynamic array-like object receivers |
+| `array_prototype_array_like_hof` | detached Array.prototype higher-order methods over dynamic array-like object receivers |
 | `array_prototype_array_like_mutators` | detached Array.prototype push/pop/shift/unshift over dynamic array-like object receivers |
 | `array_prototypes` | typed array Object/Reflect prototype reads and writes with non-extensible guards |
 | `array_prototype_value` | static Array.prototype value identity, prototype, own-key, and detached method behavior |
