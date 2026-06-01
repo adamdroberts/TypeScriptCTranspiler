@@ -1293,6 +1293,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-runtime-expression-default-package": cjsPackage("tsc2c-cjs-runtime-expression-default-package", {
         "index.js": 'module.exports = {\n  label: "expr-" + "default",\n  count: +(40 + 2),\n  enabled: !false,\n  mask: ~-1,\n  nested: { sum: 20 + 2 },\n  values: [1 + 1, -(3)]\n};\n',
     }),
+    "tsc2c-cjs-runtime-object-dynamic-expressions": cjsPackage("tsc2c-cjs-runtime-object-dynamic-expressions", {
+        "index.js": 'const x = 5;\nconst y = 10;\nconst data = { value: 3 };\nfunction makeDynamicDefault(label) { return "made-" + label; }\nmodule.exports = {\n  binary: x + y,\n  unary: typeof x,\n  conditional: x > 2 ? "greater" : "less",\n  logical: (x > 0) && true,\n  nullish: null ?? makeDynamicDefault("nullish"),\n  call: makeDynamicDefault("value"),\n  member: data.value,\n  nested: { pick: y > 5 ? x * 2 : 0, made: makeDynamicDefault("nested") },\n  values: [typeof y, x < y ? "lt" : "ge", makeDynamicDefault("array")]\n};\n',
+    }),
     "tsc2c-cjs-runtime-binary-default-package": cjsPackage("tsc2c-cjs-runtime-binary-default-package", {
         "index.js": 'module.exports = "binary-" + (20 + 2);\n',
     }),

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS object-literal `module.exports` defaults now accept bounded runtime-computed property and array element initializers while preserving finite AOT named-export metadata. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 - Trapless function-target Proxy values now forward `prototype` writes through ordinary assignment and `Reflect.set(...)`. Test: `proxy_function_set_forward`.
 - Lazy generator lowering now resumes single suspended `yield` values inside standalone expression statements such as calls whose result is discarded. Test: `generator_lazy_yield_expression_statement`.
 - Dynamic object prototype lookup now traverses array and function prototype values for property reads, `in` / `Reflect.has`, and receiver-aware `Reflect.set`. Test: `object_non_ordinary_prototypes`.
