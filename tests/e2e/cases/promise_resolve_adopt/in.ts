@@ -1,3 +1,5 @@
+import { setImmediate as immediate } from "node:timers/promises";
+
 let ignored = "";
 function mark(label: string): string {
     ignored += label;
@@ -42,3 +44,8 @@ adoptedPending
 console.log("pending:", adoptedPending.toString());
 console.log("callbacks:", callbacks);
 console.log("ignored:", ignored);
+
+const delayedSource = immediate("later");
+Promise.resolve(delayedSource).then((value: string) => {
+    console.log("delayed:", value);
+});

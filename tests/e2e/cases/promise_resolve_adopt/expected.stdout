@@ -3,4 +3,5 @@ callbacks: 0
 ignored: frp
 fulfilled: ready
 rejected: bad
+delayed: later
 recovered: handled
