@@ -1600,6 +1600,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_switch_fallthrough` | lazy generators resume across top-level switch fallthrough suspension points |
 | `generator_lazy_switch_nested` | lazy generators resume across switch cases with nested block-local breaks |
 | `generator_lazy_switch_nested_switch` | lazy generators resume across nested switch statement suspension points |
+| `generator_lazy_try` | lazy generators support non-suspending try/catch/finally statements |
 | `generator_lazy_while` | lazy generators resume across simple while-loop suspension points |
 | `generator_lazy_yield_expression` | lazy generators resume single suspended yield expressions |
 | `generator_lazy_yield_conditional` | lazy generators resume single suspended yield conditional expressions |

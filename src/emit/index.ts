@@ -23411,6 +23411,10 @@ class Emitter {
             return true;
         }
 
+        if (ts.isTryStatement(stmt)) {
+            return !this.nodeContainsYield(stmt);
+        }
+
         if (ts.isExpressionStatement(stmt) || ts.isVariableStatement(stmt) || ts.isReturnStatement(stmt)) {
             if (ts.isVariableStatement(stmt)) {
                 for (const decl of stmt.declarationList.declarations) {
