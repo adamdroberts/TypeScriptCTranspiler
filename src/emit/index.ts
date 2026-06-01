@@ -13742,6 +13742,34 @@ class Emitter {
         return null;
     }
 
+    private sideEffectFreeGlobalNumberPredicateCallValue(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean | null {
+        if (
+            !ts.isCallExpression(expr) ||
+            !ts.isIdentifier(expr.expression)
+        ) {
+            return null;
+        }
+        const name = expr.expression.text;
+        if (name !== "isFinite" && name !== "isNaN") return null;
+        if (
+            !this.isUnshadowedGlobalIdentifier(expr.expression, name) ||
+            expr.arguments.length < 1 ||
+            !this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)
+        ) {
+            return null;
+        }
+        const arg = expr.arguments[0]!;
+        let value = this.sideEffectFreeNumericLiteralSameValueZeroValue(arg, seenConsts);
+        if (value === null) {
+            value = this.sideEffectFreePrimitiveNumberValue(arg, seenConsts);
+        }
+        if (value === null) return null;
+        return name === "isFinite" ? Number.isFinite(value) : Number.isNaN(value);
+    }
+
     private isSideEffectFreeBigIntCoercion(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -26858,6 +26886,8 @@ class Emitter {
         if (stringBool !== null) return stringBool;
         const numberBool = this.sideEffectFreeNumberPredicateCallValue(unwrapped, seenConsts);
         if (numberBool !== null) return numberBool;
+        const globalNumberBool = this.sideEffectFreeGlobalNumberPredicateCallValue(unwrapped, seenConsts);
+        if (globalNumberBool !== null) return globalNumberBool;
         if (
             ts.isCallExpression(unwrapped) &&
             ts.isPropertyAccessExpression(unwrapped.expression) &&
