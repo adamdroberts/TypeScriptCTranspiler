@@ -116,6 +116,8 @@ type CommonJsObjectAssignExportEntry =
     | ts.MethodDeclaration
     | ts.GetAccessorDeclaration;
 
+const MAX_STATIC_COMPUTED_PROPERTY_ALTERNATIVES = 64;
+
 interface CommonJsObjectAssignExport {
     call: ts.CallExpression;
     name: string;
@@ -18922,10 +18924,7 @@ class Emitter {
             return [expr.name.text];
         }
         if (ts.isElementAccessExpression(expr)) {
-            const staticName = this.staticComputedPropertyExpression(expr.argumentExpression);
-            const names = staticName == null
-                ? staticStringExpressionTexts(expr.argumentExpression)
-                : [staticName];
+            const names = this.staticComputedPropertyExpressionTexts(expr.argumentExpression);
             if (names.length === 0) return [];
             if (
                 ts.isIdentifier(expr.expression) &&
@@ -46874,7 +46873,46 @@ class Emitter {
 
     private staticComputedPropertyExpressionTexts(expr: ts.Expression): string[] {
         const direct = this.staticComputedPropertyExpression(expr);
-        return direct !== null ? [direct] : staticStringExpressionTexts(expr);
+        if (direct !== null) return [direct];
+        const syntaxTexts = staticStringExpressionTexts(expr);
+        if (syntaxTexts.length > 0) return syntaxTexts;
+        return this.staticLiteralUnionPropertyTexts(expr);
+    }
+
+    private staticLiteralUnionPropertyTexts(expr: ts.Expression): string[] {
+        const ty = this.checker.getTypeAtLocation(expr);
+        if ((ty.flags & ts.TypeFlags.Union) === 0) return [];
+        const values: string[] = [];
+        const seen = new Set<string>();
+        for (const part of (ty as ts.UnionType).types) {
+            const text = this.staticLiteralPropertyTextFromType(part);
+            if (text === null) return [];
+            if (seen.has(text)) continue;
+            seen.add(text);
+            values.push(text);
+            if (values.length > MAX_STATIC_COMPUTED_PROPERTY_ALTERNATIVES) return [];
+        }
+        return values;
+    }
+
+    private staticLiteralPropertyTextFromType(ty: ts.Type): string | null {
+        if (ty.isStringLiteral()) return ty.value;
+        if (ty.isNumberLiteral()) {
+            const val = ty.value;
+            if (!Number.isFinite(val)) return null;
+            return Object.is(val, -0) ? "0" : String(val);
+        }
+        if (ty.flags & ts.TypeFlags.BigIntLiteral) {
+            const val = (ty as any).value;
+            return val ? (val.negative ? "-" : "") + val.base10Value : null;
+        }
+        if (ty.flags & ts.TypeFlags.BooleanLiteral) {
+            const intrinsicName = (ty as any).intrinsicName;
+            return intrinsicName === "true" || intrinsicName === "false" ? intrinsicName : null;
+        }
+        if (ty.flags & ts.TypeFlags.Null) return "null";
+        if (ty.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Void)) return "undefined";
+        return null;
     }
 
     private staticComputedPropertyExpression(expr: ts.Expression): string | null {
