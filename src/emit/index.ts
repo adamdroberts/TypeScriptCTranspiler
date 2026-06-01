@@ -17859,6 +17859,12 @@ class Emitter {
             return true;
         }
         if (
+            ts.isPrefixUnaryExpression(cur) &&
+            this.isCommonJsModuleExportsDefaultPrefixOperator(cur.operator)
+        ) {
+            return this.isCommonJsModuleExportsDefaultInitializerValue(cur.operand);
+        }
+        if (
             ts.isBinaryExpression(cur) &&
             this.isCommonJsModuleExportsDefaultBinaryOperator(cur.operatorToken.kind)
         ) {

@@ -1358,6 +1358,12 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-runtime-computed-conditional-default-package": cjsPackage("tsc2c-cjs-runtime-computed-conditional-default-package", {
         "index.js": 'function enabled() { return Date.now() >= 0; }\nmodule.exports = enabled() ? "computed-conditional-yes" : "computed-conditional-no";\n',
     }),
+    "tsc2c-cjs-runtime-computed-prefix-number-default-package": cjsPackage("tsc2c-cjs-runtime-computed-prefix-number-default-package", {
+        "index.js": 'function value() { return 42; }\nmodule.exports = +value();\n',
+    }),
+    "tsc2c-cjs-runtime-computed-prefix-boolean-default-package": cjsPackage("tsc2c-cjs-runtime-computed-prefix-boolean-default-package", {
+        "index.js": 'function enabled() { return 0; }\nmodule.exports = !enabled();\n',
+    }),
     "tsc2c-cjs-runtime-postfix-default-package": cjsPackage("tsc2c-cjs-runtime-postfix-default-package", {
         "index.js": "let counter = 4;\nmodule.exports = counter++;\n",
     }),
