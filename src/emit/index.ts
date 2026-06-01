@@ -18045,7 +18045,7 @@ class Emitter {
 
     private commonJsFactoryWrapperInvocation(call: ts.CallExpression): {
         fn: ts.FunctionExpression | ts.ArrowFunction;
-        args: ts.NodeArray<ts.Expression>;
+        args: readonly ts.Expression[];
     } | null {
         const outer = this.commonJsIifeCallee(call.expression);
         if (!outer || !ts.isBlock(outer.body) || call.arguments.length < outer.parameters.length) return null;
@@ -18059,7 +18059,7 @@ class Emitter {
             }
         }
         if (factories.size === 0) return null;
-        const invocations: { fn: ts.FunctionExpression | ts.ArrowFunction; args: ts.NodeArray<ts.Expression> }[] = [];
+        const invocations: { fn: ts.FunctionExpression | ts.ArrowFunction; args: readonly ts.Expression[] }[] = [];
         const visit = (node: ts.Node): void => {
             if (
                 node !== outer &&
@@ -18082,6 +18082,24 @@ class Emitter {
                     if (fn && this.commonJsFactoryWrapperArguments(node.arguments)) {
                         invocations.push({ fn, args: node.arguments });
                     }
+                } else if (ts.isPropertyAccessExpression(callee)) {
+                    let target: ts.Expression = callee.expression;
+                    while (ts.isParenthesizedExpression(target)) target = target.expression;
+                    if (ts.isIdentifier(target)) {
+                        const fn = factories.get(target.text);
+                        if (fn && callee.name.text === "call") {
+                            const args = node.arguments.slice(1);
+                            if (this.commonJsFactoryWrapperArguments(args)) {
+                                invocations.push({ fn, args });
+                            }
+                        } else if (fn && callee.name.text === "apply" && node.arguments.length >= 2) {
+                            let argArray = node.arguments[1]!;
+                            while (ts.isParenthesizedExpression(argArray)) argArray = argArray.expression;
+                            if (ts.isArrayLiteralExpression(argArray) && this.commonJsFactoryWrapperArguments(argArray.elements)) {
+                                invocations.push({ fn, args: argArray.elements });
+                            }
+                        }
+                    }
                 }
             }
             ts.forEachChild(node, visit);
@@ -18092,7 +18110,7 @@ class Emitter {
         return invocation.args.length >= invocation.fn.parameters.length ? invocation : null;
     }
 
-    private commonJsFactoryWrapperArguments(args: ts.NodeArray<ts.Expression>): boolean {
+    private commonJsFactoryWrapperArguments(args: readonly ts.Expression[]): boolean {
         let foundWrapperArg = false;
         for (const arg of args) {
             if (!this.isCommonJsWrapperArgumentExpression(arg)) return false;
@@ -19227,7 +19245,7 @@ class Emitter {
     }
 
     private commonJsFactoryWrapperInvocationForFunction(fn: ts.FunctionExpression | ts.ArrowFunction): {
-        args: ts.NodeArray<ts.Expression>;
+        args: readonly ts.Expression[];
     } | null {
         let cur: ts.Node = fn;
         while (cur.parent) {
