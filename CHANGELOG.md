@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS whole-value `module.exports = ...` defaults now accept `delete obj.key` expressions by boxing the boolean result while preserving the delete side effect. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 - Process stdio streams now expose `stdin.readableObjectMode` and `stdout` / `stderr` `writableObjectMode` as `false` in the bounded stream metadata subset. Test: `process_stdio_object_mode`.
 - CommonJS whole-value `module.exports = ...` defaults now accept postfix update expressions such as `counter++` by boxing the old-value result as a dynamic value. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 - Generated-C DCE now removes unreferenced top-level and local variable bindings with side-effectful initializers while preserving those initializer side effects as standalone expressions. Test: `generated_c_dce`.
