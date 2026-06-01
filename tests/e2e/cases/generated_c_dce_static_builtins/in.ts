@@ -19,11 +19,18 @@ Array.isArray(new WeakMap([[{}, "dead_dce_array_is_weakmap_static"]]));
 Array.isArray(new WeakSet([{}]));
 Array.isArray(new WeakRef({ marker: "dead_dce_array_is_weakref_static" }));
 Array.isArray(Buffer.from("dead_dce_array_is_buffer_static"));
+Array.isArray({ marker: "dead_dce_array_is_object_literal_static" });
 if (Array.isArray(new FinalizationRegistry(() => "dead_dce_array_is_finreg_static"))) {
     console.log("dead_dce_array_is_finreg_branch_static");
 }
+if (Array.isArray({ marker: "dead_dce_array_is_object_literal_branch_static" })) {
+    console.log("dead_dce_array_is_object_literal_branch_static");
+}
 if (Number.isFinite("dead_dce_number_isfinite_string_static")) {
     console.log("dead_dce_number_isfinite_string_branch_static");
+}
+if (Number.isFinite({ marker: "dead_dce_number_isfinite_object_static" })) {
+    console.log("dead_dce_number_isfinite_object_branch_static");
 }
 if (Number.isFinite(Infinity)) {
     console.log("dead_dce_number_isfinite_infinity_branch_static");
@@ -31,17 +38,26 @@ if (Number.isFinite(Infinity)) {
 if (Number.isInteger("dead_dce_number_isinteger_string_static")) {
     console.log("dead_dce_number_isinteger_string_branch_static");
 }
+if (Number.isInteger(["dead_dce_number_isinteger_array_static"])) {
+    console.log("dead_dce_number_isinteger_array_branch_static");
+}
 if (Number.isInteger(1.5)) {
     console.log("dead_dce_number_isinteger_fraction_branch_static");
 }
 if (Number.isNaN("dead_dce_number_isnan_string_static")) {
     console.log("dead_dce_number_isnan_string_branch_static");
 }
+if (Number.isNaN(["dead_dce_number_isnan_array_static"])) {
+    console.log("dead_dce_number_isnan_array_branch_static");
+}
 if (Number.isNaN(0)) {
     console.log("dead_dce_number_isnan_zero_branch_static");
 }
 if (Number.isSafeInteger("dead_dce_number_issafeinteger_string_static")) {
     console.log("dead_dce_number_issafeinteger_string_branch_static");
+}
+if (Number.isSafeInteger({ marker: "dead_dce_number_issafeinteger_object_static" })) {
+    console.log("dead_dce_number_issafeinteger_object_branch_static");
 }
 if (Number.isSafeInteger(9007199254740992)) {
     console.log("dead_dce_number_issafeinteger_large_branch_static");

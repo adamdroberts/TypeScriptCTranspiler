@@ -13736,7 +13736,8 @@ class Emitter {
             this.sideEffectFreePrimitiveBooleanValue(unwrappedArg, seenConsts) !== null ||
             this.staticNullishState(unwrappedArg, seenConsts) === "nullish" ||
             this.isSideEffectFreeUndefinedValue(unwrappedArg, seenConsts) ||
-            this.isSideEffectFreeFreshNonArrayBuiltinOperand(unwrappedArg, seenConsts)
+            this.isSideEffectFreeFreshNonArrayBuiltinOperand(unwrappedArg, seenConsts) ||
+            this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(unwrappedArg, seenConsts)
         ) {
             return false;
         }
@@ -27059,7 +27060,11 @@ class Emitter {
                 this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrappedArg, seenConsts) !== null ||
                 this.sideEffectFreeBigIntLiteralText(unwrappedArg, seenConsts) !== null ||
                 this.sideEffectFreePrimitiveBooleanValue(unwrappedArg, seenConsts) !== null ||
-                this.isSideEffectFreeFreshNonArrayBuiltinOperand(unwrappedArg, seenConsts)
+                this.isSideEffectFreeFreshNonArrayBuiltinOperand(unwrappedArg, seenConsts) ||
+                (
+                    ts.isObjectLiteralExpression(unwrappedArg) &&
+                    this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(unwrappedArg, seenConsts)
+                )
             ) {
                 return false;
             }

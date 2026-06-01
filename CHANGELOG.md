@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE static boolean analysis now folds `Number.isFinite(...)`, `Number.isInteger(...)`, `Number.isNaN(...)`, and `Number.isSafeInteger(...)` over side-effect-free fresh object/array literals, and `Array.isArray(...)` over fresh object literals. Test: `generated_c_dce_static_builtins`.
 - Extended the narrow lazy generator lowering to resume a single suspended `yield` inside standard template expressions. Test: `generator_lazy_yield_template`.
 - Prototype cycle checks now follow dynamic prototype lookup for object, array, and function chains, so proxy-backed virtual prototype cycles are rejected by Object and Reflect `setPrototypeOf`. Test: `object_prototype_cycles`.
 - CommonJS whole-value `module.exports = ...` defaults now accept TypeScript-only assertion wrappers such as `as`, `satisfies`, and non-null assertions around already-supported static or runtime-computed defaults. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.

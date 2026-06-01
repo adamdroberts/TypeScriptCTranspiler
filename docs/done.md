@@ -1048,7 +1048,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Generated-C DCE static primitive equality folds side-effect-free loose equality across string, number, boolean, and nullish operands. Test: `generated_c_dce_const`
 - Generated-C DCE static primitive equality folds side-effect-free loose equality between BigInt operands and statically coercible number, string, or boolean counterparts. Test: `generated_c_dce_const`
 - Generated-C DCE static boolean analysis folds side-effect-free numeric and string relational comparisons. Test: `generated_c_dce_const`
-- Generated-C DCE static boolean analysis folds side-effect-free `Array.isArray(...)` calls over statically known array, primitive, and pure fresh non-array built-in operands. Tests: `generated_c_dce_const`, `generated_c_dce_static_builtins`
+- Generated-C DCE static boolean analysis folds side-effect-free `Array.isArray(...)` calls over statically known array, primitive, fresh object literal, and pure fresh non-array built-in operands, and folds `Number.isFinite(...)`, `Number.isInteger(...)`, `Number.isNaN(...)`, and `Number.isSafeInteger(...)` calls over fresh object/array literals. Tests: `generated_c_dce_const`, `generated_c_dce_static_builtins`
 - Generated-C DCE static primitive equality folds `typeof` over side-effect-free literal and const operands. Test: `generated_c_dce_const`
 - Generated-C DCE static `typeof` analysis folds side-effect-free computed primitive operands. Test: `generated_c_dce_const`
 - Generated-C DCE static `typeof` analysis folds side-effect-free conditional, logical `&&`/`||`, and nullish `??` expression trees when their resulting operand type is statically known. Test: `generated_c_dce_const`
@@ -1634,7 +1634,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generated_c_dce` | unreferenced non-exported top-level functions are omitted from generated C |
 | `generated_c_dce_class` | unreferenced no-side-effect class declarations and class-expression constants are omitted from generated C |
 | `generated_c_dce_const` | generated-C DCE prunes broad pure static expression, helper, Promise, collection, and object-operation trees |
-| `generated_c_dce_static_builtins` | generated-C DCE prunes unused safe Symbol helpers, object prototype checks, and wrapper constructors |
+| `generated_c_dce_static_builtins` | generated-C DCE prunes unused safe Symbol helpers, object prototype checks, wrapper constructors, and static built-in predicate calls |
 | `generated_c_dce_lifted_arrow` | unreferenced non-exported lifted top-level arrow constants are omitted from generated C |
 | `global_number_predicates` | global isNaN/isFinite coercion for typed and dynamic values |
 | `group_by_this_param` | Object.groupBy and Map.groupBy callbacks with explicit this parameters |
