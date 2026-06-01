@@ -327,6 +327,7 @@ interface ReflectConstructor {
 declare var Reflect: ReflectConstructor;
 
 interface ArrayConstructor {
+    readonly prototype: any[];
     isArray(arg: unknown, ...ignored: any[]): arg is any[];
     from(s: string): string[];
     from<T>(arr: T[]): T[];
