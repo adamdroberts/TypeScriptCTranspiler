@@ -1130,6 +1130,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_function_values_immediate` | async function values without await returning immediate Promise records |
 | `async_methods_immediate` | async class methods without await returning immediate Promise records |
 | `async_throw_rejection` | synchronous throws in immediate async functions become rejected Promise records |
+| `array_buffer_dataview` | used ArrayBuffer and DataView constructor/property runtime subset |
 | `array_concat_values` | Array.concat with array, single-value, and spread-in-array-literal arguments |
 | `array_copy_within` | Array.copyWithin overlapping copy |
 | `array_entries` | Array.entries materialized `[number, value]` arrays |

@@ -30,6 +30,8 @@ export type CTypeKind =
     | "date"
     | "error"
     | "buffer"
+    | "arraybuffer"
+    | "dataview"
     | "textencoder"
     | "textdecoder"
     | "fsstats"
@@ -130,6 +132,8 @@ export const T_URL_SEARCH_PARAMS: CType = { kind: "urlsearchparams", c: "tsc_url
 export const T_DATE: CType = { kind: "date", c: "tsc_date_t*" };
 export const T_ERROR: CType = { kind: "error", c: "tsc_error_t*" };
 export const T_BUFFER: CType = { kind: "buffer", c: "tsc_buffer_t*" };
+export const T_ARRAY_BUFFER: CType = { kind: "arraybuffer", c: "tsc_array_buffer_t*" };
+export const T_DATA_VIEW: CType = { kind: "dataview", c: "tsc_data_view_t*" };
 export const T_TEXT_ENCODER: CType = { kind: "textencoder", c: "tsc_text_encoder_t*" };
 export const T_TEXT_DECODER: CType = { kind: "textdecoder", c: "tsc_text_decoder_t*" };
 export const T_FS_STATS: CType = { kind: "fsstats", c: "tsc_fs_stats_t*" };
@@ -444,6 +448,8 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
             sym?.getName() === "AggregateError"
         ) return T_ERROR;
         if (sym?.getName() === "Buffer") return T_BUFFER;
+        if (sym?.getName() === "ArrayBuffer") return T_ARRAY_BUFFER;
+        if (sym?.getName() === "DataView") return T_DATA_VIEW;
         if (sym?.getName() === "TextEncoder") return T_TEXT_ENCODER;
         if (sym?.getName() === "TextDecoder") return T_TEXT_DECODER;
         if (sym?.getName() === "FSStats") return T_FS_STATS;
