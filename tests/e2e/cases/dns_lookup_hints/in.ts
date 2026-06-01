@@ -11,6 +11,8 @@ const ORDER = "verbatim";
 const VERBATIM = true;
 const CALLBACK_ORDER_OPTIONS = { family: 4, order: ORDER } as const;
 const PROMISE_VERBATIM_OPTIONS = { family: 4, verbatim: VERBATIM } as const;
+const CALLBACK_VERBATIM_FALSE_OPTIONS = { family: 4, verbatim: false } as const;
+const PROMISE_ORDER_OPTIONS = { family: 4, order: "ipv6first" } as const;
 
 console.log("constants:", dns.ADDRCONFIG, nodeDns.V4MAPPED, DNS_ADDRCONFIG, ALL);
 
@@ -36,4 +38,12 @@ lookup("127.0.0.1", CALLBACK_ORDER_OPTIONS, (err: any, address: string, family: 
 
 promises.lookup("127.0.0.1", PROMISE_VERBATIM_OPTIONS).then((result: any): void => {
     console.log("promise verbatim alias:", result.address.indexOf("127.0.0.1") >= 0, result.family);
+});
+
+lookup("127.0.0.1", CALLBACK_VERBATIM_FALSE_OPTIONS, (err: any, address: string, family: number): void => {
+    console.log("callback verbatim false:", err === null, address.indexOf("127.0.0.1") >= 0, family);
+});
+
+promises.lookup("127.0.0.1", PROMISE_ORDER_OPTIONS).then((result: any): void => {
+    console.log("promise order option:", result.address.indexOf("127.0.0.1") >= 0, result.family);
 });

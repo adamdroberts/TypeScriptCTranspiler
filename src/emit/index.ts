@@ -37458,7 +37458,7 @@ class Emitter {
                     ty: arrayType(T_VALUE),
                 };
                 const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, addresses], callbackNode);
-                return `({ tsc_dns_lookup_all_result_t ${result} = tsc_dns_lookup_all(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}); (void)${callbackCall}; })`;
+                return `({ tsc_dns_lookup_all_result_t ${result} = tsc_dns_lookup_all(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}, ${lookupOptions.order.toFixed(1)}); (void)${callbackCall}; })`;
             }
             const address: EmitResult = {
                 c: `${result}.address ? ${result}.address : tsc_str_from_lit("", 0)`,
@@ -37466,7 +37466,7 @@ class Emitter {
             };
             const family: EmitResult = { c: `${result}.family`, ty: T_NUMBER };
             const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, address, family], callbackNode);
-            return `({ tsc_dns_lookup_result_t ${result} = tsc_dns_lookup(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}); (void)${callbackCall}; })`;
+            return `({ tsc_dns_lookup_result_t ${result} = tsc_dns_lookup(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}, ${lookupOptions.order.toFixed(1)}); (void)${callbackCall}; })`;
         });
     }
 
@@ -37542,8 +37542,17 @@ class Emitter {
         unsupported(expr, "dns.lookup hints must be a numeric literal or DNS hint constants in this subset");
     }
 
-    private dnsLookupOptions(options: ts.Expression | undefined): { family: number; all: boolean; hints: number } {
-        const out = { family: 0, all: false, hints: 0 };
+    private dnsLookupOrderValue(order: string): number {
+        switch (order) {
+            case "verbatim": return 1;
+            case "ipv4first": return 2;
+            case "ipv6first": return 3;
+        }
+        return 0;
+    }
+
+    private dnsLookupOptions(options: ts.Expression | undefined): { family: number; all: boolean; hints: number; order: number } {
+        const out = { family: 0, all: false, hints: 0, order: 0 };
         if (!options || this.isUndefinedLikeExpression(options) || this.isNullExpression(options)) return out;
         options = this.resolveSideEffectFreeEarlierConstExpression(options);
         if (this.isUndefinedLikeExpression(options) || this.isNullExpression(options)) return out;
@@ -37558,6 +37567,8 @@ class Emitter {
         if (!ts.isObjectLiteralExpression(options)) {
             unsupported(options, "dns.lookup options must be a numeric family or object literal in this subset");
         }
+        let verbatimOrder: number | null = null;
+        let explicitOrder: number | null = null;
         for (const prop of options.properties) {
             let key: string | null = null;
             let valueNode: ts.Expression | undefined;
@@ -37596,6 +37607,7 @@ class Emitter {
                 if (verbatim === null) {
                     unsupported(valueNode, "dns.lookup verbatim must be a boolean literal in this subset");
                 }
+                verbatimOrder = verbatim ? 1 : 2;
             } else if (key === "order") {
                 const order = this.dnsLookupStringValue(valueNode);
                 if (order === null) {
@@ -37604,10 +37616,12 @@ class Emitter {
                 if (order !== "verbatim" && order !== "ipv4first" && order !== "ipv6first") {
                     unsupported(valueNode, "dns.lookup order must be verbatim, ipv4first, or ipv6first");
                 }
+                explicitOrder = this.dnsLookupOrderValue(order);
             } else if (key === "hints") {
                 out.hints = this.dnsLookupHintValue(valueNode);
             }
         }
+        out.order = explicitOrder ?? verbatimOrder ?? 0;
         return out;
     }
 
@@ -37715,7 +37729,7 @@ class Emitter {
             if (lookupOptions.all) {
                 const addresses = `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`;
                 return `({ ` +
-                    `tsc_dns_lookup_all_result_t ${result} = tsc_dns_lookup_all(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}); ` +
+                    `tsc_dns_lookup_all_result_t ${result} = tsc_dns_lookup_all(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}, ${lookupOptions.order.toFixed(1)}); ` +
                     `tsc_promise_t* ${out}; ` +
                     `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
                     `${out} = tsc_promise_resolve(tsc_value_array(${addresses})); } ` +
@@ -37724,7 +37738,7 @@ class Emitter {
             const obj = this.freshTemp("_dns_result");
             const address = `${result}.address ? ${result}.address : tsc_str_from_lit("", 0)`;
             return `({ ` +
-                `tsc_dns_lookup_result_t ${result} = tsc_dns_lookup(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}); ` +
+                `tsc_dns_lookup_result_t ${result} = tsc_dns_lookup(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}, ${lookupOptions.order.toFixed(1)}); ` +
                 `tsc_promise_t* ${out}; ` +
                 `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
                 `tsc_object_t* ${obj} = tsc_object_new(); ` +

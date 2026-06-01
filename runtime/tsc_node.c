@@ -1634,6 +1634,45 @@ int tsc_dns_lookup_ai_flags(double hints) {
 
 static const char* tsc_dns_default_result_order = "verbatim";
 
+static const char* tsc_dns_effective_result_order(double order_value) {
+    if (order_value == 1.0) return "verbatim";
+    if (order_value == 2.0) return "ipv4first";
+    if (order_value == 3.0) return "ipv6first";
+    return tsc_dns_default_result_order;
+}
+
+static bool tsc_dns_addrinfo_entry(struct addrinfo* cur, tsc_str_t** address, double* family) {
+    char buf[INET6_ADDRSTRLEN];
+    void* src = NULL;
+    if (cur->ai_family == AF_INET) {
+        src = &((struct sockaddr_in*)cur->ai_addr)->sin_addr;
+        *family = 4.0;
+    } else if (cur->ai_family == AF_INET6) {
+        src = &((struct sockaddr_in6*)cur->ai_addr)->sin6_addr;
+        *family = 6.0;
+    } else {
+        return false;
+    }
+    if (!src || !inet_ntop(cur->ai_family, src, buf, sizeof(buf))) return false;
+    *address = tsc_str_from_cstr(buf);
+    return true;
+}
+
+static void tsc_dns_lookup_all_append_family(tsc_array_t* addresses, struct addrinfo* result, int wanted_family) {
+    for (struct addrinfo* cur = result; cur; cur = cur->ai_next) {
+        if (wanted_family != AF_UNSPEC && cur->ai_family != wanted_family) continue;
+        tsc_str_t* address = NULL;
+        double resolved_family = 0.0;
+        if (tsc_dns_addrinfo_entry(cur, &address, &resolved_family)) {
+            tsc_object_t* entry = tsc_object_new();
+            tsc_object_set(entry, tsc_str_from_lit("address", 7), tsc_value_string(address));
+            tsc_object_set(entry, tsc_str_from_lit("family", 6), tsc_value_num(resolved_family));
+            tsc_value_t boxed = tsc_value_object(entry);
+            tsc_array_push_raw(addresses, &boxed);
+        }
+    }
+}
+
 tsc_str_t* tsc_dns_get_default_result_order(void) {
     return tsc_str_from_cstr(tsc_dns_default_result_order);
 }
@@ -1658,7 +1697,7 @@ void tsc_dns_set_default_result_order(tsc_str_t* order) {
     tsc_throw_str(tsc_str_from_cstr("dns.setDefaultResultOrder: invalid order"));
 }
 
-tsc_dns_lookup_result_t tsc_dns_lookup(tsc_str_t* hostname, double family, double hints_value) {
+tsc_dns_lookup_result_t tsc_dns_lookup(tsc_str_t* hostname, double family, double hints_value, double order_value) {
     tsc_dns_lookup_result_t out;
     out.error = NULL;
     out.address = NULL;
@@ -1689,19 +1728,22 @@ tsc_dns_lookup_result_t tsc_dns_lookup(tsc_str_t* hostname, double family, doubl
         out.error = tsc_str_from_cstr(gai_strerror(rc));
         return out;
     }
-    char buf[INET6_ADDRSTRLEN];
-    for (struct addrinfo* cur = result; cur; cur = cur->ai_next) {
-        void* src = NULL;
-        if (cur->ai_family == AF_INET) {
-            src = &((struct sockaddr_in*)cur->ai_addr)->sin_addr;
-            out.family = 4.0;
-        } else if (cur->ai_family == AF_INET6) {
-            src = &((struct sockaddr_in6*)cur->ai_addr)->sin6_addr;
-            out.family = 6.0;
-        }
-        if (src && inet_ntop(cur->ai_family, src, buf, sizeof(buf))) {
-            out.address = tsc_str_from_cstr(buf);
-            break;
+    const char* order = tsc_dns_effective_result_order(order_value);
+    int passes[2] = { AF_UNSPEC, AF_UNSPEC };
+    size_t pass_count = 1;
+    if (strcmp(order, "ipv4first") == 0) {
+        passes[0] = AF_INET;
+        passes[1] = AF_INET6;
+        pass_count = 2;
+    } else if (strcmp(order, "ipv6first") == 0) {
+        passes[0] = AF_INET6;
+        passes[1] = AF_INET;
+        pass_count = 2;
+    }
+    for (size_t pass = 0; pass < pass_count && !out.address; pass++) {
+        for (struct addrinfo* cur = result; cur; cur = cur->ai_next) {
+            if (passes[pass] != AF_UNSPEC && cur->ai_family != passes[pass]) continue;
+            if (tsc_dns_addrinfo_entry(cur, &out.address, &out.family)) break;
         }
     }
     freeaddrinfo(result);
@@ -1711,7 +1753,7 @@ tsc_dns_lookup_result_t tsc_dns_lookup(tsc_str_t* hostname, double family, doubl
     return out;
 }
 
-tsc_dns_lookup_all_result_t tsc_dns_lookup_all(tsc_str_t* hostname, double family, double hints_value) {
+tsc_dns_lookup_all_result_t tsc_dns_lookup_all(tsc_str_t* hostname, double family, double hints_value, double order_value) {
     tsc_dns_lookup_all_result_t out;
     out.error = NULL;
     out.addresses = NULL;
@@ -1742,24 +1784,15 @@ tsc_dns_lookup_all_result_t tsc_dns_lookup_all(tsc_str_t* hostname, double famil
         return out;
     }
     out.addresses = tsc_array_new(sizeof(tsc_value_t), 4);
-    char buf[INET6_ADDRSTRLEN];
-    for (struct addrinfo* cur = result; cur; cur = cur->ai_next) {
-        void* src = NULL;
-        double resolved_family = 0.0;
-        if (cur->ai_family == AF_INET) {
-            src = &((struct sockaddr_in*)cur->ai_addr)->sin_addr;
-            resolved_family = 4.0;
-        } else if (cur->ai_family == AF_INET6) {
-            src = &((struct sockaddr_in6*)cur->ai_addr)->sin6_addr;
-            resolved_family = 6.0;
-        }
-        if (src && inet_ntop(cur->ai_family, src, buf, sizeof(buf))) {
-            tsc_object_t* entry = tsc_object_new();
-            tsc_object_set(entry, tsc_str_from_lit("address", 7), tsc_value_string(tsc_str_from_cstr(buf)));
-            tsc_object_set(entry, tsc_str_from_lit("family", 6), tsc_value_num(resolved_family));
-            tsc_value_t boxed = tsc_value_object(entry);
-            tsc_array_push_raw(out.addresses, &boxed);
-        }
+    const char* order = tsc_dns_effective_result_order(order_value);
+    if (strcmp(order, "ipv4first") == 0) {
+        tsc_dns_lookup_all_append_family(out.addresses, result, AF_INET);
+        tsc_dns_lookup_all_append_family(out.addresses, result, AF_INET6);
+    } else if (strcmp(order, "ipv6first") == 0) {
+        tsc_dns_lookup_all_append_family(out.addresses, result, AF_INET6);
+        tsc_dns_lookup_all_append_family(out.addresses, result, AF_INET);
+    } else {
+        tsc_dns_lookup_all_append_family(out.addresses, result, AF_UNSPEC);
     }
     freeaddrinfo(result);
     if (out.addresses->len == 0) {
