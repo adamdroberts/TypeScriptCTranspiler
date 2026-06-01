@@ -798,6 +798,13 @@ tsc_str_t* child_capture_string(const uint8_t* data, size_t len) {
     return out;
 }
 
+tsc_value_t child_capture_value(const uint8_t* data, size_t len, bool return_utf8) {
+    if (return_utf8) return tsc_value_string(child_capture_string(data, len));
+    tsc_buffer_t* out = tsc_buffer_alloc((double)len, 0);
+    if (len > 0) memcpy(out->data, data, len);
+    return tsc_value_buffer(out);
+}
+
 tsc_str_t* child_signal_name(int sig) {
     switch (sig) {
 #ifdef SIGHUP
@@ -914,7 +921,7 @@ tsc_array_t* child_shell_args(const tsc_str_t* command, const tsc_array_t* args)
     return out;
 }
 
-tsc_value_t tsc_child_process_spawn_sync(const tsc_str_t* file, const tsc_array_t* args, const tsc_str_t* cwd, const tsc_str_t* input, const tsc_array_t* env, const tsc_str_t* shell, const tsc_str_t* argv0, bool pipe_stdin, bool ignore_stdin, bool capture_stdout, bool capture_stderr, bool inherit_stdout, bool inherit_stderr, bool detached, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal) {
+tsc_value_t tsc_child_process_spawn_sync(const tsc_str_t* file, const tsc_array_t* args, const tsc_str_t* cwd, const tsc_str_t* input, const tsc_array_t* env, const tsc_str_t* shell, const tsc_str_t* argv0, bool pipe_stdin, bool ignore_stdin, bool capture_stdout, bool capture_stderr, bool inherit_stdout, bool inherit_stderr, bool detached, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal, bool return_utf8) {
     if (!file) tsc_panic("child_process.spawnSync file required");
     const tsc_str_t* actual_file = file;
     const tsc_array_t* actual_args = args;
@@ -1141,10 +1148,10 @@ tsc_value_t tsc_child_process_spawn_sync(const tsc_str_t* file, const tsc_array_
             : tsc_value_undefined()));
     tsc_value_t stdin_value = tsc_value_null();
     tsc_value_t stdout_value = capture_stdout
-        ? tsc_value_string(child_capture_string(stdout_data, stdout_len))
+        ? child_capture_value(stdout_data, stdout_len, return_utf8)
         : tsc_value_null();
     tsc_value_t stderr_value = capture_stderr
-        ? tsc_value_string(child_capture_string(stderr_data, stderr_len))
+        ? child_capture_value(stderr_data, stderr_len, return_utf8)
         : tsc_value_null();
     tsc_array_t* output = tsc_array_new(sizeof(tsc_value_t), 3);
     tsc_array_push_raw(output, &stdin_value);
@@ -1170,7 +1177,7 @@ tsc_value_t tsc_child_process_exec_utf8(const tsc_str_t* command, const tsc_str_
     tsc_str_t* cmd = (tsc_str_t*)command;
     tsc_array_push_raw(args, &flag);
     tsc_array_push_raw(args, &cmd);
-    return tsc_child_process_spawn_sync(shell ? shell : tsc_str_from_lit("/bin/sh", 7), args, cwd, NULL, env, NULL, NULL, true, false, true, true, false, false, false, uid, gid, max_buffer, timeout_ms, timeout_signal);
+    return tsc_child_process_spawn_sync(shell ? shell : tsc_str_from_lit("/bin/sh", 7), args, cwd, NULL, env, NULL, NULL, true, false, true, true, false, false, false, uid, gid, max_buffer, timeout_ms, timeout_signal, true);
 }
 
 /* ---------------- URL ---------------- */
@@ -2501,6 +2508,9 @@ tsc_str_t* tsc_value_to_string(tsc_value_t v) {
             }
             if (tsc_proxy_trap_is_callable(v)) {
                 return tsc_str_from_lit("[function]", 10);
+            }
+            if (o && o->is_typed_array) {
+                return tsc_buffer_to_string((const tsc_buffer_t*)o->class_ptr, tsc_str_from_lit("utf8", 4));
             }
             return tsc_str_from_lit("[object Object]", 15);
         }

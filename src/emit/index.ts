@@ -37764,7 +37764,7 @@ class Emitter {
                     ty: T_VALUE,
                 };
                 const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, stdout, stderr], callbackNode);
-                return `({ tsc_value_t ${result} = tsc_child_process_spawn_sync(${fileC}, ${argsC}, ${cwdC}, NULL, ${envC}, ${shellC}, ${argv0C}, true, false, true, true, false, false, false, ${uidC}, ${gidC}, ${maxBufferC}, ${timeoutC}, (int)${killSignalC}); (void)${callbackCall}; })`;
+                return `({ tsc_value_t ${result} = tsc_child_process_spawn_sync(${fileC}, ${argsC}, ${cwdC}, NULL, ${envC}, ${shellC}, ${argv0C}, true, false, true, true, false, false, false, ${uidC}, ${gidC}, ${maxBufferC}, ${timeoutC}, (int)${killSignalC}, true); (void)${callbackCall}; })`;
             });
         }
         if (method === "execSync") {
@@ -37947,8 +37947,8 @@ class Emitter {
             });
         }
         if (method === "spawnSync") {
-            if (call.arguments.length < 2) {
-                unsupported(call, "child_process.spawnSync expects file, optional args, and { encoding: \"utf8\" }");
+            if (call.arguments.length < 1) {
+                unsupported(call, "child_process.spawnSync expects file, optional args, and options");
             }
             const file = this.emitExpr(call.arguments[0]!);
             const optionsAsSecondArg = this.isStaticObjectLiteralExpression(call.arguments[1]);
@@ -37957,36 +37957,22 @@ class Emitter {
             if (argsNode && (args.ty.kind !== "array" || args.ty.elem?.kind !== "string")) {
                 unsupported(argsNode, "child_process.spawnSync args must be string[]");
             }
-            const optionsNode = optionsAsSecondArg ? call.arguments[1]! : call.arguments[2]!;
-            const consumedArgCount = optionsAsSecondArg ? 2 : 3;
-            const options = this.resolveSideEffectFreeEarlierConstExpression(optionsNode);
-            if (!ts.isObjectLiteralExpression(options)) {
-                unsupported(optionsNode, "child_process.spawnSync options must be an object literal");
-            }
-            const encodingProp = options.properties.find((prop): prop is ts.PropertyAssignment =>
-                ts.isPropertyAssignment(prop) && this.staticPropertyName(prop.name) === "encoding",
-            );
-            const encoding = encodingProp
-                ? this.sideEffectFreeStringLiteralText(this.resolveSideEffectFreeEarlierConstExpression(encodingProp.initializer), new Set())
-                : null;
-            if (!encodingProp || encoding === null) {
-                unsupported(optionsNode, "child_process.spawnSync requires literal encoding: \"utf8\"");
-            }
-            if (encoding !== "utf8" && encoding !== "utf-8") {
-                unsupported(encodingProp.initializer, "child_process.spawnSync only supports utf8 encoding");
-            }
-            const cwd = this.childProcessOptionString(options, "cwd");
-            const input = this.childProcessOptionString(options, "input");
-            const env = this.childProcessEnvOption(options);
-            const shell = this.childProcessShellOption(options);
-            const argv0 = this.childProcessOptionString(options, "argv0");
-            const uid = this.childProcessNumberOption(options, "uid");
-            const gid = this.childProcessNumberOption(options, "gid");
-            const maxBuffer = this.childProcessNumberOption(options, "maxBuffer");
-            const timeout = this.childProcessNumberOption(options, "timeout");
-            const killSignal = this.childProcessKillSignalOption(options);
-            const stdio = this.childProcessSpawnSyncStdioOption(options);
-            const detached = this.childProcessBooleanOption(options, "detached");
+            const optionsNode = optionsAsSecondArg ? call.arguments[1] : call.arguments[2];
+            const consumedArgCount = optionsNode ? (optionsAsSecondArg ? 2 : 3) : (argsNode ? 2 : 1);
+            const options = this.childProcessObjectOptions(optionsNode, "spawnSync");
+            const encoding = this.childProcessEncodingOption(optionsNode, "spawnSync");
+            const cwd = options ? this.childProcessOptionString(options, "cwd") : null;
+            const input = options ? this.childProcessOptionString(options, "input") : null;
+            const env = options ? this.childProcessEnvOption(options) : null;
+            const shell = options ? this.childProcessShellOption(options) : null;
+            const argv0 = options ? this.childProcessOptionString(options, "argv0") : null;
+            const uid = options ? this.childProcessNumberOption(options, "uid") : null;
+            const gid = options ? this.childProcessNumberOption(options, "gid") : null;
+            const maxBuffer = options ? this.childProcessNumberOption(options, "maxBuffer") : null;
+            const timeout = options ? this.childProcessNumberOption(options, "timeout") : null;
+            const killSignal = options ? this.childProcessKillSignalOption(options) : "15.0";
+            const stdio = options ? this.childProcessSpawnSyncStdioOption(options) : this.childProcessDefaultSpawnSyncStdio();
+            const detached = options ? this.childProcessBooleanOption(options, "detached") : "false";
             return this.emitSequencedExpr(T_VALUE, [
                 { value: file, target: T_STRING, node: call.arguments[0]! },
                 { value: args, target: arrayType(T_STRING), node: argsNode },
@@ -38025,9 +38011,10 @@ class Emitter {
                     ? { value: timeout, target: T_NUMBER, node: timeout.node }
                     : { value: { c: "-1.0", ty: T_NUMBER } },
                 { value: { c: killSignal, ty: T_NUMBER } },
+                { value: { c: encoding ? "true" : "false", ty: T_BOOLEAN } },
                 ...this.ignoredArgumentSpecs(call.arguments, consumedArgCount),
-            ], ([fileC, argsC, cwdC, inputC, envC, shellC, argv0C, pipeStdinC, ignoreStdinC, captureStdoutC, captureStderrC, inheritStdoutC, inheritStderrC, detachedC, uidC, gidC, maxBufferC, timeoutC, killSignalC]) =>
-                `tsc_child_process_spawn_sync(${fileC}, ${argsC}, ${cwdC}, ${inputC}, ${envC}, ${shellC}, ${argv0C}, ${pipeStdinC}, ${ignoreStdinC}, ${captureStdoutC}, ${captureStderrC}, ${inheritStdoutC}, ${inheritStderrC}, ${detachedC}, ${uidC}, ${gidC}, ${maxBufferC}, ${timeoutC}, (int)${killSignalC})`,
+            ], ([fileC, argsC, cwdC, inputC, envC, shellC, argv0C, pipeStdinC, ignoreStdinC, captureStdoutC, captureStderrC, inheritStdoutC, inheritStderrC, detachedC, uidC, gidC, maxBufferC, timeoutC, killSignalC, returnUtf8C]) =>
+                `tsc_child_process_spawn_sync(${fileC}, ${argsC}, ${cwdC}, ${inputC}, ${envC}, ${shellC}, ${argv0C}, ${pipeStdinC}, ${ignoreStdinC}, ${captureStdoutC}, ${captureStderrC}, ${inheritStdoutC}, ${inheritStderrC}, ${detachedC}, ${uidC}, ${gidC}, ${maxBufferC}, ${timeoutC}, (int)${killSignalC}, ${returnUtf8C})`,
             );
         }
         unsupported(call, `child_process.${method}`);
@@ -38136,7 +38123,7 @@ class Emitter {
         );
         const value = prop ? this.staticOptionValue(prop.initializer) : undefined;
         if (!value || this.isUndefinedExpression(value)) {
-            return { pipeStdin: "true", ignoreStdin: "false", captureStdout: "true", captureStderr: "true", inheritStdout: "false", inheritStderr: "false" };
+            return this.childProcessDefaultSpawnSyncStdio();
         }
         const mode = (expr: ts.Expression, fd: 0 | 1 | 2): { pipe: string; ignore: string; capture: string; inherit: string } => {
             expr = this.staticOptionValue(expr);
@@ -38194,19 +38181,29 @@ class Emitter {
         unsupported(value, "child_process.spawnSync stdio must be a literal string or tuple in this subset");
     }
 
+    private childProcessDefaultSpawnSyncStdio(): { pipeStdin: string; ignoreStdin: string; captureStdout: string; captureStderr: string; inheritStdout: string; inheritStderr: string } {
+        return { pipeStdin: "true", ignoreStdin: "false", captureStdout: "true", captureStderr: "true", inheritStdout: "false", inheritStderr: "false" };
+    }
+
     private staticOptionValue(expr: ts.Expression): ts.Expression {
         return this.unwrapSideEffectFreeStaticExpression(
             this.sideEffectFreeEarlierConstInitializer(expr, new Set()) ?? expr,
         );
     }
 
-    private childProcessEncodingOption(options: ts.Expression | undefined, method: string): "utf8" | null {
+    private childProcessObjectOptions(options: ts.Expression | undefined, method: string): ts.ObjectLiteralExpression | null {
         if (!options) return null;
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
         if (this.isUndefinedLikeExpression(resolvedOptions)) return null;
         if (!ts.isObjectLiteralExpression(resolvedOptions)) {
-            unsupported(options, "child_process options must be an object literal in this subset");
+            unsupported(options, `child_process.${method} options must be an object literal in this subset`);
         }
+        return resolvedOptions;
+    }
+
+    private childProcessEncodingOption(options: ts.Expression | undefined, method: string): "utf8" | null {
+        const resolvedOptions = this.childProcessObjectOptions(options, method);
+        if (!resolvedOptions) return null;
         const prop = resolvedOptions.properties.find((entry): entry is ts.PropertyAssignment =>
             ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === "encoding",
         );
@@ -44410,7 +44407,9 @@ class Emitter {
                 return this.emitSequencedExpr(
                     T_BOOLEAN,
                     [{ value }, ...this.ignoredArgumentSpecs(args, 1)],
-                    () => value.ty.kind === "buffer" ? "true" : "false",
+                    ([valueC]) => value.ty.kind === "buffer"
+                        ? "true"
+                        : (value.ty.kind === "value" ? `tsc_util_types_is_typed_array(${valueC})` : "false"),
                 );
             }
             case "byteLength": {
