@@ -219,6 +219,7 @@ class Emitter {
     private generatorStack: GeneratorContext[] = [];
     private activeLazyGeneratorBreakTargets: Array<"loop" | "switch"> = [];
     private activeLazyGeneratorSwitchEndLabels: string[] = [];
+    private lazyGeneratorResumeOverride: { expr: ts.Expression; result: EmitResult } | null = null;
     private asyncFunctionStack: AsyncFunctionContext[] = [];
     private tryDepth = 0;
     private currentClass: string | null = null;
@@ -24207,7 +24208,23 @@ class Emitter {
                 : this.emitExpr(expr.argumentExpression);
             return this.emitElementAccess(expr, recv, arg);
         }
-        unsupported(expr, "lazy generator suspended yield expression currently supports direct, parenthesized, unary, typeof, void, binary, conditional, array literal, object literal, property access, and element access expressions");
+        if (ts.isCallExpression(expr) || ts.isNewExpression(expr)) {
+            const yieldExpr = this.singleYieldExpressionInExpression(expr);
+            if (!yieldExpr) unsupported(expr, "lazy generator call/new resume expects a single suspended yield");
+            const previous = this.lazyGeneratorResumeOverride;
+            this.lazyGeneratorResumeOverride = {
+                expr: yieldExpr,
+                result: { c: nextArg, ty: T_VALUE },
+            };
+            try {
+                return ts.isCallExpression(expr)
+                    ? this.emitCall(expr)
+                    : this.emitNew(expr);
+            } finally {
+                this.lazyGeneratorResumeOverride = previous;
+            }
+        }
+        unsupported(expr, "lazy generator suspended yield expression currently supports direct, parenthesized, unary, typeof, void, binary, conditional, array literal, object literal, property access, element access, call, and new expressions");
     }
 
     private emitSimpleLazyResumeArrayLiteral(al: ts.ArrayLiteralExpression, nextArg: string): EmitResult {
@@ -27690,6 +27707,9 @@ class Emitter {
     // ---------------- expressions ----------------
 
     private emitExpr(expr: ts.Expression): EmitResult {
+        if (this.lazyGeneratorResumeOverride?.expr === expr) {
+            return this.lazyGeneratorResumeOverride.result;
+        }
         if (ts.isNumericLiteral(expr)) {
             return { c: formatNumericLiteral(expr.text), ty: T_NUMBER };
         }

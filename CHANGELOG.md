@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Extended the narrow lazy generator lowering to resume a single suspended `yield` inside typed call and `new` expressions for variable initializers, assignment RHS values, and return expressions. Test: `generator_lazy_yield_call_new`.
 - Cleared non-ready timeout handles no longer keep the before-exit event loop alive when no active timers remain. Test: `timers_clear_canceled_delay`.
 - Dynamic `Array.prototype.splice(...)` now preserves argument-count semantics for omitted versus explicit `undefined` or `null` `deleteCount`, so `splice(start)` deletes the tail while `splice(start, undefined)` deletes zero elements. Test: `dynamic_array_splice`.
 - `new Promise(...)` executor `resolve(...)` callbacks now assimilate dynamic thenables and nested native Promise records instead of fulfilling with them as plain values. Test: `promise_executor_thenable_assimilation`.
