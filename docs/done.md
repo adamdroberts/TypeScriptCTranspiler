@@ -1856,6 +1856,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_commonjs_conditional_whole_object_exports` | narrow CommonJS package conditional `module.exports` object whole-value defaults resolved AOT |
 | `node_modules_commonjs_computed_conditional_exports` | narrow CommonJS package computed conditional named-exports resolved AOT |
 | `node_modules_commonjs_dynamic_computed_exports` | CommonJS finite dynamic computed named-export keys lowered to AOT export dispatch |
+| `node_modules_commonjs_computed_tuple_union_exports` | CommonJS computed named-export metadata accepts tuple keys indexed by finite numeric literal unions |
 | `node_modules_commonjs_module_exports_object_from_entries_named` | narrow CommonJS package `module.exports = Object.fromEntries([...])` static entry-array default/named export metadata plus whole-value default |
 | `node_modules_commonjs_module_exports_object_from_entries_computed_named` | narrow CommonJS package `module.exports = Object.fromEntries([...])` static computed-key default/named export metadata |
 | `node_modules_commonjs_module_exports_object_from_entries_finite_keys` | narrow CommonJS package `module.exports = Object.fromEntries([...])` named export metadata with finite dynamic key alternatives |

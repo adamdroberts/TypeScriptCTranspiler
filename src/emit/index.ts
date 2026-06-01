@@ -47016,7 +47016,93 @@ class Emitter {
         if (direct !== null) return [direct];
         const syntaxTexts = staticStringExpressionTexts(expr);
         if (syntaxTexts.length > 0) return syntaxTexts;
+        const indexedTexts = this.staticIndexedAccessPropertyTexts(expr);
+        if (indexedTexts.length > 0) return indexedTexts;
         return this.staticLiteralUnionPropertyTexts(expr);
+    }
+
+    private staticIndexedAccessPropertyTexts(expr: ts.Expression): string[] {
+        const cur = this.unwrapTransparentExpression(expr);
+        if (!ts.isElementAccessExpression(cur) || !cur.argumentExpression) return [];
+        const indices = this.staticFiniteNumericIndexValues(cur.argumentExpression);
+        if (indices.length === 0) return [];
+        const collectionType = this.checker.getTypeAtLocation(cur.expression);
+        const tupleAwareChecker = this.checker as ts.TypeChecker & {
+            isTupleType?: (type: ts.Type) => boolean;
+        };
+        if (tupleAwareChecker.isTupleType?.(collectionType)) {
+            const typeRef = collectionType as ts.TypeReference;
+            const elementTypes = typeRef.typeArguments ?? this.checker.getTypeArguments(typeRef);
+            if (!elementTypes || elementTypes.length === 0) return [];
+            const out: string[] = [];
+            const seen = new Set<string>();
+            for (const index of indices) {
+                const elementType = elementTypes[index];
+                if (!elementType) return [];
+                const texts = this.staticLiteralPropertyTextsFromType(elementType);
+                if (texts.length === 0) return [];
+                for (const text of texts) {
+                    if (seen.has(text)) continue;
+                    seen.add(text);
+                    out.push(text);
+                    if (out.length > MAX_STATIC_COMPUTED_PROPERTY_ALTERNATIVES) return [];
+                }
+            }
+            return out;
+        }
+        const arrayElementType = this.staticArrayLiteralElementType(collectionType);
+        if (!arrayElementType) return [];
+        const texts = this.staticLiteralPropertyTextsFromType(arrayElementType);
+        return texts.length > MAX_STATIC_COMPUTED_PROPERTY_ALTERNATIVES ? [] : texts;
+    }
+
+    private staticArrayLiteralElementType(type: ts.Type): ts.Type | null {
+        const symbolName = type.getSymbol()?.getName();
+        if (symbolName !== "Array" && symbolName !== "ReadonlyArray") return null;
+        const typeRef = type as ts.TypeReference;
+        const args = typeRef.typeArguments ?? this.checker.getTypeArguments(typeRef);
+        return args?.[0] ?? null;
+    }
+
+    private staticFiniteNumericIndexValues(expr: ts.Expression): number[] {
+        const values = this.staticNumberLiteralValuesFromType(this.checker.getTypeAtLocation(expr));
+        if (!values) return [];
+        const out: number[] = [];
+        const seen = new Set<number>();
+        for (const value of values) {
+            if (!Number.isInteger(value) || value < 0) return [];
+            if (seen.has(value)) continue;
+            seen.add(value);
+            out.push(value);
+            if (out.length > MAX_STATIC_COMPUTED_PROPERTY_ALTERNATIVES) return [];
+        }
+        return out;
+    }
+
+    private staticNumberLiteralValuesFromType(ty: ts.Type): number[] | null {
+        if (ty.isNumberLiteral()) return [ty.value];
+        if ((ty.flags & ts.TypeFlags.Union) === 0) return null;
+        const values: number[] = [];
+        for (const part of (ty as ts.UnionType).types) {
+            if (!part.isNumberLiteral()) return null;
+            values.push(part.value);
+        }
+        return values;
+    }
+
+    private staticLiteralPropertyTextsFromType(ty: ts.Type): string[] {
+        const parts = ty.isUnion() ? ty.types : [ty];
+        const values: string[] = [];
+        const seen = new Set<string>();
+        for (const part of parts) {
+            const text = this.staticLiteralPropertyTextFromType(part);
+            if (text === null) return [];
+            if (seen.has(text)) continue;
+            seen.add(text);
+            values.push(text);
+            if (values.length > MAX_STATIC_COMPUTED_PROPERTY_ALTERNATIVES) return [];
+        }
+        return values;
     }
 
     private staticLiteralUnionPropertyTexts(expr: ts.Expression): string[] {
