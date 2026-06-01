@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS named `default` imports now use the same whole-`module.exports` AOT fallback as default and namespace-default imports when a JavaScript CommonJS package has no `__esModule` marker and no explicit `default` property. Test: `node_modules_commonjs_mixed_interop_default`.
 - Finite dynamic `require(...)` proofs now resolve `path.join(...)`, `path.resolve(...)`, and `path.normalize(...)` specifiers from `path` / `node:path` bindings, including CommonJS `__dirname` / `__filename` constants and absolute local module paths. Test: `dynamic_require_path_join`.
 - Finite dynamic `require(...)` proofs now resolve `String.raw` tagged-template specifiers, including finite substitutions, into the AOT module graph. Test: `dynamic_require_string_raw`.
 - CommonJS outer factory wrappers now preserve finite AOT require and named-export metadata when the wrapper invokes the factory with `require`, `module`, and `exports`. Test: `node_modules_commonjs_factory_wrapper`.
