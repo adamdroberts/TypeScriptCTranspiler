@@ -1,0 +1,4 @@
+locale en init
+plugin current init
+affix locale: locale-en
+affix plugin: plugin-current

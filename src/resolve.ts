@@ -1,6 +1,8 @@
 import ts from "typescript";
 import * as path from "node:path";
 import {
+    commonJsRequireSpecifierArgument,
+    filterSpecifiersByStaticAffix,
     isCommonJsRequireCallee,
     requireCallSpecifier as staticRequireCallSpecifier,
     requireCallSpecifiers as staticRequireCallSpecifiers,
@@ -180,7 +182,16 @@ function staticRequireSpecifiers(
             if (nodeSpecs.length > 0) {
                 specs.push(...nodeSpecs);
             } else if (dynamicRequires && dynamicRequireManifestHasEntries(dynamicRequires)) {
-                specs.push(...dynamicRequireSpecifiersForFile(dynamicRequires, fileName));
+                let fileSpecs = dynamicRequireSpecifiersForFile(dynamicRequires, fileName);
+                if (ts.isCallExpression(node)) {
+                    const specifierArg = commonJsRequireSpecifierArgument(
+                        node,
+                        activeRequireAliases,
+                        activeModuleAliases,
+                    );
+                    if (specifierArg) fileSpecs = filterSpecifiersByStaticAffix(fileSpecs, specifierArg);
+                }
+                specs.push(...fileSpecs);
             }
         }
         if (ts.isCallExpression(node)) {

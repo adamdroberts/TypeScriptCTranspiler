@@ -47,7 +47,11 @@ import {
     UnsupportedError,
     formatUnsupported,
 } from "../diagnostics";
-import { staticStringExpressionText, staticStringExpressionTexts } from "../module-specifiers";
+import {
+    filterSpecifiersByStaticAffix,
+    staticStringExpressionText,
+    staticStringExpressionTexts,
+} from "../module-specifiers";
 import {
     type NativeAddonManifest,
     emptyNativeAddonManifest,
@@ -19341,9 +19345,10 @@ class Emitter {
             const staticSpecs = staticStringExpressionTexts(specifierArg);
             if (staticSpecs.length > 0) return staticSpecs;
             const dynamicRequires = this.options.dynamicRequires ?? emptyDynamicRequireManifest();
-            return dynamicRequireManifestHasEntries(dynamicRequires)
+            const specs = dynamicRequireManifestHasEntries(dynamicRequires)
                 ? dynamicRequireSpecifiersForFile(dynamicRequires, expr.getSourceFile().fileName)
                 : [];
+            return filterSpecifiersByStaticAffix(specs, specifierArg);
         }
         return null;
     }

@@ -1,0 +1,7 @@
+{
+  "requires": [
+    "./locales/en",
+    "./plugins/current.plugin",
+    "./allow_unused"
+  ]
+}
