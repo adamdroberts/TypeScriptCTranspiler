@@ -287,6 +287,7 @@ static bool proxy_has_no_integrity_traps(const tsc_object_t* o, bool for_mutatio
 }
 
 static bool descriptor_has_prop(const tsc_object_t* desc, const char* name, size_t len, tsc_value_t* out);
+static bool descriptor_value_has_prop(tsc_value_t desc, const char* name, size_t len, tsc_value_t* out);
 
 static void validate_proxy_get_result(const tsc_object_t* proxy, const tsc_str_t* key, tsc_value_t result) {
     if (!proxy || !value_is_box(proxy->proxy_target)) return;
@@ -547,15 +548,22 @@ static bool descriptor_has_prop(const tsc_object_t* desc, const char* name, size
     return true;
 }
 
-static void validate_proxy_get_own_property_descriptor_object(const tsc_object_t* desc) {
+static bool descriptor_value_has_prop(tsc_value_t desc, const char* name, size_t len, tsc_value_t* out) {
+    const tsc_str_t* key = tsc_str_from_lit(name, len);
+    if (!tsc_value_has_prop(desc, key)) return false;
+    if (out) *out = tsc_value_get_prop(desc, key);
+    return true;
+}
+
+static void validate_proxy_get_own_property_descriptor_object(tsc_value_t desc) {
     tsc_value_t value = tsc_value_undefined();
-    bool has_value = descriptor_has_prop(desc, "value", 5, &value);
+    bool has_value = descriptor_value_has_prop(desc, "value", 5, &value);
     tsc_value_t writable_value = tsc_value_undefined();
-    bool has_writable = descriptor_has_prop(desc, "writable", 8, &writable_value);
+    bool has_writable = descriptor_value_has_prop(desc, "writable", 8, &writable_value);
     tsc_value_t get_value = tsc_value_undefined();
-    bool has_get = descriptor_has_prop(desc, "get", 3, &get_value);
+    bool has_get = descriptor_value_has_prop(desc, "get", 3, &get_value);
     tsc_value_t set_value = tsc_value_undefined();
-    bool has_set = descriptor_has_prop(desc, "set", 3, &set_value);
+    bool has_set = descriptor_value_has_prop(desc, "set", 3, &set_value);
     if ((has_get || has_set) && (has_value || has_writable)) {
         tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap descriptor cannot mix value/writable with get/set"));
     }
@@ -593,21 +601,20 @@ void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* p
         if (!value_is_box(result) || value_tag(result) != TSC_VALUE_TAG_OBJECT) {
             tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap must return object or undefined"));
         }
-        const tsc_object_t* desc = (const tsc_object_t*)value_ptr(result);
-        validate_proxy_get_own_property_descriptor_object(desc);
+        validate_proxy_get_own_property_descriptor_object(result);
         tsc_value_t configurable_value = tsc_value_undefined();
-        bool has_configurable = descriptor_has_prop(desc, "configurable", 12, &configurable_value);
+        bool has_configurable = descriptor_value_has_prop(result, "configurable", 12, &configurable_value);
         bool configurable = has_configurable ? tsc_value_is_truthy(configurable_value) : false;
         tsc_value_t writable_value = tsc_value_undefined();
-        bool has_writable = descriptor_has_prop(desc, "writable", 8, &writable_value);
+        bool has_writable = descriptor_value_has_prop(result, "writable", 8, &writable_value);
         bool writable = has_writable ? tsc_value_is_truthy(writable_value) : false;
         tsc_value_t enumerable_value = tsc_value_undefined();
-        bool has_enumerable = descriptor_has_prop(desc, "enumerable", 10, &enumerable_value);
+        bool has_enumerable = descriptor_value_has_prop(result, "enumerable", 10, &enumerable_value);
         bool enumerable = has_enumerable ? tsc_value_is_truthy(enumerable_value) : false;
         tsc_value_t value = tsc_value_undefined();
-        bool has_value = descriptor_has_prop(desc, "value", 5, &value);
-        bool has_get = descriptor_has_prop(desc, "get", 3, NULL);
-        bool has_set = descriptor_has_prop(desc, "set", 3, NULL);
+        bool has_value = descriptor_value_has_prop(result, "value", 5, &value);
+        bool has_get = descriptor_value_has_prop(result, "get", 3, NULL);
+        bool has_set = descriptor_value_has_prop(result, "set", 3, NULL);
 
         if (!target_desc) {
             if (!target->extensible) {
@@ -673,21 +680,20 @@ void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* p
         if (!value_is_box(result) || value_tag(result) != TSC_VALUE_TAG_OBJECT) {
             tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap must return object or undefined"));
         }
-        const tsc_object_t* desc = (const tsc_object_t*)value_ptr(result);
-        validate_proxy_get_own_property_descriptor_object(desc);
+        validate_proxy_get_own_property_descriptor_object(result);
         tsc_value_t configurable_value = tsc_value_undefined();
-        bool has_configurable = descriptor_has_prop(desc, "configurable", 12, &configurable_value);
+        bool has_configurable = descriptor_value_has_prop(result, "configurable", 12, &configurable_value);
         bool configurable = has_configurable ? tsc_value_is_truthy(configurable_value) : false;
         tsc_value_t writable_value = tsc_value_undefined();
-        bool has_writable = descriptor_has_prop(desc, "writable", 8, &writable_value);
+        bool has_writable = descriptor_value_has_prop(result, "writable", 8, &writable_value);
         bool writable = has_writable ? tsc_value_is_truthy(writable_value) : false;
         tsc_value_t enumerable_value = tsc_value_undefined();
-        bool has_enumerable = descriptor_has_prop(desc, "enumerable", 10, &enumerable_value);
+        bool has_enumerable = descriptor_value_has_prop(result, "enumerable", 10, &enumerable_value);
         bool enumerable = has_enumerable ? tsc_value_is_truthy(enumerable_value) : false;
         tsc_value_t value = tsc_value_undefined();
-        bool has_value = descriptor_has_prop(desc, "value", 5, &value);
-        bool has_get = descriptor_has_prop(desc, "get", 3, NULL);
-        bool has_set = descriptor_has_prop(desc, "set", 3, NULL);
+        bool has_value = descriptor_value_has_prop(result, "value", 5, &value);
+        bool has_get = descriptor_value_has_prop(result, "get", 3, NULL);
+        bool has_set = descriptor_value_has_prop(result, "set", 3, NULL);
 
         if (!target_desc) {
             if (!target->extensible) {
@@ -755,23 +761,22 @@ void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* p
     if (!value_is_box(result) || value_tag(result) != TSC_VALUE_TAG_OBJECT) {
         tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap must return object or undefined"));
     }
-    const tsc_object_t* desc = (const tsc_object_t*)value_ptr(result);
-    validate_proxy_get_own_property_descriptor_object(desc);
+    validate_proxy_get_own_property_descriptor_object(result);
     tsc_value_t configurable_value = tsc_value_undefined();
-    bool has_configurable = descriptor_has_prop(desc, "configurable", 12, &configurable_value);
+    bool has_configurable = descriptor_value_has_prop(result, "configurable", 12, &configurable_value);
     bool configurable = has_configurable ? tsc_value_is_truthy(configurable_value) : false;
     tsc_value_t writable_value = tsc_value_undefined();
-    bool has_writable = descriptor_has_prop(desc, "writable", 8, &writable_value);
+    bool has_writable = descriptor_value_has_prop(result, "writable", 8, &writable_value);
     bool writable = has_writable ? tsc_value_is_truthy(writable_value) : false;
     tsc_value_t enumerable_value = tsc_value_undefined();
-    bool has_enumerable = descriptor_has_prop(desc, "enumerable", 10, &enumerable_value);
+    bool has_enumerable = descriptor_value_has_prop(result, "enumerable", 10, &enumerable_value);
     bool enumerable = has_enumerable ? tsc_value_is_truthy(enumerable_value) : false;
     tsc_value_t value = tsc_value_undefined();
-    bool has_value = descriptor_has_prop(desc, "value", 5, &value);
+    bool has_value = descriptor_value_has_prop(result, "value", 5, &value);
     tsc_value_t get_value = tsc_value_undefined();
-    bool has_get = descriptor_has_prop(desc, "get", 3, &get_value);
+    bool has_get = descriptor_value_has_prop(result, "get", 3, &get_value);
     tsc_value_t set_value = tsc_value_undefined();
-    bool has_set = descriptor_has_prop(desc, "set", 3, &set_value);
+    bool has_set = descriptor_value_has_prop(result, "set", 3, &set_value);
 
     if (!prop) {
         if (!target->extensible) {
