@@ -24054,11 +24054,7 @@ class Emitter {
             return !this.nodeContainsYield(stmt);
         }
 
-        if (ts.isThrowStatement(stmt)) {
-            return !this.nodeContainsYield(stmt);
-        }
-
-        if (ts.isExpressionStatement(stmt) || ts.isVariableStatement(stmt) || ts.isReturnStatement(stmt)) {
+        if (ts.isExpressionStatement(stmt) || ts.isVariableStatement(stmt) || ts.isReturnStatement(stmt) || ts.isThrowStatement(stmt)) {
             if (ts.isVariableStatement(stmt)) {
                 for (const decl of stmt.declarationList.declarations) {
                     if (!ts.isIdentifier(decl.name)) return false;
@@ -24156,6 +24152,9 @@ class Emitter {
         if (ts.isReturnStatement(stmt)) {
             return stmt.expression ? this.singleYieldExpressionInExpression(stmt.expression) : null;
         }
+        if (ts.isThrowStatement(stmt)) {
+            return stmt.expression ? this.singleYieldExpressionInExpression(stmt.expression) : null;
+        }
         return null;
     }
 
@@ -24201,7 +24200,7 @@ class Emitter {
                 !!decl.initializer &&
                 !!this.singleYieldExpressionInExpression(decl.initializer);
         }
-        return ts.isReturnStatement(stmt) &&
+        return (ts.isReturnStatement(stmt) || ts.isThrowStatement(stmt)) &&
             !!stmt.expression &&
             !!this.singleYieldExpressionInExpression(stmt.expression);
     }
@@ -24565,7 +24564,7 @@ class Emitter {
             return;
         }
 
-        if (ts.isThrowStatement(stmt)) {
+        if (ts.isThrowStatement(stmt) && !this.simpleLazyYieldExpression(stmt)) {
             buf.line("*state = -1;");
             buf.line("*done = true;");
             this.emitThrow(buf, stmt);
@@ -24598,6 +24597,10 @@ class Emitter {
                 buf.line(`case ${nextState}:;`);
             }
             if (this.simpleLazyYieldNeedsResume(stmt)) {
+                if (ts.isThrowStatement(stmt)) {
+                    buf.line("*state = -1;");
+                    buf.line("*done = true;");
+                }
                 this.emitSimpleLazyYieldResume(buf, stmt, "next_arg", envLocalName);
             }
             if (ts.isReturnStatement(stmt)) {
@@ -24922,6 +24925,12 @@ class Emitter {
             buf.line(`a->iter_return = ${this.coerce(value, T_VALUE, stmt.expression)};`);
             buf.line("a->iter_has_return = true;");
             buf.line("a->iter_return_consumed = false;");
+            return;
+        }
+        if (ts.isThrowStatement(stmt) && stmt.expression && this.singleYieldExpressionInExpression(stmt.expression)) {
+            const value = this.emitSimpleLazyResumeExpression(stmt.expression, nextArg);
+            const asStr = this.coerceToString(value, stmt.expression);
+            buf.line(`tsc_throw_str(${asStr});`);
             return;
         }
     }
