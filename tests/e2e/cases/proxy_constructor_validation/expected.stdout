@@ -1,4 +1,6 @@
 bad target: Cannot create proxy with a non-object as target or handler
 bad handler: Cannot create proxy with a non-object as target or handler
 bad revocable: Cannot create proxy with a non-object as target or handler
-trace: thiTHIrRj
+bad revoked target: Cannot perform 'get' on a proxy that has been revoked
+revoked handler get: Cannot perform 'get' on a proxy that has been revoked
+trace: thiTHIrRjpPqsSu
