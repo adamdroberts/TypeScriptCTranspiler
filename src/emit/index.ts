@@ -17789,6 +17789,12 @@ class Emitter {
             return this.isCommonJsRuntimeComputedModuleExportsValue(cur.right);
         }
         if (
+            ts.isBinaryExpression(cur) &&
+            this.isAssignmentOperatorKind(cur.operatorToken.kind)
+        ) {
+            return true;
+        }
+        if (
             ts.isPrefixUnaryExpression(cur) &&
             (cur.operator === ts.SyntaxKind.PlusPlusToken || cur.operator === ts.SyntaxKind.MinusMinusToken)
         ) {
