@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS whole-value `module.exports = ...` defaults now accept tagged template expressions by boxing the runtime-computed result as a dynamic value while keeping named-export metadata finite. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 - Extended the narrow lazy generator lowering to resume a single suspended `yield` inside tagged template expressions, including `String.raw`. Test: `generator_lazy_yield_tagged_template`.
 - Extended the narrow lazy generator lowering to resume a single suspended `yield` inside typed call and `new` expressions for variable initializers, assignment RHS values, and return expressions. Test: `generator_lazy_yield_call_new`.
 - Cleared non-ready timeout handles no longer keep the before-exit event loop alive when no active timers remain. Test: `timers_clear_canceled_delay`.

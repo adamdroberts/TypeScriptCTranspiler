@@ -17598,7 +17598,8 @@ class Emitter {
             ts.isNewExpression(cur) ||
             ts.isPropertyAccessExpression(cur) ||
             ts.isElementAccessExpression(cur) ||
-            ts.isTemplateExpression(cur);
+            ts.isTemplateExpression(cur) ||
+            ts.isTaggedTemplateExpression(cur);
     }
 
     private objectStaticCallName(expr: ts.Expression): string | null {
