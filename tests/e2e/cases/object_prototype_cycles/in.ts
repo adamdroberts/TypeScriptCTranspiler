@@ -19,6 +19,18 @@ Object.setPrototypeOf(fnHolder, fn);
 console.log("function reflect cycle:", Reflect.setPrototypeOf(fn, fnHolder));
 report("function object cycle", (): any => Object.setPrototypeOf(fn, fnHolder) === fn);
 
+const proxyCycleTarget: any = {};
+let proxyCycleReads = 0;
+const proxyCycleProto: any = new Proxy({ marker: "proxy" }, {
+    getPrototypeOf: function(target: any): any {
+        proxyCycleReads++;
+        return proxyCycleTarget;
+    }
+} as any);
+console.log("proxy virtual cycle:", Reflect.setPrototypeOf(proxyCycleTarget, proxyCycleProto), proxyCycleReads);
+report("proxy virtual cycle object", (): any => Object.setPrototypeOf(proxyCycleTarget, proxyCycleProto) === proxyCycleTarget);
+console.log("proxy virtual cycle reads:", proxyCycleReads);
+
 const arrSelf: any = [];
 console.log("array self cycle:", Reflect.setPrototypeOf(arrSelf, arrSelf));
 

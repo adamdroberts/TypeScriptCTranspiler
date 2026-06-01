@@ -1979,7 +1979,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `object_primitive_define_properties` | Object descriptor definition helpers reject primitive targets after argument evaluation |
 | `dynamic_object_iteration_errors` | Object.create and dynamic for-of validation failures are catchable |
 | `object_prototypes` | dynamic Object.create, getPrototypeOf/setPrototypeOf, and prototype-chain lookup |
-| `object_prototype_cycles` | Object/Reflect setPrototypeOf rejects array and function prototype cycles |
+| `object_prototype_cycles` | Object/Reflect setPrototypeOf rejects array, function, and proxy-virtual prototype cycles |
 | `object_seal_freeze` | dynamic Object.seal/freeze/isSealed/isFrozen |
 | `object_to_locale_string` | dynamic Object.prototype.toLocaleString string conversion |
 | `object_to_string` | dynamic Object.prototype.toString conversion for objects and primitives |

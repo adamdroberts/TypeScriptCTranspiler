@@ -2,6 +2,9 @@ array reflect cycle: false
 array object cycle: Object.setPrototypeOf failed
 function reflect cycle: false
 function object cycle: Object.setPrototypeOf failed
+proxy virtual cycle: false 1
+proxy virtual cycle object: Object.setPrototypeOf failed
+proxy virtual cycle reads: 2
 array self cycle: false
 function self cycle: false
 array non-cycle: true ok
