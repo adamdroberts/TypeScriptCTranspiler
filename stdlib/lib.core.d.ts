@@ -515,6 +515,13 @@ interface FinalizationRegistryConstructor {
     new <T>(cleanupCallback: (heldValue: T) => void, ...ignored: any[]): FinalizationRegistry<T>;
 }
 declare var FinalizationRegistry: FinalizationRegistryConstructor;
+interface ArrayBuffer {
+    readonly byteLength: number;
+}
+interface ArrayBufferConstructor {
+    new(byteLength?: number): ArrayBuffer;
+}
+declare var ArrayBuffer: ArrayBufferConstructor;
 interface Function {
     (...args: any[]): any;
     call(thisArg: any, ...args: any[]): any;
