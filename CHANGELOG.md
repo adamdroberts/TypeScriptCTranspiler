@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Lazy generator lowering now resumes single suspended `yield` values through equality and relational binary comparisons. Test: `generator_lazy_yield_comparison`.
 - Runtime-code manifest dispatch now falls back to the embedded Node `eval` / `Function` bridge for allow-list misses only when `--unsafe-eval` is enabled, while keeping the default AOT allow-list throw. Tests: `runtime_eval_manifest_unsafe_fallback`, `runtime_function_manifest_unsafe_fallback`.
 - Proxy `getOwnPropertyDescriptor` traps now accept array and function values as descriptor objects, matching `ToPropertyDescriptor` object coercion across object-, array-, and function-target proxies. Test: `proxy_descriptor_invariants`.
 - Dynamic function `prototype` metadata now persists `Object.defineProperty(fn, "prototype", { writable: false })`, reports the updated descriptor, blocks later prototype assignment, and preserves function-target Proxy descriptor forwarding. Test: `proxy_function_prototype_invariants`.
