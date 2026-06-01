@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Extended the narrow lazy generator lowering to resume a single suspended `yield` inside standard template expressions. Test: `generator_lazy_yield_template`.
 - Prototype cycle checks now follow dynamic prototype lookup for object, array, and function chains, so proxy-backed virtual prototype cycles are rejected by Object and Reflect `setPrototypeOf`. Test: `object_prototype_cycles`.
 - CommonJS whole-value `module.exports = ...` defaults now accept TypeScript-only assertion wrappers such as `as`, `satisfies`, and non-null assertions around already-supported static or runtime-computed defaults. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 - Proxy `getOwnPropertyDescriptor` result validation now rejects trap descriptor objects that mix data and accessor fields or report non-callable `get` / `set` hooks. Test: `proxy_descriptor_invariants`.
