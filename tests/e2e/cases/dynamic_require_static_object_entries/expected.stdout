@@ -1,0 +1,2 @@
+object entries keys require: entry-key-b
+object entries values require: entry-value-a

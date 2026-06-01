@@ -639,6 +639,12 @@ const packages: Record<string, PackageFixture> = {
             "main.js": 'exports.__esModule = true;\nconst keySource = { label: true, fallbackLabel: true };\nconst valueSource = { fn: "double", altFn: "triple" };\n/** @type {0 | 1} */\nlet labelIndex = Date.now() >= 0 ? 0 : 1;\n/** @type {0 | 1} */\nlet fnIndex = Date.now() >= 0 ? 0 : 1;\nexports[Object.keys(keySource)[labelIndex]] = "object-keys-computed";\nmodule.exports[Object.values(valueSource)[fnIndex]] = function double(value) { return value * 5; };\n',
         },
     },
+    "tsc2c-cjs-computed-object-entries-exports": {
+        packageJson: { name: "tsc2c-cjs-computed-object-entries-exports", version: "1.0.0", main: "main.js" },
+        files: {
+            "main.js": 'exports.__esModule = true;\nconst labelSource = { label: "primary", fallbackLabel: "fallback" };\nconst fnSource = { double: true, triple: true };\n/** @type {0 | 1} */\nlet labelIndex = Date.now() >= 0 ? 0 : 1;\n/** @type {0 | 1} */\nlet fnIndex = Date.now() >= 0 ? 0 : 1;\nexports[Object.entries(labelSource)[labelIndex][0]] = "object-entries-computed";\nmodule.exports[Object.entries(fnSource)[fnIndex][0]] = function double(value) { return value * 6; };\n',
+        },
+    },
     "tsc2c-cjs-conditional-whole-object-exports": cjsPackage("tsc2c-cjs-conditional-whole-object-exports", {
         "index.js": 'const isProd = true;\nmodule.exports = isProd ? { label: "conditional-prod", count: 88 } : { label: "conditional-dev", count: 12 };\n',
     }),
