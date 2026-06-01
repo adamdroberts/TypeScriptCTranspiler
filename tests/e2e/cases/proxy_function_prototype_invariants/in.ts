@@ -9,6 +9,7 @@ function MissingPrototype(this: any): void {}
 function ExactFunction(this: any): void {}
 function ExtraClosedFunction(this: any): void {}
 function PrototypeDescriptor(this: any): void {}
+function LockedPrototype(this: any): void {}
 const events: string[] = [];
 
 function mark(label: string): string {
@@ -234,4 +235,21 @@ try {
 const realFunctionDescriptorProxy: any = new Proxy(prototypeDescriptorTarget, { getOwnPropertyDescriptor: realFunctionDescriptor as any });
 const realPrototypeDesc: any = Reflect.getOwnPropertyDescriptor(realFunctionDescriptorProxy, "prototype", mark("real prototype descriptor"));
 console.log("real prototype descriptor:", realPrototypeDesc.writable, realPrototypeDesc.configurable);
+
+const lockedPrototypeTarget: any = LockedPrototype as any;
+const lockedOriginalPrototype: any = lockedPrototypeTarget.prototype;
+const lockedBeforeDesc: any = Object.getOwnPropertyDescriptor(lockedPrototypeTarget, "prototype");
+console.log("locked prototype before:", lockedBeforeDesc.writable, lockedBeforeDesc.configurable);
+console.log(
+  "locked prototype define:",
+  Object.defineProperty(lockedPrototypeTarget, "prototype", { writable: false }) === lockedPrototypeTarget,
+);
+const lockedAfterDesc: any = Object.getOwnPropertyDescriptor(lockedPrototypeTarget, "prototype");
+console.log("locked prototype after:", lockedAfterDesc.writable, lockedAfterDesc.value === lockedOriginalPrototype);
+lockedPrototypeTarget.prototype = { marker: "changed" };
+console.log("locked prototype assign:", lockedPrototypeTarget.prototype === lockedOriginalPrototype);
+const lockedPrototypeProxy: any = new Proxy(lockedPrototypeTarget, { getOwnPropertyDescriptor: realFunctionDescriptor as any });
+const lockedProxyDesc: any = Reflect.getOwnPropertyDescriptor(lockedPrototypeProxy, "prototype", mark("locked prototype descriptor"));
+console.log("locked prototype proxy descriptor:", lockedProxyDesc.writable, lockedProxyDesc.value === lockedOriginalPrototype);
+
 console.log("events:", events.join("|"));

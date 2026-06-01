@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic function `prototype` metadata now persists `Object.defineProperty(fn, "prototype", { writable: false })`, reports the updated descriptor, blocks later prototype assignment, and preserves function-target Proxy descriptor forwarding. Test: `proxy_function_prototype_invariants`.
 - `JSON.stringify(...)` now serializes object- and array-target Proxy values through proxy-aware `ownKeys`, descriptor, length, and `get` paths instead of reading the proxy wrapper's empty backing object. Tests: `proxy_json_stringify`, `proxy_callable_json`.
 - Detached dynamic `Array.prototype` finder callbacks now read `undefined` instead of past the dynamic-array buffer when the callback shrinks the receiver length during iteration. Test: `dynamic_array_prototype_hof_length_shrink`.
 - Detached dynamic `Array.prototype.sort` and `toSorted` calls now honor runtime comparator callbacks for array and array-like receivers, including invalid comparator validation. Test: `dynamic_array_prototype_sort_comparator`.

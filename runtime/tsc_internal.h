@@ -90,6 +90,7 @@ typedef struct tsc_function_identity {
     bool extensible;
     bool sealed;
     bool frozen;
+    bool func_prototype_writable;
     double length;
     tsc_str_t* name;
     tsc_value_t prototype;
