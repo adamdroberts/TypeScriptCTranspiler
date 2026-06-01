@@ -1,0 +1,7 @@
+types: function function function function
+obj: true false true [object Object] true
+array: true true true false
+function: true true false
+prototype:  false true true
+has: true true true
+detached: true [object Array]
