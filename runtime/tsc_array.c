@@ -8,6 +8,16 @@ static tsc_value_t array_proto_arg(tsc_array_t* args, size_t index) {
         : tsc_value_undefined();
 }
 
+static tsc_array_t* array_proto_items(tsc_array_t* args, size_t start) {
+    size_t count = args && args->len > start ? args->len - start : 0;
+    tsc_array_t* items = tsc_array_new(sizeof(tsc_value_t), count ? count : 1);
+    for (size_t i = 0; i < count; i++) {
+        tsc_value_t value = TSC_ARR(tsc_value_t, args, start + i);
+        tsc_array_push_raw(items, &value);
+    }
+    return items;
+}
+
 static tsc_value_t array_prototype_at(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     return tsc_value_method_at(this_arg, array_proto_arg(args, 0));
@@ -51,6 +61,117 @@ static tsc_value_t array_prototype_entries(void* env, tsc_value_t this_arg, tsc_
     return tsc_value_method_entries(this_arg);
 }
 
+static tsc_value_t array_prototype_pop(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    return tsc_value_method_pop(this_arg);
+}
+
+static tsc_value_t array_prototype_push(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    size_t count = args ? args->len : 0;
+    for (size_t i = 0; i < count; i++) {
+        tsc_value_method_push(this_arg, TSC_ARR(tsc_value_t, args, i));
+    }
+    return tsc_value_num(tsc_value_length(this_arg));
+}
+
+static tsc_value_t array_prototype_shift(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    return tsc_value_method_shift(this_arg);
+}
+
+static tsc_value_t array_prototype_unshift(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    size_t count = args ? args->len : 0;
+    for (size_t i = count; i > 0; i--) {
+        tsc_value_method_unshift(this_arg, TSC_ARR(tsc_value_t, args, i - 1));
+    }
+    return tsc_value_num(tsc_value_length(this_arg));
+}
+
+static tsc_value_t array_prototype_concat(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    size_t count = args ? args->len : 0;
+    tsc_value_t out = count == 0
+        ? tsc_value_method_slice(this_arg, tsc_value_undefined(), tsc_value_undefined())
+        : this_arg;
+    for (size_t i = 0; i < count; i++) {
+        out = tsc_value_method_concat(out, TSC_ARR(tsc_value_t, args, i));
+    }
+    return out;
+}
+
+static tsc_value_t array_prototype_slice(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    return tsc_value_method_slice(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
+}
+
+static tsc_value_t array_prototype_fill(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    return tsc_value_method_fill(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1), array_proto_arg(args, 2));
+}
+
+static tsc_value_t array_prototype_copy_within(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    return tsc_value_method_copy_within(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1), array_proto_arg(args, 2));
+}
+
+static tsc_value_t array_prototype_splice(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    int argc = args && args->len <= (size_t)INT_MAX ? (int)args->len : INT_MAX;
+    return tsc_value_method_splice(
+        this_arg,
+        array_proto_arg(args, 0),
+        array_proto_arg(args, 1),
+        argc,
+        array_proto_items(args, 2)
+    );
+}
+
+static tsc_value_t array_prototype_sort(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    return tsc_value_method_sort(this_arg);
+}
+
+static tsc_value_t array_prototype_to_sorted(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    return tsc_value_method_to_sorted(this_arg);
+}
+
+static tsc_value_t array_prototype_with(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    return tsc_value_method_with(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
+}
+
+static tsc_value_t array_prototype_to_spliced(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    int argc = args && args->len <= (size_t)INT_MAX ? (int)args->len : INT_MAX;
+    tsc_value_t zero = tsc_value_num(0.0);
+    return tsc_value_method_to_spliced(
+        this_arg,
+        args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : zero,
+        args && args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : zero,
+        argc,
+        array_proto_items(args, 2)
+    );
+}
+
+static tsc_value_t array_prototype_reverse(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    return tsc_value_method_reverse(this_arg);
+}
+
+static tsc_value_t array_prototype_to_reversed(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    return tsc_value_method_to_reversed(this_arg);
+}
+
 static void array_prototype_define_method(tsc_object_t* prototype, const char* name, size_t len, tsc_generic_function_t fn) {
     tsc_object_define(
         prototype,
@@ -75,6 +196,21 @@ static tsc_value_t tsc_array_default_prototype(void) {
         array_prototype_define_method(proto, "keys", 4, array_prototype_keys);
         array_prototype_define_method(proto, "values", 6, array_prototype_values);
         array_prototype_define_method(proto, "entries", 7, array_prototype_entries);
+        array_prototype_define_method(proto, "pop", 3, array_prototype_pop);
+        array_prototype_define_method(proto, "push", 4, array_prototype_push);
+        array_prototype_define_method(proto, "shift", 5, array_prototype_shift);
+        array_prototype_define_method(proto, "unshift", 7, array_prototype_unshift);
+        array_prototype_define_method(proto, "concat", 6, array_prototype_concat);
+        array_prototype_define_method(proto, "slice", 5, array_prototype_slice);
+        array_prototype_define_method(proto, "fill", 4, array_prototype_fill);
+        array_prototype_define_method(proto, "copyWithin", 10, array_prototype_copy_within);
+        array_prototype_define_method(proto, "splice", 6, array_prototype_splice);
+        array_prototype_define_method(proto, "sort", 4, array_prototype_sort);
+        array_prototype_define_method(proto, "toSorted", 8, array_prototype_to_sorted);
+        array_prototype_define_method(proto, "with", 4, array_prototype_with);
+        array_prototype_define_method(proto, "toSpliced", 9, array_prototype_to_spliced);
+        array_prototype_define_method(proto, "reverse", 7, array_prototype_reverse);
+        array_prototype_define_method(proto, "toReversed", 10, array_prototype_to_reversed);
         prototype = tsc_value_object(proto);
         initialized = true;
     }
