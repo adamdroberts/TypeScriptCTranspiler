@@ -645,6 +645,12 @@ const packages: Record<string, PackageFixture> = {
             "main.js": 'exports.__esModule = true;\nconst labelSource = { label: "primary", fallbackLabel: "fallback" };\nconst fnSource = { double: true, triple: true };\n/** @type {0 | 1} */\nlet labelIndex = Date.now() >= 0 ? 0 : 1;\n/** @type {0 | 1} */\nlet fnIndex = Date.now() >= 0 ? 0 : 1;\nexports[Object.entries(labelSource)[labelIndex][0]] = "object-entries-computed";\nmodule.exports[Object.entries(fnSource)[fnIndex][0]] = function double(value) { return value * 6; };\n',
         },
     },
+    "tsc2c-cjs-computed-own-property-names-exports": {
+        packageJson: { name: "tsc2c-cjs-computed-own-property-names-exports", version: "1.0.0", main: "main.js" },
+        files: {
+            "main.js": 'exports.__esModule = true;\nconst labelSource = { label: true, fallbackLabel: true };\nconst fnSource = { double: true, triple: true };\n/** @type {0 | 1} */\nlet labelIndex = Date.now() >= 0 ? 0 : 1;\n/** @type {0 | 1} */\nlet fnIndex = Date.now() >= 0 ? 0 : 1;\nexports[Object.getOwnPropertyNames(labelSource)[labelIndex]] = "own-property-names-computed";\nmodule.exports[Object.getOwnPropertyNames(fnSource)[fnIndex]] = function double(value) { return value * 7; };\n',
+        },
+    },
     "tsc2c-cjs-conditional-whole-object-exports": cjsPackage("tsc2c-cjs-conditional-whole-object-exports", {
         "index.js": 'const isProd = true;\nmodule.exports = isProd ? { label: "conditional-prod", count: 88 } : { label: "conditional-dev", count: 12 };\n',
     }),
