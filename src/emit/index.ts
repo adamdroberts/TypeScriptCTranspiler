@@ -17451,8 +17451,7 @@ class Emitter {
     }
 
     private validateCommonJsModuleExportsValueAssignment(expr: ts.Expression): void {
-        let cur = expr;
-        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        const cur = this.unwrapTransparentExpression(expr);
         if (ts.isConditionalExpression(cur)) {
             this.validateCommonJsModuleExportsValueAssignment(cur.whenTrue);
             this.validateCommonJsModuleExportsValueAssignment(cur.whenFalse);
@@ -17498,8 +17497,7 @@ class Emitter {
     }
 
     private isCommonJsModuleExportsSpreadValue(expr: ts.Expression): boolean {
-        let cur = expr;
-        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        const cur = this.unwrapTransparentExpression(expr);
         if (this.isCommonJsModuleExportsDefaultValue(cur)) return true;
         if (ts.isIdentifier(cur)) {
             return !!this.untypedJsLiteralVariableDeclaration(cur) ||
@@ -17517,8 +17515,7 @@ class Emitter {
     }
 
     private isCommonJsModuleExportsDefaultValue(expr: ts.Expression): boolean {
-        let cur = expr;
-        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        const cur = this.unwrapTransparentExpression(expr);
         if (this.isCommonJsObjectLiteralExportValue(cur)) return true;
         if (ts.isPrefixUnaryExpression(cur)) {
             return this.isCommonJsModuleExportsDefaultPrefixOperator(cur.operator) &&
@@ -17578,8 +17575,7 @@ class Emitter {
     }
 
     private isCommonJsRuntimeComputedModuleExportsValue(expr: ts.Expression): boolean {
-        let cur = expr;
-        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        const cur = this.unwrapTransparentExpression(expr);
         if (
             ts.isBinaryExpression(cur) &&
             cur.operatorToken.kind === ts.SyntaxKind.CommaToken
@@ -17609,8 +17605,7 @@ class Emitter {
     }
 
     private objectStaticCallName(expr: ts.Expression): string | null {
-        let cur = expr;
-        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        const cur = this.unwrapTransparentExpression(expr);
         return ts.isCallExpression(cur) &&
             ts.isPropertyAccessExpression(cur.expression) &&
             ts.isIdentifier(cur.expression.expression) &&
@@ -17994,7 +17989,7 @@ class Emitter {
             return T_VALUE;
         }
         let valueNode = this.commonJsExportValueNode(node);
-        while (ts.isParenthesizedExpression(valueNode)) valueNode = valueNode.expression;
+        if (ts.isExpression(valueNode)) valueNode = this.unwrapTransparentExpression(valueNode);
         if (valueNode.kind === ts.SyntaxKind.NullKeyword) {
             return T_VALUE;
         }
@@ -18044,8 +18039,7 @@ class Emitter {
     }
 
     private commonJsDefaultValueContainsNull(expr: ts.Expression): boolean {
-        let cur = expr;
-        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        const cur = this.unwrapTransparentExpression(expr);
         if (cur.kind === ts.SyntaxKind.NullKeyword) return true;
         if (ts.isArrayLiteralExpression(cur)) {
             return cur.elements.some((element) =>
@@ -19353,8 +19347,7 @@ class Emitter {
     }
 
     private emitCommonJsModuleExportsDefaultValue(expr: ts.Expression): EmitResult {
-        let cur = expr;
-        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        const cur = this.unwrapTransparentExpression(expr);
         if (this.isCommonJsObjectLiteralExportValue(cur)) {
             return { c: this.coerce(this.emitExpr(cur), T_VALUE, cur), ty: T_VALUE };
         }

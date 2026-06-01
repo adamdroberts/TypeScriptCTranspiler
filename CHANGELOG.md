@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS whole-value `module.exports = ...` defaults now accept TypeScript-only assertion wrappers such as `as`, `satisfies`, and non-null assertions around already-supported static or runtime-computed defaults. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 - Proxy `getOwnPropertyDescriptor` result validation now rejects trap descriptor objects that mix data and accessor fields or report non-callable `get` / `set` hooks. Test: `proxy_descriptor_invariants`.
 - CommonJS whole-value `module.exports = ...` defaults now accept comma expressions whose right operand is an existing runtime-computed default, preserving left-operand side effects before boxing the result. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 - CommonJS whole-value `module.exports = ...` defaults now accept tagged template expressions by boxing the runtime-computed result as a dynamic value while keeping named-export metadata finite. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
