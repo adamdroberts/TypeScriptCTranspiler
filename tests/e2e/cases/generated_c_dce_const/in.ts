@@ -310,6 +310,9 @@ const unused_new_url_base_call = new URL("child", "https://dead-new-url-base.tes
 const unused_new_array_buffer_call = new ArrayBuffer("dead_new_array_buffer".length);
 const unused_array_buffer_object_keys_length_call = Object.keys(new ArrayBuffer("dead_array_buffer_object_keys_length".length)).length;
 const unused_promise_resolve_array_buffer_own_keys_call = Promise.resolve(Reflect.ownKeys(new ArrayBuffer("dead_promise_resolve_array_buffer_own_keys".length)).length);
+const unused_new_data_view_call = new DataView(new ArrayBuffer("dead_new_data_view_buffer".length));
+const unused_data_view_object_keys_length_call = Object.keys(new DataView(new ArrayBuffer("dead_data_view_object_keys_length".length))).length;
+const unused_promise_resolve_data_view_own_keys_call = Promise.resolve(Reflect.ownKeys(new DataView(new ArrayBuffer("dead_promise_resolve_data_view_own_keys".length), 1, 2)).length);
 const unused_url_to_string_call = new URL("https://dead-url-to-string.test/path").toString("dead_url_to_string_ignored");
 const unused_url_to_json_call = new URL("https://dead-url-to-json.test/path").toJSON("dead_url_to_json_ignored");
 const unused_url_value_of_call = new URL("https://dead-url-value-of.test/path").valueOf("dead_url_value_of_ignored");
@@ -1841,6 +1844,8 @@ Array.from(["top_level_dead_array_from_array"]);
 Array.from("top_level_dead_array_from_string");
 new ArrayBuffer("top_level_dead_new_array_buffer".length);
 Promise.resolve(Object.keys(new ArrayBuffer("top_level_dead_promise_resolve_array_buffer_keys".length)).length);
+new DataView(new ArrayBuffer("top_level_dead_new_data_view".length));
+Promise.resolve(Object.keys(new DataView(new ArrayBuffer("top_level_dead_promise_resolve_data_view_keys".length))).length);
 Array.from(new Map([["top_level_dead_array_from_map_key", "top_level_dead_array_from_map_value"]]));
 Array.from(new Set(["top_level_dead_array_from_set", "top_level_dead_array_from_set_tail"]));
 Array.from([] as number[], (value) => value + "top_level_dead_array_from_empty_array_mapper".length);
@@ -3291,6 +3296,8 @@ function usedLocal(value: number): number {
     Array.from("local_dead_array_from_string");
     new ArrayBuffer("local_dead_new_array_buffer".length);
     Promise.resolve(Object.keys(new ArrayBuffer("local_dead_promise_resolve_array_buffer_keys".length)).length);
+    new DataView(new ArrayBuffer("local_dead_new_data_view".length));
+    Promise.resolve(Object.keys(new DataView(new ArrayBuffer("local_dead_promise_resolve_data_view_keys".length))).length);
     Array.from(new Map([["local_dead_array_from_map_key", "local_dead_array_from_map_value"]]));
     Array.from(new Set(["local_dead_array_from_set", "local_dead_array_from_set_tail"]));
     Array.from([] as number[], (value) => value + "local_dead_array_from_empty_array_mapper".length);

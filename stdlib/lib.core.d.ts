@@ -522,6 +522,15 @@ interface ArrayBufferConstructor {
     new(byteLength?: number): ArrayBuffer;
 }
 declare var ArrayBuffer: ArrayBufferConstructor;
+interface DataView {
+    readonly buffer: ArrayBuffer;
+    readonly byteLength: number;
+    readonly byteOffset: number;
+}
+interface DataViewConstructor {
+    new(buffer: ArrayBuffer, byteOffset?: number, byteLength?: number): DataView;
+}
+declare var DataView: DataViewConstructor;
 interface Function {
     (...args: any[]): any;
     call(thisArg: any, ...args: any[]): any;
