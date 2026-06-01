@@ -172,6 +172,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - `.copyWithin(target, start, end?, ...ignored)` — in-place via `tsc_array_copy_within`, including explicit `undefined` end defaults after evaluating ignored extra arguments. Tests: `array_copy_within`, `array_mutator_ignored_arguments`
 - `.at(index?, ...ignored)` — positive and negative index lookup, defaulting omitted or explicit `undefined` indexes to zero after evaluating ignored extra arguments. Tests: `array_at`, `array_read_ignored_arguments`
 - `.with(index, value, ...ignored)` — copy via `tsc_array_with` after evaluating ignored extra arguments; original array remains unchanged, negative indices count from the end, and out-of-range failures are catchable. Tests: `array_with`, `array_with_errors`, `array_mutator_ignored_arguments`
+- `.splice(start?, deleteCount?, ...items)` — in-place via `tsc_array_splice`, returning removed elements and preserving argument-count semantics for omitted versus explicit `undefined` delete counts. Test: `array_splice`
 - `.toSpliced(start?, deleteCount?, ...items)` — copy via `tsc_array_to_spliced`; original array remains unchanged, and explicit `undefined` start/delete-count values use JavaScript defaults while preserving argument-count semantics. Test: `array_to_spliced`
 - `.slice(start?, end?, ...ignored)` — `tsc_array_slice`, including explicit `undefined` defaults after evaluating ignored extra arguments. Test: `array_read_ignored_arguments`
 - `.concat(...items)` — copy plus `tsc_array_append`/`tsc_array_push_raw`; accepts array arguments, single element arguments, and spread elements inside array-literal arguments. Test: `array_concat_values`
@@ -1131,6 +1132,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_property_descriptors` | typed array Object/Reflect property descriptors |
 | `array_reduce_no_initial` | Array.reduce/reduceRight using the first/last element as the initial accumulator |
 | `array_sort_default` | default JS-style string-conversion sort |
+| `array_splice` | typed Array.splice mutation, removed-element return, and delete-count argument semantics |
 | `array_static_dynamic` | dynamic Array.isArray and Array.from copy behavior |
 | `array_to_reversed` | Array.toReversed non-mutating copy |
 | `array_to_sorted` | Array.toSorted default/comparator non-mutating sort |

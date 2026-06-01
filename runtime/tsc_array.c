@@ -173,6 +173,42 @@ int64_t array_range_index(double value, int64_t len, double fallback) {
     return (int64_t)n;
 }
 
+tsc_array_t* tsc_array_splice(tsc_array_t* a, double start, double delete_count, int argc, const tsc_array_t* items) {
+    if (a->sealed || a->frozen) return tsc_array_new(a->es, 1);
+    int64_t len = (int64_t)a->len;
+    int64_t at = argc <= 0 ? 0 : array_range_index(start, len, 0.0);
+    int64_t del = 0;
+    if (argc == 1) {
+        del = len - at;
+    } else if (argc >= 2) {
+        double raw = isnan(delete_count) || delete_count < 0 ? 0.0 : delete_count;
+        if (isinf(raw)) raw = raw < 0 ? 0.0 : (double)(len - at);
+        del = (int64_t)raw;
+        if (del > len - at) del = len - at;
+    }
+
+    size_t insert_len = items ? items->len : 0;
+    size_t new_len = a->len - (size_t)del + insert_len;
+    if (new_len > a->len && !a->extensible) return tsc_array_new(a->es, 1);
+
+    tsc_array_t* removed = tsc_array_slice(a, (double)at, (double)(at + del));
+    size_t tail_start = (size_t)(at + del);
+    size_t tail_len = a->len - tail_start;
+    tsc_array_reserve(a, new_len > 0 ? new_len : 1);
+    if (insert_len != (size_t)del && tail_len > 0) {
+        memmove(
+            (char*)a->data + ((size_t)at + insert_len) * a->es,
+            (char*)a->data + tail_start * a->es,
+            tail_len * a->es
+        );
+    }
+    if (insert_len > 0) {
+        memcpy((char*)a->data + (size_t)at * a->es, items->data, insert_len * a->es);
+    }
+    a->len = new_len;
+    return removed;
+}
+
 tsc_array_t* tsc_array_to_spliced(const tsc_array_t* a, double start, double delete_count, int argc, const tsc_array_t* items) {
     int64_t len = (int64_t)a->len;
     int64_t at = argc <= 0 ? 0 : array_range_index(start, len, 0.0);

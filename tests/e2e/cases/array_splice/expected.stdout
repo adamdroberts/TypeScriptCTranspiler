@@ -1,0 +1,9 @@
+removed: 2,3
+nums: 1,9,8,7,4
+tail: 7,4
+after tail: 1,9,8
+inserted: 0
+after insert: 1,5,9,8
+omitted: 11,12
+undefined:  10,99,11,12
+copy: 0

@@ -180,6 +180,7 @@ interface Array<T> extends Iterable<T> {
     sort(cmp?: (a: T, b: T) => number, ...ignored: any[]): T[];
     toSorted(cmp?: (a: T, b: T) => number, ...ignored: any[]): T[];
     with(index: number, value: T, ...ignored: any[]): T[];
+    splice(start?: number, deleteCount?: number, ...items: T[]): T[];
     toSpliced(start?: number, deleteCount?: number, ...items: T[]): T[];
     fill(value: T, start?: number, end?: number, ...ignored: any[]): T[];
     copyWithin(target: number, start: number, end?: number, ...ignored: any[]): T[];

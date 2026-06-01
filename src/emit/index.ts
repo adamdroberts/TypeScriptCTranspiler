@@ -40259,6 +40259,34 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(args, 2),
                 ], (vals) => `tsc_array_with(${vals[0]}, ${vals[1]}, &(${et.c}){${vals[2]}})`);
             }
+            case "splice": {
+                const zero: EmitResult = { c: "0.0", ty: T_NUMBER };
+                const hasStart = !!args[0] && !this.isUndefinedExpression(args[0]);
+                const hasDeleteCount = !!args[1] && !this.isUndefinedExpression(args[1]);
+                const start = hasStart ? this.emitExpr(args[0]!) : zero;
+                const deleteCount = hasDeleteCount ? this.emitExpr(args[1]!) : zero;
+                if (hasStart) requireNumber(args[0]!, start.ty);
+                if (hasDeleteCount) requireNumber(args[1]!, deleteCount.ty);
+                const specs: SequencedCallArg[] = [
+                    { value: recv },
+                    { value: start, target: T_NUMBER, node: args[0] ?? call.expression },
+                    { value: deleteCount, target: T_NUMBER, node: args[1] ?? call.expression },
+                ];
+                for (const arg of args.slice(2)) {
+                    specs.push({ value: this.emitExpr(arg), target: et, node: arg });
+                }
+                return this.emitSequencedExpr(recv.ty, specs, ([target, startArg, deleteArg, ...items]) => {
+                    const av = this.freshTemp("_splice_items");
+                    const pieces = [`tsc_array_t* ${av} = tsc_array_new(sizeof(${et.c}), ${items.length || 1})`];
+                    for (const item of items) {
+                        const tmp = this.freshTemp("_splice_item");
+                        pieces.push(`${et.c} ${tmp} = ${item}`);
+                        pieces.push(`tsc_array_push_raw(${av}, &${tmp})`);
+                    }
+                    pieces.push(`tsc_array_splice(${target}, ${startArg}, ${deleteArg}, ${args.length}, ${av})`);
+                    return `({ ${pieces.join("; ")}; })`;
+                });
+            }
             case "toSpliced": {
                 const zero: EmitResult = { c: "0.0", ty: T_NUMBER };
                 const hasStart = !!args[0] && !this.isUndefinedExpression(args[0]);
