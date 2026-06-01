@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Finite dynamic `require(...)` proofs now resolve indexed `Object.keys({...})` and `Object.values({...})` specifiers over static object literals into the AOT module graph. Test: `dynamic_require_static_object_keys_values`.
 - CommonJS computed named-export metadata now accepts finite `Object.keys({...})[idx]` and `Object.values({...})[idx]` export keys over static object literals. Test: `node_modules_commonjs_computed_object_keys_values_exports`.
 - Finite dynamic `require(...)` proofs now accept `keyof typeof` const object-map indexes while rejecting unproven object-map indexes without falling back to every map value. Tests: `dynamic_require_static_keyof_map`, `dynamic_require_static_object_map_unknown`.
 - CommonJS computed named-export metadata now accepts const object-map values indexed by finite key unions through checker-proven element access. Test: `node_modules_commonjs_computed_object_map_union_exports`.
