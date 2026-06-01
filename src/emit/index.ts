@@ -13527,6 +13527,12 @@ class Emitter {
         ) {
             return "object";
         }
+        if (
+            ts.isNewExpression(unwrapped) &&
+            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
+        ) {
+            return "object";
+        }
         if (ts.isConditionalExpression(unwrapped)) {
             const condition = this.staticBooleanValue(unwrapped.condition, seenConsts);
             if (condition === true) return this.sideEffectFreeTypeofString(unwrapped.whenTrue, seenConsts);
