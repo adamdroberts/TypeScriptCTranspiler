@@ -132,8 +132,9 @@ interface CommonJsDefinePropertyExport {
 interface CommonJsFromEntriesExport {
     call: ts.CallExpression;
     name: string;
-    right: ts.Expression;
-    entry: ts.ArrayLiteralExpression | ts.PropertyAssignment;
+    right?: ts.Expression;
+    valueDecl?: ts.Node;
+    entry: ts.Node;
 }
 
 interface CaptureCell {
@@ -15539,6 +15540,18 @@ class Emitter {
         call: ts.CallExpression,
         source: ts.Expression,
     ): CommonJsFromEntriesExport[] | null {
+        const requireObjectEntries = this.commonJsObjectEntriesRequireSource(source);
+        if (requireObjectEntries) {
+            const { spec } = requireObjectEntries;
+            const info = this.resolvedModuleInfoForSpecifier(spec, source.getSourceFile().fileName, "require");
+            if (!info) unsupported(source, `unresolved require("${spec}")`);
+            const exports: CommonJsFromEntriesExport[] = [];
+            for (const member of this.commonJsExportedMemberDeclarations(info.sf)) {
+                if (member.name === "__esModule") continue;
+                exports.push({ call, name: member.name, valueDecl: member.decl, entry: member.decl });
+            }
+            return exports;
+        }
         const entries = this.commonJsObjectFromEntriesExportEntries(source);
         if (!entries) return null;
         const exports: CommonJsFromEntriesExport[] = [];
@@ -15548,6 +15561,24 @@ class Emitter {
             exports.push(exported);
         }
         return exports;
+    }
+
+    private commonJsObjectEntriesRequireSource(
+        expr: ts.Expression,
+    ): { spec: string } | null {
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isCallExpression(cur) || this.objectStaticCallName(cur) !== "entries" || cur.arguments.length !== 1) {
+            return null;
+        }
+        let baseExpr = cur.arguments[0]!;
+        while (ts.isParenthesizedExpression(baseExpr)) baseExpr = baseExpr.expression;
+        if (ts.isIdentifier(baseExpr)) {
+            const spec = this.requireBindingSpecifier(baseExpr);
+            return spec ? { spec } : null;
+        }
+        const spec = this.requireCallSpecifier(baseExpr);
+        return spec ? { spec } : null;
     }
 
     private isCommonJsModuleExportsObjectFromEntriesValueCall(call: ts.CallExpression): boolean {
@@ -17889,7 +17920,7 @@ class Emitter {
             const definePropertiesFromEntriesExport = this.commonJsDefinePropertiesFromEntriesExportEntry(node);
             if (definePropertiesFromEntriesExport?.right) return definePropertiesFromEntriesExport.right;
             const fromEntriesExport = this.commonJsObjectFromEntriesExportEntry(node);
-            if (fromEntriesExport) return fromEntriesExport.right;
+            if (fromEntriesExport?.right) return fromEntriesExport.right;
         }
         return node;
     }
@@ -18222,13 +18253,23 @@ class Emitter {
         assignment: CommonJsFromEntriesExport,
     ): void {
         const cName = this.commonJsDefinePropertyExportCName(assignment.call, assignment.name);
-        const ty = this.commonJsExportedCType(assignment.entry);
+        const valueDecl = assignment.valueDecl;
+        const ty = this.commonJsExportedCType(valueDecl ?? assignment.entry);
         if (!this.commonJsExportGlobals.has(cName)) {
             this.commonJsExportGlobals.add(cName);
             this.globalDecls.line(`static ${ty.c} ${cName};`);
         }
-        const value = this.emitExpr(assignment.right);
-        buf.line(`${cName} = ${this.coerce(value, ty, assignment.right)};`);
+        const valueNode = valueDecl ?? assignment.right ?? assignment.entry;
+        const value = valueDecl
+            ? (() => {
+                const valueCName = this.declarationCName(valueDecl);
+                if (!valueCName) unsupported(valueDecl, `unsupported CommonJS export "${assignment.name}"`);
+                return { c: valueCName, ty: this.commonJsExportedCType(valueDecl) };
+            })()
+            : assignment.right
+                ? this.emitExpr(assignment.right)
+                : unsupported(assignment.entry, "CommonJS Object.fromEntries export requires a value");
+        buf.line(`${cName} = ${this.coerce(value, ty, valueNode)};`);
     }
 
     private defaultExportAssignmentCType(stmt: ts.ExportAssignment): CType {

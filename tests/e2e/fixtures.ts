@@ -1230,6 +1230,10 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "entries-id-default",\n  label: local.label,\n  count: 122,\n  enabled: true\n};\nconst entries = Object.entries(api);\nmodule.exports = Object.fromEntries(entries);\n',
         "local.js": 'exports.label = "from-entries-object-entries-id";\n',
     }),
+    "tsc2c-cjs-object-from-entries-require-object-entries-package": cjsPackage("tsc2c-cjs-object-from-entries-require-object-entries-package", {
+        "index.js": 'const api = require("./api.js");\nmodule.exports = Object.fromEntries(Object.entries(api));\n',
+        "api.js": 'exports.default = "require-object-entries-default";\nexports.label = "require-object-entries";\nexports.count = 124;\nexports.enabled = true;\n',
+    }),
     "tsc2c-cjs-object-wrapper-from-entries-named": cjsPackage("tsc2c-cjs-object-wrapper-from-entries-named", {
         "index.js": 'const local = require("./local.js");\nmodule.exports = Object.freeze(Object.fromEntries([\n  ["default", function greet(name) { return "wrapped-entries " + name; }],\n  ["label", "wrapper-from-entries"],\n  ["count", local.count],\n  ["double", local.double]\n]));\n',
         "local.js": 'exports.count = 118;\nexports.double = function double(value) { return value * 13; };\n',
