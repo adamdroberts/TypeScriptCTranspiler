@@ -17814,6 +17814,9 @@ class Emitter {
         }
         let valueNode = this.commonJsExportValueNode(node);
         while (ts.isParenthesizedExpression(valueNode)) valueNode = valueNode.expression;
+        if (valueNode.kind === ts.SyntaxKind.NullKeyword) {
+            return T_VALUE;
+        }
         if (ts.isConditionalExpression(valueNode)) {
             const trueTy = this.commonJsExportedCType(valueNode.whenTrue);
             const falseTy = this.commonJsExportedCType(valueNode.whenFalse);
@@ -17822,6 +17825,13 @@ class Emitter {
         }
         if (ts.isObjectLiteralExpression(valueNode) && this.isCommonJsObjectLiteralDefaultValue(valueNode)) {
             return T_VALUE;
+        }
+        if (
+            ts.isArrayLiteralExpression(valueNode) &&
+            this.isCommonJsModuleExportsDefaultValue(valueNode) &&
+            this.commonJsDefaultValueContainsNull(valueNode)
+        ) {
+            return arrayType(T_VALUE);
         }
         if (ts.isPropertyAccessExpression(valueNode)) {
             const decl = this.requireModuleMemberDeclaration(valueNode);
@@ -17837,6 +17847,26 @@ class Emitter {
             if (this.isCommonJsRuntimeComputedModuleExportsValue(valueNode)) return T_VALUE;
         }
         return this.prepareType(mapType(valueNode, this.checker));
+    }
+
+    private commonJsDefaultValueContainsNull(expr: ts.Expression): boolean {
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (cur.kind === ts.SyntaxKind.NullKeyword) return true;
+        if (ts.isArrayLiteralExpression(cur)) {
+            return cur.elements.some((element) =>
+                !ts.isSpreadElement(element) &&
+                element.kind !== ts.SyntaxKind.OmittedExpression &&
+                this.commonJsDefaultValueContainsNull(element),
+            );
+        }
+        if (ts.isObjectLiteralExpression(cur)) {
+            return cur.properties.some((prop) =>
+                ts.isPropertyAssignment(prop) &&
+                this.commonJsDefaultValueContainsNull(prop.initializer),
+            );
+        }
+        return false;
     }
 
     private emitCommonJsExportAssignment(
@@ -18299,7 +18329,8 @@ class Emitter {
         return ts.isStringLiteralLike(expr) ||
             ts.isNumericLiteral(expr) ||
             expr.kind === ts.SyntaxKind.TrueKeyword ||
-            expr.kind === ts.SyntaxKind.FalseKeyword;
+            expr.kind === ts.SyntaxKind.FalseKeyword ||
+            expr.kind === ts.SyntaxKind.NullKeyword;
     }
 
     private isModuleRequireAccess(expr: ts.Expression): boolean {
