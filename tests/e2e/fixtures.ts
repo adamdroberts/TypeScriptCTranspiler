@@ -856,6 +856,14 @@ const packages: Record<string, PackageFixture> = {
         "index.js": '(function (factory) {\n  if (typeof module === "object" && module.exports) {\n    factory.apply(null, [require, module, exports]);\n  }\n})(function (req, mod, out) {\n  const local = req("./local.js");\n  out.default = function greet(name) { return "factory-wrapper-apply " + name; };\n  out.label = local.label;\n  mod.exports.count = local.count;\n  out.double = function double(value) { return value * 11; };\n});\n',
         "local.js": 'exports.label = "factory-wrapper-apply";\nexports.count = 85;\n',
     }),
+    "tsc2c-cjs-factory-wrapper-reflect-apply": cjsPackage("tsc2c-cjs-factory-wrapper-reflect-apply", {
+        "index.js": '(function (factory) {\n  if (typeof module === "object" && module.exports) {\n    Reflect.apply(factory, null, [require, module, exports]);\n  }\n})(function (req, mod, out) {\n  const local = req("./local.js");\n  out.default = function greet(name) { return "factory-wrapper-reflect " + name; };\n  out.label = local.label;\n  mod.exports.count = local.count;\n  out.double = function double(value) { return value * 12; };\n});\n',
+        "local.js": 'exports.label = "factory-wrapper-reflect";\nexports.count = 86;\n',
+    }),
+    "tsc2c-cjs-factory-wrapper-bind": cjsPackage("tsc2c-cjs-factory-wrapper-bind", {
+        "index.js": '(function (factory) {\n  if (typeof module === "object" && module.exports) {\n    factory.bind(undefined)(require, module, exports);\n  }\n})(function (req, mod, out) {\n  const local = req("./local.js");\n  out.default = function greet(name) { return "factory-wrapper-bind " + name; };\n  out.label = local.label;\n  mod.exports.count = local.count;\n  out.double = function double(value) { return value * 13; };\n});\n',
+        "local.js": 'exports.label = "factory-wrapper-bind";\nexports.count = 87;\n',
+    }),
     "tsc2c-cjs-require-assertion-wrappers": {
         packageJson: { name: "tsc2c-cjs-require-assertion-wrappers", version: "1.0.0", main: "index.ts" },
         files: {

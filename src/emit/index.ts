@@ -18086,17 +18086,45 @@ class Emitter {
                     let target: ts.Expression = callee.expression;
                     while (ts.isParenthesizedExpression(target)) target = target.expression;
                     if (ts.isIdentifier(target)) {
-                        const fn = factories.get(target.text);
-                        if (fn && callee.name.text === "call") {
-                            const args = node.arguments.slice(1);
-                            if (this.commonJsFactoryWrapperArguments(args)) {
-                                invocations.push({ fn, args });
+                        if (target.text === "Reflect" && callee.name.text === "apply" && node.arguments.length >= 3) {
+                            let factoryArg = node.arguments[0]!;
+                            while (ts.isParenthesizedExpression(factoryArg)) factoryArg = factoryArg.expression;
+                            if (ts.isIdentifier(factoryArg)) {
+                                const fn = factories.get(factoryArg.text);
+                                if (fn) {
+                                    let argArray = node.arguments[2]!;
+                                    while (ts.isParenthesizedExpression(argArray)) argArray = argArray.expression;
+                                    if (ts.isArrayLiteralExpression(argArray) && this.commonJsFactoryWrapperArguments(argArray.elements)) {
+                                        invocations.push({ fn, args: argArray.elements });
+                                    }
+                                }
                             }
-                        } else if (fn && callee.name.text === "apply" && node.arguments.length >= 2) {
-                            let argArray = node.arguments[1]!;
-                            while (ts.isParenthesizedExpression(argArray)) argArray = argArray.expression;
-                            if (ts.isArrayLiteralExpression(argArray) && this.commonJsFactoryWrapperArguments(argArray.elements)) {
-                                invocations.push({ fn, args: argArray.elements });
+                        } else {
+                            const fn = factories.get(target.text);
+                            if (fn && callee.name.text === "call") {
+                                const args = node.arguments.slice(1);
+                                if (this.commonJsFactoryWrapperArguments(args)) {
+                                    invocations.push({ fn, args });
+                                }
+                            } else if (fn && callee.name.text === "apply" && node.arguments.length >= 2) {
+                                let argArray = node.arguments[1]!;
+                                while (ts.isParenthesizedExpression(argArray)) argArray = argArray.expression;
+                                if (ts.isArrayLiteralExpression(argArray) && this.commonJsFactoryWrapperArguments(argArray.elements)) {
+                                    invocations.push({ fn, args: argArray.elements });
+                                }
+                            }
+                        }
+                    }
+                } else if (ts.isCallExpression(callee)) {
+                    let bindCallee: ts.Expression = callee.expression;
+                    while (ts.isParenthesizedExpression(bindCallee)) bindCallee = bindCallee.expression;
+                    if (ts.isPropertyAccessExpression(bindCallee)) {
+                        let bindTarget: ts.Expression = bindCallee.expression;
+                        while (ts.isParenthesizedExpression(bindTarget)) bindTarget = bindTarget.expression;
+                        if (ts.isIdentifier(bindTarget) && bindCallee.name.text === "bind") {
+                            const fn = factories.get(bindTarget.text);
+                            if (fn && this.commonJsFactoryWrapperArguments(node.arguments)) {
+                                invocations.push({ fn, args: node.arguments });
                             }
                         }
                     }
@@ -33369,6 +33397,9 @@ class Emitter {
             ) {
                 return this.emitClosureCall(call, { c: requireMember, ty: memberTy });
             }
+            if (memberTy.kind === "value") {
+                return this.emitDynamicValueCall(call, { c: requireMember, ty: T_VALUE });
+            }
             const sig = this.checker.getResolvedSignature(call);
             const params = sig?.getParameters() ?? [];
             const useMemberFunctionType =
@@ -33417,20 +33448,36 @@ class Emitter {
                 return this.emitClosureCall(call, { c: moduleNsMember, ty: memberTy });
             }
             const sig = this.checker.getResolvedSignature(call);
-            if (!sig) unsupported(call, "unresolved module namespace function");
-            const params = sig.getParameters();
-            const retType = mapTsType(call, sig.getReturnType(), this.checker);
+            const params = sig?.getParameters() ?? [];
+            const useMemberFunctionType =
+                memberTy.kind === "function" &&
+                (!sig || (params.length === 0 && call.arguments.length > 0));
+            if (memberTy.kind === "value") {
+                return this.emitDynamicValueCall(call, { c: moduleNsMember, ty: T_VALUE });
+            }
+            if (!sig && !useMemberFunctionType) unsupported(call, "unresolved module namespace function");
+            const retType = useMemberFunctionType && memberTy.kind === "function"
+                ? memberTy.ret ?? T_VOID
+                : sig
+                    ? mapTsType(call, sig.getReturnType(), this.checker)
+                    : memberTy.kind === "function" && memberTy.ret
+                        ? memberTy.ret
+                        : T_VALUE;
             if (
                 call.arguments.some((arg) => ts.isSpreadElement(arg)) &&
                 !this.signatureHasRestParameter(params)
             ) {
                 return this.emitStaticSpreadCall(call, moduleNsMember, retType, params);
             }
-            const specs = this.callSpecsFromSignature(
-                call,
-                call.arguments,
-                params,
-            );
+            const specs = useMemberFunctionType && memberTy.kind === "function"
+                ? this.callSpecsFromFunctionType(call, call.arguments, memberTy.params ?? [])
+                : sig
+                ? this.callSpecsFromSignature(
+                    call,
+                    call.arguments,
+                    params,
+                )
+                : call.arguments.map((arg) => ({ value: this.emitExpr(arg), target: T_VALUE, node: arg }));
             return this.emitSequencedCall(moduleNsMember, retType, specs);
         }
 
