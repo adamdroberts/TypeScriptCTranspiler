@@ -1287,6 +1287,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-runtime-call-default-package": cjsPackage("tsc2c-cjs-runtime-call-default-package", {
         "index.js": 'function make(label, count) {\n  return { label: "call-" + label, count, nested: { ok: true } };\n}\nmodule.exports = make("default", 14);\n',
     }),
+    "tsc2c-cjs-runtime-logical-default-package": cjsPackage("tsc2c-cjs-runtime-logical-default-package", {
+        "index.js": 'function makeLogicalDefault(label, count) {\n  return { label, count, nested: { ok: true } };\n}\nconst disabled = false;\nconst missing = null;\nmodule.exports = (disabled && makeLogicalDefault("bad", 0)) || (missing ?? makeLogicalDefault("logical", 22));\n',
+    }),
     "tsc2c-cjs-object-wrapper-freeze-named": cjsPackage("tsc2c-cjs-object-wrapper-freeze-named", {
         "index.js": 'const api = {\n  count: 71,\n  extra: true\n};\nmodule.exports = Object.freeze({\n  default: function greet(name) { return "hello " + name; },\n  label: "freeze-named",\n  double(value) { return value * 2; },\n  ...api\n});\n',
     }),
