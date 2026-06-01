@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Array-target Proxy `ownKeys` validation now accounts for dynamic array own string-key properties, rejecting missing non-configurable side keys and missing side keys on non-extensible arrays. Test: `proxy_array_ownkeys_invariants`.
 - Dynamic arrays now preserve ordinary own string-key properties alongside dense indexes and `length`, so custom `join` overrides for inherited `toString`, Object/Reflect own-key helpers, descriptors, deletion, and extensibility checks see non-index array properties. Test: `dynamic_array_string_properties`.
 - Dynamic arrays now inherit callable `Array.prototype.toString`, `toLocaleString`, and `valueOf`, so detached prototype calls use array stringification and identity semantics instead of falling through to `Object.prototype`. Test: `dynamic_array_prototype_string_value`.
 - Dynamic arrays now inherit callable higher-order `Array.prototype` methods for `forEach`, `map`, `flatMap`, `filter`, `some`, `every`, `find`, `findIndex`, `findLast`, `findLastIndex`, `reduce`, and `reduceRight`, so detached calls reuse boxed callback dispatch. Test: `dynamic_array_prototype_hof`.

@@ -30,6 +30,16 @@ function exactClosed(target: any): string[] {
     return ["0", "1", "length"];
 }
 
+function missingSide(target: any): string[] {
+    events.push("missing side trap:" + target.length);
+    return ["0", "length"];
+}
+
+function exactSide(target: any): string[] {
+    events.push("exact side trap:" + target.length + ":" + target.extra);
+    return ["0", "length", "extra"];
+}
+
 const openMissingLength: any = new Proxy(["x"], { ownKeys: missingLength as any });
 try {
     console.log("missing length:", Reflect.ownKeys(openMissingLength, mark("missing length")).join("|"));
@@ -71,5 +81,38 @@ try {
 } catch (err: any) {
     console.log("missing sealed:", err);
 }
+
+const sideMissingConfigTarget: any = ["c"];
+Object.defineProperty(sideMissingConfigTarget, "extra", {
+    value: "cfg",
+    enumerable: true,
+    configurable: true,
+});
+Object.preventExtensions(sideMissingConfigTarget);
+const sideMissingConfig: any = new Proxy(sideMissingConfigTarget, { ownKeys: missingSide as any });
+try {
+    console.log("missing side configurable:", Reflect.ownKeys(sideMissingConfig, mark("missing side configurable")).join("|"));
+} catch (err: any) {
+    console.log("missing side configurable:", err);
+}
+
+const sideMissingFixedTarget: any = ["f"];
+Object.defineProperty(sideMissingFixedTarget, "extra", {
+    value: "fixed",
+    enumerable: true,
+    configurable: false,
+});
+const sideMissingFixed: any = new Proxy(sideMissingFixedTarget, { ownKeys: missingSide as any });
+try {
+    console.log("missing side fixed:", Reflect.ownKeys(sideMissingFixed, mark("missing side fixed")).join("|"));
+} catch (err: any) {
+    console.log("missing side fixed:", err);
+}
+
+const sideExactTarget: any = ["ok"];
+sideExactTarget.extra = "present";
+Object.preventExtensions(sideExactTarget);
+const sideExact: any = new Proxy(sideExactTarget, { ownKeys: exactSide as any });
+console.log("exact side:", Reflect.ownKeys(sideExact, mark("exact side")).join("|"));
 
 console.log("events:", events.join("|"));
