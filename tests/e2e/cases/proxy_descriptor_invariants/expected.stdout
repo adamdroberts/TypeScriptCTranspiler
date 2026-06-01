@@ -8,6 +8,8 @@ bad setter: Proxy getOwnPropertyDescriptor trap setter must be callable
 new fixed: Proxy getOwnPropertyDescriptor trap cannot report new non-configurable key
 config false: Proxy getOwnPropertyDescriptor trap cannot report configurable key as non-configurable
 wrong fixed: Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key
+inherited wrong fixed: Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key
+inherited configurable: Proxy getOwnPropertyDescriptor trap cannot report non-configurable key as configurable
 writable fixed: Proxy getOwnPropertyDescriptor trap cannot report non-configurable non-writable key as writable
 wrong enumerable: Proxy getOwnPropertyDescriptor trap cannot report different enumerable flag for non-configurable key
 accessor as data: Proxy getOwnPropertyDescriptor trap cannot report data descriptor for non-configurable accessor key
@@ -15,4 +17,4 @@ accessor wrong getter: Proxy getOwnPropertyDescriptor trap cannot report differe
 accessor wrong setter: Proxy getOwnPropertyDescriptor trap cannot report different setter for non-configurable accessor key
 real descriptor: 1 false false
 keys descriptor: Proxy getOwnPropertyDescriptor trap cannot hide non-configurable key
-events: ignored:bad descriptor|bad trap:x|ignored:hide fixed|hide trap:fixed|ignored:hide closed|hide trap:x|ignored:new closed|data trap:missing|ignored:mixed descriptor|mixed trap:x|ignored:bad getter|bad getter trap:x|ignored:bad setter|bad setter trap:x|ignored:new fixed|fixed new trap:x|ignored:config false|config false trap:x|ignored:wrong fixed|wrong fixed trap:fixed|ignored:writable fixed|writable fixed trap:fixed|ignored:wrong enumerable|wrong enumerable trap:fixed|ignored:accessor as data|accessor as data trap:x|ignored:accessor wrong getter|wrong accessor getter trap:x|ignored:accessor wrong setter|wrong accessor setter trap:x|ignored:real descriptor|real trap:fixed|ignored:keys descriptor|own fixed trap|hide trap:fixed
+events: ignored:bad descriptor|bad trap:x|ignored:hide fixed|hide trap:fixed|ignored:hide closed|hide trap:x|ignored:new closed|data trap:missing|ignored:mixed descriptor|mixed trap:x|ignored:bad getter|bad getter trap:x|ignored:bad setter|bad setter trap:x|ignored:new fixed|fixed new trap:x|ignored:config false|config false trap:x|ignored:wrong fixed|wrong fixed trap:fixed|ignored:inherited wrong fixed|inherited wrong fixed trap:fixed|ignored:inherited configurable|inherited configurable trap:fixed|ignored:writable fixed|writable fixed trap:fixed|ignored:wrong enumerable|wrong enumerable trap:fixed|ignored:accessor as data|accessor as data trap:x|ignored:accessor wrong getter|wrong accessor getter trap:x|ignored:accessor wrong setter|wrong accessor setter trap:x|ignored:real descriptor|real trap:fixed|ignored:keys descriptor|own fixed trap|hide trap:fixed

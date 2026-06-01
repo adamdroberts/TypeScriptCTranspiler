@@ -2096,7 +2096,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_ownkeys_entry_validation` | Proxy ownKeys non-string entry validation after ignored-argument evaluation and trap dispatch |
 | `proxy_ownkeys_invariants` | Proxy ownKeys duplicate, non-configurable, and non-extensible target invariant checks after ignored-argument evaluation and trap dispatch |
 | `proxy_ownkeys_helper_ignored_arguments` | Object enumeration and Reflect.ownKeys on Proxy evaluate ignored arguments before ownKeys dispatch |
-| `proxy_descriptor_invariants` | Proxy getOwnPropertyDescriptor descriptor-shape validation plus non-configurable descriptor, enumerable flag, accessor identity, and non-extensible target invariant checks after ignored-argument evaluation and trap dispatch |
+| `proxy_descriptor_invariants` | Proxy getOwnPropertyDescriptor descriptor-shape validation plus non-configurable descriptor, inherited descriptor field, enumerable flag, accessor identity, and non-extensible target invariant checks after ignored-argument evaluation and trap dispatch |
 | `proxy_descriptor_writable_invariants` | Proxy getOwnPropertyDescriptor traps cannot report non-configurable writable target data properties as non-writable |
 | `proxy_descriptor_helper_ignored_arguments` | Object and Reflect getOwnPropertyDescriptor on Proxy evaluate ignored arguments before trap dispatch |
 | `proxy_get_own_property_descriptors` | Object.getOwnPropertyDescriptors on Proxy uses ownKeys and descriptor traps |

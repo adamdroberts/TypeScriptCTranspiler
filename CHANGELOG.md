@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Proxy `getOwnPropertyDescriptor` trap result validation now reads inherited descriptor fields through normal property lookup, matching `ToPropertyDescriptor` semantics for descriptor objects. Test: `proxy_descriptor_invariants`.
 - Lazy generator lowering now accepts `throw` statements whose thrown expressions do not contain suspension points, closing the lazy generator state before propagating the exception. Test: `generator_lazy_throw`.
 - CommonJS object-literal `module.exports` defaults now accept bounded runtime-computed property and array element initializers while preserving finite AOT named-export metadata. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 - Trapless function-target Proxy values now forward `prototype` writes through ordinary assignment and `Reflect.set(...)`. Test: `proxy_function_set_forward`.

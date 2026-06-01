@@ -50,6 +50,16 @@ function wrongFixedDescriptor(target: any, prop: any): any {
     return { value: 2, writable: false, enumerable: true, configurable: false };
 }
 
+function inheritedWrongFixedDescriptor(target: any, prop: any): any {
+    events.push("inherited wrong fixed trap:" + String(prop));
+    return Object.create({ value: 2, writable: false, enumerable: true, configurable: false });
+}
+
+function inheritedConfigurableDescriptor(target: any, prop: any): any {
+    events.push("inherited configurable trap:" + String(prop));
+    return Object.create({ value: 1, writable: false, enumerable: true, configurable: true });
+}
+
 function writableFixedDescriptor(target: any, prop: any): any {
     events.push("writable fixed trap:" + String(prop));
     return { value: 1, writable: true, enumerable: true, configurable: false };
@@ -183,6 +193,20 @@ try {
     console.log("wrong fixed:", Object.getOwnPropertyDescriptor(wrongFixedProxy, "fixed", mark("wrong fixed"))?.value);
 } catch (e: any) {
     console.log("wrong fixed:", e);
+}
+
+const inheritedWrongFixedProxy: any = new Proxy(fixedTarget, { getOwnPropertyDescriptor: inheritedWrongFixedDescriptor as any });
+try {
+    console.log("inherited wrong fixed:", Object.getOwnPropertyDescriptor(inheritedWrongFixedProxy, "fixed", mark("inherited wrong fixed"))?.value);
+} catch (e: any) {
+    console.log("inherited wrong fixed:", e);
+}
+
+const inheritedConfigurableProxy: any = new Proxy(fixedTarget, { getOwnPropertyDescriptor: inheritedConfigurableDescriptor as any });
+try {
+    console.log("inherited configurable:", Reflect.getOwnPropertyDescriptor(inheritedConfigurableProxy, "fixed", mark("inherited configurable"))?.configurable);
+} catch (e: any) {
+    console.log("inherited configurable:", e);
 }
 
 const writableFixedProxy: any = new Proxy(fixedTarget, { getOwnPropertyDescriptor: writableFixedDescriptor as any });
