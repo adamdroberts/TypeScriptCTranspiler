@@ -536,6 +536,7 @@ tsc_buffer_t* tsc_child_process_exec_file_sync(const tsc_str_t* file, const tsc_
     }
     int out_pipe[2];
     int err_pipe[2];
+    int exec_err_pipe[2];
     int in_pipe[2] = { -1, -1 };
     if (pipe(out_pipe) != 0) tsc_panic("child_process.execFileSync pipe failed");
     if (pipe(err_pipe) != 0) {
@@ -543,11 +544,22 @@ tsc_buffer_t* tsc_child_process_exec_file_sync(const tsc_str_t* file, const tsc_
         close(out_pipe[1]);
         tsc_panic("child_process.execFileSync stderr pipe failed");
     }
+    if (pipe(exec_err_pipe) != 0) {
+        close(out_pipe[0]);
+        close(out_pipe[1]);
+        close(err_pipe[0]);
+        close(err_pipe[1]);
+        tsc_panic("child_process.execFileSync exec-error pipe failed");
+    }
+    int exec_err_flags = fcntl(exec_err_pipe[1], F_GETFD);
+    if (exec_err_flags >= 0) (void)fcntl(exec_err_pipe[1], F_SETFD, exec_err_flags | FD_CLOEXEC);
     if (input && pipe(in_pipe) != 0) {
         close(out_pipe[0]);
         close(out_pipe[1]);
         close(err_pipe[0]);
         close(err_pipe[1]);
+        close(exec_err_pipe[0]);
+        close(exec_err_pipe[1]);
         tsc_panic("child_process.execFileSync stdin pipe failed");
     }
 
@@ -557,6 +569,8 @@ tsc_buffer_t* tsc_child_process_exec_file_sync(const tsc_str_t* file, const tsc_
         close(out_pipe[1]);
         close(err_pipe[0]);
         close(err_pipe[1]);
+        close(exec_err_pipe[0]);
+        close(exec_err_pipe[1]);
         if (input) {
             close(in_pipe[0]);
             close(in_pipe[1]);
@@ -566,24 +580,49 @@ tsc_buffer_t* tsc_child_process_exec_file_sync(const tsc_str_t* file, const tsc_
     if (pid == 0) {
         close(out_pipe[0]);
         close(err_pipe[0]);
+        close(exec_err_pipe[0]);
         if (input) close(in_pipe[1]);
-        if (dup2(out_pipe[1], STDOUT_FILENO) < 0) _exit(127);
-        if (dup2(err_pipe[1], STDERR_FILENO) < 0) _exit(127);
-        if (input && dup2(in_pipe[0], STDIN_FILENO) < 0) _exit(127);
+        if (dup2(out_pipe[1], STDOUT_FILENO) < 0) {
+            int err = errno;
+            (void)write(exec_err_pipe[1], &err, sizeof(err));
+            _exit(127);
+        }
+        if (dup2(err_pipe[1], STDERR_FILENO) < 0) {
+            int err = errno;
+            (void)write(exec_err_pipe[1], &err, sizeof(err));
+            _exit(127);
+        }
+        if (input && dup2(in_pipe[0], STDIN_FILENO) < 0) {
+            int err = errno;
+            (void)write(exec_err_pipe[1], &err, sizeof(err));
+            _exit(127);
+        }
         close(out_pipe[1]);
         close(err_pipe[1]);
         if (input) close(in_pipe[0]);
         if (cwd) {
             char* cwd_cstr = cstr_dup(cwd);
-            if (chdir(cwd_cstr) != 0) _exit(127);
+            if (chdir(cwd_cstr) != 0) {
+                int err = errno;
+                (void)write(exec_err_pipe[1], &err, sizeof(err));
+                _exit(127);
+            }
             free(cwd_cstr);
         }
         child_apply_env(env);
-        if (child_apply_ids(uid, gid) != 0) _exit(127);
+        int id_err = child_apply_ids(uid, gid);
+        if (id_err != 0) {
+            (void)write(exec_err_pipe[1], &id_err, sizeof(id_err));
+            _exit(127);
+        }
 
         size_t argc = 1 + (actual_args ? actual_args->len : 0);
         char** argv = (char**)calloc(argc + 1, sizeof(char*));
-        if (!argv) _exit(127);
+        if (!argv) {
+            int err = errno ? errno : ENOMEM;
+            (void)write(exec_err_pipe[1], &err, sizeof(err));
+            _exit(127);
+        }
         argv[0] = cstr_dup(argv0 ? argv0 : actual_file);
         for (size_t i = 1; i < argc; i++) {
             tsc_str_t* arg = TSC_ARR(tsc_str_t*, actual_args, i - 1);
@@ -592,11 +631,14 @@ tsc_buffer_t* tsc_child_process_exec_file_sync(const tsc_str_t* file, const tsc_
         argv[argc] = NULL;
         char* exec_file = cstr_dup(actual_file);
         execvp(exec_file, argv);
+        int err = errno;
+        (void)write(exec_err_pipe[1], &err, sizeof(err));
         _exit(127);
     }
 
     close(out_pipe[1]);
     close(err_pipe[1]);
+    close(exec_err_pipe[1]);
     if (input) {
         close(in_pipe[0]);
         size_t written = 0;
@@ -693,9 +735,16 @@ tsc_buffer_t* tsc_child_process_exec_file_sync(const tsc_str_t* file, const tsc_
         if (errno != EINTR) {
             free(data);
             free(stderr_data);
+            close(exec_err_pipe[0]);
             tsc_panic("child_process.execFileSync wait failed");
         }
     }
+    int exec_error = 0;
+    for (;;) {
+        ssize_t n = read(exec_err_pipe[0], &exec_error, sizeof(exec_error));
+        if (n >= 0 || errno != EINTR) break;
+    }
+    close(exec_err_pipe[0]);
     if (timed_out) {
         free(data);
         free(stderr_data);
@@ -705,6 +754,13 @@ tsc_buffer_t* tsc_child_process_exec_file_sync(const tsc_str_t* file, const tsc_
         free(data);
         free(stderr_data);
         tsc_throw_str(tsc_str_from_cstr("child_process.execFileSync maxBuffer exceeded"));
+    }
+    if (exec_error) {
+        free(data);
+        free(stderr_data);
+        tsc_throw_str(tsc_str_concat_n(2,
+            tsc_str_from_lit("child_process.execFileSync failed: ", 35),
+            child_errno_name(exec_error)));
     }
     if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
         free(data);
