@@ -1,10 +1,11 @@
 arrayProto: object [object Object]
 functionProto: object [object Object]
-objectProto: object null
+objectProto: object [object Object]
+objectProto parent: object null
 arrayProto isPrototypeOf arr: true
 functionProto isPrototypeOf fnVal: true
-objectProto isPrototypeOf arr: Object.prototype.isPrototypeOf.call receiver is null or undefined
-objectProto isPrototypeOf fnVal: Object.prototype.isPrototypeOf.call receiver is null or undefined
+objectProto isPrototypeOf arr: true
+objectProto isPrototypeOf fnVal: true
 null isPrototypeOf arr: Object.prototype.isPrototypeOf.call receiver is null or undefined
 undefined isPrototypeOf fnVal: Object.prototype.isPrototypeOf.call receiver is null or undefined
 descsNum keys: 

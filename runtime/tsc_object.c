@@ -48,6 +48,40 @@ tsc_shape_t* tsc_shape_get_root(void) {
 
 static uint64_t g_object_id_counter = 0;
 
+static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
+    tsc_object_t* o = (tsc_object_t*)TSC_GC_MALLOC(sizeof(tsc_object_t));
+    o->len = 0;
+    o->cap = 4;
+    o->extensible = true;
+    o->class_ptr = NULL;
+    o->is_proxy = false;
+    o->proxy_revoked = false;
+    o->is_promise = false;
+    o->is_date = false;
+    o->is_regexp = false;
+    o->is_map = false;
+    o->is_set = false;
+    o->is_error = false;
+    o->is_typed_array = false;
+    o->shape_version = 1;
+    o->shape = tsc_shape_get_root();
+    o->object_id = ++g_object_id_counter;
+    o->proxy_target = tsc_value_undefined();
+    o->proxy_handler = tsc_value_undefined();
+    o->prototype = prototype;
+    o->props = (tsc_object_prop_t*)TSC_GC_MALLOC(sizeof(tsc_object_prop_t) * o->cap);
+    if (g_shape_diagnostics_enabled) {
+        fprintf(stderr, "[tsc shape] Obj #%" PRIu64 " created (empty)\n", o->object_id);
+    }
+    return o;
+}
+
+tsc_value_t tsc_value_object_prototype(void) {
+    static tsc_object_t* prototype = NULL;
+    if (!prototype) prototype = tsc_object_alloc(tsc_value_null());
+    return tsc_value_object(prototype);
+}
+
 static void print_shape_keys(const tsc_object_t* o, const tsc_str_t* skip_key, const tsc_str_t* add_key) {
     fprintf(stderr, "{");
     bool first = true;
@@ -73,31 +107,7 @@ static void print_shape_keys(const tsc_object_t* o, const tsc_str_t* skip_key, c
 }
 
 tsc_object_t* tsc_object_new(void) {
-    tsc_object_t* o = (tsc_object_t*)TSC_GC_MALLOC(sizeof(tsc_object_t));
-    o->len = 0;
-    o->cap = 4;
-    o->extensible = true;
-    o->class_ptr = NULL;
-    o->is_proxy = false;
-    o->proxy_revoked = false;
-    o->is_promise = false;
-    o->is_date = false;
-    o->is_regexp = false;
-    o->is_map = false;
-    o->is_set = false;
-    o->is_error = false;
-    o->is_typed_array = false;
-    o->shape_version = 1;
-    o->shape = tsc_shape_get_root();
-    o->object_id = ++g_object_id_counter;
-    o->proxy_target = tsc_value_undefined();
-    o->proxy_handler = tsc_value_undefined();
-    o->prototype = tsc_value_null();
-    o->props = (tsc_object_prop_t*)TSC_GC_MALLOC(sizeof(tsc_object_prop_t) * o->cap);
-    if (g_shape_diagnostics_enabled) {
-        fprintf(stderr, "[tsc shape] Obj #%" PRIu64 " created (empty)\n", o->object_id);
-    }
-    return o;
+    return tsc_object_alloc(tsc_value_object_prototype());
 }
 
 static void object_shape_changed(tsc_object_t* o, const char* action, const tsc_str_t* key) {

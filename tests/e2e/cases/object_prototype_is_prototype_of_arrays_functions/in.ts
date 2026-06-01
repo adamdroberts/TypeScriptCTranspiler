@@ -18,6 +18,7 @@ const objectProto: any = Object.getPrototypeOf({});
 console.log("arrayProto:", typeof arrayProto, arrayProto);
 console.log("functionProto:", typeof functionProto, functionProto);
 console.log("objectProto:", typeof objectProto, objectProto);
+console.log("objectProto parent:", typeof Object.getPrototypeOf(objectProto), Object.getPrototypeOf(objectProto));
 
 report("arrayProto isPrototypeOf arr", (): any => Object.prototype.isPrototypeOf.call(arrayProto, arr));
 report("functionProto isPrototypeOf fnVal", (): any => Object.prototype.isPrototypeOf.call(functionProto, fnVal));
