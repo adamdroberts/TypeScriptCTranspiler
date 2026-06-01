@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS whole-value `module.exports = (target += value)` assignment-expression defaults now lower as boxed runtime-computed values. Test: `node_modules_commonjs_module_exports_assignment_default`.
 - CommonJS whole-value `module.exports = ++counter` / `--counter` defaults now lower as boxed runtime-computed values. Test: `node_modules_commonjs_module_exports_prefix_update_default`.
 - CommonJS whole-value `module.exports = /pattern/flags` RegExp literal defaults now lower through the AOT package-source path. Test: `node_modules_commonjs_module_exports_regexp_default`.
 - CommonJS whole-value `module.exports = 1n` BigInt literal defaults now lower through the AOT package-source path. Test: `node_modules_commonjs_module_exports_bigint_default`.
