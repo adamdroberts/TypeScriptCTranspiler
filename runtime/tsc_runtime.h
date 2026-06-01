@@ -826,7 +826,7 @@ tsc_value_t tsc_value_method_concat(tsc_value_t recv, tsc_value_t value);
 tsc_value_t tsc_value_method_flat(tsc_value_t recv, tsc_value_t depth);
 tsc_value_t tsc_value_method_fill(tsc_value_t recv, tsc_value_t value, tsc_value_t start, tsc_value_t end);
 tsc_value_t tsc_value_method_copy_within(tsc_value_t recv, tsc_value_t target, tsc_value_t start, tsc_value_t end);
-tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_value_t delete_count, tsc_array_t* items);
+tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_value_t delete_count, int argc, tsc_array_t* items);
 tsc_value_t tsc_value_method_sort(tsc_value_t recv);
 tsc_value_t tsc_value_method_to_sorted(tsc_value_t recv);
 tsc_value_t tsc_value_method_with(tsc_value_t recv, tsc_value_t index, tsc_value_t value);
