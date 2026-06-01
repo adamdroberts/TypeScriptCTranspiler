@@ -1377,6 +1377,14 @@ interface FSReadFileBufferObjectOptions {
 }
 type FSReadFileBufferOptions = FSBufferEncoding | null | FSReadFileBufferObjectOptions;
 type FSReadFileStringOptions = FSReadFileStringEncoding | FSReadFileOptions;
+interface FSPromisesReadFileOptions extends FSReadFileOptions {
+    signal?: any;
+}
+interface FSPromisesReadFileBufferObjectOptions extends FSReadFileBufferObjectOptions {
+    signal?: any;
+}
+type FSPromisesReadFileBufferOptions = FSBufferEncoding | null | FSPromisesReadFileBufferObjectOptions;
+type FSPromisesReadFileStringOptions = FSReadFileStringEncoding | FSPromisesReadFileOptions;
 type FSWriteFileFlag = "w" | "wx" | "w+" | "wx+" | "a" | "ax" | "a+" | "ax+" | "as" | "as+" | "r+" | "rs+";
 interface FSWriteFileOptions {
     encoding?: FSFileContentEncoding | null;
@@ -1385,6 +1393,10 @@ interface FSWriteFileOptions {
     flush?: boolean;
 }
 type FSWriteFileEncodingOptions = FSFileContentEncoding | null | FSWriteFileOptions;
+interface FSPromisesWriteFileOptions extends FSWriteFileOptions {
+    signal?: any;
+}
+type FSPromisesWriteFileEncodingOptions = FSFileContentEncoding | null | FSPromisesWriteFileOptions;
 type FSAppendFileFlag = "a" | "ax" | "a+" | "ax+" | "as" | "as+";
 interface FSAppendFileOptions {
     encoding?: FSFileContentEncoding | null;
@@ -1482,9 +1494,9 @@ interface FS {
     promises: FSPromises;
 }
 interface FSPromises {
-    readFile(path: FSPathLike, options: FSReadFileBufferOptions, ...ignored: any[]): Promise<Buffer>;
-    readFile(path: FSPathLike, options?: FSReadFileStringOptions, ...ignored: any[]): Promise<string>;
-    writeFile(path: FSPathLike, data: string | Buffer, options?: FSWriteFileEncodingOptions, ...ignored: any[]): Promise<void>;
+    readFile(path: FSPathLike, options: FSPromisesReadFileBufferOptions, ...ignored: any[]): Promise<Buffer>;
+    readFile(path: FSPathLike, options?: FSPromisesReadFileStringOptions, ...ignored: any[]): Promise<string>;
+    writeFile(path: FSPathLike, data: string | Buffer, options?: FSPromisesWriteFileEncodingOptions, ...ignored: any[]): Promise<void>;
     appendFile(path: FSPathLike, data: string | Buffer, options?: FSAppendFileEncodingOptions, ...ignored: any[]): Promise<void>;
     readdir(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Promise<Buffer[]>;
     readdir(path: FSPathLike, options: FSReaddirDirentOptions, ...ignored: any[]): Promise<FSDirent[]>;

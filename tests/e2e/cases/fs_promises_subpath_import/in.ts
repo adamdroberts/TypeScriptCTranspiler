@@ -35,7 +35,9 @@ fsp.readFile(defaultPath).then((text: string): string => {
     return defaultRead;
 });
 
-console.log("named:", namedRead);
-console.log("alias:", aliasRead);
-console.log("namespace:", namespaceRead);
-console.log("default:", defaultRead);
+setImmediate((): void => {
+    console.log("named:", namedRead);
+    console.log("alias:", aliasRead);
+    console.log("namespace:", namespaceRead);
+    console.log("default:", defaultRead);
+});

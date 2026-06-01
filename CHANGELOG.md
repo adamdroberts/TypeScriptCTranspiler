@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Immediate `fs.promises.readFile(...)` and `fs.promises.writeFile(...)` now accept and evaluate `signal` option values in the bounded sync-backed subset while leaving real AbortSignal cancellation deferred to future libuv-backed async I/O. Test: `fs_promises_signal_options`.
 - Extended the narrow lazy generator lowering to resume single suspended `yield` values inside simple identifier compound assignments such as `+=`, `&=`, and `**=`. Test: `generator_lazy_yield_compound_assignment`.
 - Function-target Proxy `ownKeys` and `getOwnPropertyDescriptor` invariants now include the non-configurable writable `prototype` metadata property instead of treating function metadata as only non-writable `length` / `name`. Test: `proxy_function_prototype_invariants`.
 - Process stdio streams now accept `.destroy(error?)` as an inert compatibility method while preserving argument evaluation and leaving destroyed state predicates false. Test: `process_stdio_destroy`.
