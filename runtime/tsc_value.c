@@ -228,7 +228,7 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
             tsc_array_t* list = value_to_argument_list(args, "Reflect.construct argumentsList must be an array or array-like object");
             tsc_value_t receiver = tsc_value_object(tsc_object_new());
             tsc_value_t new_target_proto = tsc_value_get_prop(new_target, tsc_str_from_lit("prototype", 9));
-            if (value_is_valid_prototype(new_target_proto)) {
+            if (value_is_valid_prototype(new_target_proto) && !value_is_null_value(new_target_proto)) {
                 (void)tsc_value_set_prototype_of(receiver, new_target_proto);
             }
             tsc_value_t result = ident->code.generic(ident->env, receiver, list);

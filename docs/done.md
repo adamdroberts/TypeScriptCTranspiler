@@ -473,7 +473,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Callable Proxy values support dynamic `Function.prototype.apply(...)` with omitted, `null`, and `undefined` argument lists normalized to empty arrays while still evaluating ignored trailing arguments. Test: `proxy_apply_empty_arguments_list`
 - Proxy `apply` traps receive a normalized real argument array from array-like `Reflect.apply(...)` inputs and forward trap-mutated arguments into target calls. Test: `proxy_apply_arguments_list`
 - Proxy `construct` traps receive a normalized real argument array from array-like `Reflect.construct(...)` inputs and forward trap-mutated arguments into target construction. Test: `proxy_construct_arguments_list`
-- Dynamic `Reflect.construct(target, args, newTarget)` applies valid object/array/function `newTarget.prototype` values to the initialized receiver before the target constructor runs, and Proxy `newTarget` values dispatch the `get` trap or throw on revoked proxies during prototype lookup. Test: `proxy_construct_new_target_prototype`
+- Dynamic `Reflect.construct(target, args, newTarget)` applies valid object/array/function `newTarget.prototype` values to the initialized receiver before the target constructor runs, falls back to `Object.prototype` when `newTarget.prototype` is explicitly `null`, and Proxy `newTarget` values dispatch the `get` trap or throw on revoked proxies during prototype lookup. Tests: `reflect_construct_dynamic_function`, `proxy_construct_new_target_prototype`
 - Revoked object `Proxy` values throw through object-operation paths including set, has, delete, own-key, descriptor, prototype, extensibility, seal, and freeze helpers. Test: `proxy_revocable_object_ops`
 - Revoked object `Proxy` values throw through `Reflect.*` helper paths including get, set, has, deleteProperty, ownKeys, descriptor, prototype, and extensibility helpers. Test: `proxy_revocable_reflect_ops`
 - `Proxy.revocable(...)` revoke functions are idempotent and receiver-independent across direct, `call`, and `apply` invocation forms while preserving revoked-proxy errors after revocation. Test: `proxy_revocable_revoke_function`
@@ -2022,7 +2022,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `reflect_object_target_validation` | dynamic Reflect prototype/extensibility helpers reject invalid targets and prototypes after operand evaluation |
 | `reflect_property_target_validation` | dynamic Reflect property helpers reject non-object targets after operand evaluation |
 | `reflect_construct` | Reflect.construct over statically known class constructors and array/spread argument lists |
-| `reflect_construct_dynamic_function` | dynamic Reflect.construct over boxed function values creates a dynamic receiver and honors object or primitive constructor returns |
+| `reflect_construct_dynamic_function` | dynamic Reflect.construct over boxed function values creates a dynamic receiver, honors object or primitive constructor returns, and falls back to Object.prototype for null newTarget.prototype |
 | `reflect_construct_validation` | dynamic Reflect.construct catchable target, argumentsList, and newTarget validation |
 | `reflect_construct_new_target_validation` | dynamic Reflect.construct validates explicit constructable newTarget values and rejects accessor-function constructor identities |
 | `reflect_ignored_arguments` | Reflect helpers evaluate and ignore trailing arguments across dynamic and typed helper paths |

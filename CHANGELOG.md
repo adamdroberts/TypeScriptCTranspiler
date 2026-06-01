@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic `Reflect.construct(...)` now falls back to `Object.prototype` when `newTarget.prototype` is explicitly `null`, matching constructor allocation semantics. Test: `reflect_construct_dynamic_function`.
 - Generated-C DCE now treats unused pure `DataView` allocations over fresh bounded `ArrayBuffer` inputs and empty own-key Object/Reflect helper reads over fresh `DataView` instances as discardable. Test: `generated_c_dce_const`.
 - Generated-C DCE now treats unused pure `ArrayBuffer` allocations and empty own-key Object/Reflect helper reads over fresh `ArrayBuffer` instances as discardable. Test: `generated_c_dce_const`.
 - Lazy generator lowering now resumes single suspended `yield` values through `%`, `**`, bitwise, and shift binary operators. Test: `generator_lazy_yield_binary_more`.
