@@ -26,6 +26,11 @@ arr.toLocaleString = function () {
 };
 console.log("locale:", arr.toLocaleString(), Reflect.apply(arr.toLocaleString, arr, []));
 
+arr.valueOf = function () {
+    return "value:" + arr.foo;
+};
+console.log("value:", arr.valueOf(), Reflect.apply(arr.valueOf, arr, []));
+
 console.log("delete:", delete arr.foo, Object.hasOwn(arr, "foo"), arr.foo);
 
 Object.defineProperty(arr, "hidden", { value: "secret" });

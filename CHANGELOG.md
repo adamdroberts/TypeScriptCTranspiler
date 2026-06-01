@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Direct dynamic array `.valueOf()` calls now dispatch through dynamic property lookup, so own overrides are honored like detached prototype calls. Test: `dynamic_array_string_properties`.
 - Direct dynamic array `.toLocaleString()` calls now dispatch through dynamic property lookup, so own overrides are honored like detached prototype calls. Test: `dynamic_array_string_properties`.
 - Direct dynamic array `.toString()` calls now dispatch through dynamic property lookup, so custom `join` functions and own `toString` overrides are honored like detached prototype calls. Test: `dynamic_array_string_properties`.
 - Array-target Proxy `ownKeys` validation now accounts for dynamic array own string-key properties, rejecting missing non-configurable side keys and missing side keys on non-extensible arrays. Test: `proxy_array_ownkeys_invariants`.
