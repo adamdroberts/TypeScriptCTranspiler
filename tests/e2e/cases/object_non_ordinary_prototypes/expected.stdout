@@ -1,0 +1,6 @@
+array get: 3
+array has: true
+array set: true child-marker true
+function get: object baseFunction
+function has: true true
+function set: true fn-child true

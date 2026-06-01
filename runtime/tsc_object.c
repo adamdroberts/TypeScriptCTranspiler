@@ -920,6 +920,12 @@ bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value,
     if (value_is_box(o->prototype) && value_tag(o->prototype) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_set_receiver((tsc_object_t*)value_ptr(o->prototype), key, value, receiver);
     }
+    if (
+        value_is_box(o->prototype) &&
+        (value_tag(o->prototype) == TSC_VALUE_TAG_ARRAY || value_tag(o->prototype) == TSC_VALUE_TAG_FUNCTION)
+    ) {
+        return tsc_value_set_prop_receiver(o->prototype, key, value, receiver);
+    }
     if (str_lit_eq(key, "__proto__")) {
         if (!value_is_valid_prototype(value)) return true;
         return tsc_value_set_prototype_of(receiver, value);
@@ -1188,6 +1194,12 @@ tsc_value_t tsc_object_get_receiver(const tsc_object_t* o, const tsc_str_t* key,
     if (value_is_box(o->prototype) && value_tag(o->prototype) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_get_receiver((tsc_object_t*)value_ptr(o->prototype), key, receiver);
     }
+    if (
+        value_is_box(o->prototype) &&
+        (value_tag(o->prototype) == TSC_VALUE_TAG_ARRAY || value_tag(o->prototype) == TSC_VALUE_TAG_FUNCTION)
+    ) {
+        return tsc_value_get_prop_receiver(o->prototype, key, receiver);
+    }
     if (str_lit_eq(key, "__proto__")) {
         return tsc_value_get_prototype_of(receiver);
     }
@@ -1301,6 +1313,12 @@ bool tsc_object_has(const tsc_object_t* o, const tsc_str_t* key) {
     if (idx >= 0) return true;
     if (value_is_box(o->prototype) && value_tag(o->prototype) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_has((tsc_object_t*)value_ptr(o->prototype), key);
+    }
+    if (
+        value_is_box(o->prototype) &&
+        (value_tag(o->prototype) == TSC_VALUE_TAG_ARRAY || value_tag(o->prototype) == TSC_VALUE_TAG_FUNCTION)
+    ) {
+        return tsc_value_has_prop(o->prototype, key);
     }
     return false;
 }
