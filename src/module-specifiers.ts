@@ -420,6 +420,80 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
     return dedupe(resolve(expr));
 }
 
+export function staticStringExpressionAffix(expr: ts.Expression): { prefix: string; suffix: string } | null {
+    const exact = staticStringExpressionTexts(expr);
+    if (exact.length > 0) return null;
+    const seen = new Set<ts.VariableDeclaration>();
+
+    const resolve = (node: ts.Expression): { prefix: string; suffix: string } | null => {
+        node = unwrapStaticExpression(node);
+        const nodeExact = staticStringExpressionTexts(node);
+        if (nodeExact.length > 0) return null;
+        if (ts.isIdentifier(node)) {
+            const decl = earlierConstStringDeclaration(node) ?? topLevelConstStringDeclaration(node);
+            if (!decl?.initializer || seen.has(decl)) return null;
+            seen.add(decl);
+            const value = resolve(decl.initializer);
+            seen.delete(decl);
+            return value;
+        }
+        if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+            const leftExact = staticStringExpressionTexts(node.left);
+            const rightExact = staticStringExpressionTexts(node.right);
+            if (leftExact.length === 1) {
+                const rightAffix = resolve(node.right);
+                return {
+                    prefix: leftExact[0]! + (rightAffix?.prefix ?? ""),
+                    suffix: rightAffix?.suffix ?? "",
+                };
+            }
+            if (rightExact.length === 1) {
+                const leftAffix = resolve(node.left);
+                return {
+                    prefix: leftAffix?.prefix ?? "",
+                    suffix: (leftAffix?.suffix ?? "") + rightExact[0]!,
+                };
+            }
+            return null;
+        }
+        if (ts.isTemplateExpression(node)) {
+            let prefix = node.head.text;
+            let prefixOpen = true;
+            for (const span of node.templateSpans) {
+                if (!prefixOpen) break;
+                const values = staticStringExpressionTexts(span.expression);
+                if (values.length !== 1) {
+                    prefixOpen = false;
+                    break;
+                }
+                prefix += values[0]! + span.literal.text;
+            }
+
+            let suffix = node.templateSpans[node.templateSpans.length - 1]?.literal.text ?? "";
+            for (let i = node.templateSpans.length - 1; i >= 0; i--) {
+                const span = node.templateSpans[i]!;
+                const values = staticStringExpressionTexts(span.expression);
+                if (values.length !== 1) break;
+                suffix = values[0]! + suffix;
+                suffix = (i === 0 ? node.head.text : node.templateSpans[i - 1]!.literal.text) + suffix;
+            }
+
+            return prefix || suffix ? { prefix, suffix } : null;
+        }
+        return null;
+    };
+
+    const affix = resolve(expr);
+    return affix && (affix.prefix || affix.suffix) ? affix : null;
+}
+
+export function filterSpecifiersByStaticAffix(specifiers: string[], expr: ts.Expression): string[] {
+    const affix = staticStringExpressionAffix(expr);
+    return affix
+        ? specifiers.filter((spec) => spec.startsWith(affix.prefix) && spec.endsWith(affix.suffix))
+        : specifiers;
+}
+
 export function requireCallSpecifier(
     expr: ts.Expression,
     requireAliases: Set<string>,
@@ -440,7 +514,7 @@ export function requireCallSpecifiers(
     return null;
 }
 
-function commonJsRequireSpecifierArgument(
+export function commonJsRequireSpecifierArgument(
     expr: ts.CallExpression,
     requireAliases: Set<string>,
     moduleAliases: Set<string>,

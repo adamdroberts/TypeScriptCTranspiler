@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic require manifests now filter per-file allow-list entries by static prefix/suffix proofs from non-finite specifier expressions, keeping unrelated manifest entries out of the AOT graph and dispatch table. Test: `dynamic_require_manifest_affix`.
 - Manifest-backed native-addon require and import bindings now support object destructuring, default initializers, and rest objects through the embedded Node bridge. Test: `native_addon_manifest_binding_destructure`.
 - Finite dynamic `require(...)` proofs now resolve nullish coalescing string specifier expressions into the AOT module graph without stringifying `null` / `undefined` as module names. Test: `dynamic_require_nullish_specifiers`.
 - Typed string `&&` / `||` expressions now preserve the selected string value, and finite dynamic `require(...)` proofs resolve those logical string specifiers into the AOT module graph without load-on-demand fallback. Test: `dynamic_require_logical_specifiers`.
