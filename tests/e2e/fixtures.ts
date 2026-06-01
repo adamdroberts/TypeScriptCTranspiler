@@ -1290,6 +1290,12 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-runtime-logical-default-package": cjsPackage("tsc2c-cjs-runtime-logical-default-package", {
         "index.js": 'function makeLogicalDefault(label, count) {\n  return { label, count, nested: { ok: true } };\n}\nconst disabled = false;\nconst missing = null;\nmodule.exports = (disabled && makeLogicalDefault("bad", 0)) || (missing ?? makeLogicalDefault("logical", 22));\n',
     }),
+    "tsc2c-cjs-runtime-expression-default-package": cjsPackage("tsc2c-cjs-runtime-expression-default-package", {
+        "index.js": 'module.exports = {\n  label: "expr-" + "default",\n  count: +(40 + 2),\n  enabled: !false,\n  mask: ~-1,\n  nested: { sum: 20 + 2 },\n  values: [1 + 1, -(3)]\n};\n',
+    }),
+    "tsc2c-cjs-runtime-binary-default-package": cjsPackage("tsc2c-cjs-runtime-binary-default-package", {
+        "index.js": 'module.exports = "binary-" + (20 + 2);\n',
+    }),
     "tsc2c-cjs-object-wrapper-freeze-named": cjsPackage("tsc2c-cjs-object-wrapper-freeze-named", {
         "index.js": 'const api = {\n  count: 71,\n  extra: true\n};\nmodule.exports = Object.freeze({\n  default: function greet(name) { return "hello " + name; },\n  label: "freeze-named",\n  double(value) { return value * 2; },\n  ...api\n});\n',
     }),
