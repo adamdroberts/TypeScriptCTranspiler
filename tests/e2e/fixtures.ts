@@ -673,6 +673,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-define-properties-from-entries-computed": cjsPackage("tsc2c-cjs-define-properties-from-entries-computed", {
         "index.js": 'exports.__esModule = true;\nconst defaultKey = "def" + "ault";\nconst labelSuffix = "bel";\nconst countKey = `count`;\nconst doubleKey = "dou" + "ble";\nObject.defineProperties(exports, Object.fromEntries([\n  [defaultKey, { value: function greet(name) { return "entries " + name; }, enumerable: true }],\n  ["la" + labelSuffix, { value: "define-properties-from-entries", enumerable: true }],\n  [countKey, { value: 73, enumerable: true }],\n  [doubleKey, { value: function double(value) { return value * 3; }, enumerable: true }]\n]));\n',
     }),
+    "tsc2c-cjs-define-properties-from-entries-finite-keys": cjsPackage("tsc2c-cjs-define-properties-from-entries-finite-keys", {
+        "index.js": 'exports.__esModule = true;\nconst labelKey = Date.now() >= 0 ? "label" : "fallbackLabel";\nconst countKey = Math.random() >= 0 ? "count" : "otherCount";\nObject.defineProperties(exports, Object.fromEntries([\n  [labelKey, { value: "define-properties-finite-keys", enumerable: true }],\n  [countKey, { value: 173, enumerable: true }]\n]));\n',
+    }),
     "tsc2c-cjs-numeric-boolean-exports": cjsPackage("tsc2c-cjs-numeric-boolean-exports", {
         "index.js": 'exports.__esModule = true;\nexports[1.0] = "one";\nexports[1e2] = "hundred";\nexports[-0] = "zero";\nexports[true] = "yes";\nexports[false] = "no";\n',
     }),
@@ -1249,6 +1252,9 @@ const packages: Record<string, PackageFixture> = {
     }),
     "tsc2c-cjs-object-from-entries-computed-named-package": cjsPackage("tsc2c-cjs-object-from-entries-computed-named-package", {
         "index.js": 'const defaultKey = "def" + "ault";\nconst labelKey = `label`;\nconst countPrefix = "co";\nmodule.exports = Object.fromEntries([\n  [defaultKey, "from-entries-computed-default"],\n  [labelKey, "from-entries-computed-named"],\n  [countPrefix + "unt", 94],\n  [`enabled`, true]\n]);\n',
+    }),
+    "tsc2c-cjs-object-from-entries-finite-keys-package": cjsPackage("tsc2c-cjs-object-from-entries-finite-keys-package", {
+        "index.js": 'const labelKey = Date.now() >= 0 ? "label" : "fallbackLabel";\nconst countKey = Math.random() >= 0 ? "count" : "otherCount";\nmodule.exports = Object.fromEntries([\n  [labelKey, "from-entries-finite-keys"],\n  [countKey, 171]\n]);\n',
     }),
     "tsc2c-cjs-module-exports-dynamic-computed": cjsPackage("tsc2c-cjs-module-exports-dynamic-computed", {
         "index.js": 'const suffix = "bel";\nconst entries = [["la" + suffix, "dynamic-computed"], ["count", 71]];\nmodule.exports = Object.fromEntries(entries);\n',

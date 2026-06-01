@@ -15751,9 +15751,12 @@ class Emitter {
         if (!entries) return null;
         const exports: CommonJsFromEntriesExport[] = [];
         for (const entry of entries) {
-            const exported = this.commonJsObjectFromEntriesExportFromEntry(call, entry);
-            if (!exported || exported.name === "__esModule") continue;
-            exports.push(exported);
+            const exported = this.commonJsObjectFromEntriesExportsFromEntry(call, entry);
+            if (!exported) continue;
+            for (const item of exported) {
+                if (item.name === "__esModule") continue;
+                exports.push(item);
+            }
         }
         return exports;
     }
@@ -15876,15 +15879,22 @@ class Emitter {
         call: ts.CallExpression,
         entry: ts.ArrayLiteralExpression | ts.PropertyAssignment,
     ): CommonJsFromEntriesExport | null {
+        return this.commonJsObjectFromEntriesExportsFromEntry(call, entry)?.[0] ?? null;
+    }
+
+    private commonJsObjectFromEntriesExportsFromEntry(
+        call: ts.CallExpression,
+        entry: ts.ArrayLiteralExpression | ts.PropertyAssignment,
+    ): CommonJsFromEntriesExport[] | null {
         if (ts.isPropertyAssignment(entry)) {
-            const name = this.staticPropertyName(entry.name);
-            if (name == null) {
-                unsupported(entry.name, "CommonJS Object.fromEntries(Object.entries(...)) exports require static string keys");
+            const names = this.staticPropertyNames(entry.name);
+            if (names.length === 0) {
+                unsupported(entry.name, "CommonJS Object.fromEntries(Object.entries(...)) exports require static string keys or finite dynamic key alternatives");
             }
             if (!this.isCommonJsObjectFromEntriesExportValue(entry.initializer)) {
                 unsupported(entry.initializer, "CommonJS Object.fromEntries(Object.entries(...)) exports require static literal, function, or require-backed values");
             }
-            return { call, name, right: entry.initializer, entry };
+            return names.map((name) => ({ call, name, right: entry.initializer, entry }));
         }
         if (entry.elements.length < 2) {
             unsupported(entry, "CommonJS Object.fromEntries exports require [key, value] entry arrays");
@@ -15894,14 +15904,14 @@ class Emitter {
         if (ts.isSpreadElement(key) || ts.isSpreadElement(value)) {
             unsupported(entry, "CommonJS Object.fromEntries exports require static [key, value] entry arrays");
         }
-        const name = this.staticComputedPropertyExpression(key);
-        if (name == null) {
-            unsupported(key, "CommonJS Object.fromEntries exports require static string keys");
+        const names = this.staticComputedPropertyExpressionTexts(key);
+        if (names.length === 0) {
+            unsupported(key, "CommonJS Object.fromEntries exports require static string keys or finite dynamic key alternatives");
         }
         if (!this.isCommonJsObjectFromEntriesExportValue(value)) {
             unsupported(value, "CommonJS Object.fromEntries exports require static literal, function, or require-backed values");
         }
-        return { call, name, right: value, entry };
+        return names.map((name) => ({ call, name, right: value, entry }));
     }
 
     private isCommonJsObjectFromEntriesExportValue(expr: ts.Expression): boolean {
@@ -16868,17 +16878,18 @@ class Emitter {
         for (const entry of entries) {
             const keyed = this.commonJsDefinePropertiesFromEntriesDescriptor(entry);
             if (!keyed) continue;
-            const { name, descriptor } = keyed;
-            if (!name || name === "__esModule") continue;
-            const descriptorObject = this.commonJsDefinePropertyExportDescriptor(descriptor);
-            if (!descriptorObject) {
-                unsupported(descriptor, "CommonJS Object.defineProperties Object.fromEntries descriptor must be an object literal");
+            for (const { name, descriptor } of keyed) {
+                if (!name || name === "__esModule") continue;
+                const descriptorObject = this.commonJsDefinePropertyExportDescriptor(descriptor);
+                if (!descriptorObject) {
+                    unsupported(descriptor, "CommonJS Object.defineProperties Object.fromEntries descriptor must be an object literal");
+                }
+                const right = this.commonJsDefinePropertyExportDescriptorValue(descriptorObject);
+                if (!right) {
+                    unsupported(descriptorObject, "CommonJS Object.defineProperties Object.fromEntries descriptor requires a value or simple getter");
+                }
+                exports.push({ call, name, right, entry });
             }
-            const right = this.commonJsDefinePropertyExportDescriptorValue(descriptorObject);
-            if (!right) {
-                unsupported(descriptorObject, "CommonJS Object.defineProperties Object.fromEntries descriptor requires a value or simple getter");
-            }
-            exports.push({ call, name, right, entry });
         }
         return exports;
     }
@@ -16903,12 +16914,11 @@ class Emitter {
 
     private commonJsDefinePropertiesFromEntriesDescriptor(
         entry: ts.ArrayLiteralExpression | ts.PropertyAssignment,
-    ): { name: string | null; descriptor: ts.Expression } | null {
+    ): Array<{ name: string; descriptor: ts.Expression }> | null {
         if (ts.isPropertyAssignment(entry)) {
-            return {
-                name: this.staticPropertyName(entry.name),
-                descriptor: entry.initializer,
-            };
+            const names = this.staticPropertyNames(entry.name);
+            if (names.length === 0) return null;
+            return names.map((name) => ({ name, descriptor: entry.initializer }));
         }
         if (entry.elements.length < 2) {
             unsupported(entry, "CommonJS Object.defineProperties Object.fromEntries descriptors require [key, descriptor] entry arrays");
@@ -16918,11 +16928,11 @@ class Emitter {
         if (ts.isSpreadElement(key) || ts.isSpreadElement(descriptor)) {
             unsupported(entry, "CommonJS Object.defineProperties Object.fromEntries descriptors require static [key, descriptor] entry arrays");
         }
-        const name = this.staticComputedPropertyExpression(key);
-        if (name == null) {
-            unsupported(key, "CommonJS Object.defineProperties Object.fromEntries descriptors require static string keys");
+        const names = this.staticComputedPropertyExpressionTexts(key);
+        if (names.length === 0) {
+            unsupported(key, "CommonJS Object.defineProperties Object.fromEntries descriptors require static string keys or finite dynamic key alternatives");
         }
-        return { name, descriptor };
+        return names.map((name) => ({ name, descriptor }));
     }
 
     private commonJsDefinePropertiesExportsFromOwnPropertyDescriptors(
@@ -46761,14 +46771,24 @@ class Emitter {
     }
 
     private staticPropertyName(name: ts.PropertyName): string | null {
-        if (ts.isIdentifier(name)) return name.text;
+        const names = this.staticPropertyNames(name);
+        return names.length === 1 ? names[0]! : null;
+    }
+
+    private staticPropertyNames(name: ts.PropertyName): string[] {
+        if (ts.isIdentifier(name)) return [name.text];
         if (ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)) {
-            return name.text;
+            return [name.text];
         }
         if (ts.isComputedPropertyName(name)) {
-            return this.staticComputedPropertyExpression(name.expression);
+            return this.staticComputedPropertyExpressionTexts(name.expression);
         }
-        return null;
+        return [];
+    }
+
+    private staticComputedPropertyExpressionTexts(expr: ts.Expression): string[] {
+        const direct = this.staticComputedPropertyExpression(expr);
+        return direct !== null ? [direct] : staticStringExpressionTexts(expr);
     }
 
     private staticComputedPropertyExpression(expr: ts.Expression): string | null {

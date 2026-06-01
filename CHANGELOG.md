@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS `Object.fromEntries(...)` named-export metadata now accepts finite dynamic key alternatives for direct `module.exports` sources and `Object.defineProperties(..., Object.fromEntries(...))` descriptor maps. Tests: `node_modules_commonjs_module_exports_object_from_entries_finite_keys`, `node_modules_commonjs_define_properties_from_entries_finite_keys`.
 - Lazy generator lowering now resumes simple property and element compound assignments from pre-yield lvalue snapshots. Test: `generator_lazy_yield_compound_lvalues`.
 - Generated-C DCE static numeric analysis now folds side-effect-free `Math.pow(...)`, `Math.fround(...)`, and `Math.imul(...)` calls with primitive inputs and pure ignored arguments. Test: `generated_c_dce_const`.
 - Dynamic require manifest caller-scoped entries now match only exact normalized absolute source-file paths, removing suffix fallback matches between unrelated files. Test: `dynamic_require_manifest_by_file_exact`.
