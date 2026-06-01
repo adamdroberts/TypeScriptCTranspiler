@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS computed named-export metadata now accepts checker-proven finite literal-union keys, including JavaScript JSDoc union keys, and lowers them through existing AOT export dispatch. Test: `node_modules_commonjs_jsdoc_union_computed_exports`.
 - CommonJS whole-value `module.exports = "key" in object` defaults now lower through the AOT package-source path as boxed boolean values. Test: `node_modules_commonjs_module_exports_in_default`.
 - CommonJS named `default` imports now use the same whole-`module.exports` AOT fallback as default and namespace-default imports when a JavaScript CommonJS package has no `__esModule` marker and no explicit `default` property. Test: `node_modules_commonjs_mixed_interop_default`.
 - Finite dynamic `require(...)` proofs now resolve `path.join(...)`, `path.resolve(...)`, and `path.normalize(...)` specifiers from `path` / `node:path` bindings, including CommonJS `__dirname` / `__filename` constants and absolute local module paths. Test: `dynamic_require_path_join`.
