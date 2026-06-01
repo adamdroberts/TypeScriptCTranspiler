@@ -23485,7 +23485,8 @@ class Emitter {
             ) {
                 return this.singleYieldExpressionInExpression(expr.right);
             }
-            return null;
+            const yieldExpr = this.singleYieldExpressionInExpression(expr);
+            return yieldExpr?.asteriskToken ? null : yieldExpr;
         }
         if (ts.isVariableStatement(stmt)) {
             if (stmt.declarationList.declarations.length !== 1) return null;
@@ -23533,12 +23534,8 @@ class Emitter {
     private simpleLazyYieldNeedsResume(stmt: ts.Statement): boolean {
         if (ts.isExpressionStatement(stmt)) {
             const expr = stmt.expression;
-            return ts.isBinaryExpression(expr) &&
-                (
-                    expr.operatorToken.kind === ts.SyntaxKind.EqualsToken ||
-                    (ts.isIdentifier(expr.left) && this.isSimpleLazyYieldCompoundAssignmentOperator(expr.operatorToken.kind))
-                ) &&
-                !!this.singleYieldExpressionInExpression(expr.right);
+            if (ts.isYieldExpression(expr)) return false;
+            return !!this.singleYieldExpressionInExpression(expr);
         }
         if (ts.isVariableStatement(stmt)) {
             if (stmt.declarationList.declarations.length !== 1) return false;
@@ -24180,6 +24177,11 @@ class Emitter {
                 const lhsType = this.storageType(expr.left);
                 const value = this.emitSimpleLazyResumeExpression(expr.right, nextArg);
                 buf.line(`${this.emitSimpleLazyCompoundAssignment(expr, lhs, lhsType, value)};`);
+                return;
+            }
+            if (this.singleYieldExpressionInExpression(expr)) {
+                const value = this.emitSimpleLazyResumeExpression(expr, nextArg);
+                buf.line(`(void)(${value.c});`);
                 return;
             }
         }
