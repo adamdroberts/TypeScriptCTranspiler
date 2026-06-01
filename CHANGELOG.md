@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS computed named-export metadata now accepts finite indexed `Object.getOwnPropertyNames({...})[idx]` export keys over static object literals. Test: `node_modules_commonjs_computed_own_property_names_exports`.
 - Finite dynamic `require(...)` proofs and CommonJS computed named-export metadata now resolve finite indexed `Object.entries({...})[idx][0]` keys over static object literals, with dynamic require also accepting `[idx][1]` static string values. Tests: `dynamic_require_static_object_entries`, `node_modules_commonjs_computed_object_entries_exports`.
 - Finite dynamic `require(...)` proofs now resolve indexed `Object.keys({...})` and `Object.values({...})` specifiers over static object literals into the AOT module graph. Test: `dynamic_require_static_object_keys_values`.
 - CommonJS computed named-export metadata now accepts finite `Object.keys({...})[idx]` and `Object.values({...})[idx]` export keys over static object literals. Test: `node_modules_commonjs_computed_object_keys_values_exports`.

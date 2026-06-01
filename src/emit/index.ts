@@ -47040,7 +47040,7 @@ class Emitter {
         const target = this.unwrapTransparentExpression(callee.expression);
         if (!ts.isIdentifier(target) || target.text !== "Object") return [];
         const method = callee.name.text;
-        if (method !== "keys" && method !== "values") return [];
+        if (method !== "keys" && method !== "values" && method !== "getOwnPropertyNames") return [];
 
         const object = this.staticObjectMapExpression(call.arguments[0]!);
         if (!object) return [];
@@ -47050,7 +47050,7 @@ class Emitter {
             if (ts.isSpreadAssignment(prop)) return [];
             const propNames = prop.name ? this.staticPropertyNames(prop.name) : [];
             if (propNames.length === 0) return [];
-            if (method === "keys") {
+            if (method === "keys" || method === "getOwnPropertyNames") {
                 slots.push(propNames);
                 continue;
             }
