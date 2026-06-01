@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS `module.exports` IIFE/local-factory object metadata now follows object-preserving `Object.freeze(...)` / `Object.seal(...)` / `Object.preventExtensions(...)` / `Object.setPrototypeOf(...)` wrappers returned from the zero-argument factory. Tests: `node_modules_commonjs_module_exports_iife_object`, `node_modules_commonjs_module_exports_local_factory_object`.
 - CommonJS whole-value `module.exports = (target += value)` assignment-expression defaults now lower as boxed runtime-computed values. Test: `node_modules_commonjs_module_exports_assignment_default`.
 - CommonJS whole-value `module.exports = ++counter` / `--counter` defaults now lower as boxed runtime-computed values. Test: `node_modules_commonjs_module_exports_prefix_update_default`.
 - CommonJS whole-value `module.exports = /pattern/flags` RegExp literal defaults now lower through the AOT package-source path. Test: `node_modules_commonjs_module_exports_regexp_default`.

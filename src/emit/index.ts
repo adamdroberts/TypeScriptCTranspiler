@@ -17843,9 +17843,8 @@ class Emitter {
     } | null {
         const assignment = this.commonJsModuleExportsValueAssignmentChain(stmt);
         if (!assignment) return null;
-        const right = ts.isObjectLiteralExpression(assignment.right)
-            ? assignment.right
-            : this.commonJsIifeReturnedObjectLiteral(assignment.right) ??
+        const right = this.commonJsReturnedObjectLiteral(assignment.right) ??
+            this.commonJsIifeReturnedObjectLiteral(assignment.right) ??
                 this.commonJsZeroArgFunctionReturnedObjectLiteral(assignment.right) ??
                 this.commonJsZeroArgLocalFactoryReturnedObjectLiteral(assignment.right);
         if (!right) return null;
@@ -17877,6 +17876,23 @@ class Emitter {
         return { left: assignment.left, right, exportLefts: assignment.exportLefts };
     }
 
+    private commonJsReturnedObjectLiteral(expr: ts.Expression): ts.ObjectLiteralExpression | null {
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isObjectLiteralExpression(cur)) return cur;
+        if (!ts.isCallExpression(cur) || cur.arguments.length < 1) return null;
+        const callName = this.objectStaticCallName(cur);
+        if (
+            callName !== "freeze" &&
+            callName !== "seal" &&
+            callName !== "preventExtensions" &&
+            callName !== "setPrototypeOf"
+        ) {
+            return null;
+        }
+        return this.commonJsReturnedObjectLiteral(cur.arguments[0]!);
+    }
+
     private commonJsIifeReturnedObjectLiteral(expr: ts.Expression): ts.ObjectLiteralExpression | null {
         let cur = expr;
         while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
@@ -17904,14 +17920,14 @@ class Emitter {
         if (!ts.isBlock(callee.body)) {
             let body = callee.body;
             while (ts.isParenthesizedExpression(body)) body = body.expression;
-            return ts.isObjectLiteralExpression(body) ? body : null;
+            return this.commonJsReturnedObjectLiteral(body);
         }
         if (callee.body.statements.length !== 1) return null;
         const stmt = callee.body.statements[0]!;
         if (!ts.isReturnStatement(stmt) || !stmt.expression) return null;
         let returned = stmt.expression;
         while (ts.isParenthesizedExpression(returned)) returned = returned.expression;
-        return ts.isObjectLiteralExpression(returned) ? returned : null;
+        return this.commonJsReturnedObjectLiteral(returned);
     }
 
     private commonJsZeroArgFunctionReturnedObjectLiteral(expr: ts.Expression): ts.ObjectLiteralExpression | null {
@@ -17962,14 +17978,14 @@ class Emitter {
         if (!ts.isBlock(init.body)) {
             let body = init.body;
             while (ts.isParenthesizedExpression(body)) body = body.expression;
-            return ts.isObjectLiteralExpression(body) ? body : null;
+            return this.commonJsReturnedObjectLiteral(body);
         }
         if (init.body.statements.length !== 1) return null;
         const stmt = init.body.statements[0]!;
         if (!ts.isReturnStatement(stmt) || !stmt.expression) return null;
         let returned = stmt.expression;
         while (ts.isParenthesizedExpression(returned)) returned = returned.expression;
-        return ts.isObjectLiteralExpression(returned) ? returned : null;
+        return this.commonJsReturnedObjectLiteral(returned);
     }
 
     private commonJsZeroArgFunctionDeclarationReturnedObjectLiteral(
@@ -17982,13 +17998,27 @@ class Emitter {
         if (!ts.isReturnStatement(stmt) || !stmt.expression) return null;
         let returned = stmt.expression;
         while (ts.isParenthesizedExpression(returned)) returned = returned.expression;
-        return ts.isObjectLiteralExpression(returned) ? returned : null;
+        return this.commonJsReturnedObjectLiteral(returned);
     }
 
     private commonJsObjectLiteralReturnedByExportedZeroArgFunction(
         object: ts.ObjectLiteralExpression,
     ): boolean {
-        const returnStmt = object.parent;
+        let cur: ts.Node = object;
+        while (
+            cur.parent &&
+            (
+                ts.isParenthesizedExpression(cur.parent) ||
+                (
+                    ts.isCallExpression(cur.parent) &&
+                    cur.parent.arguments[0] === cur &&
+                    this.isCommonJsModuleExportsObjectWrapperCallLike(cur.parent)
+                )
+            )
+        ) {
+            cur = cur.parent;
+        }
+        const returnStmt = cur.parent;
         if (!returnStmt || !ts.isReturnStatement(returnStmt)) return false;
         const body = returnStmt.parent;
         const decl = body?.parent;
@@ -18010,7 +18040,19 @@ class Emitter {
         object: ts.ObjectLiteralExpression,
     ): boolean {
         let cur: ts.Node = object;
-        while (cur.parent && ts.isParenthesizedExpression(cur.parent)) cur = cur.parent;
+        while (
+            cur.parent &&
+            (
+                ts.isParenthesizedExpression(cur.parent) ||
+                (
+                    ts.isCallExpression(cur.parent) &&
+                    cur.parent.arguments[0] === cur &&
+                    this.isCommonJsModuleExportsObjectWrapperCallLike(cur.parent)
+                )
+            )
+        ) {
+            cur = cur.parent;
+        }
 
         let factory: ts.Node | undefined;
         if (cur.parent && (ts.isArrowFunction(cur.parent) || ts.isFunctionExpression(cur.parent))) {
