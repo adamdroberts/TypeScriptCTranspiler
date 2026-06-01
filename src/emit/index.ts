@@ -18722,16 +18722,18 @@ class Emitter {
     }
 
     private isModuleRequireAccess(expr: ts.Expression): boolean {
-        return ts.isPropertyAccessExpression(expr) &&
-            expr.name.text === "require" &&
-            ts.isIdentifier(expr.expression) &&
-            this.isCommonJsModuleIdentifier(expr.expression);
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        return ts.isPropertyAccessExpression(unwrapped) &&
+            unwrapped.name.text === "require" &&
+            ts.isIdentifier(unwrapped.expression) &&
+            this.isCommonJsModuleIdentifier(unwrapped.expression);
     }
 
     private isCommonJsRequireCallee(expr: ts.Expression): boolean {
-        if (this.isCommonJsRequireBindExpression(expr)) return true;
-        return (ts.isIdentifier(expr) && (expr.text === "require" || this.isCommonJsRequireAliasIdentifier(expr))) ||
-            this.isModuleRequireAccess(expr);
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.isCommonJsRequireBindExpression(unwrapped)) return true;
+        return (ts.isIdentifier(unwrapped) && (unwrapped.text === "require" || this.isCommonJsRequireAliasIdentifier(unwrapped))) ||
+            this.isModuleRequireAccess(unwrapped);
     }
 
     private isCommonJsRequireAliasIdentifier(id: ts.Identifier): boolean {
@@ -18760,21 +18762,18 @@ class Emitter {
 
     private isCommonJsRequireAliasDeclaration(decl: ts.VariableDeclaration): boolean {
         if (!ts.isIdentifier(decl.name) || !decl.initializer) return false;
-        let init = decl.initializer;
-        while (ts.isParenthesizedExpression(init)) init = init.expression;
+        const init = this.unwrapSideEffectFreeStaticExpression(decl.initializer);
         return (ts.isIdentifier(init) && init.text === "require") ||
             (ts.isPropertyAccessExpression(init) && this.isModuleRequireAccess(init)) ||
             this.isCommonJsRequireBindExpression(init);
     }
 
     private isCommonJsRequireBindExpression(expr: ts.Expression): boolean {
-        let init = expr;
-        while (ts.isParenthesizedExpression(init)) init = init.expression;
+        const init = this.unwrapSideEffectFreeStaticExpression(expr);
         if (!ts.isCallExpression(init) || init.arguments.length < 1) return false;
         const callee = init.expression;
         if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "bind") return false;
-        let target: ts.Expression = callee.expression;
-        while (ts.isParenthesizedExpression(target)) target = target.expression;
+        const target = this.unwrapSideEffectFreeStaticExpression(callee.expression);
         if (ts.isIdentifier(target)) {
             if (target.text !== "require" && !this.isCommonJsRequireAliasIdentifier(target)) return false;
         } else if (!ts.isPropertyAccessExpression(target) || !this.isModuleRequireAccess(target)) {
