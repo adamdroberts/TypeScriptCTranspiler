@@ -21,6 +21,9 @@ export async function loadDynamicRequireManifest(
     if (!manifestPath) return emptyDynamicRequireManifest();
     const raw = await fs.readFile(manifestPath, "utf8");
     const parsed = JSON.parse(raw) as { requires?: unknown };
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("dynamic require manifest must be a JSON object");
+    }
     const rawSpecifiers = manifestRequireSpecifiers(parsed.requires);
     if (!rawSpecifiers) {
         throw new Error("dynamic require manifest must contain 'requires' as an array or object map");
