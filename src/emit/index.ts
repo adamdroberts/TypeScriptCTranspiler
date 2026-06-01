@@ -23486,6 +23486,10 @@ class Emitter {
             return !this.nodeContainsYield(stmt);
         }
 
+        if (ts.isThrowStatement(stmt)) {
+            return !this.nodeContainsYield(stmt);
+        }
+
         if (ts.isExpressionStatement(stmt) || ts.isVariableStatement(stmt) || ts.isReturnStatement(stmt)) {
             if (ts.isVariableStatement(stmt)) {
                 for (const decl of stmt.declarationList.declarations) {
@@ -23971,6 +23975,13 @@ class Emitter {
             } else {
                 buf.line("break;");
             }
+            return;
+        }
+
+        if (ts.isThrowStatement(stmt)) {
+            buf.line("*state = -1;");
+            buf.line("*done = true;");
+            this.emitThrow(buf, stmt);
             return;
         }
 
