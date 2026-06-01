@@ -113,6 +113,7 @@ This is the next item that most directly expands what programs can be written ag
   - Generated-C DCE static boolean analysis now folds side-effect-free `Array.isArray(...)` calls over statically known array, primitive, and pure fresh non-array built-in operands. Tests: `generated_c_dce_const`, `generated_c_dce_static_builtins`.
   - Generated-C DCE static primitive equality now folds `typeof` over side-effect-free literal and const operands. Test: `generated_c_dce_const`.
   - Generated-C DCE static `typeof` analysis now folds side-effect-free computed primitive operands. Test: `generated_c_dce_const`.
+  - Generated-C DCE static `typeof` analysis now folds side-effect-free `new` expressions for pure built-in constructors to `"object"`. Test: `generated_c_dce_typeof_new`.
   - Generated-C DCE static `typeof` analysis now folds side-effect-free conditional, logical `&&`/`||`, and nullish `??` expression trees when their resulting operand type is statically known. Test: `generated_c_dce_const`.
   - Generated-C DCE static numeric analysis now folds `.length` reads on side-effect-free string and array operands. Test: `generated_c_dce_const`.
   - Generated-C DCE static numeric analysis now folds side-effect-free numeric arithmetic expressions. Test: `generated_c_dce_const`.
