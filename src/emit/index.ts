@@ -25429,6 +25429,26 @@ class Emitter {
                 ty: T_NUMBER,
             };
         }
+        if (
+            op === ts.SyntaxKind.EqualsEqualsToken ||
+            op === ts.SyntaxKind.EqualsEqualsEqualsToken
+        ) {
+            return this.emitEquality(bin, left, right, false);
+        }
+        if (
+            op === ts.SyntaxKind.ExclamationEqualsToken ||
+            op === ts.SyntaxKind.ExclamationEqualsEqualsToken
+        ) {
+            return this.emitEquality(bin, left, right, true);
+        }
+        if (
+            op === ts.SyntaxKind.LessThanToken ||
+            op === ts.SyntaxKind.LessThanEqualsToken ||
+            op === ts.SyntaxKind.GreaterThanToken ||
+            op === ts.SyntaxKind.GreaterThanEqualsToken
+        ) {
+            return this.emitRelational(bin, left, right, op);
+        }
         unsupported(bin, `lazy generator suspended yield binary/logical operator ${ts.SyntaxKind[op]}`);
     }
 
