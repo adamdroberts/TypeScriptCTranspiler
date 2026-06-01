@@ -1478,6 +1478,22 @@ tsc_array_t* value_array_entries(const tsc_array_t* src) {
     return out;
 }
 
+static tsc_array_t* value_array_entries_numeric(const tsc_array_t* src) {
+    tsc_array_materialize_all((tsc_array_t*)src);
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), src ? src->len : 1);
+    if (!src || src->es != sizeof(tsc_value_t)) return out;
+    for (size_t i = 0; i < src->len; i++) {
+        tsc_array_t* pair = tsc_array_new(sizeof(tsc_value_t), 2);
+        tsc_value_t key = tsc_value_num((double)i);
+        tsc_value_t value = TSC_ARR(tsc_value_t, src, i);
+        tsc_array_push_raw(pair, &key);
+        tsc_array_push_raw(pair, &value);
+        tsc_value_t boxed = tsc_value_array(pair);
+        tsc_array_push_raw(out, &boxed);
+    }
+    return out;
+}
+
 tsc_array_t* value_string_keys(const tsc_str_t* src, bool include_length) {
     size_t cap = (src ? src->len : 0) + (include_length ? 1 : 0);
     tsc_array_t* out = tsc_array_new(sizeof(tsc_str_t*), cap ? cap : 1);
@@ -2367,7 +2383,7 @@ void value_flat_push(tsc_array_t* out, tsc_value_t value, int depth) {
 tsc_value_t tsc_value_method_flat(tsc_value_t recv, tsc_value_t depth) {
     if (!value_is_box(recv) || value_tag(recv) != TSC_VALUE_TAG_ARRAY) return tsc_value_undefined();
     double depth_num = tsc_value_is_undefined(depth) ? 1.0 : tsc_value_as_num(depth);
-    int depth_i = isnan(depth_num) || depth_num < 0 ? 0 : (int)depth_num;
+    int depth_i = isnan(depth_num) || depth_num < 0 ? 0 : (isinf(depth_num) || depth_num > INT_MAX ? INT_MAX : (int)depth_num);
     tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
     tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), a->len ? a->len : 1);
     for (size_t i = 0; i < a->len; i++) {
@@ -2535,7 +2551,7 @@ tsc_value_t tsc_value_method_values(tsc_value_t recv) {
 tsc_value_t tsc_value_method_entries(tsc_value_t recv) {
     if (!value_is_box(recv) || value_tag(recv) != TSC_VALUE_TAG_ARRAY) return tsc_value_undefined();
     const tsc_array_t* a = (const tsc_array_t*)value_ptr(recv);
-    return tsc_value_array(value_array_entries(a));
+    return tsc_value_array(value_array_entries_numeric(a));
 }
 
 tsc_value_t tsc_value_method_substring(tsc_value_t recv, tsc_value_t start, tsc_value_t end) {

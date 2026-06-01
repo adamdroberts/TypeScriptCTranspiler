@@ -8,6 +8,7 @@ const entries: any = items.entries(mark("e"));
 
 console.log("entry0:", entries[0][0], entries[0][1]);
 console.log("entry2:", entries[2][0], entries[2][1]);
+console.log("key type:", typeof entries[0][0]);
 
 entries[1][1] = "cyan";
 console.log("copy:", entries[1][1]);
