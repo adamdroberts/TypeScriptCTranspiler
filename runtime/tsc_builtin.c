@@ -1884,6 +1884,9 @@ tsc_value_t tsc_proxy_new(tsc_value_t target, tsc_value_t handler) {
     ) {
             tsc_throw_str(tsc_str_from_cstr("Cannot create proxy with a non-object as target or handler"));
     }
+    if (tsc_proxy_chain_has_revoked(target)) {
+        tsc_throw_str(tsc_str_from_cstr("Cannot perform 'get' on a proxy that has been revoked"));
+    }
     if (
         !value_is_box(handler) ||
         (

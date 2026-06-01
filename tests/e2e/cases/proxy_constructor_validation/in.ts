@@ -26,4 +26,24 @@ try {
     console.log("bad revocable:", e);
 }
 
+const revokedTarget: any = Proxy.revocable(mark("p", {}) as any, mark("P", {}) as any);
+const nestedRevokedTarget: any = new Proxy(revokedTarget.proxy, {});
+revokedTarget.revoke();
+
+try {
+    const badRevokedTarget: any = new Proxy(nestedRevokedTarget, mark("q", {}) as any);
+    console.log("bad revoked target:", badRevokedTarget);
+} catch (e: any) {
+    console.log("bad revoked target:", e);
+}
+
+const revokedHandler: any = Proxy.revocable(mark("s", {}) as any, mark("S", {}) as any);
+revokedHandler.revoke();
+const acceptedRevokedHandler: any = new Proxy(mark("u", { a: 1 }) as any, revokedHandler.proxy);
+try {
+    console.log("revoked handler get:", acceptedRevokedHandler.a);
+} catch (e: any) {
+    console.log("revoked handler get:", e);
+}
+
 console.log("trace:", trace);
