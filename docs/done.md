@@ -488,7 +488,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Proxy object, descriptor, key, delete, prototype, extensibility, apply, and construct traps receive the handler object as their `this` binding, including traps inherited from the handler prototype. Tests: `proxy_trap_this_binding`, `proxy_inherited_traps`, `proxy_inherited_meta_traps`
 - `Object.hasOwn(proxy)`, `Object.prototype.hasOwnProperty.call(proxy, key)`, and `Object.prototype.propertyIsEnumerable.call(proxy, key)` drive proxy `getOwnPropertyDescriptor` traps, descriptor validation, virtual descriptor results, and revocation checks. Test: `proxy_own_property_helpers`
 - Proxy `defineProperty` result validation rejects successful trap reports that would replace the getter or setter identity of a non-configurable accessor property. Test: `proxy_define_accessor`
-- Proxy `getOwnPropertyDescriptor` result validation rejects trap results that report a different getter or setter identity for a non-configurable accessor property. Test: `proxy_descriptor_invariants`
+- Proxy `getOwnPropertyDescriptor` result validation rejects trap results that mix data and accessor descriptor fields, report non-callable `get` / `set` hooks, or report a different getter or setter identity for a non-configurable accessor property. Test: `proxy_descriptor_invariants`
 - Proxy `getOwnPropertyDescriptor` result validation rejects trap results that change the `enumerable` flag of a non-configurable target property. Test: `proxy_descriptor_invariants`
 - Proxy `getOwnPropertyDescriptor` result validation rejects trap descriptors that report non-configurable writable object or array target data properties as non-writable, including omitted `writable` fields. Test: `proxy_descriptor_writable_invariants`
 - `JSON.stringify(dynamic)` recurses through dynamic arrays/objects; object properties whose values are `undefined` or boxed function identities are omitted, while array slots still emit `null`. Tests: `dynamic_values`, `object_descriptor_defaults`
@@ -2074,7 +2074,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_ownkeys_entry_validation` | Proxy ownKeys non-string entry validation after ignored-argument evaluation and trap dispatch |
 | `proxy_ownkeys_invariants` | Proxy ownKeys duplicate, non-configurable, and non-extensible target invariant checks after ignored-argument evaluation and trap dispatch |
 | `proxy_ownkeys_helper_ignored_arguments` | Object enumeration and Reflect.ownKeys on Proxy evaluate ignored arguments before ownKeys dispatch |
-| `proxy_descriptor_invariants` | Proxy getOwnPropertyDescriptor non-configurable descriptor, enumerable flag, accessor identity, and non-extensible target invariant checks after ignored-argument evaluation and trap dispatch |
+| `proxy_descriptor_invariants` | Proxy getOwnPropertyDescriptor descriptor-shape validation plus non-configurable descriptor, enumerable flag, accessor identity, and non-extensible target invariant checks after ignored-argument evaluation and trap dispatch |
 | `proxy_descriptor_writable_invariants` | Proxy getOwnPropertyDescriptor traps cannot report non-configurable writable target data properties as non-writable |
 | `proxy_descriptor_helper_ignored_arguments` | Object and Reflect getOwnPropertyDescriptor on Proxy evaluate ignored arguments before trap dispatch |
 | `proxy_get_own_property_descriptors` | Object.getOwnPropertyDescriptors on Proxy uses ownKeys and descriptor traps |
