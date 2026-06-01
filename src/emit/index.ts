@@ -28588,10 +28588,10 @@ class Emitter {
                     );
                 }
                 if (right.ty.kind === "array") {
-                    return this.emitSequencedCall("tsc_array_has_own_key", T_BOOLEAN, [
+                    return this.emitSequencedExpr(T_BOOLEAN, [
                         { value: right },
                         { value: left, target: T_STRING, node: bin.left },
-                    ]);
+                    ], ([array, key]) => `tsc_value_has_prop(tsc_value_array(${array}), ${key})`);
                 }
                 if (right.ty.kind === "buffer") {
                     return this.emitBufferPropertyKeyCheck(bin.right, right, bin.left, true);
@@ -49085,7 +49085,7 @@ class Emitter {
                         { value: target },
                         { value: key, target: T_STRING, node: args[1]! },
                         ...ignored,
-                    ], ([t, k]) => `tsc_array_has_own_key(${t}, ${k})`);
+                    ], ([t, k]) => `tsc_reflect_has_prop(tsc_value_array(${t}), ${k})`);
                 }
                 if (mapped.kind === "buffer") {
                     return this.emitBufferPropertyKeyCheck(args[0]!, target, args[1]!, true, ignored);

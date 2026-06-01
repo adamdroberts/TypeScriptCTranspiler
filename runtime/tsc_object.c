@@ -76,9 +76,77 @@ static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
     return o;
 }
 
+static void object_prototype_require_receiver(tsc_value_t receiver, const char* method) {
+    if (tsc_value_is_nullish(receiver)) {
+        char buf[128];
+        snprintf(buf, sizeof buf, "Object.prototype.%s receiver is null or undefined", method);
+        tsc_throw_str(tsc_str_from_cstr(buf));
+    }
+}
+
+static tsc_value_t object_prototype_has_own_property(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    object_prototype_require_receiver(this_arg, "hasOwnProperty");
+    tsc_value_t key_value = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    return tsc_value_bool(tsc_value_has_own_prop(this_arg, tsc_value_to_string(key_value)));
+}
+
+static tsc_value_t object_prototype_property_is_enumerable(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    object_prototype_require_receiver(this_arg, "propertyIsEnumerable");
+    tsc_value_t key_value = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    return tsc_value_bool(tsc_value_property_is_enumerable(this_arg, tsc_value_to_string(key_value)));
+}
+
+static tsc_value_t object_prototype_is_prototype_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    object_prototype_require_receiver(this_arg, "isPrototypeOf");
+    tsc_value_t value = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    return tsc_value_bool(tsc_value_is_prototype_of(this_arg, value));
+}
+
+static tsc_value_t object_prototype_to_string(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    return tsc_value_string(tsc_value_object_to_string_tag(this_arg));
+}
+
+static tsc_value_t object_prototype_to_locale_string(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    object_prototype_require_receiver(this_arg, "toLocaleString");
+    return tsc_value_string(tsc_value_to_string(this_arg));
+}
+
+static tsc_value_t object_prototype_value_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    object_prototype_require_receiver(this_arg, "valueOf");
+    return this_arg;
+}
+
+static void object_prototype_define_method(tsc_object_t* prototype, const char* name, size_t len, tsc_generic_function_t fn) {
+    tsc_object_define(
+        prototype,
+        tsc_str_from_lit(name, len),
+        tsc_value_function_generic(fn, NULL),
+        true,
+        false,
+        true
+    );
+}
+
 tsc_value_t tsc_value_object_prototype(void) {
     static tsc_object_t* prototype = NULL;
-    if (!prototype) prototype = tsc_object_alloc(tsc_value_null());
+    if (!prototype) {
+        prototype = tsc_object_alloc(tsc_value_null());
+        object_prototype_define_method(prototype, "hasOwnProperty", 14, object_prototype_has_own_property);
+        object_prototype_define_method(prototype, "isPrototypeOf", 13, object_prototype_is_prototype_of);
+        object_prototype_define_method(prototype, "propertyIsEnumerable", 20, object_prototype_property_is_enumerable);
+        object_prototype_define_method(prototype, "toLocaleString", 14, object_prototype_to_locale_string);
+        object_prototype_define_method(prototype, "toString", 8, object_prototype_to_string);
+        object_prototype_define_method(prototype, "valueOf", 7, object_prototype_value_of);
+    }
     return tsc_value_object(prototype);
 }
 
