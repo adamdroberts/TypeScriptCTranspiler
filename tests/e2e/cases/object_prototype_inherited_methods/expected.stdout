@@ -1,7 +1,10 @@
 types: function function function function
 obj: true false true [object Object] true
 array: true true true false
-function: true true false
+function: true true false [object Function] [function] true
 prototype:  false true true
 has: true true true
 detached: true [object Array]
+bad function string: toString is not a function
+bad function locale: toLocaleString is not a function
+bad function value: valueOf is not a function
