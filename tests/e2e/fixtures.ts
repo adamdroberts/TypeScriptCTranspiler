@@ -621,6 +621,12 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-computed-keys-as-const-package": cjsPackage("tsc2c-cjs-computed-keys-as-const-package", {
         "index.js": 'exports.__esModule = true;\nconst keys = { first: { name: "value" } };\nexports[keys.first.name] = function() { return "it-works"; };\n',
     }),
+    "tsc2c-cjs-computed-tuple-index-union-exports": {
+        packageJson: { name: "tsc2c-cjs-computed-tuple-index-union-exports", version: "1.0.0", main: "main.js" },
+        files: {
+            "main.js": 'exports.__esModule = true;\n/** @type {readonly ["label", "fallbackLabel"]} */\nconst labelKeys = ["label", "fallbackLabel"];\n/** @type {readonly ["double", "triple"]} */\nconst fnKeys = ["double", "triple"];\n/** @type {0 | 1} */\nlet labelIndex = Date.now() >= 0 ? 0 : 1;\n/** @type {0 | 1} */\nlet fnIndex = Date.now() >= 0 ? 0 : 1;\nexports[labelKeys[labelIndex]] = "tuple-union-computed";\nmodule.exports[fnKeys[fnIndex]] = function double(value) { return value * 3; };\n',
+        },
+    },
     "tsc2c-cjs-conditional-whole-object-exports": cjsPackage("tsc2c-cjs-conditional-whole-object-exports", {
         "index.js": 'const isProd = true;\nmodule.exports = isProd ? { label: "conditional-prod", count: 88 } : { label: "conditional-dev", count: 12 };\n',
     }),
