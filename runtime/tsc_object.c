@@ -1597,10 +1597,9 @@ static bool tsc_object_set_proxy_integrity(tsc_object_t* o, bool frozen) {
         if (frozen) {
             tsc_value_t desc_value = tsc_value_get_own_property_descriptor(tsc_value_object(o), key);
             if (tsc_value_is_undefined(desc_value)) continue;
-            if (value_is_box(desc_value) && value_tag(desc_value) == TSC_VALUE_TAG_OBJECT) {
-                const tsc_object_t* desc = (const tsc_object_t*)value_ptr(desc_value);
-                has_writable = descriptor_has_prop(desc, "value", 5, NULL) ||
-                    descriptor_has_prop(desc, "writable", 8, NULL);
+            if (proxy_descriptor_result_is_object(desc_value)) {
+                has_writable = descriptor_value_has_prop(desc_value, "value", 5, NULL) ||
+                    descriptor_value_has_prop(desc_value, "writable", 8, NULL);
             }
         }
         if (!tsc_object_define_desc(
@@ -1628,15 +1627,14 @@ static bool tsc_object_test_proxy_integrity(tsc_object_t* o, bool frozen) {
         tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
         tsc_value_t desc_value = tsc_value_get_own_property_descriptor(tsc_value_object(o), key);
         if (tsc_value_is_undefined(desc_value)) continue;
-        if (!value_is_box(desc_value) || value_tag(desc_value) != TSC_VALUE_TAG_OBJECT) return false;
-        const tsc_object_t* desc = (const tsc_object_t*)value_ptr(desc_value);
+        if (!proxy_descriptor_result_is_object(desc_value)) return false;
         tsc_value_t configurable_value = tsc_value_undefined();
-        if (descriptor_has_prop(desc, "configurable", 12, &configurable_value) && tsc_value_is_truthy(configurable_value)) {
+        if (descriptor_value_has_prop(desc_value, "configurable", 12, &configurable_value) && tsc_value_is_truthy(configurable_value)) {
             return false;
         }
         if (frozen) {
             tsc_value_t writable_value = tsc_value_undefined();
-            if (descriptor_has_prop(desc, "writable", 8, &writable_value) && tsc_value_is_truthy(writable_value)) {
+            if (descriptor_value_has_prop(desc_value, "writable", 8, &writable_value) && tsc_value_is_truthy(writable_value)) {
                 return false;
             }
         }
