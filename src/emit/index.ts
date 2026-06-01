@@ -19316,17 +19316,24 @@ class Emitter {
         return null;
     }
 
-    private requireModuleMemberDeclaration(pa: ts.PropertyAccessExpression): ts.Node | null {
-        const spec = ts.isIdentifier(pa.expression)
-            ? this.requireBindingSpecifier(pa.expression)
-            : this.requireCallSpecifier(pa.expression);
-        if (!spec) return null;
-        const info = this.resolvedModuleInfoForSpecifier(spec, pa.getSourceFile().fileName, "require");
-        return info ? this.commonJsExportedMemberDeclaration(info.sf, pa.name.text) : null;
+    private commonJsAccessMemberName(access: CommonJsExportAccess): string | null {
+        if (ts.isPropertyAccessExpression(access)) return access.name.text;
+        return this.staticComputedPropertyExpression(access.argumentExpression);
     }
 
-    private requireModuleMemberCName(pa: ts.PropertyAccessExpression): string | null {
-        const decl = this.requireModuleMemberDeclaration(pa);
+    private requireModuleMemberDeclaration(access: CommonJsExportAccess): ts.Node | null {
+        const spec = ts.isIdentifier(access.expression)
+            ? this.requireBindingSpecifier(access.expression)
+            : this.requireCallSpecifier(access.expression);
+        if (!spec) return null;
+        const name = this.commonJsAccessMemberName(access);
+        if (name == null) return null;
+        const info = this.resolvedModuleInfoForSpecifier(spec, access.getSourceFile().fileName, "require");
+        return info ? this.commonJsExportedMemberDeclaration(info.sf, name) : null;
+    }
+
+    private requireModuleMemberCName(access: CommonJsExportAccess): string | null {
+        const decl = this.requireModuleMemberDeclaration(access);
         return decl ? this.declarationCName(decl) : null;
     }
 
@@ -19518,18 +19525,22 @@ class Emitter {
         return null;
     }
 
-    private moduleNamespaceMemberDeclaration(pa: ts.PropertyAccessExpression): ts.Node | null {
-        if (!ts.isIdentifier(pa.expression)) return null;
-        const spec = this.moduleNamespaceImportSpecifier(pa.expression);
+    private moduleNamespaceMemberDeclaration(access: CommonJsExportAccess): ts.Node | null {
+        if (!ts.isIdentifier(access.expression)) return null;
+        const spec = this.moduleNamespaceImportSpecifier(access.expression);
         if (!spec || this.isNodeBuiltinModuleSpecifier(spec)) return null;
-        const info = this.resolvedModuleInfoForSpecifier(spec, pa.getSourceFile().fileName);
-        const commonJsDecl = info ? this.commonJsExportedMemberDeclaration(info.sf, pa.name.text) : null;
+        const name = this.commonJsAccessMemberName(access);
+        if (name == null) return null;
+        const info = this.resolvedModuleInfoForSpecifier(spec, access.getSourceFile().fileName);
+        const commonJsDecl = info ? this.commonJsExportedMemberDeclaration(info.sf, name) : null;
         if (commonJsDecl) return commonJsDecl;
-        if (pa.name.text === "default" && info && this.isJavaScriptSourceFile(info.sf)) {
+        if (name === "default" && info && this.isJavaScriptSourceFile(info.sf)) {
             if (!this.hasCommonJsEsModuleMarker(info.sf)) {
                 return info.sf;
             }
         }
+        if (!ts.isPropertyAccessExpression(access)) return null;
+        const pa = access;
         const sym = this.checker.getSymbolAtLocation(pa.name);
         if (sym) {
             let target = sym;
@@ -19546,20 +19557,22 @@ class Emitter {
         return null;
     }
 
-    private moduleNamespaceMemberCName(pa: ts.PropertyAccessExpression): string | null {
-        const decl = this.moduleNamespaceMemberDeclaration(pa);
+    private moduleNamespaceMemberCName(access: CommonJsExportAccess): string | null {
+        const decl = this.moduleNamespaceMemberDeclaration(access);
         if (decl && ts.isSourceFile(decl)) {
-            const spec = this.moduleNamespaceImportSpecifier(pa.expression as ts.Identifier);
+            const spec = ts.isIdentifier(access.expression)
+                ? this.moduleNamespaceImportSpecifier(access.expression)
+                : null;
             if (spec) {
-                const res = this.emitCommonJsRequireModuleValue(pa as any, spec, "import");
+                const res = this.emitCommonJsRequireModuleValue(access as any, spec, "import");
                 return res.c;
             }
         }
         return decl ? this.declarationCName(decl) : null;
     }
 
-    private moduleNamespaceMemberType(pa: ts.PropertyAccessExpression): CType {
-        const decl = this.moduleNamespaceMemberDeclaration(pa);
+    private moduleNamespaceMemberType(access: CommonJsExportAccess): CType {
+        const decl = this.moduleNamespaceMemberDeclaration(access);
         if (decl) {
             if (ts.isSourceFile(decl)) {
                 return T_VALUE;
@@ -19604,7 +19617,7 @@ class Emitter {
                 return this.commonJsExportedCType(decl);
             }
         }
-        return this.prepareType(mapType(pa, this.checker));
+        return this.prepareType(mapType(access, this.checker));
     }
 
     private isNodeBuiltinModuleSpecifier(spec: string): boolean {
@@ -51335,6 +51348,17 @@ class Emitter {
             return this.emitSequencedCall("tsc_process_env_get", T_STRING, [
                 { value: key, target: T_STRING, node: ea.argumentExpression },
             ]);
+        }
+        const requireMember = this.requireModuleMemberCName(ea);
+        if (requireMember) {
+            const decl = this.requireModuleMemberDeclaration(ea);
+            const ty = decl ? this.commonJsExportedCType(decl) : this.prepareType(mapType(ea, this.checker));
+            return { c: requireMember, ty };
+        }
+        const moduleNsMember = this.moduleNamespaceMemberCName(ea);
+        if (moduleNsMember) {
+            const ty = this.moduleNamespaceMemberType(ea);
+            return { c: moduleNsMember, ty };
         }
         const recv = precomputedReceiver ?? this.emitExpr(ea.expression);
         if (recv.ty.kind === "array") {
