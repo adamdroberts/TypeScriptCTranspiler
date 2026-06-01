@@ -861,6 +861,13 @@ static bool tsc_has_ready_timeout(void) {
     return false;
 }
 
+static bool tsc_has_active_timeout(void) {
+    for (size_t i = 0; i < g_timeout_len; i++) {
+        if (!g_timeout_queue[i].canceled && g_timeout_queue[i].fn) return true;
+    }
+    return false;
+}
+
 static double tsc_next_timeout_delay_ms(void) {
     double now_ms = tsc_now_ms();
     double delay = -1.0;
@@ -882,7 +889,7 @@ static void tsc_sleep_ms(double delay_ms) {
 }
 
 void tsc_run_event_loop(void) {
-    while (g_next_tick_len > 0 || g_microtask_len > 0 || g_timeout_len > 0 || g_immediate_len > 0) {
+    while (g_next_tick_len > 0 || g_microtask_len > 0 || tsc_has_active_timeout() || g_immediate_len > 0) {
         tsc_drain_microtasks_and_next_ticks();
         if (tsc_has_ready_timeout()) {
             tsc_drain_timeouts();
@@ -892,7 +899,7 @@ void tsc_run_event_loop(void) {
             tsc_drain_immediates();
             tsc_drain_microtasks_and_next_ticks();
         }
-        if (g_next_tick_len == 0 && g_microtask_len == 0 && g_immediate_len == 0 && g_timeout_len > 0) {
+        if (g_next_tick_len == 0 && g_microtask_len == 0 && g_immediate_len == 0 && tsc_has_active_timeout()) {
             tsc_sleep_ms(tsc_next_timeout_delay_ms());
         }
     }
