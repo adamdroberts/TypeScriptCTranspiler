@@ -1,0 +1,6 @@
+identity: true object function 0
+get-has: 1 true true
+own: x 1
+set-delete: true 2 true false
+extensible: true true false
+apply: 5

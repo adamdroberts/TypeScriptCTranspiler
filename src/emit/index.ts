@@ -27650,6 +27650,9 @@ class Emitter {
             if (this.isUnshadowedGlobalIdentifier(expr, "Function")) {
                 return { c: "tsc_value_function_generic(tsc_builtin_function, NULL)", ty: T_VALUE };
             }
+            if (this.isUnshadowedGlobalIdentifier(expr, "Reflect")) {
+                return { c: "tsc_builtin_reflect()", ty: T_VALUE };
+            }
             if (expr.text === "NaN") return { c: "((double)NAN)", ty: T_NUMBER };
             if (expr.text === "Infinity") return { c: "((double)INFINITY)", ty: T_NUMBER };
             if (expr.text === "undefined") return { c: "NULL", ty: T_VOID };
