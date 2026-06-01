@@ -386,9 +386,9 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
         }
         if (str_lit_eq(key, "__proto__")) return a->prototype;
         if (a->props && tsc_object_has_own(a->props, key)) {
-            return tsc_object_get(a->props, key);
+            return tsc_object_get_receiver(a->props, key, v);
         }
-        return tsc_value_get_prop(a->prototype, key);
+        return tsc_value_get_prop_receiver(a->prototype, key, v);
     }
     if (value_tag(v) == TSC_VALUE_TAG_STRING) {
         const tsc_str_t* s = (const tsc_str_t*)value_ptr(v);
@@ -468,7 +468,26 @@ tsc_value_t tsc_value_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc
         return tsc_object_get_receiver((tsc_object_t*)value_ptr(v), key, receiver);
     }
     if (value_tag(v) == TSC_VALUE_TAG_ARRAY) {
-        return tsc_value_get_prop(v, key);
+        tsc_array_t* a = (tsc_array_t*)value_ptr(v);
+        if (tsc_str_is_length_key(key)) return tsc_value_num((double)a->len);
+        if (str_lit_eq(key, "next")) {
+            return tsc_value_function_generic(tsc_value_generator_next, a);
+        }
+        if (str_lit_eq(key, "return")) {
+            return tsc_value_function_generic(tsc_value_generator_return, a);
+        }
+        if (str_lit_eq(key, "throw")) {
+            return tsc_value_function_generic(tsc_value_generator_throw, a);
+        }
+        size_t idx = 0;
+        if (a->es == sizeof(tsc_value_t) && tsc_str_array_index(key, &idx) && idx < a->len) {
+            return TSC_ARR(tsc_value_t, a, idx);
+        }
+        if (str_lit_eq(key, "__proto__")) return a->prototype;
+        if (a->props && tsc_object_has_own(a->props, key)) {
+            return tsc_object_get_receiver(a->props, key, receiver);
+        }
+        return tsc_value_get_prop_receiver(a->prototype, key, receiver);
     }
     if (value_tag(v) == TSC_VALUE_TAG_STRING) {
         return tsc_value_get_prop(v, key);
@@ -853,6 +872,13 @@ bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_
         if (tsc_function_metadata_key(key)) return false;
         return tsc_object_define_accessor(fn->props, key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
     }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
+        tsc_array_t* a = (tsc_array_t*)value_ptr(v);
+        if (tsc_str_is_length_key(key)) return false;
+        size_t idx = 0;
+        if (tsc_str_array_index(key, &idx)) return false;
+        return tsc_object_define_accessor(a->props, key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
+    }
     return false;
 }
 
@@ -1186,6 +1212,14 @@ bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
         if (tsc_str_is_length_key(key)) return tsc_value_array_set_length(a, value);
         size_t idx = 0;
         if (tsc_str_array_index(key, &idx)) return tsc_value_set_index(v, (double)idx, value);
+        ssize_t side_idx = a->props ? object_find(a->props, key) : -1;
+        if (side_idx >= 0) {
+            const tsc_object_prop_t* prop = &a->props->props[(size_t)side_idx];
+            if (prop->accessor) {
+                return tsc_object_set_receiver(a->props, key, value, v);
+            }
+            return tsc_object_set(a->props, key, value);
+        }
         return tsc_object_set(a->props, key, value);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
@@ -1248,6 +1282,15 @@ bool tsc_value_set_prop_receiver(tsc_value_t v, tsc_str_t* key, tsc_value_t valu
         return tsc_object_set_receiver((tsc_object_t*)value_ptr(v), key, value, receiver);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
+        tsc_array_t* a = (tsc_array_t*)value_ptr(v);
+        ssize_t side_idx = a->props ? object_find(a->props, key) : -1;
+        if (side_idx >= 0) {
+            const tsc_object_prop_t* prop = &a->props->props[(size_t)side_idx];
+            if (!prop->accessor && receiver == v) {
+                return tsc_object_set(a->props, key, value);
+            }
+            return tsc_object_set_receiver(a->props, key, value, receiver);
+        }
         return tsc_value_define_receiver_data(receiver, key, value);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
