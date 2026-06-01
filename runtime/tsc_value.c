@@ -949,16 +949,12 @@ bool tsc_value_chain_contains(tsc_value_t prototype, tsc_value_t needle) {
     while (value_is_box(prototype)) {
         tsc_value_tag_t tag = value_tag(prototype);
         if (tag == needle_tag && value_ptr(prototype) == needle_ptr) return true;
-        if (tag == TSC_VALUE_TAG_OBJECT) {
-            prototype = ((const tsc_object_t*)value_ptr(prototype))->prototype;
-            continue;
-        }
-        if (tag == TSC_VALUE_TAG_ARRAY) {
-            prototype = ((const tsc_array_t*)value_ptr(prototype))->prototype;
-            continue;
-        }
-        if (tag == TSC_VALUE_TAG_FUNCTION) {
-            prototype = ((const tsc_function_identity_t*)value_ptr(prototype))->prototype;
+        if (
+            tag == TSC_VALUE_TAG_OBJECT ||
+            tag == TSC_VALUE_TAG_ARRAY ||
+            tag == TSC_VALUE_TAG_FUNCTION
+        ) {
+            prototype = tsc_value_get_prototype_of(prototype);
             continue;
         }
         break;
