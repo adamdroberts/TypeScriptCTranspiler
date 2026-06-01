@@ -17477,9 +17477,9 @@ class Emitter {
             !(ts.isCallExpression(cur) && this.commonJsRequireSpreadMemberDeclarations(cur)) &&
             !(ts.isPropertyAccessExpression(cur) && this.requireModuleMemberDeclaration(cur)) &&
             !this.isCommonJsRuntimeComputedModuleExportsValue(cur) &&
-            !this.isCommonJsObjectLiteralExportValue(cur)
+            !this.isCommonJsModuleExportsDefaultValue(cur)
         ) {
-            unsupported(expr, "CommonJS module.exports value assignment currently supports functions, arrays, declared identifiers, literal require re-exports, literal require member re-exports, runtime-computed dynamic objects, and primitive literals only");
+            unsupported(expr, "CommonJS module.exports value assignment currently supports functions, arrays, declared identifiers, literal require re-exports, literal require member re-exports, runtime-computed dynamic objects, primitive/static default values, and bounded binary/prefix-unary static defaults only");
         }
     }
 
@@ -17519,6 +17519,15 @@ class Emitter {
         let cur = expr;
         while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
         if (this.isCommonJsObjectLiteralExportValue(cur)) return true;
+        if (ts.isPrefixUnaryExpression(cur)) {
+            return this.isCommonJsModuleExportsDefaultPrefixOperator(cur.operator) &&
+                this.isCommonJsModuleExportsDefaultValue(cur.operand);
+        }
+        if (ts.isBinaryExpression(cur)) {
+            return this.isCommonJsModuleExportsDefaultBinaryOperator(cur.operatorToken.kind) &&
+                this.isCommonJsModuleExportsDefaultValue(cur.left) &&
+                this.isCommonJsModuleExportsDefaultValue(cur.right);
+        }
         if (ts.isArrayLiteralExpression(cur)) {
             return cur.elements.every((element) =>
                 !ts.isSpreadElement(element) &&
@@ -17530,6 +17539,41 @@ class Emitter {
             return this.isCommonJsObjectLiteralDefaultValue(cur);
         }
         return false;
+    }
+
+    private isCommonJsModuleExportsDefaultPrefixOperator(kind: ts.PrefixUnaryOperator): boolean {
+        return kind === ts.SyntaxKind.PlusToken ||
+            kind === ts.SyntaxKind.MinusToken ||
+            kind === ts.SyntaxKind.ExclamationToken ||
+            kind === ts.SyntaxKind.TildeToken;
+    }
+
+    private isCommonJsModuleExportsDefaultBinaryOperator(kind: ts.BinaryOperator): boolean {
+        switch (kind) {
+            case ts.SyntaxKind.PlusToken:
+            case ts.SyntaxKind.MinusToken:
+            case ts.SyntaxKind.AsteriskToken:
+            case ts.SyntaxKind.SlashToken:
+            case ts.SyntaxKind.PercentToken:
+            case ts.SyntaxKind.AsteriskAsteriskToken:
+            case ts.SyntaxKind.AmpersandToken:
+            case ts.SyntaxKind.BarToken:
+            case ts.SyntaxKind.CaretToken:
+            case ts.SyntaxKind.LessThanLessThanToken:
+            case ts.SyntaxKind.GreaterThanGreaterThanToken:
+            case ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken:
+            case ts.SyntaxKind.LessThanToken:
+            case ts.SyntaxKind.LessThanEqualsToken:
+            case ts.SyntaxKind.GreaterThanToken:
+            case ts.SyntaxKind.GreaterThanEqualsToken:
+            case ts.SyntaxKind.EqualsEqualsToken:
+            case ts.SyntaxKind.EqualsEqualsEqualsToken:
+            case ts.SyntaxKind.ExclamationEqualsToken:
+            case ts.SyntaxKind.ExclamationEqualsEqualsToken:
+                return true;
+            default:
+                return false;
+        }
     }
 
     private isCommonJsRuntimeComputedModuleExportsValue(expr: ts.Expression): boolean {
@@ -19328,6 +19372,18 @@ class Emitter {
             }
             pieces.push(`tsc_value_array(${av})`);
             return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
+        }
+        if (
+            ts.isPrefixUnaryExpression(cur) &&
+            this.isCommonJsModuleExportsDefaultPrefixOperator(cur.operator)
+        ) {
+            return { c: this.coerce(this.emitExpr(cur), T_VALUE, cur), ty: T_VALUE };
+        }
+        if (
+            ts.isBinaryExpression(cur) &&
+            this.isCommonJsModuleExportsDefaultBinaryOperator(cur.operatorToken.kind)
+        ) {
+            return { c: this.coerce(this.emitExpr(cur), T_VALUE, cur), ty: T_VALUE };
         }
         unsupported(expr, "CommonJS module.exports default only supports static literal values");
     }

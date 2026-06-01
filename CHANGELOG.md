@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS whole-value `module.exports = ...` defaults now accept bounded side-effect-free binary and prefix-unary expressions whose operands are static AOT default values, including nested object/array defaults and primitive whole-value defaults. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 - Extended the narrow lazy generator lowering to resume a single suspended `yield` through TypeScript-only `as`, angle-bracket, `satisfies`, and non-null assertion wrappers. Test: `generator_lazy_yield_assertions`.
 - Dynamic `Array.prototype.entries()` now materializes numeric index keys instead of stringified object-entry keys, and dynamic `Array.prototype.flat(Infinity)` safely treats infinite depth as unbounded without casting infinity to `int`. Tests: `dynamic_array_entries`, `dynamic_array_flat`.
 - Proxy construction now rejects revoked Proxy chains used as the target while still accepting revoked handler objects until trap lookup, matching the ECMAScript object-validation split. Test: `proxy_constructor_validation`.
