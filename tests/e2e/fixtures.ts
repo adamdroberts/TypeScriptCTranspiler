@@ -1318,6 +1318,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-runtime-postfix-default-package": cjsPackage("tsc2c-cjs-runtime-postfix-default-package", {
         "index.js": "let counter = 4;\nmodule.exports = counter++;\n",
     }),
+    "tsc2c-cjs-runtime-prefix-update-default-package": cjsPackage("tsc2c-cjs-runtime-prefix-update-default-package", {
+        "index.js": "let counter = 4;\nmodule.exports = ++counter;\n",
+    }),
     "tsc2c-cjs-runtime-delete-default-package": cjsPackage("tsc2c-cjs-runtime-delete-default-package", {
         "index.js": "const target = { present: 1 };\nmodule.exports = delete target.present;\n",
     }),
