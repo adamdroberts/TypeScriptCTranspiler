@@ -168,8 +168,14 @@ function staticRequireSpecifiers(
     fileName: string,
 ): string[] {
     const specs: string[] = [];
-    const visit = (node: ts.Node): void => {
-        const nodeSpecs = ts.isExpression(node) ? requireCallSpecifiers(node, requireAliases, moduleAliases) : null;
+    const visit = (
+        node: ts.Node,
+        activeRequireAliases: Set<string>,
+        activeModuleAliases: Set<string>,
+    ): void => {
+        const nodeSpecs = ts.isExpression(node)
+            ? requireCallSpecifiers(node, activeRequireAliases, activeModuleAliases)
+            : null;
         if (nodeSpecs) {
             if (nodeSpecs.length > 0) {
                 specs.push(...nodeSpecs);
@@ -177,9 +183,23 @@ function staticRequireSpecifiers(
                 specs.push(...dynamicRequireSpecifiersForFile(dynamicRequires, fileName));
             }
         }
-        ts.forEachChild(node, visit);
+        if (ts.isCallExpression(node)) {
+            const scoped = commonJsIifeScopedAliases(node, activeRequireAliases, activeModuleAliases);
+            if (scoped) {
+                for (const arg of node.arguments) visit(arg, activeRequireAliases, activeModuleAliases);
+                if (ts.isBlock(scoped.fn.body)) {
+                    for (const child of scoped.fn.body.statements) {
+                        visit(child, scoped.requireAliases, scoped.moduleAliases);
+                    }
+                } else {
+                    visit(scoped.fn.body, scoped.requireAliases, scoped.moduleAliases);
+                }
+                return;
+            }
+        }
+        ts.forEachChild(node, (child) => visit(child, activeRequireAliases, activeModuleAliases));
     };
-    visit(stmt);
+    visit(stmt, requireAliases, moduleAliases);
     return specs;
 }
 
@@ -191,6 +211,49 @@ function requireCallSpecifiers(expr: ts.Expression, requireAliases: Set<string>,
     return staticRequireCallSpecifiers(expr, requireAliases, moduleAliases);
 }
 
+function commonJsIifeScopedAliases(
+    call: ts.CallExpression,
+    requireAliases: Set<string>,
+    moduleAliases: Set<string>,
+): { fn: ts.FunctionExpression | ts.ArrowFunction; requireAliases: Set<string>; moduleAliases: Set<string> } | null {
+    const fn = commonJsIifeCallee(call.expression);
+    if (!fn || call.arguments.length < fn.parameters.length) return null;
+    let nextRequireAliases: Set<string> | null = null;
+    let nextModuleAliases: Set<string> | null = null;
+    for (let index = 0; index < fn.parameters.length; index++) {
+        const param = fn.parameters[index]!;
+        if (!ts.isIdentifier(param.name)) continue;
+        const arg = call.arguments[index]!;
+        if (isCommonJsRequireCallee(arg, requireAliases, moduleAliases)) {
+            nextRequireAliases ??= new Set(requireAliases);
+            nextRequireAliases.add(param.name.text);
+            continue;
+        }
+        if (commonJsModuleArgument(arg, moduleAliases)) {
+            nextModuleAliases ??= new Set(moduleAliases);
+            nextModuleAliases.add(param.name.text);
+        }
+    }
+    if (!nextRequireAliases && !nextModuleAliases) return null;
+    return {
+        fn,
+        requireAliases: nextRequireAliases ?? requireAliases,
+        moduleAliases: nextModuleAliases ?? moduleAliases,
+    };
+}
+
+function commonJsIifeCallee(expr: ts.Expression): ts.FunctionExpression | ts.ArrowFunction | null {
+    let cur = expr;
+    while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+    return ts.isFunctionExpression(cur) || ts.isArrowFunction(cur) ? cur : null;
+}
+
+function commonJsModuleArgument(expr: ts.Expression, moduleAliases: Set<string>): boolean {
+    let cur = expr;
+    while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+    return ts.isIdentifier(cur) && (cur.text === "module" || moduleAliases.has(cur.text));
+}
+
 function commonJsModuleAliases(sf: ts.SourceFile): Set<string> {
     const aliases = new Set<string>();
     const visit = (node: ts.Node): void => {
@@ -198,6 +261,10 @@ function commonJsModuleAliases(sf: ts.SourceFile): Set<string> {
             let init = node.initializer;
             while (ts.isParenthesizedExpression(init)) init = init.expression;
             if (ts.isIdentifier(init) && init.text === "module") aliases.add(node.name.text);
+        }
+        if (ts.isParameter(node) && ts.isIdentifier(node.name)) {
+            const arg = commonJsIifeParameterArgument(node);
+            if (arg && commonJsModuleArgument(arg, aliases)) aliases.add(node.name.text);
         }
         ts.forEachChild(node, visit);
     };
@@ -223,6 +290,10 @@ function commonJsRequireAliases(sf: ts.SourceFile, moduleAliases: Set<string>): 
                 }
             }
         }
+        if (ts.isParameter(node) && ts.isIdentifier(node.name)) {
+            const arg = commonJsIifeParameterArgument(node);
+            if (arg && isCommonJsRequireCallee(arg, aliases, moduleAliases)) aliases.add(node.name.text);
+        }
         ts.forEachChild(node, visit);
     };
     visit(sf);
@@ -244,4 +315,24 @@ function isCommonJsModuleAliasInitializer(expr: ts.Expression, moduleAliases: Se
 function staticPropertyName(name: ts.PropertyName | ts.BindingName): string | null {
     if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) return name.text;
     return null;
+}
+
+function commonJsIifeParameterArgument(param: ts.ParameterDeclaration): ts.Expression | null {
+    if (!ts.isIdentifier(param.name)) return null;
+    const fn = param.parent;
+    if (!ts.isFunctionExpression(fn) && !ts.isArrowFunction(fn)) return null;
+    const index = fn.parameters.indexOf(param);
+    if (index < 0) return null;
+    const call = commonJsIifeCallForFunction(fn);
+    return call && index < call.arguments.length ? call.arguments[index]! : null;
+}
+
+function commonJsIifeCallForFunction(fn: ts.FunctionExpression | ts.ArrowFunction): ts.CallExpression | null {
+    let expr: ts.Expression = fn;
+    let parent: ts.Node | undefined = fn.parent;
+    while (parent && ts.isParenthesizedExpression(parent)) {
+        expr = parent;
+        parent = parent.parent;
+    }
+    return parent && ts.isCallExpression(parent) && parent.expression === expr ? parent : null;
 }

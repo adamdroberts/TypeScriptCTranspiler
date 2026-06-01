@@ -1885,6 +1885,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_commonjs_module_require_call_wrapper` | CommonJS module.require call/apply/Reflect.apply wrappers preserve static AOT require metadata |
 | `node_modules_commonjs_module_require_bind_alias` | CommonJS inline `module.require.bind(module)(...)` calls and aliases preserve static AOT require metadata |
 | `node_modules_commonjs_require_assertion_wrappers` | CommonJS TypeScript-only assertion wrappers around `require` / `module.require` callees, aliases, and static bind/call/apply forms preserve finite AOT require metadata |
+| `node_modules_commonjs_iife_parameter_wrapper` | CommonJS IIFE wrapper parameters passed `require`, `module`, and `exports` preserve finite AOT export metadata for named exports assigned through `module` / `exports` parameters inside the wrapper body |
 | `node_modules_commonjs_require_alias` | narrow CommonJS package top-level static `require` and `module.require` aliases for package-local member exports |
 | `node_modules_commonjs_require_alias_bind_alias` | CommonJS `req.bind(module)` aliases preserve static AOT require metadata |
 | `node_modules_commonjs_package_named` | narrow CommonJS package named exports through `exports.name` / `module.exports.name` |

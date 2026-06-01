@@ -14772,6 +14772,7 @@ class Emitter {
                     this.emitDefaultExportAssignment(initBuf, inner);
                     continue;
                 }
+                if (this.emitCommonJsIifeWrapper(initBuf, inner)) continue;
                 if (this.commonJsEsModuleMarker(inner)) continue;
                 const commonJsObjectAssignExports = this.commonJsObjectAssignExports(inner);
                 if (commonJsObjectAssignExports) {
@@ -17941,6 +17942,93 @@ class Emitter {
         return this.commonJsReturnedObjectLiteral(returned);
     }
 
+    private commonJsIifeWrapperStatements(stmt: ts.Statement): readonly ts.Statement[] | null {
+        if (!ts.isExpressionStatement(stmt)) return null;
+        let expr = stmt.expression;
+        while (ts.isParenthesizedExpression(expr)) expr = expr.expression;
+        if (!ts.isCallExpression(expr)) return null;
+        const fn = this.commonJsIifeCallee(expr.expression);
+        if (!fn || !ts.isBlock(fn.body)) return null;
+        if (expr.arguments.length !== fn.parameters.length) return null;
+        for (let index = 0; index < fn.parameters.length; index++) {
+            const param = fn.parameters[index]!;
+            if (!ts.isIdentifier(param.name)) return null;
+            if (!this.isCommonJsWrapperArgumentExpression(expr.arguments[index]!)) return null;
+        }
+        return fn.body.statements;
+    }
+
+    private commonJsIifeCallee(expr: ts.Expression): ts.FunctionExpression | ts.ArrowFunction | null {
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        return ts.isFunctionExpression(cur) || ts.isArrowFunction(cur) ? cur : null;
+    }
+
+    private isCommonJsWrapperArgumentExpression(expr: ts.Expression): boolean {
+        return this.isCommonJsRequireCallee(expr) ||
+            this.isCommonJsModuleThisArg(expr) ||
+            this.isCommonJsExportsTargetExpression(expr);
+    }
+
+    private emitCommonJsIifeWrapper(buf: CBuf, stmt: ts.Statement): boolean {
+        const statements = this.commonJsIifeWrapperStatements(stmt);
+        if (!statements) return false;
+        for (const inner of statements) {
+            if (this.commonJsEsModuleMarker(inner)) continue;
+            if (ts.isVariableStatement(inner)) {
+                if (this.isCommonJsIifeWrapperSkippableVariableStatement(inner)) {
+                    this.emitVarStmt(buf, inner);
+                    continue;
+                }
+                return false;
+            }
+            if (this.commonJsExportPlaceholderAssignment(inner)) continue;
+            const commonJsModuleExportObject = this.commonJsModuleExportsObjectAssignment(inner);
+            if (commonJsModuleExportObject) {
+                this.emitCommonJsModuleExportsObjectAssignment(buf, commonJsModuleExportObject);
+                continue;
+            }
+            const commonJsExportChain = this.commonJsExportAssignmentChain(inner);
+            if (commonJsExportChain && commonJsExportChain.lefts.length > 1) {
+                this.emitCommonJsExportAssignmentChain(buf, commonJsExportChain);
+                continue;
+            }
+            const commonJsExport = this.commonJsExportAssignment(inner);
+            if (commonJsExport) {
+                this.emitCommonJsExportAssignment(buf, commonJsExport);
+                continue;
+            }
+            const commonJsModuleExport = this.commonJsModuleExportsValueAssignment(inner);
+            if (commonJsModuleExport) {
+                this.emitCommonJsModuleExportsValueAssignment(buf, commonJsModuleExport);
+                continue;
+            }
+            return false;
+        }
+        return true;
+    }
+
+    private isCommonJsIifeWrapperSkippableVariableStatement(stmt: ts.VariableStatement): boolean {
+        for (const decl of stmt.declarationList.declarations) {
+            if (!decl.initializer) return false;
+            if (ts.isIdentifier(decl.name)) {
+                if (
+                    this.requireCallSpecifier(decl.initializer) ||
+                    this.isCommonJsModuleAliasDeclaration(decl) ||
+                    this.isCommonJsExportsAliasDeclaration(decl) ||
+                    this.isCommonJsRequireAliasDeclaration(decl)
+                ) {
+                    continue;
+                }
+            }
+            if (ts.isObjectBindingPattern(decl.name) && this.requireCallSpecifier(decl.initializer)) {
+                continue;
+            }
+            return false;
+        }
+        return true;
+    }
+
     private commonJsZeroArgFunctionReturnedObjectLiteral(expr: ts.Expression): ts.ObjectLiteralExpression | null {
         let cur = expr;
         while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
@@ -18275,9 +18363,6 @@ class Emitter {
         if (ts.isVoidExpression(valueNode)) {
             return T_VALUE;
         }
-        if (ts.isExpression(valueNode) && this.isCommonJsRuntimeComputedModuleExportsValue(valueNode)) {
-            return T_VALUE;
-        }
         if (ts.isConditionalExpression(valueNode)) {
             const trueTy = this.commonJsExportedCType(valueNode.whenTrue);
             const falseTy = this.commonJsExportedCType(valueNode.whenFalse);
@@ -18316,6 +18401,9 @@ class Emitter {
         if (ts.isCallExpression(valueNode)) {
             const decl = this.requireCallModuleExportsDeclaration(valueNode);
             if (decl) return this.commonJsExportedCType(decl);
+        }
+        if (ts.isExpression(valueNode) && this.isCommonJsRuntimeComputedModuleExportsValue(valueNode)) {
+            return T_VALUE;
         }
         return this.prepareType(mapType(valueNode, this.checker));
     }
@@ -18766,8 +18854,12 @@ class Emitter {
 
     private isCommonJsModuleIdentifier(id: ts.Identifier): boolean {
         if (id.text === "module") return true;
+        if (this.isCommonJsIifeModuleParameterIdentifier(id)) return true;
         const sym = this.symbolForIdentifier(id);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        if (decl && ts.isParameter(decl) && this.isCommonJsModuleAliasParameter(decl)) {
+            return true;
+        }
         if (decl && ts.isVariableDeclaration(decl) && this.isCommonJsModuleAliasDeclaration(decl)) {
             return true;
         }
@@ -18798,6 +18890,11 @@ class Emitter {
         return ts.isIdentifier(init) && this.isCommonJsModuleIdentifier(init);
     }
 
+    private isCommonJsModuleAliasParameter(param: ts.ParameterDeclaration): boolean {
+        const arg = this.commonJsIifeParameterArgument(param);
+        return !!arg && this.isCommonJsModuleThisArg(arg);
+    }
+
     private isCommonJsModuleDestructureAliasDeclaration(decl: ts.VariableDeclaration): boolean {
         if (!this.isJavaScriptSourceFile(decl.getSourceFile())) return false;
         if (!ts.isObjectBindingPattern(decl.name) || !decl.initializer) return false;
@@ -18826,8 +18923,12 @@ class Emitter {
     }
 
     private isCommonJsExportsAliasIdentifier(id: ts.Identifier): boolean {
+        if (this.isCommonJsIifeExportsParameterIdentifier(id)) return true;
         const sym = this.symbolForIdentifier(id);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        if (decl && ts.isParameter(decl) && this.isCommonJsExportsAliasParameter(decl)) {
+            return true;
+        }
         if (decl && ts.isBindingElement(decl) && this.isCommonJsModuleExportsAliasBindingElement(decl)) {
             return true;
         }
@@ -18843,6 +18944,11 @@ class Emitter {
         while (ts.isParenthesizedExpression(init)) init = init.expression;
         return (ts.isIdentifier(init) && init.text === "exports") ||
             (ts.isPropertyAccessExpression(init) && this.isModuleExportsAccess(init));
+    }
+
+    private isCommonJsExportsAliasParameter(param: ts.ParameterDeclaration): boolean {
+        const arg = this.commonJsIifeParameterArgument(param);
+        return !!arg && this.isCommonJsExportsTargetExpression(arg);
     }
 
     private isCommonJsModuleExportsAliasBindingElement(element: ts.BindingElement): boolean {
@@ -18905,8 +19011,12 @@ class Emitter {
     }
 
     private isCommonJsRequireAliasIdentifier(id: ts.Identifier): boolean {
+        if (this.isCommonJsIifeRequireParameterIdentifier(id)) return true;
         const sym = this.symbolForIdentifier(id);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        if (decl && ts.isParameter(decl) && this.isCommonJsRequireAliasParameter(decl)) {
+            return true;
+        }
         if (decl && ts.isBindingElement(decl) && this.isCommonJsModuleRequireAliasBindingElement(decl)) {
             return true;
         }
@@ -18934,6 +19044,63 @@ class Emitter {
         return (ts.isIdentifier(init) && init.text === "require") ||
             (ts.isPropertyAccessExpression(init) && this.isModuleRequireAccess(init)) ||
             this.isCommonJsRequireBindExpression(init);
+    }
+
+    private isCommonJsRequireAliasParameter(param: ts.ParameterDeclaration): boolean {
+        const arg = this.commonJsIifeParameterArgument(param);
+        return !!arg && this.isCommonJsRequireCallee(arg);
+    }
+
+    private commonJsIifeParameterArgument(param: ts.ParameterDeclaration): ts.Expression | null {
+        if (!ts.isIdentifier(param.name)) return null;
+        const fn = param.parent;
+        if (!ts.isFunctionExpression(fn) && !ts.isArrowFunction(fn)) return null;
+        const index = fn.parameters.indexOf(param);
+        if (index < 0) return null;
+        const call = this.commonJsIifeCallForFunction(fn);
+        return call && index < call.arguments.length ? call.arguments[index]! : null;
+    }
+
+    private commonJsIifeCallForFunction(fn: ts.FunctionExpression | ts.ArrowFunction): ts.CallExpression | null {
+        let expr: ts.Expression = fn;
+        let parent: ts.Node | undefined = fn.parent;
+        while (parent && ts.isParenthesizedExpression(parent)) {
+            expr = parent;
+            parent = parent.parent;
+        }
+        return parent && ts.isCallExpression(parent) && parent.expression === expr ? parent : null;
+    }
+
+    private commonJsIifeArgumentForIdentifier(id: ts.Identifier): ts.Expression | null {
+        let cur: ts.Node | undefined = id.parent;
+        while (cur) {
+            if (ts.isFunctionExpression(cur) || ts.isArrowFunction(cur)) {
+                const index = cur.parameters.findIndex((param) =>
+                    ts.isIdentifier(param.name) && param.name.text === id.text,
+                );
+                if (index < 0) return null;
+                const call = this.commonJsIifeCallForFunction(cur);
+                return call && index < call.arguments.length ? call.arguments[index]! : null;
+            }
+            if (ts.isSourceFile(cur)) return null;
+            cur = cur.parent;
+        }
+        return null;
+    }
+
+    private isCommonJsIifeModuleParameterIdentifier(id: ts.Identifier): boolean {
+        const arg = this.commonJsIifeArgumentForIdentifier(id);
+        return !!arg && this.isCommonJsModuleThisArg(arg);
+    }
+
+    private isCommonJsIifeExportsParameterIdentifier(id: ts.Identifier): boolean {
+        const arg = this.commonJsIifeArgumentForIdentifier(id);
+        return !!arg && this.isCommonJsExportsTargetExpression(arg);
+    }
+
+    private isCommonJsIifeRequireParameterIdentifier(id: ts.Identifier): boolean {
+        const arg = this.commonJsIifeArgumentForIdentifier(id);
+        return !!arg && this.isCommonJsRequireCallee(arg);
     }
 
     private isCommonJsRequireBindExpression(expr: ts.Expression): boolean {
@@ -19404,7 +19571,7 @@ class Emitter {
 
     private commonJsExportedMemberDeclarations(sf: ts.SourceFile): Array<{ name: string; decl: ts.Node }> {
         const out: Array<{ name: string; decl: ts.Node }> = [];
-        for (const stmt of sf.statements) {
+        for (const stmt of this.commonJsExportCandidateStatements(sf)) {
             if (this.commonJsEsModuleMarker(stmt)) continue;
             const objectAssignExports = this.commonJsObjectAssignExports(stmt);
             if (objectAssignExports) {
@@ -19549,6 +19716,16 @@ class Emitter {
         return out;
     }
 
+    private commonJsExportCandidateStatements(sf: ts.SourceFile): ts.Statement[] {
+        const out: ts.Statement[] = [];
+        for (const stmt of sf.statements) {
+            out.push(stmt);
+            const wrapperStatements = this.commonJsIifeWrapperStatements(stmt);
+            if (wrapperStatements) out.push(...wrapperStatements);
+        }
+        return out;
+    }
+
     private commonJsExportedMemberDeclaration(sf: ts.SourceFile, name: string): ts.Node | null {
         for (const exported of this.commonJsExportedMemberDeclarations(sf)) {
             if (exported.name === name) return exported.decl;
@@ -19600,7 +19777,7 @@ class Emitter {
     }
 
     private commonJsModuleExportsValueDeclaration(sf: ts.SourceFile): ts.BinaryExpression | null {
-        for (const stmt of sf.statements) {
+        for (const stmt of this.commonJsExportCandidateStatements(sf)) {
             const chain = this.commonJsModuleExportsValueAssignmentChain(stmt);
             const right = chain ? this.unwrapTransparentExpression(chain.right) : null;
             if (

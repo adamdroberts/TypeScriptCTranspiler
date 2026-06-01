@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS IIFE wrapper parameters passed `require`, `module`, and `exports` now preserve finite AOT export metadata for named exports assigned through `module` / `exports` parameters inside the wrapper body. Test: `node_modules_commonjs_iife_parameter_wrapper`.
 - CommonJS computed named-export assignments now accept finite dynamic key alternatives, lowering `exports[key] = ...` / `module.exports[key] = ...` to AOT string dispatch over known export names. Test: `node_modules_commonjs_dynamic_computed_exports`.
 - CommonJS whole-value object metadata now unwraps TypeScript-only assertion wrappers around `module.exports = { ... }` defaults and zero-argument factory object returns. Test: `node_modules_commonjs_module_exports_assertion_wrappers`.
 - CommonJS `module.exports` IIFE/local-factory object metadata now follows object-preserving `Object.freeze(...)` / `Object.seal(...)` / `Object.preventExtensions(...)` / `Object.setPrototypeOf(...)` wrappers returned from the zero-argument factory. Tests: `node_modules_commonjs_module_exports_iife_object`, `node_modules_commonjs_module_exports_local_factory_object`.
