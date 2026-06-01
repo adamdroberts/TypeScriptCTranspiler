@@ -49492,8 +49492,50 @@ class Emitter {
         return { c: `({ ${pieces.join("; ")}; })`, ty: arrayType(T_VALUE) };
     }
 
+    private emitReflectRuntimeMethodCall(call: ts.CallExpression, name: string): EmitResult {
+        const specs = call.arguments.map((arg): SequencedCallArg => ({
+            value: this.emitExpr(arg),
+            target: T_VALUE,
+            node: arg,
+        }));
+        return this.emitSequencedExpr(T_VALUE, specs, (vals) => {
+            const reflect = this.freshTemp("_reflect_obj");
+            const fn = this.freshTemp("_reflect_fn");
+            const av = this.freshTemp("_reflect_call_args");
+            const pieces: string[] = [
+                `tsc_value_t ${reflect} = tsc_builtin_reflect()`,
+                `tsc_value_t ${fn} = tsc_value_get_prop(${reflect}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))`,
+                `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, vals.length)})`,
+            ];
+            for (const value of vals) {
+                pieces.push(`tsc_array_push_value(${av}, ${value})`);
+            }
+            pieces.push(`tsc_value_apply_function(${fn}, ${reflect}, tsc_value_array(${av}))`);
+            return `({ ${pieces.join("; ")}; })`;
+        });
+    }
+
     private emitReflectCall(call: ts.CallExpression, name: string): EmitResult {
         const args = call.arguments;
+        const runtimeArity: Record<string, number> = {
+            apply: 3,
+            construct: 2,
+            defineProperty: 3,
+            deleteProperty: 2,
+            get: 2,
+            getOwnPropertyDescriptor: 2,
+            getPrototypeOf: 1,
+            has: 2,
+            isExtensible: 1,
+            ownKeys: 1,
+            preventExtensions: 1,
+            set: 3,
+            setPrototypeOf: 2,
+        };
+        const required = runtimeArity[name];
+        if (required !== undefined && args.length < required) {
+            return this.emitReflectRuntimeMethodCall(call, name);
+        }
         switch (name) {
             case "apply":
                 return this.emitReflectApply(call);
