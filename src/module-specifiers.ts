@@ -80,6 +80,9 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (ts.isConditionalExpression(node)) {
             return dedupe([...resolve(node.whenTrue), ...resolve(node.whenFalse)]);
         }
+        if (ts.isTaggedTemplateExpression(node) && isStringRawTag(node.tag)) {
+            return resolveStringRawTemplate(node.template);
+        }
         if (ts.isTemplateExpression(node)) {
             let out = [node.head.text];
             for (const span of node.templateSpans) {
@@ -104,6 +107,21 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (values.length > 0) return values;
         }
         return stringLiteralUnionIdentifierTexts(node);
+    };
+
+    const resolveStringRawTemplate = (
+        template: ts.TemplateLiteral | ts.NoSubstitutionTemplateLiteral,
+    ): string[] => {
+        if (ts.isNoSubstitutionTemplateLiteral(template)) {
+            return [templateRawText(template)];
+        }
+
+        let out = [templateRawText(template.head)];
+        for (const span of template.templateSpans) {
+            out = concat(concat(out, resolve(span.expression)), [templateRawText(span.literal)]);
+            if (out.length === 0) return [];
+        }
+        return out;
     };
 
     const resolveCollectionExpression = (node: ts.Expression): ts.Expression | null => {
@@ -641,6 +659,19 @@ function staticPropertyName(name: ts.PropertyName): string | null {
         return staticStringExpressionText(name.expression);
     }
     return null;
+}
+
+function isStringRawTag(expr: ts.Expression): boolean {
+    const unwrapped = unwrapStaticExpression(expr);
+    return ts.isPropertyAccessExpression(unwrapped) &&
+        unwrapped.name.text === "raw" &&
+        ts.isIdentifier(unwrapped.expression) &&
+        unwrapped.expression.text === "String";
+}
+
+function templateRawText(node: ts.TemplateLiteralLikeNode): string {
+    const rawText = (node as ts.TemplateLiteralLikeNode & { rawText?: string }).rawText;
+    return rawText ?? node.text;
 }
 
 function unwrapStaticExpression(expr: ts.Expression): ts.Expression {
