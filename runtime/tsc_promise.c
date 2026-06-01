@@ -83,6 +83,16 @@ void tsc_promise_add_callback(tsc_promise_t* p, void (*fn)(void*), void* env) {
     p->callbacks[p->callbacks_len++] = (tsc_promise_callback_t){ fn, env };
 }
 
+typedef struct {
+    tsc_promise_t* dest;
+    tsc_promise_t* source;
+} tsc_promise_adopt_env_t;
+
+static void tsc_promise_adopt_callback(void* env) {
+    tsc_promise_adopt_env_t* state = (tsc_promise_adopt_env_t*)env;
+    tsc_promise_adopt_into(state->dest, state->source);
+}
+
 void tsc_promise_adopt_into(tsc_promise_t* dest, tsc_promise_t* source) {
     if (!dest || dest->state != TSC_PROMISE_PENDING || !source) return;
     if (tsc_promise_is_fulfilled(source)) {
@@ -95,6 +105,11 @@ void tsc_promise_adopt_into(tsc_promise_t* dest, tsc_promise_t* source) {
         dest->result = source->result;
         dest->ptr_result = source->ptr_result;
         tsc_promise_trigger_callbacks(dest);
+    } else if (tsc_promise_is_pending(source)) {
+        tsc_promise_adopt_env_t* env = (tsc_promise_adopt_env_t*)TSC_GC_MALLOC(sizeof(tsc_promise_adopt_env_t));
+        env->dest = dest;
+        env->source = source;
+        tsc_promise_add_callback(source, tsc_promise_adopt_callback, env);
     }
 }
 

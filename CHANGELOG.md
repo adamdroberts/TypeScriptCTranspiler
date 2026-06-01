@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Promise adoption now subscribes to pending source promises so `Promise.resolve(pending)` settles when the source later resolves or rejects. Test: `promise_resolve_adopt`.
 - Generated-C DCE static boolean analysis now folds side-effect-free `Number.isFinite(...)`, `Number.isInteger(...)`, `Number.isNaN(...)`, and `Number.isSafeInteger(...)` predicate calls. Test: `generated_c_dce_static_builtins`.
 - Runtime-code AOT eval constants now accept empty source strings and `void` expressions as `undefined`. Test: `runtime_eval_empty_void_aot`.
 - Dynamic require manifests now reject non-object top-level JSON values before reading `requires`. Test: `dynamic_require_manifest_invalid_root`.
