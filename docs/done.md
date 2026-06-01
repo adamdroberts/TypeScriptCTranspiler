@@ -1499,6 +1499,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `nested_set_immediate` | nested setImmediate ordering yields to other phases across event loop ticks |
 | `set_interval_delay` | bounded nonzero-delay setInterval callbacks wait between runtime timer callbacks and can be canceled |
 | `timers_clear` | bounded setTimeout/setImmediate handles can be cleared before the before-exit drain, including clearInterval timeout-handle aliases |
+| `timers_clear_canceled_delay` | cleared non-ready timeout handles do not keep the before-exit event loop alive |
 | `timers_module_import` | timers/node:timers imports route to bounded timeout and immediate scheduler helpers |
 | `timers_promises_import` | timers/promises imports expose immediate settled timeout/immediate promises with ignored extras |
 | `timers_promises_delay` | timers/promises setTimeout supports nonzero and dynamic delays before promise fulfillment |

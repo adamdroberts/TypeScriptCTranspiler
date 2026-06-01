@@ -26,6 +26,7 @@ This is the next item that most directly expands what programs can be written ag
   - Done: thenable assimilation now rejects delayed resolver self-resolution when a thenable later resolves with the Promise record returned by `Promise.resolve(thenable)`. Test: `promise_thenable_self_resolution`.
   - Done: `new Promise(...)` executor `resolve(...)` callbacks assimilate dynamic thenables and nested native Promise records. Test: `promise_executor_thenable_assimilation`.
   - Done: bounded before-exit queue draining now loops across `process.nextTick`, Promise microtasks, zero-delay timers, and `setImmediate`, preserving nested scheduling order for the compiled runtime subset; nonzero-delay `setTimeout`, `setInterval`, and `timers/promises.setTimeout` wait on the runtime clock before running callbacks or fulfilling Promises; recursively scheduled next ticks have bounded starvation protection; recursively scheduled `setImmediate` callbacks are backed by the event-loop scheduling model, yielding to the next tick check phase to preserve proper timer and microtask ordering.
+  - Done: cleared non-ready timeout handles no longer keep the before-exit event loop alive when no active timers remain. Test: `timers_clear_canceled_delay`.
   - Still missing: real timer signal handling and future async I/O on top of libuv.
   - **Depends on Phase 3** for the `Promise<T>` value representation (mixed boxed + unboxed).
 
