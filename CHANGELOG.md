@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic `Array.prototype.toLocaleString` now stringifies elements through each element's own/inherited `toLocaleString` method, preserving empty fields for `null` / `undefined` and rejecting non-callable element methods. Test: `dynamic_array_to_string`.
 - Direct dynamic object `.toString()`, `.toLocaleString()`, and `.valueOf()` calls now honor own overrides and reject non-callable resolved methods instead of silently falling back. Tests: `object_to_string`, `object_to_locale_string`, `object_value_of`.
 - Direct dynamic array `.valueOf()` calls now dispatch through dynamic property lookup, so own overrides are honored like detached prototype calls. Test: `dynamic_array_string_properties`.
 - Direct dynamic array `.toLocaleString()` calls now dispatch through dynamic property lookup, so own overrides are honored like detached prototype calls. Test: `dynamic_array_string_properties`.
