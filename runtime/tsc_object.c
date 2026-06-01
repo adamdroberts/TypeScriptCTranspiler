@@ -895,6 +895,9 @@ bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value,
             if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_ARRAY) {
                 return tsc_value_set_prop(o->proxy_target, key, value);
             }
+            if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_FUNCTION) {
+                return tsc_value_set_prop(o->proxy_target, key, value);
+            }
             return false;
         }
         tsc_proxy_require_callable_trap(trap, "Proxy set trap must be callable");

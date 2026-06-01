@@ -2065,6 +2065,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_callable_string` | callable Proxy values preserve function-style string coercion |
 | `proxy_callable_to_string_tag` | Object.prototype.toString.call tags callable Proxy chains as Function |
 | `proxy_function_prototype_invariants` | function Proxy prototype/extensibility forwarding plus function `prototype` ownKeys/descriptor invariants after ignored-argument evaluation and trap dispatch |
+| `proxy_function_set_forward` | trapless function-target Proxy assignment and Reflect.set forward writable prototype updates |
 | `proxy_callable_target_validation` | Proxy apply and construct reject non-callable object targets before trap dispatch after argument-list evaluation |
 | `proxy_callable_trap_validation` | Proxy apply and construct traps validate after argument-list evaluation |
 | `proxy_callable_trap_this_binding` | Callable proxy-valued object traps receive the handler as this |
