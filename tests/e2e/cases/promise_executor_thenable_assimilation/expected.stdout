@@ -1,0 +1,3 @@
+events: executor|then:executor
+resolved: executor-value
+nested: nested

@@ -36128,7 +36128,7 @@ class Emitter {
             buf.line("if (!*state->result) *state->result = tsc_promise_resolve_fs_stats(value);");
         } else {
             const boxed = this.coerce({ c: "value", ty: type }, T_VALUE, node);
-            buf.line(`if (!*state->result) *state->result = tsc_promise_resolve(${boxed});`);
+            buf.line(`if (!*state->result) *state->result = tsc_promise_resolve_thenable(${boxed});`);
         }
         buf.close();
         buf.line();

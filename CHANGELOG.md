@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `new Promise(...)` executor `resolve(...)` callbacks now assimilate dynamic thenables and nested native Promise records instead of fulfilling with them as plain values. Test: `promise_executor_thenable_assimilation`.
 - CommonJS whole-value `module.exports = ...` defaults now accept bounded side-effect-free binary and prefix-unary expressions whose operands are static AOT default values, including nested object/array defaults and primitive whole-value defaults. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 - Extended the narrow lazy generator lowering to resume a single suspended `yield` through TypeScript-only `as`, angle-bracket, `satisfies`, and non-null assertion wrappers. Test: `generator_lazy_yield_assertions`.
 - Dynamic `Array.prototype.entries()` now materializes numeric index keys instead of stringified object-entry keys, and dynamic `Array.prototype.flat(Infinity)` safely treats infinite depth as unbounded without casting infinity to `int`. Tests: `dynamic_array_entries`, `dynamic_array_flat`.
