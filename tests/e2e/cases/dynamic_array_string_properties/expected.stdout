@@ -3,8 +3,9 @@ keys: 0|1|foo|join
 names: 0|1|length|foo|join
 values: red mark function
 entries: foo=mark join function
-string: custom:mark
+string: custom:mark custom:mark
+own string: own:mark own:mark
 delete: true false undefined
 hidden: secret false false false false
-names2: 0|1|length|join|hidden
+names2: 0|1|length|join|toString|hidden
 extensible: false false false

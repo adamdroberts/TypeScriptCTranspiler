@@ -14,7 +14,12 @@ console.log("values:", values[0], values[2], typeof values[3]);
 
 const entries: any = Object.entries(arr);
 console.log("entries:", entries[2].join("="), entries[3][0], typeof entries[3][1]);
-console.log("string:", Reflect.apply(arr.toString, arr, []));
+console.log("string:", arr.toString(), Reflect.apply(arr.toString, arr, []));
+
+arr.toString = function () {
+    return "own:" + arr.foo;
+};
+console.log("own string:", arr.toString(), Reflect.apply(arr.toString, arr, []));
 
 console.log("delete:", delete arr.foo, Object.hasOwn(arr, "foo"), arr.foo);
 
