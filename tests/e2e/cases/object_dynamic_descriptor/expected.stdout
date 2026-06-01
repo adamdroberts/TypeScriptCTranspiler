@@ -5,3 +5,5 @@ reflect keys: name
 reflect failed: false
 array define: true first 1
 function define: true Named
+array descriptor default: true true undefined 0
+array descriptor map: true zero 0
