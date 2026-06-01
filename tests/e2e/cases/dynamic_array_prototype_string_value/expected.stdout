@@ -1,0 +1,4 @@
+types: function function function
+lookup: false true true
+strings: 1,,,x 1,,,x
+value: true
