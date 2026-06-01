@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic require manifest caller-scoped entries now match only exact normalized absolute source-file paths, removing suffix fallback matches between unrelated files. Test: `dynamic_require_manifest_by_file_exact`.
 - Trapless array and function Proxy targets now forward accessor `Object.defineProperty` / `Reflect.defineProperty` definitions to their target side-property stores. Test: `proxy_accessor_forward_non_object_targets`.
 - Proxy integrity helpers now accept array and function values as descriptor objects when checking or applying seal/freeze state through Proxy traps. Test: `proxy_integrity_descriptor_objects`.
 - Lazy generator lowering now resumes single suspended `yield` values through equality and relational binary comparisons. Test: `generator_lazy_yield_comparison`.
