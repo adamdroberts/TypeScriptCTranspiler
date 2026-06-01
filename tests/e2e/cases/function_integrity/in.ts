@@ -28,13 +28,16 @@ const stableProto: any = { marker: "stable" };
 console.log("same boxed:", Object.is(first, second), first === second);
 const lengthDesc: any = Object.getOwnPropertyDescriptor(first, "length");
 const nameDesc: any = Object.getOwnPropertyDescriptor(first, "name");
+const prototypeDesc: any = Object.getOwnPropertyDescriptor(first, "prototype");
+const allDescs: any = Object.getOwnPropertyDescriptors(first);
 const names: any = Object.getOwnPropertyNames(first);
 const ownKeys: any = Reflect.ownKeys(first);
 console.log("function length:", first.length, Reflect.get(first, "length"));
 console.log("function name:", first.name, Reflect.get(first, "name"));
-console.log("function own:", Object.hasOwn(first, "length"), Object.hasOwn(first, "name"), Object.keys(first).length, names.length, names[0], names[1], ownKeys.length, ownKeys[0], ownKeys[1]);
+console.log("function own:", Object.hasOwn(first, "length"), Object.hasOwn(first, "name"), Object.hasOwn(first, "prototype"), Object.keys(first).length, names.length, names[0], names[1], names[2], ownKeys.length, ownKeys[0], ownKeys[1], ownKeys[2]);
 console.log("length desc:", lengthDesc.value, lengthDesc.writable, lengthDesc.enumerable, lengthDesc.configurable);
 console.log("name desc:", nameDesc.value, nameDesc.writable, nameDesc.enumerable, nameDesc.configurable);
+console.log("prototype desc:", prototypeDesc.value.constructor === first, prototypeDesc.writable, prototypeDesc.enumerable, prototypeDesc.configurable, allDescs.prototype.value === first.prototype);
 Object.setPrototypeOf(first, stableProto);
 console.log("shared proto:", Object.getPrototypeOf(second).marker);
 Object.preventExtensions(first);
@@ -44,7 +47,7 @@ const typedNames: any = Object.getOwnPropertyNames(TypedDirect);
 const typedDesc: any = Object.getOwnPropertyDescriptor(TypedDirect, "name");
 const typedDescs: any = Object.getOwnPropertyDescriptors(TypedDirect);
 console.log("typed function enum:", Object.keys(TypedDirect).length, Object.values(TypedDirect).length, Object.entries(TypedDirect).length);
-console.log("typed function own:", typedNames.length, typedNames[0], typedNames[1], Object.hasOwn(TypedDirect, "name"), typedDesc.value, typedDescs.name.value);
+console.log("typed function own:", typedNames.length, typedNames[0], typedNames[1], typedNames[2], Object.hasOwn(TypedDirect, "name"), Object.hasOwn(TypedDirect, "prototype"), typedDesc.value, typedDescs.name.value, typedDescs.prototype.writable);
 Object.setPrototypeOf(TypedProto, { marker: "typed" });
 console.log("typed function proto:", Object.getPrototypeOf(TypedProto).marker);
 console.log("typed function prevent:", Object.isExtensible(TypedPrevent), Object.preventExtensions(TypedPrevent) === TypedPrevent, Object.isExtensible(TypedPrevent));
@@ -53,13 +56,16 @@ console.log("typed function freeze:", Object.freeze(TypedFreeze) === TypedFreeze
 
 const reflectKeys: any = Reflect.ownKeys(TypedReflect);
 const reflectDesc: any = Reflect.getOwnPropertyDescriptor(TypedReflect, "name");
+const reflectPrototypeDesc: any = Reflect.getOwnPropertyDescriptor(TypedReflect, "prototype");
 Reflect.setPrototypeOf(TypedReflect, { marker: "reflect" });
-console.log("typed reflect own:", reflectKeys.length, reflectKeys[0], reflectKeys[1], Reflect.get(TypedReflect, "name"), Reflect.has(TypedReflect, "length"), reflectDesc.value);
+console.log("typed reflect own:", reflectKeys.length, reflectKeys[0], reflectKeys[1], reflectKeys[2], Reflect.get(TypedReflect, "name"), Reflect.has(TypedReflect, "length"), Reflect.has(TypedReflect, "prototype"), reflectDesc.value, reflectPrototypeDesc.writable);
 console.log("typed reflect proto:", Reflect.getPrototypeOf(TypedReflect).marker);
 console.log("typed reflect prevent:", Reflect.isExtensible(TypedReflect), Reflect.preventExtensions(TypedReflect), Reflect.isExtensible(TypedReflect));
 
 const defineResult = Object.defineProperty(TypedDefine, "name", { value: "TypedDefine", writable: false, enumerable: false, configurable: false });
 console.log("typed function define:", defineResult === TypedDefine, Reflect.defineProperty(TypedDefine, "length", { value: 1, writable: false, enumerable: false, configurable: false }), Reflect.defineProperty(TypedDefine, "length", { value: 9 }), Reflect.get(TypedDefine, "length"));
+const replacementPrototype: any = { marker: "replacement" };
+console.log("typed function prototype define:", Reflect.defineProperty(TypedDefine, "prototype", { value: replacementPrototype, writable: true, enumerable: false, configurable: false }), Reflect.get(TypedDefine, "prototype") === replacementPrototype);
 console.log("typed function delete:", Reflect.deleteProperty(TypedDelete, "length"), Reflect.deleteProperty(TypedDelete, "name"), Reflect.deleteProperty(TypedDelete, "missing"), Reflect.has(TypedDelete, "length"), Reflect.has(TypedDelete, "name"));
 
 const zeroLength: any = ZeroLength as any;
@@ -115,11 +121,11 @@ function missingKeys(target: any): any {
 }
 
 function completeKeys(target: any): any {
-    return ["length", "name"];
+    return ["length", "name", "prototype"];
 }
 
 function extraKeys(target: any): any {
-    return ["length", "name", "extra"];
+    return ["length", "name", "prototype", "extra"];
 }
 
 function falseHas(target: any, prop: any): boolean {

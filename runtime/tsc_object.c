@@ -314,6 +314,10 @@ static void validate_proxy_get_result(const tsc_object_t* proxy, const tsc_str_t
         tsc_value_t target_desc_value = value_descriptor_from_function_key(target, key);
         if (!value_is_box(target_desc_value) || value_tag(target_desc_value) != TSC_VALUE_TAG_OBJECT) return;
         const tsc_object_t* target_desc = (const tsc_object_t*)value_ptr(target_desc_value);
+        tsc_value_t writable_value = tsc_value_undefined();
+        bool has_writable = descriptor_has_prop(target_desc, "writable", 8, &writable_value);
+        bool writable = has_writable ? tsc_value_is_truthy(writable_value) : false;
+        if (writable) return;
         tsc_value_t target_value = tsc_value_undefined();
         bool target_has_value = descriptor_has_prop(target_desc, "value", 5, &target_value);
         if (target_has_value && !tsc_value_object_is(result, target_value)) {
@@ -361,6 +365,10 @@ static void validate_proxy_set_result(const tsc_object_t* proxy, const tsc_str_t
         tsc_value_t target_desc_value = value_descriptor_from_function_key(target, key);
         if (!value_is_box(target_desc_value) || value_tag(target_desc_value) != TSC_VALUE_TAG_OBJECT) return;
         const tsc_object_t* target_desc = (const tsc_object_t*)value_ptr(target_desc_value);
+        tsc_value_t writable_value = tsc_value_undefined();
+        bool has_writable = descriptor_has_prop(target_desc, "writable", 8, &writable_value);
+        bool writable = has_writable ? tsc_value_is_truthy(writable_value) : false;
+        if (writable) return;
         tsc_value_t target_value = tsc_value_undefined();
         bool target_has_value = descriptor_has_prop(target_desc, "value", 5, &target_value);
         if (target_has_value && !tsc_value_object_is(value, target_value)) {
@@ -457,21 +465,29 @@ static void validate_proxy_define_property_result(const tsc_object_t* proxy, con
 
         tsc_value_t target_value = tsc_value_undefined();
         bool target_has_value = descriptor_has_prop(target_desc, "value", 5, &target_value);
+        tsc_value_t target_writable_value = tsc_value_undefined();
+        bool target_has_writable = descriptor_has_prop(target_desc, "writable", 8, &target_writable_value);
+        bool target_writable = target_has_writable ? tsc_value_is_truthy(target_writable_value) : false;
+        tsc_value_t target_enumerable_value = tsc_value_undefined();
+        bool target_has_enumerable = descriptor_has_prop(target_desc, "enumerable", 10, &target_enumerable_value);
+        bool target_enumerable = target_has_enumerable ? tsc_value_is_truthy(target_enumerable_value) : false;
         if (has_configurable && configurable) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot make non-configurable key configurable"));
         }
-        if (has_enumerable && enumerable) {
+        if (has_enumerable && enumerable != target_enumerable) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot change non-configurable enumerable flag"));
         }
         if (accessor_descriptor) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot redefine non-configurable data key as accessor"));
         }
-        if (has_writable && writable) {
+        if (has_writable && writable && !target_writable) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot make non-configurable non-writable key writable"));
         }
-        if (target_has_value && has_value && !tsc_value_object_is(value, target_value)) {
+        if (!target_writable && target_has_value && has_value && !tsc_value_object_is(value, target_value)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot change non-configurable non-writable key"));
         }
+        (void)target_has_writable;
+        (void)target_has_enumerable;
         (void)getter_value;
         (void)has_getter;
         (void)setter_value;
