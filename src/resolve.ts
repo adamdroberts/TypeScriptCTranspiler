@@ -314,14 +314,42 @@ function commonJsFactoryWrapperInvocation(call: ts.CallExpression): {
                 let target: ts.Expression = callee.expression;
                 while (ts.isParenthesizedExpression(target)) target = target.expression;
                 if (ts.isIdentifier(target)) {
-                    const factory = factories.get(target.text);
-                    if (factory && callee.name.text === "call") {
-                        invocations.push({ fn: factory.fn, factoryArgument: factory.argument, args: node.arguments.slice(1) });
-                    } else if (factory && callee.name.text === "apply" && node.arguments.length >= 2) {
-                        let argArray = node.arguments[1]!;
-                        while (ts.isParenthesizedExpression(argArray)) argArray = argArray.expression;
-                        if (ts.isArrayLiteralExpression(argArray)) {
-                            invocations.push({ fn: factory.fn, factoryArgument: factory.argument, args: argArray.elements });
+                    if (target.text === "Reflect" && callee.name.text === "apply" && node.arguments.length >= 3) {
+                        let factoryArg = node.arguments[0]!;
+                        while (ts.isParenthesizedExpression(factoryArg)) factoryArg = factoryArg.expression;
+                        if (ts.isIdentifier(factoryArg)) {
+                            const factory = factories.get(factoryArg.text);
+                            if (factory) {
+                                let argArray = node.arguments[2]!;
+                                while (ts.isParenthesizedExpression(argArray)) argArray = argArray.expression;
+                                if (ts.isArrayLiteralExpression(argArray)) {
+                                    invocations.push({ fn: factory.fn, factoryArgument: factory.argument, args: argArray.elements });
+                                }
+                            }
+                        }
+                    } else {
+                        const factory = factories.get(target.text);
+                        if (factory && callee.name.text === "call") {
+                            invocations.push({ fn: factory.fn, factoryArgument: factory.argument, args: node.arguments.slice(1) });
+                        } else if (factory && callee.name.text === "apply" && node.arguments.length >= 2) {
+                            let argArray = node.arguments[1]!;
+                            while (ts.isParenthesizedExpression(argArray)) argArray = argArray.expression;
+                            if (ts.isArrayLiteralExpression(argArray)) {
+                                invocations.push({ fn: factory.fn, factoryArgument: factory.argument, args: argArray.elements });
+                            }
+                        }
+                    }
+                }
+            } else if (ts.isCallExpression(callee)) {
+                let bindCallee: ts.Expression = callee.expression;
+                while (ts.isParenthesizedExpression(bindCallee)) bindCallee = bindCallee.expression;
+                if (ts.isPropertyAccessExpression(bindCallee)) {
+                    let bindTarget: ts.Expression = bindCallee.expression;
+                    while (ts.isParenthesizedExpression(bindTarget)) bindTarget = bindTarget.expression;
+                    if (ts.isIdentifier(bindTarget) && bindCallee.name.text === "bind") {
+                        const factory = factories.get(bindTarget.text);
+                        if (factory) {
+                            invocations.push({ fn: factory.fn, factoryArgument: factory.argument, args: node.arguments });
                         }
                     }
                 }
