@@ -15162,7 +15162,7 @@ class Emitter {
         return this.commonJsNamedImportDeclarationInfo(id)?.decl ?? null;
     }
 
-    private commonJsNamedImportDeclarationInfo(id: ts.Identifier): { name: string; decl: ts.Node } | null {
+    private commonJsNamedImportDeclarationInfo(id: ts.Identifier): { name: string; decl: ts.Node; specifier: string } | null {
         const raw = this.checker.getSymbolAtLocation(id);
         const importSpec = (raw?.declarations ?? []).find((decl): decl is ts.ImportSpecifier =>
             ts.isImportSpecifier(decl) && decl.name.text === id.text,
@@ -15177,7 +15177,11 @@ class Emitter {
         if (!sf || !this.isJavaScriptSourceFile(sf)) return null;
         const exportName = importSpec.propertyName?.text ?? importSpec.name.text;
         const decl = this.commonJsExportedMemberDeclaration(sf, exportName);
-        return decl ? { name: exportName, decl } : null;
+        if (decl) return { name: exportName, decl, specifier: specifier.text };
+        if (exportName === "default" && !this.hasCommonJsEsModuleMarker(sf)) {
+            return { name: "default", decl: sf, specifier: specifier.text };
+        }
+        return null;
     }
 
     private declarationName(decl: ts.Node): ts.Identifier | null {
@@ -28860,6 +28864,9 @@ class Emitter {
             }
             const commonJsNamedImport = this.commonJsNamedImportDeclarationInfo(expr);
             if (commonJsNamedImport) {
+                if (ts.isSourceFile(commonJsNamedImport.decl)) {
+                    return this.emitCommonJsRequireModuleValue(expr as any, commonJsNamedImport.specifier, "import");
+                }
                 const cName = this.commonJsExportedDeclarationCName(commonJsNamedImport.decl, commonJsNamedImport.name);
                 if (!cName) unsupported(expr, "unsupported CommonJS named import");
                 return { c: cName, ty: this.commonJsExportedCType(commonJsNamedImport.decl) };
