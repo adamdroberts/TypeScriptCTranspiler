@@ -1352,6 +1352,12 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-runtime-binary-default-package": cjsPackage("tsc2c-cjs-runtime-binary-default-package", {
         "index.js": 'module.exports = "binary-" + (20 + 2);\n',
     }),
+    "tsc2c-cjs-runtime-computed-binary-default-package": cjsPackage("tsc2c-cjs-runtime-computed-binary-default-package", {
+        "index.js": 'function base() { return 20; }\nconst offset = 2;\nmodule.exports = "computed-binary-" + (base() + offset);\n',
+    }),
+    "tsc2c-cjs-runtime-computed-conditional-default-package": cjsPackage("tsc2c-cjs-runtime-computed-conditional-default-package", {
+        "index.js": 'function enabled() { return Date.now() >= 0; }\nmodule.exports = enabled() ? "computed-conditional-yes" : "computed-conditional-no";\n',
+    }),
     "tsc2c-cjs-runtime-postfix-default-package": cjsPackage("tsc2c-cjs-runtime-postfix-default-package", {
         "index.js": "let counter = 4;\nmodule.exports = counter++;\n",
     }),
