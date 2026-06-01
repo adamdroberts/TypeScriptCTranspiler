@@ -17829,6 +17829,7 @@ class Emitter {
             case ts.SyntaxKind.EqualsEqualsEqualsToken:
             case ts.SyntaxKind.ExclamationEqualsToken:
             case ts.SyntaxKind.ExclamationEqualsEqualsToken:
+            case ts.SyntaxKind.InKeyword:
                 return true;
             default:
                 return false;
