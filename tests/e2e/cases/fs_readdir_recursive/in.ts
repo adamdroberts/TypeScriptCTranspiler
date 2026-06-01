@@ -28,7 +28,7 @@ console.log("sync:", summarize(syncNames));
 const namedNames = readdirSync(root, { recursive: true, encoding: "utf8" });
 console.log("named:", summarize(namedNames));
 
-nodefs.promises.readdir(root, { recursive: true }).then((names: string[]): string => {
+(nodefs.promises.readdir(root, { recursive: true, signal: (console.log("signal option"), undefined) } as any) as unknown as Promise<string[]>).then((names: string[]): string => {
     console.log("promise:", summarize(names));
     return "done";
 });
