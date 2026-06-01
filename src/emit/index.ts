@@ -18741,6 +18741,7 @@ class Emitter {
         return ts.isStringLiteralLike(expr) ||
             ts.isNumericLiteral(expr) ||
             ts.isBigIntLiteral(expr) ||
+            ts.isRegularExpressionLiteral(expr) ||
             expr.kind === ts.SyntaxKind.TrueKeyword ||
             expr.kind === ts.SyntaxKind.FalseKeyword ||
             expr.kind === ts.SyntaxKind.NullKeyword;

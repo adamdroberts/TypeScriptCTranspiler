@@ -1391,6 +1391,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-bigint": cjsPackage("tsc2c-cjs-module-bigint", {
         "index.js": "module.exports = 9007199254740993n;\n",
     }),
+    "tsc2c-cjs-module-regexp": cjsPackage("tsc2c-cjs-module-regexp", {
+        "index.js": "module.exports = /foo+/i;\n",
+    }),
     "tsc2c-cjs-module-exports-value-chains": cjsPackage("tsc2c-cjs-module-exports-value-chains", {
         "index.js": 'module.exports = exports.default = function() { return "first chain"; };\n',
         "second.js": 'module.exports = exports.default = function() { return "second chain"; };\n',
