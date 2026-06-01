@@ -1299,6 +1299,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-runtime-binary-default-package": cjsPackage("tsc2c-cjs-runtime-binary-default-package", {
         "index.js": 'module.exports = "binary-" + (20 + 2);\n',
     }),
+    "tsc2c-cjs-runtime-postfix-default-package": cjsPackage("tsc2c-cjs-runtime-postfix-default-package", {
+        "index.js": "let counter = 4;\nmodule.exports = counter++;\n",
+    }),
     "tsc2c-cjs-object-wrapper-freeze-named": cjsPackage("tsc2c-cjs-object-wrapper-freeze-named", {
         "index.js": 'const api = {\n  count: 71,\n  extra: true\n};\nmodule.exports = Object.freeze({\n  default: function greet(name) { return "hello " + name; },\n  label: "freeze-named",\n  double(value) { return value * 2; },\n  ...api\n});\n',
     }),
