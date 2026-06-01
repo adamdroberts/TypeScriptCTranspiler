@@ -1,0 +1,7 @@
+forEach: 10
+map: 15|17|19|21
+flatMap: 1|2|3|4
+filter: 2|4
+checks: true false
+find: 3 2 4 3
+reduce: 32 4321
