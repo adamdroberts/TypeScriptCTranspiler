@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic arrays, functions, and ordinary objects now inherit callable shared `Object.prototype` methods, so inherited `.hasOwnProperty(...)`, `.propertyIsEnumerable(...)`, `.isPrototypeOf(...)`, `.toString()`, `.toLocaleString()`, and `.valueOf()` work through dynamic property lookup and `Reflect.has(...)`. Test: `object_prototype_inherited_methods`.
 - Ordinary dynamic objects now inherit from a shared `Object.prototype` whose own prototype is `null`, so array/function prototype chains reach `Object.prototype` through `Object.getPrototypeOf(...)`. Test: `object_prototype_is_prototype_of_arrays_functions`.
 - CommonJS `module.exports = Object.fromEntries(Object.entries(require(...)))` now derives finite named-export metadata from the required module for AOT package imports. Test: `node_modules_commonjs_module_exports_object_from_entries_require_object_entries`.
 - Dynamic descriptor redefinition now permits compatible generic redefinitions of non-configurable accessor properties while continuing to reject data/writable/getter/setter changes. Test: `object_accessor_redefine`.
