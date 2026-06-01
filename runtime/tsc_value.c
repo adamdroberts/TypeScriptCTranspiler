@@ -217,9 +217,6 @@ tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args) {
 }
 
 tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t args, tsc_value_t new_target) {
-    if (tsc_value_is_undefined(new_target)) {
-        new_target = target;
-    }
     if (value_is_box(target) && value_tag(target) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(target);
         if (ident->kind == TSC_FUNCTION_IDENTITY_GENERIC) {
@@ -3200,7 +3197,7 @@ static tsc_value_t reflect_construct_method(void* env, tsc_value_t this_arg, tsc
     (void)this_arg;
     tsc_value_t target = reflect_arg(args, 0, "Reflect.construct expects target and argumentsList");
     tsc_value_t arguments = reflect_arg(args, 1, "Reflect.construct expects target and argumentsList");
-    tsc_value_t new_target = args->len > 2 ? TSC_ARR(tsc_value_t, args, 2) : tsc_value_undefined();
+    tsc_value_t new_target = args->len > 2 ? TSC_ARR(tsc_value_t, args, 2) : target;
     return tsc_value_construct_with_new_target(target, arguments, new_target);
 }
 

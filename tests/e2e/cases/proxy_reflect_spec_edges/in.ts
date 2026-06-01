@@ -24,8 +24,7 @@ function Target(this: any, val: any) {
     this.value = val;
 }
 const dynamicTarget: any = Target as any;
-const made = Reflect.construct(dynamicTarget, [42], undefined);
-console.log("construct undefined:", made.value);
+report("construct undefined", (): any => Reflect.construct(dynamicTarget, [42], undefined).value);
 
 report("getPrototypeOf string", (): any => Reflect.getPrototypeOf("hello" as any));
 report("isExtensible string", (): any => Reflect.isExtensible("hello" as any));

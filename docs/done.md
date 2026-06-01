@@ -2036,6 +2036,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `reflect_property_target_validation` | dynamic Reflect property helpers reject non-object targets after operand evaluation |
 | `reflect_construct` | Reflect.construct over statically known class constructors and array/spread argument lists |
 | `reflect_construct_dynamic_function` | dynamic Reflect.construct over boxed function values creates a dynamic receiver, honors object or primitive constructor returns, and falls back to Object.prototype for null newTarget.prototype |
+| `reflect_construct_explicit_new_target` | dynamic Reflect.construct defaults omitted newTarget to target while rejecting explicit undefined newTarget values |
 | `reflect_construct_validation` | dynamic Reflect.construct catchable target, argumentsList, and newTarget validation |
 | `reflect_construct_new_target_validation` | dynamic Reflect.construct validates explicit constructable newTarget values and rejects accessor-function constructor identities |
 | `reflect_ignored_arguments` | Reflect helpers evaluate and ignore trailing arguments across dynamic and typed helper paths |
