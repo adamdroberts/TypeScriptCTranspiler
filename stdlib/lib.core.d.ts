@@ -723,6 +723,8 @@ interface ProcessWritableStream {
     readonly writableHighWaterMark: number;
     readonly writableLength: number;
     readonly writableNeedDrain: boolean;
+    readonly columns: number;
+    readonly rows: number;
     readonly _writableState: ProcessWritableState;
     addListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     cork(...ignored: any[]): void;

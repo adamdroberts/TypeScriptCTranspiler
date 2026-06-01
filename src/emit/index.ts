@@ -12216,6 +12216,9 @@ class Emitter {
             case "fd":
             case "isTTY":
                 return true;
+            case "columns":
+            case "rows":
+                return streamName !== "stdin";
             case "readable":
                 return true;
             case "readableEnded":
@@ -50928,6 +50931,12 @@ class Emitter {
                     return { c: "tsc_value_null()", ty: T_VALUE };
                 case "fd": return { c: `${fd}.0`, ty: T_NUMBER };
                 case "isTTY": return { c: `tsc_process_stdio_is_tty(${fd})`, ty: T_BOOLEAN };
+                case "columns":
+                    if (stdioStreamName !== "stdin") return { c: `tsc_process_stdio_columns(${fd})`, ty: T_NUMBER };
+                    break;
+                case "rows":
+                    if (stdioStreamName !== "stdin") return { c: `tsc_process_stdio_rows(${fd})`, ty: T_NUMBER };
+                    break;
                 case "readable":
                     if (stdioStreamName === "stdin") return { c: "true", ty: T_BOOLEAN };
                     return { c: "false", ty: T_BOOLEAN };

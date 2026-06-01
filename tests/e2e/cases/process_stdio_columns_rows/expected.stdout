@@ -1,0 +1,4 @@
+stdout types: number number
+stderr types: number number
+stdout bounds: true true
+stderr bounds: true true

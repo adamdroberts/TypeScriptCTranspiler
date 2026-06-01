@@ -1016,6 +1016,8 @@ void tsc_process_stderr_end(void);
 bool tsc_process_stdout_writable_ended(void);
 bool tsc_process_stderr_writable_ended(void);
 bool tsc_process_stdio_is_tty(int fd);
+double tsc_process_stdio_columns(int fd);
+double tsc_process_stdio_rows(int fd);
 void tsc_process_next_tick(tsc_next_tick_fn_t fn, void* env);
 void tsc_process_drain_next_ticks(void);
 void tsc_queue_microtask(tsc_microtask_fn_t fn, void* env);

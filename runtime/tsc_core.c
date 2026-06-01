@@ -664,6 +664,27 @@ bool tsc_process_stdio_is_tty(int fd) {
     return isatty(fd) == 1;
 }
 
+static double process_stdio_terminal_size(int fd, bool columns) {
+#if defined(TIOCGWINSZ)
+    struct winsize size;
+    if (isatty(fd) == 1 && ioctl(fd, TIOCGWINSZ, &size) == 0) {
+        unsigned short value = columns ? size.ws_col : size.ws_row;
+        if (value > 0) return (double)value;
+    }
+#else
+    (void)fd;
+#endif
+    return columns ? 80.0 : 24.0;
+}
+
+double tsc_process_stdio_columns(int fd) {
+    return process_stdio_terminal_size(fd, true);
+}
+
+double tsc_process_stdio_rows(int fd) {
+    return process_stdio_terminal_size(fd, false);
+}
+
 void tsc_process_next_tick(tsc_next_tick_fn_t fn, void* env) {
     if (!fn) return;
     if (g_next_tick_len == g_next_tick_cap) {
