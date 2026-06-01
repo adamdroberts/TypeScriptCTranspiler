@@ -522,6 +522,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `Object.seal(proxy)` and `Object.freeze(proxy)` fail through catchable errors when proxy integrity `defineProperty` traps return `false` after successful extension prevention. Test: `proxy_integrity_define_failure`
 - `Object.isSealed(proxy)` and `Object.isFrozen(proxy)` drive proxy integrity traps after forwarded `Object.seal(proxy)` / `Object.freeze(proxy)` operations. Test: `proxy_integrity_state_checks`
 - `Object.isSealed(proxy)` and `Object.isFrozen(proxy)` return `false` when proxy descriptor traps expose configurable or writable properties after extension prevention. Test: `proxy_integrity_state_false`
+- Proxy integrity helpers accept ordinary object, array, and function descriptor objects from `getOwnPropertyDescriptor` traps when checking or applying seal/freeze state. Test: `proxy_integrity_descriptor_objects`
 - Direct `new proxy(...)` construct traps and nested trapless proxy forwarding preserve the actual proxy `newTarget` identity. Test: `proxy_construct_new_target_identity`
 - Proxy object, descriptor, key, delete, prototype, extensibility, apply, and construct traps receive the handler object as their `this` binding, including traps inherited from the handler prototype. Tests: `proxy_trap_this_binding`, `proxy_inherited_traps`, `proxy_inherited_meta_traps`
 - `Object.hasOwn(proxy)`, `Object.prototype.hasOwnProperty.call(proxy, key)`, and `Object.prototype.propertyIsEnumerable.call(proxy, key)` drive proxy `getOwnPropertyDescriptor` traps, descriptor validation, virtual descriptor results, and revocation checks. Test: `proxy_own_property_helpers`
@@ -2180,6 +2181,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_integrity_define_failure` | Proxy Object.seal/Object.freeze fail when integrity defineProperty traps return false |
 | `proxy_integrity_state_checks` | Proxy Object.isSealed/Object.isFrozen drive integrity traps after forwarded seal/freeze |
 | `proxy_integrity_state_false` | Proxy Object.isSealed/Object.isFrozen return false for configurable or writable descriptors |
+| `proxy_integrity_descriptor_objects` | Proxy integrity helpers accept array and function descriptor objects from getOwnPropertyDescriptor traps |
 | `proxy_construct_new_target_identity` | Proxy direct construction and nested forwarding preserve newTarget identity |
 | `proxy_construct` | bounded Proxy construct trap dispatch through dynamic Reflect.construct |
 | `proxy_construct_return_objects` | Proxy construct traps accept returned arrays, functions, and ordinary objects while rejecting primitive results |
