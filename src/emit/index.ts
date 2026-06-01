@@ -17858,6 +17858,17 @@ class Emitter {
         ) {
             return true;
         }
+        if (
+            ts.isBinaryExpression(cur) &&
+            this.isCommonJsModuleExportsDefaultBinaryOperator(cur.operatorToken.kind)
+        ) {
+            return true;
+        }
+        if (ts.isConditionalExpression(cur)) {
+            return this.isCommonJsModuleExportsDefaultInitializerValue(cur.condition) &&
+                this.isCommonJsModuleExportsDefaultInitializerValue(cur.whenTrue) &&
+                this.isCommonJsModuleExportsDefaultInitializerValue(cur.whenFalse);
+        }
         const objectCallName = this.objectStaticCallName(cur);
         if (
             objectCallName === "assign" ||
