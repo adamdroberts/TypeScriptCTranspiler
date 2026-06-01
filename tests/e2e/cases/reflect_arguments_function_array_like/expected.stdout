@@ -1,0 +1,6 @@
+apply function: undefined:undefined
+apply trap: true 2 undefined undefined
+proxy apply function: undefined:undefined
+construct function: undefined:undefined
+construct trap: true 2 undefined undefined
+proxy construct function: undefined:undefined

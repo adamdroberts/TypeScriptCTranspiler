@@ -146,7 +146,13 @@ static tsc_array_t* value_to_argument_list(tsc_value_t args, const char* message
     if (value_is_box(args) && value_tag(args) == TSC_VALUE_TAG_ARRAY) {
         return (tsc_array_t*)value_ptr(args);
     }
-    if (!value_is_box(args) || value_tag(args) != TSC_VALUE_TAG_OBJECT) {
+    if (
+        !value_is_box(args) ||
+        (
+            value_tag(args) != TSC_VALUE_TAG_OBJECT &&
+            value_tag(args) != TSC_VALUE_TAG_FUNCTION
+        )
+    ) {
         tsc_throw_str(tsc_str_from_cstr(message));
     }
     tsc_value_t length_value = tsc_value_get_prop(args, tsc_str_from_lit("length", 6));
