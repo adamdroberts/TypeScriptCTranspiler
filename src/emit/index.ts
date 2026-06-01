@@ -17945,7 +17945,7 @@ class Emitter {
         if (valueNode.kind === ts.SyntaxKind.NullKeyword) {
             return T_VALUE;
         }
-        if (this.isCommonJsRuntimeComputedModuleExportsValue(valueNode)) {
+        if (ts.isExpression(valueNode) && this.isCommonJsRuntimeComputedModuleExportsValue(valueNode)) {
             return T_VALUE;
         }
         if (ts.isConditionalExpression(valueNode)) {
