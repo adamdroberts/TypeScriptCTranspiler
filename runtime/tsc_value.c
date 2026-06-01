@@ -2464,6 +2464,12 @@ tsc_array_t* value_array_like_to_reversed(tsc_value_t recv) {
     return out;
 }
 
+bool value_array_like_has_index(tsc_value_t recv, size_t index) {
+    char key_buf[32];
+    snprintf(key_buf, sizeof key_buf, "%zu", index);
+    return tsc_value_has_prop(recv, tsc_str_from_cstr(key_buf));
+}
+
 tsc_str_t* value_join_part(tsc_value_t v) {
     return tsc_value_is_nullish(v) ? tsc_str_from_lit("", 0) : tsc_value_to_string(v);
 }
@@ -2840,25 +2846,58 @@ void tsc_value_array_push_flat(tsc_array_t* out, tsc_value_t value) {
 }
 
 tsc_value_t tsc_value_method_fill(tsc_value_t recv, tsc_value_t value, tsc_value_t start, tsc_value_t end) {
-    if (!value_is_box(recv) || value_tag(recv) != TSC_VALUE_TAG_ARRAY) return recv;
-    tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-    if (a->frozen) return recv;
-    double len = (double)a->len;
+    if (!value_is_box(recv)) return recv;
+    double len = tsc_value_length(recv);
     double s = value_slice_arg(start, 0.0);
     double e = value_slice_arg(end, len);
-    tsc_array_fill(a, &value, s, e);
+    if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
+        tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
+        if (!a->frozen) tsc_array_fill(a, &value, s, e);
+    } else if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
+        size_t from = value_array_forward_start((size_t)len, s);
+        size_t to = value_array_forward_start((size_t)len, e);
+        if (to < from) to = from;
+        for (size_t i = from; i < to; i++) {
+            tsc_value_set_index(recv, (double)i, value);
+        }
+    }
     return recv;
 }
 
 tsc_value_t tsc_value_method_copy_within(tsc_value_t recv, tsc_value_t target, tsc_value_t start, tsc_value_t end) {
-    if (!value_is_box(recv) || value_tag(recv) != TSC_VALUE_TAG_ARRAY) return recv;
-    tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-    if (a->frozen) return recv;
-    double len = (double)a->len;
+    if (!value_is_box(recv)) return recv;
+    double len_num = tsc_value_length(recv);
     double t = value_slice_arg(target, 0.0);
     double s = value_slice_arg(start, 0.0);
-    double e = value_slice_arg(end, len);
-    tsc_array_copy_within(a, t, s, e);
+    double e = value_slice_arg(end, len_num);
+    if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
+        tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
+        if (!a->frozen) tsc_array_copy_within(a, t, s, e);
+    } else if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
+        size_t len = (size_t)len_num;
+        size_t to = value_array_forward_start(len, t);
+        size_t from = value_array_forward_start(len, s);
+        size_t final = value_array_forward_start(len, e);
+        size_t count = final > from ? final - from : 0;
+        if (count > len - to) count = len - to;
+        if (count > 0) {
+            bool* present = (bool*)TSC_GC_MALLOC(count * sizeof(bool));
+            tsc_value_t* values = (tsc_value_t*)TSC_GC_MALLOC(count * sizeof(tsc_value_t));
+            for (size_t i = 0; i < count; i++) {
+                size_t from_index = from + i;
+                present[i] = value_array_like_has_index(recv, from_index);
+                values[i] = present[i] ? tsc_value_get_index(recv, (double)from_index) : tsc_value_undefined();
+            }
+            for (size_t i = 0; i < count; i++) {
+                size_t to_index = to + i;
+                if (present[i]) {
+                    tsc_value_set_index(recv, (double)to_index, values[i]);
+                } else {
+                    tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)to_index));
+                }
+            }
+        }
+    }
     return recv;
 }
 
@@ -2866,6 +2905,25 @@ tsc_value_t tsc_value_method_reverse(tsc_value_t recv) {
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
         if (!a->frozen) tsc_array_reverse(a);
+    } else if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
+        size_t len = (size_t)tsc_value_length(recv);
+        for (size_t lower = 0; lower < len / 2; lower++) {
+            size_t upper = len - lower - 1;
+            bool lower_present = value_array_like_has_index(recv, lower);
+            bool upper_present = value_array_like_has_index(recv, upper);
+            tsc_value_t lower_value = lower_present ? tsc_value_get_index(recv, (double)lower) : tsc_value_undefined();
+            tsc_value_t upper_value = upper_present ? tsc_value_get_index(recv, (double)upper) : tsc_value_undefined();
+            if (upper_present) {
+                tsc_value_set_index(recv, (double)lower, upper_value);
+            } else {
+                tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)lower));
+            }
+            if (lower_present) {
+                tsc_value_set_index(recv, (double)upper, lower_value);
+            } else {
+                tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)upper));
+            }
+        }
     }
     return recv;
 }

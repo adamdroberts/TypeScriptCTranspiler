@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Detached `Array.prototype` in-place methods now operate on dynamic array-like object receivers for `fill`, `copyWithin`, and `reverse`, including sparse slot preservation for copy/reverse operations. Test: `array_prototype_array_like_inplace`.
 - Detached `Array.prototype` higher-order methods now operate on dynamic array-like object receivers, including inherited numeric slots and sparse-object callback skipping for map-style methods. Test: `array_prototype_array_like_hof`.
 - Detached `Array.prototype` copy methods now operate on dynamic array-like object receivers for `slice` and `toReversed`, including inherited numeric slots. Test: `array_prototype_array_like_copy`.
 - Detached `Array.prototype` mutators now operate on dynamic array-like object receivers for `push`, `pop`, `shift`, and `unshift`, updating numeric properties and `length` through the existing dynamic object helpers. Test: `array_prototype_array_like_mutators`.
