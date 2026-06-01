@@ -726,6 +726,7 @@ interface ProcessWritableStream {
     readonly _writableState: ProcessWritableState;
     addListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     cork(...ignored: any[]): void;
+    destroy(error?: any, ...ignored: any[]): void;
     end(callback?: () => void, ...ignored: any[]): void;
     end(chunk: string | Buffer, callback?: () => void, ...ignored: any[]): void;
     end(chunk: string | Buffer, encoding?: string, callback?: () => void, ...ignored: any[]): void;
@@ -752,6 +753,7 @@ interface ProcessReadableStream {
     readonly readableLength: number;
     readonly _readableState: ProcessReadableState;
     addListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
+    destroy(error?: any, ...ignored: any[]): void;
     off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;
     once(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): void;

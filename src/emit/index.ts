@@ -12265,6 +12265,8 @@ class Emitter {
                     ignoredAfter(2);
             case "removeAllListeners":
                 return ignoredAfter(0);
+            case "destroy":
+                return ignoredAfter(0);
             case "isPaused":
                 return streamName === "stdin" && ignoredAfter(0);
             case "pause":
@@ -32547,6 +32549,16 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(call.arguments, 2),
                 ], () => "((void)0)");
             }
+            return this.emitSequencedExpr(
+                T_VOID,
+                this.ignoredArgumentSpecs(call.arguments, 0),
+                () => "((void)0)",
+            );
+        }
+        const processStdioDestroyStreamName = memberName === "destroy"
+            ? this.processStdioStreamReceiverName(recvExpr)
+            : null;
+        if (processStdioDestroyStreamName) {
             return this.emitSequencedExpr(
                 T_VOID,
                 this.ignoredArgumentSpecs(call.arguments, 0),

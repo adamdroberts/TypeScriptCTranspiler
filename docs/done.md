@@ -908,6 +908,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Generated-C DCE prunes unused CommonJS metadata reads from `__filename`, `__dirname`, and primitive `module` fields such as `filename`, `id`, `path`, and `loaded`, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE treats CommonJS path constants and string-valued `module` metadata reads as side-effect-free `.length`, string-method, and indexable operands, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused `process.stdin` / `stdout` / `stderr` metadata reads such as `fd`, `isTTY`, `readable`, `writable`, `destroyed`, `closed`, `errored`, readable state, and writable state flags, plus bounded no-op compatibility methods such as `isPaused(...)`, `setEncoding(...)`, `pause(...)`, `resume(...)`, `pipe(...)`, `unpipe(...)`, listener no-ops, `setDefaultEncoding(...)`, `cork(...)`, and `uncork(...)` when their arguments are side-effect-free; primitive `Promise.resolve(...)` inputs are also pruned for the void/boolean stdio method and metadata subsets. Test: `generated_c_dce_const`
+- Process `stdin`, `stdout`, and `stderr` expose an inert `.destroy(error?, ...ignored)` compatibility method that evaluates arguments while preserving `destroyed: false` and `stream.isDestroyed(...) === false`. Test: `process_stdio_destroy`
 - Generated-C DCE prunes unused pure `stream.isReadable(...)`, `isWritable(...)`, `isErrored(...)`, `isDestroyed(...)`, and `isDisturbed(...)` calls over bounded process stdio streams or side-effect-free non-stream/nullish operands across named, aliased named, namespace, and default stream imports, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused primitive `process` metadata reads such as `platform`, `arch`, `pid`, `ppid`, `version`, `title`, `argv0`, and `execPath`, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused well-known `Symbol.iterator` / `Symbol.asyncIterator` reads and their `.description` reads, including primitive `Promise.resolve(...)` inputs. Test: `generated_c_dce_const`
@@ -1467,6 +1468,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `process_stdio_readable_writable` | process stdio readable and writable stream flags |
 | `process_stdio_end` | process stdout/stderr end compatibility method |
 | `process_stdio_end_ignored_arguments` | process stdio end evaluates and ignores trailing arguments |
+| `process_stdio_destroy` | process stdio destroy compatibility no-op |
 | `process_stdio_state_flags` | process stdio destroyed/closed/readable-ended/writable-ended state flags |
 | `process_stdio_state_objects` | process stdio bounded _readableState/_writableState metadata objects |
 | `process_stdio_write` | process.stdout.write and process.stderr.write string subset, including optional encoding/callback forms |
