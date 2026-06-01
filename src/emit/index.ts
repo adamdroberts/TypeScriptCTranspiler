@@ -17788,6 +17788,12 @@ class Emitter {
         ) {
             return this.isCommonJsRuntimeComputedModuleExportsValue(cur.right);
         }
+        if (
+            ts.isPrefixUnaryExpression(cur) &&
+            (cur.operator === ts.SyntaxKind.PlusPlusToken || cur.operator === ts.SyntaxKind.MinusMinusToken)
+        ) {
+            return true;
+        }
         const objectCallName = this.objectStaticCallName(cur);
         if (
             objectCallName === "assign" ||
