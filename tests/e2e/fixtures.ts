@@ -633,6 +633,12 @@ const packages: Record<string, PackageFixture> = {
             "main.js": 'exports.__esModule = true;\n/** @type {{ readonly primary: "label", readonly fallback: "fallbackLabel", readonly fn: "double", readonly altFn: "triple" }} */\nconst nameMap = { primary: "label", fallback: "fallbackLabel", fn: "double", altFn: "triple" };\n/** @type {"primary" | "fallback"} */\nlet labelKey = Date.now() >= 0 ? "primary" : "fallback";\n/** @type {"fn" | "altFn"} */\nlet fnKey = Date.now() >= 0 ? "fn" : "altFn";\nexports[nameMap[labelKey]] = "object-map-computed";\nmodule.exports[nameMap[fnKey]] = function double(value) { return value * 4; };\n',
         },
     },
+    "tsc2c-cjs-computed-object-keys-values-exports": {
+        packageJson: { name: "tsc2c-cjs-computed-object-keys-values-exports", version: "1.0.0", main: "main.js" },
+        files: {
+            "main.js": 'exports.__esModule = true;\nconst keySource = { label: true, fallbackLabel: true };\nconst valueSource = { fn: "double", altFn: "triple" };\n/** @type {0 | 1} */\nlet labelIndex = Date.now() >= 0 ? 0 : 1;\n/** @type {0 | 1} */\nlet fnIndex = Date.now() >= 0 ? 0 : 1;\nexports[Object.keys(keySource)[labelIndex]] = "object-keys-computed";\nmodule.exports[Object.values(valueSource)[fnIndex]] = function double(value) { return value * 5; };\n',
+        },
+    },
     "tsc2c-cjs-conditional-whole-object-exports": cjsPackage("tsc2c-cjs-conditional-whole-object-exports", {
         "index.js": 'const isProd = true;\nmodule.exports = isProd ? { label: "conditional-prod", count: 88 } : { label: "conditional-dev", count: 12 };\n',
     }),
