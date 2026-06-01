@@ -1,0 +1,5 @@
+push: 4 4 c d
+pop: d 3 false
+shift: a 2 b c false
+unshift: 4 4 z y b c
+empty: undefined undefined 0
