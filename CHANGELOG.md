@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Direct dynamic object `.toString()`, `.toLocaleString()`, and `.valueOf()` calls now honor own overrides and reject non-callable resolved methods instead of silently falling back. Tests: `object_to_string`, `object_to_locale_string`, `object_value_of`.
 - Direct dynamic array `.valueOf()` calls now dispatch through dynamic property lookup, so own overrides are honored like detached prototype calls. Test: `dynamic_array_string_properties`.
 - Direct dynamic array `.toLocaleString()` calls now dispatch through dynamic property lookup, so own overrides are honored like detached prototype calls. Test: `dynamic_array_string_properties`.
 - Direct dynamic array `.toString()` calls now dispatch through dynamic property lookup, so custom `join` functions and own `toString` overrides are honored like detached prototype calls. Test: `dynamic_array_string_properties`.

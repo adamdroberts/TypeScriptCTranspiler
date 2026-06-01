@@ -9,3 +9,22 @@ console.log("array:", arr.toString());
 console.log("num:", num.toString());
 console.log("text:", text.toString());
 console.log("bool:", flag.toString());
+
+obj.toString = function () {
+    return "own:" + obj.label;
+};
+console.log("own object:", obj.toString(), Reflect.apply(obj.toString, obj, []));
+
+obj.toString = 7;
+try {
+    console.log(obj.toString());
+} catch (e) {
+    console.log("bad object:", e);
+}
+
+const bare: any = Object.create(null);
+try {
+    console.log(bare.toString());
+} catch (e) {
+    console.log("bare object:", e);
+}
