@@ -34392,11 +34392,12 @@ class Emitter {
                             { value: this.emitExpr(args[0]), node: args[0] },
                             ...this.ignoredArgumentSpecs(args, 1),
                         ],
-                        ([target]) => `tsc_value_method_sort(${target})`,
+                        ([target]) => `tsc_value_method_sort(${target}, tsc_value_undefined())`,
                     );
                 }
                 return this.emitSequencedCall("tsc_value_method_sort", T_VALUE, [
                     { value: recv, target: T_VALUE, node: call.expression },
+                    { value: missing, target: T_VALUE, node: call.expression },
                 ]);
             case "toSorted":
                 if (args[0] && !this.isUndefinedExpression(args[0])) return this.emitDynamicArraySort(call, recv, true);
@@ -34408,11 +34409,12 @@ class Emitter {
                             { value: this.emitExpr(args[0]), node: args[0] },
                             ...this.ignoredArgumentSpecs(args, 1),
                         ],
-                        ([target]) => `tsc_value_method_to_sorted(${target})`,
+                        ([target]) => `tsc_value_method_to_sorted(${target}, tsc_value_undefined())`,
                     );
                 }
                 return this.emitSequencedCall("tsc_value_method_to_sorted", T_VALUE, [
                     { value: recv, target: T_VALUE, node: call.expression },
+                    { value: missing, target: T_VALUE, node: call.expression },
                 ]);
             case "with": {
                 if (args.length < 2) unsupported(call, "with expects at least 2 args");

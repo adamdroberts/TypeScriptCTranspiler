@@ -2818,7 +2818,21 @@ tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_val
     return tsc_value_array(removed);
 }
 
-tsc_value_t tsc_value_method_sort(tsc_value_t recv) {
+static double value_sort_compare(tsc_value_t compare_fn, tsc_value_t left, tsc_value_t right) {
+    if (!tsc_value_is_undefined(compare_fn)) {
+        if (!tsc_value_is_callable(compare_fn)) {
+            tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort comparator must be callable"));
+        }
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 2);
+        tsc_array_push_value(args, left);
+        tsc_array_push_value(args, right);
+        double cmp = tsc_value_as_num(tsc_value_apply_function(compare_fn, tsc_value_undefined(), tsc_value_array(args)));
+        return isnan(cmp) ? 0.0 : cmp;
+    }
+    return (double)tsc_str_cmp(tsc_value_to_string(left), tsc_value_to_string(right));
+}
+
+tsc_value_t tsc_value_method_sort(tsc_value_t recv, tsc_value_t compare_fn) {
     if (!value_is_box(recv)) return recv;
     tsc_array_t* a = NULL;
     if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
@@ -2840,7 +2854,7 @@ tsc_value_t tsc_value_method_sort(tsc_value_t recv) {
         size_t j = i;
         while (j > 0) {
             tsc_value_t prev = TSC_ARR(tsc_value_t, a, j - 1);
-            if (tsc_str_cmp(tsc_value_to_string(prev), tsc_value_to_string(key)) <= 0) break;
+            if (value_sort_compare(compare_fn, prev, key) <= 0) break;
             TSC_ARR(tsc_value_t, a, j) = prev;
             j--;
         }
@@ -2858,15 +2872,18 @@ tsc_value_t tsc_value_method_sort(tsc_value_t recv) {
     return recv;
 }
 
-tsc_value_t tsc_value_method_to_sorted(tsc_value_t recv) {
+tsc_value_t tsc_value_method_to_sorted(tsc_value_t recv, tsc_value_t compare_fn) {
     if (!value_is_box(recv)) return recv;
     if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
         tsc_value_t copy = tsc_value_array(tsc_array_slice(a, 0.0, (double)a->len));
-        return tsc_value_method_sort(copy);
+        return tsc_value_method_sort(copy, compare_fn);
     }
     if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
-        return tsc_value_method_sort(tsc_value_array(value_array_like_slice(recv, 0.0, tsc_value_length(recv))));
+        return tsc_value_method_sort(
+            tsc_value_array(value_array_like_slice(recv, 0.0, tsc_value_length(recv))),
+            compare_fn
+        );
     }
     return recv;
 }
