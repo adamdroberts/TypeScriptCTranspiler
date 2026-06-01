@@ -112,6 +112,7 @@ tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* en
     id->name = name;
     id->prototype = tsc_function_default_prototype();
     id->func_prototype = tsc_value_undefined();
+    id->props = tsc_object_new();
     id->code.generic = fn;
     id->env = env;
     id->next = g_function_identities;
@@ -343,6 +344,10 @@ static tsc_value_t tsc_function_own_prototype(tsc_function_identity_t* ident, ts
     return ident->func_prototype;
 }
 
+static bool tsc_function_metadata_key(const tsc_str_t* key) {
+    return tsc_str_is_length_key(key) || str_lit_eq(key, "name") || str_lit_eq(key, "prototype");
+}
+
 tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_GET_PROP);
     if (!value_is_box(v)) return tsc_value_undefined();
@@ -355,6 +360,9 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
         }
         if (str_lit_eq(key, "prototype")) return tsc_function_own_prototype(ident, v);
         if (str_lit_eq(key, "__proto__")) return ident->prototype;
+        if (ident->props && tsc_object_has_own(ident->props, key)) {
+            return tsc_object_get(ident->props, key);
+        }
         return tsc_value_get_prop(ident->prototype, key);
     }
     if (value_tag(v) == TSC_VALUE_TAG_OBJECT) {
@@ -565,6 +573,9 @@ bool tsc_value_array_set_length(tsc_array_t* a, tsc_value_t value) {
 tsc_value_t tsc_value_define_property(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         tsc_object_define((tsc_object_t*)value_ptr(v), key, value, false, false, false);
+    } else if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION && !tsc_function_metadata_key(key)) {
+        tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(v);
+        tsc_object_define(fn->props, key, value, false, false, false);
     }
     return v;
 }
@@ -601,7 +612,11 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
         return tsc_object_define_desc((tsc_object_t*)value_ptr(v), key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        return tsc_value_define_function_metadata_desc((const tsc_function_identity_t*)value_ptr(v), key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
+        tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(v);
+        if (tsc_function_metadata_key(key)) {
+            return tsc_value_define_function_metadata_desc(fn, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
+        }
+        return tsc_object_define_desc(fn->props, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(v);
@@ -1160,6 +1175,7 @@ bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(v);
         if (str_lit_eq(key, "prototype")) {
+            if (fn->frozen) return false;
             fn->func_prototype = value;
             return true;
         }
@@ -1167,6 +1183,8 @@ bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
             if (!value_is_valid_prototype(value)) return true;
             return tsc_value_set_prototype_of(v, value);
         }
+        if (tsc_function_metadata_key(key)) return false;
+        return tsc_object_set(fn->props, key, value);
     }
     return false;
 }
@@ -1283,7 +1301,8 @@ bool tsc_value_has_own_prop(tsc_value_t v, const tsc_str_t* key) {
         return tsc_str_array_index(key, &idx) && idx < s->len;
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        return tsc_str_is_length_key(key) || str_lit_eq(key, "name") || str_lit_eq(key, "prototype");
+        const tsc_function_identity_t* fn = (const tsc_function_identity_t*)value_ptr(v);
+        return tsc_function_metadata_key(key) || (fn->props && tsc_object_has_own(fn->props, key));
     }
     return false;
 }
@@ -1301,7 +1320,9 @@ bool tsc_value_property_is_enumerable(tsc_value_t v, const tsc_str_t* key) {
         return tsc_str_array_index(key, &idx) && idx < s->len;
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        return false;
+        const tsc_function_identity_t* fn = (const tsc_function_identity_t*)value_ptr(v);
+        if (tsc_function_metadata_key(key)) return false;
+        return fn->props && tsc_object_property_is_enumerable(fn->props, key);
     }
     return false;
 }
@@ -1351,7 +1372,10 @@ bool tsc_value_delete_prop(tsc_value_t v, tsc_str_t* key) {
         return !tsc_value_has_own_prop(v, key);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        return !tsc_value_has_own_prop(v, key);
+        tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(v);
+        if (tsc_function_metadata_key(key)) return false;
+        if (fn->props && tsc_object_has_own(fn->props, key)) return tsc_object_delete(fn->props, key);
+        return true;
     }
     return true;
 }
@@ -1384,8 +1408,9 @@ bool tsc_value_prevent_extensions(tsc_value_t v) {
         return tsc_object_prevent_extensions(a->props);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        ((tsc_function_identity_t*)value_ptr(v))->extensible = false;
-        return true;
+        tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(v);
+        fn->extensible = false;
+        return tsc_object_prevent_extensions(fn->props);
     }
     return true;
 }
@@ -1414,7 +1439,7 @@ bool tsc_value_seal(tsc_value_t v) {
         tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(v);
         fn->extensible = false;
         fn->sealed = true;
-        return true;
+        return tsc_object_seal(fn->props);
     }
     return true;
 }
@@ -1435,7 +1460,7 @@ bool tsc_value_freeze(tsc_value_t v) {
         fn->extensible = false;
         fn->sealed = true;
         fn->frozen = true;
-        return true;
+        return tsc_object_freeze(fn->props);
     }
     return true;
 }
@@ -1449,7 +1474,8 @@ bool tsc_value_is_sealed(tsc_value_t v) {
         return a->sealed && tsc_object_is_sealed(a->props);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        return ((tsc_function_identity_t*)value_ptr(v))->sealed;
+        const tsc_function_identity_t* fn = (const tsc_function_identity_t*)value_ptr(v);
+        return fn->sealed && tsc_object_is_sealed(fn->props);
     }
     return true;
 }
@@ -1463,7 +1489,8 @@ bool tsc_value_is_frozen(tsc_value_t v) {
         return a->frozen && tsc_object_is_frozen(a->props);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        return ((tsc_function_identity_t*)value_ptr(v))->frozen;
+        const tsc_function_identity_t* fn = (const tsc_function_identity_t*)value_ptr(v);
+        return fn->frozen && tsc_object_is_frozen(fn->props);
     }
     return true;
 }
@@ -1687,6 +1714,9 @@ tsc_value_t value_descriptor_from_function_key(const tsc_function_identity_t* fn
     if (tsc_str_is_length_key(key)) return value_descriptor_from_function_length(fn);
     if (str_lit_eq(key, "name")) return value_descriptor_from_function_name(fn);
     if (str_lit_eq(key, "prototype")) return value_descriptor_from_function_prototype(fn);
+    if (fn && fn->props && tsc_object_has_own(fn->props, key)) {
+        return tsc_value_get_own_property_descriptor(tsc_value_object(fn->props), (tsc_str_t*)key);
+    }
     return tsc_value_undefined();
 }
 
@@ -1724,6 +1754,13 @@ tsc_value_t value_descriptors_from_function(const tsc_function_identity_t* fn) {
     tsc_object_set(out, tsc_str_from_lit("length", 6), value_descriptor_from_function_length(fn));
     tsc_object_set(out, tsc_str_from_lit("name", 4), value_descriptor_from_function_name(fn));
     tsc_object_set(out, tsc_str_from_lit("prototype", 9), value_descriptor_from_function_prototype(fn));
+    if (fn && fn->props) {
+        tsc_array_t* keys = tsc_object_own_keys_dyn(fn->props);
+        for (size_t i = 0; i < keys->len; i++) {
+            tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
+            tsc_object_set(out, key, tsc_value_get_own_property_descriptor(tsc_value_object(fn->props), key));
+        }
+    }
     return tsc_value_object(out);
 }
 
@@ -1739,13 +1776,22 @@ tsc_array_t* tsc_value_own_keys(tsc_value_t v) {
         return value_string_keys((const tsc_str_t*)value_ptr(v), true);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        tsc_array_t* out = tsc_array_new(sizeof(tsc_str_t*), 3);
+        const tsc_function_identity_t* fn = (const tsc_function_identity_t*)value_ptr(v);
+        size_t side_len = fn && fn->props ? fn->props->len : 0;
+        tsc_array_t* out = tsc_array_new(sizeof(tsc_str_t*), 3 + side_len);
         tsc_str_t* length = tsc_str_from_lit("length", 6);
         tsc_array_push_raw(out, &length);
         tsc_str_t* name = tsc_str_from_lit("name", 4);
         tsc_array_push_raw(out, &name);
         tsc_str_t* prototype = tsc_str_from_lit("prototype", 9);
         tsc_array_push_raw(out, &prototype);
+        if (fn && fn->props) {
+            tsc_array_t* side_keys = tsc_object_own_keys_dyn(fn->props);
+            for (size_t i = 0; i < side_keys->len; i++) {
+                tsc_str_t* key = TSC_ARR(tsc_str_t*, side_keys, i);
+                tsc_array_push_raw(out, &key);
+            }
+        }
         return out;
     }
     return tsc_array_new(sizeof(tsc_str_t*), 1);
@@ -1870,7 +1916,8 @@ tsc_value_t tsc_value_object_assign(tsc_value_t target, tsc_value_t source) {
     if (!value_is_box(target)) return target;
     bool target_is_object = value_tag(target) == TSC_VALUE_TAG_OBJECT;
     bool target_is_array = value_tag(target) == TSC_VALUE_TAG_ARRAY;
-    if (!target_is_object && !target_is_array) return target;
+    bool target_is_function = value_tag(target) == TSC_VALUE_TAG_FUNCTION;
+    if (!target_is_object && !target_is_array && !target_is_function) return target;
     tsc_object_t* dst = target_is_object ? (tsc_object_t*)value_ptr(target) : NULL;
     if (!value_is_box(source)) return target;
     if (value_tag(source) == TSC_VALUE_TAG_OBJECT) {
@@ -1891,7 +1938,7 @@ tsc_value_t tsc_value_object_assign(tsc_value_t target, tsc_value_t source) {
         }
         return target;
     }
-    if (value_tag(source) == TSC_VALUE_TAG_ARRAY || value_tag(source) == TSC_VALUE_TAG_STRING) {
+    if (value_tag(source) == TSC_VALUE_TAG_ARRAY || value_tag(source) == TSC_VALUE_TAG_STRING || value_tag(source) == TSC_VALUE_TAG_FUNCTION) {
         tsc_array_t* keys = tsc_value_object_keys(source);
         for (size_t i = 0; i < keys->len; i++) {
             tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
@@ -2075,7 +2122,8 @@ tsc_array_t* tsc_value_object_keys(tsc_value_t v) {
         return value_string_keys((const tsc_str_t*)value_ptr(v), false);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        return tsc_array_new(sizeof(tsc_str_t*), 1);
+        const tsc_function_identity_t* fn = (const tsc_function_identity_t*)value_ptr(v);
+        return fn && fn->props ? tsc_object_keys_dyn(fn->props) : tsc_array_new(sizeof(tsc_str_t*), 1);
     }
     return tsc_array_new(sizeof(tsc_str_t*), 1);
 }
@@ -2090,6 +2138,10 @@ tsc_array_t* tsc_value_object_values(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
         return value_string_values((const tsc_str_t*)value_ptr(v));
     }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+        const tsc_function_identity_t* fn = (const tsc_function_identity_t*)value_ptr(v);
+        return fn && fn->props ? tsc_object_values_dyn(fn->props) : tsc_array_new(sizeof(tsc_value_t), 1);
+    }
     return tsc_array_new(sizeof(tsc_value_t), 1);
 }
 
@@ -2102,6 +2154,10 @@ tsc_array_t* tsc_value_object_entries(tsc_value_t v) {
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
         return value_string_entries((const tsc_str_t*)value_ptr(v));
+    }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+        const tsc_function_identity_t* fn = (const tsc_function_identity_t*)value_ptr(v);
+        return fn && fn->props ? tsc_object_entries_dyn(fn->props) : tsc_array_new(sizeof(tsc_value_t), 1);
     }
     return tsc_array_new(sizeof(tsc_value_t), 1);
 }

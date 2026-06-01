@@ -1,0 +1,12 @@
+read: mark mark true true true
+keys: extra|count
+names: length|name|prototype|extra|count
+values: mark|2
+entries: extra=mark count=2
+desc: mark true true true
+delete: true false undefined
+assign: 1 2 a|b
+assign source: 1 2 a|b
+hidden: s false false false false length|name|prototype|secret
+freeze: false true true false 1 false
+closed: false false false

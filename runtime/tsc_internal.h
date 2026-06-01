@@ -94,6 +94,7 @@ typedef struct tsc_function_identity {
     tsc_str_t* name;
     tsc_value_t prototype;
     tsc_value_t func_prototype;
+    tsc_object_t* props;
     union {
         tsc_accessor_getter_t getter;
         tsc_accessor_setter_t setter;
