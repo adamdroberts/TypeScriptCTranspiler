@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `child_process.execFileSync(...)` and `execSync(...)` now distinguish child setup / `execvp` failures from ordinary nonzero child exits, surfacing catchable error-code messages such as `ENOENT`. Test: `child_process_sync_exec_error`.
 - Generated-C DCE static `typeof` analysis now folds side-effect-free `new` expressions for pure built-in constructors to `"object"`. Test: `generated_c_dce_typeof_new`.
 - Generated-C DCE reference analysis now follows statically selected conditional, logical, and nullish expression branches, so top-level functions referenced only from dead expression branches are pruned before C emission. Test: `generated_c_dce_dead_expression_branches`.
 - Extended the narrow lazy generator lowering to support unlabeled `continue` inside lazy `while`, `do...while`, and counted `for` loops while preserving counted-for increment semantics. Test: `generator_lazy_continue`.

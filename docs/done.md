@@ -1239,6 +1239,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `child_process_exec_file_shell` | child_process execFile/execFileSync shell option |
 | `child_process_sync_ignored_arguments` | child_process sync helpers evaluate and ignore trailing arguments |
 | `child_process_sync_errors` | child_process.execSync/execFileSync failures are catchable |
+| `child_process_sync_exec_error` | child_process.execSync/execFileSync child setup errors include error-code messages |
 | `child_process_exec_sync` | child_process.execSync stdout Buffer subset |
 | `child_process_exec_sync_encoding` | child_process.execSync and execFileSync UTF-8 string return options |
 | `child_process_utf8_dash_encoding_options` | child_process sync and spawnSync UTF-8 alias encoding options |
