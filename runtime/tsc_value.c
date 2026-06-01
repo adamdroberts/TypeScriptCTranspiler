@@ -2470,6 +2470,16 @@ bool value_array_like_has_index(tsc_value_t recv, size_t index) {
     return tsc_value_has_prop(recv, tsc_str_from_cstr(key_buf));
 }
 
+int64_t value_array_strict_index(double value, size_t len) {
+    if (isnan(value)) value = 0.0;
+    if (isinf(value)) tsc_throw_str(tsc_str_from_cstr("Array.with index out of range"));
+    if (value < 0) value = (double)len + value;
+    if (value < 0 || value >= (double)len) {
+        tsc_throw_str(tsc_str_from_cstr("Array.with index out of range"));
+    }
+    return (int64_t)value;
+}
+
 tsc_str_t* value_join_part(tsc_value_t v) {
     return tsc_value_is_nullish(v) ? tsc_str_from_lit("", 0) : tsc_value_to_string(v);
 }
@@ -2819,22 +2829,73 @@ tsc_value_t tsc_value_method_sort(tsc_value_t recv) {
 }
 
 tsc_value_t tsc_value_method_to_sorted(tsc_value_t recv) {
-    if (!value_is_box(recv) || value_tag(recv) != TSC_VALUE_TAG_ARRAY) return recv;
-    tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-    tsc_value_t copy = tsc_value_array(tsc_array_slice(a, 0.0, (double)a->len));
-    return tsc_value_method_sort(copy);
+    if (!value_is_box(recv)) return recv;
+    if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
+        tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
+        tsc_value_t copy = tsc_value_array(tsc_array_slice(a, 0.0, (double)a->len));
+        return tsc_value_method_sort(copy);
+    }
+    if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
+        return tsc_value_method_sort(tsc_value_array(value_array_like_slice(recv, 0.0, tsc_value_length(recv))));
+    }
+    return recv;
 }
 
 tsc_value_t tsc_value_method_with(tsc_value_t recv, tsc_value_t index, tsc_value_t value) {
-    if (!value_is_box(recv) || value_tag(recv) != TSC_VALUE_TAG_ARRAY) return tsc_value_undefined();
-    tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-    return tsc_value_array(tsc_array_with(a, tsc_value_as_num(index), &value));
+    if (!value_is_box(recv)) return tsc_value_undefined();
+    if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
+        tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
+        return tsc_value_array(tsc_array_with(a, tsc_value_as_num(index), &value));
+    }
+    if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
+        size_t len = (size_t)tsc_value_length(recv);
+        int64_t at = value_array_strict_index(tsc_value_as_num(index), len);
+        tsc_array_t* copy = value_array_like_slice(recv, 0.0, (double)len);
+        TSC_ARR(tsc_value_t, copy, (size_t)at) = value;
+        return tsc_value_array(copy);
+    }
+    return tsc_value_undefined();
 }
 
 tsc_value_t tsc_value_method_to_spliced(tsc_value_t recv, tsc_value_t start, tsc_value_t delete_count, int argc, tsc_array_t* items) {
-    if (!value_is_box(recv) || value_tag(recv) != TSC_VALUE_TAG_ARRAY) return tsc_value_undefined();
-    tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-    return tsc_value_array(tsc_array_to_spliced(a, tsc_value_as_num(start), tsc_value_as_num(delete_count), argc, items));
+    if (!value_is_box(recv)) return tsc_value_undefined();
+    if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
+        tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
+        return tsc_value_array(tsc_array_to_spliced(a, tsc_value_as_num(start), tsc_value_as_num(delete_count), argc, items));
+    }
+    if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
+        size_t len = (size_t)tsc_value_length(recv);
+        size_t at = argc <= 0 ? 0 : value_array_forward_start(len, value_slice_arg(start, 0.0));
+        size_t del = 0;
+        if (argc == 1) {
+            del = len - at;
+        } else if (argc >= 2) {
+            double raw = tsc_value_as_num(delete_count);
+            if (isinf(raw) && raw > 0) {
+                del = len - at;
+            } else if (!isnan(raw) && raw > 0) {
+                del = (size_t)raw;
+                if (del > len - at) del = len - at;
+            }
+        }
+        size_t insert_len = items ? items->len : 0;
+        size_t out_len = len - del + insert_len;
+        tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), out_len ? out_len : 1);
+        for (size_t i = 0; i < at; i++) {
+            tsc_value_t value = tsc_value_get_index(recv, (double)i);
+            tsc_array_push_raw(out, &value);
+        }
+        for (size_t i = 0; i < insert_len; i++) {
+            tsc_value_t value = TSC_ARR(tsc_value_t, items, i);
+            tsc_array_push_raw(out, &value);
+        }
+        for (size_t i = at + del; i < len; i++) {
+            tsc_value_t value = tsc_value_get_index(recv, (double)i);
+            tsc_array_push_raw(out, &value);
+        }
+        return tsc_value_array(out);
+    }
+    return tsc_value_undefined();
 }
 
 void tsc_value_array_push_flat(tsc_array_t* out, tsc_value_t value) {

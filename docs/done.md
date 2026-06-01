@@ -423,6 +423,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Detached `Array.prototype` read methods for `join`, `includes`, `indexOf`, `lastIndexOf`, `at`, `keys`, `values`, and `entries` operate on dynamic array-like object receivers through generic `length` and numeric property reads, including inherited array-like slots. Test: `array_prototype_array_like`
 - Detached `Array.prototype` mutators for `push`, `pop`, `shift`, and `unshift` operate on dynamic array-like object receivers, updating numeric properties and `length` through the existing dynamic object helpers. Test: `array_prototype_array_like_mutators`
 - Detached `Array.prototype` copy methods for `slice` and `toReversed` operate on dynamic array-like object receivers through generic `length` and numeric property reads, including inherited array-like slots. Test: `array_prototype_array_like_copy`
+- Detached `Array.prototype` copy-returning methods for `toSorted`, `with`, and `toSpliced` operate on dynamic array-like object receivers, producing dense copied arrays without mutating the receiver. Test: `array_prototype_array_like_copy_more`
 - Detached `Array.prototype` higher-order methods operate on dynamic array-like object receivers, including inherited array-like slots, callback receiver identity, sparse-object callback skipping for map-style methods, and every-index `find` / `findIndex` scans. Test: `array_prototype_array_like_hof`
 - Detached `Array.prototype` in-place methods for `fill`, `copyWithin`, and `reverse` operate on dynamic array-like object receivers, including sparse slot preservation for copy and reverse operations. Test: `array_prototype_array_like_inplace`
 - Dynamic arrays inherit callable mutating and copy-returning `Array.prototype` methods for `pop`, `push`, `shift`, `unshift`, `concat`, `slice`, `fill`, `copyWithin`, `splice`, `sort`, `toSorted`, `with`, `toSpliced`, `reverse`, and `toReversed`, including detached `Reflect.apply(...)` calls backed by the existing dynamic array helper semantics. Test: `dynamic_array_prototype_mutators`
@@ -2237,6 +2238,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_extensibility` | typed array Object/Reflect extensibility, seal, freeze, compatible frozen descriptor redefinition, and write state |
 | `array_prototype_array_like` | detached Array.prototype read methods over dynamic array-like object receivers |
 | `array_prototype_array_like_copy` | detached Array.prototype slice/toReversed over dynamic array-like object receivers |
+| `array_prototype_array_like_copy_more` | detached Array.prototype toSorted/with/toSpliced over dynamic array-like object receivers |
 | `array_prototype_array_like_hof` | detached Array.prototype higher-order methods over dynamic array-like object receivers |
 | `array_prototype_array_like_inplace` | detached Array.prototype fill/copyWithin/reverse over dynamic array-like object receivers |
 | `array_prototype_array_like_mutators` | detached Array.prototype push/pop/shift/unshift over dynamic array-like object receivers |
