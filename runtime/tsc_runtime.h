@@ -646,6 +646,7 @@ bool tsc_reflect_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accesso
 tsc_value_t tsc_value_object_create(tsc_value_t prototype);
 bool tsc_value_is_prototype_of(tsc_value_t prototype, tsc_value_t object);
 tsc_value_t tsc_value_get_prototype_of(tsc_value_t v);
+tsc_value_t tsc_value_object_prototype(void);
 tsc_value_t tsc_value_number_prototype(void);
 tsc_value_t tsc_value_boolean_prototype(void);
 tsc_value_t tsc_value_string_prototype(void);
