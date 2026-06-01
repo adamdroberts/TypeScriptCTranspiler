@@ -13684,6 +13684,64 @@ class Emitter {
         return init ? this.sideEffectFreePrimitiveNumberValue(init, seenConsts) : null;
     }
 
+    private sideEffectFreeNumberPredicateCallValue(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean | null {
+        if (
+            !ts.isCallExpression(expr) ||
+            !ts.isPropertyAccessExpression(expr.expression) ||
+            !ts.isIdentifier(expr.expression.expression)
+        ) {
+            return null;
+        }
+        const method = expr.expression.name.text;
+        if (
+            method !== "isFinite" &&
+            method !== "isInteger" &&
+            method !== "isNaN" &&
+            method !== "isSafeInteger"
+        ) {
+            return null;
+        }
+        if (
+            !this.isUnshadowedGlobalIdentifier(expr.expression.expression, "Number") ||
+            expr.arguments.length < 1 ||
+            !this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)
+        ) {
+            return null;
+        }
+
+        const arg = expr.arguments[0]!;
+        const unwrappedArg = this.unwrapSideEffectFreeStaticExpression(arg);
+        const numericValue = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrappedArg, seenConsts);
+        if (numericValue !== null) {
+            switch (method) {
+                case "isFinite":
+                    return Number.isFinite(numericValue);
+                case "isInteger":
+                    return Number.isInteger(numericValue);
+                case "isNaN":
+                    return Number.isNaN(numericValue);
+                case "isSafeInteger":
+                    return Number.isSafeInteger(numericValue);
+            }
+        }
+
+        if (
+            this.sideEffectFreeStringLiteralText(unwrappedArg, seenConsts) !== null ||
+            this.sideEffectFreeBigIntLiteralText(unwrappedArg, seenConsts) !== null ||
+            this.sideEffectFreePrimitiveBooleanValue(unwrappedArg, seenConsts) !== null ||
+            this.staticNullishState(unwrappedArg, seenConsts) === "nullish" ||
+            this.isSideEffectFreeUndefinedValue(unwrappedArg, seenConsts) ||
+            this.isSideEffectFreeFreshNonArrayBuiltinOperand(unwrappedArg, seenConsts)
+        ) {
+            return false;
+        }
+
+        return null;
+    }
+
     private isSideEffectFreeBigIntCoercion(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -26798,6 +26856,8 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         const stringBool = this.sideEffectFreeStringBooleanCallValue(unwrapped, seenConsts);
         if (stringBool !== null) return stringBool;
+        const numberBool = this.sideEffectFreeNumberPredicateCallValue(unwrapped, seenConsts);
+        if (numberBool !== null) return numberBool;
         if (
             ts.isCallExpression(unwrapped) &&
             ts.isPropertyAccessExpression(unwrapped.expression) &&
