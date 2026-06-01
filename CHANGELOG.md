@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Manifest-backed native-addon bridge loads now call the embedded Node `require` hook through V8 directly, so native addons no longer depend on the unsafe source-compilation helper unless `--unsafe-eval` is enabled. Checks: `bun run build`, `TSC2C_NO_GC=1 bun tests/e2e/run.ts --filter native_addon_manifest_require`, `bun run test:native-addon-smoke` when `libnode` is available.
 - CommonJS whole-value `module.exports = ...` defaults now accept logical `&&`, `||`, and `??` expressions whose branches are supported AOT export values, including runtime-computed boxed object defaults. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 - CommonJS whole-value `module.exports = ...` defaults now accept broader runtime-computed call/new/member/template expressions by boxing the result as a dynamic value while keeping named-export metadata finite. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 - `fs.promises.stat(...)` and `fs.promises.lstat(...)` now return pending Promise records whose settlement is queued through the event loop, while preserving the existing call-time Stats capture, rejection conversion, `throwIfNoEntry`, and ignored-argument behavior. Test: `fs_promises_stat_async_order`.

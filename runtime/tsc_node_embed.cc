@@ -207,34 +207,6 @@ v8::Local<v8::Value> toV8(v8::Isolate* isolate, v8::Local<v8::Context> context, 
     return v8::Undefined(isolate).As<v8::Value>();
 }
 
-std::string quoteJsString(const std::string& value) {
-    std::string out = "'";
-    for (char ch : value) {
-        switch (ch) {
-            case '\\':
-                out += "\\\\";
-                break;
-            case '\'':
-                out += "\\'";
-                break;
-            case '\n':
-                out += "\\n";
-                break;
-            case '\r':
-                out += "\\r";
-                break;
-            case '\t':
-                out += "\\t";
-                break;
-            default:
-                out += ch;
-                break;
-        }
-    }
-    out += "'";
-    return out;
-}
-
 tsc_value_t fromV8(v8::Isolate* isolate, v8::Local<v8::Value> value) {
     if (value.IsEmpty() || value->IsUndefined()) return tsc_value_undefined();
     if (value->IsNull()) return tsc_value_null();
@@ -345,6 +317,7 @@ NodeEmbedState* ensureState() {
     return state;
 }
 
+#ifdef TSC_UNSAFE_EVAL
 tsc_value_t evalSource(tsc_str_t* source) {
     NodeEmbedState* current = ensureState();
     v8::Isolate* isolate = current->isolate;
@@ -375,6 +348,7 @@ tsc_value_t evalSource(tsc_str_t* source) {
     }
     return fromV8(isolate, result);
 }
+#endif
 
 tsc_value_t callNodeFunction(void* rawEnv, tsc_value_t, tsc_array_t* args) {
     NodeEmbedState* current = ensureState();
@@ -475,11 +449,35 @@ extern "C" tsc_value_t tsc_node_function_call(tsc_value_t fn, tsc_array_t* args)
 }
 
 extern "C" tsc_value_t tsc_node_native_addon(tsc_str_t* resolved_path) {
-    std::string source = "globalThis.__tsc2c_require(";
-    source += quoteJsString(tscToString(resolved_path));
-    source += ")";
-    tsc_str_t source_str = { source.size(), source.c_str(), 0 };
-    return evalSource(&source_str);
+    NodeEmbedState* current = ensureState();
+    v8::Isolate* isolate = current->isolate;
+    v8::Isolate::Scope isolateScope(isolate);
+    v8::HandleScope handleScope(isolate);
+    v8::Local<v8::Context> context = current->context.Get(isolate);
+    v8::Context::Scope contextScope(context);
+
+    v8::Local<v8::String> requireKey;
+    if (!v8::String::NewFromUtf8(
+             isolate,
+             "__tsc2c_require",
+             v8::NewStringType::kNormal
+         ).ToLocal(&requireKey)) {
+        tsc_panic("embedded Node bridge: could not allocate require key");
+    }
+
+    v8::Local<v8::Value> requireValue;
+    if (!context->Global()->Get(context, requireKey).ToLocal(&requireValue) || !requireValue->IsFunction()) {
+        tsc_panic("embedded Node bridge: require hook is unavailable");
+    }
+
+    v8::Local<v8::Value> pathArg = stringToV8(isolate, resolved_path).As<v8::Value>();
+    v8::Local<v8::Function> requireFn = v8::Local<v8::Function>::Cast(requireValue);
+    v8::TryCatch tryCatch(isolate);
+    v8::Local<v8::Value> result;
+    if (!requireFn->Call(context, context->Global(), 1, &pathArg).ToLocal(&result)) {
+        tsc_panic("embedded Node bridge: native addon require failed");
+    }
+    return fromV8(isolate, result);
 }
 
 extern "C" tsc_value_t tsc_builtin_eval(void* env, tsc_value_t this_arg, tsc_array_t* args) {
