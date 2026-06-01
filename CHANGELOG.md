@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic arrays now inherit callable mutating and copy-returning `Array.prototype` methods for `pop`, `push`, `shift`, `unshift`, `concat`, `slice`, `fill`, `copyWithin`, `splice`, `sort`, `toSorted`, `with`, `toSpliced`, `reverse`, and `toReversed`, forwarding detached calls through the existing runtime helpers. Test: `dynamic_array_prototype_mutators`.
 - Dynamic arrays now inherit callable `Array.prototype` methods for `join`, `includes`, `indexOf`, `lastIndexOf`, `at`, `keys`, `values`, and `entries`, so detached prototype method calls work through dynamic lookup. Test: `dynamic_array_prototype_methods`.
 - Trapless array- and function-target Proxy `set` forwarding now preserves explicit `Reflect.set(...)` receivers instead of writing those fallback assignments onto the target. Tests: `proxy_array_mutation_forward`, `proxy_function_set_forward`.
 - Dynamic `Reflect.construct(...)` now falls back to `Object.prototype` when `newTarget.prototype` is explicitly `null`, matching constructor allocation semantics. Test: `reflect_construct_dynamic_function`.
