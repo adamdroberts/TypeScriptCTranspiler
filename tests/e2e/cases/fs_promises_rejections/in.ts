@@ -32,8 +32,10 @@ fs.promises.writeFile(badWrite, "data").catch((reason: string): any => {
     return "write recovered";
 });
 
-console.log("read:", readReason);
-console.log("stat:", statReason);
-console.log("access:", accessReason);
-console.log("write:", writeReason);
-console.log("recovered:", recovered);
+setImmediate((): void => {
+    console.log("read:", readReason);
+    console.log("stat:", statReason);
+    console.log("access:", accessReason);
+    console.log("write:", writeReason);
+    console.log("recovered:", recovered);
+});

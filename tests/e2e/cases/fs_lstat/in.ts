@@ -22,6 +22,8 @@ nodefs.promises.lstat("/proc/self/exe").then((stat: FSStats): FSStats => {
 console.log("file:", fileStat.isFile(), fileStat.isDirectory(), fileStat.isSymbolicLink());
 console.log("dir:", dirStat.isFile(), dirStat.isDirectory(), dirStat.isSymbolicLink());
 console.log("link:", linkStat.isFile(), linkStat.isDirectory(), linkStat.isSymbolicLink(), targetStat.isFile());
-console.log("promise:", promiseLink);
+setImmediate((): void => {
+    console.log("promise:", promiseLink);
+});
 
 fs.rmSync(root, { recursive: true, force: true });
