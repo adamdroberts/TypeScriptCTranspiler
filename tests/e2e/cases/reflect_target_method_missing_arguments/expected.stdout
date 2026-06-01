@@ -1,0 +1,4 @@
+getPrototypeOf: Reflect.getPrototypeOf target must be an object
+isExtensible: Reflect.isExtensible target must be an object
+ownKeys: Reflect.ownKeys target must be an object
+preventExtensions: Reflect.preventExtensions target must be an object

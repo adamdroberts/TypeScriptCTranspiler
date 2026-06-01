@@ -3238,7 +3238,8 @@ static tsc_value_t reflect_get_own_property_descriptor_method(void* env, tsc_val
 static tsc_value_t reflect_get_prototype_of_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
-    return tsc_reflect_get_prototype_of(reflect_arg(args, 0, "Reflect.getPrototypeOf expects target"));
+    tsc_value_t target = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    return tsc_reflect_get_prototype_of(target);
 }
 
 static tsc_value_t reflect_has_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -3252,19 +3253,22 @@ static tsc_value_t reflect_has_method(void* env, tsc_value_t this_arg, tsc_array
 static tsc_value_t reflect_is_extensible_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
-    return tsc_value_bool(tsc_reflect_is_extensible(reflect_arg(args, 0, "Reflect.isExtensible expects target")));
+    tsc_value_t target = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    return tsc_value_bool(tsc_reflect_is_extensible(target));
 }
 
 static tsc_value_t reflect_own_keys_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
-    return tsc_value_array(value_array_from_string_array(tsc_reflect_own_keys(reflect_arg(args, 0, "Reflect.ownKeys expects target"))));
+    tsc_value_t target = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    return tsc_value_array(value_array_from_string_array(tsc_reflect_own_keys(target)));
 }
 
 static tsc_value_t reflect_prevent_extensions_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
-    return tsc_value_bool(tsc_reflect_prevent_extensions(reflect_arg(args, 0, "Reflect.preventExtensions expects target")));
+    tsc_value_t target = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    return tsc_value_bool(tsc_reflect_prevent_extensions(target));
 }
 
 static tsc_value_t reflect_set_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
