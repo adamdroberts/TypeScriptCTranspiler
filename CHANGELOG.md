@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Array-target Proxy invariants now account for non-configurable dynamic array own accessor properties when validating `get`, `set`, `defineProperty`, and `getOwnPropertyDescriptor` trap results. Test: `proxy_array_accessor_invariants`.
 - Dynamic arrays now support own string-key accessor descriptors through `Object.defineProperty`, `Reflect.defineProperty`, and legacy accessor helpers, including receiver-aware getter/setter calls and metadata-key rejection for `length` / dense indexes. Test: `dynamic_array_accessor_properties`.
 - Function-target Proxy invariants now account for non-configurable function own accessor properties when validating `get`, `set`, `defineProperty`, and `getOwnPropertyDescriptor` trap results. Test: `proxy_function_accessor_invariants`.
 - Dynamic function values now support own accessor descriptors through `Object.defineProperty`, `Reflect.defineProperty`, and legacy accessor helpers, including receiver-aware getter/setter calls and descriptor identities. Test: `dynamic_function_accessor_properties`.
