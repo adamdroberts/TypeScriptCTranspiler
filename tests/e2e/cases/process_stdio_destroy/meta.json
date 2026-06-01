@@ -1,0 +1,3 @@
+{
+  "description": "process stdio destroy is a no-op compatibility method that preserves argument evaluation"
+}
