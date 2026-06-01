@@ -15,7 +15,7 @@ const arrayProto: any = Object.getPrototypeOf(arr);
 const functionProto: any = Object.getPrototypeOf(fnVal);
 const objectProto: any = Object.getPrototypeOf({});
 
-console.log("arrayProto:", typeof arrayProto, arrayProto);
+console.log("arrayProto:", typeof arrayProto, String(arrayProto).length);
 console.log("functionProto:", typeof functionProto, functionProto);
 console.log("objectProto:", typeof objectProto, objectProto);
 console.log("objectProto parent:", typeof Object.getPrototypeOf(objectProto), Object.getPrototypeOf(objectProto));
