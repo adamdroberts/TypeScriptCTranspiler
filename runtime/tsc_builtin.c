@@ -877,6 +877,58 @@ tsc_buffer_t* buffer_alloc_len(size_t len) {
     return b;
 }
 
+static size_t array_buffer_to_index(double n, const char* label) {
+    if (isnan(n) || isinf(n) || n < 0.0 || floor(n) != n || n > (double)SIZE_MAX) {
+        tsc_throw_str(tsc_str_from_cstr(label));
+    }
+    return (size_t)n;
+}
+
+tsc_array_buffer_t* tsc_array_buffer_new(double byte_length) {
+    size_t len = array_buffer_to_index(byte_length, "ArrayBuffer byteLength must be a non-negative finite integer");
+    tsc_array_buffer_t* b = (tsc_array_buffer_t*)TSC_GC_MALLOC(sizeof(tsc_array_buffer_t));
+    b->byte_length = len;
+    b->data = (uint8_t*)TSC_GC_MALLOC_ATOMIC(len ? len : 1);
+    if (len == 0) b->data[0] = 0;
+    return b;
+}
+
+double tsc_array_buffer_byte_length(const tsc_array_buffer_t* b) {
+    return b ? (double)b->byte_length : 0.0;
+}
+
+tsc_data_view_t* tsc_data_view_new(tsc_array_buffer_t* buffer, double byte_offset, double byte_length, bool has_byte_length) {
+    if (!buffer) tsc_throw_str(tsc_str_from_cstr("DataView buffer must be an ArrayBuffer"));
+    size_t offset = array_buffer_to_index(byte_offset, "DataView byteOffset must be a non-negative finite integer");
+    if (offset > buffer->byte_length) {
+        tsc_throw_str(tsc_str_from_cstr("DataView byteOffset is outside the ArrayBuffer"));
+    }
+    size_t remaining = buffer->byte_length - offset;
+    size_t length = has_byte_length
+        ? array_buffer_to_index(byte_length, "DataView byteLength must be a non-negative finite integer")
+        : remaining;
+    if (length > remaining) {
+        tsc_throw_str(tsc_str_from_cstr("DataView byteLength is outside the ArrayBuffer"));
+    }
+    tsc_data_view_t* v = (tsc_data_view_t*)TSC_GC_MALLOC(sizeof(tsc_data_view_t));
+    v->buffer = buffer;
+    v->byte_offset = offset;
+    v->byte_length = length;
+    return v;
+}
+
+tsc_array_buffer_t* tsc_data_view_buffer(const tsc_data_view_t* v) {
+    return v ? v->buffer : NULL;
+}
+
+double tsc_data_view_byte_offset(const tsc_data_view_t* v) {
+    return v ? (double)v->byte_offset : 0.0;
+}
+
+double tsc_data_view_byte_length(const tsc_data_view_t* v) {
+    return v ? (double)v->byte_length : 0.0;
+}
+
 int hex_value(unsigned char c) {
     if (c >= '0' && c <= '9') return (int)(c - '0');
     if (c >= 'a' && c <= 'f') return 10 + (int)(c - 'a');

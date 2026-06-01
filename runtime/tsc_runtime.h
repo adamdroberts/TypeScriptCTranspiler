@@ -413,6 +413,21 @@ typedef struct tsc_buffer {
     size_t len;
     uint8_t* data;
 } tsc_buffer_t;
+typedef struct tsc_array_buffer {
+    size_t byte_length;
+    uint8_t* data;
+} tsc_array_buffer_t;
+typedef struct tsc_data_view {
+    tsc_array_buffer_t* buffer;
+    size_t byte_offset;
+    size_t byte_length;
+} tsc_data_view_t;
+tsc_array_buffer_t* tsc_array_buffer_new(double byte_length);
+double tsc_array_buffer_byte_length(const tsc_array_buffer_t* b);
+tsc_data_view_t* tsc_data_view_new(tsc_array_buffer_t* buffer, double byte_offset, double byte_length, bool has_byte_length);
+tsc_array_buffer_t* tsc_data_view_buffer(const tsc_data_view_t* v);
+double tsc_data_view_byte_offset(const tsc_data_view_t* v);
+double tsc_data_view_byte_length(const tsc_data_view_t* v);
 tsc_buffer_t* tsc_buffer_from_str(const tsc_str_t* input, const tsc_str_t* encoding);
 tsc_buffer_t* tsc_buffer_transcode(const tsc_buffer_t* source, const tsc_str_t* from_enc, const tsc_str_t* to_enc);
 tsc_buffer_t* tsc_buffer_from_array(const struct tsc_array* input);

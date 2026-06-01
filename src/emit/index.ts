@@ -14,9 +14,11 @@ import {
     promiseType,
     setType,
     TypeBindings,
+    T_ARRAY_BUFFER,
     T_BIGINT,
     T_BOOLEAN,
     T_BUFFER,
+    T_DATA_VIEW,
     T_TEXT_DECODER,
     T_TEXT_ENCODER,
     T_DATE,
@@ -29277,7 +29279,7 @@ class Emitter {
                     );
                 }
                 const pointerKinds: readonly CType["kind"][] = [
-                    "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "textencoder", "textdecoder", "fsstats", "fsdirent", "function",
+                    "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "fsdirent", "function",
                 ];
                 if (pointerKinds.includes(left.ty.kind)) {
                     const tv = this.freshTemp("_nc");
@@ -30312,7 +30314,7 @@ class Emitter {
         }
         // Compare pointer-valued types (array, class, map, set, regexp, string) to null.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "textencoder", "textdecoder", "fsstats", "fsdirent", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "fsdirent", "function",
         ];
         const leftIsNull = left.ty.kind === "void";
         const rightIsNull = right.ty.kind === "void";
@@ -46628,7 +46630,9 @@ class Emitter {
             mapped.kind === "url" ||
             mapped.kind === "urlsearchparams" ||
             mapped.kind === "hash" ||
-            mapped.kind === "hmac";
+            mapped.kind === "hmac" ||
+            mapped.kind === "arraybuffer" ||
+            mapped.kind === "dataview";
         const emptyEnumerableBuiltinObjectArg =
             emptyOwnBuiltinObjectArg ||
             mapped.kind === "regexp" ||
@@ -49691,6 +49695,8 @@ class Emitter {
                     mapped.kind === "date" ||
                     mapped.kind === "url" ||
                     mapped.kind === "urlsearchparams" ||
+                    mapped.kind === "arraybuffer" ||
+                    mapped.kind === "dataview" ||
                     mapped.kind === "hash" ||
                     mapped.kind === "hmac"
                 ) {
@@ -49820,6 +49826,8 @@ class Emitter {
                     mapped.kind === "date" ||
                     mapped.kind === "url" ||
                     mapped.kind === "urlsearchparams" ||
+                    mapped.kind === "arraybuffer" ||
+                    mapped.kind === "dataview" ||
                     mapped.kind === "hash" ||
                     mapped.kind === "hmac"
                 ) {
@@ -49959,6 +49967,8 @@ class Emitter {
             case "date":
             case "url":
             case "urlsearchparams":
+            case "arraybuffer":
+            case "dataview":
             case "hash":
             case "hmac":
             case "regexp":
@@ -50658,6 +50668,40 @@ class Emitter {
                     return `tsc_text_decoder_new(${enc})`;
                 },
             );
+        }
+        if (cls === "ArrayBuffer") {
+            const args = n.arguments ?? [];
+            const specs: SequencedCallArg[] = [];
+            const hasLength = args.length >= 1 && !this.isUndefinedExpression(args[0]);
+            if (hasLength) {
+                specs.push({ value: this.emitExpr(args[0]!), target: T_NUMBER, node: args[0]! });
+            }
+            specs.push(...this.ignoredArgumentSpecs(args, 1));
+            return this.emitSequencedExpr(T_ARRAY_BUFFER, specs, (vals) =>
+                `tsc_array_buffer_new(${hasLength ? vals[0]! : "0.0"})`,
+            );
+        }
+        if (cls === "DataView") {
+            const args = n.arguments ?? [];
+            if (args.length < 1) unsupported(n, "new DataView() expects buffer");
+            const specs: SequencedCallArg[] = [
+                { value: this.emitExpr(args[0]!), target: T_ARRAY_BUFFER, node: args[0]! },
+            ];
+            const hasOffset = args.length >= 2 && !this.isUndefinedExpression(args[1]);
+            const hasLength = args.length >= 3 && !this.isUndefinedExpression(args[2]);
+            if (hasOffset) {
+                specs.push({ value: this.emitExpr(args[1]!), target: T_NUMBER, node: args[1]! });
+            }
+            if (hasLength) {
+                specs.push({ value: this.emitExpr(args[2]!), target: T_NUMBER, node: args[2]! });
+            }
+            specs.push(...this.ignoredArgumentSpecs(args, 3));
+            return this.emitSequencedExpr(T_DATA_VIEW, specs, (vals) => {
+                let index = 1;
+                const offset = hasOffset ? vals[index++]! : "0.0";
+                const length = hasLength ? vals[index++]! : "0.0";
+                return `tsc_data_view_new(${vals[0]!}, ${offset}, ${length}, ${hasLength ? "true" : "false"})`;
+            });
         }
         // Built-in Map / Set constructors.
         if (cls === "Map") {
@@ -51586,6 +51630,19 @@ class Emitter {
         if (recv.ty.kind === "buffer" && pa.name.text === "length") {
             return { c: `tsc_buffer_length(${recv.c})`, ty: T_NUMBER };
         }
+        if (recv.ty.kind === "arraybuffer" && pa.name.text === "byteLength") {
+            return { c: `tsc_array_buffer_byte_length(${recv.c})`, ty: T_NUMBER };
+        }
+        if (recv.ty.kind === "dataview") {
+            switch (pa.name.text) {
+                case "buffer":
+                    return { c: `tsc_data_view_buffer(${recv.c})`, ty: T_ARRAY_BUFFER };
+                case "byteOffset":
+                    return { c: `tsc_data_view_byte_offset(${recv.c})`, ty: T_NUMBER };
+                case "byteLength":
+                    return { c: `tsc_data_view_byte_length(${recv.c})`, ty: T_NUMBER };
+            }
+        }
         if (recv.ty.kind === "fsstats") {
             const numericStatsProps: Record<string, string> = {
                 dev: "tsc_fs_stats_dev",
@@ -52283,7 +52340,7 @@ class Emitter {
         // null (void) → any pointer type: emit typed NULL. Check before the
         // string-coerce branch since string is a pointer type too.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "fsstats", "fsdirent", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "fsstats", "fsdirent", "function",
         ];
         if (r.ty.kind === "void" && pointerKinds.includes(target.kind)) {
             return `((${target.c})NULL)`;
@@ -52511,7 +52568,7 @@ function canBoxArrayFindElement(t: CType): boolean {
 
 function isPointerKind(t: CType): boolean {
     const pointerKinds: readonly CType["kind"][] = [
-        "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "fsstats", "fsdirent", "function",
+        "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "fsstats", "fsdirent", "function",
     ];
     return pointerKinds.includes(t.kind);
 }
