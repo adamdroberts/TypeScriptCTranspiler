@@ -533,6 +533,7 @@ void tsc_array_unshift_raw(tsc_array_t* a, const void* elem);
 tsc_array_t* tsc_array_reverse(tsc_array_t* a); /* in-place */
 tsc_array_t* tsc_array_to_reversed(const tsc_array_t* a); /* copy */
 tsc_array_t* tsc_array_with(const tsc_array_t* a, double index, const void* elem); /* copy */
+tsc_array_t* tsc_array_splice(tsc_array_t* a, double start, double delete_count, int argc, const tsc_array_t* items); /* in-place */
 tsc_array_t* tsc_array_to_spliced(const tsc_array_t* a, double start, double delete_count, int argc, const tsc_array_t* items); /* copy */
 tsc_array_t* tsc_array_fill(tsc_array_t* a, const void* elem, double start, double end); /* in-place */
 tsc_array_t* tsc_array_copy_within(tsc_array_t* a, double target, double start, double end); /* in-place */
