@@ -2756,7 +2756,7 @@ tsc_str_t* tsc_value_method_to_string(tsc_value_t recv, tsc_value_t radix) {
         if (tsc_value_is_undefined(radix)) return tsc_str_from_num(value_as_num(recv));
         return tsc_str_from_num_radix(value_as_num(recv), tsc_value_as_num(radix));
     }
-    if (value_tag(recv) == TSC_VALUE_TAG_ARRAY || value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
+    if (value_tag(recv) == TSC_VALUE_TAG_ARRAY || value_tag(recv) == TSC_VALUE_TAG_OBJECT || value_tag(recv) == TSC_VALUE_TAG_FUNCTION) {
         tsc_value_t fn = tsc_value_get_prop(recv, tsc_str_from_lit("toString", 8));
         if (tsc_value_is_callable(fn)) {
             tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
@@ -2771,7 +2771,7 @@ tsc_str_t* tsc_value_method_to_string(tsc_value_t recv, tsc_value_t radix) {
 }
 
 tsc_str_t* tsc_value_method_to_locale_string(tsc_value_t recv) {
-    if (value_is_box(recv) && (value_tag(recv) == TSC_VALUE_TAG_ARRAY || value_tag(recv) == TSC_VALUE_TAG_OBJECT)) {
+    if (value_is_box(recv) && (value_tag(recv) == TSC_VALUE_TAG_ARRAY || value_tag(recv) == TSC_VALUE_TAG_OBJECT || value_tag(recv) == TSC_VALUE_TAG_FUNCTION)) {
         tsc_value_t fn = tsc_value_get_prop(recv, tsc_str_from_lit("toLocaleString", 14));
         if (tsc_value_is_callable(fn)) {
             tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
