@@ -58,6 +58,43 @@ static tsc_array_t* array_proto_reduce_callback_args(tsc_value_t acc, tsc_value_
     return cb_args;
 }
 
+static void array_prototype_require_receiver(tsc_value_t receiver, const char* method) {
+    if (tsc_value_is_nullish(receiver)) {
+        char buf[128];
+        snprintf(buf, sizeof buf, "Array.prototype.%s receiver is null or undefined", method);
+        tsc_throw_str(tsc_str_from_cstr(buf));
+    }
+}
+
+static tsc_value_t array_proto_empty_args(void) {
+    return tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1));
+}
+
+static tsc_value_t array_prototype_to_string(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    array_prototype_require_receiver(this_arg, "toString");
+    tsc_value_t join = tsc_value_get_prop(this_arg, tsc_str_from_lit("join", 4));
+    if (tsc_value_is_callable(join)) {
+        return tsc_value_apply_function(join, this_arg, array_proto_empty_args());
+    }
+    return tsc_value_string(tsc_value_object_to_string_tag(this_arg));
+}
+
+static tsc_value_t array_prototype_to_locale_string(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    array_prototype_require_receiver(this_arg, "toLocaleString");
+    return tsc_value_string(tsc_value_to_string(this_arg));
+}
+
+static tsc_value_t array_prototype_value_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    array_prototype_require_receiver(this_arg, "valueOf");
+    return this_arg;
+}
+
 static tsc_value_t array_prototype_at(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     return tsc_value_method_at(this_arg, array_proto_arg(args, 0));
@@ -408,6 +445,9 @@ static tsc_value_t tsc_array_default_prototype(void) {
     static tsc_value_t prototype;
     if (!initialized) {
         tsc_object_t* proto = tsc_object_new();
+        array_prototype_define_method(proto, "toString", 8, array_prototype_to_string);
+        array_prototype_define_method(proto, "toLocaleString", 14, array_prototype_to_locale_string);
+        array_prototype_define_method(proto, "valueOf", 7, array_prototype_value_of);
         array_prototype_define_method(proto, "at", 2, array_prototype_at);
         array_prototype_define_method(proto, "includes", 8, array_prototype_includes);
         array_prototype_define_method(proto, "indexOf", 7, array_prototype_index_of);
