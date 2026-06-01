@@ -5996,6 +5996,7 @@ class Emitter {
                 "Event",
                 "EventTarget",
                 "ArrayBuffer",
+                "DataView",
             ]);
             if (emptyOwnKeyBuiltins.has(name)) {
                 return this.isSideEffectFreeNewExpression(unwrapped, seenConsts) ? 0 : null;
@@ -7219,6 +7220,7 @@ class Emitter {
             if (name === "AggregateError") return this.isSideEffectFreeAggregateErrorConstructorArgs(args, seenConsts);
             if (name === "URL") return this.isSideEffectFreeURLConstructorArgs(args, seenConsts);
             if (name === "ArrayBuffer") return this.isSideEffectFreeArrayBufferConstructorArgs(args, seenConsts);
+            if (name === "DataView") return this.isSideEffectFreeDataViewConstructorArgs(args, seenConsts);
             if (name === "Map") {
                 return args.length === 0 ||
                     (
@@ -7297,13 +7299,74 @@ class Emitter {
         args: ts.NodeArray<ts.Expression>,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
-        if (args.length === 0) return true;
-        if (args.length !== 1) return false;
+        return this.sideEffectFreeArrayBufferConstructorByteLength(args, seenConsts) !== null;
+    }
+
+    private sideEffectFreeArrayBufferConstructorByteLength(
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        if (args.length === 0) return 0;
+        if (args.length !== 1) return null;
         const length = this.sideEffectFreeNumericLiteralSameValueZeroValue(args[0]!, seenConsts);
         return length !== null &&
             Number.isFinite(length) &&
             Number.isInteger(length) &&
-            length >= 0;
+            length >= 0
+            ? length
+            : null;
+    }
+
+    private sideEffectFreeFreshArrayBufferByteLength(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number | null {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isNewExpression(unwrapped) &&
+            ts.isIdentifier(unwrapped.expression) &&
+            unwrapped.expression.text === "ArrayBuffer" &&
+            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "ArrayBuffer")
+        ) {
+            return this.sideEffectFreeArrayBufferConstructorByteLength(
+                unwrapped.arguments ?? ts.factory.createNodeArray(),
+                seenConsts,
+            );
+        }
+        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
+        return init ? this.sideEffectFreeFreshArrayBufferByteLength(init, seenConsts) : null;
+    }
+
+    private sideEffectFreeOptionalNonnegativeInteger(
+        expr: ts.Expression | undefined,
+        seenConsts: Set<ts.Symbol>,
+        defaultValue: number,
+    ): number | null {
+        if (!expr || this.isSideEffectFreeUndefinedValue(expr, seenConsts)) return defaultValue;
+        const value = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr, seenConsts);
+        return value !== null &&
+            Number.isFinite(value) &&
+            Number.isInteger(value) &&
+            value >= 0
+            ? value
+            : null;
+    }
+
+    private isSideEffectFreeDataViewConstructorArgs(
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (args.length < 1 || args.length > 3) return false;
+        const bufferLength = this.sideEffectFreeFreshArrayBufferByteLength(args[0]!, seenConsts);
+        if (bufferLength === null) return false;
+        const offset = this.sideEffectFreeOptionalNonnegativeInteger(args[1], seenConsts, 0);
+        if (offset === null || offset > bufferLength) return false;
+        const viewLength = this.sideEffectFreeOptionalNonnegativeInteger(
+            args[2],
+            seenConsts,
+            bufferLength - offset,
+        );
+        return viewLength !== null && offset + viewLength <= bufferLength;
     }
 
     private isSideEffectFreeEventConstructorArgs(
@@ -14007,7 +14070,8 @@ class Emitter {
                 unwrapped.expression.text === "AggregateError" ||
                 unwrapped.expression.text === "Event" ||
                 unwrapped.expression.text === "EventTarget" ||
-                unwrapped.expression.text === "ArrayBuffer"
+                unwrapped.expression.text === "ArrayBuffer" ||
+                unwrapped.expression.text === "DataView"
             )
         ) {
             return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
