@@ -49,6 +49,29 @@ static tsc_value_t array_proto_apply_callback(tsc_value_t callback, tsc_value_t 
     );
 }
 
+static size_t array_proto_length(tsc_value_t receiver) {
+    double len = tsc_value_length(receiver);
+    if (isnan(len) || len <= 0.0) return 0;
+    if (len >= (double)SIZE_MAX) return SIZE_MAX;
+    return (size_t)floor(len);
+}
+
+static bool array_proto_has_index(tsc_value_t receiver, size_t index) {
+    if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_ARRAY) {
+        return index < ((const tsc_array_t*)value_ptr(receiver))->len;
+    }
+    char key_buf[32];
+    snprintf(key_buf, sizeof key_buf, "%zu", index);
+    return tsc_value_has_prop(receiver, tsc_str_from_cstr(key_buf));
+}
+
+static tsc_value_t array_proto_get_index(tsc_value_t receiver, size_t index) {
+    if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_ARRAY) {
+        return TSC_ARR(tsc_value_t, (tsc_array_t*)value_ptr(receiver), index);
+    }
+    return tsc_value_get_index(receiver, (double)index);
+}
+
 static tsc_array_t* array_proto_reduce_callback_args(tsc_value_t acc, tsc_value_t value, size_t index, tsc_value_t receiver) {
     tsc_array_t* cb_args = tsc_array_new(sizeof(tsc_value_t), 4);
     tsc_array_push_value(cb_args, acc);
@@ -265,23 +288,29 @@ static tsc_value_t array_prototype_to_reversed(void* env, tsc_value_t this_arg, 
 
 static tsc_value_t array_prototype_for_each(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
+    array_prototype_require_receiver(this_arg, "forEach");
     tsc_value_t callback = array_proto_callback_arg(args, "Array.forEach callback must be callable");
     tsc_value_t callback_this = array_proto_callback_this(args);
-    tsc_array_t* a = tsc_value_as_array(this_arg);
-    for (size_t i = 0; i < a->len; i++) {
-        (void)array_proto_apply_callback(callback, callback_this, TSC_ARR(tsc_value_t, a, i), i, this_arg);
+    size_t len = array_proto_length(this_arg);
+    for (size_t i = 0; i < len; i++) {
+        if (!array_proto_has_index(this_arg, i)) continue;
+        (void)array_proto_apply_callback(callback, callback_this, array_proto_get_index(this_arg, i), i, this_arg);
     }
     return tsc_value_undefined();
 }
 
 static tsc_value_t array_prototype_map(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
+    array_prototype_require_receiver(this_arg, "map");
     tsc_value_t callback = array_proto_callback_arg(args, "Array.map callback must be callable");
     tsc_value_t callback_this = array_proto_callback_this(args);
-    tsc_array_t* a = tsc_value_as_array(this_arg);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), a->len ? a->len : 1);
-    for (size_t i = 0; i < a->len; i++) {
-        tsc_value_t mapped = array_proto_apply_callback(callback, callback_this, TSC_ARR(tsc_value_t, a, i), i, this_arg);
+    size_t len = array_proto_length(this_arg);
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
+    for (size_t i = 0; i < len; i++) {
+        tsc_value_t mapped = tsc_value_undefined();
+        if (array_proto_has_index(this_arg, i)) {
+            mapped = array_proto_apply_callback(callback, callback_this, array_proto_get_index(this_arg, i), i, this_arg);
+        }
         tsc_array_push_value(out, mapped);
     }
     return tsc_value_array(out);
@@ -289,12 +318,14 @@ static tsc_value_t array_prototype_map(void* env, tsc_value_t this_arg, tsc_arra
 
 static tsc_value_t array_prototype_flat_map(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
+    array_prototype_require_receiver(this_arg, "flatMap");
     tsc_value_t callback = array_proto_callback_arg(args, "Array.flatMap callback must be callable");
     tsc_value_t callback_this = array_proto_callback_this(args);
-    tsc_array_t* a = tsc_value_as_array(this_arg);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), a->len ? a->len : 1);
-    for (size_t i = 0; i < a->len; i++) {
-        tsc_value_t mapped = array_proto_apply_callback(callback, callback_this, TSC_ARR(tsc_value_t, a, i), i, this_arg);
+    size_t len = array_proto_length(this_arg);
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
+    for (size_t i = 0; i < len; i++) {
+        if (!array_proto_has_index(this_arg, i)) continue;
+        tsc_value_t mapped = array_proto_apply_callback(callback, callback_this, array_proto_get_index(this_arg, i), i, this_arg);
         tsc_value_array_push_flat(out, mapped);
     }
     return tsc_value_array(out);
@@ -302,12 +333,14 @@ static tsc_value_t array_prototype_flat_map(void* env, tsc_value_t this_arg, tsc
 
 static tsc_value_t array_prototype_filter(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
+    array_prototype_require_receiver(this_arg, "filter");
     tsc_value_t callback = array_proto_callback_arg(args, "Array.filter callback must be callable");
     tsc_value_t callback_this = array_proto_callback_this(args);
-    tsc_array_t* a = tsc_value_as_array(this_arg);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), a->len ? a->len : 1);
-    for (size_t i = 0; i < a->len; i++) {
-        tsc_value_t value = TSC_ARR(tsc_value_t, a, i);
+    size_t len = array_proto_length(this_arg);
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
+    for (size_t i = 0; i < len; i++) {
+        if (!array_proto_has_index(this_arg, i)) continue;
+        tsc_value_t value = array_proto_get_index(this_arg, i);
         if (tsc_value_is_truthy(array_proto_apply_callback(callback, callback_this, value, i, this_arg))) {
             tsc_array_push_value(out, value);
         }
@@ -317,11 +350,13 @@ static tsc_value_t array_prototype_filter(void* env, tsc_value_t this_arg, tsc_a
 
 static tsc_value_t array_prototype_some(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
+    array_prototype_require_receiver(this_arg, "some");
     tsc_value_t callback = array_proto_callback_arg(args, "Array.some callback must be callable");
     tsc_value_t callback_this = array_proto_callback_this(args);
-    tsc_array_t* a = tsc_value_as_array(this_arg);
-    for (size_t i = 0; i < a->len; i++) {
-        if (tsc_value_is_truthy(array_proto_apply_callback(callback, callback_this, TSC_ARR(tsc_value_t, a, i), i, this_arg))) {
+    size_t len = array_proto_length(this_arg);
+    for (size_t i = 0; i < len; i++) {
+        if (!array_proto_has_index(this_arg, i)) continue;
+        if (tsc_value_is_truthy(array_proto_apply_callback(callback, callback_this, array_proto_get_index(this_arg, i), i, this_arg))) {
             return tsc_value_bool(true);
         }
     }
@@ -330,11 +365,13 @@ static tsc_value_t array_prototype_some(void* env, tsc_value_t this_arg, tsc_arr
 
 static tsc_value_t array_prototype_every(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
+    array_prototype_require_receiver(this_arg, "every");
     tsc_value_t callback = array_proto_callback_arg(args, "Array.every callback must be callable");
     tsc_value_t callback_this = array_proto_callback_this(args);
-    tsc_array_t* a = tsc_value_as_array(this_arg);
-    for (size_t i = 0; i < a->len; i++) {
-        if (!tsc_value_is_truthy(array_proto_apply_callback(callback, callback_this, TSC_ARR(tsc_value_t, a, i), i, this_arg))) {
+    size_t len = array_proto_length(this_arg);
+    for (size_t i = 0; i < len; i++) {
+        if (!array_proto_has_index(this_arg, i)) continue;
+        if (!tsc_value_is_truthy(array_proto_apply_callback(callback, callback_this, array_proto_get_index(this_arg, i), i, this_arg))) {
             return tsc_value_bool(false);
         }
     }
@@ -343,11 +380,12 @@ static tsc_value_t array_prototype_every(void* env, tsc_value_t this_arg, tsc_ar
 
 static tsc_value_t array_prototype_find(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
+    array_prototype_require_receiver(this_arg, "find");
     tsc_value_t callback = array_proto_callback_arg(args, "Array.find callback must be callable");
     tsc_value_t callback_this = array_proto_callback_this(args);
-    tsc_array_t* a = tsc_value_as_array(this_arg);
-    for (size_t i = 0; i < a->len; i++) {
-        tsc_value_t value = TSC_ARR(tsc_value_t, a, i);
+    size_t len = array_proto_length(this_arg);
+    for (size_t i = 0; i < len; i++) {
+        tsc_value_t value = array_proto_get_index(this_arg, i);
         if (tsc_value_is_truthy(array_proto_apply_callback(callback, callback_this, value, i, this_arg))) {
             return value;
         }
@@ -357,11 +395,12 @@ static tsc_value_t array_prototype_find(void* env, tsc_value_t this_arg, tsc_arr
 
 static tsc_value_t array_prototype_find_index(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
+    array_prototype_require_receiver(this_arg, "findIndex");
     tsc_value_t callback = array_proto_callback_arg(args, "Array.findIndex callback must be callable");
     tsc_value_t callback_this = array_proto_callback_this(args);
-    tsc_array_t* a = tsc_value_as_array(this_arg);
-    for (size_t i = 0; i < a->len; i++) {
-        if (tsc_value_is_truthy(array_proto_apply_callback(callback, callback_this, TSC_ARR(tsc_value_t, a, i), i, this_arg))) {
+    size_t len = array_proto_length(this_arg);
+    for (size_t i = 0; i < len; i++) {
+        if (tsc_value_is_truthy(array_proto_apply_callback(callback, callback_this, array_proto_get_index(this_arg, i), i, this_arg))) {
             return tsc_value_num((double)i);
         }
     }
@@ -370,11 +409,12 @@ static tsc_value_t array_prototype_find_index(void* env, tsc_value_t this_arg, t
 
 static tsc_value_t array_prototype_find_last(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
+    array_prototype_require_receiver(this_arg, "findLast");
     tsc_value_t callback = array_proto_callback_arg(args, "Array.findLast callback must be callable");
     tsc_value_t callback_this = array_proto_callback_this(args);
-    tsc_array_t* a = tsc_value_as_array(this_arg);
-    for (size_t i = a->len; i-- > 0;) {
-        tsc_value_t value = TSC_ARR(tsc_value_t, a, i);
+    size_t len = array_proto_length(this_arg);
+    for (size_t i = len; i-- > 0;) {
+        tsc_value_t value = array_proto_get_index(this_arg, i);
         if (tsc_value_is_truthy(array_proto_apply_callback(callback, callback_this, value, i, this_arg))) {
             return value;
         }
@@ -384,11 +424,12 @@ static tsc_value_t array_prototype_find_last(void* env, tsc_value_t this_arg, ts
 
 static tsc_value_t array_prototype_find_last_index(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
+    array_prototype_require_receiver(this_arg, "findLastIndex");
     tsc_value_t callback = array_proto_callback_arg(args, "Array.findLastIndex callback must be callable");
     tsc_value_t callback_this = array_proto_callback_this(args);
-    tsc_array_t* a = tsc_value_as_array(this_arg);
-    for (size_t i = a->len; i-- > 0;) {
-        if (tsc_value_is_truthy(array_proto_apply_callback(callback, callback_this, TSC_ARR(tsc_value_t, a, i), i, this_arg))) {
+    size_t len = array_proto_length(this_arg);
+    for (size_t i = len; i-- > 0;) {
+        if (tsc_value_is_truthy(array_proto_apply_callback(callback, callback_this, array_proto_get_index(this_arg, i), i, this_arg))) {
             return tsc_value_num((double)i);
         }
     }
@@ -397,19 +438,27 @@ static tsc_value_t array_prototype_find_last_index(void* env, tsc_value_t this_a
 
 static tsc_value_t array_prototype_reduce(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
+    array_prototype_require_receiver(this_arg, "reduce");
     tsc_value_t callback = array_proto_callback_arg(args, "Array.reduce callback must be callable");
-    tsc_array_t* a = tsc_value_as_array(this_arg);
+    size_t len = array_proto_length(this_arg);
     tsc_value_t acc;
     size_t start = 0;
     if (args && args->len > 1) {
         acc = TSC_ARR(tsc_value_t, args, 1);
     } else {
-        if (a->len == 0) tsc_panic("Array.reduce: empty array with no initial value");
-        acc = TSC_ARR(tsc_value_t, a, 0);
-        start = 1;
+        bool found = false;
+        for (; start < len; start++) {
+            if (!array_proto_has_index(this_arg, start)) continue;
+            acc = array_proto_get_index(this_arg, start);
+            start++;
+            found = true;
+            break;
+        }
+        if (!found) tsc_panic("Array.reduce: empty array with no initial value");
     }
-    for (size_t i = start; i < a->len; i++) {
-        tsc_value_t value = TSC_ARR(tsc_value_t, a, i);
+    for (size_t i = start; i < len; i++) {
+        if (!array_proto_has_index(this_arg, i)) continue;
+        tsc_value_t value = array_proto_get_index(this_arg, i);
         acc = tsc_value_apply_function(
             callback,
             tsc_value_undefined(),
@@ -421,19 +470,26 @@ static tsc_value_t array_prototype_reduce(void* env, tsc_value_t this_arg, tsc_a
 
 static tsc_value_t array_prototype_reduce_right(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
+    array_prototype_require_receiver(this_arg, "reduceRight");
     tsc_value_t callback = array_proto_callback_arg(args, "Array.reduceRight callback must be callable");
-    tsc_array_t* a = tsc_value_as_array(this_arg);
+    size_t len = array_proto_length(this_arg);
     tsc_value_t acc;
-    size_t i = a->len;
+    size_t i = len;
     if (args && args->len > 1) {
         acc = TSC_ARR(tsc_value_t, args, 1);
     } else {
-        if (a->len == 0) tsc_panic("Array.reduceRight: empty array with no initial value");
-        acc = TSC_ARR(tsc_value_t, a, a->len - 1);
-        i = a->len - 1;
+        bool found = false;
+        while (i-- > 0) {
+            if (!array_proto_has_index(this_arg, i)) continue;
+            acc = array_proto_get_index(this_arg, i);
+            found = true;
+            break;
+        }
+        if (!found) tsc_panic("Array.reduceRight: empty array with no initial value");
     }
     while (i-- > 0) {
-        tsc_value_t value = TSC_ARR(tsc_value_t, a, i);
+        if (!array_proto_has_index(this_arg, i)) continue;
+        tsc_value_t value = array_proto_get_index(this_arg, i);
         acc = tsc_value_apply_function(
             callback,
             tsc_value_undefined(),

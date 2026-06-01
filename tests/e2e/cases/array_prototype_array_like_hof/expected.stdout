@@ -1,0 +1,11 @@
+forEach: 0a2c
+map: 0a!||2c! 3
+flatMap: p|0|r|2
+filter: p|r
+some/every: true true
+find: undefined
+findIndex: 2
+findLast: q
+findLastIndex: 1
+reduce: 0p1q2r
+reduceRight: 2r1q0p
