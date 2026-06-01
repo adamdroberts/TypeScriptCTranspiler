@@ -1232,6 +1232,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-runtime-typeof-default-package": cjsPackage("tsc2c-cjs-runtime-typeof-default-package", {
         "index.js": 'const maybeObject = { label: "typeof-default" };\nmodule.exports = typeof maybeObject;\n',
     }),
+    "tsc2c-cjs-runtime-void-default-package": cjsPackage("tsc2c-cjs-runtime-void-default-package", {
+        "index.js": 'console.log("void-default-init");\nmodule.exports = void "void-default";\n',
+    }),
     "tsc2c-cjs-object-from-entries-object-entries-named-package": cjsPackage("tsc2c-cjs-object-from-entries-object-entries-named-package", {
         "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "from-entries-object-default",\n  label: local.label,\n  count: 95,\n  enabled: true\n};\nmodule.exports = Object.fromEntries(Object.entries(api));\n',
         "local.js": 'exports.label = "from-entries-object-named";\n',

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS whole-value `module.exports = void ...` defaults now lower through the AOT package-source path as boxed `undefined` values instead of leaking C `void` storage into require reads. Test: `node_modules_commonjs_module_exports_void_default`.
 - CommonJS whole-value `module.exports = typeof ...` defaults now lower through the AOT package-source path instead of being rejected as unsupported runtime-computed defaults. Test: `node_modules_commonjs_module_exports_typeof_default`.
 - Generated-C DCE now prunes unused pure `URLSearchParams` constructors with no arguments, explicit `undefined`, or side-effect-free string inputs. Test: `generated_c_dce_url_search_params`.
 - CommonJS package finite require detection now unwraps TypeScript-only `as`, angle-bracket, `satisfies`, and non-null assertion wrappers around `require` / `module.require` callees, aliases, and static bind/call/apply forms. Test: `node_modules_commonjs_require_assertion_wrappers`.
