@@ -2780,6 +2780,20 @@ tsc_str_t* tsc_value_method_to_locale_string(tsc_value_t recv) {
     return tsc_value_to_string(recv);
 }
 
+tsc_value_t tsc_value_method_value_of(tsc_value_t recv) {
+    if (value_is_box(recv)) {
+        uint8_t tag = value_tag(recv);
+        if (tag == TSC_VALUE_TAG_ARRAY || tag == TSC_VALUE_TAG_OBJECT || tag == TSC_VALUE_TAG_FUNCTION) {
+            tsc_value_t fn = tsc_value_get_prop(recv, tsc_str_from_lit("valueOf", 7));
+            if (tsc_value_is_callable(fn)) {
+                tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
+                return tsc_value_apply_function(fn, recv, tsc_value_array(args));
+            }
+        }
+    }
+    return recv;
+}
+
 tsc_str_t* tsc_value_method_to_fixed(tsc_value_t recv, tsc_value_t fraction_digits) {
     if (value_is_box(recv)) tsc_throw_str(tsc_str_from_cstr("Number.toFixed: receiver must be a number"));
     double digits = tsc_value_is_nullish(fraction_digits) ? 0.0 : tsc_value_as_num(fraction_digits);

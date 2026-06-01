@@ -34442,7 +34442,7 @@ class Emitter {
                         { value: recv, target: T_VALUE, node: call.expression },
                         ...this.ignoredArgumentSpecs(args, 0),
                     ],
-                    ([target]) => target!,
+                    ([target]) => `tsc_value_method_value_of(${target})`,
                 );
         }
         const specs: SequencedCallArg[] = [

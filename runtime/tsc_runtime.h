@@ -853,6 +853,7 @@ tsc_value_t tsc_value_method_starts_with(tsc_value_t recv, tsc_value_t needle, t
 tsc_value_t tsc_value_method_ends_with(tsc_value_t recv, tsc_value_t needle, tsc_value_t end_position);
 tsc_str_t* tsc_value_method_to_string(tsc_value_t recv, tsc_value_t radix);
 tsc_str_t* tsc_value_method_to_locale_string(tsc_value_t recv);
+tsc_value_t tsc_value_method_value_of(tsc_value_t recv);
 tsc_str_t* tsc_value_method_to_fixed(tsc_value_t recv, tsc_value_t fraction_digits);
 tsc_str_t* tsc_value_method_to_exponential(tsc_value_t recv, tsc_value_t fraction_digits);
 tsc_str_t* tsc_value_method_to_precision(tsc_value_t recv, tsc_value_t precision);

@@ -6,7 +6,8 @@ entries: foo=mark join function
 string: custom:mark custom:mark
 own string: own:mark own:mark
 locale: locale:mark locale:mark
+value: value:mark value:mark
 delete: true false undefined
 hidden: secret false false false false
-names2: 0|1|length|join|toString|toLocaleString|hidden
+names2: 0|1|length|join|toString|toLocaleString|valueOf|hidden
 extensible: false false false
