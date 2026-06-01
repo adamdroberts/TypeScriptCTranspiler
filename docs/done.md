@@ -1109,7 +1109,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_throw_rejection` | synchronous throws in immediate async functions become rejected Promise records |
 | `array_concat_values` | Array.concat with array, single-value, and spread-in-array-literal arguments |
 | `array_copy_within` | Array.copyWithin overlapping copy |
-| `array_entries` | Array.entries materialized `[string, value]` arrays |
+| `array_entries` | Array.entries materialized `[number, value]` arrays |
 | `array_fill` | Array.fill range mutation |
 | `array_flat` | flat + flatMap on homogeneous typed arrays, including scalar flatMap results |
 | `array_from_map` | Array.from over typed Map<K, V> sources with and without mapper callbacks |
@@ -2179,10 +2179,10 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_array_at` | dynamic Array.at positive and negative index lookup |
 | `dynamic_array_copy_within` | dynamic Array.copyWithin overlapping copy |
 | `dynamic_array_define_property` | dynamic array Object/Reflect defineProperty for dense indexes and length |
-| `dynamic_array_entries` | dynamic Array.entries materialized `[string, value]` arrays |
+| `dynamic_array_entries` | dynamic Array.entries materialized `[number, value]` arrays |
 | `dynamic_array_extensibility` | dynamic array Object/Reflect extensibility, seal, freeze, compatible frozen descriptor redefinition, and mutator state |
 | `dynamic_array_fill` | dynamic Array.fill range mutation |
-| `dynamic_array_flat` | dynamic Array.flat depth behavior |
+| `dynamic_array_flat` | dynamic Array.flat depth behavior, including safe infinite depth handling |
 | `dynamic_array_flatmap` | dynamic Array.flatMap with inline callbacks |
 | `dynamic_array_find_last` | dynamic Array.findLast and findLastIndex with inline callbacks |
 | `dynamic_for_of` | for-of over dynamic array and string values |

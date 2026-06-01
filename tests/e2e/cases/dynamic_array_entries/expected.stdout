@@ -1,5 +1,6 @@
 entry0: 0 red
 entry2: 2 green
+key type: number
 copy: cyan
 source: blue
 ignored: e
