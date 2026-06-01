@@ -489,6 +489,46 @@ class Emitter {
                     return;
                 }
             }
+            if (ts.isConditionalExpression(node)) {
+                const staticCondition = this.staticBooleanValue(node.condition);
+                if (staticCondition === true) {
+                    visit(node.whenTrue);
+                    return;
+                }
+                if (staticCondition === false) {
+                    visit(node.whenFalse);
+                    return;
+                }
+            }
+            if (ts.isBinaryExpression(node)) {
+                const op = node.operatorToken.kind;
+                if (
+                    op === ts.SyntaxKind.AmpersandAmpersandToken &&
+                    this.staticBooleanValue(node.left) === false
+                ) {
+                    visit(node.left);
+                    return;
+                }
+                if (
+                    op === ts.SyntaxKind.BarBarToken &&
+                    this.staticBooleanValue(node.left) === true
+                ) {
+                    visit(node.left);
+                    return;
+                }
+                if (op === ts.SyntaxKind.QuestionQuestionToken) {
+                    const leftNullish = this.staticNullishState(node.left);
+                    if (leftNullish === "nullish") {
+                        visit(node.left);
+                        visit(node.right);
+                        return;
+                    }
+                    if (leftNullish === "nonNullish") {
+                        visit(node.left);
+                        return;
+                    }
+                }
+            }
             if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node)) {
                 const sym = this.symbolForIdentifier(node);
                 const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
