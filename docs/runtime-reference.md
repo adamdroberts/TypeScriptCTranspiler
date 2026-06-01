@@ -571,6 +571,7 @@ The embedded Node bridge is linked only when `--unsafe-eval` or manifest-allowed
 |--------|-----------|---------|
 | `tsc_node_eval` | `(tsc_str_t*) -> tsc_value_t` | Dynamic `eval(...)` execution through V8, gated by `TSC_UNSAFE_EVAL`. |
 | `tsc_node_function` | `(tsc_str_t*) -> tsc_value_t` | Dynamic `Function(...)` body compilation through V8, gated by `TSC_UNSAFE_EVAL`. |
+| `tsc_node_native_addon` | `(tsc_str_t*) -> tsc_value_t` | Manifest-backed native addon load through the embedded Node `require` hook. Does not require `TSC_UNSAFE_EVAL`. |
 | `tsc_builtin_eval` | `(void*, tsc_value_t, tsc_array_t*) -> tsc_value_t` | Generic function wrapper for first-class global `eval` references. |
 | `tsc_builtin_function` | `(void*, tsc_value_t, tsc_array_t*) -> tsc_value_t` | Generic function wrapper for first-class global `Function` references. |
 
