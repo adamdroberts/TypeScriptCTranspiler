@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `dns.lookup(...)` and `dns.promises.lookup(...)` now forward literal `order` / `verbatim` options into runtime address ordering, falling back to the process-local default result order when omitted. Test: `dns_lookup_hints`.
 - Proxy `getOwnPropertyDescriptor` trap result validation now reads inherited descriptor fields through normal property lookup, matching `ToPropertyDescriptor` semantics for descriptor objects. Test: `proxy_descriptor_invariants`.
 - Lazy generator lowering now accepts `throw` statements whose thrown expressions do not contain suspension points, closing the lazy generator state before propagating the exception. Test: `generator_lazy_throw`.
 - CommonJS object-literal `module.exports` defaults now accept bounded runtime-computed property and array element initializers while preserving finite AOT named-export metadata. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
