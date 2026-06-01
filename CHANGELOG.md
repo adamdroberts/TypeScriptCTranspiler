@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Function-target Proxy invariants now account for ordinary function own properties when validating `get`, `set`, `defineProperty`, `getOwnPropertyDescriptor`, `has`, `deleteProperty`, and `ownKeys` trap results. Test: `proxy_function_own_property_invariants`.
 - Dynamic function values now preserve ordinary own string-key properties alongside `length`, `name`, and `prototype`, including assignment, deletion, Object/Reflect own-key helpers, descriptors, extensibility/seal/freeze, and `Object.assign` targets. Test: `dynamic_function_own_properties`.
 - Direct dynamic function `.toString()` and `.toLocaleString()` calls now dispatch through inherited method lookup like `.valueOf()`, including non-callable method validation. Test: `object_prototype_inherited_methods`.
 - Dynamic `Array.prototype.toLocaleString` now stringifies elements through each element's own/inherited `toLocaleString` method, preserving empty fields for `null` / `undefined` and rejecting non-callable element methods. Test: `dynamic_array_to_string`.
