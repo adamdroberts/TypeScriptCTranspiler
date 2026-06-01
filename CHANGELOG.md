@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Generated-C DCE now removes unreferenced top-level and local variable bindings with side-effectful initializers while preserving those initializer side effects as standalone expressions. Test: `generated_c_dce`.
 - `dns.lookup(...)` and `dns.promises.lookup(...)` now forward literal `order` / `verbatim` options into runtime address ordering, falling back to the process-local default result order when omitted. Test: `dns_lookup_hints`.
 - Proxy `getOwnPropertyDescriptor` trap result validation now reads inherited descriptor fields through normal property lookup, matching `ToPropertyDescriptor` semantics for descriptor objects. Test: `proxy_descriptor_invariants`.
 - Lazy generator lowering now accepts `throw` statements whose thrown expressions do not contain suspension points, closing the lazy generator state before propagating the exception. Test: `generator_lazy_throw`.

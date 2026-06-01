@@ -19,4 +19,19 @@ function dead_parent(value: number): number {
     return dead_leaf(value);
 }
 
+function mark(label: string): number {
+    console.log("effect:", label);
+    return label.length;
+}
+
+const unused_top_effect = mark("top");
+let unused_top_let_effect = mark("top-let");
+
+function localEffects(): number {
+    const unused_local_effect = mark("local");
+    let unused_local_let_effect = mark("local-let");
+    return 11;
+}
+
 console.log(used(4));
+console.log(localEffects());
