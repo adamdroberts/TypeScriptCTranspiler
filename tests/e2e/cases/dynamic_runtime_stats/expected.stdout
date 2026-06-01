@@ -10,6 +10,10 @@ reflect set: true
 reflect set: true
 receiver set: true 0
 receiver set: true 1
+has cached: true
+has cached: true
+reflect has cached: true
+reflect has cached: true
 has: true
 deleted: false
 cached: 1

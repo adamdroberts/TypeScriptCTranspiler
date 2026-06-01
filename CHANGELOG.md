@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic `in` checks and dynamic `Reflect.has(...)` calls over boxed object values now emit per-site shape-validated property-cache lookups, extending the existing dynamic property cache to presence checks. Tests: `dynamic_runtime_stats`, `dynamic_polymorphic_cache`.
 - Used `ArrayBuffer` and `DataView` values now lower to native runtime records with constructor validation plus `byteLength`, `byteOffset`, and `buffer` property reads. Test: `array_buffer_dataview`.
 - Direct static `Reflect.*(...)` calls with omitted required operands now route through the runtime Reflect method wrappers, so they get normal `undefined` defaulting and catchable runtime validation instead of emitter arity failures. Test: `reflect_static_missing_arguments`.
 - First-class `Reflect.get`, `Reflect.set`, `Reflect.has`, `Reflect.deleteProperty`, `Reflect.getOwnPropertyDescriptor`, `Reflect.defineProperty`, and `Reflect.setPrototypeOf` method calls now route omitted property/prototype/descriptor arguments through normal runtime `undefined` validation and conversion. Test: `reflect_property_method_missing_arguments`.
