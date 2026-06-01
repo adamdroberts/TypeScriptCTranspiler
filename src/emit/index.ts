@@ -13784,6 +13784,34 @@ class Emitter {
                 return Math.clz32(arg);
             }
         }
+        if (method === "pow") {
+            if (expr.arguments.length < 2) return null;
+            const base = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
+            if (base === null) return null;
+            const exponent = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[1]!, seenConsts);
+            if (exponent === null) return null;
+            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 2, seenConsts)) {
+                return Math.pow(base, exponent);
+            }
+        }
+        if (method === "fround") {
+            if (expr.arguments.length < 1) return null;
+            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
+            if (arg === null) return null;
+            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
+                return Math.fround(arg);
+            }
+        }
+        if (method === "imul") {
+            if (expr.arguments.length < 2) return null;
+            const left = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
+            if (left === null) return null;
+            const right = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[1]!, seenConsts);
+            if (right === null) return null;
+            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 2, seenConsts)) {
+                return Math.imul(left, right);
+            }
+        }
         return null;
     }
 

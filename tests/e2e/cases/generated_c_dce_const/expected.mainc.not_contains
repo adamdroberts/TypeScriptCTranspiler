@@ -6132,6 +6132,10 @@ dead_math_round_branch
 dead_math_sqrt_branch
 dead_math_cbrt_branch
 dead_math_clz32_branch
+dead_math_pow_branch
+dead_math_fround_branch
+dead_math_imul_branch
+dead_math_pow_ignored_args
 dead_while_infinite_after_exit
 while_infinite_after_exit
 dead_for_infinite_after_exit

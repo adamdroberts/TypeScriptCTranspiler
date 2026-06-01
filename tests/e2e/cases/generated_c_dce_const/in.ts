@@ -5504,11 +5504,16 @@ function mathStaticFoldingDce(): string {
     const math_sqrt_dead = Math.sqrt(16) === 4 ? "kept_math_sqrt_branch" : (console.log("dead_math_sqrt_branch"), "dead_math_sqrt_branch");
     const math_cbrt_dead = Math.cbrt(27) === 3 ? "kept_math_cbrt_branch" : (console.log("dead_math_cbrt_branch"), "dead_math_cbrt_branch");
     const math_clz32_dead = Math.clz32(1) === 31 ? "kept_math_clz32_branch" : (console.log("dead_math_clz32_branch"), "dead_math_clz32_branch");
+    const math_pow_dead = Math.pow(2, 5) === 32 ? "kept_math_pow_branch" : (console.log("dead_math_pow_branch"), "dead_math_pow_branch");
+    const math_fround_dead = Math.fround(1.5) === 1.5 ? "kept_math_fround_branch" : (console.log("dead_math_fround_branch"), "dead_math_fround_branch");
+    const math_imul_dead = Math.imul(7, 6) === 42 ? "kept_math_imul_branch" : (console.log("dead_math_imul_branch"), "dead_math_imul_branch");
+    const math_pow_ignored_args = Math.pow(3, 4, "ignored_arg" as any) === 81 ? "kept_math_pow_ignored_args" : (console.log("dead_math_pow_ignored_args"), "dead_math_pow_ignored_args");
 
     return math_abs_dead + " " + math_floor_dead + " " + math_ceil_dead + " " + math_trunc_dead + " " + math_min_dead + " " + math_max_dead + " " + math_abs_ignored_args + " " +
         math_sign_pos_dead + " " + math_sign_neg_dead + " " + math_sign_ignored_args + " " +
         math_sign_zero_dynamic + " " + math_sign_nan_dynamic + " " + math_sign_inf_dynamic + " " + math_sign_dynamic + " " +
-        math_round_dead + " " + math_sqrt_dead + " " + math_cbrt_dead + " " + math_clz32_dead;
+        math_round_dead + " " + math_sqrt_dead + " " + math_cbrt_dead + " " + math_clz32_dead + " " +
+        math_pow_dead + " " + math_fround_dead + " " + math_imul_dead + " " + math_pow_ignored_args;
 }
 
 
