@@ -34433,7 +34433,7 @@ class Emitter {
                         { value: recv, target: T_VALUE, node: call.expression },
                         ...this.ignoredArgumentSpecs(args, 0),
                     ],
-                    ([v]) => `tsc_value_to_string(${v})`,
+                    ([v]) => `tsc_value_method_to_locale_string(${v})`,
                 );
             case "valueOf":
                 return this.emitSequencedExpr(
