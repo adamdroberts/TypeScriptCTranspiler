@@ -348,13 +348,14 @@ export function isCommonJsRequireCallee(
     requireAliases: Set<string>,
     moduleAliases: Set<string> = new Set(),
 ): boolean {
-    if (isCommonJsModuleRequireBindExpression(expr, requireAliases, moduleAliases)) return true;
-    return (ts.isIdentifier(expr) && (expr.text === "require" || requireAliases.has(expr.text))) ||
+    const unwrapped = unwrapStaticExpression(expr);
+    if (isCommonJsModuleRequireBindExpression(unwrapped, requireAliases, moduleAliases)) return true;
+    return (ts.isIdentifier(unwrapped) && (unwrapped.text === "require" || requireAliases.has(unwrapped.text))) ||
         (
-            ts.isPropertyAccessExpression(expr) &&
-            expr.name.text === "require" &&
-            ts.isIdentifier(expr.expression) &&
-            (expr.expression.text === "module" || moduleAliases.has(expr.expression.text))
+            ts.isPropertyAccessExpression(unwrapped) &&
+            unwrapped.name.text === "require" &&
+            ts.isIdentifier(unwrapped.expression) &&
+            (unwrapped.expression.text === "module" || moduleAliases.has(unwrapped.expression.text))
         );
 }
 
@@ -363,13 +364,11 @@ function isCommonJsModuleRequireBindExpression(
     requireAliases: Set<string>,
     moduleAliases: Set<string>,
 ): boolean {
-    let unwrapped: ts.Expression = expr;
-    while (ts.isParenthesizedExpression(unwrapped)) unwrapped = unwrapped.expression;
+    const unwrapped = unwrapStaticExpression(expr);
     if (!ts.isCallExpression(unwrapped) || unwrapped.arguments.length < 1) return false;
     const callee = unwrapped.expression;
     if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "bind") return false;
-    let target: ts.Expression = callee.expression;
-    while (ts.isParenthesizedExpression(target)) target = target.expression;
+    const target = unwrapStaticExpression(callee.expression);
     if (ts.isIdentifier(target)) {
         if (target.text !== "require" && !requireAliases.has(target.text)) return false;
     } else {
@@ -382,8 +381,7 @@ function isCommonJsModuleRequireBindExpression(
             return false;
         }
     }
-    let thisArg: ts.Expression = unwrapped.arguments[0]!;
-    while (ts.isParenthesizedExpression(thisArg)) thisArg = thisArg.expression;
+    const thisArg = unwrapStaticExpression(unwrapped.arguments[0]!);
     return ts.isIdentifier(thisArg) && (thisArg.text === "module" || moduleAliases.has(thisArg.text));
 }
 
@@ -650,6 +648,7 @@ function unwrapStaticExpression(expr: ts.Expression): ts.Expression {
         ts.isParenthesizedExpression(expr) ||
         ts.isAsExpression(expr) ||
         ts.isTypeAssertionExpression(expr) ||
+        ts.isNonNullExpression(expr) ||
         ts.isSatisfiesExpression(expr)
     ) {
         expr = expr.expression;

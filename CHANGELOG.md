@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS package finite require detection now unwraps TypeScript-only `as`, angle-bracket, `satisfies`, and non-null assertion wrappers around `require` / `module.require` callees, aliases, and static bind/call/apply forms. Test: `node_modules_commonjs_require_assertion_wrappers`.
 - `Array.prototype.flat` is now available through the shared dynamic Array prototype and operates on dynamic array-like object receivers, including inherited numeric slots and skipped holes. Test: `array_prototype_array_like_flat`.
 - Detached `Array.prototype.sort` now mutates dynamic array-like object receivers with default string ordering, including inherited numeric slots and deletion of trailing absent slots. Test: `array_prototype_array_like_sort`.
 - Detached `Array.prototype` copy-returning methods now operate on dynamic array-like object receivers for `toSorted`, `with`, and `toSpliced`, producing dense copied arrays without mutating the receiver. Test: `array_prototype_array_like_copy_more`.
