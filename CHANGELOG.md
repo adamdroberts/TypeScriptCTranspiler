@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Dynamic function values now support own accessor descriptors through `Object.defineProperty`, `Reflect.defineProperty`, and legacy accessor helpers, including receiver-aware getter/setter calls and descriptor identities. Test: `dynamic_function_accessor_properties`.
 - Function-target Proxy invariants now account for ordinary function own properties when validating `get`, `set`, `defineProperty`, `getOwnPropertyDescriptor`, `has`, `deleteProperty`, and `ownKeys` trap results. Test: `proxy_function_own_property_invariants`.
 - Dynamic function values now preserve ordinary own string-key properties alongside `length`, `name`, and `prototype`, including assignment, deletion, Object/Reflect own-key helpers, descriptors, extensibility/seal/freeze, and `Object.assign` targets. Test: `dynamic_function_own_properties`.
 - Direct dynamic function `.toString()` and `.toLocaleString()` calls now dispatch through inherited method lookup like `.valueOf()`, including non-callable method validation. Test: `object_prototype_inherited_methods`.
