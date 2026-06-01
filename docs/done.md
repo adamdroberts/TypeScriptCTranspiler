@@ -779,6 +779,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Generated-C DCE treats descriptor-result property reads over pure fresh Error-family own data properties as side-effect-free. Test: `generated_c_dce_const`
 - Generated-C DCE carries exact Error-family own-key length proofs for Object/Reflect helper results over pure fresh Error instances. Test: `generated_c_dce_const`
 - Generated-C DCE carries exact own-key length proofs for Object/Reflect helper results over pure fresh built-in instances, including empty-key `ArrayBuffer` / `DataView`, Date/Event-style objects, and RegExp `lastIndex` metadata. Test: `generated_c_dce_const`
+- Generated-C DCE prunes unused pure `URLSearchParams` constructors with no arguments, explicit `undefined`, or side-effect-free string inputs. Test: `generated_c_dce_url_search_params`
 - Generated-C DCE prunes unused pure `ArrayBuffer` allocations with statically safe nonnegative integer lengths. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused pure `DataView` allocations over fresh bounded `ArrayBuffer` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused `Object.freeze(...)`, `Object.seal(...)`, `Object.preventExtensions(...)`, and `Reflect.preventExtensions(...)` calls over pure fresh built-in object instances. Test: `generated_c_dce_const`
@@ -1680,6 +1681,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generated_c_dce` | unreferenced non-exported top-level functions are omitted from generated C |
 | `generated_c_dce_class` | unreferenced no-side-effect class declarations and class-expression constants are omitted from generated C |
 | `generated_c_dce_const` | generated-C DCE prunes broad pure static expression, helper, Promise, collection, and object-operation trees |
+| `generated_c_dce_url_search_params` | generated-C DCE prunes unused pure URLSearchParams constructors with no args, explicit undefined, or side-effect-free string inputs |
 | `generated_c_dce_static_builtins` | generated-C DCE prunes unused safe Symbol helpers, object prototype checks, wrapper constructors, and static built-in predicate calls |
 | `generated_c_dce_lifted_arrow` | unreferenced non-exported lifted top-level arrow constants are omitted from generated C |
 | `global_number_predicates` | global isNaN/isFinite coercion for typed and dynamic values |
