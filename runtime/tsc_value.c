@@ -674,8 +674,14 @@ typedef struct tsc_parsed_property_descriptor {
     bool has_configurable;
 } tsc_parsed_property_descriptor_t;
 
+static bool value_is_property_descriptor_object(tsc_value_t v) {
+    if (!value_is_box(v)) return false;
+    tsc_value_tag_t tag = value_tag(v);
+    return tag == TSC_VALUE_TAG_OBJECT || tag == TSC_VALUE_TAG_ARRAY || tag == TSC_VALUE_TAG_FUNCTION;
+}
+
 static tsc_parsed_property_descriptor_t parse_property_descriptor(tsc_value_t desc) {
-    if (!value_is_box(desc) || value_tag(desc) != TSC_VALUE_TAG_OBJECT) {
+    if (!value_is_property_descriptor_object(desc)) {
         tsc_throw_str(tsc_str_from_cstr("Object.defineProperty descriptor must be an object"));
     }
     tsc_value_t value = tsc_value_undefined();
@@ -766,7 +772,7 @@ bool tsc_value_define_property_descriptor(tsc_value_t v, tsc_str_t* key, tsc_val
 }
 
 bool tsc_value_define_properties_descriptor_map(tsc_value_t v, tsc_value_t descriptors) {
-    if (!value_is_box(descriptors) || value_tag(descriptors) != TSC_VALUE_TAG_OBJECT) {
+    if (!value_is_property_descriptor_object(descriptors)) {
         tsc_throw_str(tsc_str_from_cstr("Object.defineProperties descriptor map must be an object"));
     }
     tsc_array_t* keys = tsc_value_object_keys(descriptors);
