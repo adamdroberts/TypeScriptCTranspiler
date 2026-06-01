@@ -163,8 +163,14 @@ function staticRequireSpecifiers(
     fileName: string,
 ): string[] {
     const specs: string[] = [];
-    const visit = (node: ts.Node): void => {
-        const nodeSpecs = ts.isExpression(node) ? requireCallSpecifiers(node, requireAliases, moduleAliases) : null;
+    const visit = (
+        node: ts.Node,
+        activeRequireAliases: Set<string>,
+        activeModuleAliases: Set<string>,
+    ): void => {
+        const nodeSpecs = ts.isExpression(node)
+            ? requireCallSpecifiers(node, activeRequireAliases, activeModuleAliases)
+            : null;
         if (nodeSpecs) {
             if (nodeSpecs.length > 0) {
                 specs.push(...nodeSpecs);
@@ -172,10 +178,128 @@ function staticRequireSpecifiers(
                 specs.push(...dynamicRequireSpecifiersForFile(dynamicRequires, fileName));
             }
         }
+        if (ts.isCallExpression(node)) {
+            const factoryScoped = commonJsFactoryWrapperScopedAliases(node, activeRequireAliases, activeModuleAliases);
+            if (factoryScoped) {
+                for (const arg of node.arguments) {
+                    if (arg !== factoryScoped.factoryArgument) visit(arg, activeRequireAliases, activeModuleAliases);
+                }
+                if (ts.isBlock(factoryScoped.fn.body)) {
+                    for (const child of factoryScoped.fn.body.statements) {
+                        visit(child, factoryScoped.requireAliases, factoryScoped.moduleAliases);
+                    }
+                } else {
+                    visit(factoryScoped.fn.body, factoryScoped.requireAliases, factoryScoped.moduleAliases);
+                }
+                return;
+            }
+            const scoped = commonJsIifeScopedAliases(node, activeRequireAliases, activeModuleAliases);
+            if (scoped) {
+                for (const arg of node.arguments) visit(arg, activeRequireAliases, activeModuleAliases);
+                if (ts.isBlock(scoped.fn.body)) {
+                    for (const child of scoped.fn.body.statements) {
+                        visit(child, scoped.requireAliases, scoped.moduleAliases);
+                    }
+                } else {
+                    visit(scoped.fn.body, scoped.requireAliases, scoped.moduleAliases);
+                }
+                return;
+            }
+        }
+        ts.forEachChild(node, (child) => visit(child, activeRequireAliases, activeModuleAliases));
+    };
+    visit(stmt, requireAliases, moduleAliases);
+    return specs;
+}
+
+function commonJsFactoryWrapperScopedAliases(
+    call: ts.CallExpression,
+    requireAliases: Set<string>,
+    moduleAliases: Set<string>,
+): {
+    fn: ts.FunctionExpression | ts.ArrowFunction;
+    factoryArgument: ts.Expression;
+    requireAliases: Set<string>;
+    moduleAliases: Set<string>;
+} | null {
+    const wrapper = commonJsFactoryWrapperInvocation(call);
+    if (!wrapper || wrapper.args.length < wrapper.fn.parameters.length) return null;
+    let nextRequireAliases: Set<string> | null = null;
+    let nextModuleAliases: Set<string> | null = null;
+    for (let index = 0; index < wrapper.fn.parameters.length; index++) {
+        const param = wrapper.fn.parameters[index]!;
+        if (!ts.isIdentifier(param.name)) continue;
+        const arg = wrapper.args[index]!;
+        if (isCommonJsRequireCallee(arg, requireAliases, moduleAliases)) {
+            nextRequireAliases ??= new Set(requireAliases);
+            nextRequireAliases.add(param.name.text);
+            continue;
+        }
+        if (commonJsModuleArgument(arg, moduleAliases)) {
+            nextModuleAliases ??= new Set(moduleAliases);
+            nextModuleAliases.add(param.name.text);
+        }
+    }
+    if (!nextRequireAliases && !nextModuleAliases) return null;
+    return {
+        fn: wrapper.fn,
+        factoryArgument: wrapper.factoryArgument,
+        requireAliases: nextRequireAliases ?? requireAliases,
+        moduleAliases: nextModuleAliases ?? moduleAliases,
+    };
+}
+
+function commonJsFactoryWrapperInvocation(call: ts.CallExpression): {
+    fn: ts.FunctionExpression | ts.ArrowFunction;
+    factoryArgument: ts.Expression;
+    args: ts.NodeArray<ts.Expression>;
+} | null {
+    const outer = commonJsIifeCallee(call.expression);
+    if (!outer || !ts.isBlock(outer.body) || call.arguments.length < outer.parameters.length) return null;
+    const factories = new Map<string, { fn: ts.FunctionExpression | ts.ArrowFunction; argument: ts.Expression }>();
+    for (let index = 0; index < outer.parameters.length; index++) {
+        const param = outer.parameters[index]!;
+        if (!ts.isIdentifier(param.name)) continue;
+        let arg: ts.Expression = call.arguments[index]!;
+        while (ts.isParenthesizedExpression(arg)) arg = arg.expression;
+        if (ts.isFunctionExpression(arg) || ts.isArrowFunction(arg)) {
+            factories.set(param.name.text, { fn: arg, argument: call.arguments[index]! });
+        }
+    }
+    if (factories.size === 0) return null;
+    const invocations: {
+        fn: ts.FunctionExpression | ts.ArrowFunction;
+        factoryArgument: ts.Expression;
+        args: ts.NodeArray<ts.Expression>;
+    }[] = [];
+    const visit = (node: ts.Node): void => {
+        if (
+            node !== outer &&
+            (
+                ts.isFunctionExpression(node) ||
+                ts.isFunctionDeclaration(node) ||
+                ts.isArrowFunction(node) ||
+                ts.isMethodDeclaration(node) ||
+                ts.isGetAccessorDeclaration(node) ||
+                ts.isSetAccessorDeclaration(node)
+            )
+        ) {
+            return;
+        }
+        if (ts.isCallExpression(node)) {
+            let callee: ts.Expression = node.expression;
+            while (ts.isParenthesizedExpression(callee)) callee = callee.expression;
+            if (ts.isIdentifier(callee)) {
+                const factory = factories.get(callee.text);
+                if (factory) {
+                    invocations.push({ fn: factory.fn, factoryArgument: factory.argument, args: node.arguments });
+                }
+            }
+        }
         ts.forEachChild(node, visit);
     };
-    visit(stmt);
-    return specs;
+    visit(outer.body);
+    return invocations.length === 1 ? invocations[0]! : null;
 }
 
 function requireCallSpecifier(expr: ts.Expression, requireAliases: Set<string>, moduleAliases: Set<string>): string | null {
@@ -193,6 +317,10 @@ function commonJsModuleAliases(sf: ts.SourceFile): Set<string> {
             let init = node.initializer;
             while (ts.isParenthesizedExpression(init)) init = init.expression;
             if (ts.isIdentifier(init) && init.text === "module") aliases.add(node.name.text);
+        }
+        if (ts.isParameter(node) && ts.isIdentifier(node.name)) {
+            const arg = commonJsIifeParameterArgument(node);
+            if (arg && commonJsModuleArgument(arg, aliases)) aliases.add(node.name.text);
         }
         ts.forEachChild(node, visit);
     };
@@ -218,6 +346,10 @@ function commonJsRequireAliases(sf: ts.SourceFile, moduleAliases: Set<string>): 
                 }
             }
         }
+        if (ts.isParameter(node) && ts.isIdentifier(node.name)) {
+            const arg = commonJsIifeParameterArgument(node);
+            if (arg && isCommonJsRequireCallee(arg, aliases, moduleAliases)) aliases.add(node.name.text);
+        }
         ts.forEachChild(node, visit);
     };
     visit(sf);
@@ -234,6 +366,87 @@ function isCommonJsRequireAliasInitializer(
 
 function isCommonJsModuleAliasInitializer(expr: ts.Expression, moduleAliases: Set<string>): boolean {
     return ts.isIdentifier(expr) && (expr.text === "module" || moduleAliases.has(expr.text));
+}
+
+function commonJsIifeScopedAliases(
+    call: ts.CallExpression,
+    requireAliases: Set<string>,
+    moduleAliases: Set<string>,
+): { fn: ts.FunctionExpression | ts.ArrowFunction; requireAliases: Set<string>; moduleAliases: Set<string> } | null {
+    const fn = commonJsIifeCallee(call.expression);
+    if (!fn || call.arguments.length < fn.parameters.length) return null;
+    let nextRequireAliases: Set<string> | null = null;
+    let nextModuleAliases: Set<string> | null = null;
+    for (let index = 0; index < fn.parameters.length; index++) {
+        const param = fn.parameters[index]!;
+        if (!ts.isIdentifier(param.name)) continue;
+        const arg = call.arguments[index]!;
+        if (isCommonJsRequireCallee(arg, requireAliases, moduleAliases)) {
+            nextRequireAliases ??= new Set(requireAliases);
+            nextRequireAliases.add(param.name.text);
+            continue;
+        }
+        if (commonJsModuleArgument(arg, moduleAliases)) {
+            nextModuleAliases ??= new Set(moduleAliases);
+            nextModuleAliases.add(param.name.text);
+        }
+    }
+    if (!nextRequireAliases && !nextModuleAliases) return null;
+    return {
+        fn,
+        requireAliases: nextRequireAliases ?? requireAliases,
+        moduleAliases: nextModuleAliases ?? moduleAliases,
+    };
+}
+
+function commonJsIifeCallee(expr: ts.Expression): ts.FunctionExpression | ts.ArrowFunction | null {
+    let cur = expr;
+    while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+    return ts.isFunctionExpression(cur) || ts.isArrowFunction(cur) ? cur : null;
+}
+
+function commonJsModuleArgument(expr: ts.Expression, moduleAliases: Set<string>): boolean {
+    let cur = expr;
+    while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+    return ts.isIdentifier(cur) && (cur.text === "module" || moduleAliases.has(cur.text));
+}
+
+function commonJsIifeParameterArgument(param: ts.ParameterDeclaration): ts.Expression | null {
+    if (!ts.isIdentifier(param.name)) return null;
+    const fn = param.parent;
+    if (!ts.isFunctionExpression(fn) && !ts.isArrowFunction(fn)) return null;
+    const index = fn.parameters.indexOf(param);
+    if (index < 0) return null;
+    const call = commonJsIifeCallForFunction(fn);
+    if (call && index < call.arguments.length) return call.arguments[index]!;
+    const wrapper = commonJsFactoryWrapperInvocationForFunction(fn);
+    return wrapper && index < wrapper.args.length ? wrapper.args[index]! : null;
+}
+
+function commonJsIifeCallForFunction(fn: ts.FunctionExpression | ts.ArrowFunction): ts.CallExpression | null {
+    let expr: ts.Expression = fn;
+    let parent: ts.Node | undefined = fn.parent;
+    while (parent && ts.isParenthesizedExpression(parent)) {
+        expr = parent;
+        parent = parent.parent;
+    }
+    return parent && ts.isCallExpression(parent) && parent.expression === expr ? parent : null;
+}
+
+function commonJsFactoryWrapperInvocationForFunction(fn: ts.FunctionExpression | ts.ArrowFunction): {
+    args: ts.NodeArray<ts.Expression>;
+} | null {
+    let cur: ts.Node = fn;
+    while (cur.parent) {
+        const parent = cur.parent;
+        if (ts.isCallExpression(parent)) {
+            const wrapper = commonJsFactoryWrapperInvocation(parent);
+            if (wrapper?.fn === fn) return { args: wrapper.args };
+        }
+        if (ts.isSourceFile(parent)) return null;
+        cur = parent;
+    }
+    return null;
 }
 
 function staticPropertyName(name: ts.PropertyName | ts.BindingName): string | null {

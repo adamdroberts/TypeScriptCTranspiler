@@ -17993,6 +17993,8 @@ class Emitter {
         let expr = stmt.expression;
         while (ts.isParenthesizedExpression(expr)) expr = expr.expression;
         if (!ts.isCallExpression(expr)) return null;
+        const factory = this.commonJsFactoryWrapperInvocation(expr);
+        if (factory && ts.isBlock(factory.fn.body)) return factory.fn.body.statements;
         const fn = this.commonJsIifeCallee(expr.expression);
         if (!fn || !ts.isBlock(fn.body)) return null;
         if (expr.arguments.length !== fn.parameters.length) return null;
@@ -18008,6 +18010,64 @@ class Emitter {
         let cur = expr;
         while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
         return ts.isFunctionExpression(cur) || ts.isArrowFunction(cur) ? cur : null;
+    }
+
+    private commonJsFactoryWrapperInvocation(call: ts.CallExpression): {
+        fn: ts.FunctionExpression | ts.ArrowFunction;
+        args: ts.NodeArray<ts.Expression>;
+    } | null {
+        const outer = this.commonJsIifeCallee(call.expression);
+        if (!outer || !ts.isBlock(outer.body) || call.arguments.length < outer.parameters.length) return null;
+        const factories = new Map<string, ts.FunctionExpression | ts.ArrowFunction>();
+        for (let index = 0; index < outer.parameters.length; index++) {
+            const param = outer.parameters[index]!;
+            if (!ts.isIdentifier(param.name)) continue;
+            const arg = this.unwrapTransparentExpression(call.arguments[index]!);
+            if (ts.isFunctionExpression(arg) || ts.isArrowFunction(arg)) {
+                factories.set(param.name.text, arg);
+            }
+        }
+        if (factories.size === 0) return null;
+        const invocations: { fn: ts.FunctionExpression | ts.ArrowFunction; args: ts.NodeArray<ts.Expression> }[] = [];
+        const visit = (node: ts.Node): void => {
+            if (
+                node !== outer &&
+                (
+                    ts.isFunctionExpression(node) ||
+                    ts.isFunctionDeclaration(node) ||
+                    ts.isArrowFunction(node) ||
+                    ts.isMethodDeclaration(node) ||
+                    ts.isGetAccessorDeclaration(node) ||
+                    ts.isSetAccessorDeclaration(node)
+                )
+            ) {
+                return;
+            }
+            if (ts.isCallExpression(node)) {
+                let callee: ts.Expression = node.expression;
+                while (ts.isParenthesizedExpression(callee)) callee = callee.expression;
+                if (ts.isIdentifier(callee)) {
+                    const fn = factories.get(callee.text);
+                    if (fn && this.commonJsFactoryWrapperArguments(node.arguments)) {
+                        invocations.push({ fn, args: node.arguments });
+                    }
+                }
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(outer.body);
+        if (invocations.length !== 1) return null;
+        const invocation = invocations[0]!;
+        return invocation.args.length >= invocation.fn.parameters.length ? invocation : null;
+    }
+
+    private commonJsFactoryWrapperArguments(args: ts.NodeArray<ts.Expression>): boolean {
+        let foundWrapperArg = false;
+        for (const arg of args) {
+            if (!this.isCommonJsWrapperArgumentExpression(arg)) return false;
+            foundWrapperArg = true;
+        }
+        return foundWrapperArg;
     }
 
     private isCommonJsWrapperArgumentExpression(expr: ts.Expression): boolean {
@@ -19104,7 +19164,9 @@ class Emitter {
         const index = fn.parameters.indexOf(param);
         if (index < 0) return null;
         const call = this.commonJsIifeCallForFunction(fn);
-        return call && index < call.arguments.length ? call.arguments[index]! : null;
+        if (call && index < call.arguments.length) return call.arguments[index]!;
+        const factory = this.commonJsFactoryWrapperInvocationForFunction(fn);
+        return factory && index < factory.args.length ? factory.args[index]! : null;
     }
 
     private commonJsIifeCallForFunction(fn: ts.FunctionExpression | ts.ArrowFunction): ts.CallExpression | null {
@@ -19125,11 +19187,27 @@ class Emitter {
                     ts.isIdentifier(param.name) && param.name.text === id.text,
                 );
                 if (index < 0) return null;
-                const call = this.commonJsIifeCallForFunction(cur);
-                return call && index < call.arguments.length ? call.arguments[index]! : null;
+                const param = cur.parameters[index]!;
+                return this.commonJsIifeParameterArgument(param);
             }
             if (ts.isSourceFile(cur)) return null;
             cur = cur.parent;
+        }
+        return null;
+    }
+
+    private commonJsFactoryWrapperInvocationForFunction(fn: ts.FunctionExpression | ts.ArrowFunction): {
+        args: ts.NodeArray<ts.Expression>;
+    } | null {
+        let cur: ts.Node = fn;
+        while (cur.parent) {
+            const parent = cur.parent;
+            if (ts.isCallExpression(parent)) {
+                const factory = this.commonJsFactoryWrapperInvocation(parent);
+                if (factory?.fn === fn) return { args: factory.args };
+            }
+            if (ts.isSourceFile(parent)) return null;
+            cur = parent;
         }
         return null;
     }
