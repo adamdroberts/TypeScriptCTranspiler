@@ -1,0 +1,6 @@
+created
+start
+first: false 1
+before throw
+caught: Error: lazy boom
+after: true undefined
