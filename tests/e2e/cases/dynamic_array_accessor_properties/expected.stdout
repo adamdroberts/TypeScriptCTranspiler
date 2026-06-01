@@ -1,0 +1,10 @@
+read: base get-arr|
+set: true next! next! next! get-arr|set-arr:next|get-arr|
+desc: function function true true undefined
+keys: 0|1|marker|label 0|1|length|marker|label
+apply: next!
+reflect get: receiver get-arr|set-arr:next|get-arr|get-arr|get-other|
+reflect set: true next! via! false via! get-arr|set-arr:next|get-arr|get-arr|get-other|set-other:via|
+legacy: legacy-arr true true
+readonly: ro false undefined
+metadata: false false undefined
