@@ -80,6 +80,26 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             const right = resolve(node.right);
             return concat(left, right);
         }
+        if (
+            ts.isBinaryExpression(node) &&
+            (
+                node.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+                node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken
+            )
+        ) {
+            const left = resolveLogicalStringOperand(node.left);
+            if (left.length === 0) return [];
+            const truthyLeft = left.filter((value) => value.length > 0);
+            const falsyLeft = left.filter((value) => value.length === 0);
+            if (node.operatorToken.kind === ts.SyntaxKind.BarBarToken) {
+                if (falsyLeft.length === 0) return dedupe(truthyLeft);
+                const right = resolve(node.right);
+                return right.length === 0 ? [] : dedupe([...truthyLeft, ...right]);
+            }
+            if (truthyLeft.length === 0) return dedupe(falsyLeft);
+            const right = resolve(node.right);
+            return right.length === 0 ? [] : dedupe([...falsyLeft, ...right]);
+        }
         if (ts.isConditionalExpression(node)) {
             return dedupe([...resolve(node.whenTrue), ...resolve(node.whenFalse)]);
         }
@@ -114,6 +134,41 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (values.length > 0) return values;
         }
         return stringLiteralUnionIdentifierTexts(node);
+    };
+
+    const resolveLogicalStringOperand = (node: ts.Expression): string[] => {
+        const cur = unwrapStaticExpression(node);
+        if (
+            ts.isStringLiteral(cur) ||
+            ts.isNoSubstitutionTemplateLiteral(cur) ||
+            ts.isTemplateExpression(cur) ||
+            (ts.isTaggedTemplateExpression(cur) && isStringRawTag(cur.tag))
+        ) {
+            return resolve(cur);
+        }
+        if (ts.isBinaryExpression(cur) && cur.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+            return resolve(cur);
+        }
+        if (ts.isCallExpression(cur) && resolvePathCall(cur).length > 0) {
+            return resolve(cur);
+        }
+        if (ts.isConditionalExpression(cur)) {
+            const whenTrue = resolveLogicalStringOperand(cur.whenTrue);
+            const whenFalse = resolveLogicalStringOperand(cur.whenFalse);
+            return whenTrue.length === 0 || whenFalse.length === 0
+                ? []
+                : dedupe([...whenTrue, ...whenFalse]);
+        }
+        if (ts.isIdentifier(cur)) {
+            if (cur.text === "__filename" || cur.text === "__dirname") return resolve(cur);
+            const decl = earlierConstStringDeclaration(cur) ?? topLevelConstStringDeclaration(cur);
+            if (!decl?.initializer || seen.has(decl)) return [];
+            seen.add(decl);
+            const values = resolveLogicalStringOperand(decl.initializer);
+            seen.delete(decl);
+            return values;
+        }
+        return [];
     };
 
     const resolveStringRawTemplate = (

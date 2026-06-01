@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Typed string `&&` / `||` expressions now preserve the selected string value, and finite dynamic `require(...)` proofs resolve those logical string specifiers into the AOT module graph without load-on-demand fallback. Test: `dynamic_require_logical_specifiers`.
 - CommonJS whole-value `module.exports = ...` postfix-update, delete-expression, and comma defaults now have focused coverage for the existing boxed AOT package-source path. Test: `node_modules_commonjs_module_exports_runtime_update_delete_default`.
 - CommonJS whole-value `module.exports = ...` defaults now accept runtime-computed prefix-unary expressions through the boxed AOT package-source path. Test: `node_modules_commonjs_module_exports_runtime_prefix_unary_default`.
 - CommonJS whole-value `module.exports = ...` defaults now accept runtime-computed binary and conditional expressions through the boxed AOT package-source path. Test: `node_modules_commonjs_module_exports_runtime_binary_conditional_default`.

@@ -29845,6 +29845,13 @@ class Emitter {
             case ts.SyntaxKind.GreaterThanEqualsToken:
                 return this.emitRelational(bin, left, right, op);
             case ts.SyntaxKind.AmpersandAmpersandToken: {
+                if (left.ty.kind === "string" && right.ty.kind === "string") {
+                    const tmp = this.freshTemp("_andstr");
+                    return {
+                        c: `({ tsc_str_t* ${tmp} = ${left.c}; (${tmp} && ${tmp}->len > 0) ? ${right.c} : ${tmp}; })`,
+                        ty: T_STRING,
+                    };
+                }
                 if (left.ty.kind === "value" || right.ty.kind === "value") {
                     const rc = this.coerce(right, T_VALUE, bin.right);
                     return this.emitSequencedExpr(
@@ -29858,6 +29865,13 @@ class Emitter {
                 return { c: `(${lb} && ${rb})`, ty: T_BOOLEAN };
             }
             case ts.SyntaxKind.BarBarToken: {
+                if (left.ty.kind === "string" && right.ty.kind === "string") {
+                    const tmp = this.freshTemp("_orstr");
+                    return {
+                        c: `({ tsc_str_t* ${tmp} = ${left.c}; (${tmp} && ${tmp}->len > 0) ? ${tmp} : ${right.c}; })`,
+                        ty: T_STRING,
+                    };
+                }
                 if (left.ty.kind === "value" || right.ty.kind === "value") {
                     const rc = this.coerce(right, T_VALUE, bin.right);
                     return this.emitSequencedExpr(
