@@ -1,0 +1,3 @@
+object: {"b":"B","a":"A"}
+array: ["X","y"]
+events: ownKeys|desc:b|desc:a|desc:skip|desc:hidden|get:b|get:a|get:skip|array:length|array:0|array:1
