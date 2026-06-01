@@ -646,6 +646,14 @@ static void validate_proxy_get_own_property_descriptor_object(tsc_value_t desc) 
     (void)writable_value;
 }
 
+static bool proxy_descriptor_result_is_object(tsc_value_t result) {
+    return value_is_box(result) && (
+        value_tag(result) == TSC_VALUE_TAG_OBJECT ||
+        value_tag(result) == TSC_VALUE_TAG_ARRAY ||
+        value_tag(result) == TSC_VALUE_TAG_FUNCTION
+    );
+}
+
 void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* proxy, const tsc_str_t* key, tsc_value_t result) {
     if (proxy && value_is_box(proxy->proxy_target) && value_tag(proxy->proxy_target) == TSC_VALUE_TAG_ARRAY) {
         const tsc_array_t* target = (const tsc_array_t*)value_ptr(proxy->proxy_target);
@@ -667,7 +675,7 @@ void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* p
             }
             return;
         }
-        if (!value_is_box(result) || value_tag(result) != TSC_VALUE_TAG_OBJECT) {
+        if (!proxy_descriptor_result_is_object(result)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap must return object or undefined"));
         }
         validate_proxy_get_own_property_descriptor_object(result);
@@ -772,7 +780,7 @@ void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* p
             }
             return;
         }
-        if (!value_is_box(result) || value_tag(result) != TSC_VALUE_TAG_OBJECT) {
+        if (!proxy_descriptor_result_is_object(result)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap must return object or undefined"));
         }
         validate_proxy_get_own_property_descriptor_object(result);
@@ -871,7 +879,7 @@ void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* p
         }
         return;
     }
-    if (!value_is_box(result) || value_tag(result) != TSC_VALUE_TAG_OBJECT) {
+    if (!proxy_descriptor_result_is_object(result)) {
         tsc_throw_str(tsc_str_from_cstr("Proxy getOwnPropertyDescriptor trap must return object or undefined"));
     }
     validate_proxy_get_own_property_descriptor_object(result);

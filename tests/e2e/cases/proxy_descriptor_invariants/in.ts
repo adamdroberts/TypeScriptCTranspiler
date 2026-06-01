@@ -20,6 +20,28 @@ function dataDescriptor(target: any, prop: any): any {
     return { value: 1, writable: true, enumerable: true, configurable: true };
 }
 
+function arrayDescriptorObject(target: any, prop: any): any {
+    events.push("array object trap:" + String(prop));
+    const desc: any = [];
+    desc.value = "array";
+    desc.writable = true;
+    desc.enumerable = true;
+    desc.configurable = true;
+    return desc;
+}
+
+function FunctionDescriptorObject(this: any): void {}
+
+function functionDescriptorObject(target: any, prop: any): any {
+    events.push("function object trap:" + String(prop));
+    const out: any = FunctionDescriptorObject as any;
+    out.value = "function";
+    out.writable = true;
+    out.enumerable = true;
+    out.configurable = true;
+    return out;
+}
+
 function mixedDescriptor(target: any, prop: any): any {
     events.push("mixed trap:" + String(prop));
     return { value: 1, get: getterValue as any, enumerable: true, configurable: true };
@@ -94,6 +116,8 @@ function setterValue(value: any): void {
 function setterOther(value: any): void {
 }
 
+function DescriptorFunctionTarget(this: any): void {}
+
 function wrongAccessorGetterDescriptor(target: any, prop: any): any {
     events.push("wrong accessor getter trap:" + String(prop));
     return { get: getterOther as any, enumerable: true, configurable: false };
@@ -145,6 +169,18 @@ try {
 } catch (e: any) {
     console.log("new closed:", e);
 }
+
+const arrayDescriptorObjectProxy: any = new Proxy({}, { getOwnPropertyDescriptor: arrayDescriptorObject as any });
+const arrayDescriptor = Object.getOwnPropertyDescriptor(arrayDescriptorObjectProxy, "x", mark("array descriptor object"));
+console.log("array descriptor object:", arrayDescriptor.value, arrayDescriptor.writable, arrayDescriptor.configurable);
+
+const arrayTargetDescriptorProxy: any = new Proxy([] as any, { getOwnPropertyDescriptor: arrayDescriptorObject as any });
+const arrayTargetDescriptor = Object.getOwnPropertyDescriptor(arrayTargetDescriptorProxy, "side", mark("array target descriptor object"));
+console.log("array target descriptor object:", arrayTargetDescriptor.value, arrayTargetDescriptor.writable, arrayTargetDescriptor.configurable);
+
+const functionTargetDescriptorProxy: any = new Proxy(DescriptorFunctionTarget as any, { getOwnPropertyDescriptor: functionDescriptorObject as any });
+const functionTargetDescriptor = Object.getOwnPropertyDescriptor(functionTargetDescriptorProxy, "side", mark("function target descriptor object"));
+console.log("function target descriptor object:", functionTargetDescriptor.value, functionTargetDescriptor.writable, functionTargetDescriptor.configurable);
 
 const mixedDescriptorProxy: any = new Proxy({}, { getOwnPropertyDescriptor: mixedDescriptor as any });
 try {
