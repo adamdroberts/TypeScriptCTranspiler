@@ -47014,11 +47014,69 @@ class Emitter {
     private staticComputedPropertyExpressionTexts(expr: ts.Expression): string[] {
         const direct = this.staticComputedPropertyExpression(expr);
         if (direct !== null) return [direct];
+        const objectMapTexts = this.staticObjectMapIndexedAccessPropertyTexts(expr);
+        if (objectMapTexts.length > 0) return objectMapTexts;
         const syntaxTexts = staticStringExpressionTexts(expr);
         if (syntaxTexts.length > 0) return syntaxTexts;
         const indexedTexts = this.staticIndexedAccessPropertyTexts(expr);
         if (indexedTexts.length > 0) return indexedTexts;
         return this.staticLiteralUnionPropertyTexts(expr);
+    }
+
+    private staticObjectMapIndexedAccessPropertyTexts(expr: ts.Expression): string[] {
+        const cur = this.unwrapTransparentExpression(expr);
+        if (!ts.isElementAccessExpression(cur) || !cur.argumentExpression) return [];
+        const keys = this.staticFinitePropertyKeyTexts(cur.argumentExpression);
+        if (keys.length === 0) return [];
+        const map = this.staticObjectMapExpression(cur.expression);
+        if (!map) return [];
+
+        const entries = new Map<string, string[]>();
+        for (const prop of map.properties) {
+            if (!ts.isPropertyAssignment(prop) && !ts.isShorthandPropertyAssignment(prop)) return [];
+            const propNames = this.staticPropertyNames(prop.name);
+            if (propNames.length === 0) return [];
+            const valueExpr = ts.isPropertyAssignment(prop) ? prop.initializer : prop.name;
+            const valueTexts = this.staticComputedPropertyExpressionTexts(valueExpr);
+            if (valueTexts.length === 0) return [];
+            for (const propName of propNames) {
+                entries.set(propName, valueTexts);
+            }
+        }
+
+        const out: string[] = [];
+        const seen = new Set<string>();
+        for (const key of keys) {
+            const values = entries.get(key);
+            if (!values) return [];
+            for (const value of values) {
+                if (seen.has(value)) continue;
+                seen.add(value);
+                out.push(value);
+                if (out.length > MAX_STATIC_COMPUTED_PROPERTY_ALTERNATIVES) return [];
+            }
+        }
+        return out;
+    }
+
+    private staticObjectMapExpression(expr: ts.Expression): ts.ObjectLiteralExpression | null {
+        const cur = this.unwrapTransparentExpression(expr);
+        if (ts.isObjectLiteralExpression(cur)) return cur;
+        if (!ts.isIdentifier(cur)) return null;
+        const sym = this.symbolForIdentifier(cur);
+        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        if (!decl || !ts.isVariableDeclaration(decl) || !decl.initializer) return null;
+        if ((ts.getCombinedNodeFlags(decl.parent) & ts.NodeFlags.Const) === 0) return null;
+        const init = this.unwrapTransparentExpression(decl.initializer);
+        return ts.isObjectLiteralExpression(init) ? init : null;
+    }
+
+    private staticFinitePropertyKeyTexts(expr: ts.Expression): string[] {
+        const direct = this.staticComputedPropertyExpression(expr);
+        if (direct !== null) return [direct];
+        const syntaxTexts = staticStringExpressionTexts(expr);
+        if (syntaxTexts.length > 0) return syntaxTexts;
+        return this.staticLiteralPropertyTextsFromType(this.checker.getTypeAtLocation(expr));
     }
 
     private staticIndexedAccessPropertyTexts(expr: ts.Expression): string[] {
