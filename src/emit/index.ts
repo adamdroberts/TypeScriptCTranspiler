@@ -24208,23 +24208,23 @@ class Emitter {
                 : this.emitExpr(expr.argumentExpression);
             return this.emitElementAccess(expr, recv, arg);
         }
-        if (ts.isCallExpression(expr) || ts.isNewExpression(expr)) {
+        if (ts.isCallExpression(expr) || ts.isNewExpression(expr) || ts.isTaggedTemplateExpression(expr)) {
             const yieldExpr = this.singleYieldExpressionInExpression(expr);
-            if (!yieldExpr) unsupported(expr, "lazy generator call/new resume expects a single suspended yield");
+            if (!yieldExpr) unsupported(expr, "lazy generator call/new/tagged-template resume expects a single suspended yield");
             const previous = this.lazyGeneratorResumeOverride;
             this.lazyGeneratorResumeOverride = {
                 expr: yieldExpr,
                 result: { c: nextArg, ty: T_VALUE },
             };
             try {
-                return ts.isCallExpression(expr)
-                    ? this.emitCall(expr)
-                    : this.emitNew(expr);
+                if (ts.isCallExpression(expr)) return this.emitCall(expr);
+                if (ts.isNewExpression(expr)) return this.emitNew(expr);
+                return this.emitTaggedTemplate(expr);
             } finally {
                 this.lazyGeneratorResumeOverride = previous;
             }
         }
-        unsupported(expr, "lazy generator suspended yield expression currently supports direct, parenthesized, unary, typeof, void, binary, conditional, array literal, object literal, property access, element access, call, and new expressions");
+        unsupported(expr, "lazy generator suspended yield expression currently supports direct, parenthesized, unary, typeof, void, binary, conditional, array literal, object literal, property access, element access, call, new, and tagged template expressions");
     }
 
     private emitSimpleLazyResumeArrayLiteral(al: ts.ArrayLiteralExpression, nextArg: string): EmitResult {

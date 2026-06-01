@@ -1,0 +1,3 @@
+created: <empty>
+steps: false 1 false 2 true tag GO!|raw\ndone\t
+events: ignored|start|alpha|format go|first tag GO!|beta|second raw\ndone\t
