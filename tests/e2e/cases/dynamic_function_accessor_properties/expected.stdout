@@ -1,0 +1,10 @@
+read: seed get-fn|
+set: true next! next! get-fn|set-fn:next|get-fn|
+desc: function function true true undefined
+keys: label length|name|prototype|label
+apply: next!
+reflect get: next! get-fn|set-fn:next|get-fn|get-fn|get-other|
+reflect set: true via! false get-fn|set-fn:next|get-fn|get-fn|get-other|set-other:via|
+legacy: legacy-fn true true
+readonly: ro false undefined
+metadata: false false undefined

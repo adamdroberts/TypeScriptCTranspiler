@@ -909,6 +909,13 @@ bool value_set_receiver_own_data(tsc_value_t receiver, tsc_str_t* key, tsc_value
     if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_ARRAY) {
         return tsc_value_set_prop(receiver, key, value);
     }
+    if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_FUNCTION) {
+        tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(receiver);
+        if (tsc_str_is_length_key(key) || str_lit_eq(key, "name") || str_lit_eq(key, "prototype")) {
+            return false;
+        }
+        return object_set_own_data(fn->props, key, value);
+    }
     return false;
 }
 
