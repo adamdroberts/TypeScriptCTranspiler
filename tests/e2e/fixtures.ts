@@ -813,6 +813,12 @@ const packages: Record<string, PackageFixture> = {
         "true.js": "module.exports = (value) => value + 10;\n",
         "false.js": "module.exports = (value) => value + 20;\n",
     }),
+    "tsc2c-cjs-module-null": cjsPackage("tsc2c-cjs-module-null", {
+        "index.js": "module.exports = null;\n",
+    }),
+    "tsc2c-cjs-module-null-object": cjsPackage("tsc2c-cjs-module-null-object", {
+        "index.js": 'module.exports = { label: "null-cjs", nil: null, nested: { value: null }, list: [null, "tail"] };\n',
+    }),
     "tsc2c-cjs-function-package": cjsPackage("tsc2c-cjs-function-package", {
         "index.js": "module.exports = function add(left, right) { return left + right; };\n",
     }),
