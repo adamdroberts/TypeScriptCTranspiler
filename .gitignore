@@ -4,3 +4,4 @@ dist
 manual-tests/benchmarks/build/
 manual-tests/benchmarks/results.json
 .antigravitycli/
+cache/
