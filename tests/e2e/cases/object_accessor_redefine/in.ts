@@ -32,6 +32,10 @@ console.log(
     }),
     obj.x,
 );
+console.log("same empty:", Reflect.defineProperty(obj, "x", {}), obj.x);
+console.log("same enumerable only:", Reflect.defineProperty(obj, "x", { enumerable: true }), obj.x);
+console.log("same configurable only:", Reflect.defineProperty(obj, "x", { configurable: false }), obj.x);
+console.log("bad writable:", Reflect.defineProperty(obj, "x", { writable: false }), obj.x);
 console.log(
     "bad getter:",
     Reflect.defineProperty(obj, "x", {
