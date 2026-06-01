@@ -1,0 +1,3 @@
+created: <empty>
+steps: false 1 false 2 true T:go!|left T done right
+events: ignored|start T|alpha|first T:go!|beta|second left T done right
