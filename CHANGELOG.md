@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS whole-value `module.exports = ...` defaults now accept conditional, logical, and nullish expressions that select inline function or arrow values through the boxed AOT package-source path. Test: `node_modules_commonjs_module_exports_runtime_function_default`.
 - Dynamic require manifests now filter per-file allow-list entries by static prefix/suffix proofs from non-finite specifier expressions, keeping unrelated manifest entries out of the AOT graph and dispatch table. Test: `dynamic_require_manifest_affix`.
 - Manifest-backed native-addon require and import bindings now support object destructuring, default initializers, and rest objects through the embedded Node bridge. Test: `native_addon_manifest_binding_destructure`.
 - Finite dynamic `require(...)` proofs now resolve nullish coalescing string specifier expressions into the AOT module graph without stringifying `null` / `undefined` as module names. Test: `dynamic_require_nullish_specifiers`.

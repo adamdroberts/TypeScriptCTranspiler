@@ -2486,5 +2486,6 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_from_map` | Array.from over typed Map<K, V> sources with and without mapper callbacks |
 | `for_in` | for-in over typed classes/interfaces, typed arrays, and dynamic objects with continue/break |
 | `map_entries` | typed Map<K, V>.entries() returning ObjectEntry<V, K>[] |
+| `node_modules_commonjs_module_exports_runtime_function_default` | CommonJS whole-value module.exports conditional, logical, and nullish defaults can select inline function values |
 | `node_modules_commonjs_module_exports_runtime_update_delete_default` | CommonJS whole-value module.exports postfix, delete, and comma defaults lower as boxed values |
 | `wordcount` | real-world: fs + regex + Map + sort + captures + env |

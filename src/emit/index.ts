@@ -17844,6 +17844,9 @@ class Emitter {
 
     private isCommonJsRuntimeComputedModuleExportsValue(expr: ts.Expression): boolean {
         const cur = this.unwrapTransparentExpression(expr);
+        if (ts.isFunctionExpression(cur) || ts.isArrowFunction(cur)) {
+            return true;
+        }
         if (
             ts.isBinaryExpression(cur) &&
             cur.operatorToken.kind === ts.SyntaxKind.CommaToken
@@ -18649,7 +18652,9 @@ class Emitter {
             this.commonJsExportGlobals.add(cName);
             this.globalDecls.line(`static ${ty.c} ${cName};`);
         }
-        const value = this.emitExpr(assignment.right);
+        const value = this.isCommonJsModuleExportsDefaultInitializerValue(assignment.right)
+            ? this.emitCommonJsModuleExportsDefaultValue(assignment.right)
+            : this.emitExpr(assignment.right);
         buf.line(`${cName} = ${this.coerce(value, ty, assignment.right)};`);
     }
 
@@ -20060,8 +20065,58 @@ class Emitter {
         return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
     }
 
+    private emitCommonJsModuleExportsComputedDefaultValue(expr: ts.Expression): EmitResult | null {
+        const cur = this.unwrapTransparentExpression(expr);
+        if (ts.isConditionalExpression(cur)) {
+            const staticCondition = this.staticBooleanValue(cur.condition);
+            if (staticCondition === true) return this.emitCommonJsModuleExportsDefaultValue(cur.whenTrue);
+            if (staticCondition === false) return this.emitCommonJsModuleExportsDefaultValue(cur.whenFalse);
+            const condition = this.emitCommonJsModuleExportsDefaultValue(cur.condition);
+            const whenTrue = this.emitCommonJsModuleExportsDefaultValue(cur.whenTrue);
+            const whenFalse = this.emitCommonJsModuleExportsDefaultValue(cur.whenFalse);
+            return this.emitSequencedExpr(
+                T_VALUE,
+                [{ value: condition, target: T_VALUE, node: cur.condition }],
+                ([cond]) => `(tsc_value_is_truthy(${cond}) ? ${whenTrue.c} : ${whenFalse.c})`,
+            );
+        }
+        if (
+            ts.isBinaryExpression(cur) &&
+            (
+                cur.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
+                cur.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+                cur.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
+            )
+        ) {
+            const left = this.emitCommonJsModuleExportsDefaultValue(cur.left);
+            const right = this.emitCommonJsModuleExportsDefaultValue(cur.right);
+            if (cur.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [{ value: left, target: T_VALUE, node: cur.left }],
+                    ([lv]) => `(tsc_value_is_truthy(${lv}) ? ${right.c} : ${lv})`,
+                );
+            }
+            if (cur.operatorToken.kind === ts.SyntaxKind.BarBarToken) {
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [{ value: left, target: T_VALUE, node: cur.left }],
+                    ([lv]) => `(tsc_value_is_truthy(${lv}) ? ${lv} : ${right.c})`,
+                );
+            }
+            return this.emitSequencedExpr(
+                T_VALUE,
+                [{ value: left, target: T_VALUE, node: cur.left }],
+                ([lv]) => `(tsc_value_is_nullish(${lv}) ? ${right.c} : ${lv})`,
+            );
+        }
+        return null;
+    }
+
     private emitCommonJsModuleExportsDefaultValue(expr: ts.Expression): EmitResult {
         const cur = this.unwrapTransparentExpression(expr);
+        const computed = this.emitCommonJsModuleExportsComputedDefaultValue(cur);
+        if (computed) return computed;
         if (this.isCommonJsObjectLiteralExportValue(cur)) {
             return { c: this.coerce(this.emitExpr(cur), T_VALUE, cur), ty: T_VALUE };
         }

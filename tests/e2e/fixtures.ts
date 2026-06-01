@@ -1343,6 +1343,15 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-runtime-logical-default-package": cjsPackage("tsc2c-cjs-runtime-logical-default-package", {
         "index.js": 'function makeLogicalDefault(label, count) {\n  return { label, count, nested: { ok: true } };\n}\nconst disabled = false;\nconst missing = null;\nmodule.exports = (disabled && makeLogicalDefault("bad", 0)) || (missing ?? makeLogicalDefault("logical", 22));\n',
     }),
+    "tsc2c-cjs-runtime-function-conditional-default-package": cjsPackage("tsc2c-cjs-runtime-function-conditional-default-package", {
+        "index.js": 'const useFirst = false;\nmodule.exports = useFirst ? function first(value) { return value + 1; } : (value) => value * 3;\n',
+    }),
+    "tsc2c-cjs-runtime-function-logical-default-package": cjsPackage("tsc2c-cjs-runtime-function-logical-default-package", {
+        "index.js": 'const disabled = false;\nmodule.exports = (disabled && function bad(value) { return value - 100; }) || (function picked(value) { return value + 5; });\n',
+    }),
+    "tsc2c-cjs-runtime-function-nullish-default-package": cjsPackage("tsc2c-cjs-runtime-function-nullish-default-package", {
+        "index.js": 'const missing = undefined;\nmodule.exports = missing ?? ((value) => value * 4);\n',
+    }),
     "tsc2c-cjs-runtime-expression-default-package": cjsPackage("tsc2c-cjs-runtime-expression-default-package", {
         "index.js": 'module.exports = {\n  label: "expr-" + "default",\n  count: +(40 + 2),\n  enabled: !false,\n  mask: ~-1,\n  nested: { sum: 20 + 2 },\n  values: [1 + 1, -(3)]\n};\n',
     }),
