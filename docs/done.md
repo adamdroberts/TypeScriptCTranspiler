@@ -2041,6 +2041,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `reflect_construct_new_target_validation` | dynamic Reflect.construct validates explicit constructable newTarget values and rejects accessor-function constructor identities |
 | `reflect_method_missing_arguments` | first-class Reflect.apply and Reflect.construct methods route omitted required arguments through runtime undefined validation |
 | `reflect_target_method_missing_arguments` | first-class Reflect target helper methods route omitted targets through runtime object-target validation |
+| `reflect_property_method_missing_arguments` | first-class Reflect property helper methods route omitted property, descriptor, and prototype arguments through runtime undefined validation and conversion |
 | `reflect_ignored_arguments` | Reflect helpers evaluate and ignore trailing arguments across dynamic and typed helper paths |
 | `proxy` | dynamic Proxy construction, object traps, and revoked proxy basics |
 | `proxy-ownkeys` | Proxy ownKeys trap result filtering and basic invariant coverage |

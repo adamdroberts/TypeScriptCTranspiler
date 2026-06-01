@@ -3178,11 +3178,6 @@ bool tsc_util_types_is_typed_array(tsc_value_t v) {
     return false;
 }
 
-static tsc_value_t reflect_arg(tsc_array_t* args, size_t index, const char* message) {
-    if (args->len <= index) tsc_throw_str(tsc_str_from_cstr(message));
-    return TSC_ARR(tsc_value_t, args, index);
-}
-
 static tsc_value_t reflect_apply_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
@@ -3204,25 +3199,25 @@ static tsc_value_t reflect_construct_method(void* env, tsc_value_t this_arg, tsc
 static tsc_value_t reflect_define_property_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
-    tsc_value_t target = reflect_arg(args, 0, "Reflect.defineProperty expects target, key, and descriptor");
-    tsc_value_t key = reflect_arg(args, 1, "Reflect.defineProperty expects target, key, and descriptor");
-    tsc_value_t desc = reflect_arg(args, 2, "Reflect.defineProperty expects target, key, and descriptor");
+    tsc_value_t target = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    tsc_value_t key = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
+    tsc_value_t desc = args->len > 2 ? TSC_ARR(tsc_value_t, args, 2) : tsc_value_undefined();
     return tsc_value_bool(tsc_reflect_define_property_descriptor(target, tsc_value_to_string(key), desc));
 }
 
 static tsc_value_t reflect_delete_property_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
-    tsc_value_t target = reflect_arg(args, 0, "Reflect.deleteProperty expects target and key");
-    tsc_value_t key = reflect_arg(args, 1, "Reflect.deleteProperty expects target and key");
+    tsc_value_t target = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    tsc_value_t key = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
     return tsc_value_bool(tsc_reflect_delete_prop(target, tsc_value_to_string(key)));
 }
 
 static tsc_value_t reflect_get_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
-    tsc_value_t target = reflect_arg(args, 0, "Reflect.get expects target, key, and optional receiver");
-    tsc_value_t key = reflect_arg(args, 1, "Reflect.get expects target, key, and optional receiver");
+    tsc_value_t target = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    tsc_value_t key = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
     tsc_value_t receiver = args->len > 2 ? TSC_ARR(tsc_value_t, args, 2) : target;
     return tsc_reflect_get_prop_receiver(target, tsc_value_to_string(key), receiver);
 }
@@ -3230,8 +3225,8 @@ static tsc_value_t reflect_get_method(void* env, tsc_value_t this_arg, tsc_array
 static tsc_value_t reflect_get_own_property_descriptor_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
-    tsc_value_t target = reflect_arg(args, 0, "Reflect.getOwnPropertyDescriptor expects target and key");
-    tsc_value_t key = reflect_arg(args, 1, "Reflect.getOwnPropertyDescriptor expects target and key");
+    tsc_value_t target = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    tsc_value_t key = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
     return tsc_reflect_get_own_property_descriptor(target, tsc_value_to_string(key));
 }
 
@@ -3245,8 +3240,8 @@ static tsc_value_t reflect_get_prototype_of_method(void* env, tsc_value_t this_a
 static tsc_value_t reflect_has_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
-    tsc_value_t target = reflect_arg(args, 0, "Reflect.has expects target and key");
-    tsc_value_t key = reflect_arg(args, 1, "Reflect.has expects target and key");
+    tsc_value_t target = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    tsc_value_t key = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
     return tsc_value_bool(tsc_reflect_has_prop(target, tsc_value_to_string(key)));
 }
 
@@ -3274,9 +3269,9 @@ static tsc_value_t reflect_prevent_extensions_method(void* env, tsc_value_t this
 static tsc_value_t reflect_set_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
-    tsc_value_t target = reflect_arg(args, 0, "Reflect.set expects target, key, value, and optional receiver");
-    tsc_value_t key = reflect_arg(args, 1, "Reflect.set expects target, key, value, and optional receiver");
-    tsc_value_t value = reflect_arg(args, 2, "Reflect.set expects target, key, value, and optional receiver");
+    tsc_value_t target = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    tsc_value_t key = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
+    tsc_value_t value = args->len > 2 ? TSC_ARR(tsc_value_t, args, 2) : tsc_value_undefined();
     tsc_value_t receiver = args->len > 3 ? TSC_ARR(tsc_value_t, args, 3) : target;
     return tsc_value_bool(tsc_reflect_set_prop_receiver(target, tsc_value_to_string(key), value, receiver));
 }
@@ -3284,8 +3279,8 @@ static tsc_value_t reflect_set_method(void* env, tsc_value_t this_arg, tsc_array
 static tsc_value_t reflect_set_prototype_of_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
-    tsc_value_t target = reflect_arg(args, 0, "Reflect.setPrototypeOf expects target and prototype");
-    tsc_value_t prototype = reflect_arg(args, 1, "Reflect.setPrototypeOf expects target and prototype");
+    tsc_value_t target = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    tsc_value_t prototype = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
     return tsc_value_bool(tsc_reflect_set_prototype_of(target, prototype));
 }
 
