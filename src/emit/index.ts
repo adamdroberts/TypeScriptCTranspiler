@@ -24934,6 +24934,67 @@ class Emitter {
                         : "/";
             return { c: op === ts.SyntaxKind.SlashToken ? `(((double)(${left.c})) / ((double)(${right.c})))` : `(${left.c} ${cop} ${right.c})`, ty: T_NUMBER };
         }
+        if (op === ts.SyntaxKind.PercentToken) {
+            if (left.ty.kind === "value" || right.ty.kind === "value") {
+                return this.emitDynamicBinary("tsc_value_mod", T_VALUE, bin, left, right);
+            }
+            if (left.ty.kind === "bigint" && right.ty.kind === "bigint") {
+                return { c: `tsc_bigint_mod(${left.c}, ${right.c})`, ty: T_BIGINT };
+            }
+            requireNumber(bin, left.ty);
+            requireNumber(bin, right.ty);
+            return { c: `tsc_num_mod(${left.c}, ${right.c})`, ty: T_NUMBER };
+        }
+        if (op === ts.SyntaxKind.AsteriskAsteriskToken) {
+            if (left.ty.kind === "value" || right.ty.kind === "value") {
+                return this.emitDynamicBinary("tsc_value_pow", T_VALUE, bin, left, right);
+            }
+            if (left.ty.kind === "bigint" && right.ty.kind === "bigint") {
+                return { c: `tsc_bigint_pow(${left.c}, ${right.c})`, ty: T_BIGINT };
+            }
+            requireNumber(bin, left.ty);
+            requireNumber(bin, right.ty);
+            return { c: `pow(${left.c}, ${right.c})`, ty: T_NUMBER };
+        }
+        if (
+            op === ts.SyntaxKind.AmpersandToken ||
+            op === ts.SyntaxKind.BarToken ||
+            op === ts.SyntaxKind.CaretToken ||
+            op === ts.SyntaxKind.LessThanLessThanToken ||
+            op === ts.SyntaxKind.GreaterThanGreaterThanToken
+        ) {
+            if (left.ty.kind === "value" || right.ty.kind === "value") {
+                const fn =
+                    op === ts.SyntaxKind.AmpersandToken
+                        ? "tsc_value_bit_and"
+                        : op === ts.SyntaxKind.BarToken
+                            ? "tsc_value_bit_or"
+                            : op === ts.SyntaxKind.CaretToken
+                                ? "tsc_value_bit_xor"
+                                : op === ts.SyntaxKind.LessThanLessThanToken
+                                    ? "tsc_value_shl"
+                                    : "tsc_value_shr";
+                return this.emitDynamicBinary(fn, T_VALUE, bin, left, right);
+            }
+            requireNumber(bin, left.ty);
+            requireNumber(bin, right.ty);
+            const cop = bitwiseOp(op);
+            return {
+                c: `((double)((int32_t)(${left.c}) ${cop} (int32_t)(${right.c})))`,
+                ty: T_NUMBER,
+            };
+        }
+        if (op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken) {
+            if (left.ty.kind === "value" || right.ty.kind === "value") {
+                return this.emitDynamicBinary("tsc_value_ushr", T_VALUE, bin, left, right);
+            }
+            requireNumber(bin, left.ty);
+            requireNumber(bin, right.ty);
+            return {
+                c: `((double)((uint32_t)(${left.c}) >> (uint32_t)(${right.c})))`,
+                ty: T_NUMBER,
+            };
+        }
         unsupported(bin, `lazy generator suspended yield binary/logical operator ${ts.SyntaxKind[op]}`);
     }
 
