@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `child_process.spawnSync(...)` now returns Buffer-backed `stdout`, `stderr`, and `output` entries when encoding is omitted or literal `"buffer"`, while preserving string output for literal UTF-8 encodings. Test: `child_process_spawn_sync_buffer_encoding`.
 - Lazy generator lowering now accepts synchronous `try`/`catch`/`finally` statements that do not contain suspension points, while leaving yield-across-try control flow unsupported. Test: `generator_lazy_try`.
 - CommonJS static bracket member reads on literal `require(...)` results and require bindings now resolve through the AOT export metadata path instead of dynamic property lookup. Test: `node_modules_commonjs_require_static_element_member`.
 - `child_process.execFileSync(...)` and `execSync(...)` now distinguish child setup / `execvp` failures from ordinary nonzero child exits, surfacing catchable error-code messages such as `ENOENT`. Test: `child_process_sync_exec_error`.
