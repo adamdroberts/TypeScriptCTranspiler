@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Direct static `Reflect.*(...)` calls with omitted required operands now route through the runtime Reflect method wrappers, so they get normal `undefined` defaulting and catchable runtime validation instead of emitter arity failures. Test: `reflect_static_missing_arguments`.
 - First-class `Reflect.get`, `Reflect.set`, `Reflect.has`, `Reflect.deleteProperty`, `Reflect.getOwnPropertyDescriptor`, `Reflect.defineProperty`, and `Reflect.setPrototypeOf` method calls now route omitted property/prototype/descriptor arguments through normal runtime `undefined` validation and conversion. Test: `reflect_property_method_missing_arguments`.
 - First-class `Reflect.getPrototypeOf`, `Reflect.isExtensible`, `Reflect.ownKeys`, and `Reflect.preventExtensions` method calls now route omitted targets through normal runtime object-target validation. Test: `reflect_target_method_missing_arguments`.
 - First-class `Reflect.apply` and `Reflect.construct` method calls now route omitted required arguments through normal runtime `undefined` validation instead of failing with wrapper arity messages. Test: `reflect_method_missing_arguments`.

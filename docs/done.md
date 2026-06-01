@@ -2042,6 +2042,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `reflect_method_missing_arguments` | first-class Reflect.apply and Reflect.construct methods route omitted required arguments through runtime undefined validation |
 | `reflect_target_method_missing_arguments` | first-class Reflect target helper methods route omitted targets through runtime object-target validation |
 | `reflect_property_method_missing_arguments` | first-class Reflect property helper methods route omitted property, descriptor, and prototype arguments through runtime undefined validation and conversion |
+| `reflect_static_missing_arguments` | direct static Reflect helper calls with omitted required operands route through runtime undefined validation |
 | `reflect_ignored_arguments` | Reflect helpers evaluate and ignore trailing arguments across dynamic and typed helper paths |
 | `proxy` | dynamic Proxy construction, object traps, and revoked proxy basics |
 | `proxy-ownkeys` | Proxy ownKeys trap result filtering and basic invariant coverage |
