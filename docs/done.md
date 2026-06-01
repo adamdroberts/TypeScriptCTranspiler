@@ -1835,6 +1835,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_commonjs_require_destructure` | top-level literal destructured `require("pkg")` bindings plus defaults and rest objects for narrow CommonJS named exports |
 | `node_modules_commonjs_require_direct_function` | top-level literal direct `require("pkg")(...)` calls for function-valued CommonJS module exports |
 | `node_modules_commonjs_require_direct_member` | top-level literal direct `require("pkg").name` reads/calls for narrow CommonJS named exports |
+| `node_modules_commonjs_require_static_element_member` | static bracket `require("pkg")[key]` and require-binding member reads resolve AOT |
 | `node_modules_commonjs_require_direct_value` | top-level literal direct `require("pkg")` reads for primitive-valued CommonJS module exports |
 | `node_modules_commonjs_require_function` | top-level literal `require("pkg")` calls for function-valued CommonJS module exports |
 | `node_modules_commonjs_require_named` | top-level literal `require("pkg")` member reads/calls for narrow CommonJS named exports |

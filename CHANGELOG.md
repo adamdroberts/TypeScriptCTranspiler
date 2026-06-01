@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS static bracket member reads on literal `require(...)` results and require bindings now resolve through the AOT export metadata path instead of dynamic property lookup. Test: `node_modules_commonjs_require_static_element_member`.
 - `child_process.execFileSync(...)` and `execSync(...)` now distinguish child setup / `execvp` failures from ordinary nonzero child exits, surfacing catchable error-code messages such as `ENOENT`. Test: `child_process_sync_exec_error`.
 - Generated-C DCE static `typeof` analysis now folds side-effect-free `new` expressions for pure built-in constructors to `"object"`. Test: `generated_c_dce_typeof_new`.
 - Generated-C DCE reference analysis now follows statically selected conditional, logical, and nullish expression branches, so top-level functions referenced only from dead expression branches are pruned before C emission. Test: `generated_c_dce_dead_expression_branches`.
