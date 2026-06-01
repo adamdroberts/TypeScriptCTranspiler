@@ -1,6 +1,7 @@
 set index: red|cyan cyan
 reflect set: true
 expanded: 4 undefined gold red|cyan|undefined|gold
+receiver set: true kept undefined
 reflect length: true
 truncated: 2 red|cyan
 define index: true red|green

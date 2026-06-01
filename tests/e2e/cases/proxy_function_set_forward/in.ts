@@ -27,6 +27,14 @@ console.log(
     reflectProxy.prototype.marker,
 );
 
+const explicitReceiver: any = {};
+console.log(
+    "receiver:",
+    Reflect.set(reflectProxy, "receiverOnly", "kept", explicitReceiver),
+    explicitReceiver.receiverOnly,
+    reflectTarget.receiverOnly,
+);
+
 const revoked: any = Proxy.revocable(function Revoked(this: any): void {}, {});
 revoked.revoke();
 report("revoked set", (): any => Reflect.set(revoked.proxy, "prototype", {}));

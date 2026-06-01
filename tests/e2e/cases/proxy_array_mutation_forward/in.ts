@@ -6,6 +6,9 @@ console.log("set index:", Object.values(proxy).join("|"), proxy[1]);
 console.log("reflect set:", Reflect.set(proxy, "3", "gold"));
 console.log("expanded:", proxy.length, proxy[2], proxy[3], Object.values(proxy).join("|"));
 
+const explicitReceiver: any = {};
+console.log("receiver set:", Reflect.set(proxy, "receiverOnly", "kept", explicitReceiver), explicitReceiver.receiverOnly, proxy.receiverOnly);
+
 console.log("reflect length:", Reflect.set(proxy, "length", 2));
 console.log("truncated:", proxy.length, Object.values(proxy).join("|"));
 
