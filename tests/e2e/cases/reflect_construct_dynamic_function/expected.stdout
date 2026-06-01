@@ -1,3 +1,4 @@
 made: a this:object object
 override: b object
 primitive: c object
+null prototype fallback: d true false
