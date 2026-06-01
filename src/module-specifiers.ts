@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import ts from "typescript";
 
 const MAX_STATIC_STRING_ALTERNATIVES = 64;
@@ -57,6 +58,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (node.kind === ts.SyntaxKind.TrueKeyword) return ["true"];
         if (node.kind === ts.SyntaxKind.FalseKeyword) return ["false"];
         if (node.kind === ts.SyntaxKind.NullKeyword) return ["null"];
+        if (ts.isIdentifier(node) && node.text === "__filename") return [node.getSourceFile().fileName];
+        if (ts.isIdentifier(node) && node.text === "__dirname") return [path.dirname(node.getSourceFile().fileName)];
         if (ts.isIdentifier(node) && node.text === "undefined") return ["undefined"];
         if (node.kind === ts.SyntaxKind.UndefinedKeyword) return ["undefined"];
         if (ts.isVoidExpression(node)) return ["undefined"];
@@ -82,6 +85,10 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
         if (ts.isTaggedTemplateExpression(node) && isStringRawTag(node.tag)) {
             return resolveStringRawTemplate(node.template);
+        }
+        if (ts.isCallExpression(node)) {
+            const pathText = resolvePathCall(node);
+            if (pathText.length > 0) return pathText;
         }
         if (ts.isTemplateExpression(node)) {
             let out = [node.head.text];
@@ -122,6 +129,36 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (out.length === 0) return [];
         }
         return out;
+    };
+
+    const resolvePathCall = (call: ts.CallExpression): string[] => {
+        const name = staticPathCallName(call);
+        if (!name) return [];
+        if (name === "resolve" && call.arguments.length === 0) return [];
+        const argValues = call.arguments.map((arg) => resolve(arg));
+        if (argValues.some((values) => values.length === 0)) return [];
+        let encoded = [""];
+        for (const values of argValues) {
+            const next: string[] = [];
+            for (const prefix of encoded) {
+                for (const value of values) {
+                    next.push(prefix === "" ? value : `${prefix}\0${value}`);
+                    if (next.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
+            }
+            encoded = dedupe(next);
+        }
+        return dedupe(encoded.map((joined) => {
+            const parts = joined === "" ? [] : joined.split("\0");
+            switch (name) {
+                case "join":
+                    return path.join(...parts);
+                case "resolve":
+                    return path.resolve(...parts);
+                case "normalize":
+                    return parts.length === 1 ? path.normalize(parts[0]!) : "";
+            }
+        }).filter((value) => value !== ""));
     };
 
     const resolveCollectionExpression = (node: ts.Expression): ts.Expression | null => {
@@ -672,6 +709,99 @@ function isStringRawTag(expr: ts.Expression): boolean {
 function templateRawText(node: ts.TemplateLiteralLikeNode): string {
     const rawText = (node as ts.TemplateLiteralLikeNode & { rawText?: string }).rawText;
     return rawText ?? node.text;
+}
+
+function staticPathCallName(call: ts.CallExpression): "join" | "resolve" | "normalize" | null {
+    const callee = unwrapStaticExpression(call.expression);
+    if (ts.isPropertyAccessExpression(callee)) {
+        const name = callee.name.text;
+        if (name !== "join" && name !== "resolve" && name !== "normalize") return null;
+        const target = unwrapStaticExpression(callee.expression);
+        return ts.isIdentifier(target) && isPathNamespaceIdentifier(target) ? name : null;
+    }
+    if (!ts.isIdentifier(callee)) return null;
+    const imported = pathNamedImport(callee);
+    return imported === "join" || imported === "resolve" || imported === "normalize" ? imported : null;
+}
+
+function isPathNamespaceIdentifier(id: ts.Identifier): boolean {
+    if (isIdentifierShadowedInLocalScope(id)) return false;
+    const sf = id.getSourceFile();
+    for (const stmt of sf.statements) {
+        if (ts.isImportDeclaration(stmt) && isPathModuleSpecifier(stmt.moduleSpecifier)) {
+            const bindings = stmt.importClause?.namedBindings;
+            if (bindings && ts.isNamespaceImport(bindings) && bindings.name.text === id.text) return true;
+            if (stmt.importClause?.name?.text === id.text) return true;
+        }
+        if (!ts.isVariableStatement(stmt)) continue;
+        for (const decl of stmt.declarationList.declarations) {
+            if (
+                ts.isIdentifier(decl.name) &&
+                decl.name.text === id.text &&
+                decl.initializer &&
+                isStaticPathRequireCall(decl.initializer)
+            ) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function pathNamedImport(id: ts.Identifier): "join" | "resolve" | "normalize" | null {
+    if (isIdentifierShadowedInLocalScope(id)) return null;
+    const sf = id.getSourceFile();
+    for (const stmt of sf.statements) {
+        if (!ts.isImportDeclaration(stmt) || !isPathModuleSpecifier(stmt.moduleSpecifier)) continue;
+        const bindings = stmt.importClause?.namedBindings;
+        if (!bindings || !ts.isNamedImports(bindings)) continue;
+        for (const element of bindings.elements) {
+            if (element.name.text !== id.text) continue;
+            const imported = element.propertyName?.text ?? element.name.text;
+            if (imported === "join" || imported === "resolve" || imported === "normalize") return imported;
+        }
+    }
+    return null;
+}
+
+function isStaticPathRequireCall(expr: ts.Expression): boolean {
+    const cur = unwrapStaticExpression(expr);
+    if (!ts.isCallExpression(cur)) return false;
+    const callee = unwrapStaticExpression(cur.expression);
+    return ts.isCallExpression(cur) &&
+        ts.isIdentifier(callee) &&
+        callee.text === "require" &&
+        cur.arguments.length === 1 &&
+        isPathModuleSpecifier(cur.arguments[0]);
+}
+
+function isPathModuleSpecifier(node: ts.Node | undefined): boolean {
+    return !!node &&
+        ts.isStringLiteralLike(node) &&
+        (node.text === "path" || node.text === "node:path");
+}
+
+function isIdentifierShadowedInLocalScope(id: ts.Identifier): boolean {
+    let cur: ts.Node = id;
+    while (cur.parent && !ts.isSourceFile(cur.parent)) {
+        const parent = cur.parent;
+        if (ts.isFunctionLike(parent)) {
+            for (const param of parent.parameters) {
+                if (ts.isIdentifier(param.name) && param.name.text === id.text) return true;
+            }
+        }
+        if (ts.isBlock(parent) || ts.isModuleBlock(parent)) {
+            for (const stmt of parent.statements) {
+                if (stmt.pos >= cur.pos) break;
+                if (!ts.isVariableStatement(stmt)) continue;
+                for (const decl of stmt.declarationList.declarations) {
+                    if (ts.isIdentifier(decl.name) && decl.name.text === id.text) return true;
+                }
+            }
+        }
+        cur = parent;
+    }
+    return false;
 }
 
 function unwrapStaticExpression(expr: ts.Expression): ts.Expression {
