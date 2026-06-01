@@ -2961,6 +2961,47 @@ tsc_fs_stats_t* tsc_fs_lstat_sync_no_throw(const tsc_str_t* path) {
     return out;
 }
 
+typedef struct {
+    tsc_promise_t* promise;
+    const tsc_str_t* path;
+    bool throw_if_no_entry;
+    bool lstat;
+} tsc_fs_stats_async_task_t;
+
+static void tsc_fs_stats_async_worker(void* env) {
+    tsc_fs_stats_async_task_t* task = (tsc_fs_stats_async_task_t*)env;
+    tsc_try_frame_t frame;
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) == 0) {
+        tsc_fs_stats_t* stats = task->lstat
+            ? (task->throw_if_no_entry ? tsc_fs_lstat_sync(task->path) : tsc_fs_lstat_sync_no_throw(task->path))
+            : (task->throw_if_no_entry ? tsc_fs_stat_sync(task->path) : tsc_fs_stat_sync_no_throw(task->path));
+        tsc_try_pop();
+        tsc_promise_fulfill_in_place_ptr(task->promise, stats);
+    } else {
+        tsc_promise_reject_in_place(task->promise, tsc_value_string(tsc_current_error()));
+    }
+}
+
+static tsc_promise_t* tsc_fs_promises_stats_async(const tsc_str_t* path, bool throw_if_no_entry, bool lstat) {
+    tsc_promise_t* promise = tsc_promise_pending();
+    tsc_fs_stats_async_task_t* task = (tsc_fs_stats_async_task_t*)TSC_GC_MALLOC(sizeof(tsc_fs_stats_async_task_t));
+    task->promise = promise;
+    task->path = path;
+    task->throw_if_no_entry = throw_if_no_entry;
+    task->lstat = lstat;
+    tsc_set_immediate(tsc_fs_stats_async_worker, task);
+    return promise;
+}
+
+tsc_promise_t* tsc_fs_promises_stat_async(const tsc_str_t* path, bool throw_if_no_entry) {
+    return tsc_fs_promises_stats_async(path, throw_if_no_entry, false);
+}
+
+tsc_promise_t* tsc_fs_promises_lstat_async(const tsc_str_t* path, bool throw_if_no_entry) {
+    return tsc_fs_promises_stats_async(path, throw_if_no_entry, true);
+}
+
 tsc_str_t* tsc_fs_realpath_sync(const tsc_str_t* path) {
     char* p = cstr_dup(path);
     char* resolved = realpath(p, NULL);
