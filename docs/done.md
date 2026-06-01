@@ -426,6 +426,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Detached `Array.prototype` copy-returning methods for `toSorted`, `with`, and `toSpliced` operate on dynamic array-like object receivers, producing dense copied arrays without mutating the receiver. Test: `array_prototype_array_like_copy_more`
 - Detached `Array.prototype` higher-order methods operate on dynamic array-like object receivers, including inherited array-like slots, callback receiver identity, sparse-object callback skipping for map-style methods, and every-index `find` / `findIndex` scans. Test: `array_prototype_array_like_hof`
 - Detached `Array.prototype` in-place methods for `fill`, `copyWithin`, and `reverse` operate on dynamic array-like object receivers, including sparse slot preservation for copy and reverse operations. Test: `array_prototype_array_like_inplace`
+- Detached `Array.prototype.sort` mutates dynamic array-like object receivers with default string ordering, including inherited numeric slots and deletion of trailing absent slots. Test: `array_prototype_array_like_sort`
 - Dynamic arrays inherit callable mutating and copy-returning `Array.prototype` methods for `pop`, `push`, `shift`, `unshift`, `concat`, `slice`, `fill`, `copyWithin`, `splice`, `sort`, `toSorted`, `with`, `toSpliced`, `reverse`, and `toReversed`, including detached `Reflect.apply(...)` calls backed by the existing dynamic array helper semantics. Test: `dynamic_array_prototype_mutators`
 - Dynamic arrays inherit callable higher-order `Array.prototype` methods for `forEach`, `map`, `flatMap`, `filter`, `some`, `every`, `find`, `findIndex`, `findLast`, `findLastIndex`, `reduce`, and `reduceRight`, including detached `Reflect.apply(...)` calls with boxed callbacks and optional receiver binding where applicable. Test: `dynamic_array_prototype_hof`
 - Dynamic arrays inherit callable `Array.prototype.toString`, `toLocaleString`, and `valueOf`, including detached `Reflect.apply(...)` calls, comma stringification, and receiver identity from `valueOf`. Test: `dynamic_array_prototype_string_value`
@@ -2242,6 +2243,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_prototype_array_like_hof` | detached Array.prototype higher-order methods over dynamic array-like object receivers |
 | `array_prototype_array_like_inplace` | detached Array.prototype fill/copyWithin/reverse over dynamic array-like object receivers |
 | `array_prototype_array_like_mutators` | detached Array.prototype push/pop/shift/unshift over dynamic array-like object receivers |
+| `array_prototype_array_like_sort` | detached Array.prototype sort over dynamic array-like object receivers |
 | `array_prototypes` | typed array Object/Reflect prototype reads and writes with non-extensible guards |
 | `array_prototype_value` | static Array.prototype value identity, prototype, own-key, and detached method behavior |
 | `object_prototype_value` | static Object.prototype value identity, null parent, non-enumerable methods, and detached calls |
