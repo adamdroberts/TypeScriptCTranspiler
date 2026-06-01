@@ -303,10 +303,16 @@ static void validate_proxy_get_result(const tsc_object_t* proxy, const tsc_str_t
         tsc_value_t writable_value = tsc_value_undefined();
         bool has_writable = descriptor_has_prop(target_desc, "writable", 8, &writable_value);
         bool writable = has_writable ? tsc_value_is_truthy(writable_value) : false;
+        if (writable) return;
         tsc_value_t target_value = tsc_value_undefined();
-        bool has_value = descriptor_has_prop(target_desc, "value", 5, &target_value);
-        if (has_value && !writable && !tsc_value_object_is(result, target_value)) {
+        bool target_has_value = descriptor_has_prop(target_desc, "value", 5, &target_value);
+        if (target_has_value && !tsc_value_object_is(result, target_value)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy get trap cannot report different value for non-configurable non-writable key"));
+        }
+        tsc_value_t target_getter_value = tsc_value_undefined();
+        bool target_has_getter = descriptor_has_prop(target_desc, "get", 3, &target_getter_value);
+        if (target_has_getter && tsc_value_is_undefined(target_getter_value) && !tsc_value_is_undefined(result)) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy get trap cannot report value for non-configurable accessor without getter"));
         }
         return;
     }
@@ -363,10 +369,16 @@ static void validate_proxy_set_result(const tsc_object_t* proxy, const tsc_str_t
         tsc_value_t writable_value = tsc_value_undefined();
         bool has_writable = descriptor_has_prop(target_desc, "writable", 8, &writable_value);
         bool writable = has_writable ? tsc_value_is_truthy(writable_value) : false;
+        if (writable) return;
         tsc_value_t target_value = tsc_value_undefined();
-        bool has_value = descriptor_has_prop(target_desc, "value", 5, &target_value);
-        if (has_value && !writable && !tsc_value_object_is(value, target_value)) {
+        bool target_has_value = descriptor_has_prop(target_desc, "value", 5, &target_value);
+        if (target_has_value && !tsc_value_object_is(value, target_value)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy set trap cannot report success changing non-configurable non-writable key"));
+        }
+        tsc_value_t target_setter_value = tsc_value_undefined();
+        bool target_has_setter = descriptor_has_prop(target_desc, "set", 3, &target_setter_value);
+        if (target_has_setter && tsc_value_is_undefined(target_setter_value)) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy set trap cannot report success for non-configurable accessor without setter"));
         }
         return;
     }
@@ -438,6 +450,10 @@ static void validate_proxy_define_property_result(const tsc_object_t* proxy, con
         bool target_enumerable = target_has_enumerable ? tsc_value_is_truthy(target_enumerable_value) : false;
         tsc_value_t target_value = tsc_value_undefined();
         bool target_has_value = descriptor_has_prop(target_desc, "value", 5, &target_value);
+        tsc_value_t target_getter_value = tsc_value_undefined();
+        bool target_has_getter = descriptor_has_prop(target_desc, "get", 3, &target_getter_value);
+        tsc_value_t target_setter_value = tsc_value_undefined();
+        bool target_has_setter = descriptor_has_prop(target_desc, "set", 3, &target_setter_value);
 
         if (has_configurable && !configurable && target_configurable) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot report configurable key as non-configurable"));
@@ -448,6 +464,18 @@ static void validate_proxy_define_property_result(const tsc_object_t* proxy, con
         }
         if (has_enumerable && enumerable != target_enumerable) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot change non-configurable enumerable flag"));
+        }
+        if (target_has_getter || target_has_setter) {
+            if (has_value || has_writable) {
+                tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot redefine non-configurable accessor key as data"));
+            }
+            if (has_getter && !tsc_value_object_is(getter_value, target_getter_value)) {
+                tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot change non-configurable accessor getter"));
+            }
+            if (has_setter && !tsc_value_object_is(setter_value, target_setter_value)) {
+                tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot change non-configurable accessor setter"));
+            }
+            return;
         }
         if (accessor_descriptor) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot redefine non-configurable data key as accessor"));
