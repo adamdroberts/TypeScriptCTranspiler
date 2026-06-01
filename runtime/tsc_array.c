@@ -85,7 +85,21 @@ static tsc_value_t array_prototype_to_locale_string(void* env, tsc_value_t this_
     (void)env;
     (void)args;
     array_prototype_require_receiver(this_arg, "toLocaleString");
-    return tsc_value_string(tsc_value_to_string(this_arg));
+    double len_num = tsc_value_length(this_arg);
+    if (isnan(len_num) || len_num <= 0.0) {
+        return tsc_value_string(tsc_str_from_lit("", 0));
+    }
+    size_t len = (size_t)floor(len_num);
+    tsc_str_t* out = tsc_str_from_lit("", 0);
+    tsc_str_t* sep = tsc_str_from_lit(",", 1);
+    for (size_t i = 0; i < len; i++) {
+        if (i > 0) out = tsc_str_concat(out, sep);
+        tsc_value_t value = tsc_value_get_index(this_arg, (double)i);
+        if (!tsc_value_is_nullish(value)) {
+            out = tsc_str_concat(out, tsc_value_method_to_locale_string(value));
+        }
+    }
+    return tsc_value_string(out);
 }
 
 static tsc_value_t array_prototype_value_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {
