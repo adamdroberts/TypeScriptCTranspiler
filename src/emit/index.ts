@@ -43485,6 +43485,7 @@ class Emitter {
     private validateFsReaddirOptions(
         options: ts.Expression | undefined,
         label: string,
+        allowSignal = false,
     ): { withFileTypes: boolean; recursive: boolean; encoding: "utf8" | "hex" | "base64" | "buffer" } {
         if (!options || this.isUndefinedLikeExpression(options)) return { withFileTypes: false, recursive: false, encoding: "utf8" };
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
@@ -43515,7 +43516,7 @@ class Emitter {
         let encoding: "utf8" | "hex" | "base64" | "buffer" = "utf8";
         for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, `${label} options only support encoding, withFileTypes, and recursive property assignments`);
+                unsupported(prop, `${label} options only support encoding, withFileTypes, recursive${allowSignal ? ", and signal" : ""} property assignments`);
             }
             const key = this.staticPropertyName(prop.name);
             if (key === "encoding") {
@@ -43546,6 +43547,9 @@ class Emitter {
                     unsupported(prop.initializer, `${label}.recursive must be a boolean literal in this subset`);
                 }
                 recursive = value;
+                continue;
+            }
+            if (allowSignal && key === "signal") {
                 continue;
             }
             unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
@@ -43733,12 +43737,13 @@ class Emitter {
             }
             case "readdir": {
                 if (args.length < 1) unsupported(call, "fs.promises.readdir needs path and optional UTF-8/hex/base64/buffer encoding or withFileTypes options");
-                const options = this.validateFsReaddirOptions(args[1], "fs.promises.readdir");
+                const options = this.validateFsReaddirOptions(args[1], "fs.promises.readdir", true);
                 const p = this.emitExpr(args[0]!);
                 const optionSpecs: SequencedCallArg[] = [];
                 if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
                     optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
                 }
+                optionSpecs.push(...this.fsSignalOptionSpecs(args[1]));
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.readdir path"),
                     ...optionSpecs,
