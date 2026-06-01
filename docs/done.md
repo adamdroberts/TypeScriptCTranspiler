@@ -413,6 +413,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `dynamicObj.isPrototypeOf(value)` checks whether the dynamic receiver appears in another dynamic object's prototype chain. Test: `object_is_prototype_of`
 - `dynamicObj.propertyIsEnumerable(key)` checks that a dynamic property is both own and enumerable, returning false for hidden, inherited, or missing keys. Test: `object_property_is_enumerable`
 - Dynamic arrays, functions, and ordinary objects inherit callable shared `Object.prototype` methods through dynamic property lookup, including `.hasOwnProperty(...)`, `.propertyIsEnumerable(...)`, `.isPrototypeOf(...)`, `.toString()`, `.toLocaleString()`, and `.valueOf()`, while inherited keys are visible to `in` / `Reflect.has(...)` without becoming own properties. Test: `object_prototype_inherited_methods`
+- Dynamic arrays inherit callable `Array.prototype` methods for `join`, `includes`, `indexOf`, `lastIndexOf`, `at`, `keys`, `values`, and `entries`, allowing inherited lookup, `in` / `Reflect.has(...)`, and detached `Reflect.apply(...)` calls to share the existing dynamic array helper semantics. Test: `dynamic_array_prototype_methods`
 - `Object.prototype.isPrototypeOf.call(proto, value)` dispatches AOT over dynamic prototype chains including array and function targets, returns false for non-object receivers/values, and preserves ignored argument side effects. Tests: `object_prototype_is_prototype_of_call`, `object_prototype_is_prototype_of_arrays_functions`
 - `Object.prototype.hasOwnProperty.call(value, key)` and `Object.prototype.propertyIsEnumerable.call(value, key)` dispatch AOT over typed interface/class objects, dynamic objects, arrays, strings, Buffers, and primitive receivers while preserving ignored argument side effects. Test: `object_prototype_call`
 - `Object.prototype.hasOwnProperty.call(...)`, `propertyIsEnumerable.call(...)`, `isPrototypeOf.call(...)`, `toLocaleString.call(...)`, and `valueOf.call(...)` reject nullish dynamic receivers after evaluating arguments, while `Object.prototype.toString.call(...)` still returns `[object Null]` / `[object Undefined]`. Test: `object_prototype_nullish_call`
@@ -2229,6 +2230,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_array_methods` | dynamic array shift/unshift/push/concat behavior |
 | `dynamic_array_of` | Array.of<any> construction followed by dynamic array coercion |
 | `dynamic_array_object_enumeration` | dynamic array Object/Reflect enumeration and descriptors |
+| `dynamic_array_prototype_methods` | inherited dynamic Array.prototype method lookup and detached calls |
 | `dynamic_array_property_writes` | dynamic array string-key index writes and length writes |
 | `dynamic_array_reduce` | dynamic Array.reduce with explicit initial value and expression/block-body callbacks |
 | `dynamic_array_reduce_no_initial` | dynamic Array.reduce/reduceRight without explicit initial values |

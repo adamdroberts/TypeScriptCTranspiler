@@ -1,0 +1,4 @@
+types: function function function function
+lookup: false true true
+search: red|blue|red true false 2 2 blue
+iters: 0|1|2 red|blue|red 1|blue

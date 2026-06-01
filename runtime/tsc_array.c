@@ -2,11 +2,80 @@
 
 /* ---------------- arrays ---------------- */
 
+static tsc_value_t array_proto_arg(tsc_array_t* args, size_t index) {
+    return args && index < args->len
+        ? TSC_ARR(tsc_value_t, args, index)
+        : tsc_value_undefined();
+}
+
+static tsc_value_t array_prototype_at(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    return tsc_value_method_at(this_arg, array_proto_arg(args, 0));
+}
+
+static tsc_value_t array_prototype_includes(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    return tsc_value_method_includes(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
+}
+
+static tsc_value_t array_prototype_index_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    return tsc_value_method_index_of(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
+}
+
+static tsc_value_t array_prototype_last_index_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    return tsc_value_method_last_index_of(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
+}
+
+static tsc_value_t array_prototype_join(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    return tsc_value_method_join(this_arg, array_proto_arg(args, 0));
+}
+
+static tsc_value_t array_prototype_keys(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    return tsc_value_method_keys(this_arg);
+}
+
+static tsc_value_t array_prototype_values(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    return tsc_value_method_values(this_arg);
+}
+
+static tsc_value_t array_prototype_entries(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    return tsc_value_method_entries(this_arg);
+}
+
+static void array_prototype_define_method(tsc_object_t* prototype, const char* name, size_t len, tsc_generic_function_t fn) {
+    tsc_object_define(
+        prototype,
+        tsc_str_from_lit(name, len),
+        tsc_value_function_generic(fn, NULL),
+        true,
+        false,
+        true
+    );
+}
+
 static tsc_value_t tsc_array_default_prototype(void) {
     static bool initialized = false;
     static tsc_value_t prototype;
     if (!initialized) {
-        prototype = tsc_value_object(tsc_object_new());
+        tsc_object_t* proto = tsc_object_new();
+        array_prototype_define_method(proto, "at", 2, array_prototype_at);
+        array_prototype_define_method(proto, "includes", 8, array_prototype_includes);
+        array_prototype_define_method(proto, "indexOf", 7, array_prototype_index_of);
+        array_prototype_define_method(proto, "lastIndexOf", 11, array_prototype_last_index_of);
+        array_prototype_define_method(proto, "join", 4, array_prototype_join);
+        array_prototype_define_method(proto, "keys", 4, array_prototype_keys);
+        array_prototype_define_method(proto, "values", 6, array_prototype_values);
+        array_prototype_define_method(proto, "entries", 7, array_prototype_entries);
+        prototype = tsc_value_object(proto);
         initialized = true;
     }
     return prototype;
