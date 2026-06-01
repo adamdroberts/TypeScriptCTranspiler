@@ -2811,9 +2811,22 @@ tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_val
 }
 
 tsc_value_t tsc_value_method_sort(tsc_value_t recv) {
-    if (!value_is_box(recv) || value_tag(recv) != TSC_VALUE_TAG_ARRAY) return recv;
-    tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-    if (a->frozen) return recv;
+    if (!value_is_box(recv)) return recv;
+    tsc_array_t* a = NULL;
+    if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
+        a = (tsc_array_t*)value_ptr(recv);
+        if (a->frozen) return recv;
+    } else if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
+        size_t len = (size_t)tsc_value_length(recv);
+        a = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
+        for (size_t i = 0; i < len; i++) {
+            if (!value_array_like_has_index(recv, i)) continue;
+            tsc_value_t value = tsc_value_get_index(recv, (double)i);
+            tsc_array_push_raw(a, &value);
+        }
+    } else {
+        return recv;
+    }
     for (size_t i = 1; i < a->len; i++) {
         tsc_value_t key = TSC_ARR(tsc_value_t, a, i);
         size_t j = i;
@@ -2824,6 +2837,15 @@ tsc_value_t tsc_value_method_sort(tsc_value_t recv) {
             j--;
         }
         TSC_ARR(tsc_value_t, a, j) = key;
+    }
+    if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
+        size_t len = (size_t)tsc_value_length(recv);
+        for (size_t i = 0; i < a->len; i++) {
+            tsc_value_set_index(recv, (double)i, TSC_ARR(tsc_value_t, a, i));
+        }
+        for (size_t i = a->len; i < len; i++) {
+            tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)i));
+        }
     }
     return recv;
 }
