@@ -16305,8 +16305,7 @@ class Emitter {
     }
 
     private commonJsObjectAssignExportSourceEntries(source: ts.Expression): CommonJsObjectAssignExportEntry[] | null {
-        let cur = source;
-        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        const cur = this.unwrapTransparentExpression(source);
         if (ts.isObjectLiteralExpression(cur)) return this.commonJsObjectAssignExportObjectEntries(cur);
         if (ts.isIdentifier(cur)) {
             const decl = this.untypedJsObjectLiteralVariableDeclaration(cur);
@@ -17565,7 +17564,7 @@ class Emitter {
     ): { left: ts.PropertyAccessExpression; right: ts.Expression } | null {
         const assignment = this.commonJsModuleExportsValueAssignmentChain(stmt);
         if (!assignment) return null;
-        if (ts.isObjectLiteralExpression(assignment.right)) return null;
+        if (ts.isObjectLiteralExpression(this.unwrapTransparentExpression(assignment.right))) return null;
         this.validateCommonJsModuleExportsValueAssignment(assignment.right);
         return assignment;
     }
@@ -17877,8 +17876,7 @@ class Emitter {
     }
 
     private commonJsReturnedObjectLiteral(expr: ts.Expression): ts.ObjectLiteralExpression | null {
-        let cur = expr;
-        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        const cur = this.unwrapTransparentExpression(expr);
         if (ts.isObjectLiteralExpression(cur)) return cur;
         if (!ts.isCallExpression(cur) || cur.arguments.length < 1) return null;
         const callName = this.objectStaticCallName(cur);
@@ -17891,6 +17889,14 @@ class Emitter {
             return null;
         }
         return this.commonJsReturnedObjectLiteral(cur.arguments[0]!);
+    }
+
+    private isTransparentExpressionNode(node: ts.Node): boolean {
+        return ts.isParenthesizedExpression(node) ||
+            ts.isAsExpression(node) ||
+            ts.isTypeAssertionExpression(node) ||
+            ts.isNonNullExpression(node) ||
+            ts.isSatisfiesExpression(node);
     }
 
     private commonJsIifeReturnedObjectLiteral(expr: ts.Expression): ts.ObjectLiteralExpression | null {
@@ -18009,6 +18015,7 @@ class Emitter {
             cur.parent &&
             (
                 ts.isParenthesizedExpression(cur.parent) ||
+                this.isTransparentExpressionNode(cur.parent) ||
                 (
                     ts.isCallExpression(cur.parent) &&
                     cur.parent.arguments[0] === cur &&
@@ -18044,6 +18051,7 @@ class Emitter {
             cur.parent &&
             (
                 ts.isParenthesizedExpression(cur.parent) ||
+                this.isTransparentExpressionNode(cur.parent) ||
                 (
                     ts.isCallExpression(cur.parent) &&
                     cur.parent.arguments[0] === cur &&
@@ -18070,7 +18078,7 @@ class Emitter {
         if (!factory) return false;
 
         let factoryParent: ts.Node | undefined = factory.parent;
-        while (factoryParent && ts.isParenthesizedExpression(factoryParent)) factoryParent = factoryParent.parent;
+        while (factoryParent && this.isTransparentExpressionNode(factoryParent)) factoryParent = factoryParent.parent;
         if (!factoryParent || !ts.isVariableDeclaration(factoryParent)) return false;
 
         if (this.commonJsZeroArgLocalFactoryDeclarationReturnedObjectLiteral(factoryParent) !== object) return false;
@@ -18146,6 +18154,7 @@ class Emitter {
             }
             if (
                 ts.isParenthesizedExpression(parent) ||
+                this.isTransparentExpressionNode(parent) ||
                 ts.isReturnStatement(parent) ||
                 ts.isBlock(parent) ||
                 ts.isArrowFunction(parent) ||
@@ -19470,8 +19479,10 @@ class Emitter {
         stmt: ts.Statement,
     ): CommonJsObjectAssignExportEntry[] | null {
         const assignment = this.commonJsModuleExportsValueAssignmentChain(stmt);
-        if (!assignment || ts.isObjectLiteralExpression(assignment.right)) return null;
-        const entries = this.commonJsObjectAssignExportSourceEntries(assignment.right);
+        if (!assignment) return null;
+        const right = this.unwrapTransparentExpression(assignment.right);
+        if (ts.isObjectLiteralExpression(right)) return null;
+        const entries = this.commonJsObjectAssignExportSourceEntries(right);
         if (!entries) return null;
         const out: CommonJsObjectAssignExportEntry[] = [];
         for (const entry of entries) {
@@ -19510,13 +19521,13 @@ class Emitter {
     private commonJsModuleExportsValueDeclaration(sf: ts.SourceFile): ts.BinaryExpression | null {
         for (const stmt of sf.statements) {
             const chain = this.commonJsModuleExportsValueAssignmentChain(stmt);
+            const right = chain ? this.unwrapTransparentExpression(chain.right) : null;
             if (
                 chain &&
-                (!ts.isObjectLiteralExpression(chain.right) ||
-                    this.isCommonJsObjectLiteralDefaultValue(chain.right))
+                right &&
+                (!ts.isObjectLiteralExpression(right) ||
+                    this.isCommonJsObjectLiteralDefaultValue(right))
             ) {
-                let right: ts.Expression = chain.right;
-                while (ts.isParenthesizedExpression(right)) right = right.expression;
                 if (
                     ts.isCallExpression(right) &&
                     (

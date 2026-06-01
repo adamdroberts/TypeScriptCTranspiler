@@ -877,6 +877,18 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-local-wrapper-factory-object": cjsPackage("tsc2c-cjs-module-local-wrapper-factory-object", {
         "index.js": 'function makeWrappedApi() {\n  return Object.seal({\n    default: "factory-wrapper-default",\n    label: "factory-wrapper",\n    count: 130,\n    double(value) { return value * 2; }\n  });\n}\nmodule.exports = makeWrappedApi();\n',
     }),
+    "tsc2c-cjs-module-asserted-object": {
+        packageJson: { name: "tsc2c-cjs-module-asserted-object", version: "1.0.0", main: "index.ts" },
+        files: {
+            "index.ts": 'module.exports = ({\n  default: "asserted-default",\n  label: "asserted-object",\n  count: 131,\n  double(value: number): number { return value * 2; }\n} as const);\nexport {};\n',
+        },
+    },
+    "tsc2c-cjs-module-asserted-factory-object": {
+        packageJson: { name: "tsc2c-cjs-module-asserted-factory-object", version: "1.0.0", main: "index.ts" },
+        files: {
+            "index.ts": 'function makeApi() {\n  return ({\n    default: "asserted-factory-default",\n    label: "asserted-factory",\n    count: 132,\n    triple(value: number): number { return value * 3; }\n  } satisfies Record<string, any>);\n}\nmodule.exports = makeApi();\nexport {};\n',
+        },
+    },
     "tsc2c-cjs-module-object-identifier": cjsPackage("tsc2c-cjs-module-object-identifier", {
         "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "identifier-default",\n  greet: function greet(name) { return "identifier " + name; },\n  label: local.label,\n  count: 72,\n  double: local.double,\n  enabled: true\n};\nmodule.exports = api;\n',
         "local.js": 'exports.label = "object-identifier";\nexports.double = function double(value) { return value * 2; };\n',
