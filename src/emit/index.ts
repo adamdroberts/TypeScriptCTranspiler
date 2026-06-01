@@ -17580,6 +17580,12 @@ class Emitter {
     private isCommonJsRuntimeComputedModuleExportsValue(expr: ts.Expression): boolean {
         let cur = expr;
         while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (
+            ts.isBinaryExpression(cur) &&
+            cur.operatorToken.kind === ts.SyntaxKind.CommaToken
+        ) {
+            return this.isCommonJsRuntimeComputedModuleExportsValue(cur.right);
+        }
         const objectCallName = this.objectStaticCallName(cur);
         if (
             objectCallName === "assign" ||
