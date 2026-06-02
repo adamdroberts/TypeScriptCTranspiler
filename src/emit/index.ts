@@ -47789,7 +47789,7 @@ class Emitter {
         if (syntaxTexts.length > 0) return syntaxTexts;
         const indexedTexts = this.staticIndexedAccessPropertyTexts(expr);
         if (indexedTexts.length > 0) return indexedTexts;
-        return this.staticLiteralUnionPropertyTexts(expr);
+        return this.staticLiteralPropertyTextsFromType(this.checker.getTypeAtLocation(expr));
     }
 
     private staticObjectKeysValuesIndexedAccessPropertyTexts(expr: ts.Expression): string[] {
