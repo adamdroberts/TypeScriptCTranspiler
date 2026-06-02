@@ -654,7 +654,7 @@ static tsc_value_t array_prototype_reduce(void* env, tsc_value_t this_arg, tsc_a
             found = true;
             break;
         }
-        if (!found) tsc_panic("Array.reduce: empty array with no initial value");
+        if (!found) tsc_throw_str(tsc_str_from_cstr("Array.reduce: empty array with no initial value"));
     }
     for (size_t i = start; i < len; i++) {
         if (!array_proto_has_index(this_arg, i)) continue;
@@ -685,7 +685,7 @@ static tsc_value_t array_prototype_reduce_right(void* env, tsc_value_t this_arg,
             found = true;
             break;
         }
-        if (!found) tsc_panic("Array.reduceRight: empty array with no initial value");
+        if (!found) tsc_throw_str(tsc_str_from_cstr("Array.reduceRight: empty array with no initial value"));
     }
     while (i-- > 0) {
         if (!array_proto_has_index(this_arg, i)) continue;

@@ -36097,9 +36097,9 @@ class Emitter {
             const initC = initial
                 ? `tsc_value_t ${acc} = ${initial}; size_t ${iv}_start = ${av}->len;`
                 : method === "reduce"
-                    ? `if (${av}->len == 0) tsc_panic("Array.reduce: empty array with no initial value"); ` +
+                    ? `if (${av}->len == 0) tsc_throw_str(tsc_str_from_cstr("Array.reduce: empty array with no initial value")); ` +
                         `tsc_value_t ${acc} = TSC_ARR(tsc_value_t, ${av}, 0); size_t ${iv}_start = 1;`
-                    : `if (${av}->len == 0) tsc_panic("Array.reduceRight: empty array with no initial value"); ` +
+                    : `if (${av}->len == 0) tsc_throw_str(tsc_str_from_cstr("Array.reduceRight: empty array with no initial value")); ` +
                         `tsc_value_t ${acc} = TSC_ARR(tsc_value_t, ${av}, ${av}->len - 1); size_t ${iv}_start = ${av}->len - 1;`;
             const loop = method === "reduce"
                 ? `for (size_t ${iv} = ${initial ? "0" : `${iv}_start`}; ${iv} < ${av}->len; ${iv}++) `
@@ -42113,7 +42113,7 @@ class Emitter {
                 }
                 const initC = initR
                     ? `${accType.c} ${accName} = ${initR.c}; size_t ${iv}_start = 0;`
-                    : `if (${av}->len == 0) tsc_panic("Array.reduce: empty array with no initial value"); ` +
+                    : `if (${av}->len == 0) tsc_throw_str(tsc_str_from_cstr("Array.reduce: empty array with no initial value")); ` +
                         `${accType.c} ${accName} = TSC_ARR(${accType.c}, ${av}, 0); size_t ${iv}_start = 1;`;
                 return {
                     c:
@@ -42136,7 +42136,7 @@ class Emitter {
                 }
                 const initC = initR
                     ? `${accType.c} ${accName} = ${initR.c}; size_t ${iv}_start = ${av}->len;`
-                    : `if (${av}->len == 0) tsc_panic("Array.reduceRight: empty array with no initial value"); ` +
+                    : `if (${av}->len == 0) tsc_throw_str(tsc_str_from_cstr("Array.reduceRight: empty array with no initial value")); ` +
                         `${accType.c} ${accName} = TSC_ARR(${accType.c}, ${av}, ${av}->len - 1); size_t ${iv}_start = ${av}->len - 1;`;
                 return {
                     c:
