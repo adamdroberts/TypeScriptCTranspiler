@@ -6,3 +6,4 @@ truncated: 2 red|cyan
 delete length: false
 numeric props: half minus one 2 0|1|1.5|-1
 boundary props: 0 max beyond 4294967295|4294967296
+numeric boundary props: 0 numeric-max numeric-beyond 4294967295|4294967296

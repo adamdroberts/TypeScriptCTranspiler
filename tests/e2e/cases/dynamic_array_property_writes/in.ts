@@ -20,3 +20,8 @@ const boundary: any = [];
 boundary["4294967295"] = "max";
 boundary["4294967296"] = "beyond";
 console.log("boundary props:", boundary.length, boundary["4294967295"], boundary["4294967296"], Object.keys(boundary).join("|"));
+
+const numericBoundary: any = [];
+numericBoundary[4294967295] = "numeric-max";
+numericBoundary[4294967296] = "numeric-beyond";
+console.log("numeric boundary props:", numericBoundary.length, numericBoundary[4294967295], numericBoundary[4294967296], Object.keys(numericBoundary).join("|"));
