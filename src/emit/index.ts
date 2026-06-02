@@ -26941,6 +26941,7 @@ class Emitter {
                 buf.line(`${storage}.extensible = true;`);
                 buf.line(`${storage}.sealed = false;`);
                 buf.line(`${storage}.frozen = false;`);
+                buf.line(`${storage}.length_writable = true;`);
                 buf.line(`${storage}.prototype = tsc_value_undefined();`);
                 buf.line(`${storage}.iter_pos = 0;`);
                 buf.line(`${storage}.iter_has_return = false;`);
@@ -41247,7 +41248,7 @@ class Emitter {
                     pushes.push(`if (${av}->len + 1 > ${av}->cap) tsc_array_reserve(${av}, ${av}->len + 1); TSC_ARR(${et.c}, ${av}, ${av}->len) = ${vv}; ${av}->len++`);
                 }
                 if (pushes.length > 0) {
-                    pieces.push(`if (${av}->extensible && !${av}->sealed && !${av}->frozen) { ${pushes.join("; ")}; }`);
+                    pieces.push(`if (${av}->extensible && !${av}->sealed && !${av}->frozen && ${av}->length_writable) { ${pushes.join("; ")}; }`);
                 }
                 pieces.push(`(double)${av}->len`);
                 return { c: `({ ${pieces.join("; ")}; })`, ty: T_NUMBER };
@@ -41261,7 +41262,7 @@ class Emitter {
                     ([arr]) =>
                         `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${rv} = ` +
                         `(${av}->len > 0 ? TSC_ARR(${et.c}, ${av}, ${av}->len - 1) : (${et.c})0); ` +
-                        `if (!${av}->sealed && !${av}->frozen) tsc_array_pop_raw(${av}); ${rv}; })`,
+                        `if (!${av}->sealed && !${av}->frozen && ${av}->length_writable) tsc_array_pop_raw(${av}); ${rv}; })`,
                 );
             }
             case "shift": {
@@ -41273,7 +41274,7 @@ class Emitter {
                     ([arr]) =>
                         `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${rv} = ` +
                         `(${av}->len > 0 ? TSC_ARR(${et.c}, ${av}, 0) : (${et.c})0); ` +
-                        `if (!${av}->sealed && !${av}->frozen) tsc_array_shift_raw(${av}); ${rv}; })`,
+                        `if (!${av}->sealed && !${av}->frozen && ${av}->length_writable) tsc_array_shift_raw(${av}); ${rv}; })`,
                 );
             }
             case "unshift": {
@@ -41288,7 +41289,7 @@ class Emitter {
                     unshifts.push(`tsc_array_unshift_raw(${av}, &${vv})`);
                 }
                 if (unshifts.length > 0) {
-                    pieces.push(`if (${av}->extensible && !${av}->sealed && !${av}->frozen) { ${unshifts.join("; ")}; }`);
+                    pieces.push(`if (${av}->extensible && !${av}->sealed && !${av}->frozen && ${av}->length_writable) { ${unshifts.join("; ")}; }`);
                 }
                 pieces.push(`tsc_array_length(${av})`);
                 return { c: `({ ${pieces.join("; ")}; })`, ty: T_NUMBER };
@@ -49380,7 +49381,7 @@ class Emitter {
                             `if (${targetC}->frozen) { ${assignFailure}; ` +
                             `} else if (${idx} < ${targetC}->len) { ` +
                                 `TSC_ARR(${elem.c}, ${targetC}, ${idx}) = ${elemTmp}; ` +
-                            `} else if (${targetC}->extensible && !${targetC}->sealed && ${idx} == ${targetC}->len) { ` +
+                            `} else if (${targetC}->extensible && !${targetC}->sealed && ${targetC}->length_writable && ${idx} == ${targetC}->len) { ` +
                                 `tsc_array_push_raw(${targetC}, &${elemTmp}); ` +
                             `} else { ${assignFailure}; } ` +
                         `}`,
@@ -49415,7 +49416,7 @@ class Emitter {
                                 `tsc_str_t* ${nextKey} = tsc_str_from_int((int64_t)${targetC}->len); ` +
                                 `if (tsc_str_eq(${key}, ${nextKey})) { ` +
                                     `${elem.c} ${elemTmp} = ${coerced}; ` +
-                                    `if (${targetC}->frozen || !${targetC}->extensible || ${targetC}->sealed) { ${assignFailure}; } else { tsc_array_push_raw(${targetC}, &${elemTmp}); } ` +
+                                    `if (${targetC}->frozen || !${targetC}->extensible || ${targetC}->sealed || !${targetC}->length_writable) { ${assignFailure}; } else { tsc_array_push_raw(${targetC}, &${elemTmp}); } ` +
                                 `} ` +
                             `} ` +
                         `}`,
@@ -49446,7 +49447,7 @@ class Emitter {
                                 `if (${targetC}->frozen && ${numericKey} <= ${targetC}->len) { ${assignFailure}; ` +
                                 `} else if (${numericKey} < ${targetC}->len) { ` +
                                     `TSC_ARR(${elem.c}, ${targetC}, ${numericKey}) = ${elemTmp}; ` +
-                                `} else if (${targetC}->extensible && !${targetC}->sealed && ${numericKey} == ${targetC}->len) { ` +
+                                `} else if (${targetC}->extensible && !${targetC}->sealed && ${targetC}->length_writable && ${numericKey} == ${targetC}->len) { ` +
                                     `tsc_array_push_raw(${targetC}, &${elemTmp}); ` +
                                 `} else if (${numericKey} == ${targetC}->len) { ` +
                                     `${assignFailure}; ` +
@@ -49481,7 +49482,7 @@ class Emitter {
                         `if (${targetC}->frozen) { ${assignFailure}; ` +
                         `} else if (${idx} < ${targetC}->len) { ` +
                             `TSC_ARR(${elem.c}, ${targetC}, ${idx}) = ${elemTmp}; ` +
-                        `} else if (${targetC}->extensible && !${targetC}->sealed && ${idx} == ${targetC}->len) { ` +
+                        `} else if (${targetC}->extensible && !${targetC}->sealed && ${targetC}->length_writable && ${idx} == ${targetC}->len) { ` +
                             `tsc_array_push_raw(${targetC}, &${elemTmp}); ` +
                         `} else { ${assignFailure}; } ` +
                     `}`,
@@ -50204,7 +50205,7 @@ class Emitter {
             const pieces = [
                 `tsc_value_t ${out} = tsc_value_undefined()`,
                 `if (tsc_str_eq(${keyC}, tsc_str_from_lit("length", 6))) { ` +
-                    `${this.typedArrayDescriptorInit(lenDesc, `tsc_value_num((double)${arrC}->len)`, `!${arrC}->frozen`, "false", "false")}; ` +
+                    `${this.typedArrayDescriptorInit(lenDesc, `tsc_value_num((double)${arrC}->len)`, `!${arrC}->frozen && ${arrC}->length_writable`, "false", "false")}; ` +
                     `${out} = tsc_value_object(${lenDesc}); ` +
                 `} else { ` +
                     `for (size_t ${idx} = 0; ${idx} < ${arrC}->len; ${idx}++) { ` +
@@ -50243,7 +50244,7 @@ class Emitter {
                     `${this.typedArrayDescriptorInit(elemDesc, elemValue, `!${arrC}->frozen`, "true", `!${arrC}->sealed && !${arrC}->frozen`)}; ` +
                     `tsc_object_set(${out}, ${key}, tsc_value_object(${elemDesc})); ` +
                 `}`,
-                `{ ${this.typedArrayDescriptorInit(lenDesc, `tsc_value_num((double)${arrC}->len)`, `!${arrC}->frozen`, "false", "false")}; ` +
+                `{ ${this.typedArrayDescriptorInit(lenDesc, `tsc_value_num((double)${arrC}->len)`, `!${arrC}->frozen && ${arrC}->length_writable`, "false", "false")}; ` +
                     `tsc_object_set(${out}, tsc_str_from_lit("length", 6), tsc_value_object(${lenDesc})); }`,
                 `tsc_value_object(${out})`,
             ];
@@ -50323,15 +50324,15 @@ class Emitter {
         const pieces: string[] = [
             `bool ${out} = false`,
             `if (tsc_str_eq(${keyC}, tsc_str_from_lit("length", 6))) { ` +
-                `bool _cur_w = !${arrC}->frozen; ` +
+                `bool _cur_w = !${arrC}->frozen && ${arrC}->length_writable; ` +
                 `bool _next_w = ${desc.hasWritable} ? ${desc.writable} : _cur_w; ` +
                 `bool _next_e = ${desc.hasEnumerable} ? ${desc.enumerable} : false; ` +
                 `bool _next_c = ${desc.hasConfigurable} ? ${desc.configurable} : false; ` +
-                `if (_next_w == _cur_w && !_next_e && !_next_c) { ` +
+                `if (!(!_cur_w && _next_w) && !_next_e && !_next_c) { ` +
                     `${out} = true; ` +
                     `if (${desc.hasValue}) { ` +
                         `double ${newLen} = tsc_value_as_num(${lengthValue}); ` +
-                        `if (isnan(${newLen}) || isinf(${newLen}) || ${newLen} < 0.0 || floor(${newLen}) != ${newLen} || (${newLen} > (double)${arrC}->len && !${arrC}->extensible) || (${arrC}->sealed && (size_t)${newLen} != ${arrC}->len) || (${arrC}->frozen && (size_t)${newLen} != ${arrC}->len)) { ` +
+                        `if (isnan(${newLen}) || isinf(${newLen}) || ${newLen} < 0.0 || floor(${newLen}) != ${newLen} || (${newLen} > (double)${arrC}->len && !${arrC}->extensible) || (${arrC}->sealed && (size_t)${newLen} != ${arrC}->len) || (${arrC}->frozen && (size_t)${newLen} != ${arrC}->len) || (!_cur_w && (size_t)${newLen} != ${arrC}->len)) { ` +
                             `${out} = false; ` +
                         `} else { ` +
                             `${elem.c} ${zero} = (${elem.c})0; ` +
@@ -50339,6 +50340,7 @@ class Emitter {
                             `${arrC}->len = (size_t)${newLen}; ` +
                         `} ` +
                     `} ` +
+                    `if (${out} && !_next_w) ${arrC}->length_writable = false; ` +
                 `} ` +
             `} else { ` +
                 `for (size_t ${idx} = 0; ${idx} < ${arrC}->len; ${idx}++) { ` +
@@ -50362,7 +50364,7 @@ class Emitter {
                         `break; ` +
                     `} ` +
                 `} ` +
-                `if (!${out} && ${arrC}->extensible && !${arrC}->sealed && !${arrC}->frozen) { ` +
+                `if (!${out} && ${arrC}->extensible && !${arrC}->sealed && !${arrC}->frozen && ${arrC}->length_writable) { ` +
                     `tsc_str_t* ${nextKey} = tsc_str_from_int((int64_t)${arrC}->len); ` +
                     `bool _next_w = ${desc.hasWritable} ? ${desc.writable} : true; ` +
                     `bool _next_e = ${desc.hasEnumerable} ? ${desc.enumerable} : true; ` +
@@ -50516,7 +50518,7 @@ class Emitter {
                             `break; ` +
                         `} ` +
                     `} ` +
-                    `if (!${out} && ${arrC}->extensible && !${arrC}->sealed) { ` +
+                    `if (!${out} && ${arrC}->extensible && !${arrC}->sealed && ${arrC}->length_writable) { ` +
                         `tsc_str_t* ${nextKey} = tsc_str_from_int((int64_t)${arrC}->len); ` +
                         `if (tsc_str_eq(${keyC}, ${nextKey})) { ` +
                             `${elem.c} ${elemTmp} = ${valueC}; ` +

@@ -17,6 +17,7 @@ typedef struct tsc_array {
     bool extensible;
     bool sealed;
     bool frozen;
+    bool length_writable;
     tsc_value_t prototype;
     size_t iter_pos;
     bool iter_has_return;
@@ -268,6 +269,7 @@ void aotFunctionCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
     args.extensible = true;
     args.sealed = false;
     args.frozen = false;
+    args.length_writable = true;
     args.prototype = tsc_value_undefined();
     args.iter_pos = 0;
     args.iter_has_return = false;

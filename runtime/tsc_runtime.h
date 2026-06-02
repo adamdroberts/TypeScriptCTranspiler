@@ -526,6 +526,7 @@ typedef struct tsc_array {
     bool extensible;
     bool sealed;
     bool frozen;
+    bool length_writable;
     tsc_value_t prototype;
     size_t iter_pos;
     bool iter_has_return;

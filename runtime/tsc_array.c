@@ -721,6 +721,7 @@ static tsc_value_t tsc_array_default_prototype(void) {
         proto->extensible = true;
         proto->sealed = false;
         proto->frozen = false;
+        proto->length_writable = true;
         proto->prototype = tsc_value_object_prototype();
         proto->iter_pos = 0;
         proto->iter_has_return = false;
@@ -789,6 +790,7 @@ tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap) {
     a->extensible = true;
     a->sealed = false;
     a->frozen = false;
+    a->length_writable = true;
     a->prototype = tsc_array_default_prototype();
     a->iter_pos = 0;
     a->iter_has_return = false;
@@ -811,6 +813,7 @@ tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap) {
     a->extensible = true;
     a->sealed = false;
     a->frozen = false;
+    a->length_writable = true;
     a->prototype = tsc_array_default_prototype();
     a->iter_pos = 0;
     a->iter_has_return = false;
@@ -947,7 +950,7 @@ int64_t array_range_index(double value, int64_t len, double fallback) {
 }
 
 tsc_array_t* tsc_array_splice(tsc_array_t* a, double start, double delete_count, int argc, const tsc_array_t* items) {
-    if (a->sealed || a->frozen) return tsc_array_new(a->es, 1);
+    if (a->sealed || a->frozen || !a->length_writable) return tsc_array_new(a->es, 1);
     int64_t len = (int64_t)a->len;
     int64_t at = argc <= 0 ? 0 : array_range_index(start, len, 0.0);
     int64_t del = 0;
@@ -962,6 +965,7 @@ tsc_array_t* tsc_array_splice(tsc_array_t* a, double start, double delete_count,
 
     size_t insert_len = items ? items->len : 0;
     size_t new_len = a->len - (size_t)del + insert_len;
+    if (new_len != a->len && !a->length_writable) return tsc_array_new(a->es, 1);
     if (new_len > a->len && !a->extensible) return tsc_array_new(a->es, 1);
 
     tsc_array_t* removed = tsc_array_slice(a, (double)at, (double)(at + del));
