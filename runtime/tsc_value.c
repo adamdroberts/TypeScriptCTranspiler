@@ -553,20 +553,10 @@ tsc_value_t tsc_value_get_index(tsc_value_t v, double index) {
         return tsc_value_string(tsc_str_char_at(s, index));
     }
     if (value_tag(v) == TSC_VALUE_TAG_OBJECT) {
-        if (isnan(index) || isinf(index) || index < 0 || floor(index) != index) {
-            return tsc_value_get_prop(v, tsc_str_from_num(index));
-        }
-        char key_buf[32];
-        snprintf(key_buf, sizeof key_buf, "%zu", (size_t)index);
-        return tsc_object_get((tsc_object_t*)value_ptr(v), tsc_str_from_cstr(key_buf));
+        return tsc_value_get_prop(v, tsc_str_from_num(index));
     }
     if (value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        if (isnan(index) || isinf(index) || index < 0 || floor(index) != index) {
-            return tsc_value_get_prop(v, tsc_str_from_num(index));
-        }
-        char key_buf[32];
-        snprintf(key_buf, sizeof key_buf, "%zu", (size_t)index);
-        return tsc_value_get_prop(v, tsc_str_from_cstr(key_buf));
+        return tsc_value_get_prop(v, tsc_str_from_num(index));
     }
     if (value_tag(v) != TSC_VALUE_TAG_ARRAY) return tsc_value_undefined();
     tsc_array_t* a = (tsc_array_t*)value_ptr(v);
@@ -595,14 +585,10 @@ bool tsc_value_set_index(tsc_value_t v, double index, tsc_value_t value) {
         return false;
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
-        char key_buf[32];
-        snprintf(key_buf, sizeof key_buf, "%zu", (size_t)index);
-        return tsc_value_set_prop(v, tsc_str_from_cstr(key_buf), value);
+        return tsc_value_set_prop(v, tsc_str_from_num(index), value);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        char key_buf[32];
-        snprintf(key_buf, sizeof key_buf, "%zu", (size_t)index);
-        return tsc_value_set_prop(v, tsc_str_from_cstr(key_buf), value);
+        return tsc_value_set_prop(v, tsc_str_from_num(index), value);
     }
     if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_ARRAY) return false;
     tsc_array_t* a = (tsc_array_t*)value_ptr(v);
