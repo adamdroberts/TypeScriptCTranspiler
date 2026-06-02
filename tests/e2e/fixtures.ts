@@ -861,24 +861,28 @@ const packages: Record<string, PackageFixture> = {
         "local.js": 'exports.label = "unary-iife-wrapper";\nexports.count = 88;\n',
     }),
     "tsc2c-cjs-factory-wrapper": cjsPackage("tsc2c-cjs-factory-wrapper", {
-        "index.js": '(function (factory) {\n  if (typeof module === "object" && module.exports) {\n    factory(require, module, exports);\n  }\n})(function (req, mod, out) {\n  const local = req("./local.js");\n  out.default = function greet(name) { return "factory-wrapper " + name; };\n  out.label = local.label;\n  mod.exports.count = local.count;\n  out.double = function double(value) { return value * 9; };\n});\n',
+        "index.js": '(function (factory) {\n  if (typeof module === "object" && module.exports) {\n    factory(require, module, exports);\n  }\n})(function (req, mod, out) {\n  const local = req("./local.js");\n  out.__esModule = true;\n  out.default = function greet(name) { return "factory-wrapper " + name; };\n  out.label = local.label;\n  mod.exports.count = local.count;\n  out.double = function double(value) { return value * 9; };\n});\n',
         "local.js": 'exports.label = "factory-wrapper";\nexports.count = 83;\n',
     }),
     "tsc2c-cjs-factory-wrapper-call": cjsPackage("tsc2c-cjs-factory-wrapper-call", {
-        "index.js": '(function (factory) {\n  if (typeof module === "object" && module.exports) {\n    factory.call(undefined, require, module, exports);\n  }\n})(function (req, mod, out) {\n  const local = req("./local.js");\n  out.default = function greet(name) { return "factory-wrapper-call " + name; };\n  out.label = local.label;\n  mod.exports.count = local.count;\n  out.double = function double(value) { return value * 10; };\n});\n',
+        "index.js": '(function (factory) {\n  if (typeof module === "object" && module.exports) {\n    factory.call(undefined, require, module, exports);\n  }\n})(function (req, mod, out) {\n  const local = req("./local.js");\n  out.__esModule = true;\n  out.default = function greet(name) { return "factory-wrapper-call " + name; };\n  out.label = local.label;\n  mod.exports.count = local.count;\n  out.double = function double(value) { return value * 10; };\n});\n',
         "local.js": 'exports.label = "factory-wrapper-call";\nexports.count = 84;\n',
     }),
     "tsc2c-cjs-factory-wrapper-apply": cjsPackage("tsc2c-cjs-factory-wrapper-apply", {
-        "index.js": '(function (factory) {\n  if (typeof module === "object" && module.exports) {\n    factory.apply(null, [require, module, exports]);\n  }\n})(function (req, mod, out) {\n  const local = req("./local.js");\n  out.default = function greet(name) { return "factory-wrapper-apply " + name; };\n  out.label = local.label;\n  mod.exports.count = local.count;\n  out.double = function double(value) { return value * 11; };\n});\n',
+        "index.js": '(function (factory) {\n  if (typeof module === "object" && module.exports) {\n    factory.apply(null, [require, module, exports]);\n  }\n})(function (req, mod, out) {\n  const local = req("./local.js");\n  out.__esModule = true;\n  out.default = function greet(name) { return "factory-wrapper-apply " + name; };\n  out.label = local.label;\n  mod.exports.count = local.count;\n  out.double = function double(value) { return value * 11; };\n});\n',
         "local.js": 'exports.label = "factory-wrapper-apply";\nexports.count = 85;\n',
     }),
     "tsc2c-cjs-factory-wrapper-reflect-apply": cjsPackage("tsc2c-cjs-factory-wrapper-reflect-apply", {
-        "index.js": '(function (factory) {\n  if (typeof module === "object" && module.exports) {\n    Reflect.apply(factory, null, [require, module, exports]);\n  }\n})(function (req, mod, out) {\n  const local = req("./local.js");\n  out.default = function greet(name) { return "factory-wrapper-reflect " + name; };\n  out.label = local.label;\n  mod.exports.count = local.count;\n  out.double = function double(value) { return value * 12; };\n});\n',
+        "index.js": '(function (factory) {\n  if (typeof module === "object" && module.exports) {\n    Reflect.apply(factory, null, [require, module, exports]);\n  }\n})(function (req, mod, out) {\n  const local = req("./local.js");\n  out.__esModule = true;\n  out.default = function greet(name) { return "factory-wrapper-reflect " + name; };\n  out.label = local.label;\n  mod.exports.count = local.count;\n  out.double = function double(value) { return value * 12; };\n});\n',
         "local.js": 'exports.label = "factory-wrapper-reflect";\nexports.count = 86;\n',
     }),
     "tsc2c-cjs-factory-wrapper-bind": cjsPackage("tsc2c-cjs-factory-wrapper-bind", {
-        "index.js": '(function (factory) {\n  if (typeof module === "object" && module.exports) {\n    factory.bind(undefined)(require, module, exports);\n  }\n})(function (req, mod, out) {\n  const local = req("./local.js");\n  out.default = function greet(name) { return "factory-wrapper-bind " + name; };\n  out.label = local.label;\n  mod.exports.count = local.count;\n  out.double = function double(value) { return value * 13; };\n});\n',
+        "index.js": '(function (factory) {\n  if (typeof module === "object" && module.exports) {\n    factory.bind(undefined)(require, module, exports);\n  }\n})(function (req, mod, out) {\n  const local = req("./local.js");\n  out.__esModule = true;\n  out.default = function greet(name) { return "factory-wrapper-bind " + name; };\n  out.label = local.label;\n  mod.exports.count = local.count;\n  out.double = function double(value) { return value * 13; };\n});\n',
         "local.js": 'exports.label = "factory-wrapper-bind";\nexports.count = 87;\n',
+    }),
+    "tsc2c-cjs-factory-wrapper-require-argument": cjsPackage("tsc2c-cjs-factory-wrapper-require-argument", {
+        "index.js": '(function (factory) {\n  if (typeof module === "object" && module.exports) {\n    factory(exports, require("./local.js"));\n  }\n})(function (out, local) {\n  out.__esModule = true;\n  out.default = function greet(name) { return "factory-wrapper-require-argument " + name; };\n  out.label = local.label;\n  out.count = local.count;\n  out.double = function double(value) { return value * 18; };\n});\n',
+        "local.js": 'exports.label = "factory-wrapper-require-argument";\nexports.count = 89;\n',
     }),
     "tsc2c-cjs-require-assertion-wrappers": {
         packageJson: { name: "tsc2c-cjs-require-assertion-wrappers", version: "1.0.0", main: "index.ts" },

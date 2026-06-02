@@ -15392,7 +15392,7 @@ class Emitter {
     }
 
     private hasCommonJsEsModuleMarker(sf: ts.SourceFile): boolean {
-        for (const stmt of sf.statements) {
+        for (const stmt of this.commonJsExportCandidateStatements(sf)) {
             if (this.commonJsEsModuleMarker(stmt)) return true;
         }
         return false;
@@ -18137,7 +18137,8 @@ class Emitter {
     private isCommonJsWrapperArgumentExpression(expr: ts.Expression): boolean {
         return this.isCommonJsRequireCallee(expr) ||
             this.isCommonJsModuleThisArg(expr) ||
-            this.isCommonJsExportsTargetExpression(expr);
+            this.isCommonJsExportsTargetExpression(expr) ||
+            this.requireCallSpecifier(expr) !== null;
     }
 
     private emitCommonJsIifeWrapper(buf: CBuf, stmt: ts.Statement): boolean {
@@ -19703,6 +19704,13 @@ class Emitter {
         if (decl && ts.isVariableDeclaration(decl) && decl.initializer) {
             const spec = this.requireCallSpecifier(decl.initializer);
             if (spec) return spec;
+        }
+        if (decl && ts.isParameter(decl)) {
+            const arg = this.commonJsIifeParameterArgument(decl);
+            if (arg) {
+                const spec = this.requireCallSpecifier(arg);
+                if (spec) return spec;
+            }
         }
         for (const stmt of id.getSourceFile().statements) {
             if (!ts.isVariableStatement(stmt)) continue;
