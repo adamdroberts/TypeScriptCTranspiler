@@ -1170,6 +1170,7 @@ double tsc_os_freemem(void);
 double tsc_os_uptime(void);
 tsc_array_t* tsc_os_loadavg(void);
 tsc_value_t tsc_os_user_info(void);
+tsc_value_t tsc_os_user_info_opts(const tsc_str_t* encoding);
 tsc_value_t tsc_os_network_interfaces(void);
 double tsc_os_get_priority(double pid);
 void tsc_os_set_priority(double pid, double priority);
