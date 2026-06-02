@@ -1,0 +1,3 @@
+{
+  "description": "closure-captured typed object literal locals fall back to heap storage"
+}
