@@ -15134,11 +15134,11 @@ class Emitter {
             ts.isPropertyAccessExpression(target.left) &&
             this.isModuleExportsAccess(target.left)
         ) {
-            const defaultMember = this.commonJsExportedMemberDeclaration(target.getSourceFile(), "default");
-            if (defaultMember) return defaultMember;
             if (!this.hasCommonJsEsModuleMarker(target.getSourceFile())) {
                 return target;
             }
+            const defaultMember = this.commonJsExportedMemberDeclaration(target.getSourceFile(), "default");
+            if (defaultMember) return defaultMember;
             return null;
         }
         if (target && ts.isCallExpression(target)) {
@@ -15156,11 +15156,11 @@ class Emitter {
         const info = this.resolvedModuleInfoForSpecifier(specifier.text, id.getSourceFile().fileName);
         const sf = info?.sf;
         if (!sf || !this.isJavaScriptSourceFile(sf)) return null;
-        const defaultMember = this.commonJsExportedMemberDeclaration(sf, "default");
-        if (defaultMember) return defaultMember;
         if (!this.hasCommonJsEsModuleMarker(sf)) {
             return sf;
         }
+        const defaultMember = this.commonJsExportedMemberDeclaration(sf, "default");
+        if (defaultMember) return defaultMember;
         return null;
     }
 
@@ -20380,13 +20380,13 @@ class Emitter {
         const name = this.commonJsAccessMemberName(access);
         if (name == null) return null;
         const info = this.resolvedModuleInfoForSpecifier(spec, access.getSourceFile().fileName);
-        const commonJsDecl = info ? this.commonJsExportedMemberDeclaration(info.sf, name) : null;
-        if (commonJsDecl) return commonJsDecl;
         if (name === "default" && info && this.isJavaScriptSourceFile(info.sf)) {
             if (!this.hasCommonJsEsModuleMarker(info.sf)) {
                 return info.sf;
             }
         }
+        const commonJsDecl = info ? this.commonJsExportedMemberDeclaration(info.sf, name) : null;
+        if (commonJsDecl) return commonJsDecl;
         if (!ts.isPropertyAccessExpression(access)) return null;
         const pa = access;
         const sym = this.checker.getSymbolAtLocation(pa.name);

@@ -138,6 +138,7 @@ This is the next item that most directly expands what programs can be written ag
   - Dynamic descriptor redefinition permits compatible generic redefinitions of non-configurable accessor properties while continuing to reject data/writable/getter/setter changes. Test: `object_accessor_redefine`.
   - CommonJS `module.exports = Object.fromEntries(Object.entries(require(...)))` derives finite named-export metadata from the required module for AOT package imports. Test: `node_modules_commonjs_module_exports_object_from_entries_require_object_entries`.
   - CommonJS named `default` imports now use the whole-`module.exports` AOT fallback for unmarked CommonJS packages without explicit default properties, matching default imports and namespace `.default` reads. Test: `node_modules_commonjs_mixed_interop_default`.
+  - Unmarked CommonJS packages with an explicit `exports.default` property now keep default imports and namespace `.default` reads pointed at the whole `module.exports` object, while named `default` imports still use the explicit property. Test: `node_modules_commonjs_mixed_interop_default`.
   - CommonJS whole-value `module.exports = "key" in object` defaults lower through the AOT package-source path as boxed boolean values. Test: `node_modules_commonjs_module_exports_in_default`.
 
 - **Phase 15 — perf & polish** (ongoing)
