@@ -42043,6 +42043,9 @@ class Emitter {
             }
         }
         const resultFor = (arr: string): string => {
+            if (recv.ty.elem?.kind === "value") {
+                return `tsc_value_array_from_values(tsc_value_method_flat(tsc_value_array(${arr}), tsc_value_num(${depth}.0)))`;
+            }
             let currentTy = recv.ty;
             let currentC = depth === 0
                 ? `tsc_array_slice(${arr}, 0, (double)${arr}->len)`

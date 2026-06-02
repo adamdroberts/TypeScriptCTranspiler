@@ -2848,10 +2848,11 @@ tsc_value_t tsc_value_method_concat(tsc_value_t recv, tsc_value_t value) {
 }
 
 void value_flat_push(tsc_array_t* out, tsc_value_t value, int depth) {
-    if (depth > 0 && value_is_box(value) && value_tag(value) == TSC_VALUE_TAG_ARRAY) {
-        tsc_array_t* inner = (tsc_array_t*)value_ptr(value);
-        for (size_t i = 0; i < inner->len; i++) {
-            value_flat_push(out, TSC_ARR(tsc_value_t, inner, i), depth - 1);
+    if (depth > 0 && tsc_value_is_array(value)) {
+        size_t len = (size_t)tsc_value_length(value);
+        for (size_t i = 0; i < len; i++) {
+            if (!value_array_like_has_index(value, i)) continue;
+            value_flat_push(out, tsc_value_get_index(value, (double)i), depth - 1);
         }
         return;
     }
@@ -2864,16 +2865,9 @@ tsc_value_t tsc_value_method_flat(tsc_value_t recv, tsc_value_t depth) {
     int depth_i = isnan(depth_num) || depth_num < 0 ? 0 : (isinf(depth_num) || depth_num > INT_MAX ? INT_MAX : (int)depth_num);
     size_t len = (size_t)tsc_value_length(recv);
     tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
-    if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
-        tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-        for (size_t i = 0; i < a->len; i++) {
-            value_flat_push(out, TSC_ARR(tsc_value_t, a, i), depth_i);
-        }
-    } else {
-        for (size_t i = 0; i < len; i++) {
-            if (!value_array_like_has_index(recv, i)) continue;
-            value_flat_push(out, tsc_value_get_index(recv, (double)i), depth_i);
-        }
+    for (size_t i = 0; i < len; i++) {
+        if (!value_array_like_has_index(recv, i)) continue;
+        value_flat_push(out, tsc_value_get_index(recv, (double)i), depth_i);
     }
     return tsc_value_array(out);
 }
@@ -3122,8 +3116,13 @@ tsc_value_t tsc_value_method_to_spliced(tsc_value_t recv, tsc_value_t start, tsc
 }
 
 void tsc_value_array_push_flat(tsc_array_t* out, tsc_value_t value) {
-    if (value_is_box(value) && value_tag(value) == TSC_VALUE_TAG_ARRAY) {
-        tsc_array_append(out, (tsc_array_t*)value_ptr(value));
+    if (tsc_value_is_array(value)) {
+        size_t len = (size_t)tsc_value_length(value);
+        for (size_t i = 0; i < len; i++) {
+            if (!value_array_like_has_index(value, i)) continue;
+            tsc_value_t item = tsc_value_get_index(value, (double)i);
+            tsc_array_push_raw(out, &item);
+        }
         return;
     }
     tsc_array_push_raw(out, &value);

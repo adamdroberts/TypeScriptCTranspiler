@@ -2,3 +2,4 @@ flat: a|b|c
 flat0: a,b|c
 inherited: p|q
 dynamic: x|y|z
+proxy nested: m|n|o|p

@@ -9,3 +9,7 @@ console.log("inherited:", Reflect.apply(proto.flat, inherited, []).join("|"));
 const dynamic: any = [["x"], ["y", ["z"]]];
 const flat: any = dynamic.flat(2);
 console.log("dynamic:", flat.join("|"));
+
+const nestedProxy: any = new Proxy(["m", ["n", "o"]], {});
+const proxyFlat: any = [nestedProxy, "p"].flat(2);
+console.log("proxy nested:", proxyFlat.join("|"));
