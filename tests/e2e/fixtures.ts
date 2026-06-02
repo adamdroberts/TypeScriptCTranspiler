@@ -651,6 +651,12 @@ const packages: Record<string, PackageFixture> = {
             "main.js": 'exports.__esModule = true;\nconst labelSource = { label: true, fallbackLabel: true };\nconst fnSource = { double: true, triple: true };\n/** @type {0 | 1} */\nlet labelIndex = Date.now() >= 0 ? 0 : 1;\n/** @type {0 | 1} */\nlet fnIndex = Date.now() >= 0 ? 0 : 1;\nexports[Object.getOwnPropertyNames(labelSource)[labelIndex]] = "own-property-names-computed";\nmodule.exports[Object.getOwnPropertyNames(fnSource)[fnIndex]] = function double(value) { return value * 7; };\n',
         },
     },
+    "tsc2c-cjs-computed-object-wrapper-enum-exports": {
+        packageJson: { name: "tsc2c-cjs-computed-object-wrapper-enum-exports", version: "1.0.0", main: "main.js" },
+        files: {
+            "main.js": 'exports.__esModule = true;\nconst keySource = Object.freeze({ label: true, fallbackLabel: true });\nconst valueSource = Object.seal({ fn: "double", altFn: "triple" });\nconst entrySource = Object.preventExtensions({ entryLabel: true, fallbackEntryLabel: true });\nconst nameSource = Object.setPrototypeOf({ nameLabel: true, fallbackNameLabel: true }, null);\n/** @type {0 | 1} */\nlet labelIndex = Date.now() >= 0 ? 0 : 1;\n/** @type {0 | 1} */\nlet fnIndex = Date.now() >= 0 ? 0 : 1;\n/** @type {0 | 1} */\nlet entryIndex = Date.now() >= 0 ? 0 : 1;\n/** @type {0 | 1} */\nlet nameIndex = Date.now() >= 0 ? 0 : 1;\nexports[Object.keys(keySource)[labelIndex]] = "wrapped-object-keys";\nmodule.exports[Object.values(valueSource)[fnIndex]] = function double(value) { return value * 8; };\nexports[Object.entries(entrySource)[entryIndex][0]] = "wrapped-object-entries";\nmodule.exports[Object.getOwnPropertyNames(nameSource)[nameIndex]] = "wrapped-object-names";\n',
+        },
+    },
     "tsc2c-cjs-conditional-whole-object-exports": cjsPackage("tsc2c-cjs-conditional-whole-object-exports", {
         "index.js": 'const isProd = true;\nmodule.exports = isProd ? { label: "conditional-prod", count: 88 } : { label: "conditional-dev", count: 12 };\n',
     }),

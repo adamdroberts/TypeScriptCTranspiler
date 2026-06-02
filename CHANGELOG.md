@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS computed named-export metadata now accepts finite `Object.keys` / `Object.values` / `Object.entries` / `Object.getOwnPropertyNames` export keys over static object literals wrapped in `Object.freeze`, `Object.seal`, `Object.preventExtensions`, or `Object.setPrototypeOf`. Test: `node_modules_commonjs_computed_object_wrapper_enum_exports`.
 - CommonJS unary-wrapped IIFEs such as `!function (...) { ... }(...)` now preserve finite AOT require and named-export metadata when wrapper parameters receive `require`, `module`, and `exports`. Test: `node_modules_commonjs_unary_iife_wrapper`.
 - Runtime-code manifest AOT constants now accept template expressions, selected conditional branches, and short-circuiting logical/nullish expressions without enabling unsafe eval. Test: `runtime_code_manifest_expressions`.
 - Finite dynamic `require(...)` proofs now resolve `array.at(idx)` specifiers over static string arrays and const aliases, including proven negative `.at(...)` indexes, into the AOT module graph. Test: `dynamic_require_static_array_at`.

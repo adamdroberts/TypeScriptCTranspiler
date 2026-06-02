@@ -47208,15 +47208,35 @@ class Emitter {
     }
 
     private staticObjectMapExpression(expr: ts.Expression): ts.ObjectLiteralExpression | null {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = this.unwrapObjectPreservingWrapperExpression(expr);
         if (ts.isObjectLiteralExpression(cur)) return cur;
         if (!ts.isIdentifier(cur)) return null;
         const sym = this.symbolForIdentifier(cur);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         if (!decl || !ts.isVariableDeclaration(decl) || !decl.initializer) return null;
         if ((ts.getCombinedNodeFlags(decl.parent) & ts.NodeFlags.Const) === 0) return null;
-        const init = this.unwrapTransparentExpression(decl.initializer);
+        const init = this.unwrapObjectPreservingWrapperExpression(decl.initializer);
         return ts.isObjectLiteralExpression(init) ? init : null;
+    }
+
+    private unwrapObjectPreservingWrapperExpression(expr: ts.Expression): ts.Expression {
+        let cur = this.unwrapTransparentExpression(expr);
+        while (ts.isCallExpression(cur)) {
+            const callee = this.unwrapTransparentExpression(cur.expression);
+            if (!ts.isPropertyAccessExpression(callee)) break;
+            const target = this.unwrapTransparentExpression(callee.expression);
+            if (!ts.isIdentifier(target) || target.text !== "Object") break;
+            const method = callee.name.text;
+            const validArity =
+                (method === "freeze" || method === "seal" || method === "preventExtensions")
+                    ? cur.arguments.length === 1
+                    : method === "setPrototypeOf"
+                        ? cur.arguments.length === 2
+                        : false;
+            if (!validArity) break;
+            cur = this.unwrapTransparentExpression(cur.arguments[0]!);
+        }
+        return cur;
     }
 
     private staticFinitePropertyKeyTexts(expr: ts.Expression): string[] {
