@@ -1,0 +1,3 @@
+{
+  "description": "overflowing timer delays normalize to a bounded short delay"
+}
