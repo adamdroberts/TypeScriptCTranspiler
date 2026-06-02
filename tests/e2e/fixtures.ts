@@ -844,6 +844,10 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-iife-parameter-wrapper": cjsPackage("tsc2c-cjs-iife-parameter-wrapper", {
         "index.js": '(function (req, mod, out) {\n  out.label = "iife-parameter-wrapper";\n  mod.exports.count = 82;\n  out.double = function double(value) { return value * 8; };\n})(require, module, exports);\n',
     }),
+    "tsc2c-cjs-unary-iife-wrapper": cjsPackage("tsc2c-cjs-unary-iife-wrapper", {
+        "index.js": '!function (req, mod, out) {\n  const local = req("./local.js");\n  out.default = function greet(name) { return "unary-iife " + name; };\n  out.label = local.label;\n  mod.exports.count = local.count;\n  out.double = function double(value) { return value * 14; };\n}(require, module, exports);\n',
+        "local.js": 'exports.label = "unary-iife-wrapper";\nexports.count = 88;\n',
+    }),
     "tsc2c-cjs-factory-wrapper": cjsPackage("tsc2c-cjs-factory-wrapper", {
         "index.js": '(function (factory) {\n  if (typeof module === "object" && module.exports) {\n    factory(require, module, exports);\n  }\n})(function (req, mod, out) {\n  const local = req("./local.js");\n  out.default = function greet(name) { return "factory-wrapper " + name; };\n  out.label = local.label;\n  mod.exports.count = local.count;\n  out.double = function double(value) { return value * 9; };\n});\n',
         "local.js": 'exports.label = "factory-wrapper";\nexports.count = 83;\n',
