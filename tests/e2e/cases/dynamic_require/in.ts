@@ -47,10 +47,25 @@ const bareReflectModuleArgs = [bareReflectModuleName];
 const bareReflectModule: any = Reflect.apply(require, module, bareReflectModuleArgs);
 console.log("dynamic require bare reflect:", bareReflectModule.name);
 
+const bareNullApplyModuleName = "./other_bare_apply_null";
+const bareNullApplyModuleArgs = [bareNullApplyModuleName];
+const bareNullApplyModule: any = require.apply(null, bareNullApplyModuleArgs);
+console.log("dynamic require bare null apply:", bareNullApplyModule.name);
+
+const bareUndefinedReflectModuleName = "./other_bare_reflect_undefined";
+const bareUndefinedReflectModuleArgs = [bareUndefinedReflectModuleName];
+const bareUndefinedReflectModule: any = Reflect.apply(require, undefined, bareUndefinedReflectModuleArgs);
+console.log("dynamic require bare undefined reflect:", bareUndefinedReflectModule.name);
+
 const boundModuleName = "./other_bound";
 const boundRequire = require.bind(module);
 const boundModule: any = boundRequire(boundModuleName);
 console.log("dynamic require bound:", boundModule.name);
+
+const boundNullModuleName = "./other_bound_null";
+const boundNullRequire = require.bind(null);
+const boundNullModule: any = boundNullRequire(boundNullModuleName);
+console.log("dynamic require bound null:", boundNullModule.name);
 
 const inlineBoundModuleName = "./other_inline_bound";
 const inlineBoundModule: any = module.require.bind(module)(inlineBoundModuleName);

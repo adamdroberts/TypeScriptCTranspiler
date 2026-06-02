@@ -10,6 +10,9 @@ dynamic require apply: apply-a
 dynamic require reflect: reflect-wrapper
 dynamic require bare apply: bare-apply
 dynamic require bare reflect: bare-reflect
+dynamic require bare null apply: bare-null-apply
+dynamic require bare undefined reflect: bare-undefined-reflect
 dynamic require bound: bound
+dynamic require bound null: bound-null
 dynamic require inline bound: inline-bound
 dynamic require local: local
