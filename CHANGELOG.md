@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Standard decorator `context.addInitializer(...)` now throws catchable runtime exceptions for missing or non-callable initializer values instead of aborting through `tsc_panic` or deferring failure until initializer execution. Test: `decorator_add_initializer_validation`.
 - Empty `Array.prototype.reduce(...)` and `reduceRight(...)` calls without an initial value now throw catchable runtime exceptions instead of aborting through `tsc_panic`, including typed arrays, dynamic arrays, and detached prototype calls on array-like receivers. Test: `array_reduce_empty_errors`.
 - Dynamic `Promise.all(...)`, `Promise.any(...)`, and `Promise.allSettled(...)` over `any[]` / `Set<any>` now subscribe to pending thenable assimilation jobs instead of leaving the outer combinator pending forever after callable `then` methods are microtask-scheduled. Test: `promise_combinators_dynamic`.
 - Dynamic Promise thenable assimilation now reads the `then` property synchronously but invokes callable `then` methods through the microtask queue, preserving FIFO ordering with `queueMicrotask(...)`. Test: `promise_thenable_microtask_order`.

@@ -23758,8 +23758,9 @@ class Emitter {
         this.defs.open(`static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`);
         this.defs.line("(void)this_arg;");
         this.defs.line("tsc_array_t* list = (tsc_array_t*)env;");
-        this.defs.line("if (!args || args->len < 1) tsc_panic(\"Decorator addInitializer expects a function\");");
+        this.defs.line("if (!args || args->len < 1) tsc_throw_str(tsc_str_from_cstr(\"Decorator addInitializer expects a function\"));");
         this.defs.line("tsc_value_t fn = TSC_ARR(tsc_value_t, args, 0);");
+        this.defs.line("if (!tsc_value_is_callable(fn)) tsc_throw_str(tsc_str_from_cstr(\"Decorator addInitializer expects a function\"));");
         this.defs.line("tsc_array_push_value(list, fn);");
         this.defs.line("return tsc_value_undefined();");
         this.defs.close();
