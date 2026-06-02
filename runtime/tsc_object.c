@@ -219,7 +219,8 @@ static void object_shape_changed(tsc_object_t* o, const char* action, const tsc_
         }
         tsc_shape_t* next_shape = NULL;
         for (size_t i = 0; i < o->shape->transitions_len; i++) {
-            if (tsc_str_eq(o->shape->transitions[i]->transition_key, key)) {
+            const tsc_str_t* transition_key = o->shape->transitions[i]->transition_key;
+            if (transition_key == key || tsc_str_eq(transition_key, key)) {
                 next_shape = o->shape->transitions[i];
                 break;
             }
@@ -247,7 +248,7 @@ void object_reserve(tsc_object_t* o, size_t cap) {
 ssize_t object_find(const tsc_object_t* o, const tsc_str_t* key) {
     if (!o) return -1;
     for (size_t i = 0; i < o->len; i++) {
-        if (tsc_str_eq(o->props[i].key, key)) return (ssize_t)i;
+        if (o->props[i].key == key || tsc_str_eq(o->props[i].key, key)) return (ssize_t)i;
     }
     return -1;
 }

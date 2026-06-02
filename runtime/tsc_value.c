@@ -415,7 +415,7 @@ static tsc_object_prop_t* prop_cache_lookup(tsc_prop_cache_t* cache, tsc_object_
             entry->shape &&
             entry->shape == object->shape &&
             entry->index < object->len &&
-            tsc_str_eq(object->props[entry->index].key, key)
+            (object->props[entry->index].key == key || tsc_str_eq(object->props[entry->index].key, key))
         ) {
             if (i > 0) {
                 tsc_cache_entry_t hit = *entry;
