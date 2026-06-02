@@ -73,6 +73,7 @@ console.log("index accessor:", arr[1], indexDesc.value, typeof indexDesc.get, ty
 console.log("index map:", Reflect.apply(proto.map, arr, [
     (value: any, index: any) => String(index) + ":" + String(value),
 ]).join("|"));
+console.log("index reads:", Reflect.apply(proto.join, arr, ["/"]), Reflect.apply(proto.includes, arr, ["idx-next!"]), Reflect.apply(proto.indexOf, arr, ["idx-next!"]), Reflect.apply(proto.lastIndexOf, arr, ["idx-next!"]), Reflect.apply(proto.at, arr, [1]));
 console.log("index set:", Reflect.set(arr, "1", "set-index"), arr[1], seen);
 console.log("index keys:", Object.keys(arr).join("|"), Object.values(arr).join("|"));
 console.log("metadata:", Reflect.defineProperty(arr, "length", { get: readOnly }), Reflect.defineProperty(arr, "0", { get: readOnly }), Object.getOwnPropertyDescriptor(arr, "length").get);

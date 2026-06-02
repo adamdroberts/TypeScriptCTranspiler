@@ -2611,7 +2611,7 @@ tsc_value_t tsc_value_method_includes(tsc_value_t recv, tsc_value_t needle, tsc_
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
         size_t start = value_array_forward_start(a->len, value_slice_arg(position, 0.0));
         for (size_t i = start; i < a->len; i++) {
-            if (tsc_value_same_value_zero(TSC_ARR(tsc_value_t, a, i), needle)) return tsc_value_bool(true);
+            if (tsc_value_same_value_zero(tsc_value_get_index(recv, (double)i), needle)) return tsc_value_bool(true);
         }
     }
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
@@ -2633,7 +2633,7 @@ tsc_value_t tsc_value_method_index_of(tsc_value_t recv, tsc_value_t needle, tsc_
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
         size_t start = value_array_forward_start(a->len, value_slice_arg(position, 0.0));
         for (size_t i = start; i < a->len; i++) {
-            if (tsc_value_eq(TSC_ARR(tsc_value_t, a, i), needle)) return tsc_value_num((double)i);
+            if (tsc_value_eq(tsc_value_get_index(recv, (double)i), needle)) return tsc_value_num((double)i);
         }
     }
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
@@ -2659,7 +2659,7 @@ tsc_value_t tsc_value_method_last_index_of(tsc_value_t recv, tsc_value_t needle,
         size_t i = 0;
         if (!value_array_last_start(a->len, value_slice_arg(position, INFINITY), &i)) return tsc_value_num(-1.0);
         while (true) {
-            if (tsc_value_eq(TSC_ARR(tsc_value_t, a, i), needle)) return tsc_value_num((double)i);
+            if (tsc_value_eq(tsc_value_get_index(recv, (double)i), needle)) return tsc_value_num((double)i);
             if (i == 0) break;
             i--;
         }
@@ -2696,7 +2696,7 @@ tsc_value_t tsc_value_method_at(tsc_value_t recv, tsc_value_t index) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
         if (n < 0) n = (double)a->len + n;
         if (isinf(n) || n < 0 || n >= (double)a->len) return tsc_value_undefined();
-        return TSC_ARR(tsc_value_t, a, (size_t)n);
+        return tsc_value_get_index(recv, floor(n));
     }
     if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
         double len = tsc_value_length(recv);
@@ -2718,7 +2718,7 @@ tsc_value_t tsc_value_method_join(tsc_value_t recv, tsc_value_t separator) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
         for (size_t i = 0; i < a->len; i++) {
             if (i > 0) out = tsc_str_concat(out, sep);
-            out = tsc_str_concat(out, value_join_part(TSC_ARR(tsc_value_t, a, i)));
+            out = tsc_str_concat(out, value_join_part(tsc_value_get_index(recv, (double)i)));
         }
         return tsc_value_string(out);
     }

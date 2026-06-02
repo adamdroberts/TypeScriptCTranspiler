@@ -9,6 +9,7 @@ legacy: legacy-arr true true
 readonly: ro false undefined
 index accessor: idx-next! undefined function function true true
 index map: 0:red|1:idx-next!
-index set: true idx-next! get-arr|set-arr:next|get-arr|get-arr|get-other|set-other:via|index-get:next!|index-get:next!|index-set:set-index|index-get:next!|
+index reads: red/idx-next! true 1 1 idx-next!
+index set: true idx-next! get-arr|set-arr:next|get-arr|get-arr|get-other|set-other:via|index-get:next!|index-get:next!|index-get:next!|index-get:next!|index-get:next!|index-get:next!|index-get:next!|index-set:set-index|index-get:next!|
 index keys: 0|1|marker|label|legacy red|idx-next!|next!|next!|legacy-arr
 metadata: false true undefined
