@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Unmarked CommonJS packages with an explicit `exports.default` property now keep default imports and namespace `.default` reads pointed at the whole `module.exports` object, while named `default` imports still use the explicit property. Test: `node_modules_commonjs_mixed_interop_default`.
 - CommonJS `require(...)` of whole `module.exports = Object.freeze` / `Object.seal` / `Object.preventExtensions` / `Object.setPrototypeOf` wrapper defaults now returns the emitted runtime object instead of a synthesized plain named-export object, preserving prototype and integrity state. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 
 ### Added
