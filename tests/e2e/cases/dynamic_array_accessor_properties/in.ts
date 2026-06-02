@@ -1,5 +1,6 @@
 let backing = "seed";
 let seen = "";
+const proto: any = Array.prototype;
 
 const arr: any = ["red", "blue"];
 arr.marker = "base";
@@ -54,4 +55,24 @@ Object.defineProperty(arr, "readonly", {
 
 const readonlyDesc: any = Object.getOwnPropertyDescriptor(arr, "readonly");
 console.log("readonly:", arr.readonly, Reflect.set(arr, "readonly", "x"), readonlyDesc.set);
+
+Object.defineProperty(arr, "1", {
+    get: function(this: any): string {
+        seen += "index-get:" + String(this.marker) + "|";
+        return "idx-" + String(this.marker);
+    },
+    set: function(this: any, value: any): void {
+        seen += "index-set:" + String(value) + "|";
+    },
+    enumerable: true,
+    configurable: true,
+});
+
+const indexDesc: any = Object.getOwnPropertyDescriptor(arr, "1");
+console.log("index accessor:", arr[1], indexDesc.value, typeof indexDesc.get, typeof indexDesc.set, indexDesc.enumerable, indexDesc.configurable);
+console.log("index map:", Reflect.apply(proto.map, arr, [
+    (value: any, index: any) => String(index) + ":" + String(value),
+]).join("|"));
+console.log("index set:", Reflect.set(arr, "1", "set-index"), arr[1], seen);
+console.log("index keys:", Object.keys(arr).join("|"), Object.values(arr).join("|"));
 console.log("metadata:", Reflect.defineProperty(arr, "length", { get: readOnly }), Reflect.defineProperty(arr, "0", { get: readOnly }), Object.getOwnPropertyDescriptor(arr, "length").get);
