@@ -1,0 +1,10 @@
+number arrays: true 0 true 0 true 0 0 0 0 x|y
+number mutators: 2 1 undefined undefined
+number sortBad: Array.prototype.sort comparator must be callable
+number toSortedBad: Array.prototype.sort comparator must be callable
+number withBad: Array.with index out of range
+boolean arrays: true 0 true 0 true 0 0 0 0 x|y
+boolean mutators: 2 1 undefined undefined
+boolean sortBad: Array.prototype.sort comparator must be callable
+boolean toSortedBad: Array.prototype.sort comparator must be callable
+boolean withBad: Array.with index out of range
