@@ -798,7 +798,8 @@ static double tsc_now_ms(void) {
 }
 
 static double tsc_timer_delay_ms(double delay) {
-    if (isnan(delay) || isinf(delay) || delay < 0.0) return 0.0;
+    if (isnan(delay) || delay < 0.0) return 0.0;
+    if (isinf(delay) || delay > 2147483647.0) return 1.0;
     return delay;
 }
 
