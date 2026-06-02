@@ -11,6 +11,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - CommonJS `require(...)` of whole `module.exports = Object.freeze` / `Object.seal` / `Object.preventExtensions` / `Object.setPrototypeOf` wrapper defaults now returns the emitted runtime object instead of a synthesized plain named-export object, preserving prototype and integrity state. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 
 ### Added
+- Finite dynamic `require(...)` proofs now resolve zero-argument static string `.trim()`, `.trimStart()`, `.trimEnd()`, `.trimLeft()`, and `.trimRight()` specifiers into the AOT module graph. Test: `dynamic_require_static_string_trim`.
 - CommonJS whole-value `module.exports = value instanceof Class` defaults now lower through the boxed AOT package-source path as boolean values. Test: `node_modules_commonjs_module_exports_instanceof_default`.
 - Finite dynamic `require(...)` proofs now resolve zero-argument static string `.toLowerCase()` and `.toUpperCase()` specifiers into the AOT module graph. Test: `dynamic_require_static_string_case`.
 - Lazy generator lowering now short-circuits simple suspended-yield logical compound assignments (`||=`, `&&=`, and `??=`), yielding only when the RHS is evaluated and assigning the resumed RHS value afterward. Test: `generator_lazy_yield_logical_compound_assignment`.
