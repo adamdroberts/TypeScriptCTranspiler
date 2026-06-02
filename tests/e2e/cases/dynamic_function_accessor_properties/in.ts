@@ -54,3 +54,14 @@ Object.defineProperty(fn, "readonly", {
 const readonlyDesc: any = Object.getOwnPropertyDescriptor(fn, "readonly");
 console.log("readonly:", fn.readonly, Reflect.set(fn, "readonly", "x"), readonlyDesc.set);
 console.log("metadata:", Reflect.defineProperty(fn, "length", { get: readOnly }), Reflect.defineProperty(fn, "name", { set: writeLabel }), Object.getOwnPropertyDescriptor(fn, "length").get);
+
+console.log("accessor prototype before:", Object.hasOwn(desc.get, "prototype"), desc.get.prototype, Object.getOwnPropertyNames(desc.get).join("|"), Object.hasOwn(desc.set, "prototype"), desc.set.prototype, Object.getOwnPropertyNames(desc.set).join("|"));
+desc.get.prototype = "getter-proto";
+Object.defineProperty(desc.set, "prototype", {
+    value: "setter-proto",
+    enumerable: false,
+    configurable: true,
+});
+const getterPrototypeDesc: any = Object.getOwnPropertyDescriptor(desc.get, "prototype");
+const setterPrototypeDesc: any = Object.getOwnPropertyDescriptor(desc.set, "prototype");
+console.log("accessor prototype after:", desc.get.prototype, Object.hasOwn(desc.get, "prototype"), getterPrototypeDesc.enumerable, getterPrototypeDesc.configurable, Object.keys(desc.get).join("|"), Object.getOwnPropertyNames(desc.get).join("|"), desc.set.prototype, Object.hasOwn(desc.set, "prototype"), setterPrototypeDesc.enumerable, setterPrototypeDesc.configurable, Object.keys(desc.set).join("|"), Object.getOwnPropertyNames(desc.set).join("|"));

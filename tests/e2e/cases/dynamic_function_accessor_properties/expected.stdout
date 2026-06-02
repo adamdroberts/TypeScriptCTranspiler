@@ -8,3 +8,5 @@ reflect set: true via! false get-fn|set-fn:next|get-fn|get-fn|get-other|set-othe
 legacy: legacy-fn true true
 readonly: ro false undefined
 metadata: false false undefined
+accessor prototype before: false undefined length|name false undefined length|name
+accessor prototype after: getter-proto true true true prototype length|name|prototype setter-proto true false true  length|name|prototype
