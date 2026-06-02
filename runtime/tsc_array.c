@@ -94,6 +94,115 @@ static tsc_value_t array_proto_empty_args(void) {
     return tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1));
 }
 
+static bool array_proto_is_string_receiver(tsc_value_t receiver) {
+    return value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_STRING;
+}
+
+static tsc_str_t* array_proto_join_part(tsc_value_t value) {
+    return tsc_value_is_nullish(value) ? tsc_str_from_lit("", 0) : tsc_value_to_string(value);
+}
+
+static tsc_value_t array_proto_generic_join(tsc_value_t receiver, tsc_value_t separator) {
+    size_t len = array_proto_length(receiver);
+    tsc_str_t* sep = tsc_value_is_undefined(separator) ? tsc_str_from_lit(",", 1) : tsc_value_to_string(separator);
+    tsc_str_t* out = tsc_str_from_lit("", 0);
+    for (size_t i = 0; i < len; i++) {
+        if (i > 0) out = tsc_str_concat(out, sep);
+        out = tsc_str_concat(out, array_proto_join_part(array_proto_get_index(receiver, i)));
+    }
+    return tsc_value_string(out);
+}
+
+static tsc_value_t array_proto_generic_includes(tsc_value_t receiver, tsc_value_t needle, tsc_value_t position) {
+    size_t len = array_proto_length(receiver);
+    size_t start = value_array_forward_start(len, value_slice_arg(position, 0.0));
+    for (size_t i = start; i < len; i++) {
+        if (tsc_value_same_value_zero(array_proto_get_index(receiver, i), needle)) return tsc_value_bool(true);
+    }
+    return tsc_value_bool(false);
+}
+
+static tsc_value_t array_proto_generic_index_of(tsc_value_t receiver, tsc_value_t needle, tsc_value_t position) {
+    size_t len = array_proto_length(receiver);
+    size_t start = value_array_forward_start(len, value_slice_arg(position, 0.0));
+    for (size_t i = start; i < len; i++) {
+        if (tsc_value_eq(array_proto_get_index(receiver, i), needle)) return tsc_value_num((double)i);
+    }
+    return tsc_value_num(-1.0);
+}
+
+static tsc_value_t array_proto_generic_last_index_of(tsc_value_t receiver, tsc_value_t needle, tsc_value_t position) {
+    size_t len = array_proto_length(receiver);
+    if (len == 0) return tsc_value_num(-1.0);
+    size_t i = 0;
+    double raw = value_slice_arg(position, INFINITY);
+    if (raw == -INFINITY) return tsc_value_num(-1.0);
+    if (raw == INFINITY) {
+        i = len - 1;
+    } else {
+        if (isnan(raw)) raw = 0.0;
+        int64_t idx = (int64_t)(raw < 0 ? ceil(raw) : floor(raw));
+        if (idx < 0) idx = (int64_t)len + idx;
+        else if (idx >= (int64_t)len) idx = (int64_t)len - 1;
+        if (idx < 0) return tsc_value_num(-1.0);
+        i = (size_t)idx;
+    }
+    while (true) {
+        if (tsc_value_eq(array_proto_get_index(receiver, i), needle)) return tsc_value_num((double)i);
+        if (i == 0) break;
+        i--;
+    }
+    return tsc_value_num(-1.0);
+}
+
+static tsc_array_t* array_proto_generic_slice_array(tsc_value_t receiver, tsc_value_t start, tsc_value_t end) {
+    size_t len = array_proto_length(receiver);
+    size_t from = value_array_forward_start(len, value_slice_arg(start, 0.0));
+    size_t to = value_array_forward_start(len, value_slice_arg(end, (double)len));
+    if (to < from) to = from;
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), to > from ? to - from : 1);
+    for (size_t i = from; i < to; i++) {
+        tsc_value_t value = array_proto_get_index(receiver, i);
+        tsc_array_push_raw(out, &value);
+    }
+    return out;
+}
+
+static tsc_value_t array_proto_generic_keys(tsc_value_t receiver) {
+    size_t len = array_proto_length(receiver);
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
+    for (size_t i = 0; i < len; i++) {
+        tsc_value_t key = tsc_value_num((double)i);
+        tsc_array_push_raw(out, &key);
+    }
+    return tsc_value_array(out);
+}
+
+static tsc_value_t array_proto_generic_values(tsc_value_t receiver) {
+    size_t len = array_proto_length(receiver);
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
+    for (size_t i = 0; i < len; i++) {
+        tsc_value_t value = array_proto_get_index(receiver, i);
+        tsc_array_push_raw(out, &value);
+    }
+    return tsc_value_array(out);
+}
+
+static tsc_value_t array_proto_generic_entries(tsc_value_t receiver) {
+    size_t len = array_proto_length(receiver);
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
+    for (size_t i = 0; i < len; i++) {
+        tsc_array_t* pair = tsc_array_new(sizeof(tsc_value_t), 2);
+        tsc_value_t key = tsc_value_num((double)i);
+        tsc_value_t value = array_proto_get_index(receiver, i);
+        tsc_array_push_raw(pair, &key);
+        tsc_array_push_raw(pair, &value);
+        tsc_value_t boxed = tsc_value_array(pair);
+        tsc_array_push_raw(out, &boxed);
+    }
+    return tsc_value_array(out);
+}
+
 static tsc_value_t array_prototype_to_string(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)args;
@@ -140,39 +249,54 @@ static tsc_value_t array_prototype_at(void* env, tsc_value_t this_arg, tsc_array
 
 static tsc_value_t array_prototype_includes(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
+    if (array_proto_is_string_receiver(this_arg)) {
+        return array_proto_generic_includes(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
+    }
     return tsc_value_method_includes(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
 }
 
 static tsc_value_t array_prototype_index_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
+    if (array_proto_is_string_receiver(this_arg)) {
+        return array_proto_generic_index_of(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
+    }
     return tsc_value_method_index_of(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
 }
 
 static tsc_value_t array_prototype_last_index_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
+    if (array_proto_is_string_receiver(this_arg)) {
+        return array_proto_generic_last_index_of(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
+    }
     return tsc_value_method_last_index_of(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
 }
 
 static tsc_value_t array_prototype_join(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
+    if (array_proto_is_string_receiver(this_arg)) {
+        return array_proto_generic_join(this_arg, array_proto_arg(args, 0));
+    }
     return tsc_value_method_join(this_arg, array_proto_arg(args, 0));
 }
 
 static tsc_value_t array_prototype_keys(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)args;
+    if (array_proto_is_string_receiver(this_arg)) return array_proto_generic_keys(this_arg);
     return tsc_value_method_keys(this_arg);
 }
 
 static tsc_value_t array_prototype_values(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)args;
+    if (array_proto_is_string_receiver(this_arg)) return array_proto_generic_values(this_arg);
     return tsc_value_method_values(this_arg);
 }
 
 static tsc_value_t array_prototype_entries(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)args;
+    if (array_proto_is_string_receiver(this_arg)) return array_proto_generic_entries(this_arg);
     return tsc_value_method_entries(this_arg);
 }
 
@@ -219,6 +343,9 @@ static tsc_value_t array_prototype_concat(void* env, tsc_value_t this_arg, tsc_a
 
 static tsc_value_t array_prototype_slice(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
+    if (array_proto_is_string_receiver(this_arg)) {
+        return tsc_value_array(array_proto_generic_slice_array(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1)));
+    }
     return tsc_value_method_slice(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
 }
 
@@ -286,6 +413,15 @@ static tsc_value_t array_prototype_reverse(void* env, tsc_value_t this_arg, tsc_
 static tsc_value_t array_prototype_to_reversed(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)args;
+    if (array_proto_is_string_receiver(this_arg)) {
+        size_t len = array_proto_length(this_arg);
+        tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
+        for (size_t i = len; i > 0; i--) {
+            tsc_value_t value = array_proto_get_index(this_arg, i - 1);
+            tsc_array_push_raw(out, &value);
+        }
+        return tsc_value_array(out);
+    }
     return tsc_value_method_to_reversed(this_arg);
 }
 

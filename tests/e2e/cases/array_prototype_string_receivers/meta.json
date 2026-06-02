@@ -1,0 +1,3 @@
+{
+  "description": "detached Array.prototype generic read and copy methods treat string receivers as array-like character sequences"
+}
