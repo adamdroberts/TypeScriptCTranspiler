@@ -1,3 +1,3 @@
 {
-  "description": "dynamic array string-key and non-integer numeric writes, length writes, and non-configurable length deletion"
+  "description": "dynamic array string-key, non-integer numeric, and array-index-boundary writes, length writes, and non-configurable length deletion"
 }

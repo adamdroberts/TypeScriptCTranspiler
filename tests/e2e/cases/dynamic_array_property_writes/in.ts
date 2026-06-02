@@ -15,3 +15,8 @@ const keyed: any = ["zero", "one"];
 keyed[1.5] = "half";
 keyed[-1] = "minus";
 console.log("numeric props:", keyed[1.5], keyed[-1], keyed[1], keyed.length, Object.keys(keyed).join("|"));
+
+const boundary: any = [];
+boundary["4294967295"] = "max";
+boundary["4294967296"] = "beyond";
+console.log("boundary props:", boundary.length, boundary["4294967295"], boundary["4294967296"], Object.keys(boundary).join("|"));
