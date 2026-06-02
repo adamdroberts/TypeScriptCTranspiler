@@ -616,7 +616,7 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'exports.__esModule = true;\nconst one = 1;\nconst negTwo = -2;\nconst isTrue = true;\nexports["item_" + one] = "first";\nexports["item_" + negTwo] = "second";\nexports[`item_${isTrue}`] = "third";\nexports[1e2] = "hundred";\nexports[-0] = "zero";\n',
     }),
     "tsc2c-cjs-computed-string-exports-package": cjsPackage("tsc2c-cjs-computed-string-exports-package", {
-        "index.js": 'exports.__esModule = true;\nconst answerPrefix = "ans";\nconst labelPrefix = "la";\nconst labelSuffix = "bel";\nconst comboMiddle = "bo";\nconst keys = ["extra", "mapped"];\nconst keyMap = { alias: "mapped" };\nexports[answerPrefix + "wer"] = 53;\nmodule.exports[`${labelPrefix}${labelSuffix}`] = "computed-static";\nexports[`com${comboMiddle}`] = true;\nexports[keys[0]] = "array-key";\nmodule.exports[keyMap.alias] = 71;\n',
+        "index.js": 'exports.__esModule = true;\nconst answerPrefix = "ans";\nconst labelPrefix = "la";\nconst labelSuffix = "bel";\nconst comboMiddle = "bo";\nconst keys = ["extra", "mapped"];\nconst keyMap = { alias: "mapped" };\nconst joinParts = ["joined", "Key"];\nconst joinSep = "";\nexports[answerPrefix + "wer"] = 53;\nmodule.exports[`${labelPrefix}${labelSuffix}`] = "computed-static";\nexports[`com${comboMiddle}`] = true;\nexports[keys[0]] = "array-key";\nmodule.exports[keyMap.alias] = 71;\nexports[joinParts.join(joinSep)] = "joined-export";\n',
     }),
     "tsc2c-cjs-computed-keys-as-const-package": cjsPackage("tsc2c-cjs-computed-keys-as-const-package", {
         "index.js": 'exports.__esModule = true;\nconst keys = { first: { name: "value" } };\nexports[keys.first.name] = function() { return "it-works"; };\n',
