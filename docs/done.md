@@ -415,6 +415,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Dynamic array `with(index, value)` returns a copy with one replaced element, leaves the receiver unchanged, and throws catchable out-of-range errors. Tests: `dynamic_array_with`, `array_with_errors`
 - Dynamic array `toSpliced(start?, deleteCount?, ...items)` returns a spliced copy and leaves the receiver unchanged. Test: `dynamic_array_to_spliced`
 - Dynamic array `splice(start, deleteCount?, ...items)` mutates `tsc_value_t` arrays and returns removed elements as a dynamic array, preserving argument-count semantics for omitted versus explicit `undefined` or `null` `deleteCount`. Test: `dynamic_array_splice`
+- Detached `Array.prototype.splice` mutates dynamic array-like object receivers, preserving omitted versus explicit `undefined` delete-count semantics and sparse-slot tail shifting. Test: `array_prototype_array_like_splice`
 - Dynamic array-literal spread boxes elements from dynamic arrays, dynamic/typed strings, and typed arrays into the produced dynamic array. Test: `dynamic_array_spread`
 - Dynamic array `slice(start?, end?)` returns a shallow copied range with negative/clipped bounds, treating `null` numeric bounds as zero rather than omitted/defaulted, and `reverse()` mutates the receiver while returning the same array identity. Test: `dynamic_array_slice_reverse`
 - Dynamic array `sort()` mutates `tsc_value_t` arrays with JS-style default string-conversion ordering or an inline expression-body/single-return block-body/named comparator. Tests: `dynamic_array_sort`, `dynamic_array_sort_comparator`
@@ -2329,6 +2330,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_prototype_array_like_inplace` | detached Array.prototype fill/copyWithin/reverse over dynamic array-like object receivers |
 | `array_prototype_array_like_mutators` | detached Array.prototype push/pop/shift/unshift over dynamic array-like object receivers |
 | `array_prototype_array_like_sort` | detached Array.prototype sort over dynamic array-like object receivers |
+| `array_prototype_array_like_splice` | detached Array.prototype splice mutates dynamic array-like object receivers |
 | `array_prototypes` | typed array Object/Reflect prototype reads and writes with non-extensible guards |
 | `array_prototype_value` | static Array.prototype value identity, prototype, own-key, and detached method behavior |
 | `object_prototype_value` | static Object.prototype value identity, null parent, non-enumerable methods, and detached calls |

@@ -2773,52 +2773,110 @@ tsc_value_t tsc_value_method_flat(tsc_value_t recv, tsc_value_t depth) {
 }
 
 tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_value_t delete_count, int argc, tsc_array_t* items) {
-    if (!value_is_box(recv) || value_tag(recv) != TSC_VALUE_TAG_ARRAY) return tsc_value_undefined();
-    tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-    if (a->sealed || a->frozen) return tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1));
-    int64_t len = (int64_t)a->len;
-    double start_num = value_slice_arg(start, 0.0);
-    int64_t at = isnan(start_num) ? 0 : (int64_t)start_num;
-    if (at < 0) at = len + at;
-    if (at < 0) at = 0;
-    if (at > len) at = len;
+    if (!value_is_box(recv)) return tsc_value_undefined();
+    if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
+        tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
+        if (a->sealed || a->frozen) return tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1));
+        int64_t len = (int64_t)a->len;
+        double start_num = value_slice_arg(start, 0.0);
+        int64_t at = isnan(start_num) ? 0 : (int64_t)start_num;
+        if (at < 0) at = len + at;
+        if (at < 0) at = 0;
+        if (at > len) at = len;
 
-    int64_t del = 0;
-    if (argc >= 1) {
-        double del_num = argc < 2
-            ? (double)(len - at)
-            : tsc_value_as_num(delete_count);
-        if (isinf(del_num) && del_num > 0) {
+        int64_t del = 0;
+        if (argc >= 1) {
+            double del_num = argc < 2
+                ? (double)(len - at)
+                : tsc_value_as_num(delete_count);
+            if (isinf(del_num) && del_num > 0) {
+                del = len - at;
+            } else if (!isnan(del_num) && del_num > 0) {
+                del = (int64_t)del_num;
+                if (del > len - at) del = len - at;
+            }
+        }
+
+        size_t insert_len = items ? items->len : 0;
+        tsc_array_t* removed = tsc_array_new(sizeof(tsc_value_t), del > 0 ? (size_t)del : 1);
+        for (int64_t i = 0; i < del; i++) {
+            tsc_value_t v = TSC_ARR(tsc_value_t, a, (size_t)(at + i));
+            tsc_array_push_raw(removed, &v);
+        }
+
+        size_t tail_start = (size_t)(at + del);
+        size_t tail_len = a->len - tail_start;
+        size_t new_len = a->len - (size_t)del + insert_len;
+        if (new_len > a->len && !a->extensible) return tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1));
+        tsc_array_reserve(a, new_len > 0 ? new_len : 1);
+        if (insert_len != (size_t)del && tail_len > 0) {
+            memmove(
+                (char*)a->data + ((size_t)at + insert_len) * a->es,
+                (char*)a->data + tail_start * a->es,
+                tail_len * a->es
+            );
+        }
+        for (size_t i = 0; i < insert_len; i++) {
+            TSC_ARR(tsc_value_t, a, (size_t)at + i) = TSC_ARR(tsc_value_t, items, i);
+        }
+        a->len = new_len;
+        return tsc_value_array(removed);
+    }
+    if (value_tag(recv) != TSC_VALUE_TAG_OBJECT) return tsc_value_undefined();
+
+    size_t len = (size_t)tsc_value_length(recv);
+    size_t at = argc <= 0 ? 0 : value_array_forward_start(len, value_slice_arg(start, 0.0));
+    size_t del = 0;
+    if (argc == 1) {
+        del = len - at;
+    } else if (argc >= 2) {
+        double raw = tsc_value_as_num(delete_count);
+        if (isinf(raw) && raw > 0) {
             del = len - at;
-        } else if (!isnan(del_num) && del_num > 0) {
-            del = (int64_t)del_num;
+        } else if (!isnan(raw) && raw > 0) {
+            del = (size_t)raw;
             if (del > len - at) del = len - at;
         }
     }
 
     size_t insert_len = items ? items->len : 0;
-    tsc_array_t* removed = tsc_array_new(sizeof(tsc_value_t), del > 0 ? (size_t)del : 1);
-    for (int64_t i = 0; i < del; i++) {
-        tsc_value_t v = TSC_ARR(tsc_value_t, a, (size_t)(at + i));
-        tsc_array_push_raw(removed, &v);
+    size_t new_len = len - del + insert_len;
+    tsc_array_t* removed = tsc_array_new(sizeof(tsc_value_t), del ? del : 1);
+    for (size_t i = 0; i < del; i++) {
+        tsc_value_t value = tsc_value_get_index(recv, (double)(at + i));
+        tsc_array_push_raw(removed, &value);
     }
 
-    size_t tail_start = (size_t)(at + del);
-    size_t tail_len = a->len - tail_start;
-    size_t new_len = a->len - (size_t)del + insert_len;
-    if (new_len > a->len && !a->extensible) return tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1));
-    tsc_array_reserve(a, new_len > 0 ? new_len : 1);
-    if (insert_len != (size_t)del && tail_len > 0) {
-        memmove(
-            (char*)a->data + ((size_t)at + insert_len) * a->es,
-            (char*)a->data + tail_start * a->es,
-            tail_len * a->es
-        );
+    if (insert_len < del) {
+        size_t shift = del - insert_len;
+        for (size_t from = at + del; from < len; from++) {
+            size_t to = from - shift;
+            if (value_array_like_has_index(recv, from)) {
+                tsc_value_set_index(recv, (double)to, tsc_value_get_index(recv, (double)from));
+            } else {
+                tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)to));
+            }
+        }
+        for (size_t i = new_len; i < len; i++) {
+            tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)i));
+        }
+    } else if (insert_len > del) {
+        size_t shift = insert_len - del;
+        for (size_t from = len; from > at + del; from--) {
+            size_t source = from - 1;
+            size_t to = source + shift;
+            if (value_array_like_has_index(recv, source)) {
+                tsc_value_set_index(recv, (double)to, tsc_value_get_index(recv, (double)source));
+            } else {
+                tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)to));
+            }
+        }
     }
+
     for (size_t i = 0; i < insert_len; i++) {
-        TSC_ARR(tsc_value_t, a, (size_t)at + i) = TSC_ARR(tsc_value_t, items, i);
+        tsc_value_set_index(recv, (double)(at + i), TSC_ARR(tsc_value_t, items, i));
     }
-    a->len = new_len;
+    tsc_value_set_prop(recv, tsc_str_from_lit("length", 6), tsc_value_num((double)new_len));
     return tsc_value_array(removed);
 }
 
