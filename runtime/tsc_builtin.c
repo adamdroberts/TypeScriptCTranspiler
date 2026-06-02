@@ -211,6 +211,81 @@ double tsc_math_fround(double x) {
     return (double)(float)x;
 }
 
+double tsc_math_f16round(double x) {
+    union { float f; uint32_t u; } in;
+    in.f = (float)x;
+
+    uint32_t f32 = in.u;
+    uint32_t sign = (f32 >> 16) & 0x8000u;
+    uint32_t exp = (f32 >> 23) & 0xffu;
+    uint32_t mant = f32 & 0x7fffffu;
+    uint32_t f16;
+
+    if (exp == 0xffu) {
+        f16 = sign | 0x7c00u | (mant ? 0x0200u : 0u);
+    } else {
+        int32_t exp16 = (int32_t)exp - 127 + 15;
+        if (exp16 >= 0x1f) {
+            f16 = sign | 0x7c00u;
+        } else if (exp16 <= 0) {
+            if (exp16 < -10) {
+                f16 = sign;
+            } else {
+                mant |= 0x800000u;
+                uint32_t shift = (uint32_t)(14 - exp16);
+                uint32_t halfMant = mant >> shift;
+                uint32_t roundBit = (mant >> (shift - 1u)) & 1u;
+                uint32_t sticky = mant & ((1u << (shift - 1u)) - 1u);
+                if (roundBit && (sticky || (halfMant & 1u))) halfMant++;
+                f16 = sign | halfMant;
+            }
+        } else {
+            uint32_t halfExp = (uint32_t)exp16 << 10;
+            uint32_t halfMant = mant >> 13;
+            uint32_t roundBit = (mant >> 12) & 1u;
+            uint32_t sticky = mant & 0xfffu;
+            if (roundBit && (sticky || (halfMant & 1u))) {
+                halfMant++;
+                if (halfMant == 0x400u) {
+                    halfMant = 0;
+                    halfExp += 0x400u;
+                    if (halfExp >= 0x7c00u) {
+                        f16 = sign | 0x7c00u;
+                        goto decode;
+                    }
+                }
+            }
+            f16 = sign | halfExp | halfMant;
+        }
+    }
+
+decode:
+    sign = (f16 & 0x8000u) << 16;
+    exp = (f16 >> 10) & 0x1fu;
+    mant = f16 & 0x03ffu;
+    uint32_t out;
+    if (exp == 0x1fu) {
+        out = sign | 0x7f800000u | (mant ? (mant << 13) : 0u);
+    } else if (exp == 0u) {
+        if (mant == 0u) {
+            out = sign;
+        } else {
+            int32_t e = -14;
+            while ((mant & 0x0400u) == 0u) {
+                mant <<= 1;
+                e--;
+            }
+            mant &= 0x03ffu;
+            out = sign | ((uint32_t)(e + 127) << 23) | (mant << 13);
+        }
+    } else {
+        out = sign | ((exp - 15u + 127u) << 23) | (mant << 13);
+    }
+    union { uint32_t u; float f; } result;
+    result.u = out;
+    return (double)result.f;
+}
+
 /* ---------------- BigInt (GMP-backed) ---------------- */
 
 tsc_bigint_t* bigint_alloc(void) {

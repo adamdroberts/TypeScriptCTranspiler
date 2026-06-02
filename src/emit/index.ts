@@ -14502,7 +14502,7 @@ class Emitter {
         const supported = new Set([
             "abs", "acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh",
             "cbrt", "ceil", "clz32", "cos", "cosh", "exp", "expm1", "floor",
-            "fround", "hypot", "imul", "log", "log1p", "log2", "log10", "max",
+            "f16round", "fround", "hypot", "imul", "log", "log1p", "log2", "log10", "max",
             "min", "pow", "round", "sign", "sin", "sinh", "sqrt", "tan",
             "tanh", "trunc",
         ]);
@@ -43567,6 +43567,7 @@ class Emitter {
             case "abs": return one((x) => `fabs(${x})`);
             case "clz32": return one((x) => `tsc_math_clz32(${x})`);
             case "fround": return one((x) => `tsc_math_fround(${x})`);
+            case "f16round": return one((x) => `tsc_math_f16round(${x})`);
             case "cbrt": return one((x) => `cbrt(${x})`);
             case "sqrt": return one((x) => `sqrt(${x})`);
             case "pow": return two((a, b) => `pow(${a}, ${b})`);

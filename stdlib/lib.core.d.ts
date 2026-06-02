@@ -1059,6 +1059,7 @@ interface Math {
     imul(x: number, y: number, ...ignored: any[]): number;
     clz32(x: number, ...ignored: any[]): number;
     fround(x: number, ...ignored: any[]): number;
+    f16round(x: number, ...ignored: any[]): number;
     cbrt(x: number, ...ignored: any[]): number;
     sqrt(x: number, ...ignored: any[]): number;
     pow(x: number, y: number, ...ignored: any[]): number;

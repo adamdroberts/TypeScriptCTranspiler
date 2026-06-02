@@ -224,6 +224,7 @@ double tsc_math_sign(double x);
 double tsc_math_imul(double a, double b);
 double tsc_math_clz32(double x);
 double tsc_math_fround(double x);
+double tsc_math_f16round(double x);
 
 /* ------------- BigInt (GMP-backed) ------------- */
 typedef struct tsc_bigint {
