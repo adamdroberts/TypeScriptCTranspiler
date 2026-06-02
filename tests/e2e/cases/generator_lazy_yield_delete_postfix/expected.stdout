@@ -1,0 +1,7 @@
+next1: {"done":false,"value":"object"}
+delete: true
+next2: {"done":false,"value":"counter"} false y
+post-prop: 4
+next3: {"done":false,"value":"array"} 5
+post-index: 20
+next4: {"done":true,"value":"done"} 10,19,30
