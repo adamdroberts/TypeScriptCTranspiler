@@ -30,6 +30,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - CommonJS `require(...)` of whole `module.exports = Object.freeze` / `Object.seal` / `Object.preventExtensions` / `Object.setPrototypeOf` wrapper defaults now returns the emitted runtime object instead of a synthesized plain named-export object, preserving prototype and integrity state. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 
 ### Added
+- Generated-C DCE now prunes unused object literals containing method, getter, and setter definitions when their property names are definition-time side-effect-free. Test: `generated_c_dce_const`.
 - CommonJS `Object.defineProperties(exports, { [key]: { value } })` named-export metadata now accepts finite dynamic key alternatives and stores to the runtime-selected AOT export slot. Test: `node_modules_commonjs_define_properties_finite_key_exports`.
 - CommonJS `Object.defineProperty(exports, key, { value })` named-export metadata now accepts finite dynamic key alternatives and stores to the runtime-selected AOT export slot. Test: `node_modules_commonjs_define_property_finite_key_exports`.
 - Lazy generator `yield*` lowering now delegates over typed `Map` sources by materializing `[key, value]` entries like the eager generator path. Test: `generator_lazy_yield_star_map`.

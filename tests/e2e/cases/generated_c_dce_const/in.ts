@@ -28,6 +28,20 @@ const unused_bigint_literal = 123n;
 const unused_regexp_literal = /dead-regexp/g;
 const unused_array = [1, 2, [3, 4]];
 const unused_object = { label: "dead", count: 2, nested: { flag: false } };
+const unused_object_methods = {
+    dead_object_method() {
+        return "dead_object_method_body";
+    },
+    get dead_object_getter() {
+        return "dead_object_getter_body";
+    },
+    set dead_object_setter(value: string) {
+        const dead_object_setter_body = value;
+    },
+    ["dead_object_computed_method"]() {
+        return "dead_object_computed_method_body";
+    },
+};
 const unused_math = (1 + 2) * 3;
 const unused_template = `dead-${1 + 2}`;
 const unused_conditional = true ? "dead" : "live";

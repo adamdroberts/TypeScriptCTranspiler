@@ -1091,6 +1091,13 @@ class Emitter {
                 if (ts.isShorthandPropertyAssignment(prop)) {
                     return this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts);
                 }
+                if (
+                    ts.isMethodDeclaration(prop) ||
+                    ts.isGetAccessorDeclaration(prop) ||
+                    ts.isSetAccessorDeclaration(prop)
+                ) {
+                    return this.objectLiteralPropertyNameHasNoDefinitionSideEffects(prop.name, seenConsts);
+                }
                 return false;
             });
         }
