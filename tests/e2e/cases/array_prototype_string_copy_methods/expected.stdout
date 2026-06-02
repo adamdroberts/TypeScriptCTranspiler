@@ -1,0 +1,5 @@
+flat: true c|b|a
+sorted: true abc abc
+with: cXa cbZ
+spliced: cXYa c
+original: cba
