@@ -15,10 +15,15 @@ tsc_value_t tsc_function_default_prototype(void) {
     return prototype;
 }
 
-tsc_value_t value_event_listener_identity(void* identity) {
+tsc_value_t value_event_listener_identity(tsc_event_listener_fn_t fn, void* env, void* identity) {
     if (!identity) return tsc_value_undefined();
     for (tsc_function_identity_t* cur = g_function_identities; cur; cur = cur->next) {
-        if (cur->kind == TSC_FUNCTION_IDENTITY_EVENT_LISTENER && cur->code.event_identity == identity) {
+        if (
+            cur->kind == TSC_FUNCTION_IDENTITY_EVENT_LISTENER &&
+            cur->code.event_listener.fn == fn &&
+            cur->code.event_listener.identity == identity &&
+            cur->env == env
+        ) {
             return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cur);
         }
     }
@@ -33,21 +38,24 @@ tsc_value_t value_event_listener_identity(void* identity) {
     entry->prototype = tsc_function_default_prototype();
     entry->func_prototype = tsc_value_undefined();
     entry->props = tsc_object_new();
-    entry->code.event_identity = identity;
-    entry->env = NULL;
+    entry->code.event_listener.fn = fn;
+    entry->code.event_listener.identity = identity;
+    entry->env = env;
     entry->next = g_function_identities;
     g_function_identities = entry;
     return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)entry);
 }
 
-tsc_value_t value_event_raw_listener_identity(void* identity, uint64_t order, bool once) {
-    if (!once) return value_event_listener_identity(identity);
+tsc_value_t value_event_raw_listener_identity(tsc_event_listener_fn_t fn, void* env, void* identity, uint64_t order, bool once) {
+    if (!once) return value_event_listener_identity(fn, env, identity);
     if (!identity) return tsc_value_undefined();
     for (tsc_function_identity_t* cur = g_function_identities; cur; cur = cur->next) {
         if (
             cur->kind == TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER &&
+            cur->code.event_raw_identity.fn == fn &&
             cur->code.event_raw_identity.identity == identity &&
-            cur->code.event_raw_identity.order == order
+            cur->code.event_raw_identity.order == order &&
+            cur->env == env
         ) {
             return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cur);
         }
@@ -63,9 +71,10 @@ tsc_value_t value_event_raw_listener_identity(void* identity, uint64_t order, bo
     entry->prototype = tsc_function_default_prototype();
     entry->func_prototype = tsc_value_undefined();
     entry->props = tsc_object_new();
+    entry->code.event_raw_identity.fn = fn;
     entry->code.event_raw_identity.identity = identity;
     entry->code.event_raw_identity.order = order;
-    entry->env = NULL;
+    entry->env = env;
     entry->next = g_function_identities;
     g_function_identities = entry;
     return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)entry);

@@ -100,8 +100,12 @@ typedef struct tsc_function_identity {
         tsc_accessor_getter_t getter;
         tsc_accessor_setter_t setter;
         tsc_generic_function_t generic;
-        void* event_identity;
         struct {
+            tsc_event_listener_fn_t fn;
+            void* identity;
+        } event_listener;
+        struct {
+            tsc_event_listener_fn_t fn;
             void* identity;
             uint64_t order;
         } event_raw_identity;
@@ -374,8 +378,8 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
 tsc_value_t tsc_function_default_prototype(void);
 tsc_value_t tsc_value_function_generic_arity(tsc_generic_function_t fn, void* env, double length);
 tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
-tsc_value_t value_event_listener_identity(void* identity);
-tsc_value_t value_event_raw_listener_identity(void* identity, uint64_t order, bool once);
+tsc_value_t value_event_listener_identity(tsc_event_listener_fn_t fn, void* env, void* identity);
+tsc_value_t value_event_raw_listener_identity(tsc_event_listener_fn_t fn, void* env, void* identity, uint64_t order, bool once);
 bool str_lit_eq(const tsc_str_t* s, const char* lit);
 bool process_stream_write(FILE* f, const tsc_str_t* data);
 bool process_stream_write_bytes(FILE* f, const uint8_t* data, size_t len);

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- `EventEmitter.listeners(...)` and once-wrapper `.rawListeners(...)[i].listener` values now remain directly callable through boxed dynamic dispatch / `Reflect.apply(...)` instead of reaching an internal function-identity panic. Test: `event_emitter_listener_apply`.
 - Standard decorator `context.addInitializer(...)` now throws catchable runtime exceptions for missing or non-callable initializer values instead of aborting through `tsc_panic` or deferring failure until initializer execution. Test: `decorator_add_initializer_validation`.
 - Empty `Array.prototype.reduce(...)` and `reduceRight(...)` calls without an initial value now throw catchable runtime exceptions instead of aborting through `tsc_panic`, including typed arrays, dynamic arrays, and detached prototype calls on array-like receivers. Test: `array_reduce_empty_errors`.
 - Dynamic `Promise.all(...)`, `Promise.any(...)`, and `Promise.allSettled(...)` over `any[]` / `Set<any>` now subscribe to pending thenable assimilation jobs instead of leaving the outer combinator pending forever after callable `then` methods are microtask-scheduled. Test: `promise_combinators_dynamic`.
