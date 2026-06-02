@@ -15135,6 +15135,15 @@ class Emitter {
             this.isModuleExportsAccess(target.left)
         ) {
             if (!this.hasCommonJsEsModuleMarker(target.getSourceFile())) {
+                const right = this.unwrapTransparentExpression(target.right);
+                if (
+                    ts.isCallExpression(right) &&
+                    this.commonJsModuleExportsObjectFromEntriesValueExportCall(right) &&
+                    !this.canEmitCommonJsModuleExportsObjectFromEntriesWholeValue(right)
+                ) {
+                    const defaultMember = this.commonJsExportedMemberDeclaration(target.getSourceFile(), "default");
+                    if (defaultMember) return defaultMember;
+                }
                 return target;
             }
             const defaultMember = this.commonJsExportedMemberDeclaration(target.getSourceFile(), "default");
