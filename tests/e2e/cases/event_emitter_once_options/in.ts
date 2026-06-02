@@ -22,4 +22,10 @@ secondReady.then((args) => {
     console.log("signal undefined:", args[0], args[1]);
 });
 
+const third = new EventEmitter();
+const thirdReady = once(third, "ready", { signal: mark("s") });
+console.log("signal listener before:", third.listenerCount("ready"));
+third.emit("ready", "gamma", 3);
+console.log("signal listener after:", third.listenerCount("ready"));
+
 console.log("ignored:", ignoredSeen);

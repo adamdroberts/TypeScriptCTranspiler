@@ -13,7 +13,7 @@ ready.then((args: any[]): string => {
     resolved = String(args[0]) + ":" + String(args[1]);
     return resolved;
 });
-console.log("resolved:", resolved);
+console.log("resolved:" + (resolved ? " " + resolved : ""));
 
 const failing = new events.EventEmitter();
 const rejected = events.once(failing, "ready");
@@ -27,7 +27,7 @@ rejected.catch((reason: any): any[] => {
     rejectedReason = String(reason);
     return [];
 });
-console.log("rejected:", rejectedReason);
+console.log("rejected:" + (rejectedReason ? " " + rejectedReason : ""));
 
 const errorEmitter = new EventEmitter();
 const errorEvent = once(errorEmitter, "error");
@@ -39,4 +39,4 @@ errorEvent.then((args: any[]): any[] => {
     handledError = String(args[0]);
     return args;
 });
-console.log("error resolved:", handledError, errorEmitter.listenerCount("error"));
+console.log("error resolved:" + (handledError ? " " + handledError : ""), errorEmitter.listenerCount("error"));

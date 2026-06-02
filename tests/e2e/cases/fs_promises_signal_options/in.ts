@@ -1,7 +1,10 @@
-import { appendFile, lstat, mkdtemp, readFile, readlink, realpath, stat, writeFile } from "node:fs/promises";
+import { appendFile, lstat, mkdir, mkdtemp, readFile, readlink, realpath, rm, rmdir, stat, writeFile } from "node:fs/promises";
 
 const tmpPath = "/tmp/tsc2c-fs-promises-signal-options.txt";
 const dirPrefix = "/tmp/tsc2c-fs-promises-signal-options-dir-";
+const mkdirPath = "/tmp/tsc2c-fs-promises-signal-options-mkdir";
+const rmdirPath = "/tmp/tsc2c-fs-promises-signal-options-rmdir";
+const rmPath = "/tmp/tsc2c-fs-promises-signal-options-rm";
 let seen = "";
 let readBack = "";
 
@@ -25,6 +28,12 @@ stat(tmpPath, { signal: void 0 } as any);
 realpath(tmpPath, { encoding: "utf8", signal: mark("realpath") } as any);
 readlink("/proc/self/exe", { encoding: "utf8", signal: mark("readlink") } as any);
 mkdtemp(dirPrefix, { encoding: "utf8", signal: mark("mkdtemp") } as any);
+mkdir(mkdirPath, { recursive: true, mode: 0o700, signal: mark("mkdir") } as any);
+mkdir(rmdirPath, { signal: void 0 } as any);
+rmdir(rmdirPath, { signal: mark("rmdir") } as any);
+mkdir(rmPath, { recursive: true } as any);
+writeFile(rmPath + "/file.txt", "remove me");
+rm(rmPath, { recursive: true, force: true, signal: mark("rm") } as any);
 
 setImmediate((): void => {
     console.log("seen:", seen);

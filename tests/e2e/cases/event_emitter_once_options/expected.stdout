@@ -1,3 +1,5 @@
+signal listener before: 1
+signal listener after: 0
+ignored: oabs
 undefined options: alpha 1
 signal undefined: beta 2
-ignored: oab
