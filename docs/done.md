@@ -807,6 +807,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Generated-C DCE carries exact Error-family own-key length proofs for Object/Reflect helper results over pure fresh Error instances. Test: `generated_c_dce_const`
 - Generated-C DCE carries exact own-key length proofs for Object/Reflect helper results over pure fresh built-in instances, including empty-key `ArrayBuffer` / `DataView`, Date/Event-style objects, and RegExp `lastIndex` metadata. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused pure `URLSearchParams` constructors with no arguments, explicit `undefined`, or side-effect-free string inputs. Test: `generated_c_dce_url_search_params`
+- Generated-C DCE prunes unused pure `Array` constructor calls with no arguments, valid static length arguments, or multiple side-effect-free element arguments. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused pure `ArrayBuffer` allocations with statically safe nonnegative integer lengths. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused pure `DataView` allocations over fresh bounded `ArrayBuffer` inputs. Test: `generated_c_dce_const`
 - Generated-C DCE prunes unused `Object.freeze(...)`, `Object.seal(...)`, `Object.preventExtensions(...)`, and `Reflect.preventExtensions(...)` calls over pure fresh built-in object instances. Test: `generated_c_dce_const`
