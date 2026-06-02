@@ -3403,16 +3403,19 @@ tsc_str_t* tsc_value_method_to_string(tsc_value_t recv, tsc_value_t radix) {
     return tsc_value_to_string(recv);
 }
 
-tsc_str_t* tsc_value_method_to_locale_string(tsc_value_t recv) {
+tsc_str_t* tsc_value_method_to_locale_string_args(tsc_value_t recv, tsc_array_t* args) {
     if (value_is_box(recv) && (value_tag(recv) == TSC_VALUE_TAG_ARRAY || value_tag(recv) == TSC_VALUE_TAG_OBJECT || value_tag(recv) == TSC_VALUE_TAG_FUNCTION)) {
         tsc_value_t fn = tsc_value_get_prop(recv, tsc_str_from_lit("toLocaleString", 14));
         if (tsc_value_is_callable(fn)) {
-            tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
             return tsc_value_to_string(tsc_value_apply_function(fn, recv, tsc_value_array(args)));
         }
         tsc_throw_str(tsc_str_from_cstr("toLocaleString is not a function"));
     }
     return tsc_value_to_string(recv);
+}
+
+tsc_str_t* tsc_value_method_to_locale_string(tsc_value_t recv) {
+    return tsc_value_method_to_locale_string_args(recv, tsc_array_new(sizeof(tsc_value_t), 0));
 }
 
 tsc_value_t tsc_value_method_value_of(tsc_value_t recv) {

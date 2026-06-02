@@ -242,7 +242,7 @@ static tsc_value_t array_prototype_to_locale_string(void* env, tsc_value_t this_
         if (i > 0) out = tsc_str_concat(out, sep);
         tsc_value_t value = tsc_value_get_index(this_arg, (double)i);
         if (!tsc_value_is_nullish(value)) {
-            out = tsc_str_concat(out, tsc_value_method_to_locale_string(value));
+            out = tsc_str_concat(out, tsc_value_method_to_locale_string_args(value, args));
         }
     }
     return tsc_value_string(out);

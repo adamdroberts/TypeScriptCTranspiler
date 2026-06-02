@@ -6,15 +6,15 @@ console.log("locale:", values.toLocaleString());
 console.log("nested:", nested.toString());
 
 const custom: any = { label: "obj" };
-custom.toLocaleString = function () {
-    return "locale:" + custom.label;
+custom.toLocaleString = function (locale: any, options: any) {
+    return "locale:" + custom.label + ":" + String(locale) + ":" + String(options.style);
 };
 const numericLocale: any = {};
-numericLocale.toLocaleString = function () {
-    return 77;
+numericLocale.toLocaleString = function (locale: any) {
+    return "77:" + String(locale);
 };
 const localeValues: any = [custom, numericLocale, null, undefined, "tail"];
-console.log("custom locale:", localeValues.toLocaleString());
+console.log("custom locale:", localeValues.toLocaleString("fr", { style: "short" }));
 
 const bad: any = { toLocaleString: 7 };
 const badValues: any = [bad];
