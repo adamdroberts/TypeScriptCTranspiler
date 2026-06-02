@@ -484,6 +484,9 @@ static void validate_proxy_define_property_result(const tsc_object_t* proxy, con
         if (has_writable && writable && !target_writable) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot make non-configurable non-writable key writable"));
         }
+        if (has_writable && !writable && target_writable) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot make non-configurable writable key non-writable"));
+        }
         if (!target_writable && target_has_value && has_value && !tsc_value_object_is(value, target_value)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot change non-configurable non-writable key"));
         }
@@ -554,6 +557,9 @@ static void validate_proxy_define_property_result(const tsc_object_t* proxy, con
         if (has_writable && writable && !target_writable) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot make non-configurable non-writable key writable"));
         }
+        if (has_writable && !writable && target_writable) {
+            tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot make non-configurable writable key non-writable"));
+        }
         if (!target_writable && target_has_value && has_value && !tsc_value_object_is(value, target_value)) {
             tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot change non-configurable non-writable key"));
         }
@@ -605,6 +611,9 @@ static void validate_proxy_define_property_result(const tsc_object_t* proxy, con
     }
     if (has_writable && writable && !prop->writable) {
         tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot make non-configurable non-writable key writable"));
+    }
+    if (has_writable && !writable && prop->writable) {
+        tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot make non-configurable writable key non-writable"));
     }
     if (!prop->writable && has_value && !tsc_value_object_is(value, prop->value)) {
         tsc_throw_str(tsc_str_from_cstr("Proxy defineProperty trap cannot change non-configurable non-writable key"));
