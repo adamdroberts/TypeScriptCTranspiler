@@ -678,6 +678,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-jsdoc-union-computed-exports": cjsPackage("tsc2c-cjs-jsdoc-union-computed-exports", {
         "index.js": 'exports.__esModule = true;\n/** @type {"label" | "fallbackLabel"} */\nlet labelKey;\n/** @type {"double" | "triple"} */\nlet fnKey;\nif (Date.now() >= 0) {\n  labelKey = "label";\n  fnKey = "double";\n} else {\n  labelKey = "fallbackLabel";\n  fnKey = "triple";\n}\nexports[labelKey] = "jsdoc-union-computed";\nmodule.exports[fnKey] = function double(value) { return value * 2; };\n',
     }),
+    "tsc2c-cjs-jsdoc-single-computed-exports": cjsPackage("tsc2c-cjs-jsdoc-single-computed-exports", {
+        "index.js": 'exports.__esModule = true;\n/** @type {"label"} */\nlet labelKey = "label";\n/** @type {"double"} */\nlet fnKey = "double";\nexports[labelKey] = "jsdoc-single-computed";\nmodule.exports[fnKey] = function double(value) { return value * 4; };\n',
+    }),
     "tsc2c-cjs-define-properties-exports": cjsPackage("tsc2c-cjs-define-properties-exports", {
         "index.js": 'exports.__esModule = true;\nObject.defineProperties(exports, {\n  default: { value: function greet(name) { return "hello " + name; }, enumerable: true },\n  label: { value: "define-properties", enumerable: true },\n  count: { value: 45, enumerable: true }\n});\n',
     }),
