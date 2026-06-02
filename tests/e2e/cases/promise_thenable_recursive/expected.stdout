@@ -1,4 +1,4 @@
 pending callbacks: 0
-events: outer|inner|rejecting-outer|rejecting-inner|pending-outer|pending-inner
+events:
 nested: final
 nested reject: inner-bad

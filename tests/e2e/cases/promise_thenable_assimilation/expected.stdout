@@ -1,7 +1,7 @@
-events: ignored:f|fulfilled then:function:function|rejected then|throwing then
+events: ignored:f
+plain: 7
 fulfilled: ready
 rejected: bad
-plain: 7
 throwing: boom
 recovered: handled
 callback: start:next

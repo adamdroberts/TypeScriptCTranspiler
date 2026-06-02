@@ -1,3 +1,3 @@
-events: try reject then throw
-callback resolve kept: callback kept
+events:
 try reject kept: try kept reason
+callback resolve kept: callback kept

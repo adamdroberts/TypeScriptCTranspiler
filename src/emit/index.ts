@@ -37518,6 +37518,12 @@ class Emitter {
                 }
                 const elem = this.prepareType(resultArray.elem);
                 const isDynamic = source.ty.elem!.kind === "value";
+                if (isDynamic) {
+                    return this.emitSequencedExpr(mapped, [
+                        { value: source, node: call.arguments[0]! },
+                        ...this.ignoredArgumentSpecs(call.arguments, 1),
+                    ], ([src]) => `tsc_promise_all_dynamic(${src})`);
+                }
                 return this.emitSequencedExpr(mapped, [
                     { value: source, node: call.arguments[0]! },
                     ...this.ignoredArgumentSpecs(call.arguments, 1),
@@ -37549,6 +37555,12 @@ class Emitter {
                 if (call.arguments.length < 1) unsupported(call, "Promise.race expects 1 arg");
                 const source = this.emitPromiseArrayArg(call, "Promise.race");
                 const isDynamic = source.ty.elem!.kind === "value";
+                if (isDynamic) {
+                    return this.emitSequencedExpr(mapped, [
+                        { value: source, node: call.arguments[0]! },
+                        ...this.ignoredArgumentSpecs(call.arguments, 1),
+                    ], ([src]) => `tsc_promise_race_dynamic(${src})`);
+                }
                 return this.emitSequencedExpr(mapped, [
                     { value: source, node: call.arguments[0]! },
                     ...this.ignoredArgumentSpecs(call.arguments, 1),
@@ -37574,6 +37586,12 @@ class Emitter {
                 if (call.arguments.length < 1) unsupported(call, "Promise.any expects 1 arg");
                 const source = this.emitPromiseArrayArg(call, "Promise.any");
                 const isDynamic = source.ty.elem!.kind === "value";
+                if (isDynamic) {
+                    return this.emitSequencedExpr(mapped, [
+                        { value: source, node: call.arguments[0]! },
+                        ...this.ignoredArgumentSpecs(call.arguments, 1),
+                    ], ([src]) => `tsc_promise_any_dynamic(${src})`);
+                }
                 return this.emitSequencedExpr(mapped, [
                     { value: source, node: call.arguments[0]! },
                     ...this.ignoredArgumentSpecs(call.arguments, 1),
@@ -37614,6 +37632,12 @@ class Emitter {
                 const resultArray = mapped.elem;
                 if (!resultArray || resultArray.kind !== "array") {
                     unsupported(call, "Promise.allSettled result must be Promise<any[]>");
+                }
+                if (isDynamic) {
+                    return this.emitSequencedExpr(mapped, [
+                        { value: source, node: call.arguments[0]! },
+                        ...this.ignoredArgumentSpecs(call.arguments, 1),
+                    ], ([src]) => `tsc_promise_all_settled_dynamic(${src})`);
                 }
                 return this.emitSequencedExpr(mapped, [
                     { value: source, node: call.arguments[0]! },
