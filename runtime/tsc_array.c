@@ -382,12 +382,14 @@ static tsc_value_t array_prototype_slice(void* env, tsc_value_t this_arg, tsc_ar
 static tsc_value_t array_prototype_fill(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     array_prototype_require_receiver(this_arg, "fill");
+    if (array_proto_is_empty_primitive_receiver(this_arg)) return this_arg;
     return tsc_value_method_fill(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1), array_proto_arg(args, 2));
 }
 
 static tsc_value_t array_prototype_copy_within(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     array_prototype_require_receiver(this_arg, "copyWithin");
+    if (array_proto_is_empty_primitive_receiver(this_arg)) return this_arg;
     return tsc_value_method_copy_within(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1), array_proto_arg(args, 2));
 }
 
@@ -466,6 +468,7 @@ static tsc_value_t array_prototype_reverse(void* env, tsc_value_t this_arg, tsc_
     (void)env;
     (void)args;
     array_prototype_require_receiver(this_arg, "reverse");
+    if (array_proto_is_empty_primitive_receiver(this_arg)) return this_arg;
     return tsc_value_method_reverse(this_arg);
 }
 
