@@ -970,6 +970,36 @@ const packages: Record<string, PackageFixture> = {
             "index.ts": 'function makeApi() {\n  return ({\n    default: "asserted-factory-default",\n    label: "asserted-factory",\n    count: 132,\n    triple(value: number): number { return value * 3; }\n  } satisfies Record<string, any>);\n}\nmodule.exports = makeApi();\nexport {};\n',
         },
     },
+    "tsc2c-cjs-module-object-assign-asserted-call": {
+        packageJson: { name: "tsc2c-cjs-module-object-assign-asserted-call", version: "1.0.0", main: "index.ts" },
+        files: {
+            "index.ts": 'module.exports = (Object.assign({}, { default: "assign-call-default", label: "assign-call", count: 133 }, { extra: "assign-extra" }) as any);\nexport {};\n',
+        },
+    },
+    "tsc2c-cjs-module-from-entries-asserted-call": {
+        packageJson: { name: "tsc2c-cjs-module-from-entries-asserted-call", version: "1.0.0", main: "index.ts" },
+        files: {
+            "index.ts": 'module.exports = (<any>Object.fromEntries(([["default", "from-entries-call-default"], ["label", "from-entries-call"], ["count", 134]] as any)));\nexport {};\n',
+        },
+    },
+    "tsc2c-cjs-module-define-property-asserted-call": {
+        packageJson: { name: "tsc2c-cjs-module-define-property-asserted-call", version: "1.0.0", main: "index.ts" },
+        files: {
+            "index.ts": 'module.exports = (Object.defineProperty({ default: "define-property-call-default", label: "define-property-call", count: 135 }, "extra", { value: "define-property-extra", enumerable: true })!);\nexport {};\n',
+        },
+    },
+    "tsc2c-cjs-module-define-properties-asserted-call": {
+        packageJson: { name: "tsc2c-cjs-module-define-properties-asserted-call", version: "1.0.0", main: "index.ts" },
+        files: {
+            "index.ts": 'module.exports = (Object.defineProperties({}, {\n  default: { value: "define-properties-call-default", enumerable: true },\n  label: { value: "define-properties-call", enumerable: true },\n  count: { value: 136, enumerable: true }\n}) satisfies Record<string, any>);\nexport {};\n',
+        },
+    },
+    "tsc2c-cjs-module-object-create-asserted-call": {
+        packageJson: { name: "tsc2c-cjs-module-object-create-asserted-call", version: "1.0.0", main: "index.ts" },
+        files: {
+            "index.ts": 'module.exports = (Object.create(null, {\n  default: { value: "object-create-call-default", enumerable: true },\n  label: { value: "object-create-call", enumerable: true },\n  count: { value: 137, enumerable: true }\n}) as any);\nexport {};\n',
+        },
+    },
     "tsc2c-cjs-module-object-identifier": cjsPackage("tsc2c-cjs-module-object-identifier", {
         "index.js": 'const local = require("./local.js");\nconst api = {\n  default: "identifier-default",\n  greet: function greet(name) { return "identifier " + name; },\n  label: local.label,\n  count: 72,\n  double: local.double,\n  enabled: true\n};\nmodule.exports = api;\n',
         "local.js": 'exports.label = "object-identifier";\nexports.double = function double(value) { return value * 2; };\n',
