@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Named `child_process` / `node:child_process` imports of unsupported `spawn` and `fork` now produce precise compile-time diagnostics instead of falling through less specific call handling. Tests: `child_process_named_spawn_reject`, `child_process_named_fork_reject`.
 - Typed and dynamic array `length` descriptors now preserve non-writable length state independently from `Object.freeze(...)`, blocking later appends and length changes while accepting compatible same-length redefinitions. Test: `array_length_writable_descriptor`.
 - Detached `Array.prototype` helpers now reject `null` and `undefined` receivers before generic array-like or primitive fallback handling. Test: `array_prototype_nullish_receivers`.
 - Default imports from unmarked CommonJS `module.exports = Object.fromEntries(Object.entries(require(...)))` packages now bind to the finite AOT `default` export member instead of an un-emitted whole-`module.exports` fallback. Test: `node_modules_commonjs_module_exports_object_from_entries_require_object_entries`.

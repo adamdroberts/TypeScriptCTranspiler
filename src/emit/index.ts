@@ -32055,7 +32055,7 @@ class Emitter {
         if (netNamed) {
             return this.emitNetCall(call, netNamed);
         }
-        const childProcessNamed = ["exec", "execFile", "execSync", "execFileSync", "spawnSync"]
+        const childProcessNamed = ["exec", "execFile", "execSync", "execFileSync", "spawnSync", "spawn", "fork"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["child_process", "node:child_process"], exported));
         if (childProcessNamed) {
             return this.emitChildProcessCall(call, childProcessNamed);

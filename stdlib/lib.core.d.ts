@@ -2348,6 +2348,8 @@ interface ChildProcessModule {
     spawnSync(file: string, options?: ChildProcessSpawnSyncBufferOptions, ...ignored: any[]): any;
     spawnSync(file: string, args: string[], options: ChildProcessSpawnSyncUtf8Options, ...ignored: any[]): any;
     spawnSync(file: string, args?: string[], options?: ChildProcessSpawnSyncBufferOptions, ...ignored: any[]): any;
+    spawn(...args: any[]): any;
+    fork(...args: any[]): any;
 }
 declare module "child_process" {
     export function exec(command: string, callback: ChildProcessExecCallback, ...ignored: any[]): void;
@@ -2369,6 +2371,8 @@ declare module "child_process" {
     export function spawnSync(file: string, options?: ChildProcessSpawnSyncBufferOptions, ...ignored: any[]): any;
     export function spawnSync(file: string, args: string[], options: ChildProcessSpawnSyncUtf8Options, ...ignored: any[]): any;
     export function spawnSync(file: string, args?: string[], options?: ChildProcessSpawnSyncBufferOptions, ...ignored: any[]): any;
+    export function spawn(...args: any[]): any;
+    export function fork(...args: any[]): any;
     const defaultChildProcess: ChildProcessModule;
     export default defaultChildProcess;
 }
@@ -2392,6 +2396,8 @@ declare module "node:child_process" {
     export function spawnSync(file: string, options?: ChildProcessSpawnSyncBufferOptions, ...ignored: any[]): any;
     export function spawnSync(file: string, args: string[], options: ChildProcessSpawnSyncUtf8Options, ...ignored: any[]): any;
     export function spawnSync(file: string, args?: string[], options?: ChildProcessSpawnSyncBufferOptions, ...ignored: any[]): any;
+    export function spawn(...args: any[]): any;
+    export function fork(...args: any[]): any;
     const defaultChildProcess: ChildProcessModule;
     export default defaultChildProcess;
 }
