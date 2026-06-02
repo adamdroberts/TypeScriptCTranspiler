@@ -1,4 +1,8 @@
 callback ::1: true ::1
+callback ttl false: true ::1
 callback direct ::1: true ::1
+callback ttl shorthand: true ::1
 promise ::1: ::1
 promise direct ::1: ::1
+promise ttl undefined: ::1
+promise ttl false: ::1
