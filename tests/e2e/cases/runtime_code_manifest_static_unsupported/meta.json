@@ -1,0 +1,3 @@
+{
+  "description": "static unsupported eval or Function source is rejected at compile time even when unrelated runtime-code manifest entries exist"
+}

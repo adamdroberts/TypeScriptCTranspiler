@@ -1,0 +1,4 @@
+{
+  "eval": ["1 + 4"],
+  "functions": ["return 8 * 8;"]
+}
