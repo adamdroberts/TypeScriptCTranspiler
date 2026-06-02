@@ -23,3 +23,24 @@ try {
 } catch (err) {
     console.log("bad comparator:", String(err));
 }
+
+const badComparatorReceivers: any = [
+    ["empty array", [] as any],
+    ["single array", ["solo"] as any],
+    ["empty like", { length: 0 } as any],
+    ["single like", { 0: "solo", length: 1 } as any],
+];
+for (const entry of badComparatorReceivers) {
+    const label: string = entry[0];
+    const receiver: any = entry[1];
+    try {
+        Reflect.apply(sort, receiver, [5 as any]);
+    } catch (err) {
+        console.log(label + " sort bad:", String(err));
+    }
+    try {
+        Reflect.apply(toSorted, receiver, [5 as any]);
+    } catch (err) {
+        console.log(label + " toSorted bad:", String(err));
+    }
+}

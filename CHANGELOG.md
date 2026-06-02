@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Dynamic and detached `Array.prototype.sort(...)` / `toSorted(...)` calls now reject non-callable comparators even for empty or single-element array and array-like receivers. Test: `dynamic_array_prototype_sort_comparator`.
 - Runtime string allocations now initialize cached hash metadata before dynamic object, map, and JSON-derived string-key lookups use hash-based buckets. Test: `string_hash_dynamic_keys`.
 - `EventEmitter.listeners(...)` and once-wrapper `.rawListeners(...)[i].listener` values now remain directly callable through boxed dynamic dispatch / `Reflect.apply(...)` instead of reaching an internal function-identity panic. Test: `event_emitter_listener_apply`.
 - Standard decorator `context.addInitializer(...)` now throws catchable runtime exceptions for missing or non-callable initializer values instead of aborting through `tsc_panic` or deferring failure until initializer execution. Test: `decorator_add_initializer_validation`.
