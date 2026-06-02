@@ -35,11 +35,15 @@ const fnFirst: any = fnIter.next();
 const fnDone: any = fnIter.next();
 console.log("fn:", fnFirst.value, fnDone.done, fnDone.value);
 
+let throwIter: any = null;
 try {
-    make("throw").throw("boom");
+    throwIter = make("throw");
+    throwIter.throw("boom");
 } catch (e) {
     console.log("throw:", e);
 }
+const throwAfter: any = throwIter.next();
+console.log("throw after:", throwAfter.done, String(throwAfter.value));
 
 const closeIter = make("close");
 console.log("return first:", closeIter.next().value);
