@@ -42256,6 +42256,9 @@ class Emitter {
             case "flatMap": {
                 const inner = bodyType.kind === "array" ? bodyType.elem! : bodyType;
                 if (bodyType.kind !== "array") {
+                    const push = inner.kind === "value"
+                        ? "tsc_value_array_push_flat(_dst, _r)"
+                        : "tsc_array_push_raw(_dst, &_r)";
                     return {
                         c:
                             `({ tsc_array_t* const ${av} = ${recv.c}; ` +
@@ -42264,7 +42267,7 @@ class Emitter {
                             `tsc_array_t* _dst = tsc_array_new(sizeof(${inner.c}), ${av}->len); ` +
                             `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
                             `{ ${bindings} ${inner.c} _r = ${bodyC}; ` +
-                            `tsc_array_push_raw(_dst, &_r); } _dst; })`,
+                            `${push}; } _dst; })`,
                         ty: arrayType(inner),
                     };
                 }
