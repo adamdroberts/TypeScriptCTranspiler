@@ -123,6 +123,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (joinText.length > 0) return joinText;
             const caseText = resolveStaticStringCaseCall(node);
             if (caseText.length > 0) return caseText;
+            const trimText = resolveStaticStringTrimCall(node);
+            if (trimText.length > 0) return trimText;
         }
         if (ts.isTemplateExpression(node)) {
             let out = [node.head.text];
@@ -561,6 +563,36 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (values.length === 0) return [];
         return dedupe(values.map((value) => {
             return method === "toLowerCase" ? value.toLowerCase() : value.toUpperCase();
+        }));
+    };
+
+    const resolveStaticStringTrimCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 0) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (
+            method !== "trim" &&
+            method !== "trimStart" &&
+            method !== "trimEnd" &&
+            method !== "trimLeft" &&
+            method !== "trimRight"
+        ) {
+            return [];
+        }
+        const values = resolve(callee.expression);
+        if (values.length === 0) return [];
+        return dedupe(values.map((value) => {
+            switch (method) {
+                case "trimStart":
+                case "trimLeft":
+                    return value.trimStart();
+                case "trimEnd":
+                case "trimRight":
+                    return value.trimEnd();
+                default:
+                    return value.trim();
+            }
         }));
     };
 
