@@ -41841,7 +41841,15 @@ class Emitter {
                         { value: err, target: T_STRING, node: args[0]! },
                         ...this.ignoredArgumentSpecs(args, 1),
                     ],
-                    ([, errArg]) => `({ tsc_throw_str(${errArg!}); tsc_value_undefined(); })`,
+                    ([arr, errArg]) => {
+                        const av = this.freshTemp("_iter");
+                        return `({ tsc_array_t* const ${av} = ${arr!}; ` +
+                            `${av}->iter_pos = ${av}->len; ` +
+                            `${av}->is_lazy_generator = false; ` +
+                            `${av}->state = -1; ` +
+                            `${av}->iter_return_consumed = true; ` +
+                            `tsc_throw_str(${errArg!}); tsc_value_undefined(); })`;
+                    },
                 );
             }
             case "hasOwnProperty":
