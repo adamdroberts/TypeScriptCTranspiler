@@ -10,6 +10,7 @@ tsc_str_t* str_alloc(size_t len) {
     buf[len] = '\0';
     s->len = len;
     s->data = buf;
+    s->hash = 0;
     return s;
 }
 
@@ -17,6 +18,7 @@ tsc_str_t* tsc_str_from_lit(const char* data, size_t len) {
     tsc_str_t* s = (tsc_str_t*)TSC_GC_MALLOC(sizeof(tsc_str_t));
     s->len = len;
     s->data = data;
+    s->hash = 0;
     return s;
 }
 
@@ -547,6 +549,9 @@ tsc_str_t* tsc_str_from_code_point_n(size_t n, ...) {
 bool tsc_str_eq(const tsc_str_t* a, const tsc_str_t* b) {
     if (a == b) return true;
     if (a->len != b->len) return false;
+    uint64_t ah = a->hash;
+    uint64_t bh = b->hash;
+    if (ah != 0 && bh != 0 && ah != bh) return false;
     return memcmp(a->data, b->data, a->len) == 0;
 }
 

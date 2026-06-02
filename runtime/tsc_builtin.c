@@ -927,6 +927,7 @@ tsc_str_t* tsc_json_escape_string(const tsc_str_t* s) {
     buf[pos] = '\0';
     out->data = buf;
     out->len = pos;
+    out->hash = 0;
     return out;
 }
 
