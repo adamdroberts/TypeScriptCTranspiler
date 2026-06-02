@@ -92,6 +92,16 @@ function wrongEnumerableDescriptor(target: any, prop: any): any {
     return { value: 1, writable: false, enumerable: false, configurable: false };
 }
 
+function missingValueDescriptor(target: any, prop: any): any {
+    events.push("missing value trap:" + String(prop));
+    return { writable: false, enumerable: true, configurable: false };
+}
+
+function missingEnumerableDescriptor(target: any, prop: any): any {
+    events.push("missing enumerable trap:" + String(prop));
+    return { value: 1, writable: false, configurable: false };
+}
+
 function accessorAsDataDescriptor(target: any, prop: any): any {
     events.push("accessor as data trap:" + String(prop));
     return { value: 1, enumerable: true, configurable: false };
@@ -126,6 +136,16 @@ function wrongAccessorGetterDescriptor(target: any, prop: any): any {
 function wrongAccessorSetterDescriptor(target: any, prop: any): any {
     events.push("wrong accessor setter trap:" + String(prop));
     return { set: setterOther as any, enumerable: true, configurable: false };
+}
+
+function missingAccessorGetterDescriptor(target: any, prop: any): any {
+    events.push("missing accessor getter trap:" + String(prop));
+    return { set: setterValue as any, enumerable: true, configurable: false };
+}
+
+function missingAccessorSetterDescriptor(target: any, prop: any): any {
+    events.push("missing accessor setter trap:" + String(prop));
+    return { enumerable: true, configurable: false };
 }
 
 function ownFixed(target: any): string[] {
@@ -259,9 +279,29 @@ try {
     console.log("wrong enumerable:", e);
 }
 
+const missingValueProxy: any = new Proxy(fixedTarget, { getOwnPropertyDescriptor: missingValueDescriptor as any });
+try {
+    console.log("missing value:", Object.getOwnPropertyDescriptor(missingValueProxy, "fixed", mark("missing value"))?.value);
+} catch (e: any) {
+    console.log("missing value:", e);
+}
+
+const missingEnumerableProxy: any = new Proxy(fixedTarget, { getOwnPropertyDescriptor: missingEnumerableDescriptor as any });
+try {
+    console.log("missing enumerable:", Object.getOwnPropertyDescriptor(missingEnumerableProxy, "fixed", mark("missing enumerable"))?.enumerable);
+} catch (e: any) {
+    console.log("missing enumerable:", e);
+}
+
 const accessorTarget: any = {};
 Object.defineProperty(accessorTarget, "x", {
     get: getterValue as any,
+    set: setterValue as any,
+    enumerable: true,
+    configurable: false,
+});
+const setterOnlyAccessorTarget: any = {};
+Object.defineProperty(setterOnlyAccessorTarget, "x", {
     set: setterValue as any,
     enumerable: true,
     configurable: false,
@@ -280,11 +320,25 @@ try {
     console.log("accessor wrong getter:", e);
 }
 
-const wrongAccessorSetterProxy: any = new Proxy(accessorTarget, { getOwnPropertyDescriptor: wrongAccessorSetterDescriptor as any });
+const wrongAccessorSetterProxy: any = new Proxy(setterOnlyAccessorTarget, { getOwnPropertyDescriptor: wrongAccessorSetterDescriptor as any });
 try {
     console.log("accessor wrong setter:", Object.getOwnPropertyDescriptor(wrongAccessorSetterProxy, "x", mark("accessor wrong setter"))?.set);
 } catch (e: any) {
     console.log("accessor wrong setter:", e);
+}
+
+const missingAccessorGetterProxy: any = new Proxy(accessorTarget, { getOwnPropertyDescriptor: missingAccessorGetterDescriptor as any });
+try {
+    console.log("accessor missing getter:", Object.getOwnPropertyDescriptor(missingAccessorGetterProxy, "x", mark("accessor missing getter"))?.get);
+} catch (e: any) {
+    console.log("accessor missing getter:", e);
+}
+
+const missingAccessorSetterProxy: any = new Proxy(setterOnlyAccessorTarget, { getOwnPropertyDescriptor: missingAccessorSetterDescriptor as any });
+try {
+    console.log("accessor missing setter:", Object.getOwnPropertyDescriptor(missingAccessorSetterProxy, "x", mark("accessor missing setter"))?.set);
+} catch (e: any) {
+    console.log("accessor missing setter:", e);
 }
 
 const realProxy: any = new Proxy(fixedTarget, { getOwnPropertyDescriptor: realDescriptor as any });
