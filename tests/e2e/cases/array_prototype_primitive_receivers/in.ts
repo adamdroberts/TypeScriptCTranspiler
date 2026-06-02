@@ -28,6 +28,14 @@ function report(label: string, receiver: any): void {
         Reflect.apply(proto.pop, receiver, []),
         Reflect.apply(proto.shift, receiver, []),
     );
+    console.log(
+        label,
+        "empty-mutating:",
+        String(Reflect.apply(proto.reverse, receiver, [])),
+        String(Reflect.apply(proto.fill, receiver, ["z"])),
+        String(Reflect.apply(proto.copyWithin, receiver, [0, 1])),
+        String(Reflect.apply(proto.sort, receiver, [])),
+    );
 
     try {
         Reflect.apply(proto.sort, receiver, [5]);
