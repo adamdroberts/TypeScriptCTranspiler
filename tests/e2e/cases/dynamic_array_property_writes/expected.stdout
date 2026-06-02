@@ -4,3 +4,4 @@ expanded: 4 undefined gold red|cyan||gold
 reflect length: true
 truncated: 2 red|cyan
 delete length: false
+numeric props: half minus one 2 0|1|1.5|-1

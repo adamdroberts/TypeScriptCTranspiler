@@ -563,14 +563,29 @@ tsc_value_t tsc_value_get_index(tsc_value_t v, double index) {
     if (value_tag(v) != TSC_VALUE_TAG_ARRAY) return tsc_value_undefined();
     tsc_array_t* a = (tsc_array_t*)value_ptr(v);
     if (a->es != sizeof(tsc_value_t)) return tsc_value_undefined();
-    if (isnan(index) || isinf(index) || index < 0 || (size_t)index >= a->len) {
+    if (isnan(index) || isinf(index) || index < 0 || floor(index) != index) {
+        return tsc_value_get_prop(v, tsc_str_from_num(index));
+    }
+    if ((size_t)index >= a->len) {
         return tsc_value_undefined();
     }
     return TSC_ARR(tsc_value_t, a, (size_t)index);
 }
 
 bool tsc_value_set_index(tsc_value_t v, double index, tsc_value_t value) {
-    if (isnan(index) || isinf(index) || index < 0 || floor(index) != index) return false;
+    if (isnan(index) || isinf(index) || index < 0 || floor(index) != index) {
+        if (
+            value_is_box(v) &&
+            (
+                value_tag(v) == TSC_VALUE_TAG_OBJECT ||
+                value_tag(v) == TSC_VALUE_TAG_ARRAY ||
+                value_tag(v) == TSC_VALUE_TAG_FUNCTION
+            )
+        ) {
+            return tsc_value_set_prop(v, tsc_str_from_num(index), value);
+        }
+        return false;
+    }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         char key_buf[32];
         snprintf(key_buf, sizeof key_buf, "%zu", (size_t)index);
