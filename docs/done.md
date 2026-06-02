@@ -2512,4 +2512,5 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_commonjs_module_exports_runtime_function_default` | CommonJS whole-value module.exports conditional, logical, and nullish defaults can select inline function values |
 | `node_modules_commonjs_module_exports_runtime_update_delete_default` | CommonJS whole-value module.exports postfix, delete, and comma defaults lower as boxed values |
 | `node_modules_commonjs_module_exports_array_spread_default` | CommonJS whole-value module.exports array spread defaults lower through the boxed AOT package-source path |
+| `node_modules_commonjs_module_exports_this` | CommonJS whole-value module.exports = this materializes the top-level exports object through AOT package-source lowering |
 | `wordcount` | real-world: fs + regex + Map + sort + captures + env |
