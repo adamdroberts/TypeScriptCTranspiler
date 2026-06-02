@@ -2,5 +2,5 @@ add closed: Proxy defineProperty trap cannot add key to non-extensible target
 new nonconfig: Proxy defineProperty trap cannot report new non-configurable key
 change frozen: Proxy defineProperty trap cannot change non-configurable non-writable key
 sealed compatible: true
-sealed downgrade: Proxy defineProperty trap cannot make non-configurable writable key non-writable
+sealed downgrade: true
 events: ignored:add closed|define:1|ignored:new nonconfig|define:1|ignored:change frozen|define:0|ignored:sealed compatible|define:0|ignored:sealed downgrade|define:0

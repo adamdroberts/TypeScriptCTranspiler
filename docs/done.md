@@ -553,6 +553,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Proxy object, descriptor, key, delete, prototype, extensibility, apply, and construct traps receive the handler object as their `this` binding, including traps inherited from the handler prototype. Tests: `proxy_trap_this_binding`, `proxy_inherited_traps`, `proxy_inherited_meta_traps`
 - `Object.hasOwn(proxy)`, `Object.prototype.hasOwnProperty.call(proxy, key)`, and `Object.prototype.propertyIsEnumerable.call(proxy, key)` drive proxy `getOwnPropertyDescriptor` traps, descriptor validation, virtual descriptor results, and revocation checks. Test: `proxy_own_property_helpers`
 - Proxy `defineProperty` result validation rejects successful trap reports that would replace the getter or setter identity of a non-configurable accessor property. Test: `proxy_define_accessor`
+- Proxy `defineProperty` result validation permits compatible non-configurable writable data properties to be reported as non-writable, while continuing to reject non-writable-to-writable and fixed-value changes. Tests: `proxy_get_set_define_invariants`, `proxy_array_define_invariants`, `proxy_function_prototype_invariants`
 - Proxy `getOwnPropertyDescriptor` result validation rejects trap results that mix data and accessor descriptor fields, report non-callable `get` / `set` hooks, or report a different getter or setter identity for a non-configurable accessor property. Test: `proxy_descriptor_invariants`
 - Proxy `getOwnPropertyDescriptor` result validation rejects trap results that change the `enumerable` flag of a non-configurable target property. Test: `proxy_descriptor_invariants`
 - Proxy `getOwnPropertyDescriptor` result validation rejects trap descriptors that report non-configurable writable object or array target data properties as non-writable, including omitted `writable` fields. Test: `proxy_descriptor_writable_invariants`
@@ -2174,7 +2175,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_array_accessor_invariants` | array Proxy get/set/defineProperty/getOwnPropertyDescriptor traps enforce non-configurable side-accessor invariants |
 | `proxy_array_ownkeys_invariants` | array Proxy ownKeys traps enforce length, sealed-index, and non-extensible exact-key invariants after ignored-argument evaluation and trap dispatch |
 | `proxy_array_descriptor_invariants` | array Proxy getOwnPropertyDescriptor traps enforce non-configurable, non-extensible, and frozen descriptor invariants after ignored-argument evaluation and trap dispatch |
-| `proxy_array_define_invariants` | array Proxy defineProperty traps enforce non-extensible, non-configurable, and frozen fixed-data invariants after ignored-argument evaluation and trap dispatch |
+| `proxy_array_define_invariants` | array Proxy defineProperty traps enforce non-extensible, non-configurable, and frozen fixed-data invariants while permitting compatible writable downgrades |
 | `proxy_array_get_set_invariants` | array Proxy get/set traps enforce frozen index and frozen length fixed-data invariants after ignored-argument evaluation and trap dispatch |
 | `proxy_array_has_delete_invariants` | array Proxy has/deleteProperty traps enforce non-configurable and non-extensible key invariants after trap dispatch |
 | `proxy_array_object_helpers` | trapless array Proxy Object/Reflect own-key, value, descriptor, has, and enumerability forwarding |
@@ -2190,7 +2191,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_json_stringify` | JSON.stringify honors Proxy ownKeys/get traps for object and array targets |
 | `proxy_callable_string` | callable Proxy values preserve function-style string coercion |
 | `proxy_callable_to_string_tag` | Object.prototype.toString.call tags callable Proxy chains as Function |
-| `proxy_function_prototype_invariants` | function Proxy prototype/extensibility forwarding plus function `prototype` ownKeys/descriptor invariants after ignored-argument evaluation and trap dispatch |
+| `proxy_function_prototype_invariants` | function Proxy prototype/extensibility forwarding plus function `prototype` ownKeys/descriptor/define invariants after ignored-argument evaluation and trap dispatch |
 | `proxy_function_set_forward` | trapless function-target Proxy assignment and Reflect.set forward writable prototype updates and preserve explicit receivers |
 | `proxy_callable_target_validation` | Proxy apply and construct reject non-callable object targets before trap dispatch after argument-list evaluation |
 | `proxy_callable_trap_validation` | Proxy apply and construct traps validate after argument-list evaluation |
@@ -2231,7 +2232,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_object_values_entries` | Object.values and Object.entries on Proxy use ownKeys, descriptor, and get traps |
 | `proxy_object_assign_source` | Object.assign over Proxy sources uses ownKeys, descriptor, get, and target set traps |
 | `proxy_object_assign_set_failure` | Object.assign throws when a Proxy target set trap returns false |
-| `proxy_get_set_define_invariants` | Proxy get/set/defineProperty non-configurable and non-extensible target invariant checks after ignored-argument evaluation and trap dispatch |
+| `proxy_get_set_define_invariants` | Proxy get/set/defineProperty non-configurable and non-extensible target invariant checks, including compatible writable downgrades |
 | `proxy_has_delete_invariants` | Proxy has/deleteProperty non-configurable and non-extensible target invariant checks after trap dispatch |
 | `proxy_prototype_extensibility_invariants` | Proxy get/set prototype and extensibility trap invariant checks after ignored-argument evaluation and trap dispatch |
 | `proxy_trap_result_coercion` | Proxy boolean-returning traps coerce non-boolean trap results with ToBoolean semantics |
