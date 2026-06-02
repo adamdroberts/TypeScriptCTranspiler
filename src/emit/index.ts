@@ -7050,14 +7050,15 @@ class Emitter {
         call: ts.CallExpression,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
-        if (!ts.isIdentifier(call.expression)) return false;
-        const name = call.expression.text;
+        const callee = this.unwrapTransparentExpression(call.expression);
+        if (!ts.isIdentifier(callee)) return false;
+        const name = callee.text;
         if (name === "parseInt" || name === "parseFloat") {
-            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+            return this.isUnshadowedGlobalIdentifier(callee, name) &&
                 this.isSideEffectFreeNumericParserArgs(name, call.arguments, seenConsts);
         }
         if (name === "isNaN" || name === "isFinite") {
-            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+            return this.isUnshadowedGlobalIdentifier(callee, name) &&
                 call.arguments.length >= 1 &&
                 this.isSideEffectFreePrimitiveNumberCoercion(call.arguments[0]!, seenConsts) &&
                 Array.from(call.arguments).slice(1).every((arg) =>
@@ -7065,47 +7066,51 @@ class Emitter {
                 );
         }
         if (name === "Object") {
-            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+            return this.isUnshadowedGlobalIdentifier(callee, name) &&
                 Array.from(call.arguments).every((arg) =>
                     this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
                 );
         }
+        if (name === "Array") {
+            return this.isUnshadowedGlobalIdentifier(callee, name) &&
+                this.isSideEffectFreeArrayConstructorArgs(call.arguments, seenConsts);
+        }
         if (name === "String" || name === "Number" || name === "Boolean") {
-            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+            return this.isUnshadowedGlobalIdentifier(callee, name) &&
                 this.isSideEffectFreePrimitiveCallableConstructorArgs(call.arguments, seenConsts);
         }
         if (name === "Date") {
-            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+            return this.isUnshadowedGlobalIdentifier(callee, name) &&
                 Array.from(call.arguments).every((arg) =>
                     this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
                 );
         }
-        const osExport = this.namedImportExportName(call.expression, ["os", "node:os"]);
+        const osExport = this.namedImportExportName(callee, ["os", "node:os"]);
         if (osExport !== null) {
             return this.isSideEffectFreeOsCall(osExport, call.arguments, seenConsts);
         }
-        const pathExport = this.namedImportExportName(call.expression, ["path", "node:path"]);
+        const pathExport = this.namedImportExportName(callee, ["path", "node:path"]);
         if (pathExport !== null) {
             return this.isSideEffectFreePathCall(pathExport, call.arguments, seenConsts);
         }
-        const netExport = this.namedImportExportName(call.expression, ["net", "node:net"]);
+        const netExport = this.namedImportExportName(callee, ["net", "node:net"]);
         if (netExport !== null) {
             return this.isSideEffectFreeNetCall(netExport, call.arguments, seenConsts);
         }
-        const eventsExport = this.namedImportExportName(call.expression, ["events", "node:events"]);
+        const eventsExport = this.namedImportExportName(callee, ["events", "node:events"]);
         if (eventsExport !== null) {
             return this.isSideEffectFreeEventsStaticCall(eventsExport, call.arguments, seenConsts);
         }
-        const streamExport = this.namedImportExportName(call.expression, ["stream", "node:stream"]);
+        const streamExport = this.namedImportExportName(callee, ["stream", "node:stream"]);
         if (streamExport !== null) {
             return this.isSideEffectFreeStreamCall(streamExport, call.arguments, seenConsts);
         }
-        const cryptoExport = this.namedImportExportName(call.expression, ["crypto", "node:crypto"]);
+        const cryptoExport = this.namedImportExportName(callee, ["crypto", "node:crypto"]);
         if (cryptoExport !== null) {
             return this.isSideEffectFreeCryptoCall(cryptoExport, call.arguments, seenConsts);
         }
         if (name === "BigInt") {
-            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+            return this.isUnshadowedGlobalIdentifier(callee, name) &&
                 call.arguments.length >= 1 &&
                 this.isSideEffectFreeBigIntCoercion(call.arguments[0]!, seenConsts) &&
                 Array.from(call.arguments).slice(1).every((arg) =>
@@ -7113,11 +7118,11 @@ class Emitter {
                 );
         }
         if (name === "RegExp") {
-            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+            return this.isUnshadowedGlobalIdentifier(callee, name) &&
                 this.isSideEffectFreeRegExpConstructorArgs(call.arguments, seenConsts);
         }
         if (name === "AggregateError") {
-            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+            return this.isUnshadowedGlobalIdentifier(callee, name) &&
                 this.isSideEffectFreeAggregateErrorConstructorArgs(call.arguments, seenConsts);
         }
         const pureErrorConstructors = new Set([
@@ -7131,7 +7136,7 @@ class Emitter {
         ]);
         if (pureErrorConstructors.has(name)) {
             const errorArgs = Array.from(call.arguments);
-            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+            return this.isUnshadowedGlobalIdentifier(callee, name) &&
                 (
                     errorArgs.length === 0 ||
                     (
@@ -7143,7 +7148,7 @@ class Emitter {
                 );
         }
         if (name === "Symbol") {
-            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+            return this.isUnshadowedGlobalIdentifier(callee, name) &&
                 (
                     call.arguments.length === 0 ||
                     (
@@ -7160,7 +7165,7 @@ class Emitter {
             name === "decodeURI" ||
             name === "decodeURIComponent"
         ) {
-            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+            return this.isUnshadowedGlobalIdentifier(callee, name) &&
                 call.arguments.length >= 1 &&
                 this.isSideEffectFreeUriStringCoercion(call.arguments[0]!, seenConsts) &&
                 Array.from(call.arguments).slice(1).every((arg) =>
@@ -7168,7 +7173,7 @@ class Emitter {
                 );
         }
         if (name === "btoa") {
-            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+            return this.isUnshadowedGlobalIdentifier(callee, name) &&
                 call.arguments.length >= 1 &&
                 this.isSideEffectFreeStringCoercion(call.arguments[0]!, seenConsts) &&
                 Array.from(call.arguments).slice(1).every((arg) =>
@@ -7176,7 +7181,7 @@ class Emitter {
                 );
         }
         if (name === "atob") {
-            return this.isUnshadowedGlobalIdentifier(call.expression, name) &&
+            return this.isUnshadowedGlobalIdentifier(callee, name) &&
                 call.arguments.length >= 1 &&
                 this.isSideEffectFreeBase64StringCoercion(call.arguments[0]!, seenConsts) &&
                 Array.from(call.arguments).slice(1).every((arg) =>
