@@ -1,0 +1,13 @@
+{
+  "eval": [
+    "`manifest-${1 + 2}`",
+    "false ? missingEval() : 'selected-eval'",
+    "null ?? 'fallback-eval'",
+    "false && missingEval()",
+    "'truthy' || missingEval()"
+  ],
+  "functions": [
+    "return `fn-${2 * 3}`;",
+    "return true ? 'selected-fn' : missingFunction();"
+  ]
+}
