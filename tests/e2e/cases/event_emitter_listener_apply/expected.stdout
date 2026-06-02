@@ -1,0 +1,4 @@
+types: function function function function
+seen: normal:a|once:b|once:c|once:d
+stable: true
+still registered: 2

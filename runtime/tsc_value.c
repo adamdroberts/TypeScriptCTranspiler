@@ -205,6 +205,14 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
     if (ident->kind == TSC_FUNCTION_IDENTITY_GENERIC) {
         return ident->code.generic(ident->env, this_arg, list);
     }
+    if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_LISTENER) {
+        ident->code.event_listener.fn(ident->env, NULL, list);
+        return tsc_value_undefined();
+    }
+    if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER) {
+        ident->code.event_raw_identity.fn(ident->env, NULL, list);
+        return tsc_value_undefined();
+    }
     if (ident->kind != TSC_FUNCTION_IDENTITY_SETTER) {
         tsc_panic("Reflect.apply target is not a callable function identity");
     }
@@ -354,7 +362,7 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
         if (tsc_str_is_length_key(key)) return tsc_value_num(ident->length);
         if (str_lit_eq(key, "name")) return tsc_value_string(ident->name ? ident->name : tsc_str_from_lit("", 0));
         if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER && str_lit_eq(key, "listener")) {
-            return value_event_listener_identity(ident->code.event_raw_identity.identity);
+            return value_event_listener_identity(ident->code.event_raw_identity.fn, ident->env, ident->code.event_raw_identity.identity);
         }
         if (str_lit_eq(key, "prototype")) return tsc_function_own_prototype(ident, v);
         if (str_lit_eq(key, "__proto__")) return ident->prototype;
@@ -495,7 +503,7 @@ tsc_value_t tsc_value_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc
         if (tsc_str_is_length_key(key)) return tsc_value_num(ident->length);
         if (str_lit_eq(key, "name")) return tsc_value_string(ident->name ? ident->name : tsc_str_from_lit("", 0));
         if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER && str_lit_eq(key, "listener")) {
-            return value_event_listener_identity(ident->code.event_raw_identity.identity);
+            return value_event_listener_identity(ident->code.event_raw_identity.fn, ident->env, ident->code.event_raw_identity.identity);
         }
         if (str_lit_eq(key, "prototype")) return tsc_function_own_prototype(ident, v);
         if (str_lit_eq(key, "__proto__")) return ident->prototype;

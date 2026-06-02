@@ -2201,7 +2201,7 @@ tsc_array_t* tsc_event_emitter_listeners(const tsc_event_emitter_t* ee, const ts
     if (!ee || !event) return listeners;
     for (size_t i = 0; i < ee->len; i++) {
         if (!tsc_str_eq(ee->listeners[i].event, event)) continue;
-        tsc_value_t listener = value_event_listener_identity(ee->listeners[i].identity);
+        tsc_value_t listener = value_event_listener_identity(ee->listeners[i].fn, ee->listeners[i].env, ee->listeners[i].identity);
         tsc_array_push_raw(listeners, &listener);
     }
     return listeners;
@@ -2212,7 +2212,7 @@ tsc_array_t* tsc_event_emitter_raw_listeners(const tsc_event_emitter_t* ee, cons
     if (!ee || !event) return listeners;
     for (size_t i = 0; i < ee->len; i++) {
         if (!tsc_str_eq(ee->listeners[i].event, event)) continue;
-        tsc_value_t listener = value_event_raw_listener_identity(ee->listeners[i].identity, ee->listeners[i].order, ee->listeners[i].once);
+        tsc_value_t listener = value_event_raw_listener_identity(ee->listeners[i].fn, ee->listeners[i].env, ee->listeners[i].identity, ee->listeners[i].order, ee->listeners[i].once);
         tsc_array_push_raw(listeners, &listener);
     }
     return listeners;
