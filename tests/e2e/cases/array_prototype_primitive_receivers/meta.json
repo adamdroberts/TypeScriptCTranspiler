@@ -1,0 +1,3 @@
+{
+  "description": "detached Array.prototype helpers treat non-string primitive receivers as zero-length array-like objects"
+}

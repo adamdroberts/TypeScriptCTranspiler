@@ -445,6 +445,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Static `Array.prototype` reads lower to the shared runtime Array prototype value, so it is a zero-length array whose prototype is `Object.prototype`, whose `length` is non-enumerable, and whose callable prototype methods can be detached and applied to array receivers. Test: `array_prototype_value`
 - Detached `Array.prototype` read methods for `join`, `includes`, `indexOf`, `lastIndexOf`, `at`, `keys`, `values`, and `entries` operate on dynamic array-like object receivers through generic `length` and numeric property reads, including inherited array-like slots. Test: `array_prototype_array_like`
 - Detached `Array.prototype` read and copy helpers treat string receivers as generic array-like character sequences for `join`, search helpers, `slice`, `keys`, `values`, `entries`, and `toReversed`, while direct string instance methods keep String.prototype behavior. Test: `array_prototype_string_receivers`
+- Detached `Array.prototype` helpers treat non-string primitive number and boolean receivers as zero-length array-like objects for empty array results, inserted-copy helpers, mutator counts, and comparator/index validation. Test: `array_prototype_primitive_receivers`
 - Detached `Array.prototype` mutators for `push`, `pop`, `shift`, and `unshift` operate on dynamic array-like object receivers, updating numeric properties and `length` through the existing dynamic object helpers. Test: `array_prototype_array_like_mutators`
 - Detached `Array.prototype` copy methods for `slice` and `toReversed` operate on dynamic array-like object receivers through generic `length` and numeric property reads, including inherited array-like slots. Test: `array_prototype_array_like_copy`
 - Detached `Array.prototype` copy-returning methods for `toSorted`, `with`, and `toSpliced` operate on dynamic array-like object receivers, producing dense copied arrays without mutating the receiver. Test: `array_prototype_array_like_copy_more`
@@ -2326,6 +2327,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_extensibility` | typed array Object/Reflect extensibility, seal, freeze, compatible frozen descriptor redefinition, and write state |
 | `array_prototype_array_like` | detached Array.prototype read methods over dynamic array-like object receivers |
 | `array_prototype_string_receivers` | detached Array.prototype read and copy helpers treat string receivers as array-like character sequences |
+| `array_prototype_primitive_receivers` | detached Array.prototype helpers treat non-string primitive number and boolean receivers as zero-length array-like objects |
 | `array_prototype_array_like_copy` | detached Array.prototype slice/toReversed over dynamic array-like object receivers |
 | `array_prototype_array_like_copy_more` | detached Array.prototype toSorted/with/toSpliced over dynamic array-like object receivers |
 | `array_prototype_concat_generic` | detached Array.prototype concat treats ordinary array-like receivers as generic items |
