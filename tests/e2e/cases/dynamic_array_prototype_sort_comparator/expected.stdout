@@ -2,3 +2,11 @@ sort comparator: true 10|3|2
 toSorted comparator: 2|3|10 3|10|2
 array-like comparator: a cc bbb
 bad comparator: Array.prototype.sort comparator must be callable
+empty array sort bad: Array.prototype.sort comparator must be callable
+empty array toSorted bad: Array.prototype.sort comparator must be callable
+single array sort bad: Array.prototype.sort comparator must be callable
+single array toSorted bad: Array.prototype.sort comparator must be callable
+empty like sort bad: Array.prototype.sort comparator must be callable
+empty like toSorted bad: Array.prototype.sort comparator must be callable
+single like sort bad: Array.prototype.sort comparator must be callable
+single like toSorted bad: Array.prototype.sort comparator must be callable

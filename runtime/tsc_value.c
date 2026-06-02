@@ -2890,11 +2890,17 @@ tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_val
     return tsc_value_array(removed);
 }
 
-static double value_sort_compare(tsc_value_t compare_fn, tsc_value_t left, tsc_value_t right) {
+static void value_sort_validate_compare_fn(tsc_value_t compare_fn) {
     if (!tsc_value_is_undefined(compare_fn)) {
         if (!tsc_value_is_callable(compare_fn)) {
             tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort comparator must be callable"));
         }
+    }
+}
+
+static double value_sort_compare(tsc_value_t compare_fn, tsc_value_t left, tsc_value_t right) {
+    if (!tsc_value_is_undefined(compare_fn)) {
+        value_sort_validate_compare_fn(compare_fn);
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 2);
         tsc_array_push_value(args, left);
         tsc_array_push_value(args, right);
@@ -2905,6 +2911,7 @@ static double value_sort_compare(tsc_value_t compare_fn, tsc_value_t left, tsc_v
 }
 
 tsc_value_t tsc_value_method_sort(tsc_value_t recv, tsc_value_t compare_fn) {
+    value_sort_validate_compare_fn(compare_fn);
     if (!value_is_box(recv)) return recv;
     tsc_array_t* a = NULL;
     if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
