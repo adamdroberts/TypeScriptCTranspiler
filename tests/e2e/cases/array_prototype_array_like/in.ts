@@ -11,3 +11,9 @@ const values: any = Reflect.apply(proto.values, like, []);
 const entries: any = Reflect.apply(proto.entries, like, []);
 console.log("iters:", keys.join("|"), values.join("|"), entries[1].join(":"));
 console.log("inherited:", Reflect.apply(proto.join, inherited, ["/"]), Reflect.apply(proto.includes, inherited, ["q"]));
+
+const sparse: any = { length: 3 };
+const ownUndefined: any = { 0: undefined, length: 3 };
+const inheritedUndefined: any = Object.create({ 0: undefined, length: 3 });
+console.log("sparse undefined:", Reflect.apply(proto.indexOf, sparse, [undefined]), Reflect.apply(proto.lastIndexOf, sparse, [undefined]), Reflect.apply(proto.includes, sparse, [undefined]));
+console.log("present undefined:", Reflect.apply(proto.indexOf, ownUndefined, [undefined]), Reflect.apply(proto.lastIndexOf, ownUndefined, [undefined]), Reflect.apply(proto.includes, ownUndefined, [undefined]), Reflect.apply(proto.indexOf, inheritedUndefined, [undefined]), Reflect.apply(proto.lastIndexOf, inheritedUndefined, [undefined]), Reflect.apply(proto.includes, inheritedUndefined, [undefined]));

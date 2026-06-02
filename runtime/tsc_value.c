@@ -2589,7 +2589,10 @@ tsc_value_t tsc_value_method_index_of(tsc_value_t recv, tsc_value_t needle, tsc_
         size_t len = (size_t)tsc_value_length(recv);
         size_t start = value_array_forward_start(len, value_slice_arg(position, 0.0));
         for (size_t i = start; i < len; i++) {
-            if (tsc_value_eq(tsc_value_get_index(recv, (double)i), needle)) return tsc_value_num((double)i);
+            tsc_str_t* key = tsc_str_from_int((int64_t)i);
+            if (tsc_value_has_prop(recv, key) && tsc_value_eq(tsc_value_get_index(recv, (double)i), needle)) {
+                return tsc_value_num((double)i);
+            }
         }
     }
     return tsc_value_num(-1.0);
@@ -2615,7 +2618,10 @@ tsc_value_t tsc_value_method_last_index_of(tsc_value_t recv, tsc_value_t needle,
         size_t i = 0;
         if (!value_array_last_start(len, value_slice_arg(position, INFINITY), &i)) return tsc_value_num(-1.0);
         while (true) {
-            if (tsc_value_eq(tsc_value_get_index(recv, (double)i), needle)) return tsc_value_num((double)i);
+            tsc_str_t* key = tsc_str_from_int((int64_t)i);
+            if (tsc_value_has_prop(recv, key) && tsc_value_eq(tsc_value_get_index(recv, (double)i), needle)) {
+                return tsc_value_num((double)i);
+            }
             if (i == 0) break;
             i--;
         }
