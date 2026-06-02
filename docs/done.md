@@ -336,6 +336,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - CommonJS whole-value `module.exports = ++counter` / `--counter` defaults lower as boxed runtime-computed values. Test: `node_modules_commonjs_module_exports_prefix_update_default`
 - CommonJS whole-value `module.exports = (target += value)` assignment-expression defaults lower as boxed runtime-computed values. Test: `node_modules_commonjs_module_exports_assignment_default`
 - CommonJS whole-value `module.exports = "key" in object` defaults lower through the AOT package-source path as boxed boolean values. Test: `node_modules_commonjs_module_exports_in_default`
+- CommonJS whole-value `module.exports = value instanceof Class` defaults lower through the boxed AOT package-source path as boolean values. Test: `node_modules_commonjs_module_exports_instanceof_default`
 - CommonJS whole-value `module.exports = ...` defaults accept runtime-computed binary and conditional expressions through the boxed AOT package-source path. Test: `node_modules_commonjs_module_exports_runtime_binary_conditional_default`
 - CommonJS whole-value `module.exports = ...` defaults accept runtime-computed prefix-unary expressions through the boxed AOT package-source path. Test: `node_modules_commonjs_module_exports_runtime_prefix_unary_default`
 - CommonJS computed named-export metadata accepts checker-proven finite literal-union keys, including JavaScript JSDoc union keys, and lowers them through existing AOT export dispatch. Test: `node_modules_commonjs_jsdoc_union_computed_exports`
@@ -2515,4 +2516,5 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_commonjs_module_exports_runtime_update_delete_default` | CommonJS whole-value module.exports postfix, delete, and comma defaults lower as boxed values |
 | `node_modules_commonjs_module_exports_array_spread_default` | CommonJS whole-value module.exports array spread defaults lower through the boxed AOT package-source path |
 | `node_modules_commonjs_module_exports_this` | CommonJS whole-value module.exports = this materializes the top-level exports object through AOT package-source lowering |
+| `node_modules_commonjs_module_exports_instanceof_default` | CommonJS whole-value module.exports instanceof defaults lower through the boxed AOT package-source path |
 | `wordcount` | real-world: fs + regex + Map + sort + captures + env |

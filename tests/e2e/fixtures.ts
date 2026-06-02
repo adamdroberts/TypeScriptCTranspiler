@@ -1487,6 +1487,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-runtime-in-default-package": cjsPackage("tsc2c-cjs-runtime-in-default-package", {
         "index.js": 'module.exports = "present" in { present: 1 };\n',
     }),
+    "tsc2c-cjs-runtime-instanceof-default-package": cjsPackage("tsc2c-cjs-runtime-instanceof-default-package", {
+        "index.js": "class Widget {}\nconst item = new Widget();\nmodule.exports = item instanceof Widget;\n",
+    }),
     "tsc2c-cjs-object-wrapper-freeze-named": cjsPackage("tsc2c-cjs-object-wrapper-freeze-named", {
         "index.js": 'const api = {\n  count: 71,\n  extra: true\n};\nmodule.exports = Object.freeze({\n  default: function greet(name) { return "hello " + name; },\n  label: "freeze-named",\n  double(value) { return value * 2; },\n  ...api\n});\n',
     }),
