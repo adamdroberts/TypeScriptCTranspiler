@@ -2286,6 +2286,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_require_static_string_case` | zero-argument static string `.toLowerCase()` and `.toUpperCase()` calls provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_string_trim` | zero-argument static string trim calls provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_string_range` | static string `.slice(...)` and `.substring(...)` calls with finite integer bounds provide AOT dynamic require alternatives |
+| `array_literal_stack_alloc_uncaptured_nested_function` / `array_literal_stack_alloc_closure_capture` | typed array literal escape analysis ignores unrelated nested functions but keeps closure-captured arrays on heap storage |
 | `dynamic_require_static_object_keys_values` | indexed Object.keys/Object.values calls over static object literals provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_object_entries` | indexed Object.entries calls over static object literals provide finite AOT dynamic require alternatives from entry keys and static string values |
 | `dynamic_require_template_literal_numeric_type` | numeric and boolean literal placeholders inside finite template-literal string type aliases provide AOT dynamic require alternatives |
