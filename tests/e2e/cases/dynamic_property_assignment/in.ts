@@ -9,7 +9,8 @@ console.log("obj:", obj.a, obj.b, obj.c, Object.keys(obj).join(","));
 obj[1.5] = "half";
 obj[-1] = "minus";
 obj[4294967295] = "max";
-console.log("numeric:", obj[1.5], obj[-1], obj[4294967295], Object.hasOwn(obj, "1.5"), Object.hasOwn(obj, "-1"), Object.hasOwn(obj, "4294967295"));
+obj[1e21] = "huge";
+console.log("numeric:", obj[1.5], obj[-1], obj[4294967295], obj[1e21], Object.hasOwn(obj, "1.5"), Object.hasOwn(obj, "-1"), Object.hasOwn(obj, "4294967295"), Object.hasOwn(obj, "1e+21"));
 
 const proto: any = {};
 Object.defineProperty(proto, "locked", {
