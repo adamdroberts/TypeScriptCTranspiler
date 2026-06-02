@@ -1,0 +1,8 @@
+typed reduce error: Array.reduce: empty array with no initial value
+typed reduceRight error: Array.reduceRight: empty array with no initial value
+dynamic reduce error: Array.reduce: empty array with no initial value
+dynamic reduceRight error: Array.reduceRight: empty array with no initial value
+proto reduce error: Array.reduce: empty array with no initial value
+proto reduceRight error: Array.reduceRight: empty array with no initial value
+initial reduce result: seed
+initial reduceRight result: seed

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Empty `Array.prototype.reduce(...)` and `reduceRight(...)` calls without an initial value now throw catchable runtime exceptions instead of aborting through `tsc_panic`, including typed arrays, dynamic arrays, and detached prototype calls on array-like receivers. Test: `array_reduce_empty_errors`.
 - Dynamic `Promise.all(...)`, `Promise.any(...)`, and `Promise.allSettled(...)` over `any[]` / `Set<any>` now subscribe to pending thenable assimilation jobs instead of leaving the outer combinator pending forever after callable `then` methods are microtask-scheduled. Test: `promise_combinators_dynamic`.
 - Dynamic Promise thenable assimilation now reads the `then` property synchronously but invokes callable `then` methods through the microtask queue, preserving FIFO ordering with `queueMicrotask(...)`. Test: `promise_thenable_microtask_order`.
 - Named `child_process` / `node:child_process` imports of unsupported `spawn` and `fork` now produce precise compile-time diagnostics instead of falling through less specific call handling. Tests: `child_process_named_spawn_reject`, `child_process_named_fork_reject`.
