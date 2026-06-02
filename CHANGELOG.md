@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Proxy `defineProperty` result validation now permits compatible non-configurable writable data properties to be reported as non-writable, while still rejecting non-writable-to-writable and fixed-value changes. Tests: `proxy_get_set_define_invariants`, `proxy_array_define_invariants`, `proxy_function_prototype_invariants`.
 - Immediate `fs.promises.realpath(...)`, `readlink(...)`, and `mkdtemp(...)` now accept and evaluate `signal` option values in supported encoding option objects. Test: `fs_promises_signal_options`.
 - Immediate `fs.promises.appendFile(...)` now accepts and evaluates `signal` option values in the bounded sync-backed subset, matching the existing read/write/readdir/stat/lstat signal-option handling. Test: `fs_promises_signal_options`.
 - `new Promise(...)` resolve/reject callbacks now settle the returned promise safely from scheduled callbacks instead of retaining stack-backed executor state. Test: `promise_executor_async_settle`.
