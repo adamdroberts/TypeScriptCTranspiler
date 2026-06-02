@@ -121,6 +121,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (atText.length > 0) return atText;
             const joinText = resolveStaticArrayJoinCall(node);
             if (joinText.length > 0) return joinText;
+            const caseText = resolveStaticStringCaseCall(node);
+            if (caseText.length > 0) return caseText;
         }
         if (ts.isTemplateExpression(node)) {
             let out = [node.head.text];
@@ -547,6 +549,19 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
         }
         return dedupe(out);
+    };
+
+    const resolveStaticStringCaseCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 0) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (method !== "toLowerCase" && method !== "toUpperCase") return [];
+        const values = resolve(callee.expression);
+        if (values.length === 0) return [];
+        return dedupe(values.map((value) => {
+            return method === "toLowerCase" ? value.toLowerCase() : value.toUpperCase();
+        }));
     };
 
     const resolveStaticArrayAccess = (

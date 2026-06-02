@@ -2279,6 +2279,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_require_static_array_at` | static string array `.at(...)` calls provide finite AOT dynamic require alternatives, including proven negative indexes |
 | `dynamic_require_static_array_join` | static string array `.join(...)` calls provide finite AOT dynamic require alternatives, including static separator aliases and `undefined` separator defaults |
 | `dynamic_require_static_array_spread` | static string array spread elements are flattened before array index, `.at(...)`, and `.join(...)` dynamic require proofs |
+| `dynamic_require_static_string_case` | zero-argument static string `.toLowerCase()` and `.toUpperCase()` calls provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_object_keys_values` | indexed Object.keys/Object.values calls over static object literals provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_object_entries` | indexed Object.entries calls over static object literals provide finite AOT dynamic require alternatives from entry keys and static string values |
 | `dynamic_require_template_literal_numeric_type` | numeric and boolean literal placeholders inside finite template-literal string type aliases provide AOT dynamic require alternatives |
