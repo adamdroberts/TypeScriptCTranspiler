@@ -3305,6 +3305,14 @@ class Emitter {
             case "unshift":
                 return this.isSideEffectFreeFreshOrReturnedArrayOperand(recv, seenConsts) &&
                     allArgsPure();
+            case "splice":
+                return args.length <= 2
+                    ? numberArgs(2) &&
+                        this.isSideEffectFreeFreshOrReturnedArrayOperand(recv, seenConsts)
+                    : this.isSideEffectFreeFreshOrReturnedArrayOperand(recv, seenConsts) &&
+                        this.isSideEffectFreePrimitiveNumberCoercion(args[0]!, seenConsts) &&
+                        this.isSideEffectFreePrimitiveNumberCoercion(args[1]!, seenConsts) &&
+                        allArgsPure(2);
             case "sort":
                 if (args.length === 0) {
                     return this.isSideEffectFreeFreshOrReturnedStringArrayOperand(recv, seenConsts);
