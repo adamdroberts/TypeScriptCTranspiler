@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Dynamic array numeric index reads now consult the array prototype chain for out-of-length indexes, matching string-keyed property reads and `Reflect.has(...)`. Test: `dynamic_index_assignment`.
 - Dynamic `Array.prototype.toLocaleString(...)` now forwards locale/options arguments to object element `toLocaleString` calls instead of only evaluating and discarding them. Test: `dynamic_array_to_string`.
 - Dynamic and detached `Array.prototype.sort(...)` / `toSorted(...)` calls now reject non-callable comparators even for empty or single-element array and array-like receivers. Test: `dynamic_array_prototype_sort_comparator`.
 - Runtime string allocations now initialize cached hash metadata before dynamic object, map, and JSON-derived string-key lookups use hash-based buckets. Test: `string_hash_dynamic_keys`.
