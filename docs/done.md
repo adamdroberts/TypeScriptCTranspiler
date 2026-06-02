@@ -1261,6 +1261,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `class_decorator_replacement_order` | stacked standard class decorator replacements composing constructor arguments |
 | `class_decorator_spread_replacement` | standard class decorator replacements for fixed-arity spread constructor calls |
 | `decorator_add_initializer_basic` | standard decorator context addInitializer callbacks |
+| `decorator_add_initializer_validation` | catchable validation for missing or non-callable decorator addInitializer callbacks |
 | `decorator_computed_members` | literal and const-literal computed standard member decorator replacements |
 | `decorator_computed_nonliteral_members` | asserted non-literal static-expression computed standard member decorator replacements |
 | `decorator_factory_order` | multiple standard decorator factories evaluating top-down before bottom-up invocation |
