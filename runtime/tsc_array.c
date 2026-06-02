@@ -209,9 +209,8 @@ static tsc_value_t array_prototype_unshift(void* env, tsc_value_t this_arg, tsc_
 static tsc_value_t array_prototype_concat(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     size_t count = args ? args->len : 0;
-    tsc_value_t out = count == 0
-        ? tsc_value_method_slice(this_arg, tsc_value_undefined(), tsc_value_undefined())
-        : this_arg;
+    tsc_value_t out = tsc_value_array(tsc_array_new(sizeof(tsc_value_t), count + 1));
+    out = tsc_value_method_concat(out, this_arg);
     for (size_t i = 0; i < count; i++) {
         out = tsc_value_method_concat(out, TSC_ARR(tsc_value_t, args, i));
     }

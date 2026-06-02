@@ -1,0 +1,3 @@
+{
+  "description": "detached Array.prototype.concat treats ordinary array-like receivers as single generic items"
+}
