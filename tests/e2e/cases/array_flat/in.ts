@@ -14,3 +14,6 @@ console.log("flatMap:", mapped.join(","));
 
 const scalarMapped = [1, 2, 3].flatMap((n) => n * 2);
 console.log("flatMap scalar:", scalarMapped.join(","));
+
+const dynamicMapped = [1, 2, 3].flatMap((n): any => n === 2 ? [n, n + 10] : n);
+console.log("flatMap dynamic:", dynamicMapped.join(","));
