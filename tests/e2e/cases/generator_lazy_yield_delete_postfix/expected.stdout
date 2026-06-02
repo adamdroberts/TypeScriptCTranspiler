@@ -4,4 +4,8 @@ next2: {"done":false,"value":"counter"} false y
 post-prop: 4
 next3: {"done":false,"value":"array"} 5
 post-index: 20
-next4: {"done":true,"value":"done"} 10,19,30
+next4: {"done":false,"value":"prefix-counter"} 10,19,30
+prefix-prop: 8
+next5: {"done":false,"value":"prefix-array"} 8
+prefix-index: 3
+next6: {"done":true,"value":"done"} 3,3,5

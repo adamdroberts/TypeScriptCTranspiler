@@ -25593,7 +25593,11 @@ class Emitter {
         ) {
             return this.emitSimpleLazyResumeExpression(expr.expression, nextArg);
         }
-        if (ts.isPrefixUnaryExpression(expr)) {
+        if (
+            ts.isPrefixUnaryExpression(expr) &&
+            expr.operator !== ts.SyntaxKind.PlusPlusToken &&
+            expr.operator !== ts.SyntaxKind.MinusMinusToken
+        ) {
             const inner = this.emitSimpleLazyResumeExpression(expr.operand, nextArg);
             const op = expr.operator;
             if (op === ts.SyntaxKind.ExclamationToken) {
@@ -25708,11 +25712,12 @@ class Emitter {
             ts.isNewExpression(expr) ||
             ts.isDeleteExpression(expr) ||
             ts.isPostfixUnaryExpression(expr) ||
+            ts.isPrefixUnaryExpression(expr) ||
             ts.isTaggedTemplateExpression(expr) ||
             ts.isTemplateExpression(expr)
         ) {
             const yieldExpr = this.singleYieldExpressionInExpression(expr);
-            if (!yieldExpr) unsupported(expr, "lazy generator call/new/delete/postfix/tagged-template/template resume expects a single suspended yield");
+            if (!yieldExpr) unsupported(expr, "lazy generator call/new/delete/prefix/postfix/tagged-template/template resume expects a single suspended yield");
             const previous = this.lazyGeneratorResumeOverride;
             this.lazyGeneratorResumeOverride = {
                 expr: yieldExpr,
@@ -25723,13 +25728,14 @@ class Emitter {
                 if (ts.isNewExpression(expr)) return this.emitNew(expr);
                 if (ts.isDeleteExpression(expr)) return this.emitDelete(expr);
                 if (ts.isPostfixUnaryExpression(expr)) return this.emitPostfixUnary(expr);
+                if (ts.isPrefixUnaryExpression(expr)) return this.emitPrefixUnary(expr);
                 if (ts.isTemplateExpression(expr)) return this.emitTemplate(expr);
                 return this.emitTaggedTemplate(expr);
             } finally {
                 this.lazyGeneratorResumeOverride = previous;
             }
         }
-        unsupported(expr, "lazy generator suspended yield expression currently supports direct, parenthesized, unary, typeof, void, binary, conditional, array literal, object literal, property access, element access, call, new, delete, postfix update, template, and tagged template expressions");
+        unsupported(expr, "lazy generator suspended yield expression currently supports direct, parenthesized, unary, typeof, void, binary, conditional, array literal, object literal, property access, element access, call, new, delete, prefix update, postfix update, template, and tagged template expressions");
     }
 
     private emitSimpleLazyCompoundAssignment(
