@@ -3,3 +3,5 @@ values: red|blue|green
 entries: 1|blue kve
 copy: red|cyan|green
 source: red|blue|green
+accessor values: red|get-red|green kveg
+accessor entries: 1|get-red kvegg

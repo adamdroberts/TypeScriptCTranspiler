@@ -1759,10 +1759,13 @@ static tsc_array_t* value_array_entries_numeric(const tsc_array_t* src) {
     tsc_array_materialize_all((tsc_array_t*)src);
     tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), src ? src->len : 1);
     if (!src || src->es != sizeof(tsc_value_t)) return out;
+    tsc_value_t recv = tsc_value_array((tsc_array_t*)src);
     for (size_t i = 0; i < src->len; i++) {
         tsc_array_t* pair = tsc_array_new(sizeof(tsc_value_t), 2);
         tsc_value_t key = tsc_value_num((double)i);
-        tsc_value_t value = TSC_ARR(tsc_value_t, src, i);
+        tsc_value_t value = src->props && src->props->len > 0
+            ? tsc_value_get_index(recv, (double)i)
+            : TSC_ARR(tsc_value_t, src, i);
         tsc_array_push_raw(pair, &key);
         tsc_array_push_raw(pair, &value);
         tsc_value_t boxed = tsc_value_array(pair);
@@ -3257,6 +3260,14 @@ tsc_value_t tsc_value_method_values(tsc_value_t recv) {
     if (!value_is_box(recv)) return tsc_value_undefined();
     if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         const tsc_array_t* a = (const tsc_array_t*)value_ptr(recv);
+        if (a->props && a->props->len > 0) {
+            tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), a->len ? a->len : 1);
+            for (size_t i = 0; i < a->len; i++) {
+                tsc_value_t value = tsc_value_get_index(recv, (double)i);
+                tsc_array_push_raw(out, &value);
+            }
+            return tsc_value_array(out);
+        }
         return tsc_value_array(tsc_array_slice(a, 0.0, (double)a->len));
     }
     if (value_tag(recv) != TSC_VALUE_TAG_OBJECT) return tsc_value_undefined();
