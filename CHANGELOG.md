@@ -21,6 +21,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - CommonJS `require(...)` of whole `module.exports = Object.freeze` / `Object.seal` / `Object.preventExtensions` / `Object.setPrototypeOf` wrapper defaults now returns the emitted runtime object instead of a synthesized plain named-export object, preserving prototype and integrity state. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 
 ### Added
+- Lazy generator lowering now resumes suspended `yield` values on either side of the `in` operator for typed objects, arrays, buffers, and dynamic values. Test: `generator_lazy_yield_in`.
 - Lazy generator lowering now resumes single suspended `yield` values inside `instanceof` expressions. Test: `generator_lazy_yield_instanceof`.
 - CommonJS whole-value `module.exports = ...` packages with runtime-computed property keys now support AOT named imports, namespace member reads, and require destructuring by reading properties from the eagerly initialized module export object. Test: `node_modules_commonjs_runtime_named_fallback`.
 - Detached `Array.prototype` helpers now treat non-string primitive number and boolean receivers as zero-length array-like objects for empty array results, inserted-copy helpers, mutator counts, and comparator/index validation. Test: `array_prototype_primitive_receivers`.
